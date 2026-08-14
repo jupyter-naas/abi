@@ -1420,6 +1420,11 @@ class SnapshotContext:
     ) -> dict[str, list[dict[str, Any]]]:
         """Every post by each of *usernames*, newest first, keyed by username.
 
+        Covers search matches *and* referenced context (a quote/reply/retweet
+        original this account wrote). Context-only rows are flagged
+        ``referenced=True``; matches omit the key. ``x:Tweet`` already includes
+        ``x:ReferencedTweet``, so no extra type filter is needed.
+
         Resolved in batches of :data:`AUTHOR_BATCH_SIZE` so peak memory is a
         function of the batch, not of the graph. Photos carry ``media_url``;
         videos and animated GIFs store their best MP4 variant there at ingest
@@ -1440,7 +1445,7 @@ class SnapshotContext:
             sparql = f"""
             PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
             PREFIX x:   <{self.namespace}>
-            SELECT ?username ?created ?fullText ?text ?url
+            SELECT ?username ?created ?fullText ?text ?url ?isReferenced
                    (GROUP_CONCAT(DISTINCT COALESCE(?mediaAny, "");
                                  separator=" ") AS ?mediaUrls)
             WHERE {{
@@ -1450,6 +1455,7 @@ class SnapshotContext:
                 ?tweet rdf:type x:Tweet ;
                        x:tweet_created_at ?created ;
                        x:isAuthoredBy ?author .
+                BIND(EXISTS {{ ?tweet rdf:type x:ReferencedTweet }} AS ?isReferenced)
                 OPTIONAL {{ ?tweet x:full_text ?fullText . }}
                 OPTIONAL {{ ?tweet x:tweet_text ?text . }}
                 OPTIONAL {{ ?tweet x:url ?url . }}
@@ -1461,7 +1467,7 @@ class SnapshotContext:
                 }}
               }}
             }}
-            GROUP BY ?tweet ?username ?created ?fullText ?text ?url
+            GROUP BY ?tweet ?username ?created ?fullText ?text ?url ?isReferenced
             """
             rows = self._query_rows(
                 sparql, f"posts_for_usernames for a batch of {len(batch)} author(s)"
@@ -1483,6 +1489,8 @@ class SnapshotContext:
                     "url": _s(row, "url"),
                     "username": username,
                 }
+                if _s(row, "isReferenced").lower() in ("true", "1"):
+                    post["referenced"] = True
                 # Space-separated: a tweet can carry up to four media. Omitted
                 # rather than published empty — most posts have none, and the
                 # table renders a missing key and an empty one identically.

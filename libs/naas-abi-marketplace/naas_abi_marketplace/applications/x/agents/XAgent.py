@@ -43,6 +43,11 @@ class XAgent(Agent):
             "description": "Rank X users by number of tweets collected",
         },
         {
+            "label": "Tweets by handle",
+            "value": "Show me all tweets by @",
+            "description": "List ingested tweets authored by an X username",
+        },
+        {
             "label": "Language breakdown",
             "value": "What is the language distribution of collected tweets?",
             "description": "See which languages dominate the ingested dataset",
@@ -79,7 +84,10 @@ questions over previously-ingested data):
 - `find_top_liked_tweets`, `find_top_retweeted_tweets`,
   `find_top_impression_tweets`, `find_top_engaging_tweets` — engagement
   rankings with a `limit`.
-- `find_tweets_by_author` — tweets by a specific `author_id`.
+- `find_tweets_by_username` — tweets by a specific X handle (`username`,
+  with or without `@`; case-insensitive). Prefer this when the user names
+  an author by handle.
+- `find_tweets_by_author` — tweets by a specific numeric `author_id`.
 - `find_tweets_containing_keyword` — substring match on tweet text.
 - `find_tweets_in_language` — filter by BCP 47 `lang_code`.
 - `find_tweets_since` — tweets created after a UTC `since` timestamp.
@@ -97,6 +105,9 @@ questions over previously-ingested data):
 Routing rules:
 - "Most liked / retweeted / viewed / engaging tweets" → graph tool.
 - "Top authors / language distribution / tweets containing X / tweets since X" → graph tool.
+- "Tweets by @handle / username / what did <handle> post" → graph tool
+  (`find_tweets_by_username`). Use `find_tweets_by_author` only when the
+  user already gave a numeric author id.
 - "What filters are we ingesting / list ingested tweets / tweets for query X" → graph tool
   (`list_ingested_search_queries` then `find_tweets_by_search_query`).
 - "What does @handle look like / fetch tweets now / who follows X" → API tool.
@@ -151,6 +162,7 @@ Constraints:
             "find_top_impression_tweets",
             "find_top_engaging_tweets",
             "find_tweets_by_author",
+            "find_tweets_by_username",
             "find_tweets_containing_keyword",
             "find_tweets_in_language",
             "find_tweets_since",

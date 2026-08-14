@@ -447,13 +447,24 @@ def test_newest_posts_are_ordered_and_carry_a_resolvable_url():
     assert rows[0]["url"] == "https://x.com/alice/status/1"
 
 
-def test_author_index_counts_only_matched_posts():
+def test_author_index_counts_matched_and_referenced_posts():
     reader = _seeded_reader()
     index = {row["username"]: row for row in reader.author_index()}
     assert set(index) == {"alice", "bob"}
-    # bob authored one match and one referenced post; only the match counts.
-    assert index["bob"]["posts"] == 1
+    # bob authored one match and one referenced post; both count.
+    assert index["alice"]["posts"] == 1
+    assert index["bob"]["posts"] == 2
     assert reader.descriptions() == {"alice": "hi"}
+
+
+def test_posts_by_username_includes_referenced_context():
+    """The author page is a full view: matches plus quote/reply/retweet originals."""
+    reader = _seeded_reader()
+    bob = reader.posts_by_username(["bob"])["bob"]
+    assert [p["url"].rsplit("/", 1)[-1] for p in bob] == ["2", "9"]
+    by_id = {p["url"].rsplit("/", 1)[-1]: p for p in bob}
+    assert "referenced" not in by_id["2"]
+    assert by_id["9"]["referenced"] is True
 
 
 def test_reads_are_scoped_to_one_query():

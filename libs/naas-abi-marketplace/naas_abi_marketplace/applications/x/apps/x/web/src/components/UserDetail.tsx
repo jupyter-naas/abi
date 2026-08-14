@@ -29,6 +29,7 @@ type Props = {
 
 const POSTS_COLUMNS = [
   { key: "created_at", label: "Date" },
+  { key: "referenced", label: "Kind" },
   { key: "text", label: "Post" },
   { key: "url", label: "URL" },
 ];
@@ -104,13 +105,23 @@ export function UserDetail({
   const pinned = pinnedUsers.includes(username);
   // A handle typed into the URL may simply not be in the published dataset.
   const unknown = !indexLoading && !loading && !profile && !rows.length;
+  const allPosts = bundle?.posts || [];
+  const referencedCount = allPosts.filter((p) => p.referenced).length;
+  const matchedCount = allPosts.length
+    ? allPosts.length - referencedCount
+    : 0;
+  const postsLoaded = Boolean(bundle) && !loading;
 
   const kpis: KpiItem[] = [
     {
       id: "posts_retrieved",
       label: "Posts retrieved",
       value: total,
-      hint: "all posts in the X graph",
+      matched: matchedCount,
+      referenced: referencedCount,
+      hint: postsLoaded
+        ? `${matchedCount} matched · ${referencedCount} quoted/replied-to context`
+        : "search matches and quoted/replied-to context",
     },
     {
       id: "last_post",
@@ -183,7 +194,10 @@ export function UserDetail({
       <div className="section">
         <div className="section-head">
           <h2>Posts ingested</h2>
-          <p className="sub">Counted over the whole X graph, not this page.</p>
+          <p className="sub">
+            Search matches plus posts this account wrote that were pulled in as
+            quote, reply or retweet context.
+          </p>
         </div>
         <KpiGrid items={kpis} columns={3} accentFirst />
       </div>
