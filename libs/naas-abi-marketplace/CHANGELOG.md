@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v3.34.6 (2026-08-14)
+
+### Bug Fixes
+
+- Refactor posts search page
+  ([`86fe1f6`](https://github.com/jupyter-naas/abi/commit/86fe1f6162a74dcb389d9760633b6b19d152a9bb))
+
+- Ruff errors
+  ([`c816229`](https://github.com/jupyter-naas/abi/commit/c816229ad4c8274d2f5034d4e959b897659e1b02))
+
+### Refactoring
+
+- X user page & posts
+  ([`5f2f2c2`](https://github.com/jupyter-naas/abi/commit/5f2f2c265d2241fb67f89534d7a1073f76790f26))
+
+
 ## v3.34.5 (2026-08-14)
 
 
