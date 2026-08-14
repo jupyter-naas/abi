@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.34.2 (2026-08-14)
+
+### Bug Fixes
+
+- Display referenced tweets in author page
+  ([`87f84be`](https://github.com/jupyter-naas/abi/commit/87f84beaf838f28d7ebef072268d0e8ac913fc39))
+
+
 ## v3.34.1 (2026-08-14)
 
 ### Bug Fixes
