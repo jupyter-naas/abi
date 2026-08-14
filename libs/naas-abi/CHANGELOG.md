@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.53.0 (2026-08-11)
+
+### Features
+
+- **app-html**: Add ABI API key and JWT auth for /app-html/ assets
+  ([`1ec9534`](https://github.com/jupyter-naas/abi/commit/1ec953401d55525a7fa5f88c686beb070da080cf))
+
+
 ## v2.52.5 (2026-08-11)
 
 ### Bug Fixes
