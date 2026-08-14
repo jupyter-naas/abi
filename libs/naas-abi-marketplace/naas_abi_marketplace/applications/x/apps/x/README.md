@@ -272,6 +272,12 @@ excluded, which matches the count workflow (it only ingests complete hours).
 scenario** (4× for the default Scenario filter) per followed query. Tweet
 tables and author/location bars still use `DEFAULT_TWEET_LIMIT` (1 000).
 
+The Search page shows four cards: **Total Posts Ingested** (matched + referenced,
+delta vs the previous window, hint = coverage period), **Tweets** and
+**Referenced Tweets** (each with a delta and share of posts ingested), and
+**Coverage** (matched / count-endpoint total; hint is that count, no
+period-over-period comparison).
+
 `tweets_in_window` orders the full graph match by recency *before* applying that
 LIMIT, so a capped read is the newest N tweets in the window — never an
 arbitrary sample.
