@@ -45,7 +45,7 @@ cd domains/personnel && make app-personnel-cockpit  # API + static UI dev server
 | **Hiring** | Open positions, filled vs vacant by title | What are we hiring for? Who fills “Data Engineer”? |
 | **Graph** | Person → process canvas | Which Birth Registration / Employment processes link to Jeremy? |
 | **Logs** | Births, kinship, trust | List birth registrations. Reconstruct Emma Petit’s lineage. |
-| **Processes** | BFO 7-buckets process docs | Explain BirthRegistrationProcess. EmployeeRole vs JobPosition? |
+| **Processes** | BFO 7-buckets process docs | Explain BirthProcess. EmployeeRole vs JobPosition? |
 
 ---
 

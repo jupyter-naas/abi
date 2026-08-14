@@ -27,14 +27,16 @@ def compact_graph_id(uri: str | None) -> str | None:
         return None
     text = str(uri).rstrip("/")
     if text.startswith(PERSONNEL_NS):
-        return f"personnel:{text[len(PERSONNEL_NS):]}"
+        return f"personnel:{text[len(PERSONNEL_NS) :]}"
     if text.startswith(ABI_NS):
-        return f"abi:{text[len(ABI_NS):]}"
+        return f"abi:{text[len(ABI_NS) :]}"
     uuid = compact_personnel(text)
     return uuid or text
 
 
-def _relation(from_id: str, to_id: str, predicate_uri: str, predicate_label: str) -> dict:
+def _relation(
+    from_id: str, to_id: str, predicate_uri: str, predicate_label: str
+) -> dict:
     return {
         "from": from_id,
         "to": to_id,
@@ -157,7 +159,10 @@ def build_graph_page_payload(
         *,
         canvas: bool = True,
     ) -> None:
-        rel = {**_relation(from_id, to_id, predicate_uri, predicate_label), "canvas": canvas}
+        rel = {
+            **_relation(from_id, to_id, predicate_uri, predicate_label),
+            "canvas": canvas,
+        }
         if rel not in relations:
             relations.append(rel)
 
@@ -178,12 +183,16 @@ def build_graph_page_payload(
             continue
         ensure_person(subject)
 
-        reg_id = compact_graph_id(reg_uri) or compact_personnel(reg_uri) or (
-            f"birth-{_slug(subject)}-{_slug(birth.get('declarantLabel') or '')}"
+        reg_id = (
+            compact_graph_id(reg_uri)
+            or compact_personnel(reg_uri)
+            or (f"birth-{_slug(subject)}-{_slug(birth.get('declarantLabel') or '')}")
         )
         decl_uri = birth.get("declaration") or ""
-        source_id = compact_graph_id(decl_uri) or compact_personnel(decl_uri) or (
-            f"source-{uuid_part(decl_uri) or _slug(subject)}"
+        source_id = (
+            compact_graph_id(decl_uri)
+            or compact_personnel(decl_uri)
+            or (f"source-{uuid_part(decl_uri) or _slug(subject)}")
         )
         declarant = birth.get("declarantLabel")
 
@@ -209,9 +218,19 @@ def build_graph_page_payload(
                         p
                         for p in (
                             _prop("rdfs:label", "label", birth_label),
-                            _prop("personnel:registeredPerson", "registered person", subject),
-                            _prop("abi:hasFirstInstant", "start", birth.get("temporalStart")),
-                            _prop("abi:hasLastInstant", "end", birth.get("temporalEnd")),
+                            _prop(
+                                "personnel:registeredPerson",
+                                "registered person",
+                                subject,
+                            ),
+                            _prop(
+                                "abi:hasFirstInstant",
+                                "start",
+                                birth.get("temporalStart"),
+                            ),
+                            _prop(
+                                "abi:hasLastInstant", "end", birth.get("temporalEnd")
+                            ),
                         )
                         if p
                     ],
@@ -233,7 +252,7 @@ def build_graph_page_payload(
                             bfo_bucket="Site",
                         )
                     )
-                    add_rel(birth_id, site_id, "bfo:BFO_0000066", "occurs in")
+                    add_rel(birth_id, site_id, "abi:occursIn", "occurs in")
 
             temporal_uri = birth.get("temporal")
             temporal_label = birth.get("temporalLabel")
@@ -267,7 +286,12 @@ def build_graph_page_payload(
                             ],
                         )
                     )
-                    add_rel(birth_id, temporal_id, "bfo:BFO_0000199", "occupies temporal region")
+                    add_rel(
+                        birth_id,
+                        temporal_id,
+                        "abi:occupiesTemporalRegion",
+                        "occupies temporal region",
+                    )
 
             sex_uri = birth.get("sex")
             sex_label = birth.get("sexLabel")
@@ -283,7 +307,7 @@ def build_graph_page_payload(
                             bfo_bucket="Quality",
                         )
                     )
-                    add_rel(birth_id, sex_id, "bfo:BFO_0000057", "has sex")
+                    add_rel(birth_id, sex_id, "abi:hasParticipant", "has sex")
 
             eye_uri = birth.get("eyeColor")
             eye_label = birth.get("eyeColorLabel")
@@ -299,7 +323,7 @@ def build_graph_page_payload(
                             bfo_bucket="Quality",
                         )
                     )
-                    add_rel(birth_id, eye_id, "bfo:BFO_0000057", "has eye color")
+                    add_rel(birth_id, eye_id, "abi:hasParticipant", "has eye color")
 
         add_rel(birth_id, subject, "personnel:isBirthOf", "is birth of")
 
@@ -341,7 +365,7 @@ def build_graph_page_payload(
                 "sourceId": source_id,
                 "nodeKind": "process",
                 "processType": "birth-registration",
-                "classUri": "personnel:BirthRegistrationProcess",
+                "classUri": "personnel:BirthProcess",
                 "classLabel": "Birth Registration Process",
                 "canvasHidden": True,
                 "startedAt": birth.get("registrationStart") or birth.get("declaredOn"),
@@ -350,7 +374,11 @@ def build_graph_page_payload(
                     p
                     for p in (
                         _prop("personnel:registersBirth", "registers birth", birth_id),
-                        _prop("bfo:BFO_0000199", "ledger time", birth.get("declaredOn")),
+                        _prop(
+                            "abi:occupiesTemporalRegion",
+                            "ledger time",
+                            birth.get("declaredOn"),
+                        ),
                         _prop(
                             "abi:hasFirstInstant",
                             "start",
@@ -361,14 +389,30 @@ def build_graph_page_payload(
                             "end",
                             birth.get("registrationEnd") or birth.get("declaredOn"),
                         ),
-                        _prop("personnel:declared_content", "declared content", birth.get("declaredContent")),
+                        _prop(
+                            "personnel:declared_content",
+                            "declared content",
+                            birth.get("declaredContent"),
+                        ),
                     )
                     if p
                 ],
             }
         )
-        add_rel(reg_id, birth_id, "personnel:registersBirth", "registers birth", canvas=False)
-        add_rel(reg_id, source_id, "personnel:hasInformationSource", "has information source", canvas=False)
+        add_rel(
+            reg_id,
+            birth_id,
+            "personnel:registersBirth",
+            "registers birth",
+            canvas=False,
+        )
+        add_rel(
+            reg_id,
+            source_id,
+            "personnel:hasInformationSource",
+            "has information source",
+            canvas=False,
+        )
         if declarant:
             add_rel(source_id, declarant, "cco:ont00001833", "has agent", canvas=False)
 
@@ -426,9 +470,9 @@ def build_graph_page_payload(
         add_entity(
             _entity_node(
                 working_id,
-                label="Working",
-                class_uri="personnel:Working",
-                class_label="Working",
+                label="Act of Working",
+                class_uri="personnel:ActOfWorking",
+                class_label="Act of Working",
                 bfo_bucket="Process",
                 is_working_hub=True,
                 started_at=work.get("temporalStart"),
@@ -436,16 +480,18 @@ def build_graph_page_payload(
                 properties=[
                     p
                     for p in (
-                        _prop("personnel:isWorkingOf", "worker", subject),
+                        _prop("personnel:isActOfWorkingOf", "worker", subject),
                         _prop("personnel:job_title", "job title", work.get("jobTitle")),
-                        _prop("abi:hasFirstInstant", "start", work.get("temporalStart")),
+                        _prop(
+                            "abi:hasFirstInstant", "start", work.get("temporalStart")
+                        ),
                         _prop("abi:hasLastInstant", "end", work.get("temporalEnd")),
                     )
                     if p
                 ],
             )
         )
-        add_rel(subject, working_id, "personnel:hasWorking", "has working")
+        add_rel(subject, working_id, "personnel:hasActOfWorking", "has act of working")
 
         org_uri = work.get("org")
         org_label = work.get("orgLabel")
@@ -463,7 +509,9 @@ def build_graph_page_payload(
                     )
                 )
             if org_id:
-                add_rel(working_id, org_id, "personnel:forOrganization", "for organization")
+                add_rel(
+                    working_id, org_id, "personnel:forOrganization", "for organization"
+                )
 
         site_uri = work.get("site")
         site_label = work.get("siteLabel")
@@ -479,7 +527,7 @@ def build_graph_page_payload(
                         bfo_bucket="Site",
                     )
                 )
-                add_rel(working_id, site_id, "bfo:BFO_0000066", "occurs in")
+                add_rel(working_id, site_id, "abi:occursIn", "occurs in")
 
         temporal_uri = work.get("temporal")
         temporal_label = work.get("temporalLabel")
@@ -504,14 +552,21 @@ def build_graph_page_payload(
                                     work.get("temporalStart"),
                                 ),
                                 _prop(
-                                    "abi:hasLastInstant", "last instant", work.get("temporalEnd")
+                                    "abi:hasLastInstant",
+                                    "last instant",
+                                    work.get("temporalEnd"),
                                 ),
                             )
                             if p
                         ],
                     )
                 )
-                add_rel(working_id, temporal_id, "bfo:BFO_0000199", "occupies temporal region")
+                add_rel(
+                    working_id,
+                    temporal_id,
+                    "abi:occupiesTemporalRegion",
+                    "occupies temporal region",
+                )
 
         contract_uri = work.get("contract")
         contract_label = work.get("contractLabel")
@@ -527,7 +582,9 @@ def build_graph_page_payload(
                         bfo_bucket="GDC",
                     )
                 )
-                add_rel(working_id, contract_id, "personnel:hasContract", "has contract")
+                add_rel(
+                    working_id, contract_id, "personnel:hasContract", "has contract"
+                )
 
         position_uri = work.get("position")
         position_label = work.get("positionLabel")
@@ -541,10 +598,31 @@ def build_graph_page_payload(
                         label=position_label,
                         class_uri="personnel:JobPosition",
                         class_label="Job Position",
-                        bfo_bucket="Realizable",
+                        bfo_bucket="GDC",
                     )
                 )
-                add_rel(working_id, position_id, "personnel:realizesJobPosition", "realizes job position")
+        role_uri = work.get("role")
+        role_label = work.get("roleLabel")
+        if role_uri and role_label:
+            role_id = compact_graph_id(role_uri)
+            if role_id:
+                add_entity(
+                    _entity_node(
+                        role_id,
+                        label=role_label,
+                        class_uri="personnel:EmployeeRole",
+                        class_label="Employee Role",
+                        bfo_bucket="Role",
+                    )
+                )
+                add_rel(working_id, role_id, "abi:realizes", "realizes")
+                if position_id:
+                    add_rel(
+                        role_id,
+                        position_id,
+                        "personnel:hasJobPosition",
+                        "has job position",
+                    )
 
         rem_uri = work.get("remuneration")
         rem_label = work.get("remunerationLabel")
@@ -577,7 +655,7 @@ def build_graph_page_payload(
                         properties=rem_props,
                     )
                 )
-                add_rel(working_id, rem_id, "bfo:BFO_0000057", "has remuneration")
+                add_rel(working_id, rem_id, "abi:hasParticipant", "has remuneration")
 
     canvas_relations = [rel for rel in relations if rel.get("canvas", True)]
 

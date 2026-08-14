@@ -162,7 +162,7 @@ def build_ledger_log_entries(
                     subject_uri=birth_uri,
                     subject_type_uri="cco:ont00001237",
                     predicate_kind=PROP_OBJECT,
-                    predicate_uri="bfo:BFO_0000199",
+                    predicate_uri="abi:occupiesTemporalRegion",
                     object_value=str(temporal),
                     object_type_uri="xsd:date",
                 )
@@ -175,7 +175,7 @@ def build_ledger_log_entries(
                     subject_uri=birth_uri,
                     subject_type_uri="cco:ont00001237",
                     predicate_kind=PROP_OBJECT,
-                    predicate_uri="bfo:BFO_0000066",
+                    predicate_uri="abi:occursIn",
                     object_value=str(site),
                     object_type_uri="bfo:BFO_0000029",
                 )
@@ -240,7 +240,7 @@ def build_ledger_log_entries(
         entries.append(
             {
                 "process_uri": process_uri,
-                "process_type_uri": "personnel:BirthRegistrationProcess",
+                "process_type_uri": "personnel:BirthProcess",
                 "source_at": source_at,
                 "source_uuid": source_uuid,
                 "source_uri": source_uri,

@@ -181,7 +181,9 @@ function renderBucketCards(proc) {
 }
 
 export function mountProcessesPage(el, data) {
-  const processes = data.processes || [];
+  const processes = (data.processes || []).filter(
+    (p) => p.status === "implemented"
+  );
   let activeId = processes[0]?.id;
 
   function paint() {
@@ -236,7 +238,7 @@ export function mountProcessesPage(el, data) {
         ${renderRestrictions(proc.restrictions)}
       </div>
 
-      <div class="agent-q"><strong>Ask PersonnelAgent:</strong> “Explain BirthRegistrationProcess.” · “What is the difference between EmployeeRole and JobPosition?”</div>
+      <div class="agent-q"><strong>Ask PersonnelAgent:</strong> “Explain BirthProcess.” · “Explain ActOfWorking.” · “Explain ActOfStudying.”</div>
     `;
 
     el.querySelectorAll("[data-proc]").forEach((btn) => {
