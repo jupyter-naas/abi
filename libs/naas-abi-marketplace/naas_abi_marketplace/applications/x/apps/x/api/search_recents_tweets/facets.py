@@ -8,6 +8,10 @@ render them without querying the graph.
 
 One entry per ``query_slug`` × ``scenario_id`` × faceted column, capped at
 :data:`MAX_FACET_VALUES` values (most frequent first).
+
+The value lists come from :meth:`SnapshotContext.facet_values_for_window`, which
+aggregates each column once across the scenario bands and sums the per-scenario
+totals in Python — one scan per column rather than one per column per scenario.
 """
 
 from __future__ import annotations
@@ -32,7 +36,7 @@ def publish(ctx: SnapshotContext) -> dict:
         slug = slugify(entry.get("name") or query_string)
         for scenario in ctx.scenarios:
             for column in TWEET_FACET_COLUMNS:
-                values = ctx.distinct_column_values(
+                values = ctx.facet_values_for_window(
                     query_string,
                     scenario["start_time"],
                     scenario["end_time"],

@@ -525,12 +525,45 @@ def publish_x_app(
 
     from naas_abi_marketplace.applications.x.apps.x.hub import XAppHubBuilder
 
+    # Bring the columnar projection level with the envelope archive first, so the
+    # snapshots below read a view that includes this tick's ingest.
+    projection = refresh_x_cache(module)
+
     hub = XAppHubBuilder(
         module.engine.services.object_storage,
         module.engine.services.triple_store,
         namespace=module.configuration.ontology_namespace,
     )
-    return hub.publish(followed_count_entries(module), full_users=full_users)
+    published = hub.publish(followed_count_entries(module), full_users=full_users)
+    if projection is not None:
+        published = {**published, "projection": projection}
+    return published
+
+
+def refresh_x_cache(module, *, full: bool = False) -> dict | None:
+    """Update the Parquet projection from any envelopes written since last time.
+
+    Returns the refresh summary, or ``None`` when the projection is unavailable
+    (polars not installed, object storage unreachable). A failure here must never
+    fail the publish: the snapshots fall back to SPARQL, which is what ran before
+    the projection existed.
+    """
+    try:
+        from naas_abi_marketplace.applications.x.apps.x.cache import refresh
+    except ImportError as exc:
+        logger.info(f"refresh_x_cache: projection unavailable ({exc})")
+        return None
+    try:
+        kv = getattr(module.engine.services, "kv", None)
+    except Exception:  # noqa: BLE001 — kv is optional; the watermark degrades to a rescan
+        kv = None
+    try:
+        return refresh(module.engine.services.object_storage, kv, full=full)
+    except Exception as exc:  # noqa: BLE001 — degrade to the SPARQL path
+        logger.warning(
+            f"refresh_x_cache: refresh failed ({exc}) — snapshots use SPARQL"
+        )
+        return None
 
 
 def republish_x_app_after_pipeline(

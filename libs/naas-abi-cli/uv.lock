@@ -2653,6 +2653,7 @@ requires-dist = [
     { name = "naas-abi-core", editable = "../naas-abi-core" },
     { name = "pandas", marker = "extra == 'applications-linkedin'", specifier = ">=2.3.3" },
     { name = "pdfplumber", marker = "extra == 'ai-chatgpt'", specifier = ">=0.11.8" },
+    { name = "polars", marker = "extra == 'applications-x'", specifier = ">=1.0.0" },
     { name = "psycopg2-binary", marker = "extra == 'applications-postgres'", specifier = ">=2.9.10,<3" },
     { name = "pymupdf", marker = "extra == 'domains-document'", specifier = ">=1.27.2.2" },
     { name = "pymupdf4llm", marker = "extra == 'domains-document'", specifier = ">=1.27.2.2" },
@@ -2668,7 +2669,7 @@ requires-dist = [
     { name = "yahooquery", marker = "extra == 'applications-yahoofinance'", specifier = "==2.4.1" },
     { name = "yfinance", marker = "extra == 'applications-yahoofinance'", specifier = "==0.2.66" },
 ]
-provides-extras = ["ai-bedrock", "ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-ollama", "ai-openrouter", "ai-perplexity", "ai-qwen", "applications-agicap", "applications-airtable", "applications-algolia", "applications-arxiv", "applications-bodo", "applications-datagouv", "applications-exchangeratesapi", "applications-git", "applications-github", "applications-gmail", "applications-google-calendar", "applications-google-drive", "applications-google-sheets", "applications-googlesearch", "applications-hubspot", "applications-linkedin", "applications-naas", "applications-nebari", "applications-newsapi", "applications-notion", "applications-openrouter", "applications-openweathermap", "applications-pennylane", "applications-postgres", "applications-powerpoint", "applications-pubmed", "applications-sanax", "applications-sendgrid", "applications-sharepoint", "applications-spotify", "applications-twilio", "applications-worldbank", "applications-yahoofinance", "domains-ontology-engineer", "domains-document"]
+provides-extras = ["ai-bedrock", "ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-ollama", "ai-openrouter", "ai-perplexity", "ai-qwen", "applications-agicap", "applications-airtable", "applications-algolia", "applications-arxiv", "applications-bodo", "applications-datagouv", "applications-exchangeratesapi", "applications-git", "applications-github", "applications-gmail", "applications-google-calendar", "applications-google-drive", "applications-google-sheets", "applications-googlesearch", "applications-hubspot", "applications-linkedin", "applications-naas", "applications-nebari", "applications-newsapi", "applications-notion", "applications-openrouter", "applications-openweathermap", "applications-pennylane", "applications-postgres", "applications-powerpoint", "applications-pubmed", "applications-sanax", "applications-sendgrid", "applications-sharepoint", "applications-spotify", "applications-twilio", "applications-worldbank", "applications-x", "applications-yahoofinance", "domains-ontology-engineer", "domains-document"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -4551,8 +4552,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography" },
-    { name = "jeepney" },
+    { name = "cryptography", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "jeepney", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [

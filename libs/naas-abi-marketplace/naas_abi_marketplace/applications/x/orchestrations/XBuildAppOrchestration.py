@@ -41,16 +41,36 @@ _BUILD_APP_OP_CONFIG_SCHEMA = {
             "without a new post."
         ),
     ),
+    "rebuild_projection": dg.Field(
+        bool,
+        is_required=False,
+        default_value=False,
+        description=(
+            "Re-project the Parquet cache from the whole envelope archive "
+            "instead of only the envelopes past the watermark. Use after a "
+            "schema change, or if the projection is suspected to have a gap. "
+            "Costs a full archive read, so it is not the scheduled behaviour."
+        ),
+    ),
 }
 
 
-def _run_build_cycle(*, full_users: bool = False) -> dict:
+def _run_build_cycle(
+    *, full_users: bool = False, rebuild_projection: bool = False
+) -> dict:
     """Populate from the triple store and rebuild the X app front."""
-    from naas_abi_marketplace.applications.x.orchestrations.utils import publish_x_app
+    from naas_abi_marketplace.applications.x.orchestrations.utils import (
+        publish_x_app,
+        refresh_x_cache,
+    )
 
     module = ABIModule.get_instance()
-    publish = publish_x_app(module, full_users=full_users)
-    summary = {"app": publish}
+    summary: dict = {}
+    if rebuild_projection:
+        # Done up front so the publish below reads the rebuilt projection;
+        # publish_x_app's own incremental refresh then has nothing left to do.
+        summary["projection_rebuild"] = refresh_x_cache(module, full=True)
+    summary["app"] = publish_x_app(module, full_users=full_users)
     logger.info(f"XBuildAppOrchestration: done — {summary}")
     return summary
 
@@ -78,8 +98,10 @@ class XBuildAppOrchestration(DagsterOrchestration):
 
         @dg.op(name=_OP_NAME, config_schema=_BUILD_APP_OP_CONFIG_SCHEMA)
         def build_op(context) -> dict:
+            config = context.op_config or {}
             return _run_build_cycle(
-                full_users=bool((context.op_config or {}).get("full_users", False))
+                full_users=bool(config.get("full_users", False)),
+                rebuild_projection=bool(config.get("rebuild_projection", False)),
             )
 
         # In-process executor: share the code-server's warm engine instead of
