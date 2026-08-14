@@ -22,10 +22,10 @@ DEFAULT_TWEET_GRAPH = "http://ontology.naas.ai/graph/x"
 DEFAULT_NAMESPACE = "http://ontology.naas.ai/x/"
 DEFAULT_APP_PREFIX = "x/apps/x"
 
-# Cap for Search page tweet tables / author bars (KPI counts are uncapped).
-# ``tweets_in_window`` orders the *full* graph match by recency before applying
-# this LIMIT, so a capped read is the newest N tweets in the window — never an
-# arbitrary sample.
+# Cap for Search page tweet tables / author bars (KPI counts and the ingested
+# tweets line chart are uncapped). ``tweets_in_window`` orders the *full* graph
+# match by recency before applying this LIMIT, so a capped read is the newest N
+# tweets in the window — never an arbitrary sample.
 DEFAULT_TWEET_LIMIT = 1000
 
 # The Users page reads a published dataset rather than querying the graph, so
@@ -446,10 +446,10 @@ class SnapshotContext:
         # this could go stale on.
         #
         # It exists because the page scripts ask for the same rows repeatedly:
-        # tables, barcharts and linecharts each call tweets_in_window for the
-        # same (query, scenario) — 5 executions per scenario where 2 windows are
-        # actually distinct — and every sum_counts_in_window re-runs the same
-        # graph-wide timeseries aggregate.
+        # tables and barcharts each call tweets_in_window for the same
+        # (query, scenario) — and every sum_counts_in_window re-runs the same
+        # graph-wide timeseries aggregate. The Search line chart reads
+        # ingested_timeseries instead (uncapped matched tweets, by created_at).
         self._query_cache: dict[tuple, Any] = {}
         # Unfiltered tweet pages actually fetched this publish, keyed by
         # (query, end_time, cap) — the pool :meth:`_derive_tweets` reuses so the
@@ -634,6 +634,94 @@ class SnapshotContext:
             if start_ms <= t < end_ms:
                 total += int(bucket["count"])
         return total
+
+    def ingested_timeseries(
+        self, query_string: str, start_time: str, end_time: str
+    ) -> list[dict[str, Any]]:
+        """Hourly ``{start, end, count}`` of ingested **matched** tweets.
+
+        Bucketed by each tweet's ``created_at``, not by ingest time. Referenced
+        context is excluded — quoted/replied-to originals can predate the
+        window. Count-endpoint totals are a different population (what X
+        reported, not what was ingested).
+
+        Memoized per publish: the Search line chart derives every scenario
+        window (and its previous period) from one span.
+        """
+        return self._memo(
+            ("ingested_timeseries", query_string, start_time, end_time),
+            lambda: self._ingested_timeseries(query_string, start_time, end_time),
+        )
+
+    def _ingested_timeseries(
+        self, query_string: str, start_time: str, end_time: str
+    ) -> list[dict[str, Any]]:
+        cache = self.cache
+        slug = self._cache_slug(query_string)
+        if cache is not None and slug is not None:
+            return cache.hourly_counts(start_time, end_time, query_slug=slug)
+        return self._ingested_timeseries_sparql(query_string, start_time, end_time)
+
+    def _ingested_timeseries_sparql(
+        self, query_string: str, start_time: str, end_time: str
+    ) -> list[dict[str, Any]]:
+        escaped = _escape_sparql_string(query_string)
+        start_lit = _escape_sparql_string(start_time)
+        end_lit = _escape_sparql_string(end_time)
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        PREFIX x:   <{self.namespace}>
+        SELECT DISTINCT ?tweet ?created
+        WHERE {{
+          GRAPH <{self.tweet_graph_name}> {{
+            ?sq rdf:type x:SearchQuery ; x:query_string ?qs .
+            FILTER(
+              CONTAINS(LCASE(STR(?qs)), LCASE("{escaped}"))
+              || CONTAINS(LCASE("{escaped}"), LCASE(STR(?qs)))
+            )
+            ?proc rdf:type x:SearchRecentTweets ;
+                  x:usesSearchQuery ?sq ;
+                  x:producesSearchResult ?rs .
+            ?tweet rdf:type x:Tweet ;
+                   x:isContainedInSearchResultSet ?rs ;
+                   x:tweet_created_at ?created .
+            FILTER(
+              ?created >= "{start_lit}"^^xsd:dateTime
+              && ?created < "{end_lit}"^^xsd:dateTime
+            )
+          }}
+        }}
+        """
+        counts: dict[datetime, int] = {}
+        rows = self._query_rows(
+            sparql,
+            f"ingested_timeseries for {query_string!r} [{start_time} → {end_time}]",
+        )
+        for row in rows:
+            raw = getattr(row, "created", None)
+            if raw is None:
+                continue
+            try:
+                created = (
+                    raw
+                    if isinstance(raw, datetime)
+                    else datetime.fromisoformat(str(raw))
+                )
+            except ValueError:
+                continue
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=UTC)
+            hour = created.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+            counts[hour] = counts.get(hour, 0) + 1
+        return [
+            {
+                "start": hour.isoformat(),
+                "end": (hour + timedelta(hours=1)).isoformat(),
+                "count": n,
+            }
+            for hour, n in sorted(counts.items())
+        ]
 
     # ----- SPARQL: ingested tweets -----------------------------------------
 
@@ -1705,3 +1793,50 @@ class SnapshotContext:
             }
             for day, value in sorted(by_day.items())
         ]
+
+
+def complete_hourly_buckets(
+    buckets: list[dict[str, Any]],
+    start_time: str,
+    end_time: str,
+) -> list[dict[str, Any]]:
+    """Pad *buckets* so every hour in ``[start, end)`` is present.
+
+    The Search line chart plots by index (same as Count), so a sparse series of
+    only the hours that had a tweet would stretch those hours across the axis
+    and overlay current vs previous by rank rather than by clock hour. Zero
+    hours keep the series aligned with the window, the way the count endpoint's
+    hourly buckets already are.
+    """
+    by_hour: dict[datetime, int] = {}
+    for bucket in buckets:
+        try:
+            hour = datetime.fromisoformat(str(bucket["start"]))
+        except ValueError:
+            continue
+        if hour.tzinfo is None:
+            hour = hour.replace(tzinfo=UTC)
+        hour = hour.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+        by_hour[hour] = by_hour.get(hour, 0) + int(bucket.get("count") or 0)
+
+    start = datetime.fromisoformat(start_time)
+    end = datetime.fromisoformat(end_time)
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=UTC)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=UTC)
+    start = start.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+
+    out: list[dict[str, Any]] = []
+    hour = start
+    while hour < end:
+        nxt = hour + timedelta(hours=1)
+        out.append(
+            {
+                "start": hour.isoformat(),
+                "end": nxt.isoformat(),
+                "count": by_hour.get(hour, 0),
+            }
+        )
+        hour = nxt
+    return out

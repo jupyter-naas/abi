@@ -7,6 +7,7 @@ costs only the new envelopes.
 """
 
 import json
+from datetime import datetime
 
 from naas_abi_marketplace.applications.x.apps.x.cache import projection
 from naas_abi_marketplace.applications.x.apps.x.cache.envelopes import (
@@ -457,6 +458,22 @@ def test_author_index_counts_matched_and_referenced_posts():
     assert index["bob"]["posts"] == 2
     assert reader.descriptions() == {"alice": "hi"}
     assert reader.display_names() == {"alice": "Alice Example"}
+
+
+def test_hourly_counts_are_matched_by_created_at_not_referenced():
+    """The Search line chart must not fold in quoted/replied-to context."""
+    reader = _seeded_reader()
+    buckets = reader.hourly_counts(
+        "2026-08-12T00:00:00+00:00",
+        "2026-08-13T00:00:00+00:00",
+        query_slug="drone_or_drones_lang_en",
+    )
+    by_hour = {
+        datetime.fromisoformat(b["start"]).hour: b["count"] for b in buckets
+    }
+    # bob's referenced post at 03:00 is out; matched posts at 04:00 and 05:00.
+    assert 3 not in by_hour
+    assert by_hour == {4: 1, 5: 1}
 
 
 def test_posts_by_username_includes_referenced_context():
