@@ -706,7 +706,7 @@ class SnapshotContext:
                 created = (
                     raw
                     if isinstance(raw, datetime)
-                    else datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+                    else datetime.fromisoformat(str(raw))
                 )
             except ValueError:
                 continue
