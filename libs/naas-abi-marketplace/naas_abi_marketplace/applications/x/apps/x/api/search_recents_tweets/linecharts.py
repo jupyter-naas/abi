@@ -1,53 +1,47 @@
-"""Publish ``search_recents_tweets/linecharts.json`` — ingested tweets over time."""
+"""Publish ``search_recents_tweets/linecharts.json`` — ingested tweets over time.
+
+Same shape as the Count page's "Posts over time": per-hour or per-day **counts**
+(not a cumulative running total), current vs previous period.
+
+The series is ingested **matched** tweets bucketed by ``created_at``. It is not
+the count-endpoint total (a different population) and not referenced context
+(those posts can predate the window). The 1 000-row table sample is not used —
+the cardinality is the same uncapped window the Tweets KPI reports.
+"""
 
 from __future__ import annotations
 
-from collections import Counter
 from datetime import datetime
 
 from naas_abi_marketplace.applications.x.apps.x.api.common import (
     SnapshotContext,
+    complete_hourly_buckets,
     previous_window,
     slugify,
 )
 
 
-def _bucket_tweets(tweets: list[dict], *, daily: bool) -> list[dict]:
-    counts: Counter[str] = Counter()
-    for t in tweets:
-        try:
-            created = datetime.fromisoformat(str(t["created_at"]))
-        except (KeyError, ValueError):
-            continue
-        key = (
-            created.strftime("%Y-%m-%d")
-            if daily
-            else created.strftime("%Y-%m-%dT%H:00:00+00:00")
-        )
-        counts[key] += 1
-    points: list[dict] = []
-    for key, value in sorted(counts.items()):
-        if daily:
-            point_t = f"{key}T12:00:00+00:00"
-            dt = datetime.fromisoformat(point_t)
-            label = dt.strftime("%b ") + str(dt.day)
-        else:
-            point_t = key
-            start = datetime.fromisoformat(key)
-            label = start.strftime("%b ") + str(start.day) + start.strftime(", %H:00")
-        points.append(
-            {"t": point_t, "value": value, "label": label, "range_label": label}
-        )
-    return points
-
-
 def publish(ctx: SnapshotContext) -> dict:
     charts: list[dict] = []
+    if ctx.scenarios:
+        span_start = min(
+            previous_window(s["start_time"], s["end_time"])[0] for s in ctx.scenarios
+        )
+        span_end = max(s["end_time"] for s in ctx.scenarios)
+    else:
+        span_start = span_end = ""
     for entry in ctx.queries:
         query_string = str(entry.get("query") or "").strip()
         if not query_string:
             continue
         slug = slugify(entry.get("name") or query_string)
+        if not ctx.scenarios:
+            continue
+        buckets = complete_hourly_buckets(
+            ctx.ingested_timeseries(query_string, span_start, span_end),
+            span_start,
+            span_end,
+        )
         for scenario in ctx.scenarios:
             start, end = scenario["start_time"], scenario["end_time"]
             prev_start, prev_end = previous_window(start, end)
@@ -58,8 +52,6 @@ def publish(ctx: SnapshotContext) -> dict:
                 // 3600
             )
             daily = hours > 48
-            cur = ctx.tweets_in_window(query_string, start, end)
-            prev = ctx.tweets_in_window(query_string, prev_start, prev_end)
             charts.append(
                 {
                     "query_slug": slug,
@@ -69,12 +61,16 @@ def publish(ctx: SnapshotContext) -> dict:
                         {
                             "id": "current",
                             "label": "Current",
-                            "points": _bucket_tweets(cur, daily=daily),
+                            "points": ctx.aggregate_buckets(
+                                buckets, start, end, daily=daily
+                            ),
                         },
                         {
                             "id": "previous",
                             "label": "Previous period",
-                            "points": _bucket_tweets(prev, daily=daily),
+                            "points": ctx.aggregate_buckets(
+                                buckets, prev_start, prev_end, daily=daily
+                            ),
                         },
                     ],
                 }

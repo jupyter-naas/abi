@@ -250,6 +250,42 @@ class CacheReader:
             start_time, end_time, kind=kind, query_slug=query_slug
         ).height
 
+    def hourly_counts(
+        self,
+        start_time: str,
+        end_time: str,
+        *,
+        query_slug: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Hourly ``{start, end, count}`` of matched tweets by ``created_at``.
+
+        Same shape as the count-endpoint timeseries, so ``aggregate_buckets``
+        can turn a window into chart points. Referenced context is excluded.
+        """
+        import polars as pl
+
+        rows = (
+            self.window(start_time, end_time, query_slug=query_slug)
+            .with_columns(pl.col("created_at").dt.truncate("1h").alias("hour"))
+            .group_by("hour")
+            .agg(pl.col("tweet_id").n_unique().alias("count"))
+            .sort("hour")
+        )
+        out: list[dict[str, Any]] = []
+        for r in rows.iter_rows(named=True):
+            hour = r["hour"]
+            if hour is None:
+                continue
+            nxt = hour + timedelta(hours=1)
+            out.append(
+                {
+                    "start": hour.isoformat(),
+                    "end": nxt.isoformat(),
+                    "count": int(r["count"]),
+                }
+            )
+        return out
+
     def facet_values(
         self,
         start_time: str,
@@ -294,7 +330,7 @@ class CacheReader:
         """The newest *limit* posts in the window, shaped like the table rows.
 
         Key-for-key what ``SnapshotContext._search_tweets`` returns, so either
-        source can feed the tables / barcharts / linecharts unchanged — including
+        source can feed the tables / barcharts unchanged — including
         ``text`` preferring ``full_text``, which is how the SPARQL path resolves
         a long post's untruncated content.
         """
