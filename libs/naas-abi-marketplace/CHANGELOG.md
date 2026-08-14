@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.34.4 (2026-08-14)
+
+### Bug Fixes
+
+- Search username on x app
+  ([`1739501`](https://github.com/jupyter-naas/abi/commit/1739501c5fbdf427e3c09efeb7e9252a7fee92ff))
+
+
 ## v3.34.3 (2026-08-14)
 
 
