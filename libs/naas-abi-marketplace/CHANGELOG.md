@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v3.35.0 (2026-08-17)
+
+### Chores
+
+- **x/orchestrations**: Update orchestration config schema
+  ([`c7da479`](https://github.com/jupyter-naas/abi/commit/c7da4797ab310bc48d8b45d6871641eb03d8f142))
+
+### Features
+
+- **x/cache**: Improve watermark handling and batch processing
+  ([`c7da479`](https://github.com/jupyter-naas/abi/commit/c7da4797ab310bc48d8b45d6871641eb03d8f142))
+
+### Testing
+
+- **x/cache**: Add tests for Redis watermark fallback and manifest rebuild
+  ([`c7da479`](https://github.com/jupyter-naas/abi/commit/c7da4797ab310bc48d8b45d6871641eb03d8f142))
+
+
 ## v3.34.6 (2026-08-14)
 
 ### Bug Fixes
