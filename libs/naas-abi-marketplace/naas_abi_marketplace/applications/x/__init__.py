@@ -18,6 +18,10 @@ from pydantic import BaseModel, Field, model_validator
 # `cron` — the sensor wakes every minute (the spend guard bounds the spend).
 DEFAULT_SEARCH_INTERVAL_SECONDS = 60
 
+# Cadence applied to a files-reprocess entry that sets neither `interval_seconds`
+# nor `cron` — the sensor wakes every 1 h 30 min.
+DEFAULT_FILES_INTERVAL_SECONDS = 5400
+
 def validate_cron(value: str, setting: str) -> str:
     """Return *value* stripped, or raise if it is not cron-shaped.
 
@@ -321,12 +325,14 @@ class XSearchRecentTweetsEventConfiguration(BaseModel):
 
 
 class XSearchRecentTweetsFilesConfiguration(BaseModel):
-    """One configured files-reprocessing sensor built by
+    """One configured files-reprocessing trigger built by
     :class:`XSearchRecentTweetsFilesOrchestration`.
 
-    Each entry produces its own (job, sensor) pair. Every ``interval_seconds``
-    the sensor — unless a previous run is still in flight — triggers a job that
-    sweeps every persisted search envelope under ``prefix`` and feeds it to
+    Each entry produces its own (job, trigger) pair — a **sensor** when the
+    entry sets ``interval_seconds`` (elapsed-time cadence) or a **schedule**
+    when it sets ``cron`` (wall-clock times, UTC). Unless a previous run is
+    still in flight, the trigger starts a job that sweeps every persisted search
+    envelope under ``prefix`` and feeds it to
     :class:`XSearchRecentTweetsPipeline` in ``file_path`` mode. When
     ``skip_existing`` is true the job first reads the ``x:file_path`` of every
     ``x:SearchResultSet`` already mapped and reprocesses only the envelopes not
@@ -353,12 +359,21 @@ class XSearchRecentTweetsFilesConfiguration(BaseModel):
             "is created STOPPED; enable it from the Dagster UI)."
         ),
     )
-    interval_seconds: int = Field(
-        default=5400,
+    interval_seconds: int | None = Field(
+        default=None,
         ge=60,
         description=(
-            "Minimum delay between two sensor evaluations. Defaults to 5400 "
-            "(every 1 h 30 min)."
+            "Minimum delay between two sensor evaluations. Mutually exclusive "
+            f"with `cron`; when neither is set, defaults to "
+            f"{DEFAULT_FILES_INTERVAL_SECONDS}s."
+        ),
+    )
+    cron: str | None = Field(
+        default=None,
+        description=(
+            "Cron expression (5 or 6 fields, or a @-macro such as '@hourly') "
+            "firing this sweep at fixed wall-clock times in UTC. Mutually "
+            "exclusive with `interval_seconds`."
         ),
     )
     prefix: str = Field(
@@ -399,6 +414,25 @@ class XSearchRecentTweetsFilesConfiguration(BaseModel):
             "the graph. Independent of ``enabled``."
         ),
     )
+
+    @model_validator(mode="after")
+    def _resolve_schedule_mode(self) -> "XSearchRecentTweetsFilesConfiguration":
+        """Exactly one trigger per entry: sensor cadence *or* cron schedule."""
+        if self.cron is not None and self.interval_seconds is not None:
+            raise ValueError(
+                f"search_recent_tweets_files[{self.name!r}]: set either "
+                f"'interval_seconds' (sensor cadence) or 'cron' (schedule), "
+                f"not both."
+            )
+
+        if self.cron is not None:
+            self.cron = validate_cron(
+                self.cron, f"search_recent_tweets_files[{self.name!r}]"
+            )
+        elif self.interval_seconds is None:
+            self.interval_seconds = DEFAULT_FILES_INTERVAL_SECONDS
+
+        return self
 
 
 class XCountFollowConfiguration(BaseModel):
@@ -530,19 +564,20 @@ class ABIModule(BaseModule):
                 persist: true
                 app_publish: false       # opt in to republish x/apps/x/ per map
 
-            # ----- Scheduled files-reprocessing sensors --------------------
-            # One (job, sensor) pair per entry. Every `interval_seconds` the
-            # sensor — unless a previous run is still in flight — sweeps every
-            # search envelope under `prefix` and feeds it to
-            # XSearchRecentTweetsPipeline. With `skip_existing: true` the run
-            # first reads the x:file_path of every x:SearchResultSet already in
-            # the graph and reprocesses only the envelopes not yet mapped.
-            # Created STOPPED unless `enabled: true`. Use it to backfill /
-            # re-ingest a folder on a cadence without re-querying the X API.
+            # ----- Scheduled files-reprocessing triggers -------------------
+            # One (job, trigger) pair per entry — sensor (`interval_seconds`)
+            # or schedule (`cron`), not both. Unless a previous run is still in
+            # flight, the trigger sweeps every search envelope under `prefix`
+            # and feeds it to XSearchRecentTweetsPipeline. With
+            # `skip_existing: true` the run first reads the x:file_path of
+            # every x:SearchResultSet already in the graph and reprocesses
+            # only the envelopes not yet mapped. Created STOPPED unless
+            # `enabled: true`. Use it to backfill / re-ingest a folder on a
+            # cadence without re-querying the X API.
             search_recent_tweets_files:
               - name: reprocess_envelopes
                 enabled: true
-                interval_seconds: 5400   # every 1 h 30 min
+                cron: "0,15,30,45 * * * *"  # 5 min after :10/:25/:40/:55 search ticks
                 prefix: x/search_recent_tweets
                 skip_existing: true      # skip files already in the graph
                 max_age_hours: 24        # only envelopes from the last 24h
