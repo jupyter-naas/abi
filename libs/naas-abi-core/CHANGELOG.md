@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.26.1 (2026-08-17)
+
+### Bug Fixes
+
+- Make it possible to comment in yaml config and discard required secrets
+  ([`9b38d61`](https://github.com/jupyter-naas/abi/commit/9b38d616e0518db381c97aeea64020b5e27ab79a))
+
+
 ## v2.26.0 (2026-08-17)
 
 ### Features
