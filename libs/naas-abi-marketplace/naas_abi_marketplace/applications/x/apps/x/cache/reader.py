@@ -80,7 +80,9 @@ class CacheReader:
 
     # ----- loading ---------------------------------------------------------
 
-    def _read_parquet_objects(self, prefix: str) -> list[Any]:
+    def _read_parquet_objects(
+        self, prefix: str, *, columns: list[str] | None = None
+    ) -> list[Any]:
         """Every part file under *prefix*, oldest part first.
 
         The order matters: :meth:`posts` keeps the *last* row of each duplicate
@@ -89,6 +91,10 @@ class CacheReader:
         under a ``ym=`` prefix a row's ``created_at`` fully determines, so sorting
         the keys orders each partition chronologically. Sorting is not optional —
         ``list_objects`` is ``os.listdir`` order on the filesystem adapter.
+
+        *columns* loads only those fields — ``_all_matched_ids`` needs
+        ``tweet_id`` / ``kind``, not the full row, so a windowed read does not
+        hold a second copy of every post in RAM.
         """
         import polars as pl
 
@@ -100,7 +106,7 @@ class CacheReader:
             except Exception as exc:  # noqa: BLE001
                 logger.warning(f"X cache reader: could not read {key} ({exc})")
                 continue
-            frames.append(pl.read_parquet(io.BytesIO(raw)))
+            frames.append(pl.read_parquet(io.BytesIO(raw), columns=columns))
         return frames
 
     def authors(self):
@@ -150,6 +156,17 @@ class CacheReader:
                 subset=["tweet_id", "kind", "query_slug"], keep="last"
             )
 
+        # Full-history load already has every row: derive matched ids from it
+        # instead of reading the same parts a second time. A windowed load still
+        # needs the global set (match typing wins across months).
+        if cache_key is None and not df.is_empty():
+            self._matched_ids = (
+                df.filter(pl.col("kind") == KIND_MATCHED)
+                .select("tweet_id")
+                .unique()
+                .get_column("tweet_id")
+                .implode()
+            )
         matched_ids = self._all_matched_ids()
         if matched_ids is not None and not df.is_empty():
             df = df.filter(
@@ -179,14 +196,13 @@ class CacheReader:
         import polars as pl
 
         if self._matched_ids is None:
-            frames = self._read_parquet_objects(POSTS_DIR)
+            frames = self._read_parquet_objects(
+                POSTS_DIR, columns=["tweet_id", "kind"]
+            )
             if not frames:
                 return None
             ids = (
-                pl.concat(
-                    [f.select("tweet_id", "kind") for f in frames],
-                    how="vertical_relaxed",
-                )
+                pl.concat(frames, how="vertical_relaxed")
                 .filter(pl.col("kind") == KIND_MATCHED)
                 .select("tweet_id")
                 .unique()

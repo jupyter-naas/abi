@@ -5,6 +5,10 @@ already projected is held in the key-value service, and only keys past it are
 read. On a normal tick that is the four envelopes the search workflow wrote in
 the last hour.
 
+The watermark is also written into ``manifest.json``. Redis is the fast path;
+if it is empty (restart, OOM) the manifest value is used rather than re-reading
+the whole archive into RAM — that is what SIGKILL'd ``x_build_app``.
+
 Everything lives in the platform's services — envelopes and Parquet in
 ``object_storage``, the watermark in ``kv``. Nothing is written to local disk, so
 the projection survives a container replacement like any other published artifact.
@@ -40,9 +44,11 @@ from naas_abi_marketplace.applications.x.apps.x.cache.schema import (
 )
 from naas_abi_marketplace.applications.x.apps.x.cache.storage import split_key, walk
 
-# Envelopes are fetched concurrently: each is a separate object-storage GET, and
-# the refresh is latency-bound rather than CPU-bound.
-FETCH_WORKERS = 16
+# Envelopes are fetched concurrently inside a small batch: each is a separate
+# object-storage GET. The batch bound is what keeps raw JSON off the heap —
+# ``executor.map`` over the whole archive would hold every body at once.
+FETCH_WORKERS = 8
+FETCH_BATCH = 32
 
 
 def _read_manifest(object_storage: ObjectStorageService) -> dict[str, Any]:
@@ -57,6 +63,15 @@ def _read_manifest(object_storage: ObjectStorageService) -> dict[str, Any]:
     return doc if isinstance(doc, dict) else {}
 
 
+def _parse_watermark(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(str(raw).strip())
+    except ValueError:
+        return None
+
+
 def _read_watermark(kv: KeyValueService | None) -> datetime | None:
     if kv is None:
         return None
@@ -67,9 +82,10 @@ def _read_watermark(kv: KeyValueService | None) -> datetime | None:
     if not raw:
         return None
     try:
-        return datetime.fromisoformat(raw.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError):
+        text = raw.decode("utf-8") if isinstance(raw, (bytes, bytearray)) else str(raw)
+    except UnicodeDecodeError:
         return None
+    return _parse_watermark(text)
 
 
 def _write_watermark(kv: KeyValueService | None, moment: datetime) -> None:
@@ -81,9 +97,95 @@ def _write_watermark(kv: KeyValueService | None, moment: datetime) -> None:
         logger.warning(f"X cache: could not store watermark ({exc})")
 
 
+def _resolve_watermark(
+    kv: KeyValueService | None,
+    manifest: dict[str, Any],
+    *,
+    rebuild: bool,
+) -> datetime | None:
+    """KV first; manifest if Redis is empty. Never invent a watermark."""
+    if rebuild:
+        return None
+    watermark = _read_watermark(kv)
+    if watermark is not None:
+        return watermark
+    fallback = _parse_watermark(
+        str(manifest["watermark"]) if manifest.get("watermark") else None
+    )
+    if fallback is not None:
+        logger.info(
+            f"X cache: Redis watermark missing — using manifest "
+            f"{fallback.isoformat()}"
+        )
+        # Put it back so the next tick does not have to read the manifest again.
+        _write_watermark(kv, fallback)
+    return fallback
+
+
 def _envelope_keys(object_storage: ObjectStorageService) -> list[str]:
     """Every persisted envelope, across the per-query sub-prefixes."""
     return walk(object_storage, ENVELOPE_PREFIX, suffix=".json")
+
+
+def _fetch_one(
+    object_storage: ObjectStorageService, key: str
+) -> tuple[str, bytes | None]:
+    directory, name = split_key(key)
+    try:
+        return key, object_storage.get_object(directory, name)
+    except Exception as exc:  # noqa: BLE001 — one bad object must not stop the run
+        logger.warning(f"X cache: could not read {key} ({exc})")
+        return key, None
+
+
+def _project_batch(
+    object_storage: ObjectStorageService,
+    batch: list[tuple[str, datetime | None]],
+) -> tuple[Any, Any, int, datetime | None]:
+    """Fetch and parse one batch of envelopes into columnar frames.
+
+    Returns ``(posts_frame, authors_frame, envelopes_read, newest_moment)``.
+    JSON bodies are dropped as soon as the batch is parsed.
+    """
+    import polars as pl
+
+    workers = min(FETCH_WORKERS, len(batch)) or 1
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        fetched = list(
+            pool.map(lambda item: _fetch_one(object_storage, item[0]), batch)
+        )
+
+    post_rows: list[dict[str, Any]] = []
+    author_rows: list[dict[str, Any]] = []
+    newest: datetime | None = None
+    read = 0
+    for (key, body), (_key, moment) in zip(fetched, batch, strict=True):
+        if body is None:
+            continue
+        try:
+            posts, authors = parse_envelope(json.loads(body))
+        except (ValueError, UnicodeDecodeError) as exc:
+            logger.warning(f"X cache: could not parse {key} ({exc})")
+            continue
+        post_rows.extend(posts)
+        author_rows.extend(authors)
+        read += 1
+        if moment is not None and (newest is None or moment > newest):
+            newest = moment
+
+    posts_frame = (
+        pl.DataFrame(post_rows, schema=post_schema()).unique(
+            subset=["tweet_id", "kind", "query_slug"], keep="last"
+        )
+        if post_rows
+        else pl.DataFrame([], schema=post_schema())
+    )
+    authors_frame = (
+        pl.DataFrame(author_rows, schema=author_schema())
+        if author_rows
+        else pl.DataFrame([], schema=author_schema())
+    )
+    return posts_frame, authors_frame, read, newest
 
 
 def refresh(
@@ -111,7 +213,16 @@ def refresh(
             f"{SCHEMA_VERSION} — rebuilding from the full archive"
         )
 
-    watermark = None if rebuild else _read_watermark(kv)
+    watermark = _resolve_watermark(kv, manifest, rebuild=rebuild)
+    # A published projection with no watermark at all would otherwise treat
+    # every envelope as new and *append* a second copy of history. Replace.
+    if not rebuild and watermark is None and manifest:
+        rebuild = True
+        logger.info(
+            "X cache: no watermark in Redis or manifest — rebuilding "
+            "(replace parts, do not append a full-archive dump)"
+        )
+
     keys = _envelope_keys(object_storage)
     pending: list[tuple[str, datetime | None]] = []
     for key in keys:
@@ -131,47 +242,46 @@ def refresh(
         f"({'full rebuild' if rebuild else f'since {watermark}'})"
     )
 
-    def _fetch(item: tuple[str, datetime | None]) -> tuple[str, bytes | None]:
-        key, _moment = item
-        directory, name = split_key(key)
-        try:
-            return key, object_storage.get_object(directory, name)
-        except Exception as exc:  # noqa: BLE001 — one bad object must not stop the run
-            logger.warning(f"X cache: could not read {key} ({exc})")
-            return key, None
-
-    post_rows: list[dict[str, Any]] = []
-    author_rows: list[dict[str, Any]] = []
+    posts_parts: list[Any] = []
+    authors_parts: list[Any] = []
     newest = watermark
     read = 0
-    with ThreadPoolExecutor(max_workers=FETCH_WORKERS) as pool:
-        for (key, body), (_k, moment) in zip(
-            pool.map(_fetch, pending), pending, strict=True
+    for start in range(0, len(pending), FETCH_BATCH):
+        batch = pending[start : start + FETCH_BATCH]
+        posts, authors, batch_read, batch_newest = _project_batch(
+            object_storage, batch
+        )
+        read += batch_read
+        if not posts.is_empty():
+            posts_parts.append(posts)
+        if not authors.is_empty():
+            authors_parts.append(authors)
+        if batch_newest is not None and (
+            newest is None or batch_newest > newest
         ):
-            if body is None:
-                continue
-            try:
-                posts, authors = parse_envelope(json.loads(body))
-            except (ValueError, UnicodeDecodeError) as exc:
-                logger.warning(f"X cache: could not parse {key} ({exc})")
-                continue
-            post_rows.extend(posts)
-            author_rows.extend(authors)
-            read += 1
-            if moment is not None and (newest is None or moment > newest):
-                newest = moment
+            newest = batch_newest
+        done = start + len(batch)
+        if done == len(pending) or done % (FETCH_BATCH * 4) == 0:
+            logger.info(
+                f"X cache: projected {done:,}/{len(pending):,} envelopes "
+                f"({read:,} read)"
+            )
 
-    # The same post arrives on many ticks; one row per (id, kind, query).
-    posts_frame = pl.DataFrame(post_rows, schema=post_schema()).unique(
-        subset=["tweet_id", "kind", "query_slug"], keep="last"
+    posts_frame = (
+        pl.concat(posts_parts, how="vertical_relaxed").unique(
+            subset=["tweet_id", "kind", "query_slug"], keep="last"
+        )
+        if posts_parts
+        else pl.DataFrame([], schema=post_schema())
+    )
+    authors_frame = (
+        pl.concat(authors_parts, how="vertical_relaxed")
+        if authors_parts
+        else pl.DataFrame([], schema=author_schema())
     )
 
     months_written = _write_posts(object_storage, posts_frame, rebuild=rebuild)
-    authors_total = _write_authors(
-        object_storage,
-        pl.DataFrame(author_rows, schema=author_schema()),
-        rebuild=rebuild,
-    )
+    authors_total = _write_authors(object_storage, authors_frame, rebuild=rebuild)
 
     if newest is not None:
         _write_watermark(kv, newest)
