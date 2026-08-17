@@ -72,6 +72,7 @@ export interface Message {
   content: string;
   timestamp: Date;
   agent?: AgentType;
+  modelId?: string | null;
   activityLine?: string; // Single-line live status (legacy, kept for backward compat)
   toolCalls?: ToolCall[]; // Ordered list of tool invocations for this message
   images?: string[]; // Base64-encoded images for multimodal chat
@@ -247,9 +248,11 @@ interface WorkspaceState {
   selectedAgent: AgentType;
   /** True when the user deliberately picked an agent (sidebar or composer),
    *  false when the agent was auto-selected as the workspace default.
-   *  Drives the sidebar highlight: "New Chat" vs a specific agent. Not persisted. */
+   *  Persisted so refresh and new chat keep the last pick. */
   agentExplicitlySelected: boolean;
   setSelectedAgent: (agent: AgentType, explicit?: boolean) => void;
+  selectedChatModels: Record<string, string>;
+  setSelectedChatModel: (agentId: string, modelId: string) => void;
   /** Drop the explicit selection without changing the agent — landing back on
    *  the chat route will then reset to the workspace default. */
   clearAgentExplicitSelection: () => void;
@@ -448,6 +451,12 @@ const mapApiMessage = (message: ApiChatMessage): Message => {
     content: message.content,
     timestamp: new Date(message.created_at || Date.now()),
     agent: message.agent || undefined,
+    modelId:
+      typeof meta.llm_model === 'string' && meta.llm_model.trim()
+        ? meta.llm_model.trim()
+        : typeof meta.model === 'string' && meta.model.trim()
+          ? meta.model.trim()
+          : undefined,
     toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
     sources: sources && sources.length > 0 ? sources : undefined,
     executionTime,
@@ -529,6 +538,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   agentExplicitlySelected: false,
   setSelectedAgent: (agent, explicit = false) =>
     set({ selectedAgent: agent, agentExplicitlySelected: explicit }),
+  selectedChatModels: {},
+  setSelectedChatModel: (agentId, modelId) =>
+    set((state) => ({
+      selectedChatModels: { ...state.selectedChatModels, [agentId]: modelId },
+    })),
   clearAgentExplicitSelection: () => set({ agentExplicitlySelected: false }),
   pendingComposerText: null,
   setPendingComposerText: (text) => set({ pendingComposerText: text }),
@@ -625,7 +639,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       return {
         activeConversationId: id,
         ...(conv?.agent
-          ? { selectedAgent: conv.agent, agentExplicitlySelected: false }
+          ? { selectedAgent: conv.agent, agentExplicitlySelected: true }
           : {}),
       };
     }),
@@ -1599,9 +1613,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         sidebarCollapsed: state.sidebarCollapsed,
         expandedSections: state.expandedSections,
         selectedAgent: state.selectedAgent,
+        agentExplicitlySelected: state.agentExplicitlySelected,
+        selectedChatModels: state.selectedChatModels,
         paneAgent: state.paneAgent,
-        // Do not persist paneAgentExplicitlySelected (same as main chat): a hard
-        // refresh should re-default the right pane to Abi via agents sync.
+        // Do not persist paneAgentExplicitlySelected: a hard refresh should
+        // re-default the right pane to Abi via agents sync.
         paneConversationId: state.paneConversationId,
         paneOpenTabIds: state.paneOpenTabIds,
         activePanelSection: state.activePanelSection,

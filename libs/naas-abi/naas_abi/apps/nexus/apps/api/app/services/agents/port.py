@@ -27,6 +27,8 @@ class AgentRecord:
     # layer (not persisted): falls back to a catalog/registry default when the
     # agent has no explicitly assigned ``model_id``.
     resolved_model_id: str | None = None
+    # Chat models the agent class can load. Empty/None means a single resolved id.
+    model_ids: list[str] | None = None
 
 
 @dataclass

@@ -2,7 +2,7 @@
 
 .chat-agent-selector-trigger {
   display: flex;
-  max-width: 9.5rem;
+  max-width: 16rem;
   align-items: center;
   gap: 4px;
   min-height: 32px;
@@ -34,7 +34,7 @@
 
 @media (min-width: 768px) {
   .chat-agent-selector-trigger {
-    max-width: 12rem;
+    max-width: 18rem;
     font-size: var(--font-size-sm, 14px);
   }
 }
@@ -159,6 +159,28 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: var(--font-weight-medium, 500);
+}
+
+.chat-agent-selector-row-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted-foreground-hex);
+}
+
+.chat-agent-selector-row.is-nested {
+  padding-left: calc(var(--space-2) + 16px);
+}
+
+.chat-agent-selector-chevron {
+  flex-shrink: 0;
+  color: var(--muted-foreground-hex);
+  transition: transform 0.15s ease;
+}
+
+.chat-agent-selector-chevron.is-open {
+  transform: rotate(90deg);
 }
 
 .chat-agent-selector-check {

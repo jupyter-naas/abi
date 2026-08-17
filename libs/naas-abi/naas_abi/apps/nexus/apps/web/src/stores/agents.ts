@@ -63,6 +63,7 @@ export interface Agent {
   provider: string | null; // Provider name (xai, openai, anthropic, etc.)
   modelId: string | null; // Model ID (grok-beta, gpt-4o, claude-3-5-sonnet, etc.)
   resolvedModelId?: string | null; // Effective model resolved by the backend (catalog/registry default when modelId is unset)
+  modelIds?: string[]; // Chat models the agent class can load
   logoUrl: string | null; // URL to agent/provider logo
   enabled: boolean; // Whether agent is available for chat
   suggestions?: Array<{ label: string; value: string }>; // Optional class-level prompt suggestions
@@ -193,6 +194,9 @@ export const useAgentsStore = create<AgentsState>()(
               provider: a.provider || null, // Provider name (xai, openai, etc.)
               modelId: cleanModel(a.model_id) || cleanModel(a.model) || null, // Model ID (grok-beta, gpt-4o, etc.)
               resolvedModelId: cleanModel(a.resolved_model_id) || null, // Backend-resolved effective model
+              modelIds: Array.isArray(a.model_ids)
+                ? a.model_ids.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
+                : undefined,
 
               logoUrl: a.logo_url || null, // Logo URL from API
               enabled: a.enabled || false, // Whether agent is available for chat

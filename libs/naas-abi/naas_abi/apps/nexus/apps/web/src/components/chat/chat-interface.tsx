@@ -13,6 +13,7 @@ import { useSurfaceConversation } from '@/stores/chat-thread-selectors';
 import { nextChatUrl } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
+import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
 import { dispatchSlidesDeckUpdated, useSlidesStore } from '@/stores/slides';
@@ -1914,6 +1915,13 @@ export function ChatInterface({
       const token = useAuthStore.getState().token;
       const workspaceId = useWorkspaceStore.getState().currentWorkspaceId;
 
+      const agentDataForModel = getAgent(effectiveAgent);
+      const llmModel =
+        (agentDataForModel && useWorkspaceStore.getState().selectedChatModels[agentDataForModel.id]) ||
+        agentDataForModel?.modelIds?.[0] ||
+        agentDataForModel?.resolvedModelId ||
+        null;
+
       const providerPayload = provider ? {
         id: provider.id,
         name: provider.name,
@@ -1923,6 +1931,7 @@ export function ChatInterface({
         api_key: provider.apiKey,
         account_id: provider.accountId,
         model: provider.model,
+        llm_model: llmModel,
       } : null;
 
       // Get agent's system prompt
@@ -1964,6 +1973,7 @@ export function ChatInterface({
           content: '▌',
           // content: searchEnabled ? '🌐 Searching the web...' : '▌',
           agent: effectiveAgent,
+          modelId: llmModel,
           activityLine: 'Processing...',
           // activityLine: searchEnabled ? 'Web search in progress' : 'Processing...',
           // Records which answer this one re-runs, so later turns leave the
@@ -2220,6 +2230,7 @@ export function ChatInterface({
             messages: fullHistory,
             agent: effectiveAgent,
             provider: providerPayload,
+            llm_model: llmModel,
             system_prompt: systemPrompt,
             search_enabled: false,
             regenerate_of: regenerateOf ?? null,
@@ -2385,6 +2396,7 @@ export function ChatInterface({
                   output: t.output ?? null,
                 })),
                 sources: streamSources,
+                llm_model: llmModel,
               }),
             },
           ).catch(() => { /* non-blocking */ });
@@ -2436,6 +2448,7 @@ export function ChatInterface({
             messages: fullHistory,
             agent: effectiveAgent,
             provider: providerPayload,
+            llm_model: llmModel,
             system_prompt: systemPrompt,
             regenerate_of: regenerateOf ?? null,
             ...(slidesChatContext ? { context: slidesChatContext } : {}),
@@ -2453,6 +2466,7 @@ export function ChatInterface({
           role: 'assistant',
           content: data.message.content,
           agent: effectiveAgent,
+          modelId: llmModel,
           thinkingDuration,
           sources: data.context_used?.length > 0 ? data.context_used : undefined,
           ...(regenerateOf ? { regenerateOf } : {}),
@@ -3528,6 +3542,17 @@ function ToolCallRow({ tool }: { tool: ToolCall }) {
   );
 }
 
+function formatMessageStamp(value: Date | string | undefined): string {
+  const date = value instanceof Date ? value : value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 // Matches page titles that indicate a soft-404 ("Page Not Found", etc.)
 const NOT_FOUND_TITLE_RE = /\b(404|not found|page not found|introuvable|doesn.t exist|no page)\b/i;
 
@@ -3570,6 +3595,7 @@ const MessageBubble = React.memo(function MessageBubble({
   // Get user name and agent info for display
   const user = useAuthStore(state => state.user);
   const resolveAgent = useAgentsStore(state => state.resolveAgent);
+  const catalogModels = useModelsStore(state => state.models);
   const agent = resolveAgent(message.agent);
   const isFromDifferentAgent = !isUser && Boolean(message.agent) && message.agent !== currentSelectedAgent;
   
@@ -4108,6 +4134,28 @@ const MessageBubble = React.memo(function MessageBubble({
               {transformBareUrls(responseForRender as string)}
             </ReactMarkdown>
           )}
+        </div>
+
+        <div
+          className={cn(
+            'px-1 pt-0.5 text-[10px] leading-4 text-muted-foreground',
+            isUser && 'text-right'
+          )}
+        >
+          {(() => {
+            const when = formatMessageStamp(message.timestamp);
+            if (isUser) return when;
+            const modelRaw =
+              message.modelId ||
+              agent?.modelIds?.[0] ||
+              agent?.resolvedModelId ||
+              agent?.modelId ||
+              null;
+            const modelLabel = modelDisplayName(catalogModels, modelRaw) ?? modelRaw;
+            return [senderName, modelLabel ? `model: ${modelLabel}` : null, when]
+              .filter(Boolean)
+              .join(' · ');
+          })()}
         </div>
 
         {/* RAG document source pills (filenames only; URLs use the panel below) */}
