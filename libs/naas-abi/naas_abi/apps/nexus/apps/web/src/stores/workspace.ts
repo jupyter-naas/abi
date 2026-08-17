@@ -193,6 +193,8 @@ export type SidebarSection = 'maps' | 'chat' | 'search' | 'files' | 'lab' | 'cod
 export interface OpenAppModule {
   module_path: string;
   module_name?: string;
+  /** "<module_path>:<app_name>" — the app's stable id. */
+  app_id?: string;
   name: string;
   description?: string;
   logo_url: string | null;
@@ -207,6 +209,11 @@ export interface OpenAppModule {
   author?: string | null;
   license?: string | null;
   keywords?: string[];
+  /** Manifest `agent_path` / `agent_class` — the app's default agent. */
+  agent_path?: string | null;
+  agent_class?: string | null;
+  /** Resolved agent registry key ("<python.module>/<ClassName>"). */
+  agent_class_name?: string | null;
 }
 
 interface WorkspaceState {
@@ -265,6 +272,12 @@ interface WorkspaceState {
   paneAgentExplicitlySelected: boolean;
   setPaneAgent: (agent: AgentType, explicit?: boolean) => void;
   clearPaneAgentExplicitSelection: () => void;
+  /** Agent the open app declares in its manifest (`agent_path`/`agent_class`),
+   *  resolved to a workspace agent id. While set it replaces Abi as the default,
+   *  so the chat next to an app opens on the agent that knows that app. Cleared
+   *  when the app closes. Not persisted. */
+  appPaneAgent: AgentType | null;
+  setAppPaneAgent: (agent: AgentType | null) => void;
   /** Independent conversation bound to the right AI / compare pane. */
   paneConversationId: string | null;
   setPaneConversationId: (id: string | null) => void;
@@ -539,6 +552,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   setPaneAgent: (agent, explicit = false) =>
     set({ paneAgent: agent, paneAgentExplicitlySelected: explicit }),
   clearPaneAgentExplicitSelection: () => set({ paneAgentExplicitlySelected: false }),
+  appPaneAgent: null,
+  setAppPaneAgent: (agent) =>
+    set((state) => {
+      if (state.appPaneAgent === agent) return {};
+      // Binding an app switches the pane to its agent, but never overrules a
+      // pick the user made in the selector. Closing the app only drops the
+      // binding: the running pane conversation keeps the agent it started on.
+      const adopt = agent !== null && !state.paneAgentExplicitlySelected;
+      return adopt ? { appPaneAgent: agent, paneAgent: agent } : { appPaneAgent: agent };
+    }),
   paneConversationId: null,
   paneOpenTabIds: [],
   setPaneConversationId: (id) =>

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/shell/header';
 import {
-  AppWindow, ExternalLink, RefreshCw, AlertTriangle, Info, PanelLeft, X,
+  AppWindow, ExternalLink, RefreshCw, AlertTriangle, Info, PanelLeft, PanelRight, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isBundledAppHtmlUrl, resolveAppEmbedUrl, resolveAppExternalUrl, appHtmlPathPrefix, withAppHtmlAccessToken } from '@/lib/app-html';
@@ -15,6 +15,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { ViewBar } from './components/view-bar';
 import { DatabaseBody } from './components/views';
 import { useAppViews } from './components/use-app-views';
+import { useAppAgent } from './components/use-app-agent';
 import {
   applyFilters, applySearch, applySort, groupRecords, recordToOpenModule, toRecord, toTenantRecord,
   type AppRecord, type AppsResponse,
@@ -36,6 +37,17 @@ function EmbedView({ record, onBack }: { record: AppRecord; onBack: () => void }
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { activePanelSection, setActivePanelSection, appDetailOpen, setAppDetailOpen } =
     useWorkspaceStore();
+  const contextPanelOpen = useWorkspaceStore((s) => s.contextPanelOpen);
+  const toggleContextPanel = useWorkspaceStore((s) => s.toggleContextPanel);
+  const setAppPaneAgent = useWorkspaceStore((s) => s.setAppPaneAgent);
+
+  // The app's manifest agent owns the chat pane while the app is open, so the
+  // chat next to it can answer for it. Unbind on close / app switch.
+  const appAgent = useAppAgent(record);
+  useEffect(() => {
+    setAppPaneAgent(appAgent?.id ?? null);
+    return () => setAppPaneAgent(null);
+  }, [appAgent?.id, setAppPaneAgent]);
 
   useEffect(() => {
     let cancelled = false;
@@ -164,6 +176,23 @@ function EmbedView({ record, onBack }: { record: AppRecord; onBack: () => void }
         >
           <ExternalLink size={13} />
         </a>
+        {/* The embed replaces the page body, Header included — so the chat pane
+            toggle lives here while an app is open. */}
+        <button
+          type="button"
+          onClick={toggleContextPanel}
+          title={`${contextPanelOpen ? 'Close' : 'Open'} ${appAgent?.name || 'Abi'} chat pane (⌘K)`}
+          aria-label={`Toggle ${appAgent?.name || 'Abi'} chat pane`}
+          aria-pressed={contextPanelOpen}
+          className={cn(
+            'rounded p-1.5 transition-colors',
+            contextPanelOpen
+              ? 'bg-muted text-foreground'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+          )}
+        >
+          <PanelRight size={13} />
+        </button>
         <button
           onClick={onBack}
           title="Close app"

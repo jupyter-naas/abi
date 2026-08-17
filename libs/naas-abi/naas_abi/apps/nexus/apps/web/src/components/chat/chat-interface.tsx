@@ -920,6 +920,28 @@ export function ChatInterface({
     };
   }, [pathname, slidesSlug, slidesTitle, slidesMode]);
 
+  // Set only by the Apps section while an app is embedded — the agent needs to
+  // know which app the user is looking at to answer "what does this show?".
+  const openAppModule = useWorkspaceStore((s) => s.openAppModule);
+  const appChatContext = useMemo(() => {
+    if (!openAppModule) return null;
+    return {
+      app: {
+        app_id: openAppModule.app_id ?? openAppModule.module_path,
+        name: openAppModule.name,
+        description: openAppModule.description ?? '',
+        module_path: openAppModule.module_path,
+        category: openAppModule.category,
+        url: openAppModule.app_url ?? '',
+      },
+    };
+  }, [openAppModule]);
+
+  const chatClientContext = useMemo(() => {
+    const merged = { ...(slidesChatContext ?? {}), ...(appChatContext ?? {}) };
+    return Object.keys(merged).length > 0 ? merged : null;
+  }, [slidesChatContext, appChatContext]);
+
   useEffect(() => {
     if (!mounted || isPane) return;
     const target = nextChatUrl(pathname, currentWorkspaceId, activeConversationId);
@@ -2223,7 +2245,7 @@ export function ChatInterface({
             system_prompt: systemPrompt,
             search_enabled: false,
             regenerate_of: regenerateOf ?? null,
-            ...(slidesChatContext ? { context: slidesChatContext } : {}),
+            ...(chatClientContext ? { context: chatClientContext } : {}),
             // search_enabled: searchEnabled,
           }),
         });
@@ -2438,7 +2460,7 @@ export function ChatInterface({
             provider: providerPayload,
             system_prompt: systemPrompt,
             regenerate_of: regenerateOf ?? null,
-            ...(slidesChatContext ? { context: slidesChatContext } : {}),
+            ...(chatClientContext ? { context: chatClientContext } : {}),
           }),
         });
 

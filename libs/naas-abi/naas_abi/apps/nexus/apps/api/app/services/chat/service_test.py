@@ -999,6 +999,56 @@ async def test_build_abi_injection_preamble_includes_open_slides_deck() -> None:
 
 
 @pytest.mark.asyncio
+async def test_build_abi_injection_preamble_includes_open_app() -> None:
+    service = ChatService(adapter=SimpleNamespace())
+    preamble = await service.build_abi_injection_preamble(
+        prior_messages=[SimpleNamespace(role="assistant", content="Hello")],
+        user_id="user-1",
+        workspace_id="ws-1",
+        client_context={
+            "app": {
+                "app_id": "osint:osint",
+                "name": "OSINT Orchestration Hub",
+                "description": "Orchestration coverage for the OSINT chain.",
+                "module_path": "osint",
+                "url": "/app-html/osint/osint/index.html",
+            }
+        },
+    )
+    assert preamble is not None
+    assert "Open app" in preamble
+    assert "OSINT Orchestration Hub" in preamble
+    assert "osint:osint" in preamble
+
+
+@pytest.mark.asyncio
+async def test_build_system_prompt_includes_open_app() -> None:
+    service = ChatService(adapter=SimpleNamespace())
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt="Base prompt.",
+        prior_messages=[SimpleNamespace(role="assistant", content="Hello")],
+        user_id="user-1",
+        client_context={"app": {"name": "OSINT Orchestration Hub"}},
+    )
+    assert "Open app" in prompt
+    assert "OSINT Orchestration Hub" in prompt
+
+
+@pytest.mark.asyncio
+async def test_build_system_prompt_without_open_app_has_no_app_block() -> None:
+    service = ChatService(adapter=SimpleNamespace())
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt="Base prompt.",
+        prior_messages=[SimpleNamespace(role="assistant", content="Hello")],
+        user_id="user-1",
+        client_context={"app": {"name": ""}},
+    )
+    assert "Open app" not in prompt
+
+
+@pytest.mark.asyncio
 async def test_build_system_prompt_skips_skills_catalog_without_context() -> None:
     skills_service = SimpleNamespace(list_visible_skills=AsyncMock())
     service = ChatService(adapter=SimpleNamespace(), skills_service=skills_service)

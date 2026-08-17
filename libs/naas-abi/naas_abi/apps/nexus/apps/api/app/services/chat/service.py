@@ -205,6 +205,32 @@ def _render_slides_context_block(client_context: dict | None) -> str:
     )
 
 
+def _render_app_context_block(client_context: dict | None) -> str:
+    """Inject the app open in the Apps section so the agent answers about it."""
+    if not isinstance(client_context, dict):
+        return ""
+    app = client_context.get("app")
+    if not isinstance(app, dict):
+        return ""
+    name = str(app.get("name") or "").strip()
+    if not name:
+        return ""
+    lines = [f"- name: {name}"]
+    for key in ("app_id", "module_path", "category", "url", "description"):
+        value = str(app.get(key) or "").strip()
+        if value:
+            lines.append(f"- {key}: {value}")
+    return (
+        "\n\n## Open app\n"
+        "The user is looking at this app in the Apps section right now and is "
+        "asking from the chat pane next to it. Questions like \"what does this "
+        "show?\", \"why is this number low?\" or \"refresh this\" are about this "
+        "app and the data behind it — do not ask which app they mean.\n"
+        + "\n".join(lines)
+        + "\n"
+    )
+
+
 def _render_user_context_block(
     user: AuthUserRecord,
     workspace_id: str | None = None,
@@ -269,6 +295,9 @@ class ChatService:
         slides_block = _render_slides_context_block(client_context)
         if slides_block:
             system_prompt += slides_block
+        app_block = _render_app_context_block(client_context)
+        if app_block:
+            system_prompt += app_block
 
         has_prior_assistant = any(getattr(m, "role", None) == "assistant" for m in prior_messages)
         if has_prior_assistant:
@@ -301,6 +330,10 @@ class ChatService:
         slides_block = _render_slides_context_block(client_context)
         if slides_block.strip():
             parts.append(slides_block.strip())
+
+        app_block = _render_app_context_block(client_context)
+        if app_block.strip():
+            parts.append(app_block.strip())
 
         has_prior_assistant = any(getattr(m, "role", None) == "assistant" for m in prior_messages)
         if has_prior_assistant:

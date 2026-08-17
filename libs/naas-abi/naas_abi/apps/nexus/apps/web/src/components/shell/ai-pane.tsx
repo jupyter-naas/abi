@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { History, MessageSquare, MoreHorizontal, Plus, Presentation, X } from 'lucide-react';
+import { AppWindow, History, MessageSquare, MoreHorizontal, Plus, Presentation, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { downloadConversationTranscript } from '@/lib/chat-transcript-export';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -37,6 +37,11 @@ export function AIPane() {
   const closePaneTab = useWorkspaceStore((s) => s.closePaneTab);
   const conversations = useWorkspaceStore((s) => s.conversations);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const openAppModule = useWorkspaceStore((s) => s.openAppModule);
+  const appPaneAgent = useWorkspaceStore((s) => s.appPaneAgent);
+  const appAgentName = useAgentsStore((s) =>
+    appPaneAgent ? s.agents.find((a) => a.id === appPaneAgent)?.name ?? null : null,
+  );
   const slidesSlug = useSlidesStore((s) => s.selectedSlug);
   const slidesTitle = useSlidesStore((s) => s.selectedTitle);
   const slidesMode = useSlidesStore((s) => s.editorMode);
@@ -110,9 +115,17 @@ export function AIPane() {
     const ws = useWorkspaceStore.getState();
     setPaneConversationId(null);
     // New blank pane chat: restore Abi unless the user picked another agent
-    // in the selector (history tabs must not count as an explicit pick).
+    // in the selector (history tabs must not count as an explicit pick), or an
+    // open app declares its own agent — that one owns the pane while it shows.
     if (!ws.paneAgentExplicitlySelected) {
       const agents = useAgentsStore.getState().agents;
+      const appAgent = agents.find((a) => a.id === ws.appPaneAgent && a.enabled);
+      if (appAgent) {
+        ws.setPaneAgent(appAgent.id);
+        setShowHistory(false);
+        setShowOverflow(false);
+        return;
+      }
       const abi =
         agents.find(
           (a) =>
@@ -400,6 +413,16 @@ export function AIPane() {
             )}
           </div>
         </div>
+        {openAppModule && (
+          <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-muted/30 px-3 py-1.5 text-[11px] text-muted-foreground">
+            <AppWindow size={12} className="shrink-0 text-workspace-accent" />
+            <span className="min-w-0 truncate">
+              Asking about{' '}
+              <span className="font-medium text-foreground">{openAppModule.name}</span>
+              {appAgentName ? ` · ${appAgentName}` : ''}
+            </span>
+          </div>
+        )}
         {slidesContext && (
           <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-muted/30 px-3 py-1.5 text-[11px] text-muted-foreground">
             <Presentation size={12} className="shrink-0 text-workspace-accent" />

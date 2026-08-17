@@ -49,6 +49,21 @@ class AppInfo(BaseModel):
     demo_login: str | None = None
     demo_password: str | None = None
 
+    # Default agent bound to the app. The chat pane opens on this agent while
+    # the app is open, so questions about the app land on the agent that knows
+    # it. The manifest declares it as a file path plus a class name:
+    #
+    #     "agent_path": "src/osint/agents/OsintAgent.py",
+    #     "agent_class": "OsintAgent"
+    #
+    # ``agent_class_name`` is the agent registry key
+    # ("<python.module>/<ClassName>") resolved from those two against the loaded
+    # modules — the same identifier the agents service stores on each workspace
+    # agent row, which is what the UI joins on.
+    agent_path: str | None = None
+    agent_class: str | None = None
+    agent_class_name: str | None = None
+
     # Optional manifest metadata
     version: str | None = None
     author: str | None = None

@@ -159,6 +159,8 @@ def _build_app_info(
         icon_emoji=manifest.get("icon_emoji"),
         demo_login=manifest.get("demo_login"),
         demo_password=manifest.get("demo_password"),
+        agent_path=manifest.get("agent_path"),
+        agent_class=manifest.get("agent_class"),
         version=manifest.get("version"),
         author=manifest.get("author"),
         license=manifest.get("license"),
@@ -168,6 +170,81 @@ def _build_app_info(
         pricing=pricing,
         dependencies=dict(manifest.get("dependencies") or {}),
     )
+
+
+def _agent_module_hint(agent_path: str | None) -> str | None:
+    """Module a manifest ``agent_path`` points into.
+
+    ``"src/osint/agents/OsintAgent.py"`` names the ``osint`` module: the ``src``
+    root and the ``agents`` folder are layout, not module identity. Used only to
+    disambiguate when two loaded modules ship a class with the same name.
+    """
+    value = (agent_path or "").strip().replace("\\", "/")
+    if not value:
+        return None
+    parts = [p for p in value.split("/")[:-1] if p and p not in (".", "src", "agents")]
+    return parts[-1] if parts else None
+
+
+def _agent_class_from_path(agent_path: str | None) -> str | None:
+    """Class name implied by a manifest ``agent_path`` (its file stem)."""
+    value = (agent_path or "").strip().replace("\\", "/")
+    if not value.endswith(".py"):
+        return None
+    stem = value.split("/")[-1][: -len(".py")]
+    return stem or None
+
+
+@lru_cache(maxsize=128)
+def _resolve_agent_class_name(agent_path: str | None, agent_class: str | None) -> str | None:
+    """Resolve a manifest ``agent_path`` + ``agent_class`` to an agent registry key.
+
+    Registry keys are ``{python_module}/{ClassName}`` — the same identifier the
+    agents service stores on each workspace agent row, which is what the UI
+    joins on. ``agent_class`` alone is enough; ``agent_path`` fills it in when
+    omitted and breaks ties between same-named classes in different modules.
+    Returns ``None`` when the agent is not loaded (module disabled, typo in the
+    manifest, or no engine at all in unit tests).
+    """
+    class_name = (agent_class or "").strip() or _agent_class_from_path(agent_path)
+    if not class_name:
+        return None
+    module_hint = _agent_module_hint(agent_path)
+
+    try:
+        from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (  # noqa: E501
+            _get_agent_class_registry,
+        )
+
+        registry = _get_agent_class_registry()
+    except Exception:
+        _log.debug("Agent class registry unavailable; skipping app agent", exc_info=True)
+        return None
+
+    candidates = sorted(key for key in registry if key.rsplit("/", 1)[-1] == class_name)
+    if not candidates:
+        _log.warning(
+            "Manifest agent %r (path %r) matches no loaded agent class", class_name, agent_path
+        )
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+
+    if module_hint:
+        scoped = [
+            key
+            for key in candidates
+            if key.startswith(f"{module_hint}.") or key.split("/", 1)[0] == module_hint
+        ]
+        if scoped:
+            return scoped[0]
+    _log.warning(
+        "Manifest agent %r is ambiguous across %s; using %s",
+        class_name,
+        candidates,
+        candidates[0],
+    )
+    return candidates[0]
 
 
 def _iter_loaded_modules() -> Iterator[Any]:
@@ -385,6 +462,13 @@ async def list_apps(
         # so iframes load same-origin. Keep API-relative paths here.
         if app.url and app.url.startswith("/app-html/"):
             update["url"] = app.url
+
+        # Resolved late (not in the cached scan): the agent class registry is
+        # built lazily, and a manifest may name an agent from another module.
+        if app.agent_class or app.agent_path:
+            update["agent_class_name"] = _resolve_agent_class_name(
+                app.agent_path, app.agent_class
+            )
 
         results.append(app.model_copy(update=update))
 

@@ -261,7 +261,11 @@ export const useAgentsStore = create<AgentsState>()(
                     (typeof a.class_name === 'string' &&
                       a.class_name.toLowerCase().includes('abiagent')))
               ) ?? null;
-            const panePreferred = abiAgent ?? preferred;
+            // An open app's manifest agent outranks Abi in the pane: the chat
+            // next to an app should answer for that app.
+            const appAgent =
+              formattedAgents.find((a) => a.id === ws.appPaneAgent && a.enabled) ?? null;
+            const panePreferred = appAgent ?? abiAgent ?? preferred;
             const currentPane = ws.paneAgent;
             if (!ws.paneAgentExplicitlySelected) {
               ws.setPaneAgent(panePreferred.id);

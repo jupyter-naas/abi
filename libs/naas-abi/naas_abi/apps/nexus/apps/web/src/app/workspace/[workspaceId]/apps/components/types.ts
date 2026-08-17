@@ -27,6 +27,13 @@ export interface AppInfo {
   icon_emoji?: string | null;
   demo_login?: string | null;
   demo_password?: string | null;
+  /** Manifest `agent_path` — file the app's agent lives in. */
+  agent_path?: string | null;
+  /** Manifest `agent_class` — the agent's Python class name. */
+  agent_class?: string | null;
+  /** Resolved agent registry key ("<python.module>/<ClassName>"), the join key
+   *  against the workspace's agent rows. Null when the agent is not loaded. */
+  agent_class_name?: string | null;
   version?: string | null;
   author?: string | null;
   license?: string | null;
@@ -74,6 +81,10 @@ export interface AppRecord {
   iconEmoji: string | null;
   demoLogin: string | null;
   demoPassword: string | null;
+  /** Agent the chat pane opens on while this app is showing (manifest). */
+  agentPath: string | null;
+  agentClass: string | null;
+  agentClassName: string | null;
   /** Original payload, kept for the metadata panel. Null for external apps. */
   app: AppInfo | null;
 }
@@ -104,6 +115,9 @@ export function toRecord(app: AppInfo): AppRecord {
     iconEmoji: app.icon_emoji ?? null,
     demoLogin: app.demo_login ?? null,
     demoPassword: app.demo_password ?? null,
+    agentPath: app.agent_path ?? null,
+    agentClass: app.agent_class ?? null,
+    agentClassName: app.agent_class_name ?? null,
     app,
   };
 }
@@ -128,6 +142,9 @@ export function toTenantRecord(app: TenantApp): AppRecord {
     iconEmoji: app.icon_emoji ?? null,
     demoLogin: null,
     demoPassword: null,
+    agentPath: null,
+    agentClass: null,
+    agentClassName: null,
     app: null,
   };
 }
@@ -143,8 +160,12 @@ export function recordToOpenModule(record: AppRecord): OpenAppModule {
     icon_emoji: record.iconEmoji,
     category: record.category,
     app_url: record.url,
+    app_id: record.id,
     demo_login: record.demoLogin,
     demo_password: record.demoPassword,
+    agent_path: record.agentPath,
+    agent_class: record.agentClass,
+    agent_class_name: record.agentClassName,
     maintainer: record.maintainer,
     tier: record.tier,
     version: record.version,
