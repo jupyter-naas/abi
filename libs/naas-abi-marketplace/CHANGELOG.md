@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.35.2 (2026-08-17)
+
+### Bug Fixes
+
+- **naas_abi_marketplace**: Remove unused import field_validator from pydantic
+  ([`fb2c548`](https://github.com/jupyter-naas/abi/commit/fb2c548dcff47b6bcddf686ef0be2c51bd618972))
+
+
 ## v3.35.1 (2026-08-17)
 
 ### Bug Fixes
