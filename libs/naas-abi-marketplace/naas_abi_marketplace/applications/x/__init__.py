@@ -18,10 +18,6 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # `cron` — the sensor wakes every minute (the spend guard bounds the spend).
 DEFAULT_SEARCH_INTERVAL_SECONDS = 60
 
-# Cron the hourly XCountRecentTweetsOrchestration schedule runs on by default.
-DEFAULT_COUNT_RECENT_TWEETS_CRON = "0 * * * *"
-
-
 def validate_cron(value: str, setting: str) -> str:
     """Return *value* stripped, or raise if it is not cron-shaped.
 
@@ -406,16 +402,13 @@ class XSearchRecentTweetsFilesConfiguration(BaseModel):
 
 
 class XCountFollowConfiguration(BaseModel):
-    """One configured X query whose recent-post counts are followed over time by
-    :class:`XCountRecentTweetsOrchestration`.
+    """One configured X query whose recent-post counts appear in the dashboard.
 
-    Every hour the orchestration runs :class:`XCountRecentTweetsWorkflow` for
-    ``query`` (7-day hourly backfill on the first run, last-full-hour only
-    afterwards), maps the counts into the ``x_recent_posts_count`` graph via
-    :class:`XCountRecentTweetsPipeline`, and republishes the "Post Count
-    Following" dashboard (``x/apps/x/``). Counts are free — the counts endpoint
-    returns only time-bucketed totals (no tweet content), so there is no spend
-    guard here.
+    Counts are fetched and mapped when a search filter opts in via
+    ``count_recent_tweets: true`` on the same ``query``, or when an event/files
+    orchestration maps a search envelope whose query is listed here. The
+    ``enabled`` flag controls whether this entry is included in the dashboard
+    catalog (``x/apps/x/``).
     """
 
     name: str = Field(
@@ -438,8 +431,8 @@ class XCountFollowConfiguration(BaseModel):
     enabled: bool = Field(
         default=False,
         description=(
-            "Include this query in the hourly count schedule. When no configured "
-            "query is enabled the schedule is created STOPPED."
+            "Include this query in the dashboard catalog. Counts still require "
+            "a search filter with ``count_recent_tweets: true`` or manual ingest."
         ),
     )
 
@@ -556,15 +549,10 @@ class ABIModule(BaseModule):
                 persist: true
                 app_publish: false       # opt in to republish x/apps/x/ after sweep
 
-            # ----- Hourly post-count following -----------------------------
-            # One schedule for ALL entries below: every tick it fetches the
-            # newly completed clock hour(s) of counts (free endpoint — no tweet
-            # budget), maps them into the x_recent_posts_count graph and
-            # republishes the "Post Count Following" dashboard. The schedule
-            # starts RUNNING only when at least one entry is `enabled: true`.
-            # `count_recent_tweets_cron` sets when it fires (UTC) — offset it
-            # from the search filters so the two do not share a tick.
-            count_recent_tweets_cron: "30 * * * *"   # half past every hour
+            # ----- Post-count dashboard catalog ------------------------------
+            # Queries listed here appear in the "Post Count Following" dashboard
+            # when `enabled: true`. Fetch counts via `count_recent_tweets: true`
+            # on a matching search_recent_tweets_workflow filter.
             count_recent_tweets_workflow:
               - name: drones
                 query: "(drone OR drones OR uas OR uav) lang:en -is:retweet"
@@ -579,11 +567,8 @@ class ABIModule(BaseModule):
         search_recent_tweets_workflow: list[XTweetSearchWorkflowConfiguration] = []
         search_recent_tweets_event: list[XSearchRecentTweetsEventConfiguration] = []
         search_recent_tweets_files: list[XSearchRecentTweetsFilesConfiguration] = []
-        # ----- Hourly post-count following -----------------------------------
-        # One entry per query whose recent-post counts to follow over time. The
-        # hourly XCountRecentTweetsOrchestration fetches the newly completed
-        # clock hour(s), maps them into the x_recent_posts_count graph and
-        # republishes the "Post Count Following" dashboard (x/apps/x/).
+        # ----- Post-count dashboard catalog ----------------------------------
+        # One entry per query shown in the "Post Count Following" dashboard.
         #
         #     count_recent_tweets_workflow:
         #       - name: drones
@@ -591,14 +576,6 @@ class ABIModule(BaseModule):
         #         label: "Drones / UAS"
         #         enabled: true
         count_recent_tweets_workflow: list[XCountFollowConfiguration] = []
-        # Cron the single count schedule fires on, in UTC — it covers every
-        # enabled entry above, so it is a module-level setting rather than a
-        # per-query one. Offset it from the search filters (e.g. "30 * * * *",
-        # half past every hour) to keep the two off the same tick. The schedule
-        # only starts RUNNING when at least one entry above is enabled.
-        #
-        #     count_recent_tweets_cron: "30 * * * *"
-        count_recent_tweets_cron: str = DEFAULT_COUNT_RECENT_TWEETS_CRON
         # ----- Recent Tweets catalog app (x/apps/x/) ------------------------
         # Snapshot republish is independent of sensor ``enabled`` flags and of
         # ``count_recent_tweets`` on search filters.
@@ -606,11 +583,6 @@ class ABIModule(BaseModule):
         #     app:
         #       publish: true
         app: XAppConfiguration = Field(default_factory=XAppConfiguration)
-
-        @field_validator("count_recent_tweets_cron")
-        @classmethod
-        def _check_count_cron(cls, value: str) -> str:
-            return validate_cron(value, "count_recent_tweets_cron")
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.

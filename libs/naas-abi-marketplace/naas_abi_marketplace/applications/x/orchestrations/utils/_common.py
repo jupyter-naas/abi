@@ -25,7 +25,7 @@ _UNSET: Any = object()
 
 # Dedicated named graph for the recent-posts count triples (mirrors
 # XCountRecentTweetsPipeline). Kept here so the count helpers below stay in one
-# place shared by the count schedule and the search orchestration's count opt-in.
+# place shared by search/event orchestrations when count_recent_tweets is enabled.
 _COUNT_GRAPH_NAME = "http://ontology.naas.ai/graph/x_recent_posts_count"
 
 # Dagster run statuses that mean "a run is still pending or in flight". Used to
@@ -379,7 +379,7 @@ def run_search_and_map_for_query(
     }
 
 
-# ----- Recent-post COUNT helpers (shared by both orchestrations) -------------
+# ----- Recent-post COUNT helpers ---------------------------------------------
 
 
 def followed_count_entries(module) -> list[dict]:
@@ -387,9 +387,8 @@ def followed_count_entries(module) -> list[dict]:
 
     The union of enabled ``count_recent_tweets_workflow`` entries and any
     ``search_recent_tweets_workflow`` filter that opts in via
-    ``count_recent_tweets: true`` — deduped by query string. Both the count
-    schedule and the search orchestration publish this same full list so the
-    app catalog stays complete regardless of which one runs.
+    ``count_recent_tweets: true`` — deduped by query string. Search and event
+    orchestrations publish this same full list so the app catalog stays complete.
     """
     entries: list[dict] = []
     seen: set[str] = set()

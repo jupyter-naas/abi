@@ -1,16 +1,12 @@
 """Schedule configuration for the X module.
 
 ``search_recent_tweets_workflow`` entries are driven either by a sensor
-(``interval_seconds``) or by a cron schedule (``cron``) — never both; the
-count-following schedule takes its cron from ``count_recent_tweets_cron``.
+(``interval_seconds``) or by a cron schedule (``cron``) — never both.
 """
 
 import pytest
-from naas_abi_core.engine.engine_configuration.EngineConfiguration import GlobalConfig
 from naas_abi_marketplace.applications.x import (
-    DEFAULT_COUNT_RECENT_TWEETS_CRON,
     DEFAULT_SEARCH_INTERVAL_SECONDS,
-    ABIModule,
     XTweetSearchWorkflowConfiguration,
 )
 
@@ -62,27 +58,3 @@ def test_malformed_cron_is_rejected(cron: str):
 )
 def test_accepted_cron_forms(cron: str):
     assert _config(cron=cron).cron == cron
-
-
-# ----- count_recent_tweets_cron (module-level count schedule) ---------------
-
-GLOBAL_CONFIG = GlobalConfig(ai_mode="local")
-
-
-def _module_config(**overrides) -> ABIModule.Configuration:
-    return ABIModule.Configuration(global_config=GLOBAL_CONFIG, **overrides)
-
-
-def test_count_cron_defaults_to_hourly():
-    assert _module_config().count_recent_tweets_cron == DEFAULT_COUNT_RECENT_TWEETS_CRON
-
-
-def test_count_cron_is_configurable():
-    config = _module_config(count_recent_tweets_cron="30 * * * *")
-
-    assert config.count_recent_tweets_cron == "30 * * * *"
-
-
-def test_malformed_count_cron_is_rejected():
-    with pytest.raises(ValueError, match="count_recent_tweets_cron"):
-        _module_config(count_recent_tweets_cron="every half hour")
