@@ -8,7 +8,7 @@ from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator impo
 )
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Only import for type checking, not at runtime
 if TYPE_CHECKING:
@@ -136,8 +136,36 @@ class SecretAdapterConfiguration(GenericLoader):
             return super().load()
 
 
+def default_secret_adapters() -> list[SecretAdapterConfiguration]:
+    """Read secrets from ./.env unless the project configures otherwise.
+
+    The secret service is loaded before everything else, so it cannot itself
+    be resolved from a secret — which makes it the one service a project used
+    to have to spell out even when it wanted the obvious behaviour.
+    """
+    return [
+        SecretAdapterConfiguration(adapter="dotenv", config=DotenvSecretConfiguration())
+    ]
+
+
 class SecretServiceConfiguration(BaseModel):
-    secret_adapters: list[SecretAdapterConfiguration]
+    secret_adapters: list[SecretAdapterConfiguration] = Field(
+        default_factory=default_secret_adapters
+    )
 
     def load(self) -> Secret:
-        return Secret(adapters=[adapter.load() for adapter in self.secret_adapters])
+        adapters: list[ISecretAdapter] = []
+
+        for adapter in self.secret_adapters:
+            try:
+                adapters.append(adapter.load())
+            except FileNotFoundError:
+                # A default nobody asked for must not be fatal. With no
+                # `services.secret` in config.yaml the dotenv adapter is
+                # merely implied, and a project with no secrets has no .env —
+                # it should still boot. An adapter the project wrote down
+                # keeps raising, because there the missing file is a mistake.
+                if "secret_adapters" in self.model_fields_set:
+                    raise
+
+        return Secret(adapters=adapters)

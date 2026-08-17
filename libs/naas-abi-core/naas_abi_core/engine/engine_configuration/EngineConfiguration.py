@@ -55,8 +55,6 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_ObjectStorage
     ObjectStorageServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_SecretService import (
-    DotenvSecretConfiguration,
-    SecretAdapterConfiguration,
     SecretServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_SourceControlService import (
@@ -108,13 +106,11 @@ class ServicesConfiguration(BaseModel):
             ).model_dump(),
         )
     )
-    secret: SecretServiceConfiguration = SecretServiceConfiguration(
-        secret_adapters=[
-            SecretAdapterConfiguration(
-                adapter="dotenv", config=DotenvSecretConfiguration()
-            )
-        ]
-    )
+    # Left unset rather than spelled out: `SecretServiceConfiguration` defaults
+    # to the same dotenv adapter, and a value passed here would read as the
+    # project asking for it — which is what decides whether a missing .env is
+    # an error or just an unused default.
+    secret: SecretServiceConfiguration = SecretServiceConfiguration()
     bus: BusServiceConfiguration = BusServiceConfiguration(
         bus_adapter=BusAdapterConfiguration(
             adapter="python_queue",
@@ -232,9 +228,9 @@ class FirstPassConfiguration(BaseModel):
     """
 
     class FirstPassServicesConfiguration(BaseModel):
-        secret: SecretServiceConfiguration
+        secret: SecretServiceConfiguration = SecretServiceConfiguration()
 
-    services: FirstPassServicesConfiguration
+    services: FirstPassServicesConfiguration = FirstPassServicesConfiguration()
 
 
 class ModuleConfig(BaseModel):
@@ -260,7 +256,10 @@ class ModuleConfig(BaseModel):
 
 
 class GlobalConfig(BaseModel):
-    ai_mode: Literal["cloud", "local", "airgap"]
+    # "cloud" is the default because it is the only mode that works with no
+    # further setup: a hosted provider needs a key, where "local" needs a
+    # model server already running.
+    ai_mode: Literal["cloud", "local", "airgap"] = "cloud"
     skip_ontology_loading: bool = False
     public_api_host: str = "localhost:9879"
 
@@ -296,15 +295,18 @@ _cached_configuration: "EngineConfiguration | None" = None
 
 
 class EngineConfiguration(BaseModel):
-    api: ApiConfiguration
+    # Everything here has a working default, so a config.yaml only has to name
+    # what it wants to change. `abi config render` prints what a given file
+    # actually resolves to once the defaults are filled in.
+    api: ApiConfiguration = ApiConfiguration()
 
     deploy: DeployConfiguration | None = None
 
-    services: ServicesConfiguration
+    services: ServicesConfiguration = ServicesConfiguration()
 
-    global_config: GlobalConfig
+    global_config: GlobalConfig = GlobalConfig()
 
-    modules: list[ModuleConfig]
+    modules: list[ModuleConfig] = []
 
     default_agent: str = "naas_abi AbiAgent"
 
@@ -357,6 +359,22 @@ class EngineConfiguration(BaseModel):
         env.globals["load_csv"] = load_csv
         return env
 
+    @staticmethod
+    def _default_bootstrap_dotenv_adapter() -> ISecretAdapter | None:
+        """The dotenv adapter a config gets when it configures no secrets.
+
+        Resolved against the working directory rather than the config file's
+        directory, to match `DotenvSecretConfiguration`'s own relative default.
+        """
+        if not os.path.exists(".env"):
+            return None
+
+        from naas_abi_core.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
+            DotenvSecretSecondaryAdaptor,
+        )
+
+        return DotenvSecretSecondaryAdaptor(path=".env")
+
     @classmethod
     def _load_bootstrap_dotenv_adapter_from_yaml_content(
         cls, yaml_content: str, base_dir: str | None = None
@@ -368,19 +386,21 @@ class EngineConfiguration(BaseModel):
         env = cls._build_jinja_env(base_dir)
         raw_data = yaml.safe_load(StringIO(env.from_string(yaml_content).render()))
         if not isinstance(raw_data, dict):
-            return None
+            raw_data = {}
 
         services = raw_data.get("services")
-        if not isinstance(services, dict):
-            return None
+        secret = services.get("secret") if isinstance(services, dict) else None
+        secret_adapters = (
+            secret.get("secret_adapters") if isinstance(secret, dict) else None
+        )
 
-        secret = services.get("secret")
-        if not isinstance(secret, dict):
-            return None
-
-        secret_adapters = secret.get("secret_adapters")
         if not isinstance(secret_adapters, list):
-            return None
+            # The config names no adapters, so the defaulted dotenv adapter is
+            # what the second pass will load — the bootstrap pass has to agree,
+            # or `{{ secret.X }}` would resolve differently between the two.
+            # Guarded on existence: an implied default must not make a project
+            # with no .env unloadable.
+            return cls._default_bootstrap_dotenv_adapter()
 
         for secret_adapter in secret_adapters:
             if not isinstance(secret_adapter, dict):
@@ -470,14 +490,19 @@ class EngineConfiguration(BaseModel):
                     return value
                 return secret
 
-        first_pass_data = yaml.safe_load(
-            StringIO(
-                env.from_string(yaml_content).render(
-                    secret=SecretServiceWrapper(
-                        bootstrap_dotenv_adapter=bootstrap_dotenv_adapter
+        # `or {}` throughout: a config that is empty or all comments parses to
+        # None, and every section now has a default, so it is a valid config.
+        first_pass_data = (
+            yaml.safe_load(
+                StringIO(
+                    env.from_string(yaml_content).render(
+                        secret=SecretServiceWrapper(
+                            bootstrap_dotenv_adapter=bootstrap_dotenv_adapter
+                        )
                     )
                 )
             )
+            or {}
         )
 
         first_pass_configuration = FirstPassConfiguration(**first_pass_data)
@@ -491,7 +516,7 @@ class EngineConfiguration(BaseModel):
         template = env.from_string(yaml_content)
         templated_yaml = template.render(secret=SecretServiceWrapper(secret_service))
 
-        data = yaml.safe_load(StringIO(templated_yaml))
+        data = yaml.safe_load(StringIO(templated_yaml)) or {}
 
         logger.debug(f"Data: {data}")
 
