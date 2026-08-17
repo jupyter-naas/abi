@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.26.0 (2026-08-17)
+
+### Features
+
+- **event**: Add cursor seeking and setting functionality for event consumers
+  ([`37b424d`](https://github.com/jupyter-naas/abi/commit/37b424d69099114e57e3597656756ad0b20a70f6))
+
+
 ## v2.25.0 (2026-08-11)
 
 ### Chores
