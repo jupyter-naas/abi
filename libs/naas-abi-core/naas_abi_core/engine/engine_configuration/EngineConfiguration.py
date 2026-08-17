@@ -328,16 +328,65 @@ class EngineConfiguration(BaseModel):
         return self
 
     @staticmethod
+    def _leave_yaml_comments_unrendered(yaml_content: str) -> str:
+        """Keep Jinja from evaluating expressions on YAML `#` comment lines.
+
+        Jinja runs before YAML parsing, so `{{ secret.X }}` (or `{% include %}`)
+        on a commented-out line would still resolve — and hard-fail when the
+        secret is missing and there is no TTY. Wrap those lines in `{% raw %}`
+        so they pass through unchanged and stay comments for the YAML parser.
+
+        Only full-line comments (optional space/tab, then `#`) are skipped.
+        Inline comments after a value are still rendered.
+        """
+        masked: list[str] = []
+        for line in yaml_content.splitlines(keepends=True):
+            newline = ""
+            body = line
+            if body.endswith("\r\n"):
+                newline = "\r\n"
+                body = body[:-2]
+            elif body.endswith("\n"):
+                newline = "\n"
+                body = body[:-1]
+            if body.lstrip(" \t").startswith("#"):
+                # Neutralize a closer that would otherwise terminate the wrap
+                # early and leak the rest of the comment into Jinja.
+                body = body.replace("{% endraw %}", "{ % endraw %}")
+                masked.append("{% raw %}" + body + "{% endraw %}" + newline)
+            else:
+                masked.append(line)
+        return "".join(masked)
+
+    @classmethod
+    def _render_yaml_template(
+        cls, env: Environment, yaml_content: str, **context
+    ) -> str:
+        return env.from_string(
+            cls._leave_yaml_comments_unrendered(yaml_content)
+        ).render(**context)
+
+    @staticmethod
     def _build_jinja_env(base_dir: str | None = None) -> Environment:
         # FileSystemLoader so {% include %} / {% import %} resolve relative to the
         # config file's directory (defaults to CWD when rendering inline content).
         # ChainableUndefined so `{{ secret.X }}` renders to "" instead of raising
         # when no secret context is supplied (used by the bootstrap pass below).
         root = base_dir or os.getcwd()
+
+        class _YamlCommentAwareLoader(FileSystemLoader):
+            def get_source(self, environment, template):
+                source, filename, uptodate = super().get_source(environment, template)
+                return (
+                    EngineConfiguration._leave_yaml_comments_unrendered(source),
+                    filename,
+                    uptodate,
+                )
+
         # autoescape stays off intentionally: this renders YAML config, not HTML.
         # HTML-escaping would corrupt config values (e.g. & < > in secrets/URLs).
         env = Environment(  # nosec B701 - YAML rendering, no HTML/XSS surface
-            loader=FileSystemLoader(root),
+            loader=_YamlCommentAwareLoader(root),
             undefined=ChainableUndefined,
         )
 
@@ -366,7 +415,7 @@ class EngineConfiguration(BaseModel):
         # the dotenv path here, which is bootstrap config and cannot itself depend
         # on a secret, so empty-rendered secrets are harmless.
         env = cls._build_jinja_env(base_dir)
-        raw_data = yaml.safe_load(StringIO(env.from_string(yaml_content).render()))
+        raw_data = yaml.safe_load(StringIO(cls._render_yaml_template(env, yaml_content)))
         if not isinstance(raw_data, dict):
             return None
 
@@ -472,10 +521,12 @@ class EngineConfiguration(BaseModel):
 
         first_pass_data = yaml.safe_load(
             StringIO(
-                env.from_string(yaml_content).render(
+                cls._render_yaml_template(
+                    env,
+                    yaml_content,
                     secret=SecretServiceWrapper(
                         bootstrap_dotenv_adapter=bootstrap_dotenv_adapter
-                    )
+                    ),
                 )
             )
         )
@@ -488,8 +539,9 @@ class EngineConfiguration(BaseModel):
 
         logger.debug(f"Yaml content: {yaml_content}")
 
-        template = env.from_string(yaml_content)
-        templated_yaml = template.render(secret=SecretServiceWrapper(secret_service))
+        templated_yaml = cls._render_yaml_template(
+            env, yaml_content, secret=SecretServiceWrapper(secret_service)
+        )
 
         data = yaml.safe_load(StringIO(templated_yaml))
 
