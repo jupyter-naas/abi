@@ -63,6 +63,7 @@ class ResolvedProvider:
     api_key: str | None
     account_id: str | None
     model: str
+    llm_model: str | None = None
 
 
 # Metadata keys tracking "refresh" (regenerate) lineage on messages.
@@ -1129,6 +1130,7 @@ class ChatService:
         agent_id: str | None = None,
         workspace_id: str | None = None,
     ) -> ResolvedProvider | None:
+        incoming_llm = getattr(provider, "llm_model", None) if provider else None
         if provider and getattr(provider, "enabled", False):
             return ResolvedProvider(
                 id=provider.id,
@@ -1139,6 +1141,7 @@ class ChatService:
                 api_key=provider.api_key,
                 account_id=provider.account_id,
                 model=provider.model,
+                llm_model=incoming_llm,
             )
 
         if agent_id:
@@ -1167,6 +1170,7 @@ class ChatService:
                                 api_key=abi_server.api_key,
                                 account_id=None,
                                 model=external_agent_ref,
+                                llm_model=incoming_llm,
                             )
                         return ResolvedProvider(
                             id=f"abi-inprocess-{agent.id}",
@@ -1177,6 +1181,7 @@ class ChatService:
                             api_key=None,
                             account_id=None,
                             model=inprocess_agent_ref,
+                            llm_model=incoming_llm,
                         )
 
                     secret_key_map = {
