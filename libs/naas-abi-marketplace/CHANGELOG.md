@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.36.0 (2026-08-17)
+
+### Features
+
+- **x**: Add support for scheduled files-reprocessing triggers with cron
+  ([`0f625fe`](https://github.com/jupyter-naas/abi/commit/0f625fe39f22fe239c1348dc57919e4a38092fe2))
+
+
 ## v3.35.2 (2026-08-17)
 
 ### Bug Fixes
