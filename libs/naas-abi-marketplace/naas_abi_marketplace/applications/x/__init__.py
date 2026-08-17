@@ -12,7 +12,7 @@ from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import (
     TripleStoreService,
 )
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 # Cadence applied to a search filter that sets neither `interval_seconds` nor
 # `cron` — the sensor wakes every minute (the spend guard bounds the spend).
