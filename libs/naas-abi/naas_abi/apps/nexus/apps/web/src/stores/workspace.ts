@@ -227,7 +227,10 @@ interface WorkspaceState {
   expandedSections: SidebarSection[];
   toggleSection: (section: SidebarSection) => void;
   activePanelSection: SidebarSection | null;
-  setActivePanelSection: (section: SidebarSection | null) => void;
+  /** Open a section panel, or close it with `null`. `remember` names the
+   *  section the header toggle should re-open — pass it when closing a panel
+   *  whose section is still the one on screen. */
+  setActivePanelSection: (section: SidebarSection | null, remember?: SidebarSection) => void;
   lastActivePanelSection: SidebarSection | null;
 
   // Currently open app (for Apps section panel detail view)
@@ -241,6 +244,7 @@ interface WorkspaceState {
   // Context panel (right AI / compare surface)
   contextPanelOpen: boolean;
   toggleContextPanel: () => void;
+  setContextPanelOpen: (open: boolean) => void;
   /** Width of the secondary left section panel (px). Persisted. */
   sectionPanelWidth: number;
   setSectionPanelWidth: (width: number) => void;
@@ -513,9 +517,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         : [...state.expandedSections, section],
     })),
   activePanelSection: null,
-  setActivePanelSection: (section) => set((state) => ({
+  setActivePanelSection: (section, remember) => set((state) => ({
     activePanelSection: section,
-    lastActivePanelSection: section ?? state.lastActivePanelSection,
+    lastActivePanelSection: section ?? remember ?? state.lastActivePanelSection,
   })),
   lastActivePanelSection: null,
 
@@ -528,6 +532,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   // Context panel (right AI / compare surface)
   contextPanelOpen: false,
   toggleContextPanel: () => set((state) => ({ contextPanelOpen: !state.contextPanelOpen })),
+  setContextPanelOpen: (open) => set({ contextPanelOpen: open }),
   sectionPanelWidth: 256,
   setSectionPanelWidth: (width) =>
     set({ sectionPanelWidth: Math.max(200, Math.min(480, Math.round(width))) }),

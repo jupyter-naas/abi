@@ -21,6 +21,10 @@ type SectionDef = {
   href: string;
   feature?: 'maps' | 'chat' | 'files' | 'agents' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'settings.workspace';
   extraHref?: string;
+  /** The page already lists this section's content (e.g. the Apps gallery), so
+   *  the panel would only duplicate it. Landing on the section leaves the panel
+   *  closed; the header / in-page toggles still open it on demand. */
+  panelOnDemand?: boolean;
 };
 
 const SECTIONS: SectionDef[] = [
@@ -33,7 +37,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'lab',      icon: <FlaskConical size={18} />,  label: 'Lab',            href: '/lab',         feature: 'agents' },
   { id: 'slides',   icon: <Presentation size={18} />,  label: 'Slides',         href: '/slides',   feature: 'slides' },
   { id: 'code',     icon: <Code size={18} />,          label: 'Code',           href: '/code',     feature: 'code' },
-  { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        href: '/apps',        feature: 'apps' },
+  { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        href: '/apps',        feature: 'apps', panelOnDemand: true },
   { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', href: '/marketplace', feature: 'marketplace' },
 ];
 
@@ -109,7 +113,10 @@ export function Sidebar() {
       if (pathname.includes('/admin/')) setActivePanelSection(null);
       return;
     }
-    setActivePanelSection(urlSection.id);
+    // Panel-on-demand sections land closed — including when the URL only gains
+    // ?open=<app>, which does not re-run this effect, so an opening app keeps
+    // the panel closed too.
+    setActivePanelSection(urlSection.panelOnDemand ? null : urlSection.id, urlSection.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, urlSection]);
 
@@ -173,7 +180,7 @@ export function Sidebar() {
       setActivePanelSection(null);
       return;
     }
-    setActivePanelSection(section.id);
+    setActivePanelSection(section.panelOnDemand ? null : section.id, section.id);
     if (section.id === 'files') setActiveSource('my-drive');
     router.push(getDefaultPath(section.id));
   };

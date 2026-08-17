@@ -39,6 +39,7 @@ function EmbedView({ record, onBack }: { record: AppRecord; onBack: () => void }
     useWorkspaceStore();
   const contextPanelOpen = useWorkspaceStore((s) => s.contextPanelOpen);
   const toggleContextPanel = useWorkspaceStore((s) => s.toggleContextPanel);
+  const setContextPanelOpen = useWorkspaceStore((s) => s.setContextPanelOpen);
   const setAppPaneAgent = useWorkspaceStore((s) => s.setAppPaneAgent);
 
   // The app's manifest agent owns the chat pane while the app is open, so the
@@ -48,6 +49,12 @@ function EmbedView({ record, onBack }: { record: AppRecord; onBack: () => void }
     setAppPaneAgent(appAgent?.id ?? null);
     return () => setAppPaneAgent(null);
   }, [appAgent?.id, setAppPaneAgent]);
+
+  // Here the chat pane exists to talk about the app, so it closes with it —
+  // whether the user hits Close or navigates out of the embed.
+  useEffect(() => {
+    return () => setContextPanelOpen(false);
+  }, [setContextPanelOpen]);
 
   useEffect(() => {
     let cancelled = false;
