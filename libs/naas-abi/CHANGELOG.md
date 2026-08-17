@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.54.0 (2026-08-17)
+
+### Features
+
+- **nexus**: Let ABI agents declare multiple chat models
+  ([`0851d13`](https://github.com/jupyter-naas/abi/commit/0851d13e875c71987eede88b5a409c58d7edb3d0))
+
+
 ## v2.53.0 (2026-08-11)
 
 ### Features
