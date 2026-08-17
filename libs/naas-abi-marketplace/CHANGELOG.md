@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.35.1 (2026-08-17)
+
+### Bug Fixes
+
+- Remove orchestration count recents tweets not used
+  ([`fdd7fc4`](https://github.com/jupyter-naas/abi/commit/fdd7fc471500d5a2be971ed43553d2ff05ff1506))
+
+
 ## v3.35.0 (2026-08-17)
 
 ### Chores
