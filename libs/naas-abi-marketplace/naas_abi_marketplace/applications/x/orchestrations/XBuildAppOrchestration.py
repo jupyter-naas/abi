@@ -48,8 +48,10 @@ _BUILD_APP_OP_CONFIG_SCHEMA = {
         description=(
             "Re-project the Parquet cache from the whole envelope archive "
             "instead of only the envelopes past the watermark. Use after a "
-            "schema change, or if the projection is suspected to have a gap. "
-            "Costs a full archive read, so it is not the scheduled behaviour."
+            "schema change, a suspected gap, or to compact month partitions "
+            "that were duplicated when a missing watermark appended a full "
+            "archive dump. Costs a full archive read, so it is not the "
+            "scheduled behaviour."
         ),
     ),
 }
@@ -85,6 +87,12 @@ class XBuildAppOrchestration(DagsterOrchestration):
           x_build_app_op:
             config:
               full_users: true
+              rebuild_projection: true
+
+    ``rebuild_projection`` rewrites every monthly Parquet part from the envelope
+    archive (one file per month). Use it after an OOM or a missing Redis
+    watermark that appended a second copy of history — the hourly tick must
+    stay incremental.
     """
 
     @classmethod

@@ -354,6 +354,50 @@ def test_a_schema_bump_forces_a_full_rebuild(monkeypatch):
     assert again["envelopes_new"] == 1
 
 
+def test_missing_redis_watermark_falls_back_to_the_manifest():
+    """An empty Redis must not re-read the whole archive and append duplicates."""
+    storage, kv = _Storage(), _KV()
+    _store_envelope(
+        storage,
+        "2026-08-12T05:00:00+00:00_q.json",
+        _envelope(matched=[_tweet("1", "2026-08-12T05:00:00.000Z")]),
+    )
+    projection.refresh(storage, kv)  # type: ignore[arg-type]
+    parts_before = len(walk(storage, "x/cache/posts", suffix=".parquet"))  # type: ignore[arg-type]
+    kv.store.clear()
+
+    second = projection.refresh(storage, kv)  # type: ignore[arg-type]
+
+    assert second == {"skipped": True, "envelopes_total": 1, "envelopes_new": 0}
+    assert len(walk(storage, "x/cache/posts", suffix=".parquet")) == parts_before  # type: ignore[arg-type]
+    # Redis is restocked so the next tick does not need the manifest.
+    assert kv.store
+
+
+def test_manifest_without_watermark_rebuilds_instead_of_appending():
+    """A projection we cannot resume must replace parts, not dump history twice."""
+    storage, kv = _Storage(), _KV()
+    _store_envelope(
+        storage,
+        "2026-08-12T05:00:00+00:00_q.json",
+        _envelope(matched=[_tweet("1", "2026-08-12T05:00:00.000Z")]),
+    )
+    projection.refresh(storage, kv)  # type: ignore[arg-type]
+    kv.store.clear()
+    manifest_raw = storage.get_object("x/cache", "manifest.json")
+    manifest = json.loads(manifest_raw.decode("utf-8"))
+    manifest.pop("watermark", None)
+    storage.put_object(
+        "x/cache", "manifest.json", json.dumps(manifest).encode("utf-8")
+    )
+
+    again = projection.refresh(storage, kv)  # type: ignore[arg-type]
+
+    assert again["full_rebuild"] is True
+    assert again["envelopes_new"] == 1
+    assert len(walk(storage, "x/cache/posts", suffix=".parquet")) == 1  # type: ignore[arg-type]
+
+
 # --------------------------------------------------------------------------
 # Reader
 # --------------------------------------------------------------------------
