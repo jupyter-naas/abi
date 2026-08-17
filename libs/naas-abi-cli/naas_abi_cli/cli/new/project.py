@@ -17,6 +17,26 @@ from .utils import to_kebab_case, to_pascal_case, to_snake_case
 ABI_SUBMODULE_URL = "https://github.com/jupyter-naas/abi.git"
 ABI_SUBMODULE_PATH = ".abi"
 
+_LOCAL_ABI_SOURCES_BLOCK = """\
+# Resolve the framework from the `.abi` submodule rather than PyPI, so this
+# project tracks the checked-out source instead of the last published release.
+# Clone with `--recursive` (or run `git submodule update --init`) or these
+# paths will be empty and `uv sync` will fail.
+[tool.uv.sources]
+naas-abi = { path = ".abi/libs/naas-abi",  editable = true }
+naas-abi-core = { path = ".abi/libs/naas-abi-core",  editable = true }
+naas-abi-marketplace = { path = ".abi/libs/naas-abi-marketplace",  editable = true }
+naas-abi-cli = { path = ".abi/libs/naas-abi-cli",  editable = true }
+"""
+
+
+def _append_local_abi_sources(project_path: str) -> None:
+    """Append editable `.abi` source paths to the generated pyproject.toml."""
+    pyproject_path = os.path.join(project_path, "pyproject.toml")
+    with open(pyproject_path, "a", encoding="utf-8") as file:
+        file.write("\n\n")
+        file.write(_LOCAL_ABI_SOURCES_BLOCK)
+
 
 def _add_abi_submodule(project_path: str) -> bool:
     """Add the upstream ABI repo as a git submodule at `.abi/`.
@@ -194,9 +214,11 @@ def new_project(
             # When the coding stack is provisioned (`--with-coding`), the config
             # enables the "code" feature flag for workspace admins by default.
             "include_coding": with_coding,
-            "use_local_abi_sources": abi_submodule_added,
         }
     )
+
+    if abi_submodule_added:
+        _append_local_abi_sources(project_path)
 
     # Calling new_module to create the module in the src folder
     new_module(project_name, os.path.join(project_path, "src"), quiet=True)
