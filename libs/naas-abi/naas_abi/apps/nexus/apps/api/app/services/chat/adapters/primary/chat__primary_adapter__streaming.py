@@ -352,6 +352,7 @@ async def stream_chat_response(
         api_key=provider.api_key,
         account_id=provider.account_id,
         model=provider.model,
+        llm_model=getattr(provider, "llm_model", None) or request.llm_model,
     )
 
     assistant_msg_id = ""
@@ -442,6 +443,7 @@ async def stream_chat_response(
                 "execution_time": round(loop.time() - stream_started_at, 3),
                 "steps": _strip_internal_step_keys(steps),
                 "sources": _merge_source_urls(list(context_sources), web_source_urls),
+                "llm_model": request.llm_model,
             }
             try:
                 await persist_stream_metadata(
