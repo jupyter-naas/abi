@@ -42,6 +42,7 @@ class ProviderConfig(BaseModel):
     api_key: str | None = None
     account_id: str | None = None  # For Cloudflare
     model: str
+    llm_model: str | None = None
 
 
 class Message(BaseModel):
@@ -1424,6 +1425,7 @@ async def stream_with_abi_inprocess(
 
     agent_name = config.model
     template_agent = _resolve_inprocess_abi_agent(agent_name)
+    llm_model = (getattr(config, "llm_model", None) or "").strip() or None
     if template_agent is None:
         with _INPROCESS_AGENT_LOCK:
             available_hint = ", ".join(_INPROCESS_AGENT_HINTS[:20]) or "unavailable"
@@ -1438,7 +1440,21 @@ async def stream_with_abi_inprocess(
     # (the previous behaviour) caused cross-conversation response leakage when
     # two requests overlapped — see jupyter-naas/abi#991.
     assert thread_id is not None, "thread_id is required"
-    agent = _duplicate_inprocess_agent(template_agent, thread_id)
+    agent = None
+    if llm_model:
+        new_fn = getattr(type(template_agent), "New", None)
+        if callable(new_fn):
+            try:
+                from naas_abi_core.services.agent.Agent import AgentSharedState
+
+                agent = new_fn(
+                    agent_shared_state=AgentSharedState(thread_id=str(thread_id)),
+                    model_id=llm_model,
+                )
+            except TypeError:
+                agent = None
+    if agent is None:
+        agent = _duplicate_inprocess_agent(template_agent, thread_id)
 
     logger.debug(
         f"Agent.state.thread_id: {getattr(getattr(agent, 'state', None), 'thread_id', None)}"

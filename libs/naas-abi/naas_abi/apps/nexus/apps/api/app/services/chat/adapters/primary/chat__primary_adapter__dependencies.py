@@ -131,6 +131,7 @@ def to_complete_chat_input(request: ChatRequest) -> CompleteChatInput:
             api_key=request.provider.api_key,
             account_id=request.provider.account_id,
             model=request.provider.model,
+            llm_model=request.provider.llm_model,
         )
 
     return CompleteChatInput(
@@ -183,6 +184,7 @@ async def resolve_provider(
             api_key=resolved.api_key,
             account_id=resolved.account_id,
             model=resolved.model,
+            llm_model=resolved.llm_model,
         )
 
 

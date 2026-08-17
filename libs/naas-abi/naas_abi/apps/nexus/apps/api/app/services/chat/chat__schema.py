@@ -45,6 +45,7 @@ class ChatProviderConfigInput:
     endpoint: str | None = None
     api_key: str | None = None
     account_id: str | None = None
+    llm_model: str | None = None
 
 
 @dataclass(frozen=True)
