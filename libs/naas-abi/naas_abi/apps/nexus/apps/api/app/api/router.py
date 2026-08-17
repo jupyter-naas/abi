@@ -29,6 +29,12 @@ from naas_abi.apps.nexus.apps.api.app.services.coding_environment.handlers impor
     router as coding_environment_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.handlers import router as files_router
+from naas_abi.apps.nexus.apps.api.app.services.gatekeeper.handlers import (
+    router as gatekeeper_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.integrations.github.handlers import (
+    router as github_integration_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.modules.handlers import router as modules_router
 from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.handlers import (
     router as openai_gateway_router,
@@ -37,6 +43,9 @@ from naas_abi.apps.nexus.apps.api.app.services.platform.handlers import (
     router as platform_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.providers.handlers import router as providers_router
+from naas_abi.apps.nexus.apps.api.app.services.runtime.handlers import (
+    router as runtime_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.skills.handlers import router as skills_router
 from naas_abi.apps.nexus.apps.api.app.services.slides.handlers import router as slides_router
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.handlers import (
@@ -66,7 +75,14 @@ api_router.include_router(graph.router, prefix="/graph", tags=["graph"])
 api_router.include_router(view.router, prefix="/view", tags=["view"])
 api_router.include_router(agents_router, prefix="/agents", tags=["agents"])
 api_router.include_router(skills_router, prefix="/skills", tags=["skills"])
+api_router.include_router(gatekeeper_router, prefix="/gatekeeper", tags=["gatekeeper"])
 api_router.include_router(modules_router, prefix="/modules", tags=["modules"])
+api_router.include_router(
+    github_integration_router,
+    prefix="/integrations/github",
+    tags=["integrations"],
+)
+api_router.include_router(runtime_router, prefix="/runtime", tags=["runtime"])
 api_router.include_router(apps_router, prefix="/apps", tags=["apps"])
 api_router.include_router(files_router, prefix="/files", tags=["files"])
 api_router.include_router(secrets.router, prefix="/secrets", tags=["secrets"])

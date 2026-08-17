@@ -18,6 +18,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.secondary.postgres 
     ChatSecondaryAdapterPostgres,
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import ChatService
+from naas_abi.apps.nexus.apps.api.app.services.gatekeeper.service import GatekeeperNexusService
 from naas_abi.apps.nexus.apps.api.app.services.graph.service import GraphService
 from naas_abi.apps.nexus.apps.api.app.services.iam.adapters.secondary.postgres import (
     IAMSecondaryAdapterPostgres,
@@ -67,6 +68,7 @@ def initialize_nexus_service_registry() -> ServiceRegistry:
         auth_adapter=AuthSecondaryAdapterPostgres(db_getter=db_getter),
         skills_service=skills_service,
     )
+    gatekeeper_service = GatekeeperNexusService(chat_service=chat_service)
     search_service = SearchService()
     agents_service = AgentService(
         AgentSecondaryAdapterPostgres(db_getter=db_getter),
@@ -83,6 +85,7 @@ def initialize_nexus_service_registry() -> ServiceRegistry:
             search=search_service,
             agents=agents_service,
             skills=skills_service,
+            gatekeeper=gatekeeper_service,
             apps=apps_service,
             workspaces=workspace_service,
             organizations=organization_service,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
 import {
@@ -11,9 +11,11 @@ import {
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
+import { useWorkspaceStore } from '@/stores/workspace';
 import { useTenant } from '@/contexts/tenant-context';
 import Link from 'next/link';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { ConnectGitHubPanel } from '@/components/integrations/connect-github';
+import { RestartOsButton } from '@/components/shell/restart-os-control';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,6 +42,16 @@ interface ModuleInfo {
 interface ModulesResponse {
   installed: ModuleInfo[];
   available: ModuleInfo[];
+}
+
+interface InstallModuleResponse {
+  module_path: string;
+  config_file: string;
+  created: boolean;
+  restart_required: boolean;
+  secrets_required: string[];
+  message: string;
+  already_installed: boolean;
 }
 
 // Marketplace config shapes (mirrors backend Pydantic models)
@@ -196,9 +208,29 @@ type Pricing = {
   ctaUrl?: string;
 };
 
+function isGitHubModule(mod: ModuleInfo): boolean {
+  return mod.module_path.includes('applications.github');
+}
+
 function getModulePricing(mod: ModuleInfo, cfg: MarketplaceConfig): Pricing {
   if (mod.installed) {
-    return { label: 'Installed', labelStyle: PRICE_STYLE.installed, cta: 'Installed', ctaStyle: 'bg-emerald-500/10 text-emerald-600 cursor-default', ctaDisabled: true };
+    // Avoid duplicate "Installed" + "Installed" on the card (label and CTA).
+    if (isGitHubModule(mod)) {
+      return {
+        label: 'Installed',
+        labelStyle: PRICE_STYLE.installed,
+        cta: 'Connect',
+        ctaStyle: 'bg-workspace-accent text-white hover:bg-workspace-accent/90',
+        ctaDisabled: false,
+      };
+    }
+    return {
+      label: 'Installed',
+      labelStyle: PRICE_STYLE.installed,
+      cta: 'Open',
+      ctaStyle: 'bg-workspace-accent/10 text-workspace-accent hover:bg-workspace-accent/20',
+      ctaDisabled: false,
+    };
   }
   if (isEnterprise(mod, cfg)) {
     const fee = mod.functional
@@ -393,7 +425,19 @@ function ModuleAvatar({ mod, className, imgClassName }: { mod: ModuleInfo; class
 // Module card
 // ---------------------------------------------------------------------------
 
-function ModuleCard({ mod, onClick, cfg }: { mod: ModuleInfo; onClick: () => void; cfg: MarketplaceConfig }) {
+function ModuleCard({
+  mod,
+  onClick,
+  cfg,
+  onInstall,
+  installing,
+}: {
+  mod: ModuleInfo;
+  onClick: () => void;
+  cfg: MarketplaceConfig;
+  onInstall?: (mod: ModuleInfo) => void;
+  installing?: boolean;
+}) {
   const isPortrait = mod.category === 'domain';
   const pricing = getModulePricing(mod, cfg);
 
@@ -441,15 +485,24 @@ function ModuleCard({ mod, onClick, cfg }: { mod: ModuleInfo; onClick: () => voi
             </a>
           ) : (
             <button
-              disabled={pricing.ctaDisabled}
-              onClick={(e) => e.stopPropagation()}
+              disabled={pricing.ctaDisabled || installing}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (pricing.ctaDisabled) return;
+                if (pricing.cta === 'Install' && onInstall) {
+                  onInstall(mod);
+                  return;
+                }
+                // Connect / Open: open the Agent ID card
+                onClick();
+              }}
               className={cn(
                 'flex items-center gap-1 px-3 py-1 text-xs font-semibold transition-colors',
                 pricing.ctaStyle,
               )}
             >
-              {!pricing.ctaDisabled && <Download size={11} />}
-              {pricing.cta}
+              {!pricing.ctaDisabled && !installing && pricing.cta === 'Install' && <Download size={11} />}
+              {installing ? 'Installing…' : pricing.cta}
             </button>
           )}
         </div>
@@ -526,7 +579,23 @@ function ExternalAppCard({ app }: { app: { name: string; url: string; descriptio
 // Agent ID Card panel
 // ---------------------------------------------------------------------------
 
-function AgentIdCard({ mod, onClose, cfg, workspaceId }: { mod: ModuleInfo; onClose: () => void; cfg: MarketplaceConfig; workspaceId: string | null }) {
+function AgentIdCard({
+  mod,
+  onClose,
+  cfg,
+  workspaceId,
+  onInstall,
+  installing,
+  installNotice,
+}: {
+  mod: ModuleInfo;
+  onClose: () => void;
+  cfg: MarketplaceConfig;
+  workspaceId: string | null;
+  onInstall?: (mod: ModuleInfo) => void;
+  installing?: boolean;
+  installNotice?: string | null;
+}) {
   const isPortrait = mod.category === 'domain';
   const pricing = getModulePricing(mod, cfg);
 
@@ -589,6 +658,15 @@ function AgentIdCard({ mod, onClose, cfg, workspaceId }: { mod: ModuleInfo; onCl
               <p className="text-sm leading-relaxed text-muted-foreground">{mod.description}</p>
             )}
 
+            {/* GitHub first: Connect / Disconnect must be above the fold. */}
+            {isGitHubModule(mod) ? (
+              <ConnectGitHubPanel
+                showRestart
+                workspaceId={workspaceId}
+                moduleInstalled={mod.installed}
+              />
+            ) : null}
+
             {/* System prompt */}
             {mod.system_prompt_preview && (
               <div className="border bg-muted/40 p-3">
@@ -606,8 +684,14 @@ function AgentIdCard({ mod, onClose, cfg, workspaceId }: { mod: ModuleInfo; onCl
               <p className="break-all font-mono text-xs text-muted-foreground">{mod.module_path}</p>
             </div>
 
-            {/* CTA */}
-            {pricing.ctaUrl && !pricing.ctaDisabled ? (
+            {/* CTA (non-GitHub, or GitHub install only when not yet enabled) */}
+            {installNotice && !isGitHubModule(mod) ? (
+              <div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
+                <p>{installNotice}</p>
+                <RestartOsButton />
+              </div>
+            ) : null}
+            {isGitHubModule(mod) && mod.installed ? null : pricing.ctaUrl && !pricing.ctaDisabled ? (
               <a
                 href={pricing.ctaUrl}
                 target="_blank"
@@ -617,15 +701,29 @@ function AgentIdCard({ mod, onClose, cfg, workspaceId }: { mod: ModuleInfo; onCl
                 <ExternalLink size={14} />
                 {pricing.cta}
               </a>
-            ) : (
+            ) : isGitHubModule(mod) && !mod.installed ? (
               <button
-                disabled={pricing.ctaDisabled}
+                disabled={installing}
+                onClick={() => onInstall?.(mod)}
                 className={cn('w-full py-2.5 text-sm font-semibold transition-colors flex items-center justify-center gap-2', pricing.ctaStyle)}
               >
-                {!pricing.ctaDisabled && <Download size={14} />}
-                {pricing.cta}
+                {!installing && <Download size={14} />}
+                {installing ? 'Installing…' : 'Install'}
               </button>
-            )}
+            ) : !isGitHubModule(mod) ? (
+              <button
+                disabled={pricing.ctaDisabled || installing}
+                onClick={() => {
+                  if (!pricing.ctaDisabled && pricing.cta === 'Install' && onInstall) {
+                    onInstall(mod);
+                  }
+                }}
+                className={cn('w-full py-2.5 text-sm font-semibold transition-colors flex items-center justify-center gap-2', pricing.ctaStyle)}
+              >
+                {!pricing.ctaDisabled && !installing && <Download size={14} />}
+                {installing ? 'Installing…' : pricing.cta}
+              </button>
+            ) : null}
 
             {/* Open in Apps — only for installed modules that have a launchable app */}
             {mod.installed && mod.app_url && workspaceId && (
@@ -666,6 +764,47 @@ export default function MarketplacePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMod, setSelectedMod] = useState<ModuleInfo | null>(null);
+  const [installingPath, setInstallingPath] = useState<string | null>(null);
+  const [installNotice, setInstallNotice] = useState<string | null>(null);
+
+  const reloadModules = useCallback(async () => {
+    const apiBase = getApiUrl();
+    const modules = await authFetch(`${apiBase}/api/modules/`).then((r) =>
+      r.ok ? r.json() : Promise.reject(r.statusText),
+    );
+    setData(modules as ModulesResponse);
+  }, []);
+
+  const handleInstallModule = useCallback(
+    async (mod: ModuleInfo) => {
+      setInstallingPath(mod.module_path);
+      setInstallNotice(null);
+      setError(null);
+      try {
+        const apiBase = getApiUrl();
+        const response = await authFetch(
+          `${apiBase}/api/modules/install/${encodeURIComponent(mod.module_path)}`,
+          { method: 'POST' },
+        );
+        const body = (await response.json()) as InstallModuleResponse & { detail?: string };
+        if (!response.ok) {
+          throw new Error(body.detail || body.message || 'Install failed');
+        }
+        setInstallNotice(body.message);
+        await reloadModules();
+        setSelectedMod((current) =>
+          current?.module_path === mod.module_path
+            ? { ...current, installed: body.already_installed || body.restart_required }
+            : current,
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Install failed');
+      } finally {
+        setInstallingPath(null);
+      }
+    },
+    [reloadModules],
+  );
 
   useEffect(() => {
     const t = searchParams?.get('type') as ArtifactType | null;
@@ -857,7 +996,14 @@ export default function MarketplacePage() {
                     )}
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                       {mods.map((mod) => (
-                        <ModuleCard key={mod.module_path} mod={mod} onClick={() => setSelectedMod(mod)} cfg={mktCfg} />
+                        <ModuleCard
+                          key={mod.module_path}
+                          mod={mod}
+                          onClick={() => setSelectedMod(mod)}
+                          cfg={mktCfg}
+                          onInstall={handleInstallModule}
+                          installing={installingPath === mod.module_path}
+                        />
                       ))}
                     </div>
                   </section>
@@ -891,7 +1037,18 @@ export default function MarketplacePage() {
       </div>
 
       {selectedMod && (
-        <AgentIdCard mod={selectedMod} onClose={() => setSelectedMod(null)} cfg={mktCfg} workspaceId={currentWorkspaceId} />
+        <AgentIdCard
+          mod={selectedMod}
+          onClose={() => {
+            setSelectedMod(null);
+            setInstallNotice(null);
+          }}
+          cfg={mktCfg}
+          workspaceId={currentWorkspaceId}
+          onInstall={handleInstallModule}
+          installing={installingPath === selectedMod.module_path}
+          installNotice={installNotice}
+        />
       )}
     </div>
   );

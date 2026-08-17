@@ -54,7 +54,10 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import MessagesState
 from langgraph.types import Command
-from naas_abi_core.engine.context import get_default_event_service
+from naas_abi_core.engine.context import (
+    get_default_event_service,
+    get_default_gatekeeper_service,
+)
 from naas_abi_core.services.agent.context import (
     agent_chat_id,
     agent_user_id,
@@ -72,6 +75,10 @@ from naas_abi_core.services.agent.ontologies.modules.AgentEventOntology import (
 )
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
+from naas_abi_core.services.gatekeeper.GatekeeperPort import (
+    GatekeeperSubject,
+    parse_missing_grant_reason,
+)
 from sse_starlette.sse import EventSourceResponse
 
 from .tools.default_tools import default_tools
@@ -325,6 +332,26 @@ class CallModelEvent(Event):
 @dataclass
 class AgentRoutingEvent(Event):
     agent_name: str
+
+
+@dataclass
+class GatekeeperDeniedEvent(Event):
+    tool_name: str
+    reason: str
+    resource_type: str | None = None
+    resource_id: str | None = None
+    action: str | None = None
+
+
+@dataclass
+class GatekeeperRequestEvent(Event):
+    """Emitted when a tool call needs user approval before execution."""
+
+    tool_name: str
+    reason: str
+    resource_type: str | None = None
+    resource_id: str | None = None
+    action: str | None = None
 
 
 @dataclass
@@ -1555,6 +1582,67 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
             # Check if tool is a handoff tool
             is_handoff = tool_call["name"].startswith("transfer_to_")
+
+            if not is_handoff:
+                gatekeeper = get_default_gatekeeper_service()
+                if gatekeeper is not None:
+                    tool_args = (
+                        tool_call.get("args")
+                        if isinstance(tool_call, dict)
+                        else getattr(tool_call, "args", None)
+                    )
+                    if not isinstance(tool_args, dict):
+                        tool_args = {}
+                    subject = GatekeeperSubject(
+                        user_id=agent_user_id.get(),
+                        workspace_id=agent_workspace_id.get(),
+                        chat_id=agent_chat_id.get() or self._state.thread_id,
+                    )
+                    decision = gatekeeper.evaluate_tool_call(
+                        subject,
+                        tool_name,
+                        tool_args,
+                    )
+                    if not decision.allowed:
+                        logger.warning(
+                            f"🚫 Gatekeeper denied tool '{tool_name}': {decision.reason}"
+                        )
+                        parsed = parse_missing_grant_reason(decision.reason)
+                        self._event_queue.put(
+                            GatekeeperDeniedEvent(
+                                payload=None,
+                                tool_name=tool_name,
+                                reason=decision.reason,
+                                resource_type=parsed[0] if parsed else None,
+                                resource_id=parsed[1] if parsed else None,
+                                action=parsed[2] if parsed else None,
+                            )
+                        )
+                        had_tool_error = True
+                        resource_hint = (
+                            f"{parsed[1]} ({parsed[0]})"
+                            if parsed
+                            else "the requested resource"
+                        )
+                        results.append(
+                            Command(
+                                update={
+                                    "messages": [
+                                        ToolMessage(
+                                            content=(
+                                                "Gatekeeper approval required: "
+                                                f"{decision.reason}. Waiting for the "
+                                                f"user to approve access to "
+                                                f"{resource_hint} in the chat UI."
+                                            ),
+                                            name=tool_name,
+                                            tool_call_id=tool_call["id"],
+                                        )
+                                    ]
+                                },
+                            )
+                        )
+                        continue
             if is_handoff is True:
                 args = {"state": state, "tool_call": {**tool_call, "role": "tool_call"}}
 
@@ -1565,6 +1653,25 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 logger.debug(
                     f"📦 Tool response: {tool_response.content if hasattr(tool_response, 'content') else tool_response}"
                 )
+                if not is_handoff:
+                    gatekeeper = get_default_gatekeeper_service()
+                    if gatekeeper is not None:
+                        tool_args = (
+                            tool_call.get("args")
+                            if isinstance(tool_call, dict)
+                            else getattr(tool_call, "args", None)
+                        )
+                        if not isinstance(tool_args, dict):
+                            tool_args = {}
+                        gatekeeper.record_tool_observation(
+                            GatekeeperSubject(
+                                user_id=agent_user_id.get(),
+                                workspace_id=agent_workspace_id.get(),
+                                chat_id=agent_chat_id.get() or self._state.thread_id,
+                            ),
+                            tool_name,
+                            tool_args,
+                        )
                 if (
                     tool_response is not None
                     and hasattr(tool_response, "name")
@@ -1714,7 +1821,56 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         except Exception:  # noqa: BLE001
             return str(value)
 
+    def _emit_gatekeeper_approval_event(
+        self,
+        tool_name: str,
+        reason: str,
+        tool_args: dict[str, Any],
+    ) -> None:
+        parsed = parse_missing_grant_reason(reason)
+        event = GatekeeperRequestEvent(
+            payload=None,
+            tool_name=tool_name,
+            reason=reason,
+            resource_type=parsed[0] if parsed else None,
+            resource_id=parsed[1] if parsed else None,
+            action=parsed[2] if parsed else None,
+        )
+        self._event_queue.put(event)
+
     def _notify_tool_usage(self, message: AnyMessage):
+        identity_subject = GatekeeperSubject(
+            user_id=agent_user_id.get(),
+            workspace_id=agent_workspace_id.get(),
+            chat_id=agent_chat_id.get() or self._state.thread_id,
+        )
+        gatekeeper = get_default_gatekeeper_service()
+        for call in getattr(message, "tool_calls", []) or []:
+            tool_name = (
+                call.get("name")
+                if isinstance(call, dict)
+                else getattr(call, "name", None)
+            )
+            if not tool_name or tool_name.startswith("transfer_to_"):
+                continue
+            tool_args = (
+                call.get("args")
+                if isinstance(call, dict)
+                else getattr(call, "args", None)
+            )
+            if not isinstance(tool_args, dict):
+                tool_args = {}
+            if gatekeeper is not None:
+                decision = gatekeeper.evaluate_tool_call(
+                    identity_subject,
+                    tool_name,
+                    tool_args,
+                )
+                if not decision.allowed:
+                    self._emit_gatekeeper_approval_event(
+                        tool_name, decision.reason, tool_args
+                    )
+
         self._event_queue.put(ToolUsageEvent(payload=message))
         self._on_tool_usage(message)
         identity = self._identity()
@@ -2238,6 +2394,32 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                     yield {
                         "event": "agent_routing",
                         "data": str(message.payload),
+                    }
+                elif isinstance(message, GatekeeperRequestEvent):
+                    yield {
+                        "event": "gatekeeper_request",
+                        "data": json.dumps(
+                            {
+                                "tool": message.tool_name,
+                                "reason": message.reason,
+                                "resource_type": message.resource_type,
+                                "resource_id": message.resource_id,
+                                "action": message.action,
+                            }
+                        ),
+                    }
+                elif isinstance(message, GatekeeperDeniedEvent):
+                    yield {
+                        "event": "gatekeeper_denied",
+                        "data": json.dumps(
+                            {
+                                "tool": message.tool_name,
+                                "reason": message.reason,
+                                "resource_type": message.resource_type,
+                                "resource_id": message.resource_id,
+                                "action": message.action,
+                            }
+                        ),
                     }
                 elif isinstance(message, FinalStateEvent):
                     final_state = message.payload
