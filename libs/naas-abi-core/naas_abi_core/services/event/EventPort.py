@@ -80,6 +80,16 @@ class IEventAdapter(ABC):
         """Return last delivered seq for (consumer_id, event_type). 0 if unset."""
 
     @abstractmethod
+    def set_cursor(self, consumer_id: str, event_type: str, last_seq: int) -> None:
+        """Set last delivered seq for (consumer_id, event_type).
+
+        Used to seek a consumer to a known position (for example the current
+        max seq) without draining events. ``last_seq`` may be lower than the
+        stored cursor — that is how a reset event log is repaired after
+        ``seq`` restarts from 1 while the cursor row still holds an old value.
+        """
+
+    @abstractmethod
     def query_for_consumer(
         self,
         consumer_id: str,
