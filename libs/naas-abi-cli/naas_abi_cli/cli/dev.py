@@ -361,6 +361,11 @@ def _launch_api(
     # Keep config-templated frontend URLs in sync when they reference
     # {{ secret.PUBLIC_WEB_HOST }}.
     env["PUBLIC_WEB_HOST"] = f"{BROWSER_HOST}:{nexus_port}"
+    # Module asset URLs are built from public_api_host / NEXUS_API_URL. The
+    # engine default is localhost:9879. This process is on a worktree port.
+    api_origin = f"http://{BROWSER_HOST}:{spec.port}"
+    env["PUBLIC_API_HOST"] = f"{BROWSER_HOST}:{spec.port}"
+    env["NEXUS_API_URL"] = api_origin
     cmd = ["uv", "run", "python", "-m", "naas_abi_core.apps.api.api"]
     return _spawn(spec, cmd, _project_root(), env)
 

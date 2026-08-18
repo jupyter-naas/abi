@@ -26,15 +26,9 @@ import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
+import { getLogoUrl } from '@/lib/logo-url';
 
 const getApiBase = () => getApiUrl();
-
-// Helper to get logo URL (prefix relative URLs with API base)
-const getLogoUrl = (url: string | null): string | undefined => {
-  if (!url) return undefined;
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  return `${getApiBase()}${url}`; // Relative URL -> add API base
-};
 
 // Max image size for uploads (5MB)
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -3174,6 +3168,30 @@ const CTA_SECTION_MAP: Record<string, SidebarSection> = {
   '/apps': 'apps',
 };
 
+function EmptyStateLogo({ src, name }: { src?: string; name: string }) {
+  const [imgReady, setImgReady] = useState(false);
+
+  useEffect(() => {
+    setImgReady(false);
+  }, [src]);
+
+  return (
+    <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-workspace-accent-10 overflow-hidden">
+      {(!src || !imgReady) && <Bot size={24} className="text-workspace-accent" />}
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt={name}
+          className={imgReady ? 'h-full w-full object-contain p-1' : 'hidden'}
+          onLoad={() => setImgReady(true)}
+          onError={() => setImgReady(false)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function EmptyState({
   selectedAgentName,
   logoUrl,
@@ -3198,18 +3216,7 @@ function EmptyState({
   const greeting = firstName ? `Hello, ${firstName}.` : 'Hello.';
   return (
     <div className="flex h-full flex-col items-center justify-center px-4">
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-workspace-accent-10 overflow-hidden">
-        {resolvedLogoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={resolvedLogoUrl}
-            alt={selectedAgentName}
-            className="h-full w-full object-contain p-1"
-          />
-        ) : (
-          <Bot size={24} className="text-workspace-accent" />
-        )}
-      </div>
+      <EmptyStateLogo src={resolvedLogoUrl} name={selectedAgentName} />
       <p className="mb-6 text-center text-muted-foreground">
         {greeting} Pick a suggestion or type a message to get started.
       </p>
@@ -3985,7 +3992,14 @@ const MessageBubble = React.memo(function MessageBubble({
           )
         ) : agent?.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={getLogoUrl(agent.logoUrl)} alt={agent.name} className="h-full w-full object-cover" />
+          <img
+            src={getLogoUrl(agent.logoUrl)}
+            alt={agent.name}
+            className="h-full w-full object-cover"
+            onError={(event) => {
+              event.currentTarget.style.display = 'none';
+            }}
+          />
         ) : (
           <Bot size={16} />
         )}
