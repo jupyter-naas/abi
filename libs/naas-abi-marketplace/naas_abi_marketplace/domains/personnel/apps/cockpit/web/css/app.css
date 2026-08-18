@@ -613,7 +613,7 @@ td.muted { color: var(--muted); font-style: italic; }
   cursor: not-allowed;
 }
 
-/* Classes — multi-select dropdown, styled to match the distance filter. */
+/* Classes - multi-select dropdown, styled to match the distance filter. */
 .graph-classes {
   position: relative;
   display: flex;
@@ -789,7 +789,7 @@ td.muted { color: var(--muted); font-style: italic; }
   pointer-events: none;
   white-space: nowrap;
 }
-/* Graph parameters — gear button bottom-right, panel opens above it. */
+/* Graph parameters - gear button bottom-right, panel opens above it. */
 .graph-params {
   position: absolute;
   right: 0.75rem;

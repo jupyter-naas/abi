@@ -4,7 +4,7 @@ Source: https://demo.example/profiles/demo
 
 ``mission_label`` is the opening sentence shown as the node label; ``mission``
 is the full stated text. ``skills`` holds only the skills LinkedIn renders
-inline — the "+N skills" tail is not guessed at.
+inline - the "+N skills" tail is not guessed at.
 """
 
 from datetime import date

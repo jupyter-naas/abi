@@ -1,4 +1,4 @@
-/** BFO 7-bucket palette — aligned with Nexus `bfo-buckets.ts`. */
+/** BFO 7-bucket palette - aligned with Nexus `bfo-buckets.ts`. */
 export const BFO_BUCKETS = [
   {
     uri: "http://purl.obolibrary.org/obo/BFO_0000040",

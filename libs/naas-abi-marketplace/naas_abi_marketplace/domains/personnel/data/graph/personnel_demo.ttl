@@ -11,7 +11,7 @@
 <http://ontology.naas.ai/personnel/AcademicDegree/alice-dupont-licence-informatique> a personnel:AcademicDegree,
         owl:NamedIndividual ;
     rdfs:label "Licence Informatique" ;
-    dcterms:created "2026-08-18T12:26:26.165066"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.287055"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 personnel:completion_date a owl:DatatypeProperty ;
@@ -134,188 +134,188 @@ personnel:termination_date a owl:DatatypeProperty ;
 <http://ontology.naas.ai/abi/Organization/alstom> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "Alstom" ;
-    dcterms:created "2026-08-18T12:26:26.152288"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.268931"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/Organization/cashstory> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "CashStory" ;
-    dcterms:created "2026-08-18T12:26:26.146928"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.262035"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/Organization/episaveurs-nord-champagne-haute-normandie> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "EpiSaveurs Nord Champagne Haute Normandie" ;
-    dcterms:created "2026-08-18T12:26:26.161261"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.281407"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/Organization/frv-services> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "FRV SERVICES" ;
-    dcterms:created "2026-08-18T12:26:26.144451"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.259160"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/Organization/groupe-bpce> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "Groupe BPCE" ;
-    dcterms:created "2026-08-18T12:26:26.149186"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.265317"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/Organization/herm-s> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "Hermès" ;
-    dcterms:created "2026-08-18T12:26:26.154533"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.271983"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/Organization/kedge-business-school> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "Kedge Business School" ;
-    dcterms:created "2026-08-18T12:26:26.158940"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.278031"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/Organization/lagard-re-sports> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "Lagardère Sports" ;
-    dcterms:created "2026-08-18T12:26:26.157066"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.275099"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/Organization/demo> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "naas.ai" ;
-    dcterms:created "2026-08-18T12:26:26.141108"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.254968"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/Organization/universit-de-rennes-1> a abi:Organization,
         owl:NamedIndividual,
         cco:ont00000564 ;
     rdfs:label "Université de Rennes 1" ;
-    dcterms:created "2026-08-18T12:26:26.163798"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.285302"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-alstom-financial-planning-analyst-working-end-2017-02-28> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "28/02/2017" ;
     personnel:instant_date "2017-02-28"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.153055"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.270090"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-alstom-financial-planning-analyst-working-start-2016-10-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/10/2016" ;
     personnel:instant_date "2016-10-01"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.152825"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.269786"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-cashstory-co-founder-working-end-2022-12-31> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "31/12/2022" ;
     personnel:instant_date "2022-12-31"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.147638"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.262916"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-cashstory-co-founder-working-start-2018-10-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/10/2018" ;
     personnel:instant_date "2018-10-01"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.147372"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.262661"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-episaveurs-nord-champagne-haute-normandie-accountant-working-end-2012-07-31> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "31/07/2012" ;
     personnel:instant_date "2012-07-31"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.162296"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.282897"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-episaveurs-nord-champagne-haute-normandie-accountant-working-start-2012-04-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/04/2012" ;
     personnel:instant_date "2012-04-01"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.161999"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.282522"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-frv-services-data-ai-engineer-working-start-2019-10-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/10/2019" ;
     personnel:instant_date "2019-10-01"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.145155"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.259895"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-groupe-bpce-moa-finance-consultant-working-end-2019-02-28> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "28/02/2019" ;
     personnel:instant_date "2019-02-28"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.150394"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.266800"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-groupe-bpce-moa-finance-consultant-working-start-2017-03-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/03/2017" ;
     personnel:instant_date "2017-03-01"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.150226"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.266557"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-herm-s-financial-project-manager-working-end-2015-12-31> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "31/12/2015" ;
     personnel:instant_date "2015-12-31"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.155558"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.273264"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-herm-s-financial-project-manager-working-start-2015-03-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/03/2015" ;
     personnel:instant_date "2015-03-01"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.155286"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.272930"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-kedge-business-school-treasurer-cash-manager-in-the-sport-business-school-association-working-end-2014-07-31> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "31/07/2014" ;
     personnel:instant_date "2014-07-31"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.159789"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.279397"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-kedge-business-school-treasurer-cash-manager-in-the-sport-business-school-association-working-start-2013-09-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/09/2013" ;
     personnel:instant_date "2013-09-01"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.159551"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.278992"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-lagard-re-sports-corporate-financial-controller-working-end-2015-02-28> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "28/02/2015" ;
     personnel:instant_date "2015-02-28"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.157449"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.275676"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-lagard-re-sports-corporate-financial-controller-working-start-2014-09-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/09/2014" ;
     personnel:instant_date "2014-09-01"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.157272"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.275352"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-licence-informatique-studying-end-2014-06-30> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "30/06/2014" ;
     personnel:instant_date "2014-06-30"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.164237"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.285823"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-licence-informatique-studying-start-2009-09-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/09/2009" ;
     personnel:instant_date "2009-09-01"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.163995"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.285544"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-demo-co-founder-coo-working-start-2023-04-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/04/2023" ;
     personnel:instant_date "2023-04-01"^^xsd:date ;
-    dcterms:created "2026-08-18T12:26:26.142296"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.256398"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-alstom-financial-planning-analyst-working> a abi:TemporalRegion,
@@ -324,7 +324,7 @@ personnel:termination_date a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-alstom-financial-planning-analyst-working-start-2016-10-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-alstom-financial-planning-analyst-working-end-2017-02-28> ;
     personnel:duration_label "5 mos"^^xsd:string ;
-    dcterms:created "2026-08-18T12:26:26.153298"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.270382"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-cashstory-co-founder-working> a abi:TemporalRegion,
@@ -333,7 +333,7 @@ personnel:termination_date a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-cashstory-co-founder-working-start-2018-10-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-cashstory-co-founder-working-end-2022-12-31> ;
     personnel:duration_label "4 yrs 3 mos"^^xsd:string ;
-    dcterms:created "2026-08-18T12:26:26.147819"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.263118"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-episaveurs-nord-champagne-haute-normandie-accountant-working> a abi:TemporalRegion,
@@ -342,7 +342,7 @@ personnel:termination_date a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-episaveurs-nord-champagne-haute-normandie-accountant-working-start-2012-04-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-episaveurs-nord-champagne-haute-normandie-accountant-working-end-2012-07-31> ;
     personnel:duration_label "4 mos"^^xsd:string ;
-    dcterms:created "2026-08-18T12:26:26.162477"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.283159"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-frv-services-data-ai-engineer-working> a abi:TemporalRegion,
@@ -350,7 +350,7 @@ personnel:termination_date a owl:DatatypeProperty ;
     rdfs:label "Oct 2019 – Present" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-frv-services-data-ai-engineer-working-start-2019-10-01> ;
     personnel:duration_label "6 yrs 11 mos"^^xsd:string ;
-    dcterms:created "2026-08-18T12:26:26.145330"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.260145"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-groupe-bpce-moa-finance-consultant-working> a abi:TemporalRegion,
@@ -359,7 +359,7 @@ personnel:termination_date a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-groupe-bpce-moa-finance-consultant-working-start-2017-03-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-groupe-bpce-moa-finance-consultant-working-end-2019-02-28> ;
     personnel:duration_label "2 yrs"^^xsd:string ;
-    dcterms:created "2026-08-18T12:26:26.150807"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.267013"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-herm-s-financial-project-manager-working> a abi:TemporalRegion,
@@ -368,7 +368,7 @@ personnel:termination_date a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-herm-s-financial-project-manager-working-start-2015-03-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-herm-s-financial-project-manager-working-end-2015-12-31> ;
     personnel:duration_label "10 mos"^^xsd:string ;
-    dcterms:created "2026-08-18T12:26:26.155751"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.273492"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-kedge-business-school-treasurer-cash-manager-in-the-sport-business-school-association-working> a abi:TemporalRegion,
@@ -377,7 +377,7 @@ personnel:termination_date a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-kedge-business-school-treasurer-cash-manager-in-the-sport-business-school-association-working-start-2013-09-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-kedge-business-school-treasurer-cash-manager-in-the-sport-business-school-association-working-end-2014-07-31> ;
     personnel:duration_label "11 mos"^^xsd:string ;
-    dcterms:created "2026-08-18T12:26:26.160005"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.279644"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-lagard-re-sports-corporate-financial-controller-working> a abi:TemporalRegion,
@@ -386,7 +386,7 @@ personnel:termination_date a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-lagard-re-sports-corporate-financial-controller-working-start-2014-09-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-lagard-re-sports-corporate-financial-controller-working-end-2015-02-28> ;
     personnel:duration_label "6 mos"^^xsd:string ;
-    dcterms:created "2026-08-18T12:26:26.157707"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.276137"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-licence-informatique-studying> a abi:TemporalRegion,
@@ -394,7 +394,7 @@ personnel:termination_date a owl:DatatypeProperty ;
     rdfs:label "Sep 2009 – Jun 2014" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-licence-informatique-studying-start-2009-09-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-licence-informatique-studying-end-2014-06-30> ;
-    dcterms:created "2026-08-18T12:26:26.164425"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.286119"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-demo-co-founder-coo-working> a abi:TemporalRegion,
@@ -402,7 +402,7 @@ personnel:termination_date a owl:DatatypeProperty ;
     rdfs:label "Apr 2023 – Present" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-demo-co-founder-coo-working-start-2023-04-01> ;
     personnel:duration_label "3 yrs 5 mos"^^xsd:string ;
-    dcterms:created "2026-08-18T12:26:26.142523"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.256686"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 personnel:AcademicDegree a owl:Class ;
@@ -425,7 +425,7 @@ personnel:AcademicDegree a owl:Class ;
     personnel:forEducationalOrganization <http://ontology.naas.ai/abi/Organization/universit-de-rennes-1> ;
     personnel:hasEnrollment <http://ontology.naas.ai/personnel/EnrollmentRecord/alice-dupont-licence-informatique> ;
     personnel:isActOfStudyingOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.165237"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.287374"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 personnel:ActOfStudyingProcess a owl:Ontology ;
@@ -436,7 +436,7 @@ personnel:ActOfStudyingProcess a owl:Ontology ;
         "Emma Petit",
         "Grace Lambert" ;
     dc:date "2026-08-14"^^xsd:date ;
-    dcterms:description "Process slice for the act of studying — a CCO Planned Act (Act of Educational Training Acquisition) in which a person acquires knowledge of a curriculum from an educational organization at a site, concretizing an enrollment record and realizing a student role."@en ;
+    dcterms:description "Process slice for the act of studying - a CCO Planned Act (Act of Educational Training Acquisition) in which a person acquires knowledge of a curriculum from an educational organization at a site, concretizing an enrollment record and realizing a student role."@en ;
     dcterms:license <https://creativecommons.org/licenses/by/4.0/> ;
     dcterms:title "Act of Studying Process Ontology"@en ;
     rdfs:comment "Process slice for Act of Studying. Reuses shared personnel classes."@en ;
@@ -455,7 +455,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
         "Emma Petit",
         "Grace Lambert" ;
     dc:date "2026-08-18"^^xsd:date ;
-    dcterms:description "Process slice for the act of working — a CCO Planned Act (and Act of Employment) in which a person performs work for an organization at a site over a temporal region, realizing an employee role that concretizes a mission, developing the skills the person bears, and concretizing an employment contract."@en ;
+    dcterms:description "Process slice for the act of working - a CCO Planned Act (and Act of Employment) in which a person performs work for an organization at a site over a temporal region, realizing an employee role that concretizes a mission, developing the skills the person bears, and concretizing an employment contract."@en ;
     dcterms:license <https://creativecommons.org/licenses/by/4.0/> ;
     dcterms:title "Act of Working Process Ontology"@en ;
     rdfs:comment "Process slice for Act of Working. Reuses shared personnel classes."@en ;
@@ -468,30 +468,30 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
 
 <http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont-cashstory-co-founder> a personnel:EmploymentContract,
         owl:NamedIndividual ;
-    rdfs:label "Self-employed — Alice Dupont / CashStory" ;
+    rdfs:label "Self-employed - Alice Dupont / CashStory" ;
     personnel:contract_type "Self-employed"^^xsd:string ;
-    dcterms:created "2026-08-18T12:26:26.148734"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.264429"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont-frv-services-data-ai-engineer> a personnel:EmploymentContract,
         owl:NamedIndividual ;
-    rdfs:label "Freelance — Alice Dupont / FRV SERVICES" ;
+    rdfs:label "Freelance - Alice Dupont / FRV SERVICES" ;
     personnel:contract_type "Freelance"^^xsd:string ;
-    dcterms:created "2026-08-18T12:26:26.146406"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.261300"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont-groupe-bpce-moa-finance-consultant> a personnel:EmploymentContract,
         owl:NamedIndividual ;
-    rdfs:label "Permanent — Alice Dupont / Groupe BPCE" ;
+    rdfs:label "Permanent - Alice Dupont / Groupe BPCE" ;
     personnel:contract_type "Permanent"^^xsd:string ;
-    dcterms:created "2026-08-18T12:26:26.151798"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.268220"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont-demo-co-founder-coo> a personnel:EmploymentContract,
         owl:NamedIndividual ;
-    rdfs:label "Self-employed — Alice Dupont / naas.ai" ;
+    rdfs:label "Self-employed - Alice Dupont / naas.ai" ;
     personnel:contract_type "Self-employed"^^xsd:string ;
-    dcterms:created "2026-08-18T12:26:26.143569"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.257917"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentRecord/E-10428> a personnel:EmploymentRecord,
@@ -500,7 +500,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:employee_id "E-10428" ;
     personnel:hire_date "2018-03-01"^^xsd:date ;
     personnel:isEmploymentRecordOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
-    dcterms:created "2026-08-18T12:26:26.166166"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.288416"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentRecord/E-10429> a personnel:EmploymentRecord,
@@ -509,7 +509,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:employee_id "E-10429" ;
     personnel:hire_date "2019-06-15"^^xsd:date ;
     personnel:isEmploymentRecordOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.167168"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.289771"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentRecord/E-10430> a personnel:EmploymentRecord,
@@ -518,7 +518,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:employee_id "E-10430" ;
     personnel:hire_date "2020-01-10"^^xsd:date ;
     personnel:isEmploymentRecordOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
-    dcterms:created "2026-08-18T12:26:26.168150"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.291015"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentStatus/alice-dupont> a personnel:EmploymentStatus,
@@ -526,7 +526,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "active" ;
     personnel:isEmploymentStatusOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:status_value "active" ;
-    dcterms:created "2026-08-18T12:26:26.167396"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.290214"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentStatus/emma-petit> a personnel:EmploymentStatus,
@@ -534,7 +534,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "active" ;
     personnel:isEmploymentStatusOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
     personnel:status_value "active" ;
-    dcterms:created "2026-08-18T12:26:26.166818"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.289277"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmploymentStatus/grace-lambert> a personnel:EmploymentStatus,
@@ -542,25 +542,25 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "active" ;
     personnel:isEmploymentStatusOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
     personnel:status_value "active" ;
-    dcterms:created "2026-08-18T12:26:26.168882"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.291943"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/JobDescription/alice-dupont-E-10429> a personnel:JobDescription,
         owl:NamedIndividual ;
-    rdfs:label "COO — Executive" ;
-    dcterms:created "2026-08-18T12:26:26.167012"^^xsd:dateTime ;
+    rdfs:label "COO - Executive" ;
+    dcterms:created "2026-08-18T13:46:35.289525"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/JobDescription/emma-petit-E-10428> a personnel:JobDescription,
         owl:NamedIndividual ;
-    rdfs:label "CEO — Executive" ;
-    dcterms:created "2026-08-18T12:26:26.165965"^^xsd:dateTime ;
+    rdfs:label "CEO - Executive" ;
+    dcterms:created "2026-08-18T13:46:35.288169"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/JobDescription/grace-lambert-E-10430> a personnel:JobDescription,
         owl:NamedIndividual ;
-    rdfs:label "CTO — Executive" ;
-    dcterms:created "2026-08-18T12:26:26.167971"^^xsd:dateTime ;
+    rdfs:label "CTO - Executive" ;
+    dcterms:created "2026-08-18T13:46:35.290813"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-alstom-financial-planning-analyst> a personnel:JobPosition,
@@ -568,7 +568,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Financial Planning Analyst" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-alstom-financial-planning-analyst> ;
     personnel:job_title "Financial Planning Analyst" ;
-    dcterms:created "2026-08-18T12:26:26.153836"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.270963"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-cashstory-co-founder> a personnel:JobPosition,
@@ -576,7 +576,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Co-Founder" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-cashstory-co-founder> ;
     personnel:job_title "Co-Founder" ;
-    dcterms:created "2026-08-18T12:26:26.148213"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.263816"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-episaveurs-nord-champagne-haute-normandie-accountant> a personnel:JobPosition,
@@ -584,7 +584,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Accountant" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-episaveurs-nord-champagne-haute-normandie-accountant> ;
     personnel:job_title "Accountant" ;
-    dcterms:created "2026-08-18T12:26:26.162868"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.283776"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-frv-services-data-ai-engineer> a personnel:JobPosition,
@@ -592,7 +592,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Data & AI Engineer" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-frv-services-data-ai-engineer> ;
     personnel:job_title "Data & AI Engineer" ;
-    dcterms:created "2026-08-18T12:26:26.145928"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.260766"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-groupe-bpce-moa-finance-consultant> a personnel:JobPosition,
@@ -600,7 +600,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "MOA Finance Consultant" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-groupe-bpce-moa-finance-consultant> ;
     personnel:job_title "MOA Finance Consultant" ;
-    dcterms:created "2026-08-18T12:26:26.151336"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.267551"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-herm-s-financial-project-manager> a personnel:JobPosition,
@@ -608,7 +608,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Financial Project Manager" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-herm-s-financial-project-manager> ;
     personnel:job_title "Financial Project Manager" ;
-    dcterms:created "2026-08-18T12:26:26.156286"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.274028"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-kedge-business-school-treasurer-cash-manager-in-the-sport-business-school-association> a personnel:JobPosition,
@@ -616,7 +616,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Treasurer / Cash Manager in the sport Business School Association" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-kedge-business-school-treasurer-cash-manager-in-the-sport-business-school-association> ;
     personnel:job_title "Treasurer / Cash Manager in the sport Business School Association" ;
-    dcterms:created "2026-08-18T12:26:26.160456"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.280293"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-lagard-re-sports-corporate-financial-controller> a personnel:JobPosition,
@@ -624,7 +624,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Corporate Financial Controller" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-lagard-re-sports-corporate-financial-controller> ;
     personnel:job_title "Corporate Financial Controller" ;
-    dcterms:created "2026-08-18T12:26:26.158159"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.276806"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-demo-co-founder-coo> a personnel:JobPosition,
@@ -634,7 +634,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-demo-co-founder-coo> ;
     personnel:job_family "Executive"^^xsd:string ;
     personnel:job_title "Co-Founder & COO" ;
-    dcterms:created "2026-08-18T12:26:26.143102"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.257383"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/JobPosition/emma-petit-roster> a personnel:JobPosition,
@@ -644,7 +644,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/emma-petit-roster> ;
     personnel:job_family "Executive"^^xsd:string ;
     personnel:job_title "CEO" ;
-    dcterms:created "2026-08-18T12:26:26.166388"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.288744"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/JobPosition/grace-lambert-roster> a personnel:JobPosition,
@@ -654,7 +654,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-roster> ;
     personnel:job_family "Executive"^^xsd:string ;
     personnel:job_title "CTO" ;
-    dcterms:created "2026-08-18T12:26:26.168356"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.291265"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Remuneration/alice-dupont-demo-co-founder-coo> a personnel:Remuneration,
@@ -663,7 +663,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:remuneration_amount 95000 ;
     personnel:remuneration_currency "EUR" ;
-    dcterms:created "2026-08-18T12:26:26.143856"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.258249"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 personnel:employs a owl:ObjectProperty ;
@@ -911,7 +911,7 @@ personnel:isWorkLocationOf a owl:ObjectProperty ;
     rdfs:label "CEO" ;
     personnel:hasJobPosition <http://ontology.naas.ai/personnel/JobPosition/emma-petit-roster> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
-    dcterms:created "2026-08-18T12:26:26.166574"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.289025"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-roster> a personnel:EmployeeRole,
@@ -919,17 +919,17 @@ personnel:isWorkLocationOf a owl:ObjectProperty ;
     rdfs:label "CTO" ;
     personnel:hasJobPosition <http://ontology.naas.ai/personnel/JobPosition/grace-lambert-roster> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
-    dcterms:created "2026-08-18T12:26:26.168592"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.291537"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EnrollmentRecord/alice-dupont-licence-informatique> a personnel:EnrollmentRecord,
         owl:NamedIndividual ;
-    rdfs:label "Enrollment — Licence Informatique" ;
+    rdfs:label "Enrollment - Licence Informatique" ;
     personnel:completion_date "2014-06-30"^^xsd:date ;
     personnel:enrollment_date "2009-09-01"^^xsd:date ;
     personnel:isEnrollmentRecordOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:program_name "Licence Informatique" ;
-    dcterms:created "2026-08-18T12:26:26.164845"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.286663"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Mission/alice-dupont-alstom-financial-planning-analyst> a personnel:Mission,
@@ -942,7 +942,7 @@ personnel:isWorkLocationOf a owl:ObjectProperty ;
 - Build financial databases by unit/contract and consolidate results by region
 - Prepare financial reports by collecting, analyzing, formating and presenting information
 - Analyze forecasting operating costs from sites (Hourly Rates, Functional costs)""" ;
-    dcterms:created "2026-08-18T12:26:26.153597"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.270677"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Mission/alice-dupont-cashstory-co-founder> a personnel:Mission,
@@ -959,7 +959,7 @@ Key Responsibilities:
 - Creating visualizations and reports that effectively communicate data insights to clients.
 - Managing data projects from start to finish, including project planning, resource allocation, and risk management.
 - Identifying opportunities for process and tool improvements and implementing changes to improve the overall data consulting process""" ;
-    dcterms:created "2026-08-18T12:26:26.148009"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.263435"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Mission/alice-dupont-episaveurs-nord-champagne-haute-normandie-accountant> a personnel:Mission,
@@ -970,7 +970,7 @@ Key Responsibilities:
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/alice-dupont-linkedin> ;
     personnel:mission_content """- Contact with customers/suppliers (means and delay of payment)
 - Enter suppliers invoices in SAP""" ;
-    dcterms:created "2026-08-18T12:26:26.162669"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.283423"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Mission/alice-dupont-frv-services-data-ai-engineer> a personnel:Mission,
@@ -984,7 +984,7 @@ Key Responsibilities:
 - Design, implement, and manage high-performing data pipelines, focusing on scalability, efficiency, and stability.
 - Develop and execute data extraction, transformation, and loading pipelines for various data sources and destinations.
 - Automate end-to-end business processes with autonomous AI agents""" ;
-    dcterms:created "2026-08-18T12:26:26.145626"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.260467"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Mission/alice-dupont-groupe-bpce-moa-finance-consultant> a personnel:Mission,
@@ -1002,7 +1002,7 @@ Key Responsibilities:
 - Working closely with the IT team to ensure data quality for end-users
 - Building reporting models for the financial communication department
 - Managing bugs and irregularities that may arise during the implementation process""" ;
-    dcterms:created "2026-08-18T12:26:26.151029"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.267249"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Mission/alice-dupont-herm-s-financial-project-manager> a personnel:Mission,
@@ -1021,7 +1021,7 @@ Key Responsibilities:
 - Support the go-live of the interface during the September financial closing, (60 users, 30 entities)
 - Work directly with Accounting, Financial Control and Treasury department during the financial closing
 - Develop BI reports for the Group Financial Controllers""" ;
-    dcterms:created "2026-08-18T12:26:26.155992"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.273727"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Mission/alice-dupont-kedge-business-school-treasurer-cash-manager-in-the-sport-business-school-association> a personnel:Mission,
@@ -1034,7 +1034,7 @@ Key Responsibilities:
 - Perform daily treasury management
 - Monitor Cash flows (Actual vs Budget)
 - Develop relationships with banking partners""" ;
-    dcterms:created "2026-08-18T12:26:26.160190"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.279887"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Mission/alice-dupont-lagard-re-sports-corporate-financial-controller> a personnel:Mission,
@@ -1047,7 +1047,7 @@ Key Responsibilities:
 - Analyze discrepancies in the results (actual vs. budget)
 - Assist with the preparation of forecasts and budget
 - Create reports to prepare the subsidiaries for their monthly closing""" ;
-    dcterms:created "2026-08-18T12:26:26.157958"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.276419"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Mission/alice-dupont-demo-co-founder-coo> a personnel:Mission,
@@ -1060,7 +1060,7 @@ Key Responsibilities:
 - Architecting and building advanced AI agent systems, including multi-agent coordination to enable complex, autonomous workflows.
 - Designing integrations with a wide range of tools and external services to enhance platform extensibility and real-world applicability.
 - Utilizing knowledge graphs and ontology engineering to create a unified semantic layer that connects data, AI models, and business logic.""" ;
-    dcterms:created "2026-08-18T12:26:26.142813"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.257079"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 personnel:PersonnelOntology a owl:Ontology ;
@@ -1084,25 +1084,25 @@ personnel:PersonnelOntology a owl:Ontology ;
 <http://ontology.naas.ai/personnel/Site/bordeaux> a abi:Site,
         owl:NamedIndividual ;
     rdfs:label "Bordeaux" ;
-    dcterms:created "2026-08-18T12:26:26.159104"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.278287"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Site/france-remote> a abi:Site,
         owl:NamedIndividual ;
     rdfs:label "France · Remote" ;
-    dcterms:created "2026-08-18T12:26:26.144676"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.259371"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Site/world> a abi:Site,
         owl:NamedIndividual ;
     rdfs:label "World" ;
-    dcterms:created "2026-08-18T12:26:26.141313"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.255284"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Site/world-remote> a abi:Site,
         owl:NamedIndividual ;
     rdfs:label "World · Remote" ;
-    dcterms:created "2026-08-18T12:26:26.147164"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.262324"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Skill/alice-dupont-accounting> a personnel:Skill,
@@ -1111,7 +1111,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-episaveurs-nord-champagne-haute-normandie-accountant> ;
     personnel:skill_name "Accounting" ;
-    dcterms:created "2026-08-18T12:26:26.161685"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.282062"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Skill/alice-dupont-fastapi> a personnel:Skill,
@@ -1120,7 +1120,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-demo-co-founder-coo> ;
     personnel:skill_name "FastAPI" ;
-    dcterms:created "2026-08-18T12:26:26.141984"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.255986"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Skill/alice-dupont-ibm-cognos-analytics> a personnel:Skill,
@@ -1129,7 +1129,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-herm-s-financial-project-manager> ;
     personnel:skill_name "IBM Cognos Analytics" ;
-    dcterms:created "2026-08-18T12:26:26.154959"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.272496"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Skill/alice-dupont-leadership> a personnel:Skill,
@@ -1138,7 +1138,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-kedge-business-school-treasurer-cash-manager-in-the-sport-business-school-association> ;
     personnel:skill_name "Leadership" ;
-    dcterms:created "2026-08-18T12:26:26.159262"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.278629"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Skill/alice-dupont-qlikview> a personnel:Skill,
@@ -1147,14 +1147,14 @@ personnel:PersonnelOntology a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-alstom-financial-planning-analyst> ;
     personnel:skill_name "QlikView" ;
-    dcterms:created "2026-08-18T12:26:26.152448"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.269232"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/StudentRole/alice-dupont-licence-informatique> a personnel:StudentRole,
         owl:NamedIndividual ;
-    rdfs:label "Student — Licence Informatique" ;
+    rdfs:label "Student - Licence Informatique" ;
     personnel:isStudentRoleOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.164655"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.286355"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 personnel:developsSkill a owl:ObjectProperty ;
@@ -1271,7 +1271,7 @@ personnel:isStudentRoleOf a owl:ObjectProperty ;
     personnel:hasEmployeeRole <http://ontology.naas.ai/personnel/EmployeeRole/emma-petit-roster> ;
     personnel:hasEmploymentRecord <http://ontology.naas.ai/personnel/EmploymentRecord/E-10428> ;
     personnel:hasEmploymentStatus <http://ontology.naas.ai/personnel/EmploymentStatus/emma-petit> ;
-    dcterms:created "2026-08-18T12:26:26.165606"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.287865"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/abi/Person/grace-lambert> a abi:Person,
@@ -1286,7 +1286,7 @@ personnel:isStudentRoleOf a owl:ObjectProperty ;
     personnel:hasEmployeeRole <http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-roster> ;
     personnel:hasEmploymentRecord <http://ontology.naas.ai/personnel/EmploymentRecord/E-10430> ;
     personnel:hasEmploymentStatus <http://ontology.naas.ai/personnel/EmploymentStatus/grace-lambert> ;
-    dcterms:created "2026-08-18T12:26:26.167732"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.290545"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-alstom-financial-planning-analyst> a personnel:ActOfWorking,
@@ -1300,7 +1300,7 @@ personnel:isStudentRoleOf a owl:ObjectProperty ;
         <http://ontology.naas.ai/personnel/Skill/alice-dupont-qlikview> ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/alstom> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.154237"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.271647"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-cashstory-co-founder> a personnel:ActOfWorking,
@@ -1315,7 +1315,7 @@ personnel:isStudentRoleOf a owl:ObjectProperty ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/cashstory> ;
     personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont-cashstory-co-founder> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.148918"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.264864"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-episaveurs-nord-champagne-haute-normandie-accountant> a personnel:ActOfWorking,
@@ -1329,7 +1329,7 @@ personnel:isStudentRoleOf a owl:ObjectProperty ;
         <http://ontology.naas.ai/personnel/Skill/alice-dupont-microsoft-excel> ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/episaveurs-nord-champagne-haute-normandie> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.163511"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.284921"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-frv-services-data-ai-engineer> a personnel:ActOfWorking,
@@ -1344,7 +1344,7 @@ personnel:isStudentRoleOf a owl:ObjectProperty ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/frv-services> ;
     personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont-frv-services-data-ai-engineer> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.146627"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.261588"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-groupe-bpce-moa-finance-consultant> a personnel:ActOfWorking,
@@ -1359,7 +1359,7 @@ personnel:isStudentRoleOf a owl:ObjectProperty ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/groupe-bpce> ;
     personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont-groupe-bpce-moa-finance-consultant> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.151981"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.268464"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-herm-s-financial-project-manager> a personnel:ActOfWorking,
@@ -1373,7 +1373,7 @@ personnel:isStudentRoleOf a owl:ObjectProperty ;
         <http://ontology.naas.ai/personnel/Skill/alice-dupont-sap-bfc> ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/herm-s> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.156749"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.274748"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-kedge-business-school-treasurer-cash-manager-in-the-sport-business-school-association> a personnel:ActOfWorking,
@@ -1387,7 +1387,7 @@ personnel:isStudentRoleOf a owl:ObjectProperty ;
         <http://ontology.naas.ai/personnel/Skill/alice-dupont-microsoft-excel> ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/kedge-business-school> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.161002"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.281067"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-lagard-re-sports-corporate-financial-controller> a personnel:ActOfWorking,
@@ -1401,7 +1401,7 @@ personnel:isStudentRoleOf a owl:ObjectProperty ;
         <http://ontology.naas.ai/personnel/Skill/alice-dupont-sap-bfc> ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/lagard-re-sports> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.158618"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.277435"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-demo-co-founder-coo> a personnel:ActOfWorking,
@@ -1417,7 +1417,7 @@ personnel:isStudentRoleOf a owl:ObjectProperty ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/demo> ;
     personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont-demo-co-founder-coo> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.144153"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.258752"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 personnel:Remuneration a owl:Class ;
@@ -1435,7 +1435,7 @@ personnel:Remuneration a owl:Class ;
 <http://ontology.naas.ai/personnel/Site/rennes> a abi:Site,
         owl:NamedIndividual ;
     rdfs:label "Rennes" ;
-    dcterms:created "2026-08-18T12:26:26.161420"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.281787"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Skill/alice-dupont-financial-reporting> a personnel:Skill,
@@ -1445,7 +1445,7 @@ personnel:Remuneration a owl:Class ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-alstom-financial-planning-analyst>,
         <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-lagard-re-sports-corporate-financial-controller> ;
     personnel:skill_name "Financial Reporting" ;
-    dcterms:created "2026-08-18T12:26:26.152630"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.269525"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Skill/alice-dupont-sap-bfc> a personnel:Skill,
@@ -1455,7 +1455,7 @@ personnel:Remuneration a owl:Class ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-herm-s-financial-project-manager>,
         <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-lagard-re-sports-corporate-financial-controller> ;
     personnel:skill_name "SAP BFC" ;
-    dcterms:created "2026-08-18T12:26:26.154693"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.272190"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-alstom-financial-planning-analyst> a personnel:EmployeeRole,
@@ -1464,7 +1464,7 @@ personnel:Remuneration a owl:Class ;
     personnel:hasJobPosition <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-alstom-financial-planning-analyst> ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/alice-dupont-alstom-financial-planning-analyst> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.154014"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.271272"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-cashstory-co-founder> a personnel:EmployeeRole,
@@ -1473,7 +1473,7 @@ personnel:Remuneration a owl:Class ;
     personnel:hasJobPosition <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-cashstory-co-founder> ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/alice-dupont-cashstory-co-founder> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.148468"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.264120"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-episaveurs-nord-champagne-haute-normandie-accountant> a personnel:EmployeeRole,
@@ -1482,7 +1482,7 @@ personnel:Remuneration a owl:Class ;
     personnel:hasJobPosition <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-episaveurs-nord-champagne-haute-normandie-accountant> ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/alice-dupont-episaveurs-nord-champagne-haute-normandie-accountant> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.163043"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.284610"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-frv-services-data-ai-engineer> a personnel:EmployeeRole,
@@ -1491,7 +1491,7 @@ personnel:Remuneration a owl:Class ;
     personnel:hasJobPosition <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-frv-services-data-ai-engineer> ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/alice-dupont-frv-services-data-ai-engineer> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.146140"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.260994"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-groupe-bpce-moa-finance-consultant> a personnel:EmployeeRole,
@@ -1500,7 +1500,7 @@ personnel:Remuneration a owl:Class ;
     personnel:hasJobPosition <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-groupe-bpce-moa-finance-consultant> ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/alice-dupont-groupe-bpce-moa-finance-consultant> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.151564"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.267922"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-herm-s-financial-project-manager> a personnel:EmployeeRole,
@@ -1509,7 +1509,7 @@ personnel:Remuneration a owl:Class ;
     personnel:hasJobPosition <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-herm-s-financial-project-manager> ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/alice-dupont-herm-s-financial-project-manager> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.156489"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.274358"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-kedge-business-school-treasurer-cash-manager-in-the-sport-business-school-association> a personnel:EmployeeRole,
@@ -1518,7 +1518,7 @@ personnel:Remuneration a owl:Class ;
     personnel:hasJobPosition <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-kedge-business-school-treasurer-cash-manager-in-the-sport-business-school-association> ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/alice-dupont-kedge-business-school-treasurer-cash-manager-in-the-sport-business-school-association> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.160710"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.280663"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-lagard-re-sports-corporate-financial-controller> a personnel:EmployeeRole,
@@ -1527,7 +1527,7 @@ personnel:Remuneration a owl:Class ;
     personnel:hasJobPosition <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-lagard-re-sports-corporate-financial-controller> ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/alice-dupont-lagard-re-sports-corporate-financial-controller> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.158328"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.277070"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-demo-co-founder-coo> a personnel:EmployeeRole,
@@ -1536,7 +1536,7 @@ personnel:Remuneration a owl:Class ;
     personnel:hasJobPosition <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-demo-co-founder-coo> ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/alice-dupont-demo-co-founder-coo> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-08-18T12:26:26.143292"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.257621"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Skill/alice-dupont-business-analysis> a personnel:Skill,
@@ -1547,7 +1547,7 @@ personnel:Remuneration a owl:Class ;
         <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-frv-services-data-ai-engineer>,
         <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-groupe-bpce-moa-finance-consultant> ;
     personnel:skill_name "Business Analysis" ;
-    dcterms:created "2026-08-18T12:26:26.144879"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.259572"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Skill/alice-dupont-microsoft-excel> a personnel:Skill,
@@ -1558,7 +1558,7 @@ personnel:Remuneration a owl:Class ;
         <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-groupe-bpce-moa-finance-consultant>,
         <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-kedge-business-school-treasurer-cash-manager-in-the-sport-business-school-association> ;
     personnel:skill_name "Microsoft Excel" ;
-    dcterms:created "2026-08-18T12:26:26.149996"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.266243"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 <http://ontology.naas.ai/personnel/Skill/alice-dupont-python-programming-language> a personnel:Skill,
@@ -1569,7 +1569,7 @@ personnel:Remuneration a owl:Class ;
         <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-frv-services-data-ai-engineer>,
         <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-demo-co-founder-coo> ;
     personnel:skill_name "Python (Programming Language)" ;
-    dcterms:created "2026-08-18T12:26:26.141646"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.255541"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 personnel:StudentRole a owl:Class ;
@@ -1588,7 +1588,7 @@ personnel:StudentRole a owl:Class ;
 <http://ontology.naas.ai/personnel/Site/greater-paris-metropolitan-region> a abi:Site,
         owl:NamedIndividual ;
     rdfs:label "Greater Paris Metropolitan Region" ;
-    dcterms:created "2026-08-18T12:26:26.149422"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.265996"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 personnel:EmploymentStatus a owl:Class ;
@@ -1685,14 +1685,14 @@ personnel:EmploymentContract a owl:Class ;
             owl:someValuesFrom personnel:ActOfWorking ],
         abi:GenericallyDependentContinuant ;
     skos:definition "A generically dependent continuant that specifies the terms under which a person works for an organization."@en ;
-    skos:example "Permanent contract CDI — Alice Dupont / naas.ai."@en .
+    skos:example "Permanent contract CDI - Alice Dupont / naas.ai."@en .
 
 <http://ontology.naas.ai/personnel/ProfileDocument/alice-dupont-linkedin> a personnel:ProfileDocument,
         owl:NamedIndividual ;
-    rdfs:label "LinkedIn experience — Alice Dupont" ;
+    rdfs:label "LinkedIn experience - Alice Dupont" ;
     personnel:isProfileDocumentOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:source_url "https://demo.example/profiles/demo" ;
-    dcterms:created "2026-08-18T12:26:26.140676"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.254427"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 
 personnel:Mission a owl:Class ;
@@ -1840,6 +1840,6 @@ personnel:ActOfWorking a owl:Class ;
         <http://ontology.naas.ai/personnel/Site/rennes>,
         <http://ontology.naas.ai/personnel/Site/world>,
         <http://ontology.naas.ai/personnel/Site/world-remote> ;
-    dcterms:created "2026-08-18T12:26:26.139567"^^xsd:dateTime ;
+    dcterms:created "2026-08-18T13:46:35.253633"^^xsd:dateTime ;
     dcterms:creator "generate_demo_graph" .
 

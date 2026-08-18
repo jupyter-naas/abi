@@ -1,6 +1,6 @@
 # Personnel Cockpit
 
-Lightweight S1 workforce analytics example — same *registration / data / page*
+Lightweight S1 workforce analytics example - same *registration / data / page*
 shape as [Financial Cockpit](../../finance/apps/financial_cockpit), without the
 Next.js surface. SPARQL-shaped JSON, static UI, FastAPI dataset layer.
 
@@ -33,7 +33,7 @@ cd domains/personnel && make app-personnel-cockpit  # API + static UI dev server
 | Age pyramid | Birth `TemporalRegion` + `BiologicalSex` | Pipeline can write · aggregate in app |
 | Birth registry | Birth + site + time + record + trust | Query + `register_birth` |
 | Kinship / lineage | `hasMother` / `hasFather` / `updatesPriorRegistration` | Query + pipeline |
-| Manager org chart | — | **Not in ontology** — do not invent |
+| Manager org chart | - | **Not in ontology** - do not invent |
 
 ---
 

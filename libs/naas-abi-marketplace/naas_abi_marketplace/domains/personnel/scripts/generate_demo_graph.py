@@ -109,7 +109,7 @@ EMPLOYEES = [
     },
 ]
 
-# The one course of study in the demo. Not from LinkedIn — kept from the
+# The one course of study in the demo. Not from LinkedIn - kept from the
 # previous demo set so the Act of Studying slice still has an instance.
 STUDY = {
     "person": ("Florent", "Ravenel"),
@@ -197,7 +197,7 @@ def _add_temporal_region(
 
 
 def load_schema_graph() -> Graph:
-    """Parse ontology TTLs (schema only — modules + processes)."""
+    """Parse ontology TTLs (schema only - modules + processes)."""
     g = Graph()
     for path in sorted(ONTOLOGIES.rglob("*.ttl")):
         if "queries" in path.parts:
@@ -270,7 +270,7 @@ def _ensure_skill(
 
     A skill is a quality inhering in the person, not in the act, so the same
     skill exercised across several jobs is a single node that several acts of
-    working point at — which is what makes those jobs neighbours in the graph.
+    working point at - which is what makes those jobs neighbours in the graph.
     """
     key = f"{person.label}|{name}"
     if key in cache:
@@ -293,7 +293,7 @@ def _add_profile_document(graph: Graph, person: Person) -> ProfileDocument:
     """The LinkedIn page every experience below was read from."""
     doc = ProfileDocument(
         _uri=_uri(str(PERSONNEL), "ProfileDocument", _slug(person.label or "", "linkedin")),
-        label=f"LinkedIn experience — {person.label}",
+        label=f"LinkedIn experience - {person.label}",
         source_url=LINKEDIN_PROFILE_URL,
         is_profile_document_of=[person._uri],
         created=_now(),
@@ -324,7 +324,7 @@ def _add_working(
 ) -> tuple[str, str]:
     """Emit one act of working and everything hanging off it.
 
-    Returns ``(act_uri, position_uri)`` — the roster pass tags the position of a
+    Returns ``(act_uri, position_uri)`` - the roster pass tags the position of a
     person's current job with its job family rather than minting a second,
     competing position for the same post.
     """
@@ -343,7 +343,7 @@ def _add_working(
         duration=duration,
     )
 
-    # HOW WE KNOW — the stated remit. Opening sentence is the label, full text
+    # HOW WE KNOW - the stated remit. Opening sentence is the label, full text
     # is the content, and provenance points back at the profile page.
     mission = Mission(
         _uri=_uri(str(PERSONNEL), "Mission", key),
@@ -357,7 +357,7 @@ def _add_working(
     graph += mission.rdf()
     graph.add((URIRef(person._uri), PERSONNEL.hasMissionCarried, URIRef(mission._uri)))
 
-    # HOW WE KNOW — the position as published by the organization.
+    # HOW WE KNOW - the position as published by the organization.
     position = JobPosition(
         _uri=_uri(str(PERSONNEL), "JobPosition", key),
         label=title,
@@ -367,7 +367,7 @@ def _add_working(
     )
     graph += position.rdf()
 
-    # WHY — the role the person bears, concretizing both position and mission.
+    # WHY - the role the person bears, concretizing both position and mission.
     role = EmployeeRole(
         _uri=_uri(str(PERSONNEL), "EmployeeRole", key),
         label=title,
@@ -379,10 +379,10 @@ def _add_working(
     graph += role.rdf()
     graph.add((URIRef(person._uri), PERSONNEL.hasEmployeeRole, URIRef(role._uri)))
     # No reasoner runs over the demo graph, so the owl:inverseOf pair has to be
-    # asserted by hand — find_open_job_positions tests the inverse direction.
+    # asserted by hand - find_open_job_positions tests the inverse direction.
     graph.add((URIRef(position._uri), PERSONNEL.isJobPositionOf, URIRef(role._uri)))
     # personnel:hasMission lives in the process slice, so it is not a field on
-    # the shared EmployeeRole model — assert the role → mission link directly.
+    # the shared EmployeeRole model - assert the role → mission link directly.
     graph.add((URIRef(role._uri), PERSONNEL.hasMission, URIRef(mission._uri)))
     graph.add((URIRef(mission._uri), PERSONNEL.isMissionOf, URIRef(role._uri)))
 
@@ -390,7 +390,7 @@ def _add_working(
     if contract_type:
         contract = EmploymentContract(
             _uri=_uri(str(PERSONNEL), "EmploymentContract", key),
-            label=f"{contract_type} — {person.label} / {org.label}",
+            label=f"{contract_type} - {person.label} / {org.label}",
             created=_now(),
             creator="generate_demo_graph",
         )
@@ -438,7 +438,7 @@ def _add_working(
     graph += working.rdf()
 
     graph.add((URIRef(person._uri), PERSONNEL.hasActOfWorking, URIRef(working_uri)))
-    # WHO ↔ WHERE — the shortcut from the worker to the site of execution.
+    # WHO ↔ WHERE - the shortcut from the worker to the site of execution.
     graph.add((URIRef(person._uri), PERSONNEL.hasWorkLocation, URIRef(site._uri)))
     for skill in skills:
         graph.add(
@@ -469,7 +469,7 @@ def _add_studying(
 
     role = StudentRole(
         _uri=_uri(str(PERSONNEL), "StudentRole", key),
-        label=f"Student — {program}",
+        label=f"Student - {program}",
         is_student_role_of=[person._uri],
         created=_now(),
         creator="generate_demo_graph",
@@ -479,7 +479,7 @@ def _add_studying(
 
     enrollment = EnrollmentRecord(
         _uri=_uri(str(PERSONNEL), "EnrollmentRecord", key),
-        label=f"Enrollment — {program}",
+        label=f"Enrollment - {program}",
         program_name=program,
         enrollment_date=start,
         completion_date=end,
@@ -590,7 +590,7 @@ def build_instances() -> Graph:
 
         desc = JobDescription(
             _uri=_uri(str(PERSONNEL), "JobDescription", f"{slug}-{emp['employee_id']}"),
-            label=f"{emp['job_title']} — {emp['job_family']}",
+            label=f"{emp['job_title']} - {emp['job_family']}",
             created=_now(),
             creator="generate_demo_graph",
         )
@@ -610,7 +610,7 @@ def build_instances() -> Graph:
 
         # job_family marks the one position that counts as the person's current
         # post. Roster reporting keys off it, so exactly one position per person
-        # may carry it — every other position they have ever held must not.
+        # may carry it - every other position they have ever held must not.
         position_uri = current_position.get(person.label or "")
         if position_uri is None:
             # No current act of working for this person, so the post itself is

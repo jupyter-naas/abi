@@ -24,14 +24,14 @@ personnel:ActOfStudyingProcess a owl:Ontology ;
   abi:ontologyResource "ontologies/processes/ActOfStudyingProcess.ttl" ;
   abi:pythonResource "ontologies/processes/ActOfStudyingProcess.py" ;
   dc:title "Act of Studying Process Ontology"@en ;
-  dc:description "Process slice for the act of studying — a CCO Planned Act (Act of Educational Training Acquisition) in which a person acquires knowledge of a curriculum from an educational organization at a site, concretizing an enrollment record and realizing a student role."@en ;
+  dc:description "Process slice for the act of studying - a CCO Planned Act (Act of Educational Training Acquisition) in which a person acquires knowledge of a curriculum from an educational organization at a site, concretizing an enrollment record and realizing a student role."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Process slice for Act of Studying. Reuses shared personnel classes."@en ;
   dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
   dc11:date "2026-08-14"^^xsd:date .
 
 #################################################################
-#    Classes — WHAT
+#    Classes - WHAT
 #################################################################
 
 personnel:ActOfStudying a owl:Class ;
@@ -48,7 +48,7 @@ personnel:ActOfStudying a owl:Class ;
   skos:example "Alice Dupont studying computer science at Université de Rennes 1 in Rennes from 2009-09-01 to 2014-06-30."@en .
 
 #################################################################
-#    Object properties — process-only
+#    Object properties - process-only
 #################################################################
 
 personnel:hasActOfStudying a owl:ObjectProperty ;

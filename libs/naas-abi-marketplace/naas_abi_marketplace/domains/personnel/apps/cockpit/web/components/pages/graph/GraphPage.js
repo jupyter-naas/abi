@@ -1,5 +1,5 @@
 /**
- * Graph page — acts of working around a focus person, with labeled relations.
+ * Graph page - acts of working around a focus person, with labeled relations.
  */
 
 import { BFO_SEVEN, bfoColor } from "../processes/bfo-buckets.js";
@@ -71,6 +71,12 @@ const GRAPH_PARAM_DEFS = {
     unit: "ms",
     hint: "How long nodes keep moving before the layout freezes in place. Raise it if a crowded graph has not finished spreading out.",
   },
+  legend: {
+    label: "BFO legend",
+    type: "toggle",
+    default: true,
+    hint: "Show the colour key for the seven BFO buckets in the top-right corner of the canvas.",
+  },
   zoom: {
     label: "Default zoom",
     min: 0.25,
@@ -78,14 +84,14 @@ const GRAPH_PARAM_DEFS = {
     step: 0.05,
     default: 1,
     unit: "×",
-    hint: "Scale the canvas opens at, and returns to with the ⟲ button. The graph may extend past the edges — drag to pan.",
+    hint: "Scale the canvas opens at, and returns to with the ⟲ button. The graph may extend past the edges, so drag to pan.",
   },
 };
 
-// Hops are counted from the selected person, who roots the traversal — the
+// Hops are counted from the selected person, who roots the traversal - the
 // acts of working are one hop out, not the origin.
 const DISTANCE_HINT =
-  "Hops out from the selected person, who roots the graph. 1 — what they bear or carry: acts of working, employee roles, missions, skills, profile document. 2 — what those acts reach: organization, site, temporal region, contract, remuneration. 3 — the instants bounding each temporal region.";
+  "Hops out from the selected person, who roots the graph. 1 shows what they bear or carry: acts of working, employee roles, missions, skills, profile document. 2 adds what those acts reach: organization, site, temporal region, contract, remuneration. 3 adds the instants bounding each temporal region.";
 
 function defaultGraphParams() {
   return Object.fromEntries(
@@ -113,7 +119,7 @@ function readStoredParams() {
 
 // Mutated in place by the panel; the simulation reads it every tick.
 const graphParams = readStoredParams();
-// The gap floor is enforced positionally every tick — see graphParams.nodeMinGap.
+// The gap floor is enforced positionally every tick - see graphParams.nodeMinGap.
 // The repulsion force alone could not guarantee it: it is scaled by alpha, so
 // as the simulation cools the push fades and nodes settle packed.
 
@@ -151,7 +157,7 @@ function buildGraphIndex(data) {
   };
 }
 
-/** ISO start of a record's temporal region — the ordering key for "most recent". */
+/** ISO start of a record's temporal region - the ordering key for "most recent". */
 function recencyKey(record) {
   return record?.startedAt || record?.endedAt || "";
 }
@@ -262,7 +268,7 @@ function visibleClassOptions(visible) {
 
 /**
  * Drop every node whose class the user has deselected, plus any relation left
- * dangling. The focus person is always kept — it anchors the canvas.
+ * dangling. The focus person is always kept - it anchors the canvas.
  */
 function applyClassFilter(visible, hiddenClasses, focusPersonId) {
   if (!hiddenClasses || hiddenClasses.size === 0) return visible;
@@ -292,8 +298,8 @@ function renderPropertiesTable(properties) {
     .map(
       (p) => `<tr>
         <td class="graph-prop-name">
-          <span class="graph-prop-uri">${esc(p.uri || "—")}</span>
-          <span class="graph-prop-label">${esc(p.label || "—")}</span>
+          <span class="graph-prop-uri">${esc(p.uri || "-")}</span>
+          <span class="graph-prop-label">${esc(p.label || "-")}</span>
         </td>
         <td>${esc(p.value)}</td>
       </tr>`
@@ -697,7 +703,7 @@ function seedSemanticLayout(focusNode, workingNode, nodes, edges, focusPersonId)
   for (const node of nodes) {
     node.homeX = node.x;
     node.homeY = node.y;
-    // Everything but the focus is simulated — the focus stays put so the
+    // Everything but the focus is simulated - the focus stays put so the
     // canvas keeps a stable centre to fit and pan around.
     node.physicsEnabled = node.id !== focusNode.id;
   }
@@ -913,7 +919,7 @@ function classPhysicsStep(nodes, edges, alpha) {
     if (!Number.isFinite(edge.physicsLength)) {
       // A uniform target length. Freezing the seeded distance here made every
       // edge start at rest, so the simulation had no work to do and the seed
-      // was the layout — which is why nothing ever appeared to move.
+      // was the layout - which is why nothing ever appeared to move.
       edge.physicsLength = graphParams.linkDistance;
     }
     const strength =
@@ -1569,7 +1575,7 @@ export function mountGraphPage(el, data) {
                   </label>
                   ${renderClassFilter(classOptions, hiddenClasses)}
                 </div>
-                <div class="graph-legend">${renderLegend()}</div>
+                ${graphParams.legend ? `<div class="graph-legend">${renderLegend()}</div>` : ""}
                 ${renderParamsPanel(graphParams, distance, paramsOpen)}
                 <div class="graph-zoom"><button type="button" id="graph-zoom-in" title="Zoom in">+</button><button type="button" id="graph-zoom-out" title="Zoom out">−</button><button type="button" id="graph-zoom-reset" title="Reset view">⟲</button></div>
                 <p class="graph-hint">Focus at center · every other node is simulated · drag to pan · scroll to zoom</p>
@@ -1609,8 +1615,8 @@ export function mountGraphPage(el, data) {
       paramsToggle.setAttribute("aria-expanded", paramsOpen ? "true" : "false");
     });
 
-    // `input` updates the readout on every frame of the drag; `change` — once
-    // the thumb is released — is what repaints, so dragging a slider does not
+    // `input` updates the readout on every frame of the drag; `change` - once
+    // the thumb is released - is what repaints, so dragging a slider does not
     // rebuild the whole canvas dozens of times.
     for (const input of el.querySelectorAll("[data-param]")) {
       const key = input.dataset.param;

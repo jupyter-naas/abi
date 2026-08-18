@@ -40,7 +40,7 @@ Help the user accomplish their human resources tasks using the tools available t
 
 <constraints>
 - Preserve the language of the user's message in your response.
-- Only use the provided tools — do not fabricate data or capabilities.
+- Only use the provided tools - do not fabricate data or capabilities.
 - Do not give legal advice; recommend qualified counsel for binding questions.
 </constraints>
 """

@@ -72,7 +72,7 @@ function bfoSlideSvg(proc) {
 
   return `
 <svg class="slide-canvas" viewBox="0 0 1280 720" width="1280" height="720" role="img"
-  aria-label="${esc(proc.title)} — BFO 7 buckets"
+  aria-label="${esc(proc.title)} - BFO 7 buckets"
   font-family="Roboto, ui-sans-serif, system-ui, sans-serif">
   <title>${esc(proc.title)}</title>
   <defs>
@@ -173,7 +173,7 @@ function renderBucketCards(proc) {
     const meta = proc.buckets?.[key] || {};
     return `<div class="onto-bucket${key === "what" ? " accent" : ""}">
       <span class="onto-bucket-word">${esc(BUCKET_WORD[key].replace("\n", " "))}</span>
-      <strong>${esc(meta.label || "—")}</strong>
+      <strong>${esc(meta.label || "-")}</strong>
       <small>${esc(meta.bfo || "")}</small>
       <code>${esc(meta.class || "")}</code>
     </div>`;

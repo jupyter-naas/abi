@@ -20,8 +20,8 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
   #   WHAT         ActOfWorking (the process itself)
   #   WHEN         TemporalRegion, bounded by two TemporalInstants
   #   WHERE        Site
-  #   WHY          EmployeeRole (SDC) — the job title borne by the worker
-  #   HOW IT IS    Skill (quality) — what the worker bears and develops in the act
+  #   WHY          EmployeeRole (SDC) - the job title borne by the worker
+  #   HOW IT IS    Skill (quality) - what the worker bears and develops in the act
   #   HOW WE KNOW  Mission, EmploymentContract, ProfileDocument (GDCs)
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
   owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
@@ -33,14 +33,14 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
   abi:ontologyResource "ontologies/processes/ActOfWorkingProcess.ttl" ;
   abi:pythonResource "ontologies/processes/ActOfWorkingProcess.py" ;
   dc:title "Act of Working Process Ontology"@en ;
-  dc:description "Process slice for the act of working — a CCO Planned Act (and Act of Employment) in which a person performs work for an organization at a site over a temporal region, realizing an employee role that concretizes a mission, developing the skills the person bears, and concretizing an employment contract."@en ;
+  dc:description "Process slice for the act of working - a CCO Planned Act (and Act of Employment) in which a person performs work for an organization at a site over a temporal region, realizing an employee role that concretizes a mission, developing the skills the person bears, and concretizing an employment contract."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Process slice for Act of Working. Reuses shared personnel classes."@en ;
   dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
   dc11:date "2026-08-18"^^xsd:date .
 
 #################################################################
-#    Classes — WHAT
+#    Classes - WHAT
 #################################################################
 
 personnel:ActOfWorking a owl:Class ;
@@ -58,7 +58,7 @@ personnel:ActOfWorking a owl:Class ;
   skos:example "Alice Dupont working as Head of Product for Demo, worldwide, since April 2023."@en .
 
 #################################################################
-#    Classes — HOW WE KNOW
+#    Classes - HOW WE KNOW
 #################################################################
 
 personnel:Mission a owl:Class ;
@@ -80,7 +80,7 @@ personnel:ProfileDocument a owl:Class ;
   rdfs:comment "The provenance anchor of the demo graph: every Mission, EmployeeRole and Skill asserted from a profile page points back to the ProfileDocument it was read from."@en .
 
 #################################################################
-#    Classes — HOW IT IS
+#    Classes - HOW IT IS
 #################################################################
 
 personnel:Skill a owl:Class ;
@@ -93,7 +93,7 @@ personnel:Skill a owl:Class ;
   rdfs:comment "Borne by the person, not by the process: the skill outlives any one act of working. personnel:developsSkill links the act to the skills exercised and grown in it."@en .
 
 #################################################################
-#    Object properties — process-only
+#    Object properties - process-only
 #################################################################
 
 personnel:hasActOfWorking a owl:ObjectProperty ;
@@ -144,7 +144,7 @@ personnel:isContractOf a owl:ObjectProperty ;
   rdfs:domain personnel:EmploymentContract ;
   rdfs:range  personnel:ActOfWorking .
 
-# WHAT ↔ HOW IT IS — the act develops the skills the worker bears
+# WHAT ↔ HOW IT IS - the act develops the skills the worker bears
 personnel:developsSkill a owl:ObjectProperty ;
   owl:inverseOf personnel:isSkillDevelopedIn ;
   rdfs:label "develops skill"@en ;
@@ -159,7 +159,7 @@ personnel:isSkillDevelopedIn a owl:ObjectProperty ;
   rdfs:domain personnel:Skill ;
   rdfs:range  personnel:ActOfWorking .
 
-# WHO ↔ HOW IT IS — the person bears the skill
+# WHO ↔ HOW IT IS - the person bears the skill
 personnel:hasSkill a owl:ObjectProperty ;
   rdfs:subPropertyOf abi:bearerOf ;
   owl:inverseOf personnel:isSkillOf ;
@@ -176,7 +176,7 @@ personnel:isSkillOf a owl:ObjectProperty ;
   rdfs:domain personnel:Skill ;
   rdfs:range  abi:Person .
 
-# WHY ↔ HOW WE KNOW — the employee role concretizes the mission
+# WHY ↔ HOW WE KNOW - the employee role concretizes the mission
 personnel:hasMission a owl:ObjectProperty ;
   rdfs:subPropertyOf abi:concretizes ;
   owl:inverseOf personnel:isMissionOf ;
@@ -193,7 +193,7 @@ personnel:isMissionOf a owl:ObjectProperty ;
   rdfs:domain personnel:Mission ;
   rdfs:range  personnel:EmployeeRole .
 
-# WHO ↔ HOW WE KNOW — the person carries the mission
+# WHO ↔ HOW WE KNOW - the person carries the mission
 personnel:hasMissionCarried a owl:ObjectProperty ;
   rdfs:subPropertyOf abi:isCarrierOf ;
   owl:inverseOf personnel:isMissionCarriedBy ;
@@ -210,7 +210,7 @@ personnel:isMissionCarriedBy a owl:ObjectProperty ;
   rdfs:domain personnel:Mission ;
   rdfs:range  abi:Person .
 
-# WHO ↔ HOW WE KNOW — the person carries the profile document
+# WHO ↔ HOW WE KNOW - the person carries the profile document
 personnel:hasProfileDocument a owl:ObjectProperty ;
   rdfs:subPropertyOf abi:isCarrierOf ;
   owl:inverseOf personnel:isProfileDocumentOf ;
@@ -227,7 +227,7 @@ personnel:isProfileDocumentOf a owl:ObjectProperty ;
   rdfs:domain personnel:ProfileDocument ;
   rdfs:range  abi:Person .
 
-# HOW WE KNOW ↔ HOW WE KNOW — provenance of an asserted entity
+# HOW WE KNOW ↔ HOW WE KNOW - provenance of an asserted entity
 personnel:isSourcedFrom a owl:ObjectProperty ;
   rdfs:subPropertyOf cco:ont00001808 ;
   owl:inverseOf personnel:isSourceOf ;
@@ -243,7 +243,7 @@ personnel:isSourceOf a owl:ObjectProperty ;
   rdfs:domain personnel:ProfileDocument ;
   rdfs:range  abi:GenericallyDependentContinuant .
 
-# WHO ↔ WHERE — convenience shortcut from the worker to the site of execution.
+# WHO ↔ WHERE - convenience shortcut from the worker to the site of execution.
 # The backbone remains ActOfWorking abi:occursIn Site; this collapses the hop so
 # a person can be shown against the places they work without traversing the act.
 personnel:hasWorkLocation a owl:ObjectProperty ;

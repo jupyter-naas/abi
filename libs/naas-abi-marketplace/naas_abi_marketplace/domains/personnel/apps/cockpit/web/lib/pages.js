@@ -6,7 +6,7 @@ export const PAGES = {
     banner: {
       type: "info",
       enabled: true,
-      text: "Demo roster from the personnel graph — headcount, job families, and status mix.",
+      text: "Demo roster from the personnel graph: headcount, job families, and status mix.",
     },
   },
   graph: {
@@ -14,7 +14,7 @@ export const PAGES = {
     banner: {
       type: "info",
       enabled: true,
-      text: "Distance counts hops from the selected person, who roots the graph. 1 is what they bear or carry — acts of working, roles, missions, skills, profile document. 2 is what those acts reach — organization, site, temporal region, contract, remuneration. 3 is the instants bounding each temporal region.",
+      text: "Distance counts hops from the selected person, who roots the graph. 1 is what they bear or carry: acts of working, roles, missions, skills, profile document. 2 is what those acts reach: organization, site, temporal region, contract, remuneration. 3 is the instants bounding each temporal region.",
     },
   },
   processes: {

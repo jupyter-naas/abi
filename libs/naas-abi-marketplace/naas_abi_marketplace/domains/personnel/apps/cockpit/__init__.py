@@ -1,4 +1,4 @@
-"""Cockpit — S1 workforce analytics example app.
+"""Cockpit - S1 workforce analytics example app.
 
 Ships a lightweight static dashboard over SPARQL-shaped JSON (workforce,
 working history, process graph). Datasets are committed under ``data/`` and

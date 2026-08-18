@@ -1,4 +1,4 @@
-# AGENTS — cockpit
+# AGENTS - cockpit
 
 Lightweight example. Prefer editing demo JSON / SPARQL stubs over growing the UI.
 
@@ -12,13 +12,13 @@ Lightweight example. Prefer editing demo JSON / SPARQL stubs over growing the UI
 Committed datasets live under ``data/`` and are served to the UI through
 ``api/`` (``GET /api/personnel-cockpit/entities/demo/...``).
 
-- ``data/entities/<id>/manifest.json`` — page → dataset paths for that entity
-- ``data/entities/<id>/<page>/`` — page-ready aggregates the UI reads
-- ``data/globals/entities.json`` — sidebar entity dropdown (organization perimeters)
+- ``data/entities/<id>/manifest.json`` - page → dataset paths for that entity
+- ``data/entities/<id>/<page>/`` - page-ready aggregates the UI reads
+- ``data/globals/entities.json`` - sidebar entity dropdown (organization perimeters)
 - Build input graph: ``domains/personnel/data/graph/personnel_demo.ttl``
 
 Regenerate with ``make demo-data`` (from ``domains/personnel``). Dev server:
-``make app-personnel-cockpit``. Do not invent manager hierarchies — not in the ontology.
+``make app-personnel-cockpit``. Do not invent manager hierarchies - not in the ontology.
 
 ## Web layout
 

@@ -4,9 +4,9 @@ The canvas is explored breadth-first from the focused person, so which edges are
 drawn decides what appears at each distance:
 
     distance 1  the acts of working, and everything hanging directly off the
-                person — the missions and profile document they carry, the
+                person - the missions and profile document they carry, the
                 employee roles and skills they bear
-    distance 2  what those acts reach — organization, site, temporal region,
+    distance 2  what those acts reach - organization, site, temporal region,
                 employment contract
     distance 3  the temporal instants bounding each temporal region
 

@@ -11,7 +11,7 @@
 @prefix personnel: <http://ontology.naas.ai/personnel/> .
 
 personnel:PersonnelOntology a owl:Ontology ;
-  # One owl:imports statement per IRI — onto2py's codegen pre-scan only matches
+  # One owl:imports statement per IRI - onto2py's codegen pre-scan only matches
   # an IRI directly after the `owl:imports` keyword.
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
   owl:imports <https://www.commoncoreontologies.org/QualityOntology> ;
@@ -34,7 +34,7 @@ personnel:PersonnelOntology a owl:Ontology ;
 #    Object Properties
 #################################################################
 
-# WHO ↔ HOW WE KNOW — person carries an employment record
+# WHO ↔ HOW WE KNOW - person carries an employment record
 personnel:hasEmploymentRecord a owl:ObjectProperty ;
     rdfs:subPropertyOf abi:isCarrierOf ;
     owl:inverseOf personnel:isEmploymentRecordOf ;
@@ -51,7 +51,7 @@ personnel:isEmploymentRecordOf a owl:ObjectProperty ;
     rdfs:domain personnel:EmploymentRecord ;
     rdfs:range abi:Person .
 
-# WHO ↔ WHY — person bears an employee role
+# WHO ↔ WHY - person bears an employee role
 personnel:hasEmployeeRole a owl:ObjectProperty ;
     rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf personnel:isEmployeeRoleOf ;
@@ -68,7 +68,7 @@ personnel:isEmployeeRoleOf a owl:ObjectProperty ;
     rdfs:domain personnel:EmployeeRole ;
     rdfs:range abi:Person .
 
-# WHO ↔ WHY — person bears a student role
+# WHO ↔ WHY - person bears a student role
 personnel:hasStudentRole a owl:ObjectProperty ;
     rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf personnel:isStudentRoleOf ;
@@ -85,7 +85,7 @@ personnel:isStudentRoleOf a owl:ObjectProperty ;
     rdfs:domain personnel:StudentRole ;
     rdfs:range abi:Person .
 
-# WHO ↔ HOW WE KNOW — person carries an enrollment record
+# WHO ↔ HOW WE KNOW - person carries an enrollment record
 personnel:hasEnrollmentRecord a owl:ObjectProperty ;
     rdfs:subPropertyOf abi:isCarrierOf ;
     owl:inverseOf personnel:isEnrollmentRecordOf ;
@@ -102,7 +102,7 @@ personnel:isEnrollmentRecordOf a owl:ObjectProperty ;
     rdfs:domain personnel:EnrollmentRecord ;
     rdfs:range abi:Person .
 
-# WHO ↔ WHO — convenience shortcut. Backbone is Person bears EmployeeRole
+# WHO ↔ WHO - convenience shortcut. Backbone is Person bears EmployeeRole
 # and participates in ActOfWorking; do not use this as the employment model.
 personnel:employs a owl:ObjectProperty ;
     owl:inverseOf personnel:isEmployedBy ;
@@ -118,7 +118,7 @@ personnel:isEmployedBy a owl:ObjectProperty ;
     rdfs:domain abi:Person ;
     rdfs:range abi:Organization .
 
-# WHY ↔ HOW WE KNOW — employee role concretizes the job position (GDC)
+# WHY ↔ HOW WE KNOW - employee role concretizes the job position (GDC)
 personnel:hasJobPosition a owl:ObjectProperty ;
     rdfs:subPropertyOf abi:concretizes ;
     owl:inverseOf personnel:isJobPositionOf ;
@@ -135,7 +135,7 @@ personnel:isJobPositionOf a owl:ObjectProperty ;
     rdfs:domain personnel:JobPosition ;
     rdfs:range personnel:EmployeeRole .
 
-# HOW WE KNOW ↔ HOW WE KNOW — job position is described by a job description
+# HOW WE KNOW ↔ HOW WE KNOW - job position is described by a job description
 personnel:hasJobDescription a owl:ObjectProperty ;
     owl:inverseOf personnel:isJobDescriptionOf ;
     rdfs:label "has job description"@en ;
@@ -150,7 +150,7 @@ personnel:isJobDescriptionOf a owl:ObjectProperty ;
     rdfs:domain personnel:JobDescription ;
     rdfs:range personnel:JobPosition .
 
-# HOW WE KNOW ↔ HOW WE KNOW — contract is about a job description
+# HOW WE KNOW ↔ HOW WE KNOW - contract is about a job description
 personnel:isAboutJobDescription a owl:ObjectProperty ;
     rdfs:subPropertyOf cco:ont00001808 ;
     owl:inverseOf personnel:isJobDescriptionOfContract ;
@@ -166,7 +166,7 @@ personnel:isJobDescriptionOfContract a owl:ObjectProperty ;
     rdfs:domain personnel:JobDescription ;
     rdfs:range personnel:EmploymentContract .
 
-# WHO ↔ HOW IT IS — person bears an employment status
+# WHO ↔ HOW IT IS - person bears an employment status
 personnel:hasEmploymentStatus a owl:ObjectProperty ;
     rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf personnel:isEmploymentStatusOf ;
@@ -275,7 +275,7 @@ personnel:completion_date a owl:DatatypeProperty ;
     rdfs:range  xsd:date .
 
 #################################################################
-#    Classes — HOW WE KNOW
+#    Classes - HOW WE KNOW
 #################################################################
 
 personnel:EmploymentRecord a owl:Class ;
@@ -309,7 +309,7 @@ personnel:EmploymentContract a owl:Class ;
       [ a owl:Restriction ; owl:onProperty abi:isConcretizedBy ; owl:someValuesFrom personnel:ActOfWorking ] ;
     rdfs:label "Employment Contract"@en ;
     skos:definition "A generically dependent continuant that specifies the terms under which a person works for an organization."@en ;
-    skos:example "Permanent contract CDI — Alice Dupont / naas.ai."@en .
+    skos:example "Permanent contract CDI - Alice Dupont / naas.ai."@en .
 
 personnel:EnrollmentRecord a owl:Class ;
     rdfs:subClassOf abi:GenericallyDependentContinuant ,
@@ -329,7 +329,7 @@ personnel:AcademicDegree a owl:Class ;
     skos:example "Licence Informatique, Université de Rennes 1."@en .
 
 #################################################################
-#    Classes — WHY
+#    Classes - WHY
 #################################################################
 
 personnel:EmployeeRole a owl:Class ;
@@ -353,7 +353,7 @@ personnel:StudentRole a owl:Class ;
     rdfs:comment "No CCO student-role class; minted in the personnel namespace. Ends when the enrollment ends, without the person ceasing to exist."@en .
 
 #################################################################
-#    Classes — HOW IT IS
+#    Classes - HOW IT IS
 #################################################################
 
 personnel:EmploymentStatus a owl:Class ;

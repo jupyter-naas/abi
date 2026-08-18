@@ -23,7 +23,7 @@
 #  headcount means employment records with no personnel:termination_date, which
 #  is what find_active_employees does.
 #
-#  personnel:JobPosition may be vacant — it is defined by the organization and
+#  personnel:JobPosition may be vacant - it is defined by the organization and
 #  needs no bearer. Queries over positions therefore do NOT join through a
 #  person unless they mean to exclude open requisitions.
 #################################################################
@@ -172,7 +172,7 @@ intentMapping:findEmployeesByOrganizationQuery a intentMapping:TemplatableSparql
 
 intentMapping:findOpenJobPositionsQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_open_job_positions"@en ;
-    intentMapping:intentDescription "Return the job positions that no employee role currently fills — the open requisitions. Useful to answer 'what roles are we hiring for?'. A position is open when no personnel:EmployeeRole points at it via personnel:hasJobPosition." ;
+    intentMapping:intentDescription "Return the job positions that no employee role currently fills - the open requisitions. Useful to answer 'what roles are we hiring for?'. A position is open when no personnel:EmployeeRole points at it via personnel:hasJobPosition." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
