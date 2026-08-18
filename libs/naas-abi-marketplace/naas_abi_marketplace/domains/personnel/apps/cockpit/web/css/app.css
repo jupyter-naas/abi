@@ -803,13 +803,13 @@ td.muted { color: var(--muted); font-style: italic; }
 .graph-params-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  font: inherit;
-  font-size: 0.8rem;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
   color: var(--ink);
-  padding: 0.4rem 0.65rem;
   border: 1px solid var(--line);
-  border-radius: 0.4rem;
+  border-radius: 0.35rem;
   background: color-mix(in srgb, var(--panel) 92%, var(--ink));
   cursor: pointer;
 }
