@@ -18,34 +18,14 @@ function renderBars(rows, labelKey, valueKey) {
     .join("")}</div>`;
 }
 
-function renderPyramid(rows) {
-  const max = Math.max(...rows.flatMap((r) => [r.Male || 0, r.Female || 0]), 1);
-  return `<div class="pyramid">${rows
-    .map((r) => {
-      const m = r.Male || 0;
-      const f = r.Female || 0;
-      return `<div class="pyramid-row">
-        <span>${r.band}</span>
-        <div class="pyramid-pair">
-          <div class="pyramid-male" style="width:${(100 * m) / max}%" title="Male ${m}"></div>
-          <div class="pyramid-female" style="width:${(100 * f) / max}%" title="Female ${f}"></div>
-        </div>
-        <span>${m} · ${f}</span>
-      </div>`;
-    })
-    .join("")}</div>
-    <p style="margin:0.7rem 0 0;font-size:0.75rem;color:var(--muted)">Left = Male · Right = Female</p>`;
-}
-
 /** @param {HTMLElement} el @param {{ loadJson: (rel: string) => Promise<object> }} ctx */
 export async function mountPage(el, ctx) {
   const { loadJson } = ctx;
-  const [kpis, roster, families, status, pyramid] = await Promise.all([
+  const [kpis, roster, families, status] = await Promise.all([
     loadJson("workforce/kpis.json"),
     loadJson("workforce/roster.json"),
     loadJson("workforce/by_job_family.json"),
     loadJson("workforce/status_mix.json"),
-    loadJson("workforce/age_pyramid.json"),
   ]);
   const k = kpis.kpis;
   el.innerHTML = `
@@ -61,15 +41,11 @@ export async function mountPage(el, ctx) {
         ${renderBars(families.records, "jobFamily", "headcount")}
       </div>
       <div class="panel">
-        <h2>Age pyramid</h2>
-        ${renderPyramid(pyramid.records)}
-      </div>
-    </div>
-    <div class="grid-2">
-      <div class="panel">
         <h2>Status mix</h2>
         ${renderBars(status.records, "status_value", "count")}
       </div>
+    </div>
+    <div class="grid-2">
       <div class="panel">
         <h2>Roster</h2>
         <table>

@@ -58,8 +58,8 @@ from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfWorkingPro
     Skill,
 )
 from naas_abi_marketplace.domains.personnel.scripts.linkedin_experience import (
-    LINKEDIN_PROFILE_URL,
     EXPERIENCES,
+    LINKEDIN_PROFILE_URL,
 )
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import RDF, XSD
@@ -75,8 +75,7 @@ CCO = Namespace("https://www.commoncoreontologies.org/")
 BFO = Namespace("http://purl.obolibrary.org/obo/")
 GRAPH_NAME = URIRef("http://ontology.naas.ai/graph/personnel")
 
-# Roster facts for the Workforce page. Birth is no longer modelled as a process,
-# so the date of birth the age pyramid needs is asserted straight on the person.
+# Roster facts for the Workforce page.
 EMPLOYEES = [
     {
         "first": "Jeremy",
@@ -86,7 +85,6 @@ EMPLOYEES = [
         "job_family": "Executive",
         "hire_date": date(2018, 3, 1),
         "status": "active",
-        "birth_date": date(1989, 12, 5),
         "remuneration": 120_000,
     },
     {
@@ -97,7 +95,6 @@ EMPLOYEES = [
         "job_family": "Executive",
         "hire_date": date(2019, 6, 15),
         "status": "active",
-        "birth_date": date(1991, 4, 18),
         "remuneration": 95_000,
     },
     {
@@ -108,7 +105,6 @@ EMPLOYEES = [
         "job_family": "Executive",
         "hire_date": date(2020, 1, 10),
         "status": "active",
-        "birth_date": date(1988, 9, 22),
         "remuneration": 85_000,
     },
 ]
@@ -325,8 +321,13 @@ def _add_working(
     duration: str | None,
     remuneration_amount: float | None = None,
     remuneration_currency: str = "EUR",
-) -> str:
-    """Emit one act of working and everything hanging off it."""
+) -> tuple[str, str]:
+    """Emit one act of working and everything hanging off it.
+
+    Returns ``(act_uri, position_uri)`` — the roster pass tags the position of a
+    person's current job with its job family rather than minting a second,
+    competing position for the same post.
+    """
     key = _slug(person.label or "", org.label or "", title)
 
     temporal_uri = _add_temporal_region(
@@ -377,6 +378,9 @@ def _add_working(
     )
     graph += role.rdf()
     graph.add((URIRef(person._uri), PERSONNEL.hasEmployeeRole, URIRef(role._uri)))
+    # No reasoner runs over the demo graph, so the owl:inverseOf pair has to be
+    # asserted by hand — find_open_job_positions tests the inverse direction.
+    graph.add((URIRef(position._uri), PERSONNEL.isJobPositionOf, URIRef(role._uri)))
     # personnel:hasMission lives in the process slice, so it is not a field on
     # the shared EmployeeRole model — assert the role → mission link directly.
     graph.add((URIRef(role._uri), PERSONNEL.hasMission, URIRef(mission._uri)))
@@ -440,7 +444,7 @@ def _add_working(
         graph.add(
             (URIRef(skill._uri), PERSONNEL.isSkillDevelopedIn, URIRef(working_uri))
         )
-    return working_uri
+    return working_uri, position._uri
 
 
 def _add_studying(
@@ -523,18 +527,66 @@ def build_instances() -> Graph:
     sites: dict[str, Site] = {}
     skills: dict[str, Skill] = {}
 
-    # --- Workforce roster: employment records, positions, status ------------
+    # --- LinkedIn working experience ---------------------------------------
+    # Runs before the roster pass: the roster needs the position of each
+    # person's current job, which this creates.
+    profiles: dict[str, ProfileDocument] = {}
+    current_position: dict[str, str] = {}
+    for exp in EXPERIENCES:
+        first, last = exp["person"]
+        person = _ensure_person(g, people, first, last)
+        if person.label not in profiles:
+            profiles[person.label] = _add_profile_document(g, person)
+
+        org = _ensure_org(g, orgs, exp["organization"])
+        site = _ensure_site(g, sites, exp["site"])
+        exp_skills = [_ensure_skill(g, skills, name, person) for name in exp["skills"]]
+
+        roster = next(
+            (
+                e
+                for e in EMPLOYEES
+                if (e["first"], e["last"]) == exp["person"]
+                and exp["organization"].lower().startswith("naas")
+            ),
+            None,
+        )
+
+        _, position_uri = _add_working(
+            g,
+            person=person,
+            org=org,
+            site=site,
+            skills=exp_skills,
+            profile=profiles[person.label],
+            title=exp["title"],
+            mission_label=exp["mission_label"],
+            mission_content=exp["mission"],
+            contract_type=exp["contract_type"],
+            start=exp["start"],
+            end=exp["end"],
+            duration=exp["duration"],
+            remuneration_amount=roster["remuneration"] if roster else None,
+        )
+        if roster:
+            current_position[person.label] = position_uri
+
+    # --- One course of study ------------------------------------------------
+    first, last = STUDY["person"]
+    _add_studying(
+        g,
+        person=_ensure_person(g, people, first, last),
+        org=_ensure_org(g, orgs, STUDY["organization"], educational=True),
+        site=_ensure_site(g, sites, STUDY["site"]),
+        program=STUDY["program"],
+        start=STUDY["start"],
+        end=STUDY["end"],
+    )
+
+    # --- Workforce roster: employment records, job family, status ----------
     for emp in EMPLOYEES:
         person = _ensure_person(g, people, emp["first"], emp["last"])
         slug = _slug(emp["first"], emp["last"])
-
-        g.add(
-            (
-                URIRef(person._uri),
-                PERSONNEL.birth_date,
-                Literal(emp["birth_date"], datatype=XSD.date),
-            )
-        )
 
         desc = JobDescription(
             _uri=_uri(str(PERSONNEL), "JobDescription", f"{slug}-{emp['employee_id']}"),
@@ -556,16 +608,45 @@ def build_instances() -> Graph:
         g += record.rdf()
         g.add((URIRef(person._uri), PERSONNEL.hasEmploymentRecord, URIRef(record._uri)))
 
-        position = JobPosition(
-            _uri=_uri(str(PERSONNEL), "JobPosition", f"{slug}-roster"),
-            label=emp["job_title"],
-            job_title=emp["job_title"],
-            job_family=emp["job_family"],
-            has_job_description=[desc._uri],
-            created=_now(),
-            creator="generate_demo_graph",
+        # job_family marks the one position that counts as the person's current
+        # post. Roster reporting keys off it, so exactly one position per person
+        # may carry it — every other position they have ever held must not.
+        position_uri = current_position.get(person.label or "")
+        if position_uri is None:
+            # No current act of working for this person, so the post itself is
+            # only documented by the roster: mint it, and the role that fills it.
+            position = JobPosition(
+                _uri=_uri(str(PERSONNEL), "JobPosition", f"{slug}-roster"),
+                label=emp["job_title"],
+                job_title=emp["job_title"],
+                has_job_description=[desc._uri],
+                created=_now(),
+                creator="generate_demo_graph",
+            )
+            g += position.rdf()
+            position_uri = position._uri
+
+            role = EmployeeRole(
+                _uri=_uri(str(PERSONNEL), "EmployeeRole", f"{slug}-roster"),
+                label=emp["job_title"],
+                is_employee_role_of=[person._uri],
+                has_job_position=[position_uri],
+                created=_now(),
+                creator="generate_demo_graph",
+            )
+            g += role.rdf()
+            g.add((URIRef(person._uri), PERSONNEL.hasEmployeeRole, URIRef(role._uri)))
+            g.add((URIRef(position_uri), PERSONNEL.isJobPositionOf, URIRef(role._uri)))
+        else:
+            g.add((URIRef(position_uri), PERSONNEL.hasJobDescription, URIRef(desc._uri)))
+
+        g.add(
+            (
+                URIRef(position_uri),
+                PERSONNEL.job_family,
+                Literal(emp["job_family"], datatype=XSD.string),
+            )
         )
-        g += position.rdf()
 
         status = EmploymentStatus(
             _uri=_uri(str(PERSONNEL), "EmploymentStatus", slug),
@@ -579,57 +660,6 @@ def build_instances() -> Graph:
         g.add(
             (URIRef(person._uri), PERSONNEL.hasEmploymentStatus, URIRef(status._uri))
         )
-
-    # --- LinkedIn working experience ---------------------------------------
-    profiles: dict[str, ProfileDocument] = {}
-    for exp in EXPERIENCES:
-        first, last = exp["person"]
-        person = _ensure_person(g, people, first, last)
-        if person.label not in profiles:
-            profiles[person.label] = _add_profile_document(g, person)
-
-        org = _ensure_org(g, orgs, exp["organization"])
-        site = _ensure_site(g, sites, exp["site"])
-        exp_skills = [_ensure_skill(g, skills, name, person) for name in exp["skills"]]
-
-        roster = next(
-            (
-                e
-                for e in EMPLOYEES
-                if (e["first"], e["last"]) == exp["person"]
-                and exp["organization"].lower().startswith("naas")
-            ),
-            None,
-        )
-
-        _add_working(
-            g,
-            person=person,
-            org=org,
-            site=site,
-            skills=exp_skills,
-            profile=profiles[person.label],
-            title=exp["title"],
-            mission_label=exp["mission_label"],
-            mission_content=exp["mission"],
-            contract_type=exp["contract_type"],
-            start=exp["start"],
-            end=exp["end"],
-            duration=exp["duration"],
-            remuneration_amount=roster["remuneration"] if roster else None,
-        )
-
-    # --- One course of study ------------------------------------------------
-    first, last = STUDY["person"]
-    _add_studying(
-        g,
-        person=_ensure_person(g, people, first, last),
-        org=_ensure_org(g, orgs, STUDY["organization"], educational=True),
-        site=_ensure_site(g, sites, STUDY["site"]),
-        program=STUDY["program"],
-        start=STUDY["start"],
-        end=STUDY["end"],
-    )
 
     return g
 

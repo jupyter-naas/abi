@@ -1,5 +1,5 @@
 /**
- * Graph page — birth process hub + employment, with labeled relations.
+ * Graph page — acts of working around a focus person, with labeled relations.
  */
 
 import { BFO_SEVEN, bfoColor } from "../processes/bfo-buckets.js";
@@ -26,20 +26,12 @@ const PHYSICS_SETTLE_MS = 3000;
 function buildGraphIndex(data) {
   const peopleById = Object.fromEntries((data.people || []).map((p) => [p.id, p]));
   const processesById = Object.fromEntries((data.processes || []).map((p) => [p.id, p]));
-  const sourcesById = Object.fromEntries((data.sources || []).map((s) => [s.id, s]));
-  const ledgerProcessesById = Object.fromEntries(
-    (data.ledgerProcesses || []).map((p) => [p.id, p])
-  );
   const entitiesById = Object.fromEntries((data.entities || []).map((e) => [e.id, e]));
-  const birthHubByPerson = new Map();
   const workingHubByPerson = new Map();
   const personToProcesses = new Map();
   const relations = data.relations || [];
 
   for (const rel of relations) {
-    if (rel.predicateLabel === "has birth" && peopleById[rel.from] && entitiesById[rel.to]?.isBirthHub) {
-      birthHubByPerson.set(rel.from, rel.to);
-    }
     if (rel.predicateLabel === "has working" && peopleById[rel.from] && entitiesById[rel.to]?.isWorkingHub) {
       workingHubByPerson.set(rel.from, rel.to);
     }
@@ -52,19 +44,14 @@ function buildGraphIndex(data) {
   const suppressedIds = suppressOldProcesses([
     ...Object.values(entitiesById),
     ...Object.values(processesById),
-    ...Object.values(ledgerProcessesById),
-    ...Object.values(sourcesById),
   ]);
 
   return {
     peopleById,
     processesById,
-    sourcesById,
-    ledgerProcessesById,
     entitiesById,
     relations,
     suppressedIds,
-    birthHubByPerson,
     workingHubByPerson,
     personToProcesses,
   };
@@ -147,10 +134,7 @@ function collectVisibleGraph(adj, rootId, distance) {
 
   return {
     people: [...active].map((id) => adj.peopleById[id]).filter(Boolean),
-    processes: [...active]
-      .map((id) => adj.processesById?.[id] || adj.ledgerProcessesById?.[id])
-      .filter(Boolean),
-    sources: [...active].map((id) => adj.sourcesById?.[id]).filter(Boolean),
+    processes: [...active].map((id) => adj.processesById?.[id]).filter(Boolean),
     entities: [...active].map((id) => adj.entitiesById[id]).filter(Boolean),
     relations: visibleRelations,
   };
@@ -177,7 +161,6 @@ function visibleClassOptions(visible) {
   for (const person of visible.people || []) add(person, "Material Entity");
   for (const entity of visible.entities || []) add(entity, "Process");
   for (const process of visible.processes || []) add(process, "Process");
-  for (const source of visible.sources || []) add(source, "Process");
   return [...byLabel.values()].sort(
     (a, b) => a.bucket.localeCompare(b.bucket) || a.label.localeCompare(b.label)
   );
@@ -195,15 +178,13 @@ function applyClassFilter(visible, hiddenClasses, focusPersonId) {
   );
   const entities = (visible.entities || []).filter(visibleClass);
   const processes = (visible.processes || []).filter(visibleClass);
-  const sources = (visible.sources || []).filter(visibleClass);
   const liveIds = new Set(
-    [...people, ...entities, ...processes, ...sources].map((record) => record.id)
+    [...people, ...entities, ...processes].map((record) => record.id)
   );
   return {
     people,
     entities,
     processes,
-    sources,
     relations: (visible.relations || []).filter(
       (rel) => liveIds.has(rel.from) && liveIds.has(rel.to)
     ),
@@ -264,7 +245,7 @@ function resolveNode(id, lookup) {
     const person = lookup.peopleById[id];
     return { id: `person:${person.id}`, kind: "person", person, label: person.label, palette: nodePalette(person) };
   }
-  const process = lookup.processesById[id] || lookup.ledgerProcessesById?.[id];
+  const process = lookup.processesById[id];
   if (process) {
     return {
       id: process.id,
@@ -275,26 +256,14 @@ function resolveNode(id, lookup) {
       dashed: true,
     };
   }
-  if (lookup.sourcesById?.[id]) {
-    const source = lookup.sourcesById[id];
-    return {
-      id: source.id,
-      kind: "source",
-      source,
-      label: source.classLabel || "Source",
-      palette: nodePalette(source, { faded: true }),
-      dashed: true,
-    };
-  }
   if (lookup.entitiesById[id]) {
     const entity = lookup.entitiesById[id];
     return {
       id: entity.id,
       kind: "entity",
       entity,
-      label: entity.isBirthHub ? "Birth" : entity.isWorkingHub ? "Working" : entity.label,
+      label: entity.label,
       palette: nodePalette(entity),
-      isBirthHub: entity.isBirthHub,
       isWorkingHub: entity.isWorkingHub,
     };
   }
@@ -449,22 +418,20 @@ function resolveOverlaps(nodes, { iterations = 120, pinnedIds = new Set() } = {}
   }
 }
 
-function seedSemanticLayout(focusNode, birthNode, workingNode, nodes, edges, focusPersonId) {
+function seedSemanticLayout(focusNode, workingNode, nodes, edges, focusPersonId) {
   focusNode.x = 0;
   focusNode.y = 0;
   const processRoots = nodes
     .filter(
       (node) =>
         node.id !== focusNode.id &&
-        (node.isBirthHub || node.isWorkingHub || node.kind === "process")
+        (node.isWorkingHub || node.kind === "process")
     )
     .sort((a, b) => {
       const priority = (node) => {
-        if (node.id === birthNode?.id) return 0;
-        if (node.id === workingNode?.id) return 1;
-        if (node.isBirthHub) return 2;
-        if (node.isWorkingHub) return 3;
-        return 4;
+        if (node.id === workingNode?.id) return 0;
+        if (node.isWorkingHub) return 1;
+        return 2;
       };
       return priority(a) - priority(b) || a.label.localeCompare(b.label) || a.id.localeCompare(b.id);
     });
@@ -916,8 +883,6 @@ function buildGraph(focusPerson, visible, lookup) {
     return node;
   };
 
-  const birthId = lookup.birthHubByPerson?.get?.(focusPerson.id) || visible.entities.find((e) => e.isBirthHub)?.id;
-  const birthNode = birthId ? addNode(birthId, { isBirthHub: true }) : null;
   const workingId =
     lookup.workingHubByPerson?.get?.(focusPerson.id) ||
     visible.entities.find((e) => e.isWorkingHub)?.id;
@@ -925,7 +890,6 @@ function buildGraph(focusPerson, visible, lookup) {
   const focusNode = addNode(focusPerson.id, { isFocus: true, pinned: true });
 
   for (const proc of visible.processes) addNode(proc.id);
-  for (const source of visible.sources || []) addNode(source.id);
 
   const edges = [];
   for (const rel of visible.relations) {
@@ -941,14 +905,13 @@ function buildGraph(focusPerson, visible, lookup) {
   focusNode.x = 0;
   focusNode.y = 0;
 
-  return { nodes, edges, focusNode, birthNode, workingNode };
+  return { nodes, edges, focusNode, workingNode };
 }
 
 export function layoutGraphNodes(focusPerson, visible, lookup) {
   const graph = buildGraph(focusPerson, visible, lookup);
   seedSemanticLayout(
     graph.focusNode,
-    graph.birthNode,
     graph.workingNode,
     graph.nodes,
     graph.edges,
@@ -1031,7 +994,6 @@ function mountGraphCanvas(root, options) {
 
   const { nodes, edges, focusNode } = layoutGraphNodes(focusPerson, visible, {
     ...lookup,
-    birthHubByPerson: options.birthHubByPerson,
     workingHubByPerson: options.workingHubByPerson,
   });
   let selected = focusNode;
@@ -1331,12 +1293,26 @@ function readStoredHiddenClasses() {
   }
 }
 
+// Landing on an empty canvas hides what the page is for, so the graph opens on
+// a person with a full working history rather than on a prompt to search.
+const DEFAULT_PERSON_LABEL = "Alice Dupont";
+const DEFAULT_DISTANCE = 3;
+
+function defaultPerson(people) {
+  return (
+    people.find((person) => person.label === DEFAULT_PERSON_LABEL) ||
+    people.find((person) => person.kind === "employee") ||
+    people[0] ||
+    null
+  );
+}
+
 function graphFiltersFromUrl(people, fallbackDistance) {
   const params = new URLSearchParams(window.location.search);
   const personParam = params.get("person");
   const selectedPerson = personParam
     ? people.find((person) => person.id === personParam || person.label === personParam)
-    : null;
+    : defaultPerson(people);
   const distanceParam = Number(params.get("distance"));
   const distance = [1, 2, 3].includes(distanceParam) ? distanceParam : fallbackDistance;
   return {
@@ -1365,20 +1341,16 @@ function syncGraphFiltersToUrl(personId, distance) {
 
 export function mountGraphPage(el, data) {
   const adj = buildGraphIndex(data);
-  adj.ledgerProcesses = data.ledgerProcesses || [];
   const lookup = {
     peopleById: adj.peopleById,
     processesById: adj.processesById,
-    ledgerProcessesById: adj.ledgerProcessesById,
-    sourcesById: adj.sourcesById,
     entitiesById: adj.entitiesById,
-    birthHubByPerson: adj.birthHubByPerson,
     workingHubByPerson: adj.workingHubByPerson,
   };
   const people = [...(data.people || [])].sort((a, b) => a.label.localeCompare(b.label));
   const storedDistance = Math.min(
     3,
-    Math.max(1, Number(sessionStorage.getItem(DISTANCE_KEY)) || 1)
+    Math.max(1, Number(sessionStorage.getItem(DISTANCE_KEY)) || DEFAULT_DISTANCE)
   );
   const initialFilters = graphFiltersFromUrl(people, storedDistance);
   let selectedId = initialFilters.selectedId;
@@ -1433,7 +1405,7 @@ export function mountGraphPage(el, data) {
                 <input type="search" id="graph-person-search" placeholder="Search people…" value="" autocomplete="off" />
                 <ul class="graph-suggestions" id="graph-suggestions" hidden></ul>
               </label>
-            </div><div class="graph-empty panel"><h2>Select a person</h2><p>Try <strong>Emma Petit</strong>, <strong>Alice Dupont</strong>, or <strong>Grace Lambert</strong> for birth and working decomposition.</p></div></div>`
+            </div><div class="graph-empty panel"><h2>Select a person</h2><p>Try <strong>Alice Dupont</strong>, <strong>Emma Petit</strong>, or <strong>Grace Lambert</strong> to decompose their acts of working.</p></div></div>`
       }`;
 
     const input = el.querySelector("#graph-person-search");
@@ -1502,7 +1474,6 @@ export function mountGraphPage(el, data) {
         focusPerson: person,
         visible,
         lookup,
-        birthHubByPerson: adj.birthHubByPerson,
         workingHubByPerson: adj.workingHubByPerson,
       });
     }

@@ -17,16 +17,11 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
-
-from rdflib import Graph, Literal
 
 from naas_abi_marketplace.domains.personnel.apps.cockpit.graph_payload import (
     build_graph_page_payload,
-)
-from naas_abi_marketplace.domains.personnel.apps.cockpit.log_payload import (
-    build_ledger_log_entries,
 )
 from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import (
     DATA_ROOT,
@@ -35,6 +30,7 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import (
     ENTITY_DATA,
     GRAPH_FILE,
 )
+from rdflib import Graph, Literal
 
 PERSONNEL_ROOT = Path(__file__).resolve().parents[1]
 QUERIES_TTL = (
@@ -116,7 +112,7 @@ def _row_to_dict(row, keys: list[str]) -> dict:
     for key in keys:
         try:
             val = row[key]
-        except Exception:
+        except (KeyError, TypeError):
             val = getattr(row, key, None)
         if val is None:
             out[key] = None
@@ -133,44 +129,6 @@ def _run_select(graph: Graph, sparql: str) -> list[dict]:
     result = graph.query(sparql)
     keys = [str(v) for v in result.vars] if result.vars else []
     return [_row_to_dict(row, keys) for row in result]
-
-
-def _age_years(iso: str, today: date | None = None) -> int:
-    today = today or date.today()
-    y, m, d = (int(x) for x in iso.split("-"))
-    born = date(y, m, d)
-    return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
-
-
-def _age_pyramid_from_births(births: list[dict], sex_by_person: dict[str, str]) -> list[dict]:
-    bands = ["<25", "25-34", "35-44", "45-54", "55+"]
-    counts = {b: {"Male": 0, "Female": 0, "Other": 0} for b in bands}
-    seen: set[str] = set()
-    for b in births:
-        person = b.get("personLabel")
-        temporal = b.get("temporalLabel")
-        if not person or not temporal or person in seen:
-            continue
-        seen.add(person)
-        try:
-            age = _age_years(str(temporal)[:10])
-        except ValueError:
-            continue
-        if age < 25:
-            band = "<25"
-        elif age < 35:
-            band = "25-34"
-        elif age < 45:
-            band = "35-44"
-        elif age < 55:
-            band = "45-54"
-        else:
-            band = "55+"
-        sex = sex_by_person.get(person, "Other")
-        if sex not in counts[band]:
-            sex = "Other"
-        counts[band][sex] += 1
-    return [{"band": b, **counts[b]} for b in bands]
 
 
 def main() -> None:
@@ -194,7 +152,6 @@ def main() -> None:
         "find_employees_by_status": {"status_value": "active"},
         "find_employees_by_organization": {"organization_name": ""},
         "find_positions_by_title": {"job_title": ""},
-        "find_person_birth_lineage": {"person_name": "Ravenel"},
         "find_employee_by_id": {"employee_id": "E-10428"},
     }
     for label, template in templates.items():
@@ -215,25 +172,10 @@ def main() -> None:
                     "statusValue": "status_value",
                     "organizationLabel": "organizationLabel",
                     "descriptionLabel": "descriptionLabel",
-                    "registrationLabel": "registrationLabel",
-                    "declaration": "declaration",
-                    "birth": "birth",
-                    "birthLabel": "birthLabel",
                     "site": "site",
                     "siteLabel": "siteLabel",
                     "temporal": "temporal",
                     "temporalLabel": "temporalLabel",
-                    "record": "record",
-                    "recordLabel": "recordLabel",
-                    "sex": "sex",
-                    "sexLabel": "sexLabel",
-                    "eyeColor": "eyeColor",
-                    "eyeColorLabel": "eyeColorLabel",
-                    "motherLabel": "motherLabel",
-                    "fatherLabel": "fatherLabel",
-                    "declarantLabel": "declarantLabel",
-                    "declaredOn": "declaredOn",
-                    "declaredContent": "declaredContent",
                     "givenName": "givenName",
                     "familyName": "familyName",
                     "headcount": "headcount",
@@ -260,48 +202,29 @@ def main() -> None:
             normalized.append(item)
         source_rows[label] = normalized
 
-    # Biological sex for pyramid (not in birth registration SELECT).
-    sex_q = _strip_graph(
-        """
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX bfo:  <http://purl.obolibrary.org/obo/>
-        PREFIX personnel: <http://ontology.naas.ai/personnel/>
-        SELECT ?personLabel ?sexLabel WHERE {
-          ?sex a personnel:BiologicalSex ; rdfs:label ?sexLabel ; bfo:BFO_0000197 ?person .
-          ?person rdfs:label ?personLabel .
-        }
-        """
-    )
-    sex_by_person = {
-        r["personLabel"]: r["sexLabel"]
-        for r in _run_select(graph, sex_q)
-        if r.get("personLabel") and r.get("sexLabel")
-    }
-
     # --- page datasets ------------------------------------------------------
     print(f"data/entities/{ENTITY_ID}/")
-    active = source_rows.get("find_active_employees", [])
-    by_status_all = source_rows.get("find_employees_by_status", [])
-    # Re-query all statuses for mix: run without status filter approximation —
-    # use active list + on-leave/notice from a broader query.
+    # Status mix needs every status, so the roster is re-queried unfiltered
+    # rather than reusing the status-filtered competency queries.
     status_all_sparql = _strip_graph(
         """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX abi:  <http://ontology.naas.ai/abi/>
         PREFIX personnel: <http://ontology.naas.ai/personnel/>
-        SELECT DISTINCT ?personLabel ?employeeId ?jobTitle ?hireDate ?statusValue ?organizationLabel
+        SELECT DISTINCT ?personLabel ?employeeId ?jobTitle ?jobFamily ?hireDate ?statusValue ?organizationLabel
         WHERE {
           ?person rdf:type abi:Person ;
                   personnel:hasEmploymentRecord ?record .
           ?record personnel:employee_id ?employeeId .
           OPTIONAL { ?person rdfs:label ?personLabel . }
           OPTIONAL { ?record personnel:hire_date ?hireDate . }
-          OPTIONAL {
-            ?person personnel:hasEmployeeRole ?role .
-            ?role personnel:hasJobPosition ?position .
-            ?position personnel:job_title ?jobTitle .
-          }
+          # job_family marks the person's current post, so this join picks out
+          # exactly one position even when they have held many.
+          ?person personnel:hasEmployeeRole ?role .
+          ?role personnel:hasJobPosition ?position .
+          ?position personnel:job_family ?jobFamily .
+          OPTIONAL { ?position personnel:job_title ?jobTitle . }
           OPTIONAL {
             ?person personnel:hasEmploymentStatus ?status .
             ?status personnel:status_value ?statusValue .
@@ -321,6 +244,7 @@ def main() -> None:
                 "personLabel": row.get("personLabel"),
                 "employee_id": row.get("employeeId"),
                 "job_title": row.get("jobTitle"),
+                "job_family": row.get("jobFamily"),
                 "hire_date": row.get("hireDate"),
                 "status_value": row.get("statusValue"),
                 "organizationLabel": row.get("organizationLabel"),
@@ -342,7 +266,6 @@ def main() -> None:
         s = r.get("status_value") or "unknown"
         status_mix[s] = status_mix.get(s, 0) + 1
 
-    births = source_rows.get("find_birth_registrations", [])
     open_positions = [
         {
             "job_title": r.get("job_title") or r.get("jobTitle"),
@@ -386,29 +309,6 @@ def main() -> None:
             [{"status_value": k, "count": v} for k, v in sorted(status_mix.items())]
         ),
     )
-    _dump(
-        ENTITY_DATA / "workforce" / "age_pyramid.json",
-        _envelope(_age_pyramid_from_births(births, sex_by_person)),
-    )
-
-
-    # Kinship from lineage query (Jeremy family).
-    kinship = []
-    for r in source_rows.get("find_person_birth_lineage", []):
-        if r.get("motherLabel") or r.get("fatherLabel"):
-            kinship.append(
-                {
-                    "personLabel": r.get("personLabel"),
-                    "motherLabel": r.get("motherLabel"),
-                    "fatherLabel": r.get("fatherLabel"),
-                    "declarantLabel": r.get("declarantLabel"),
-                    "priorRegistration": r.get("priorRegistration"),
-                }
-            )
-    _dump(
-        ENTITY_DATA / "logs" / "ledger.json",
-        _envelope(build_ledger_log_entries(births, kinship)),
-    )
 
     family_by_person = {
         (r.get("personLabel") or ""): r.get("jobFamily") or r.get("job_family")
@@ -421,8 +321,8 @@ def main() -> None:
 
     graph_payload = build_graph_page_payload(
         roster_rows,
-        births,
         source_rows.get("find_working_processes", []),
+        source_rows.get("find_skills_developed", []),
     )
     _dump(
         ENTITY_DATA / "graph" / "index.json",
@@ -436,10 +336,6 @@ def main() -> None:
             "workforce/roster.json",
             "workforce/by_job_family.json",
             "workforce/status_mix.json",
-            "workforce/age_pyramid.json",
-        ],
-        "logs": [
-            "logs/ledger.json",
         ],
         "graph": [
             "graph/index.json",

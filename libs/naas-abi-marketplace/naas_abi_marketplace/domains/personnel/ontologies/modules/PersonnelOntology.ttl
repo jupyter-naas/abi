@@ -239,12 +239,6 @@ personnel:family_name a owl:DatatypeProperty ;
     rdfs:domain abi:Person ;
     rdfs:range  xsd:string .
 
-personnel:birth_date a owl:DatatypeProperty ;
-    rdfs:label "birth date"@en ;
-    skos:definition "Date on which a person was born, asserted directly on the person. Carried as a plain assertion rather than derived from a birth process, so demographics can be reported without modelling the birth itself."@en ;
-    rdfs:domain abi:Person ;
-    rdfs:range  xsd:date .
-
 personnel:instant_date a owl:DatatypeProperty ;
     rdfs:label "instant date"@en ;
     skos:definition "Calendar date a temporal instant denotes, carried so processes can be ordered and capped by recency without parsing display labels."@en ;

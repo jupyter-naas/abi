@@ -1,6 +1,6 @@
 {
   "name": "Personnel Cockpit",
-  "description": "S1 workforce analytics example — headcount, birth registry, and process graph, fed by SPARQL-shaped JSON from the personnel graph.",
+  "description": "S1 workforce analytics example — headcount, working history, and process graph, fed by SPARQL-shaped JSON from the personnel graph.",
   "category": "alpha",
   "avatar_url": "https://assets.naas.ai/marketplace/personnel-cockpit/logo.png",
   "demo_login": "demo@personnel-cockpit.local",

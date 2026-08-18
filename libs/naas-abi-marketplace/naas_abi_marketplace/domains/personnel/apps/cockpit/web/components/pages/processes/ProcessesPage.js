@@ -238,7 +238,7 @@ export function mountProcessesPage(el, data) {
         ${renderRestrictions(proc.restrictions)}
       </div>
 
-      <div class="agent-q"><strong>Ask PersonnelAgent:</strong> “Explain BirthProcess.” · “Explain ActOfWorking.” · “Explain ActOfStudying.”</div>
+      <div class="agent-q"><strong>Ask PersonnelAgent:</strong> “Explain ActOfWorking.” · “Explain ActOfStudying.”</div>
     `;
 
     el.querySelectorAll("[data-proc]").forEach((btn) => {

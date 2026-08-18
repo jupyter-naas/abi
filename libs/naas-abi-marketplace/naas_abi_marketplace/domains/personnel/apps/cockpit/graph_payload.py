@@ -175,7 +175,7 @@ def build_graph_page_payload(
             job_family=row.get("job_family"),
             status_value=row.get("status_value"),
             employee_id=row.get("employee_id"),
-            organization_label=row.get("organizationLabel") or "organization",
+            organization_label=row.get("organizationLabel"),
         )
 
     seen_workings: set[str] = set()

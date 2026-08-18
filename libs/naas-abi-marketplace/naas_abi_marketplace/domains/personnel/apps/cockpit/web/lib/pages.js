@@ -6,7 +6,7 @@ export const PAGES = {
     banner: {
       type: "info",
       enabled: true,
-      text: "Demo roster from the personnel graph — headcount, status mix, and age pyramid.",
+      text: "Demo roster from the personnel graph — headcount, job families, and status mix.",
     },
   },
   graph: {
@@ -14,15 +14,7 @@ export const PAGES = {
     banner: {
       type: "info",
       enabled: true,
-      text: "Search a person, then choose how many relationship hops to display around that person.",
-    },
-  },
-  logs: {
-    title: "Logs",
-    banner: {
-      type: "info",
-      enabled: true,
-      text: "Each card is one ledger entry. Rows are facts in subject → property → object form, with URI-only types and properties. The header summarizes who registered what, in plain language.",
+      text: "Hops out from the selected person: 1 shows the acts, missions, roles and skills; 2 adds organizations, sites and temporal regions; 3 adds the bounding instants.",
     },
   },
   processes: {
@@ -30,7 +22,7 @@ export const PAGES = {
     banner: {
       type: "info",
       enabled: true,
-      text: "Birth and Working processes mapped to the BFO 7 buckets. Employment continuants remain in PersonnelOntology for HR records.",
+      text: "Acts of Working and Studying mapped to the BFO 7 buckets. Employment continuants remain in PersonnelOntology for HR records.",
     },
   },
 };
