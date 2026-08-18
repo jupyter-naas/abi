@@ -17,7 +17,6 @@ personnel:PersonnelOntology a owl:Ontology ;
   owl:imports <https://www.commoncoreontologies.org/QualityOntology> ;
   owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
   owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
-  owl:imports <http://ontology.naas.ai/personnel/BirthProcess> ;
   owl:imports <http://ontology.naas.ai/personnel/ActOfWorkingProcess> ;
   owl:imports <http://ontology.naas.ai/personnel/ActOfStudyingProcess> ;
   rdfs:seeAlso <https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/ontologies/modules/PersonnelOntology.ttl> ;
@@ -25,11 +24,11 @@ personnel:PersonnelOntology a owl:Ontology ;
   abi:ontologyResource "ontologies/modules/PersonnelOntology.ttl" ;
   abi:pythonResource "ontologies/modules/PersonnelOntology.py" ;
   dc:title "Personnel Ontology"@en ;
-  dc:description "Shared vocabulary for the personnel (S1) domain: the person, the employee and student roles they bear, the job position an employee role concretizes, and the records, contracts, qualities and kinship that outlive any one process. Process slices (BirthProcess, ActOfWorkingProcess, ActOfStudyingProcess) import nothing from this file; this ontology imports them and they restrict these classes in context."@en ;
+  dc:description "Shared vocabulary for the personnel (S1) domain: the person, the employee and student roles they bear, the job position an employee role concretizes, and the records, contracts and qualities that outlive any one process. Process slices (ActOfWorkingProcess, ActOfStudyingProcess) import nothing from this file; this ontology imports them and they restrict these classes in context."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Shared personnel classes. Process restrictions live in ontologies/processes/."@en ;
   dc11:contributor "Alice Dupont" ;
-  dc11:date "2026-08-12"^^xsd:date .
+  dc11:date "2026-08-18"^^xsd:date .
 
 #################################################################
 #    Object Properties
@@ -184,52 +183,6 @@ personnel:isEmploymentStatusOf a owl:ObjectProperty ;
     rdfs:domain personnel:EmploymentStatus ;
     rdfs:range abi:Person .
 
-# WHO ↔ WHAT — person is born in a birth process
-personnel:hasBirth a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:participatesIn ;
-    owl:inverseOf personnel:isBirthOf ;
-    rdfs:label "has birth"@en ;
-    skos:definition "Relates a person to the birth process in which they participate as the newborn."@en ;
-    rdfs:domain abi:Person ;
-    rdfs:range  cco:ont00001237 .
-
-personnel:isBirthOf a owl:ObjectProperty ;
-    owl:inverseOf personnel:hasBirth ;
-    rdfs:label "is birth of"@en ;
-    skos:definition "Relates a birth process to the person born in it."@en ;
-    rdfs:domain cco:ont00001237 ;
-    rdfs:range  abi:Person .
-
-# WHO ↔ WHO — kinship on persons only (asserted parentage of a registration
-# is carried by the declaration/record, not by the natural Birth).
-personnel:hasMother a owl:ObjectProperty ;
-    owl:inverseOf personnel:isMotherOf ;
-    rdfs:label "has mother"@en ;
-    skos:definition "Relates a person to the person asserted as their mother."@en ;
-    rdfs:domain abi:Person ;
-    rdfs:range  abi:Person .
-
-personnel:isMotherOf a owl:ObjectProperty ;
-    owl:inverseOf personnel:hasMother ;
-    rdfs:label "is mother of"@en ;
-    skos:definition "Relates a person to a person of whom they are the asserted mother."@en ;
-    rdfs:domain abi:Person ;
-    rdfs:range  abi:Person .
-
-personnel:hasFather a owl:ObjectProperty ;
-    owl:inverseOf personnel:isFatherOf ;
-    rdfs:label "has father"@en ;
-    skos:definition "Relates a person to the person asserted as their father."@en ;
-    rdfs:domain abi:Person ;
-    rdfs:range  abi:Person .
-
-personnel:isFatherOf a owl:ObjectProperty ;
-    owl:inverseOf personnel:hasFather ;
-    rdfs:label "is father of"@en ;
-    skos:definition "Relates a person to a person of whom they are the asserted father."@en ;
-    rdfs:domain abi:Person ;
-    rdfs:range  abi:Person .
-
 #################################################################
 #    Data Properties
 #################################################################
@@ -285,6 +238,12 @@ personnel:family_name a owl:DatatypeProperty ;
     skos:example "'Ravenel'."@en ;
     rdfs:domain abi:Person ;
     rdfs:range  xsd:string .
+
+personnel:birth_date a owl:DatatypeProperty ;
+    rdfs:label "birth date"@en ;
+    skos:definition "Date on which a person was born, asserted directly on the person. Carried as a plain assertion rather than derived from a birth process, so demographics can be reported without modelling the birth itself."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range  xsd:date .
 
 personnel:instant_date a owl:DatatypeProperty ;
     rdfs:label "instant date"@en ;
@@ -358,15 +317,6 @@ personnel:EmploymentContract a owl:Class ;
     skos:definition "A generically dependent continuant that specifies the terms under which a person works for an organization."@en ;
     skos:example "Permanent contract CDI — Alice Dupont / naas.ai."@en .
 
-personnel:BirthRecord a owl:Class ;
-    rdfs:subClassOf abi:GenericallyDependentContinuant ,
-      [ a owl:Restriction ; owl:onProperty abi:genericallyDependsOn ; owl:someValuesFrom abi:Person ] ,
-      [ a owl:Restriction ; owl:onProperty abi:isConcretizedBy ; owl:someValuesFrom personnel:BirthProcess ] ;
-    rdfs:label "Birth Record"@en ;
-    skos:definition "An information content entity, output by a birth process in the ledger, that records what was asserted about a birth: date, place, parents and any measurements taken."@en ;
-    skos:example "A discharge summary containing birth weight, gestational age, and sex assigned at birth."@en ;
-    rdfs:comment "Aboutness of a particular Birth is added by the BirthProcess slice (cco:is about). The record is concretized by the ledger birth process, not by the natural birth."@en .
-
 personnel:EnrollmentRecord a owl:Class ;
     rdfs:subClassOf abi:GenericallyDependentContinuant ,
       [ a owl:Restriction ; owl:onProperty personnel:isEnrollmentRecordOf ; owl:someValuesFrom abi:Person ] ,
@@ -408,24 +358,6 @@ personnel:StudentRole a owl:Class ;
     skos:example "The role Florent bears as a computer-science student at Université de Rennes 1."@en ;
     rdfs:comment "No CCO student-role class; minted in the personnel namespace. Ends when the enrollment ends, without the person ceasing to exist."@en .
 
-personnel:BirthFunction a owl:Class ;
-    rdfs:subClassOf abi:Disposition ,
-      [ a owl:Restriction ; owl:onProperty abi:inheresIn ; owl:someValuesFrom cco:ont00000562 ] ,
-      [ a owl:Restriction ; owl:onProperty abi:hasMaterialBasis ; owl:someValuesFrom cco:ont00000562 ] ,
-      [ a owl:Restriction ; owl:onProperty abi:hasRealization ; owl:someValuesFrom cco:ont00001237 ] ;
-    rdfs:label "Birth function"@en ;
-    skos:definition "A function (BFO_0000034, a disposition) that inheres in a material entity and is realized in a birth process."@en ;
-    skos:example "A birth function realized during labor and delivery."@en .
-
-personnel:NewbornDisposition a owl:Class ;
-    rdfs:subClassOf abi:Disposition ,
-      [ a owl:Restriction ; owl:onProperty abi:inheresIn ; owl:someValuesFrom cco:ont00000562 ] ,
-      [ a owl:Restriction ; owl:onProperty abi:hasMaterialBasis ; owl:someValuesFrom cco:ont00000562 ] ,
-      [ a owl:Restriction ; owl:onProperty abi:hasRealization ; owl:someValuesFrom cco:ont00001237 ] ;
-    rdfs:label "Newborn disposition"@en ;
-    skos:definition "A disposition that inheres in a material entity and can be realized in a newborn-related process."@en ;
-    skos:example "A newborn begins to breathe spontaneously after delivery."@en .
-
 #################################################################
 #    Classes — HOW IT IS
 #################################################################
@@ -445,43 +377,3 @@ personnel:Remuneration a owl:Class ;
     rdfs:label "Remuneration"@en ;
     skos:definition "A quality borne by a person that specifies what they are paid for their work."@en ;
     skos:example "95000 EUR per year."@en .
-
-personnel:Weight a owl:Class ;
-    owl:equivalentClass cco:ont00000633 ;
-    rdfs:subClassOf abi:Quality ,
-      [ a owl:Restriction ; owl:onProperty abi:inheresIn ; owl:someValuesFrom cco:ont00000562 ] ;
-    rdfs:label "Weight"@en ;
-    skos:definition "A quality that inheres in some material entity with a mass in virtue of its location in some gravitational field."@en ;
-    skos:example "A birth weight of 3.2 kg."@en .
-
-personnel:Length a owl:Class ;
-    owl:equivalentClass cco:ont00000738 ;
-    rdfs:subClassOf abi:Quality ,
-      [ a owl:Restriction ; owl:onProperty abi:inheresIn ; owl:someValuesFrom cco:ont00000562 ] ;
-    rdfs:label "Length"@en ;
-    skos:definition "A quality that inheres in some material entity with a length in virtue of its location in some three-dimensional spatial region."@en ;
-    skos:example "A crown-heel length of 50 cm."@en .
-
-personnel:BiologicalSex a owl:Class ;
-    owl:equivalentClass cco:ont00001033 ;
-    rdfs:subClassOf abi:Quality ,
-      [ a owl:Restriction ; owl:onProperty abi:inheresIn ; owl:someValuesFrom cco:ont00000562 ] ;
-    rdfs:label "Biological sex"@en ;
-    skos:definition "A quality that inheres in some material entity with a biological sex in virtue of its location in some biological sex space."@en ;
-    skos:example "Male"@en .
-
-personnel:EyeColor a owl:Class ;
-    rdfs:subClassOf abi:Quality ,
-      cco:ont00000378 ,
-      [ a owl:Restriction ; owl:onProperty abi:inheresIn ; owl:someValuesFrom abi:Person ] ;
-    rdfs:label "Eye color"@en ;
-    skos:definition "A color quality that inheres in a person and locates their eye color in a color space."@en ;
-    skos:example "Green"@en .
-
-personnel:GestationalAge a owl:Class ;
-    rdfs:subClassOf abi:Quality ,
-      [ a owl:Restriction ; owl:onProperty abi:inheresIn ; owl:someValuesFrom cco:ont00000562 ] ;
-    rdfs:label "Gestational age"@en ;
-    skos:definition "A quality that inheres in some material entity with a gestational age in virtue of its location in some temporal region."@en ;
-    skos:example "Gestational age of 39 weeks and 2 days."@en ;
-    rdfs:comment "No CCO equivalent; minted in the personnel namespace."@en .

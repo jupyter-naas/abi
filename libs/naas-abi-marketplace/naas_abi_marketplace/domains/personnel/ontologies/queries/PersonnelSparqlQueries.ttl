@@ -251,100 +251,25 @@ intentMapping:findHeadcountByJobFamilyQuery a intentMapping:TemplatableSparqlQue
     intentMapping:hasArgument intentMapping:personnelLimitArg .
 
 #-----------------------------------------------------------------
-# Process-ledger queries
+# Process queries
 #-----------------------------------------------------------------
-
-intentMapping:findBirthRegistrationsQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "find_birth_registrations"@en ;
-    intentMapping:intentDescription "Return every birth process in the ledger with the natural birth it registers, the person born, the site and date of the birth, the record produced, and the declaration act that sourced it — who declared it, when, and in what words. Two entries for the same birth by different declarants appear as two rows sharing one ?birth. Backed by the BirthProcess ontology." ;
-    intentMapping:sparqlTemplate """
-        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX cco:  <https://www.commoncoreontologies.org/>
-        PREFIX abi:  <http://ontology.naas.ai/abi/>
-        PREFIX personnel: <http://ontology.naas.ai/personnel/>
-
-        SELECT DISTINCT ?registration ?declaration ?birth ?birthLabel ?personLabel
-                        ?site ?siteLabel ?temporal ?temporalLabel ?temporalStart ?temporalEnd
-                        ?registrationTemporal ?registrationTemporalLabel
-                        ?registrationStart ?registrationEnd
-                        ?record ?recordLabel ?declarantLabel ?declaredOn ?declaredContent
-                        ?sex ?sexLabel ?eyeColor ?eyeColorLabel ?motherLabel ?fatherLabel
-        WHERE {
-          GRAPH <http://ontology.naas.ai/graph/personnel> {
-            ?registration rdf:type personnel:BirthProcess .
-            OPTIONAL {
-              ?registration personnel:registersBirth ?birth .
-              OPTIONAL { ?birth rdfs:label ?birthLabel . }
-              OPTIONAL { ?birth personnel:isBirthOf ?person . ?person rdfs:label ?personLabel . }
-              OPTIONAL { ?person personnel:hasMother ?mother . ?mother rdfs:label ?motherLabel . }
-              OPTIONAL { ?person personnel:hasFather ?father . ?father rdfs:label ?fatherLabel . }
-<<<<<<< HEAD
-              OPTIONAL { ?birth abi:occursIn ?site . ?site rdfs:label ?siteLabel . }
-=======
-              OPTIONAL { ?birth bfo:BFO_0000066 ?site . ?site rdfs:label ?siteLabel . }
-              OPTIONAL {
-                ?birth bfo:BFO_0000199 ?temporal .
-                ?temporal rdfs:label ?temporalLabel .
-                OPTIONAL { ?temporal abi:hasFirstInstant / personnel:instant_date ?temporalStart . }
-                OPTIONAL { ?temporal abi:hasLastInstant  / personnel:instant_date ?temporalEnd . }
-              }
->>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
-              OPTIONAL {
-                ?birth abi:occupiesTemporalRegion ?temporal .
-                ?temporal rdfs:label ?temporalLabel .
-                OPTIONAL { ?temporal abi:hasFirstInstant / personnel:instant_date ?temporalStart . }
-                OPTIONAL { ?temporal abi:hasLastInstant  / personnel:instant_date ?temporalEnd . }
-              }
-              OPTIONAL {
-                ?birth abi:hasParticipant ?sex .
-                ?sex a personnel:BiologicalSex ; rdfs:label ?sexLabel .
-              }
-              OPTIONAL {
-                ?birth abi:hasParticipant ?eyeColor .
-                ?eyeColor a personnel:EyeColor ; rdfs:label ?eyeColorLabel .
-              }
-            }
-            OPTIONAL { ?registration cco:ont00001829 ?record . ?record rdfs:label ?recordLabel . }
-            # Ledger time — the registration process occupies its own temporal region.
-            OPTIONAL {
-<<<<<<< HEAD
-              ?registration abi:occupiesTemporalRegion ?registrationTemporal .
-=======
-              ?registration bfo:BFO_0000199 ?registrationTemporal .
->>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
-              ?registrationTemporal rdfs:label ?registrationTemporalLabel .
-              OPTIONAL { ?registrationTemporal abi:hasFirstInstant / personnel:instant_date ?registrationStart . }
-              OPTIONAL { ?registrationTemporal abi:hasLastInstant  / personnel:instant_date ?registrationEnd . }
-            }
-            # The source: an act of representative communication, not a bare
-            # attribute on the record. Who said it, when, and in what words.
-            OPTIONAL {
-              ?registration personnel:hasInformationSource ?declaration .
-              OPTIONAL { ?declaration cco:ont00001833 ?declarant . ?declarant rdfs:label ?declarantLabel . }
-              OPTIONAL { ?declaration abi:occupiesTemporalRegion ?declaredTemporal . ?declaredTemporal rdfs:label ?declaredOn . }
-              OPTIONAL { ?declaration personnel:declared_content ?declaredContent . }
-            }
-          }
-        }
-        ORDER BY ?personLabel ?declaredOn
-        LIMIT {{ limit }}
-    """ ;
-    intentMapping:hasArgument intentMapping:personnelLimitArg .
 
 intentMapping:findWorkingProcessesQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_working_processes"@en ;
-    intentMapping:intentDescription "Return every act of working: the person performing the work, the organization, site, temporal region, employment contract, job position, remuneration quality, and job description. Backed by the ActOfWorkingProcess ontology." ;
+    intentMapping:intentDescription "Return every act of working with the seven buckets it ties together: the person performing the work and the organization they work for (WHO), the site (WHERE), the temporal region and its bounding instants (WHEN), the employee role and the mission that role concretizes (WHY), the skills developed (HOW IT IS), and the contract and profile document it was sourced from (HOW WE KNOW). Backed by the ActOfWorkingProcess ontology." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX abi:  <http://ontology.naas.ai/abi/>
         PREFIX personnel: <http://ontology.naas.ai/personnel/>
 
-        SELECT DISTINCT ?personLabel ?working ?org ?orgLabel ?site ?siteLabel
-                        ?temporal ?temporalLabel ?temporalStart ?temporalEnd
-                        ?contract ?contractLabel
+        SELECT DISTINCT ?personLabel ?working ?workingLabel ?org ?orgLabel ?site ?siteLabel
+                        ?temporal ?temporalLabel ?temporalStart ?temporalEnd ?durationLabel
+                        ?firstInstant ?firstInstantLabel ?lastInstant ?lastInstantLabel
+                        ?contract ?contractLabel ?contractType
                         ?role ?roleLabel ?position ?positionLabel ?jobTitle
+                        ?mission ?missionLabel ?missionContent
+                        ?profile ?profileLabel ?sourceUrl
                         ?remuneration ?remunerationLabel ?remunerationAmount ?remunerationCurrency
         WHERE {
           GRAPH <http://ontology.naas.ai/graph/personnel> {
@@ -352,27 +277,51 @@ intentMapping:findWorkingProcessesQuery a intentMapping:TemplatableSparqlQuery ;
                     rdfs:label ?personLabel ;
                     personnel:hasActOfWorking ?working .
             ?working rdf:type personnel:ActOfWorking .
+            OPTIONAL { ?working rdfs:label ?workingLabel . }
             OPTIONAL { ?working personnel:forOrganization ?org . ?org rdfs:label ?orgLabel . }
-<<<<<<< HEAD
             OPTIONAL { ?working abi:occursIn ?site . ?site rdfs:label ?siteLabel . }
             OPTIONAL {
               ?working abi:occupiesTemporalRegion ?temporal .
-=======
-            OPTIONAL { ?working bfo:BFO_0000066 ?site . ?site rdfs:label ?siteLabel . }
-            OPTIONAL {
-              ?working bfo:BFO_0000199 ?temporal .
->>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
               ?temporal rdfs:label ?temporalLabel .
-              OPTIONAL { ?temporal abi:hasFirstInstant / personnel:instant_date ?temporalStart . }
-              OPTIONAL { ?temporal abi:hasLastInstant  / personnel:instant_date ?temporalEnd . }
+              OPTIONAL { ?temporal personnel:duration_label ?durationLabel . }
+              OPTIONAL {
+                ?temporal abi:hasFirstInstant ?firstInstant .
+                ?firstInstant personnel:instant_date ?temporalStart .
+                OPTIONAL { ?firstInstant rdfs:label ?firstInstantLabel . }
+              }
+              # An ongoing experience has no last instant: the region stays open.
+              OPTIONAL {
+                ?temporal abi:hasLastInstant ?lastInstant .
+                ?lastInstant personnel:instant_date ?temporalEnd .
+                OPTIONAL { ?lastInstant rdfs:label ?lastInstantLabel . }
+              }
             }
-            OPTIONAL { ?working personnel:hasContract ?contract . ?contract rdfs:label ?contractLabel . }
             OPTIONAL {
-              ?person personnel:hasEmployeeRole ?role .
+              ?working personnel:hasContract ?contract .
+              ?contract rdfs:label ?contractLabel .
+              OPTIONAL { ?contract personnel:contract_type ?contractType . }
+            }
+            # Reached through the act, not through the person: a person bears one
+            # employee role per job, so joining on the person would cross-join
+            # every role against every act of working they ever performed.
+            OPTIONAL {
+              ?working abi:realizes ?role .
               OPTIONAL { ?role rdfs:label ?roleLabel . }
-              ?role personnel:hasJobPosition ?position .
-              ?position rdfs:label ?positionLabel .
-              OPTIONAL { ?position personnel:job_title ?jobTitle . }
+              OPTIONAL {
+                ?role personnel:hasJobPosition ?position .
+                ?position rdfs:label ?positionLabel .
+                OPTIONAL { ?position personnel:job_title ?jobTitle . }
+              }
+              OPTIONAL {
+                ?role personnel:hasMission ?mission .
+                ?mission rdfs:label ?missionLabel .
+                OPTIONAL { ?mission personnel:mission_content ?missionContent . }
+                OPTIONAL {
+                  ?mission personnel:isSourcedFrom ?profile .
+                  ?profile rdfs:label ?profileLabel .
+                  OPTIONAL { ?profile personnel:source_url ?sourceUrl . }
+                }
+              }
             }
             OPTIONAL {
               ?working abi:hasParticipant ?remuneration .
@@ -382,7 +331,34 @@ intentMapping:findWorkingProcessesQuery a intentMapping:TemplatableSparqlQuery ;
             }
           }
         }
-        ORDER BY ?personLabel
+        ORDER BY ?personLabel DESC(?temporalStart)
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:personnelLimitArg .
+
+intentMapping:findSkillsDevelopedQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_skills_developed"@en ;
+    intentMapping:intentDescription "Return every skill a person bears together with each act of working in which it was developed. A skill exercised across several jobs yields one row per job, which is what links those jobs to one another in the graph. Backed by the ActOfWorkingProcess ontology." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+        PREFIX personnel: <http://ontology.naas.ai/personnel/>
+
+        SELECT DISTINCT ?personLabel ?skill ?skillLabel ?working ?orgLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/personnel> {
+            ?person rdf:type abi:Person ;
+                    rdfs:label ?personLabel ;
+                    personnel:hasSkill ?skill .
+            ?skill rdf:type personnel:Skill ; rdfs:label ?skillLabel .
+            OPTIONAL {
+              ?skill personnel:isSkillDevelopedIn ?working .
+              OPTIONAL { ?working personnel:forOrganization ?org . ?org rdfs:label ?orgLabel . }
+            }
+          }
+        }
+        ORDER BY ?personLabel ?skillLabel
         LIMIT {{ limit }}
     """ ;
     intentMapping:hasArgument intentMapping:personnelLimitArg .
@@ -429,88 +405,3 @@ intentMapping:findActsOfStudyingQuery a intentMapping:TemplatableSparqlQuery ;
         LIMIT {{ limit }}
     """ ;
     intentMapping:hasArgument intentMapping:personnelLimitArg .
-
-intentMapping:findPersonBirthLineageQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "find_person_birth_lineage"@en ;
-    intentMapping:intentDescription "Retrace every birth registration logged for a person matched by name substring: their given and family names, the single birth all registrations share, each registration's declarant and declared wording, the prior registration it updates, the parents, the site and the date. Use this to reconstruct how knowledge about a person accumulated over successive registrations and to see which declarant contributed which fact." ;
-    intentMapping:sparqlTemplate """
-        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX cco:  <https://www.commoncoreontologies.org/>
-        PREFIX abi:  <http://ontology.naas.ai/abi/>
-        PREFIX personnel: <http://ontology.naas.ai/personnel/>
-
-        SELECT DISTINCT ?person ?personLabel ?givenName ?familyName ?birth ?registration ?registrationLabel
-                        ?priorRegistration ?siteLabel ?temporalLabel ?motherLabel ?fatherLabel
-                        ?declarantLabel ?declaredOn ?declaredContent
-        WHERE {
-          GRAPH <http://ontology.naas.ai/graph/personnel> {
-            ?person rdf:type abi:Person ;
-                    rdfs:label ?personLabel ;
-                    personnel:hasBirth ?birth .
-            FILTER(CONTAINS(LCASE(STR(?personLabel)), LCASE("{{ person_name }}")))
-            OPTIONAL { ?person personnel:given_name  ?givenName . }
-            OPTIONAL { ?person personnel:family_name ?familyName . }
-            OPTIONAL { ?birth abi:occursIn ?site . ?site rdfs:label ?siteLabel . }
-            OPTIONAL { ?birth abi:occupiesTemporalRegion ?temporal . ?temporal rdfs:label ?temporalLabel . }
-            OPTIONAL { ?person personnel:hasMother ?mother . ?mother rdfs:label ?motherLabel . }
-            OPTIONAL { ?person personnel:hasFather ?father . ?father rdfs:label ?fatherLabel . }
-            # One row per registration of that one birth.
-            OPTIONAL {
-              ?birth personnel:isRegisteredBy ?registration .
-              OPTIONAL { ?registration rdfs:label ?registrationLabel . }
-              OPTIONAL { ?registration personnel:updatesPriorRegistration ?priorRegistration . }
-              OPTIONAL {
-                ?registration personnel:hasInformationSource ?declaration .
-                OPTIONAL { ?declaration cco:ont00001833 ?declarant . ?declarant rdfs:label ?declarantLabel . }
-                OPTIONAL { ?declaration abi:occupiesTemporalRegion ?declaredTemporal . ?declaredTemporal rdfs:label ?declaredOn . }
-                OPTIONAL { ?declaration personnel:declared_content ?declaredContent . }
-              }
-            }
-          }
-        }
-        ORDER BY ?personLabel ?declaredOn
-        LIMIT {{ limit }}
-    """ ;
-    intentMapping:hasArgument intentMapping:personnelPersonNameArg ;
-    intentMapping:hasArgument intentMapping:personnelLimitArg .
-
-#-----------------------------------------------------------------
-# Query arguments
-#-----------------------------------------------------------------
-
-intentMapping:personnelLimitArg a intentMapping:QueryArgument ;
-    intentMapping:argumentName "limit" ;
-    intentMapping:argumentDescription "Maximum number of rows to return (positive integer)." ;
-    intentMapping:validationPattern "^[1-9][0-9]{0,3}$" ;
-    intentMapping:validationFormat "integer" .
-
-intentMapping:personnelEmployeeIdArg a intentMapping:QueryArgument ;
-    intentMapping:argumentName "employee_id" ;
-    intentMapping:argumentDescription "Identifier assigned to a person by the employing organization's HR system (e.g. 'E-10428')." ;
-    intentMapping:validationPattern "." ;
-    intentMapping:validationFormat "string" .
-
-intentMapping:personnelStatusValueArg a intentMapping:QueryArgument ;
-    intentMapping:argumentName "status_value" ;
-    intentMapping:argumentDescription "Employment status to match, case-insensitive (e.g. 'active', 'on-leave', 'notice-period', 'terminated')." ;
-    intentMapping:validationPattern "." ;
-    intentMapping:validationFormat "string" .
-
-intentMapping:personnelOrganizationNameArg a intentMapping:QueryArgument ;
-    intentMapping:argumentName "organization_name" ;
-    intentMapping:argumentDescription "Substring to match against an organization's name, case-insensitive. Pass an empty string to return every employing organization." ;
-    intentMapping:validationPattern ".*" ;
-    intentMapping:validationFormat "string" .
-
-intentMapping:personnelJobTitleArg a intentMapping:QueryArgument ;
-    intentMapping:argumentName "job_title" ;
-    intentMapping:argumentDescription "Substring to match against a job position title, case-insensitive. Pass an empty string to return every position." ;
-    intentMapping:validationPattern ".*" ;
-    intentMapping:validationFormat "string" .
-
-intentMapping:personnelPersonNameArg a intentMapping:QueryArgument ;
-    intentMapping:argumentName "person_name" ;
-    intentMapping:argumentDescription "Substring to match against a person's full name, case-insensitive (e.g. 'Emma Petit' or 'Ravenel')." ;
-    intentMapping:validationPattern "." ;
-    intentMapping:validationFormat "string" .

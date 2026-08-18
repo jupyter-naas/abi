@@ -2,8 +2,19 @@
 """Build the personnel demo instance graph from ontology Python classes.
 
 Loads schema TTLs under ``ontologies/`` (modules + processes) and emits demo
-individuals with the generated RDFEntity classes (``abi:Person``,
-``personnel:EmploymentRecord``, birth process classes, …). Writes:
+individuals with the generated RDFEntity classes. The working experiences are
+transcribed from a real LinkedIn profile (see ``scripts/linkedin_experience.py``)
+and expanded into the seven buckets the Act of Working slice declares:
+
+    WHO          Person, Organization
+    WHAT         ActOfWorking
+    WHEN         TemporalRegion → two TemporalInstants (last one absent if ongoing)
+    WHERE        Site
+    WHY          EmployeeRole → concretizes → Mission
+    HOW IT IS    Skill (borne by the person, developed in the act)
+    HOW WE KNOW  Mission, EmploymentContract, ProfileDocument
+
+Writes::
 
     data/graph/personnel_demo.ttl
 
@@ -25,19 +36,13 @@ from naas_abi.ontologies.modules.ABIOntology import (
     TemporalInstant,
 )
 from naas_abi.ontologies.modules.ABIOntology import TemporalRegion as AbiTemporalRegion
-from naas_abi_marketplace.domains.personnel.individual_uri import (
-    personnel_individual_uri,
-)
 from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
     AcademicDegree,
-    BiologicalSex,
-    BirthRecord,
     EmployeeRole,
     EmploymentContract,
     EmploymentRecord,
     EmploymentStatus,
     EnrollmentRecord,
-    EyeColor,
     JobDescription,
     JobPosition,
     Remuneration,
@@ -48,26 +53,16 @@ from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfStudyingPr
 )
 from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfWorkingProcess import (
     ActOfWorking,
+    Mission,
+    ProfileDocument,
+    Skill,
 )
-from naas_abi_marketplace.domains.personnel.ontologies.processes.BirthProcess import (
-    Birth,
-    BirthDeclarationAct,
-<<<<<<< HEAD
-    BirthProcess,
-=======
-    BirthRecord,
-    BirthRegistrationProcess,
-    EyeColor,
-    Site,
-)
-from naas_abi_marketplace.domains.personnel.ontologies.processes.WorkingProcess import (
-    EmploymentContract,
-    Remuneration,
-    Working,
->>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
+from naas_abi_marketplace.domains.personnel.scripts.linkedin_experience import (
+    LINKEDIN_PROFILE_URL,
+    EXPERIENCES,
 )
 from rdflib import Graph, Literal, Namespace, URIRef
-from rdflib.namespace import RDF, RDFS, XSD
+from rdflib.namespace import RDF, XSD
 
 PERSONNEL_ROOT = Path(__file__).resolve().parents[1]
 ONTOLOGIES = PERSONNEL_ROOT / "ontologies"
@@ -80,6 +75,8 @@ CCO = Namespace("https://www.commoncoreontologies.org/")
 BFO = Namespace("http://purl.obolibrary.org/obo/")
 GRAPH_NAME = URIRef("http://ontology.naas.ai/graph/personnel")
 
+# Roster facts for the Workforce page. Birth is no longer modelled as a process,
+# so the date of birth the age pyramid needs is asserted straight on the person.
 EMPLOYEES = [
     {
         "first": "Jeremy",
@@ -90,13 +87,6 @@ EMPLOYEES = [
         "hire_date": date(2018, 3, 1),
         "status": "active",
         "birth_date": date(1989, 12, 5),
-        "birth_site": "Vitré",
-        "sex": "Male",
-        "eye_color": "Green",
-        "rich_birth": True,
-        "mother": ("Christine", "Ravenel"),
-        "father": ("Pascal", "Ravenel"),
-        "work_site": "Paris",
         "remuneration": 120_000,
     },
     {
@@ -108,11 +98,7 @@ EMPLOYEES = [
         "hire_date": date(2019, 6, 15),
         "status": "active",
         "birth_date": date(1991, 4, 18),
-        "sex": "Male",
-        "work_site": "Paris",
         "remuneration": 95_000,
-        "mother": ("Marie", "Ravenel"),
-        "father": ("Henri", "Ravenel"),
     },
     {
         "first": "Maxime",
@@ -123,20 +109,19 @@ EMPLOYEES = [
         "hire_date": date(2020, 1, 10),
         "status": "active",
         "birth_date": date(1988, 9, 22),
-        "sex": "Male",
-        "work_site": "Paris",
         "remuneration": 85_000,
     },
 ]
 
-
-# Parents are demo stubs, but every Birth process still needs a temporal region,
-# so each one gets a plausible date of its own.
-PARENT_BIRTH_DATES = {
-    ("Christine", "Ravenel"): date(1962, 3, 14),
-    ("Pascal", "Ravenel"): date(1959, 11, 2),
-    ("Marie", "Ravenel"): date(1964, 7, 21),
-    ("Henri", "Ravenel"): date(1961, 5, 9),
+# The one course of study in the demo. Not from LinkedIn — kept from the
+# previous demo set so the Act of Studying slice still has an instance.
+STUDY = {
+    "person": ("Florent", "Ravenel"),
+    "organization": "Université de Rennes 1",
+    "program": "Licence Informatique",
+    "site": "Rennes",
+    "start": date(2009, 9, 1),
+    "end": date(2014, 6, 30),
 }
 
 
@@ -160,48 +145,58 @@ def _add_temporal_region(
     key: str,
     label: str,
     start: date,
-    end: date,
+    end: date | None,
+    duration: str | None = None,
 ) -> str:
-    """Emit one temporal region bounded by a first and a last temporal instant.
+    """Emit one temporal region bounded by a first and, unless ongoing, a last instant.
 
     ``abi:TemporalRegion`` is ``owl:equivalentClass bfo:BFO_0000008`` and
     ``abi:TemporalInstant`` is equivalent to ``bfo:BFO_0000203``, so this
     satisfies the ``BFO_0000199 someValuesFrom BFO_0000008`` restrictions the
     process ontologies declare. Each instant carries ``personnel:instant_date``
     so downstream SPARQL can order processes by recency.
+
+    An ongoing experience (LinkedIn "Present") gets **no** last instant: the
+    region is genuinely open, and inventing a closing bound would assert an end
+    that has not happened.
     """
 
-    instant_uris: list[str] = []
-    for bound, moment in (("start", start), ("end", end)):
+    def instant(bound: str, moment: date) -> str:
         uri = _uri(str(ABI), "TemporalInstant", f"{key}-{bound}-{moment.isoformat()}")
-        instant = TemporalInstant(
+        node = TemporalInstant(
             _uri=uri,
             label=moment.strftime("%d/%m/%Y"),
             created=_now(),
             creator="generate_demo_graph",
         )
-        graph += instant.rdf()
-<<<<<<< HEAD
+        for triple in node.rdf():
+            graph.add(triple)
         graph.add(
             (URIRef(uri), PERSONNEL.instant_date, Literal(moment, datatype=XSD.date))
         )
-=======
-        graph.add((URIRef(uri), PERSONNEL.instant_date, Literal(moment, datatype=XSD.date)))
->>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
-        instant_uris.append(uri)
+        return uri
 
-    first_uri, last_uri = instant_uris
+    first_uri = instant("start", start)
+    last_uri = instant("end", end) if end else None
 
     region_uri = _uri(str(ABI), "TemporalRegion", key)
     region = AbiTemporalRegion(
         _uri=region_uri,
         label=label,
         has_first_instant=[first_uri],
-        has_last_instant=[last_uri],
+        has_last_instant=[last_uri] if last_uri else None,
         created=_now(),
         creator="generate_demo_graph",
     )
     graph += region.rdf()
+    if duration:
+        graph.add(
+            (
+                URIRef(region_uri),
+                PERSONNEL.duration_label,
+                Literal(duration, datatype=XSD.string),
+            )
+        )
     return region_uri
 
 
@@ -234,48 +229,312 @@ def _ensure_person(
     )
     graph += person.rdf()
     graph.add((URIRef(uri), RDF.type, CCO.ont00000562))
-
-    # Role-based names, held as strings on the person. abi:first_name /
-    # abi:last_name above are the positional variants and are set separately.
     graph.add((URIRef(uri), PERSONNEL.given_name, Literal(first, datatype=XSD.string)))
     graph.add((URIRef(uri), PERSONNEL.family_name, Literal(last, datatype=XSD.string)))
-
     cache[key] = person
     return person
 
 
+def _ensure_org(
+    graph: Graph, cache: dict[str, Organization], label: str, *, educational: bool = False
+) -> Organization:
+    if label in cache:
+        return cache[label]
+    org = Organization(
+        _uri=_uri(str(ABI), "Organization", _slug(label)),
+        label=label,
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += org.rdf()
+    if educational:
+        graph.add((URIRef(org._uri), RDF.type, CCO.ont00000564))
+    cache[label] = org
+    return org
+
+
+def _ensure_site(graph: Graph, cache: dict[str, Site], label: str) -> Site:
+    if label in cache:
+        return cache[label]
+    site = Site(
+        _uri=_uri(str(PERSONNEL), "Site", _slug(label)),
+        label=label,
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += site.rdf()
+    cache[label] = site
+    return site
+
+
+def _ensure_skill(
+    graph: Graph, cache: dict[str, Skill], name: str, person: Person
+) -> Skill:
+    """One Skill node per person and name.
+
+    A skill is a quality inhering in the person, not in the act, so the same
+    skill exercised across several jobs is a single node that several acts of
+    working point at — which is what makes those jobs neighbours in the graph.
+    """
+    key = f"{person.label}|{name}"
+    if key in cache:
+        return cache[key]
+    skill = Skill(
+        _uri=_uri(str(PERSONNEL), "Skill", _slug(person.label or "", name)),
+        label=name,
+        skill_name=name,
+        inheresIn=[person._uri],
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += skill.rdf()
+    graph.add((URIRef(person._uri), PERSONNEL.hasSkill, URIRef(skill._uri)))
+    cache[key] = skill
+    return skill
+
+
+def _add_profile_document(graph: Graph, person: Person) -> ProfileDocument:
+    """The LinkedIn page every experience below was read from."""
+    doc = ProfileDocument(
+        _uri=_uri(str(PERSONNEL), "ProfileDocument", _slug(person.label or "", "linkedin")),
+        label=f"LinkedIn experience — {person.label}",
+        source_url=LINKEDIN_PROFILE_URL,
+        is_profile_document_of=[person._uri],
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += doc.rdf()
+    graph.add((URIRef(person._uri), PERSONNEL.hasProfileDocument, URIRef(doc._uri)))
+    return doc
+
+
+def _add_working(
+    graph: Graph,
+    *,
+    person: Person,
+    org: Organization,
+    site: Site,
+    skills: list[Skill],
+    profile: ProfileDocument | None,
+    title: str,
+    mission_label: str,
+    mission_content: str,
+    contract_type: str | None,
+    start: date,
+    end: date | None,
+    duration: str | None,
+    remuneration_amount: float | None = None,
+    remuneration_currency: str = "EUR",
+) -> str:
+    """Emit one act of working and everything hanging off it."""
+    key = _slug(person.label or "", org.label or "", title)
+
+    temporal_uri = _add_temporal_region(
+        graph,
+        key=f"{key}-working",
+        label=(
+            f"{start.strftime('%b %Y')} – Present"
+            if end is None
+            else f"{start.strftime('%b %Y')} – {end.strftime('%b %Y')}"
+        ),
+        start=start,
+        end=end,
+        duration=duration,
+    )
+
+    # HOW WE KNOW — the stated remit. Opening sentence is the label, full text
+    # is the content, and provenance points back at the profile page.
+    mission = Mission(
+        _uri=_uri(str(PERSONNEL), "Mission", key),
+        label=mission_label,
+        mission_content=mission_content,
+        is_mission_carried_by=[person._uri],
+        is_sourced_from=[profile._uri] if profile else None,
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += mission.rdf()
+    graph.add((URIRef(person._uri), PERSONNEL.hasMissionCarried, URIRef(mission._uri)))
+
+    # HOW WE KNOW — the position as published by the organization.
+    position = JobPosition(
+        _uri=_uri(str(PERSONNEL), "JobPosition", key),
+        label=title,
+        job_title=title,
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += position.rdf()
+
+    # WHY — the role the person bears, concretizing both position and mission.
+    role = EmployeeRole(
+        _uri=_uri(str(PERSONNEL), "EmployeeRole", key),
+        label=title,
+        is_employee_role_of=[person._uri],
+        has_job_position=[position._uri],
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += role.rdf()
+    graph.add((URIRef(person._uri), PERSONNEL.hasEmployeeRole, URIRef(role._uri)))
+    # personnel:hasMission lives in the process slice, so it is not a field on
+    # the shared EmployeeRole model — assert the role → mission link directly.
+    graph.add((URIRef(role._uri), PERSONNEL.hasMission, URIRef(mission._uri)))
+    graph.add((URIRef(mission._uri), PERSONNEL.isMissionOf, URIRef(role._uri)))
+
+    contract_uri = None
+    if contract_type:
+        contract = EmploymentContract(
+            _uri=_uri(str(PERSONNEL), "EmploymentContract", key),
+            label=f"{contract_type} — {person.label} / {org.label}",
+            created=_now(),
+            creator="generate_demo_graph",
+        )
+        graph += contract.rdf()
+        graph.add(
+            (
+                URIRef(contract._uri),
+                PERSONNEL.contract_type,
+                Literal(contract_type, datatype=XSD.string),
+            )
+        )
+        contract_uri = contract._uri
+
+    participants = [person._uri]
+    if remuneration_amount:
+        remuneration = Remuneration(
+            _uri=_uri(str(PERSONNEL), "Remuneration", key),
+            label=f"{int(remuneration_amount):,} {remuneration_currency}/year".replace(
+                ",", " "
+            ),
+            remuneration_amount=remuneration_amount,
+            remuneration_currency=remuneration_currency,
+            inheresIn=[person._uri],
+            created=_now(),
+            creator="generate_demo_graph",
+        )
+        graph += remuneration.rdf()
+        participants.append(remuneration._uri)
+
+    working_uri = _uri(str(PERSONNEL), "ActOfWorking", key)
+    working = ActOfWorking(
+        _uri=working_uri,
+        label=f"{title} @ {org.label}",
+        hasParticipant=participants,
+        occursIn=[site._uri],
+        occupiesTemporalRegion=[temporal_uri],
+        for_organization=[org._uri],
+        has_contract=contract_uri,
+        is_act_of_working_of=[person._uri],
+        realizes=role._uri,
+        develops_skill=[s._uri for s in skills] or None,
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += working.rdf()
+
+    graph.add((URIRef(person._uri), PERSONNEL.hasActOfWorking, URIRef(working_uri)))
+    # WHO ↔ WHERE — the shortcut from the worker to the site of execution.
+    graph.add((URIRef(person._uri), PERSONNEL.hasWorkLocation, URIRef(site._uri)))
+    for skill in skills:
+        graph.add(
+            (URIRef(skill._uri), PERSONNEL.isSkillDevelopedIn, URIRef(working_uri))
+        )
+    return working_uri
+
+
+def _add_studying(
+    graph: Graph,
+    *,
+    person: Person,
+    org: Organization,
+    site: Site,
+    program: str,
+    start: date,
+    end: date,
+) -> str:
+    key = _slug(person.label or "", program)
+
+    temporal_uri = _add_temporal_region(
+        graph,
+        key=f"{key}-studying",
+        label=f"{start.strftime('%b %Y')} – {end.strftime('%b %Y')}",
+        start=start,
+        end=end,
+    )
+
+    role = StudentRole(
+        _uri=_uri(str(PERSONNEL), "StudentRole", key),
+        label=f"Student — {program}",
+        is_student_role_of=[person._uri],
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += role.rdf()
+    graph.add((URIRef(person._uri), PERSONNEL.hasStudentRole, URIRef(role._uri)))
+
+    enrollment = EnrollmentRecord(
+        _uri=_uri(str(PERSONNEL), "EnrollmentRecord", key),
+        label=f"Enrollment — {program}",
+        program_name=program,
+        enrollment_date=start,
+        completion_date=end,
+        is_enrollment_record_of=[person._uri],
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += enrollment.rdf()
+    graph.add(
+        (URIRef(person._uri), PERSONNEL.hasEnrollmentRecord, URIRef(enrollment._uri))
+    )
+
+    degree = AcademicDegree(
+        _uri=_uri(str(PERSONNEL), "AcademicDegree", key),
+        label=program,
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += degree.rdf()
+
+    studying_uri = _uri(str(PERSONNEL), "ActOfStudying", key)
+    studying = ActOfStudying(
+        _uri=studying_uri,
+        label=f"{program} @ {org.label}",
+        hasParticipant=[person._uri],
+        occursIn=[site._uri],
+        occupiesTemporalRegion=[temporal_uri],
+        for_educational_organization=[org._uri],
+        has_enrollment=enrollment._uri,
+        is_act_of_studying_of=[person._uri],
+        realizes=role._uri,
+        created=_now(),
+        creator="generate_demo_graph",
+    )
+    graph += studying.rdf()
+    graph.add((URIRef(person._uri), PERSONNEL.hasActOfStudying, URIRef(studying_uri)))
+    return studying_uri
+
+
 def build_instances() -> Graph:
-    """Emit employment + birth individuals with ontology classes."""
+    """Emit the demo individuals: roster facts plus the LinkedIn experience graph."""
     g = Graph()
     people: dict[str, Person] = {}
+    orgs: dict[str, Organization] = {}
+    sites: dict[str, Site] = {}
+    skills: dict[str, Skill] = {}
 
-    org = Organization(
-        _uri=_uri(str(ABI), "Organization", "demo"),
-        label="Naas.ai",
-        created=_now(),
-        creator="generate_demo_graph",
-    )
-    g += org.rdf()
-
-    school = Organization(
-        _uri=_uri(str(ABI), "Organization", "universite-de-rennes-1"),
-        label="Université de Rennes 1",
-        created=_now(),
-        creator="generate_demo_graph",
-    )
-    g += school.rdf()
-    g.add((URIRef(school._uri), RDF.type, CCO.ont00000564))
-
-    # Family stubs — parents of Jeremy and Florent.
-    christine = _ensure_person(g, people, "Christine", "Ravenel")
-    pascal = _ensure_person(g, people, "Pascal", "Ravenel")
-    marie = _ensure_person(g, people, "Marie", "Ravenel")
-    henri = _ensure_person(g, people, "Henri", "Ravenel")
-    florent = _ensure_person(g, people, "Florent", "Ravenel")
-
+    # --- Workforce roster: employment records, positions, status ------------
     for emp in EMPLOYEES:
         person = _ensure_person(g, people, emp["first"], emp["last"])
         slug = _slug(emp["first"], emp["last"])
+
+        g.add(
+            (
+                URIRef(person._uri),
+                PERSONNEL.birth_date,
+                Literal(emp["birth_date"], datatype=XSD.date),
+            )
+        )
 
         desc = JobDescription(
             _uri=_uri(str(PERSONNEL), "JobDescription", f"{slug}-{emp['employee_id']}"),
@@ -298,7 +557,7 @@ def build_instances() -> Graph:
         g.add((URIRef(person._uri), PERSONNEL.hasEmploymentRecord, URIRef(record._uri)))
 
         position = JobPosition(
-            _uri=_uri(str(PERSONNEL), "JobPosition", _slug(emp["job_title"])),
+            _uri=_uri(str(PERSONNEL), "JobPosition", f"{slug}-roster"),
             label=emp["job_title"],
             job_title=emp["job_title"],
             job_family=emp["job_family"],
@@ -308,453 +567,71 @@ def build_instances() -> Graph:
         )
         g += position.rdf()
 
-        role = EmployeeRole(
-            _uri=_uri(str(PERSONNEL), "EmployeeRole", f"{slug}-{emp['employee_id']}"),
-            label=f"{emp['job_title']} role — {person.label}",
-            is_employee_role_of=[person._uri],
-            has_job_position=[position._uri],
-            created=_now(),
-            creator="generate_demo_graph",
-        )
-        g += role.rdf()
-        g.add((URIRef(person._uri), PERSONNEL.hasEmployeeRole, URIRef(role._uri)))
-        g.add((URIRef(position._uri), PERSONNEL.isJobPositionOf, URIRef(role._uri)))
-
         status = EmploymentStatus(
-            _uri=_uri(str(PERSONNEL), "EmploymentStatus", f"{slug}-{emp['status']}"),
-            label=f"{person.label} — {emp['status']}",
+            _uri=_uri(str(PERSONNEL), "EmploymentStatus", slug),
+            label=emp["status"],
             status_value=emp["status"],
+            is_employment_status_of=[person._uri],
             created=_now(),
             creator="generate_demo_graph",
         )
         g += status.rdf()
-        g.add((URIRef(person._uri), PERSONNEL.hasEmploymentStatus, URIRef(status._uri)))
         g.add(
-            (URIRef(status._uri), PERSONNEL.isEmploymentStatusOf, URIRef(person._uri))
+            (URIRef(person._uri), PERSONNEL.hasEmploymentStatus, URIRef(status._uri))
         )
 
-        g.add((URIRef(person._uri), PERSONNEL.isEmployedBy, URIRef(org._uri)))
-        g.add((URIRef(org._uri), PERSONNEL.employs, URIRef(person._uri)))
+    # --- LinkedIn working experience ---------------------------------------
+    profiles: dict[str, ProfileDocument] = {}
+    for exp in EXPERIENCES:
+        first, last = exp["person"]
+        person = _ensure_person(g, people, first, last)
+        if person.label not in profiles:
+            profiles[person.label] = _add_profile_document(g, person)
+
+        org = _ensure_org(g, orgs, exp["organization"])
+        site = _ensure_site(g, sites, exp["site"])
+        exp_skills = [_ensure_skill(g, skills, name, person) for name in exp["skills"]]
+
+        roster = next(
+            (
+                e
+                for e in EMPLOYEES
+                if (e["first"], e["last"]) == exp["person"]
+                and exp["organization"].lower().startswith("naas")
+            ),
+            None,
+        )
 
         _add_working(
             g,
             person=person,
             org=org,
-            role=role,
-            desc=desc,
-            work_site=emp["work_site"],
-            hire_date=emp["hire_date"],
-            remuneration_amount=emp["remuneration"],
+            site=site,
+            skills=exp_skills,
+            profile=profiles[person.label],
+            title=exp["title"],
+            mission_label=exp["mission_label"],
+            mission_content=exp["mission"],
+            contract_type=exp["contract_type"],
+            start=exp["start"],
+            end=exp["end"],
+            duration=exp["duration"],
+            remuneration_amount=roster["remuneration"] if roster else None,
         )
 
-        mother = (
-            _ensure_person(g, people, emp["mother"][0], emp["mother"][1])
-            if emp.get("mother")
-            else None
-        )
-        father = (
-            _ensure_person(g, people, emp["father"][0], emp["father"][1])
-            if emp.get("father")
-            else None
-        )
-        if emp.get("rich_birth"):
-            _add_birth(
-                g,
-                person=person,
-                declarant=florent,
-                birth_date=emp.get("birth_date"),
-                birth_site=emp.get("birth_site"),
-                sex=emp.get("sex"),
-                eye_color=emp.get("eye_color"),
-                mother=mother,
-                father=father,
-            )
-        elif emp.get("birth_date"):
-            _add_birth(
-                g,
-                person=person,
-                declarant=florent,
-                birth_date=emp.get("birth_date"),
-                sex=emp.get("sex"),
-                mother=mother,
-                father=father,
-            )
-
-    # Parent ledger entries — dated so their Birth process has a temporal region too.
-    for parent, names in (
-        (christine, ("Christine", "Ravenel")),
-        (pascal, ("Pascal", "Ravenel")),
-        (marie, ("Marie", "Ravenel")),
-        (henri, ("Henri", "Ravenel")),
-    ):
-        _add_birth(
-            g,
-            person=parent,
-            declarant=florent,
-            birth_date=PARENT_BIRTH_DATES[names],
-        )
-<<<<<<< HEAD
-
+    # --- One course of study ------------------------------------------------
+    first, last = STUDY["person"]
     _add_studying(
         g,
-        person=florent,
-        org=school,
-        program="Licence Informatique",
-        study_site="Rennes",
-        start=date(2009, 9, 1),
-        end=date(2014, 6, 30),
+        person=_ensure_person(g, people, first, last),
+        org=_ensure_org(g, orgs, STUDY["organization"], educational=True),
+        site=_ensure_site(g, sites, STUDY["site"]),
+        program=STUDY["program"],
+        start=STUDY["start"],
+        end=STUDY["end"],
     )
-=======
->>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
 
     return g
-
-
-def _add_working(
-    graph: Graph,
-    *,
-    person: Person,
-    org: Organization,
-    role: EmployeeRole,
-    desc: JobDescription,
-    work_site: str,
-    hire_date: date,
-    remuneration_amount: float,
-    remuneration_currency: str = "EUR",
-) -> str:
-    slug = _slug(person.label or person._uri)
-    working_uri = _uri(str(PERSONNEL), "ActOfWorking", slug)
-    contract_uri = _uri(str(PERSONNEL), "EmploymentContract", slug)
-    site_uri = _uri(str(PERSONNEL), "Site", _slug(work_site, "work"))
-    remuneration_uri = _uri(str(PERSONNEL), "Remuneration", slug)
-
-    site = Site(
-        _uri=site_uri,
-        label=work_site,
-        created=_now(),
-        creator="generate_demo_graph",
-    )
-    graph += site.rdf()
-
-    # Employment is ongoing: the region is closed at the generation date so every
-    # temporal region has both bounds and recency ordering stays total.
-    temporal_uri = _add_temporal_region(
-        graph,
-        key=f"{slug}-working-{hire_date.isoformat()}",
-        label=f"Since {hire_date.strftime('%d/%m/%Y')}",
-        start=hire_date,
-        end=_now().date(),
-    )
-
-    remuneration = Remuneration(
-        _uri=remuneration_uri,
-        label=f"{int(remuneration_amount):,} {remuneration_currency}/year".replace(
-            ",", " "
-        ),
-        remuneration_amount=remuneration_amount,
-        remuneration_currency=remuneration_currency,
-        inheresIn=[person._uri],
-        created=_now(),
-        creator="generate_demo_graph",
-    )
-    graph += remuneration.rdf()
-
-    contract = EmploymentContract(
-        _uri=contract_uri,
-        label=f"Contract — {person.label} / {org.label}",
-        is_about_job_description=[desc._uri],
-        created=_now(),
-        creator="generate_demo_graph",
-    )
-    graph += contract.rdf()
-
-    working = ActOfWorking(
-        _uri=working_uri,
-<<<<<<< HEAD
-        label=f"Act of working — {person.label} @ {org.label}",
-        hasParticipant=[person._uri, remuneration._uri],
-        occursIn=[site._uri],
-        occupiesTemporalRegion=[temporal_uri],
-=======
-        label=f"Working — {person.label} @ {org.label}",
-        bFO_0000057=[person._uri, remuneration._uri],
-        bFO_0000066=[site._uri],
-        bFO_0000199=[temporal_uri],
->>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
-        for_organization=[org._uri],
-        has_contract=contract._uri,
-        is_act_of_working_of=[person._uri],
-        realizes=role._uri,
-        created=_now(),
-        creator="generate_demo_graph",
-    )
-    graph += working.rdf()
-    graph.add((URIRef(person._uri), PERSONNEL.hasActOfWorking, URIRef(working_uri)))
-    return working_uri
-
-
-def _add_studying(
-    graph: Graph,
-    *,
-    person: Person,
-    org: Organization,
-    program: str,
-    study_site: str,
-    start: date,
-    end: date,
-) -> str:
-    slug = _slug(person.label or person._uri)
-    studying_uri = _uri(str(PERSONNEL), "ActOfStudying", slug)
-    enrollment_uri = _uri(str(PERSONNEL), "EnrollmentRecord", slug)
-    role_uri = _uri(str(PERSONNEL), "StudentRole", slug)
-    degree_uri = _uri(str(PERSONNEL), "AcademicDegree", slug)
-    site_uri = _uri(str(PERSONNEL), "Site", _slug(study_site, "study"))
-
-    site = Site(
-        _uri=site_uri,
-        label=study_site,
-        created=_now(),
-        creator="generate_demo_graph",
-    )
-    graph += site.rdf()
-
-    temporal_uri = _add_temporal_region(
-        graph,
-        key=f"{slug}-studying-{start.isoformat()}",
-        label=f"{start.strftime('%d/%m/%Y')} – {end.strftime('%d/%m/%Y')}",
-        start=start,
-        end=end,
-    )
-
-    role = StudentRole(
-        _uri=role_uri,
-        label=f"Student role — {person.label} / {program}",
-        is_student_role_of=[person._uri],
-        created=_now(),
-        creator="generate_demo_graph",
-    )
-    graph += role.rdf()
-    graph.add((URIRef(person._uri), PERSONNEL.hasStudentRole, URIRef(role._uri)))
-
-    enrollment = EnrollmentRecord(
-        _uri=enrollment_uri,
-        label=f"Enrollment — {person.label} / {program}",
-        program_name=program,
-        enrollment_date=start,
-        completion_date=end,
-        is_enrollment_record_of=[person._uri],
-        created=_now(),
-        creator="generate_demo_graph",
-    )
-    graph += enrollment.rdf()
-    graph.add(
-        (URIRef(person._uri), PERSONNEL.hasEnrollmentRecord, URIRef(enrollment._uri))
-    )
-
-    degree = AcademicDegree(
-        _uri=degree_uri,
-        label=f"{program} — {org.label}",
-        created=_now(),
-        creator="generate_demo_graph",
-    )
-    graph += degree.rdf()
-
-    studying = ActOfStudying(
-        _uri=studying_uri,
-        label=f"Act of studying — {person.label} @ {org.label}",
-        hasParticipant=[person._uri],
-        occursIn=[site._uri],
-        occupiesTemporalRegion=[temporal_uri],
-        for_educational_organization=[org._uri],
-        has_enrollment=enrollment._uri,
-        is_act_of_studying_of=[person._uri],
-        realizes=role._uri,
-        created=_now(),
-        creator="generate_demo_graph",
-    )
-    graph += studying.rdf()
-    graph.add((URIRef(person._uri), PERSONNEL.hasActOfStudying, URIRef(studying_uri)))
-    return studying_uri
-
-
-def _add_birth(
-    graph: Graph,
-    *,
-    person: Person,
-    declarant: Person,
-    birth_date: date | None = None,
-    birth_site: str | None = None,
-    sex: str | None = None,
-    eye_color: str | None = None,
-    mother: Person | None = None,
-    father: Person | None = None,
-    declared_on: date = date(2026, 8, 13),
-    declared_content: str | None = None,
-) -> str:
-    """Emit one Birth (natural process) plus ledger registration behind the scenes.
-
-    The canvas focuses on the Birth process and its BFO satellites. The
-    registration process and declaration act remain in the graph for SPARQL/logs.
-    """
-    slug = _slug(person.label or person._uri)
-    dslug = _slug(declarant.label or declarant._uri)
-    key = f"{slug}-by-{dslug}"
-    birth_uri = _uri(str(PERSONNEL), "Birth", slug)
-    declaration_uri = personnel_individual_uri(f"BirthDeclarationAct:{key}")
-    registration_uri = personnel_individual_uri(f"BirthProcess:{key}")
-    record_uri = _uri(str(PERSONNEL), "BirthRecord", key)
-
-    participants: list = [person._uri]
-    sites: list = []
-    temporals: list = []
-
-    if sex:
-        sex_ind = BiologicalSex(
-            _uri=_uri(str(PERSONNEL), "BiologicalSex", f"{slug}-{_slug(sex)}"),
-            label=sex,
-            inheres_in=[person._uri],
-            created=_now(),
-            creator="generate_demo_graph",
-        )
-        graph += sex_ind.rdf()
-        participants.append(sex_ind)
-
-    if eye_color:
-        eye = EyeColor(
-            _uri=_uri(str(PERSONNEL), "EyeColor", f"{slug}-{_slug(eye_color)}"),
-            label=eye_color,
-            inheres_in=[person._uri],
-            created=_now(),
-            creator="generate_demo_graph",
-        )
-        graph += eye.rdf()
-        participants.append(eye)
-
-    if mother is not None:
-        graph.add((URIRef(person._uri), PERSONNEL.hasMother, URIRef(mother._uri)))
-    if father is not None:
-        graph.add((URIRef(person._uri), PERSONNEL.hasFather, URIRef(father._uri)))
-
-    if birth_site:
-        site = Site(
-            _uri=_uri(str(PERSONNEL), "Site", _slug(birth_site)),
-            label=birth_site,
-            created=_now(),
-            creator="generate_demo_graph",
-        )
-        graph += site.rdf()
-        sites.append(site._uri)
-
-    # A birth is instantaneous on the scale we model it: both bounds are the day
-    # itself. Every Birth process gets its own region, never a shared one.
-    if birth_date is not None:
-        temporals.append(
-            _add_temporal_region(
-                graph,
-                key=f"{slug}-birth-{birth_date.isoformat()}",
-                label=birth_date.strftime("%d/%m/%Y"),
-                start=birth_date,
-                end=birth_date,
-            )
-        )
-
-    participant_refs = [p if isinstance(p, str) else p._uri for p in participants]
-    # 1. The birth itself — the natural process, one per person.
-    birth = Birth(
-        _uri=birth_uri,
-        label=f"Birth of {person.label}",
-        hasParticipant=participant_refs,
-        occursIn=sites or None,
-        occupiesTemporalRegion=temporals or None,
-        is_registered_by=[registration_uri],
-        created=_now(),
-        creator="generate_demo_graph",
-    )
-    graph += birth.rdf()
-    graph.add((URIRef(person._uri), PERSONNEL.hasBirth, URIRef(birth_uri)))
-    graph.add((URIRef(birth_uri), PERSONNEL.isBirthOf, URIRef(person._uri)))
-
-    # 2. The source — who said what, when. Everything about the attestation
-    #    hangs off this act rather than off the registration.
-    declared_temporal_uri = _add_temporal_region(
-        graph,
-        key=f"{key}-declared-{declared_on.isoformat()}",
-        label=declared_on.isoformat(),
-        start=declared_on,
-        end=declared_on,
-    )
-
-    declaration = BirthDeclarationAct(
-        _uri=declaration_uri,
-        declared_content=declared_content
-        or f"{person.label} was born"
-        + (f" on {birth_date.strftime('%d/%m/%Y')}" if birth_date else "")
-        + (f" in {birth_site}" if birth_site else "")
-        + (f", sex {sex}" if sex else "")
-        + (f", eyes {eye_color}" if eye_color else "")
-        + (f", mother {mother.label}" if mother else "")
-        + (f", father {father.label}" if father else "")
-        + ".",
-<<<<<<< HEAD
-        occupiesTemporalRegion=[declared_temporal_uri],
-=======
-        bFO_0000199=[declared_temporal_uri],
->>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
-        ont00001833=[declarant._uri],  # has agent
-        ont00001829=record_uri,  # has output
-        hasParticipant=[declarant._uri],
-        created=_now(),
-        creator="generate_demo_graph",
-    )
-    graph += declaration.rdf()
-
-    # 3. The record — about the birth, output by the registration. It is no
-    #    longer concretized by the birth: a natural birth produces a child, not
-    #    a document.
-    record = BirthRecord(
-        _uri=record_uri,
-        label=f"Birth record — {person.label} (declared by {declarant.label})",
-        genericallyDependsOn=[person._uri],
-        isConcretizedBy=[registration_uri],
-        created=_now(),
-        creator="generate_demo_graph",
-    )
-    graph += record.rdf()
-    graph.add((URIRef(record_uri), CCO.ont00001808, URIRef(birth_uri)))
-
-    # 4. The ledger entry. Its own temporal region is ledger time, distinct
-    #    from when the birth happened and from when it was declared.
-    ledger_temporal_uri = _add_temporal_region(
-        graph,
-        key=f"{key}-ledger-{declared_on.isoformat()}",
-        label=declared_on.isoformat(),
-        start=declared_on,
-        end=declared_on,
-    )
-
-<<<<<<< HEAD
-    registration = BirthProcess(
-        _uri=registration_uri,
-        has_information_source=[declaration_uri],
-        registers_birth=[birth_uri],
-        ont00001829=record_uri,
-        concretizes=record_uri,
-        hasParticipant=[person._uri],
-        occupiesTemporalRegion=[ledger_temporal_uri],
-=======
-    registration = BirthRegistrationProcess(
-        _uri=registration_uri,
-        has_information_source=[declaration_uri],
-        registers_birth=[birth_uri],
-        ont00001829=[record_uri],
-        bFO_0000199=[ledger_temporal_uri],
->>>>>>> d0afb02f6501efac691b56296165d7e6077a0e56
-        created=_now(),
-        creator="generate_demo_graph",
-    )
-    graph += registration.rdf()
-
-    return registration_uri
 
 
 def bind_prefixes(g: Graph) -> None:
@@ -762,43 +639,27 @@ def bind_prefixes(g: Graph) -> None:
     g.bind("personnel", PERSONNEL)
     g.bind("cco", CCO)
     g.bind("bfo", BFO)
-    g.bind("rdfs", RDFS)
-    g.bind("rdf", RDF)
-    g.bind("xsd", XSD)
 
 
 def main() -> None:
-    print("Loading ontology schemas…")
+    print("Loading ontology schema…")
     schema = load_schema_graph()
+
     print("Building demo individuals…")
     instances = build_instances()
 
-    # Named-graph friendly serialization: write instances into a TriG-like
-    # Turtle file with an explicit comment; consumers load into the default
-    # graph for local SPARQL (GRAPH clauses are stripped by the export script).
     out = Graph()
-    bind_prefixes(out)
     out += schema
     out += instances
+    bind_prefixes(out)
 
     GRAPH_DIR.mkdir(parents=True, exist_ok=True)
-    # Drop noisy blank-node-heavy schema axioms from the demo instance file —
-    # keep schema headers lightly by re-serializing instances + essential types.
-    # Full schema remains available under ontologies/; the demo TTL focuses on
-    # queryable individuals for the cockpit fallback.
-    demo = Graph()
-    bind_prefixes(demo)
-    demo += instances
-    # Retain owl:Ontology headers from schema for provenance.
-    for s, p, o in schema.triples(
-        (None, RDF.type, URIRef("http://www.w3.org/2002/07/owl#Ontology"))
-    ):
-        demo.add((s, p, o))
-        for _, pp, oo in schema.triples((s, None, None)):
-            demo.add((s, pp, oo))
+    out.serialize(destination=str(GRAPH_FILE), format="turtle")
 
-    GRAPH_FILE.write_text(demo.serialize(format="turtle"), encoding="utf-8")
-    print(f"Wrote {GRAPH_FILE.relative_to(PERSONNEL_ROOT)} ({len(demo)} triples)")
+    print(
+        f"\nWrote {GRAPH_FILE.relative_to(PERSONNEL_ROOT)} "
+        f"({len(schema)} schema + {len(instances)} instance triples)"
+    )
 
 
 if __name__ == "__main__":

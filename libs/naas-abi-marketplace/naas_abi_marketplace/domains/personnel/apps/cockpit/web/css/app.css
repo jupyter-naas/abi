@@ -556,7 +556,7 @@ td.muted { color: var(--muted); font-style: italic; }
   flex-wrap: wrap;
   gap: 0.5rem 0.85rem;
   align-items: center;
-  max-width: min(calc(100% - 16rem), 42rem);
+  max-width: min(calc(100% - 13rem), 44rem);
   padding: 0.55rem 0.75rem;
   background: color-mix(in srgb, var(--panel) 92%, transparent);
   backdrop-filter: blur(6px);
@@ -568,14 +568,25 @@ td.muted { color: var(--muted); font-style: italic; }
   gap: 0.35rem;
   font-size: 0.82rem;
   color: var(--muted);
-  min-width: min(100%, 280px);
+  min-width: 0;
+  flex: 1 1 14rem;
 }
 .graph-search input {
+  min-width: 0;
   font: inherit;
   color: var(--ink);
   background: color-mix(in srgb, var(--ink) 5%, var(--panel));
   border: none;
   padding: 0.45rem 0.65rem;
+}
+/* Distance and Classes sit side by side and shrink together rather than wrapping. */
+.graph-filters {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.85rem;
+  flex: 1 1 18rem;
+  min-width: 0;
 }
 .graph-distance {
   display: flex;
@@ -583,9 +594,11 @@ td.muted { color: var(--muted); font-style: italic; }
   gap: 0.35rem;
   font-size: 0.82rem;
   color: var(--muted);
-  min-width: 11rem;
+  flex: 1 1 8rem;
+  min-width: 0;
 }
 .graph-distance select {
+  min-width: 0;
   font: inherit;
   color: var(--ink);
   background: color-mix(in srgb, var(--ink) 5%, var(--panel));
@@ -605,10 +618,12 @@ td.muted { color: var(--muted); font-style: italic; }
   gap: 0.35rem;
   font-size: 0.82rem;
   color: var(--muted);
-  min-width: 11rem;
+  flex: 1 1 9rem;
+  min-width: 0;
 }
 .graph-classes-toggle {
   display: flex;
+  min-width: 0;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
@@ -746,15 +761,6 @@ td.muted { color: var(--muted); font-style: italic; }
   border-radius: 50%;
   box-sizing: border-box;
 }
-.graph-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.82rem;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.graph-toggle input:disabled + span { opacity: 0.55; }
 
 .graph-stage {
   position: relative;

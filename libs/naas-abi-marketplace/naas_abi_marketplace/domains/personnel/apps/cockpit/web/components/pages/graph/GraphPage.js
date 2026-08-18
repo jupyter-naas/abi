@@ -13,7 +13,6 @@ function esc(s) {
 }
 
 const DISTANCE_KEY = "cockpit-graph-distance";
-const SOURCES_KEY = "cockpit-graph-show-sources";
 const HIDDEN_CLASSES_KEY = "cockpit-graph-hidden-classes";
 const MAX_PROCESSES_PER_CLASS = 10;
 const MIN_SCALE = 0.25;
@@ -108,27 +107,12 @@ function suppressOldProcesses(records, limit = MAX_PROCESSES_PER_CLASS) {
   return suppressed;
 }
 
-/**
- * Merge relation lists by triple identity. `relations` and `allRelations` come from the same
- * payload but are parsed into distinct objects, so a Set keyed on identity would not dedupe.
- */
-function dedupeRelations(relations) {
-  const seen = new Map();
-  for (const rel of relations) {
-    const key = `${rel.from}\0${rel.to}\0${rel.predicateUri}\0${rel.predicateLabel}`;
-    if (!seen.has(key)) seen.set(key, rel);
-  }
-  return [...seen.values()];
-}
-
-function collectVisibleGraph(adj, rootId, distance, showSources) {
+function collectVisibleGraph(adj, rootId, distance) {
   const maxDistance = Math.max(1, Math.floor(distance));
   const suppressed = adj.suppressedIds || new Set();
-  const relations = (
-    showSources
-      ? dedupeRelations([...(adj.relations || []), ...(adj.allRelations || [])])
-      : (adj.relations || []).filter((rel) => rel.canvas !== false)
-  ).filter((rel) => !suppressed.has(rel.from) && !suppressed.has(rel.to));
+  const relations = (adj.relations || [])
+    .filter((rel) => rel.canvas !== false)
+    .filter((rel) => !suppressed.has(rel.from) && !suppressed.has(rel.to));
   const adjacency = new Map();
 
   for (const rel of relations) {
@@ -1382,7 +1366,6 @@ function syncGraphFiltersToUrl(personId, distance) {
 export function mountGraphPage(el, data) {
   const adj = buildGraphIndex(data);
   adj.ledgerProcesses = data.ledgerProcesses || [];
-  adj.allRelations = data.allRelations || data.relations || [];
   const lookup = {
     peopleById: adj.peopleById,
     processesById: adj.processesById,
@@ -1400,7 +1383,6 @@ export function mountGraphPage(el, data) {
   const initialFilters = graphFiltersFromUrl(people, storedDistance);
   let selectedId = initialFilters.selectedId;
   let distance = initialFilters.distance;
-  let showSources = sessionStorage.getItem(SOURCES_KEY) === "1";
   // Deselected classes are stored, not selected ones, so classes that only
   // appear at a larger distance start out visible.
   let hiddenClasses = new Set(readStoredHiddenClasses());
@@ -1414,7 +1396,7 @@ export function mountGraphPage(el, data) {
 
   function paint() {
     const person = people.find((p) => p.id === selectedId) || null;
-    const reachable = person ? collectVisibleGraph(adj, person.id, distance, showSources) : null;
+    const reachable = person ? collectVisibleGraph(adj, person.id, distance) : null;
     const classOptions = reachable ? visibleClassOptions(reachable) : [];
     const visible = reachable ? applyClassFilter(reachable, hiddenClasses, person.id) : null;
 
@@ -1429,18 +1411,16 @@ export function mountGraphPage(el, data) {
                     <input type="search" id="graph-person-search" placeholder="Search people…" value="${esc(person?.label || "")}" autocomplete="off" />
                     <ul class="graph-suggestions" id="graph-suggestions" hidden></ul>
                   </label>
-                  <label class="graph-distance"><span>Distance</span>
-                    <select id="graph-distance">
-                      <option value="1" ${distance === 1 ? "selected" : ""}>Distance 1</option>
-                      <option value="2" ${distance === 2 ? "selected" : ""}>Distance 2</option>
-                      <option value="3" ${distance === 3 ? "selected" : ""}>Distance 3</option>
-                    </select>
-                  </label>
-                  ${renderClassFilter(classOptions, hiddenClasses)}
-                  <label class="graph-toggle">
-                    <input type="checkbox" id="graph-show-sources" ${showSources ? "checked" : ""} />
-                    <span>Show ledger sources</span>
-                  </label>
+                  <div class="graph-filters">
+                    <label class="graph-distance"><span>Distance</span>
+                      <select id="graph-distance">
+                        <option value="1" ${distance === 1 ? "selected" : ""}>Distance 1</option>
+                        <option value="2" ${distance === 2 ? "selected" : ""}>Distance 2</option>
+                        <option value="3" ${distance === 3 ? "selected" : ""}>Distance 3</option>
+                      </select>
+                    </label>
+                    ${renderClassFilter(classOptions, hiddenClasses)}
+                  </div>
                 </div>
                 <div class="graph-legend">${renderLegend()}</div>
                 <div class="graph-zoom"><button type="button" id="graph-zoom-in" title="Zoom in">+</button><button type="button" id="graph-zoom-out" title="Zoom out">−</button><button type="button" id="graph-zoom-reset" title="Fit view">⟲</button></div>
@@ -1479,12 +1459,6 @@ export function mountGraphPage(el, data) {
       syncGraphFiltersToUrl(selectedId, distance);
       paint();
     });
-    el.querySelector("#graph-show-sources")?.addEventListener("change", (e) => {
-      showSources = e.target.checked;
-      sessionStorage.setItem(SOURCES_KEY, showSources ? "1" : "0");
-      paint();
-    });
-
     const classToggle = el.querySelector("#graph-classes-toggle");
     const classMenu = el.querySelector("#graph-classes-menu");
     if (classToggle && classMenu) {
