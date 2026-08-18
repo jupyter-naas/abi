@@ -73,11 +73,10 @@ The adapter handles this automatically:
 
 Write serialisation (distributed lock)
 ---------------------------------------
-By default the adapter uses a ``threading.Lock`` to prevent concurrent writes
-from the *same process* reaching Fuseki simultaneously.  For multi-process or
+The adapter uses a ``threading.Lock`` to prevent concurrent writes from the
+same adapter instance reaching Fuseki simultaneously. For multi-process or
 multi-instance deployments — where multiple adapter instances point at the same
-Fuseki dataset — you can inject a ``KeyValueService`` to promote that lock to a
-*distributed* lock:
+Fuseki dataset — you can inject a ``KeyValueService`` to add a distributed lock:
 
 .. code-block:: python
 
@@ -90,7 +89,7 @@ Fuseki dataset — you can inject a ``KeyValueService`` to promote that lock to 
         key_value_service=kv,
     )
 
-When a ``KeyValueService`` is provided:
+When a ``KeyValueService`` is provided, both locks are used:
 
 - Acquisition uses ``set_if_not_exists(key, token, ttl=timeout+10)`` — atomic
   across processes via the underlying store (e.g. Redis).
@@ -174,7 +173,8 @@ class ApacheJenaTDB2(ITripleStorePort):
         # gets its own lock namespace in the key-value store.
         _url_hash = hashlib.sha256(jena_tdb2_url.encode()).hexdigest()[:16]
         self._dataset_lock_key = f"fuseki:write_lock:{_url_hash}"
-        # Fallback thread lock used when no KeyValueService is provided.
+        # Always serialize writes from this adapter instance before acquiring
+        # the optional cross-process lock.
         self._write_lock = threading.Lock()
 
         self._test_connection()
@@ -305,62 +305,62 @@ class ApacheJenaTDB2(ITripleStorePort):
     def _acquire_write_lock(self) -> Generator[None, None, None]:
         """Acquire a write lock appropriate for the deployment topology.
 
-        - With a ``KeyValueService``: acquires a distributed lock via
-          ``set_if_not_exists`` so writes are serialised across all processes
-          and service instances pointing at the same Fuseki dataset.
-        - Without: acquires ``self._write_lock`` (``threading.Lock``) to
-          serialise writes within the current process only.
+        The process-local ``threading.Lock`` is always acquired first. With a
+        ``KeyValueService``, a distributed lock is then acquired via
+        ``set_if_not_exists`` so writes are also serialised across all processes
+        and service instances pointing at the same Fuseki dataset.
 
         In both cases the same exponential back-off / retry parameters
         (``max_retries``, ``retry_delay``) are used for acquisition attempts.
         """
-        if self._key_value_service is None:
-            with self._write_lock:
+        with self._write_lock:
+            if self._key_value_service is None:
                 yield
-            return
+                return
 
-        # --- Distributed lock path ---
-        # Each acquisition uses a unique random token so that only the exact
-        # caller that acquired the lock can release it (prevents accidental
-        # release of another holder's lock after a long retry pause).
-        lock_token = os.urandom(16)
-        # TTL = request timeout + buffer; self-heals after process crash.
-        lock_ttl = self.timeout + 10
+            # --- Distributed lock path ---
+            # Each acquisition uses a unique random token so that only the exact
+            # caller that acquired the lock can release it (prevents accidental
+            # release of another holder's lock after a long retry pause).
+            lock_token = os.urandom(16)
+            # TTL = request timeout + buffer; self-heals after process crash.
+            lock_ttl = self.timeout + 10
 
-        acquired = False
-        for attempt in range(self.max_retries + 1):
-            if self._key_value_service.set_if_not_exists(
-                self._dataset_lock_key, lock_token, ttl=lock_ttl
-            ):
-                acquired = True
-                break
-            if attempt < self.max_retries:
-                delay = self.retry_delay * (2 ** attempt) + random.uniform(0, 0.1)
-                logger.warning(
-                    "Fuseki distributed write lock busy (attempt %d/%d); waiting %.2fs",
-                    attempt + 1,
-                    self.max_retries + 1,
-                    delay,
+            acquired = False
+            for attempt in range(self.max_retries + 1):
+                if self._key_value_service.set_if_not_exists(
+                    self._dataset_lock_key, lock_token, ttl=lock_ttl
+                ):
+                    acquired = True
+                    break
+                if attempt < self.max_retries:
+                    delay = self.retry_delay * (2 ** attempt) + random.uniform(0, 0.1)
+                    logger.warning(
+                        "Fuseki distributed write lock busy (attempt %d/%d); "
+                        "waiting %.2fs",
+                        attempt + 1,
+                        self.max_retries + 1,
+                        delay,
+                    )
+                    time.sleep(delay)
+
+            if not acquired:
+                raise Exceptions.RequestError(
+                    operation="acquire_write_lock",
+                    message=(
+                        f"Could not acquire distributed write lock for "
+                        f"{self.jena_tdb2_url} after {self.max_retries + 1} attempts"
+                    ),
+                    endpoint=self.jena_tdb2_url,
+                    attempts=self.max_retries + 1,
                 )
-                time.sleep(delay)
 
-        if not acquired:
-            raise Exceptions.RequestError(
-                operation="acquire_write_lock",
-                message=(
-                    f"Could not acquire distributed write lock for "
-                    f"{self.jena_tdb2_url} after {self.max_retries + 1} attempts"
-                ),
-                endpoint=self.jena_tdb2_url,
-                attempts=self.max_retries + 1,
-            )
-
-        try:
-            yield
-        finally:
-            self._key_value_service.delete_if_value_matches(
-                self._dataset_lock_key, lock_token
-            )
+            try:
+                yield
+            finally:
+                self._key_value_service.delete_if_value_matches(
+                    self._dataset_lock_key, lock_token
+                )
 
     def _post_update(self, sparql: str) -> requests.Response:
         """POST to the SPARQL update endpoint, retrying on transient 500/503.
