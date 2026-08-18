@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v2.26.2 (2026-08-18)
+
+### Bug Fixes
+
+- **rabbitmq**: Add thread-safe locking to publish calls
+  ([`005efa3`](https://github.com/jupyter-naas/abi/commit/005efa3e0f7659a258c02a441d872923a2499f7c))
+
+- **triple_store**: Clarify and improve distributed write lock
+  ([`005efa3`](https://github.com/jupyter-naas/abi/commit/005efa3e0f7659a258c02a441d872923a2499f7c))
+
+
 ## v2.26.1 (2026-08-17)
 
 ### Bug Fixes
