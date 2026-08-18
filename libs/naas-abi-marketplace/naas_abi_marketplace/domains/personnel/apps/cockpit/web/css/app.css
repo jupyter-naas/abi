@@ -869,6 +869,16 @@ td.muted { color: var(--muted); font-style: italic; }
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
+.graph-param select {
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--ink);
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, var(--ink) 4%, var(--panel));
+  cursor: pointer;
+}
 .graph-param input[type="range"] {
   width: 100%;
   margin: 0;

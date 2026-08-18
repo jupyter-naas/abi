@@ -35,6 +35,36 @@ const GRAPH_PARAM_DEFS = {
     default: true,
     hint: "Run the force simulation. Off leaves every node where the layout first placed it.",
   },
+  view: {
+    label: "View",
+    type: "select",
+    default: "2d",
+    options: [
+      { value: "2d", label: "2D" },
+      { value: "3d", label: "3D" },
+    ],
+    hint: "3D gives every cluster its own depth and projects the graph in perspective. Drag the background to orbit it; nodes cannot be dragged while orbiting.",
+  },
+  clusterBy: {
+    label: "Cluster by",
+    type: "select",
+    default: "process",
+    options: [
+      { value: "none", label: "Nothing" },
+      { value: "process", label: "Act of working" },
+      { value: "bucket", label: "BFO bucket" },
+    ],
+    hint: "Pull related nodes into groups instead of spreading them evenly. By act of working, each job gathers its own organization, site, role and dates; by BFO bucket, all the people group, all the sites group, and so on.",
+  },
+  clusterPull: {
+    label: "Cluster pull",
+    min: 0,
+    max: 100,
+    step: 5,
+    default: 50,
+    unit: "%",
+    hint: "How tightly each group is drawn together. At 0 clustering is off; raise it for compact, clearly separated groups.",
+  },
   linkDistance: {
     label: "Link length",
     min: 80,
@@ -107,6 +137,8 @@ function readStoredParams() {
       const value = stored[key];
       if (def.type === "toggle") {
         if (typeof value === "boolean") params[key] = value;
+      } else if (def.type === "select") {
+        if (def.options.some((option) => option.value === value)) params[key] = value;
       } else if (Number.isFinite(value)) {
         params[key] = Math.min(def.max, Math.max(def.min, value));
       }
@@ -532,6 +564,7 @@ function resolveOverlaps(
 function seedSemanticLayout(focusNode, workingNode, nodes, edges, focusPersonId) {
   focusNode.x = 0;
   focusNode.y = 0;
+  focusNode.z = 0;
   const processRoots = nodes
     .filter(
       (node) =>
@@ -554,6 +587,7 @@ function seedSemanticLayout(focusNode, workingNode, nodes, edges, focusPersonId)
       const radius = 170 + Math.floor(index / 8) * 170;
       node.x = Math.cos(angle) * radius;
       node.y = Math.sin(angle) * radius;
+      node.z = Math.sin(index * 2.399963) * radius * 0.6;
       node.rayId = null;
       node.radialLevel = Math.floor(index / 8) + 1;
     });
@@ -614,12 +648,18 @@ function seedSemanticLayout(focusNode, workingNode, nodes, edges, focusPersonId)
     assignments.set(node.id, { rootId: root.id, hop: 1 });
   });
 
-  const minimumRootSpacing = GRAPH_NODE_RADIUS * 2 + 48;
+  const clustered = graphParams.clusterBy !== "none" && graphParams.clusterPull > 0;
+  // A cluster occupies a disc around its process, so the processes themselves
+  // have to sit far enough apart for those discs not to overlap.
+  const clusterRadius = GRAPH_NODE_RADIUS + graphParams.nodeMinGap;
+  const minimumRootSpacing = clustered
+    ? clusterRadius * 4.4
+    : GRAPH_NODE_RADIUS * 2 + 48;
   const rootRadius =
     processRoots.length === 1
       ? PROCESS_ROOT_RADIUS
       : Math.max(
-          PROCESS_ROOT_RADIUS,
+          clustered ? minimumRootSpacing : PROCESS_ROOT_RADIUS,
           minimumRootSpacing / (2 * Math.sin(Math.PI / processRoots.length))
         );
   const ringGap = 180;
@@ -650,6 +690,10 @@ function seedSemanticLayout(focusNode, workingNode, nodes, edges, focusPersonId)
     root.rayId = root.id;
     root.radialLevel = 1;
     root.isProcessAnchor = true;
+    // Depth is fixed per cluster: the golden angle spreads the processes
+    // through the z range without any two landing on the same plane.
+    const rootZ = Math.sin(rayIndex * 2.399963) * (rootRadius * 0.85);
+    root.z = rootZ;
 
     const members = nodes
       .filter(
@@ -680,17 +724,34 @@ function seedSemanticLayout(focusNode, workingNode, nodes, edges, focusPersonId)
     }
 
     for (const [level, levelNodes] of levels.entries()) {
-      const radius = rootRadius + (level - 1) * ringGap;
       levelNodes.forEach((node, index) => {
-        const offset =
-          levelNodes.length === 1
-            ? 0
-            : -sectorSpan / 2 + (sectorSpan * index) / (levelNodes.length - 1);
-        const angle = rayAngle + offset;
-        node.x = Math.cos(angle) * radius;
-        node.y = Math.sin(angle) * radius;
+        // Declared out here because the depth below needs it too; each branch
+        // scoped its own copy, which is what broke the 3D view.
+        let angle;
+        if (clustered) {
+          // Orbit the process: a compact group centred on its own act.
+          const ringRadius = clusterRadius * level * 0.95;
+          angle =
+            rayAngle +
+            Math.PI +
+            (Math.PI * 2 * index) / Math.max(1, levelNodes.length) +
+            level * 0.6;
+          node.x = root.x + Math.cos(angle) * ringRadius;
+          node.y = root.y + Math.sin(angle) * ringRadius;
+        } else {
+          const radius = rootRadius + (level - 1) * ringGap;
+          const offset =
+            levelNodes.length === 1
+              ? 0
+              : -sectorSpan / 2 + (sectorSpan * index) / (levelNodes.length - 1);
+          angle = rayAngle + offset;
+          node.x = Math.cos(angle) * radius;
+          node.y = Math.sin(angle) * radius;
+        }
         node.rayId = root.id;
         node.radialLevel = level;
+        // Members sit around their process in depth as well as in plane.
+        node.z = rootZ + Math.cos(angle + level) * (clusterRadius * 0.6);
       });
     }
   });
@@ -803,13 +864,63 @@ function annotateEdgeCurves(edges) {
   }
 }
 
+const CAMERA_DISTANCE = 2400;
+
+/** Screen-space X of a node: the projection in 3D, the raw position in 2D. */
+function viewX(node) {
+  return node._px ?? node.x;
+}
+
+function viewY(node) {
+  return node._py ?? node.y;
+}
+
+/** Perspective scale at a node's depth. 1 in 2D, and in front-to-back order. */
+function viewScale(node) {
+  return node._ds ?? 1;
+}
+
+/**
+ * Rotate every node about the vertical then horizontal axis and project.
+ * The simulation stays two-dimensional; z is fixed per cluster at seed time,
+ * so orbiting reveals the grouping as depth rather than re-running any physics.
+ */
+function projectNodes(nodes, yaw, pitch) {
+  if (graphParams.view !== "3d") {
+    for (const node of nodes) {
+      node._px = undefined;
+      node._py = undefined;
+      node._ds = 1;
+      node._depth = 0;
+    }
+    return;
+  }
+  const cosYaw = Math.cos(yaw);
+  const sinYaw = Math.sin(yaw);
+  const cosPitch = Math.cos(pitch);
+  const sinPitch = Math.sin(pitch);
+  for (const node of nodes) {
+    const z = node.z || 0;
+    const x1 = node.x * cosYaw + z * sinYaw;
+    const z1 = -node.x * sinYaw + z * cosYaw;
+    const y1 = node.y * cosPitch - z1 * sinPitch;
+    const z2 = node.y * sinPitch + z1 * cosPitch;
+    // Clamped so a node level with the camera cannot blow the scale up.
+    const k = CAMERA_DISTANCE / Math.max(400, CAMERA_DISTANCE + z2);
+    node._px = x1 * k;
+    node._py = y1 * k;
+    node._ds = k;
+    node._depth = z2;
+  }
+}
+
 function nodeBoundaryPoint(from, to, radius) {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
+  const dx = viewX(to) - viewX(from);
+  const dy = viewY(to) - viewY(from);
   const dist = Math.hypot(dx, dy) || 1;
   return {
-    x: from.x + (dx / dist) * radius,
-    y: from.y + (dy / dist) * radius,
+    x: viewX(from) + (dx / dist) * radius,
+    y: viewY(from) + (dy / dist) * radius,
   };
 }
 
@@ -830,8 +941,8 @@ function tangentOnQuadratic(t, start, control, end) {
 }
 
 function edgeGeometry(edge) {
-  const startRadius = graphNodeRadius(edge.a) + 4;
-  const endRadius = graphNodeRadius(edge.b) + 4;
+  const startRadius = graphNodeRadius(edge.a) * viewScale(edge.a) + 4;
+  const endRadius = graphNodeRadius(edge.b) * viewScale(edge.b) + 4;
   const start = nodeBoundaryPoint(edge.a, edge.b, startRadius);
   const end = nodeBoundaryPoint(edge.b, edge.a, endRadius);
   const midX = (start.x + end.x) / 2;
@@ -853,6 +964,19 @@ function edgeGeometry(edge) {
     control: { x: midX + normalX * offset * sign, y: midY + normalY * offset * sign },
     curved: true,
   };
+}
+
+/**
+ * Group a node belongs to. `rayId` is assigned by the seeding pass, which
+ * already walks every class back to its nearest process, so clustering by act
+ * of working needs no traversal of its own.
+ */
+function clusterKeyOf(node) {
+  if (graphParams.clusterBy === "process") return node.rayId || node.id;
+  if (graphParams.clusterBy === "bucket") {
+    return node.entity?.bfoBucket || node.person?.bfoBucket || node.kind;
+  }
+  return null;
 }
 
 function classPhysicsStep(nodes, edges, alpha) {
@@ -933,6 +1057,36 @@ function classPhysicsStep(nodes, edges, alpha) {
     if (b.physicsEnabled) {
       b.vx -= forceX;
       b.vy -= forceY;
+    }
+  }
+
+  // Clustering anchors each group to where the seeding pass put it. The seed
+  // already fans the acts of working out into separate angular sectors, so the
+  // groups start well apart; emergent forces alone could not reproduce that,
+  // because all-pairs repulsion cancels a pull toward a live centroid and the
+  // groups end up evenly mixed. Pulling toward the group's *seeded* centre
+  // instead keeps the sectors intact while the simulation still handles
+  // spacing inside each one.
+  if (graphParams.clusterBy !== "none" && graphParams.clusterPull > 0) {
+    const groups = new Map();
+    for (const node of nodes) {
+      const key = clusterKeyOf(node);
+      if (!key) continue;
+      const entry = groups.get(key) || { x: 0, y: 0, count: 0 };
+      entry.x += node.homeX ?? node.x;
+      entry.y += node.homeY ?? node.y;
+      entry.count += 1;
+      groups.set(key, entry);
+    }
+
+    const pull = (graphParams.clusterPull / 100) * 0.05;
+    for (const node of nodes) {
+      if (!node.physicsEnabled) continue;
+      const entry = groups.get(clusterKeyOf(node));
+      // A group of one has no centre to be drawn toward.
+      if (!entry || entry.count < 2) continue;
+      node.vx += (entry.x / entry.count - node.x) * pull * alpha;
+      node.vy += (entry.y / entry.count - node.y) * pull * alpha;
     }
   }
 
@@ -1093,7 +1247,9 @@ export {
  * legible and the canvas is pannable to reach the rest.
  */
 function resetGraphView(canvas, focusNode, setPanScale) {
-  const scale = graphParams.zoom;
+  // Perspective pushes the near half of the graph outward, so the same zoom
+  // number lands much closer in 3D than in 2D.
+  const scale = graphParams.zoom * (graphParams.view === "3d" ? 0.55 : 1);
   setPanScale({
     scale,
     panX: -(focusNode?.x ?? 0) * scale,
@@ -1129,6 +1285,9 @@ function mountGraphCanvas(root, options) {
   let pointerStart = null;
   const layoutDone = true;
   let stopPhysics = null;
+  // Camera orientation for the 3D view. Ignored entirely in 2D.
+  const orbit = { yaw: -0.6, pitch: 0.35 };
+  let orbiting = null;
 
   function setPanScale({ scale: s, panX, panY }) {
     scale = s;
@@ -1173,7 +1332,7 @@ function mountGraphCanvas(root, options) {
   }
 
   function nodeRadius(n) {
-    return graphNodeRadius(n);
+    return graphNodeRadius(n) * viewScale(n);
   }
 
   function drawEdgeLabel(text, x, y) {
@@ -1246,7 +1405,7 @@ function mountGraphCanvas(root, options) {
   function drawNodeBody(n) {
     const r = nodeRadius(n);
     ctx.beginPath();
-    ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+    ctx.arc(viewX(n), viewY(n), r, 0, Math.PI * 2);
     ctx.fillStyle = n.palette.color;
     ctx.fill();
     ctx.strokeStyle = n.palette.border;
@@ -1263,15 +1422,20 @@ function mountGraphCanvas(root, options) {
 
   function drawNodeLabel(n) {
     const { fontSize, lineHeight, lines } = nodeLabelLayout(n);
-    ctx.font = `600 ${fontSize}px var(--font-body), sans-serif`;
+    const depth = viewScale(n);
+    // Labels on distant nodes would be unreadable anyway, and drawing them
+    // only adds clutter behind the nodes in front.
+    if (depth < 0.72) return;
+    ctx.font = `600 ${fontSize * depth}px var(--font-body), sans-serif`;
     ctx.fillStyle = n.dashed ? "rgba(255,255,255,0.82)" : "#ffffff";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const blockHeight = lines.length * lineHeight;
-    let y = n.y - blockHeight / 2 + lineHeight / 2;
+    const scaledLineHeight = lineHeight * depth;
+    const blockHeight = lines.length * scaledLineHeight;
+    let y = viewY(n) - blockHeight / 2 + scaledLineHeight / 2;
     for (const line of lines) {
-      ctx.fillText(line, n.x, y);
-      y += lineHeight;
+      ctx.fillText(line, viewX(n), y);
+      y += scaledLineHeight;
     }
   }
 
@@ -1279,19 +1443,25 @@ function mountGraphCanvas(root, options) {
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
     ctx.clearRect(0, 0, w, h);
+    projectNodes(nodes, orbit.yaw, orbit.pitch);
     ctx.save();
     ctx.translate(w / 2 + pan.x, h / 2 + pan.y);
     ctx.scale(scale, scale);
     for (const e of edges) drawEdge(e);
-    for (const n of nodes) drawNodeBody(n);
-    for (const n of nodes) drawNodeLabel(n);
+    // Painter's algorithm: furthest first, so near nodes occlude far ones.
+    const ordered =
+      graphParams.view === "3d"
+        ? [...nodes].sort((a, b) => (b._depth ?? 0) - (a._depth ?? 0))
+        : nodes;
+    for (const n of ordered) drawNodeBody(n);
+    for (const n of ordered) drawNodeLabel(n);
     ctx.restore();
   }
 
   function hit(pos) {
     for (let i = nodes.length - 1; i >= 0; i--) {
       const n = nodes[i];
-      if (Math.hypot(n.x - pos.x, n.y - pos.y) <= nodeRadius(n) + 5) return n;
+      if (Math.hypot(viewX(n) - pos.x, viewY(n) - pos.y) <= nodeRadius(n) + 5) return n;
     }
     return null;
   }
@@ -1301,12 +1471,16 @@ function mountGraphCanvas(root, options) {
     const pos = screenToWorld(ev.clientX - rect.left, ev.clientY - rect.top);
     const node = hit(pos);
     pointerStart = node ? { node, x: ev.clientX, y: ev.clientY, moved: false } : null;
-    if (node && !node.pinned) {
+    const threeD = graphParams.view === "3d";
+    if (node && !node.pinned && !threeD) {
       dragging = node;
       offset = { x: pos.x - node.x, y: pos.y - node.y };
     } else if (node) {
       selected = node;
       showDetail(node);
+    } else if (threeD) {
+      // Background drag orbits the camera rather than panning the plane.
+      orbiting = { x: ev.clientX, y: ev.clientY, yaw: orbit.yaw, pitch: orbit.pitch };
     } else {
       panning = { x: ev.clientX - pan.x, y: ev.clientY - pan.y };
     }
@@ -1317,7 +1491,14 @@ function mountGraphCanvas(root, options) {
     if (pointerStart && Math.hypot(ev.clientX - pointerStart.x, ev.clientY - pointerStart.y) > 4) {
       pointerStart.moved = true;
     }
-    if (dragging) {
+    if (orbiting) {
+      orbit.yaw = orbiting.yaw + (ev.clientX - orbiting.x) * 0.008;
+      orbit.pitch = Math.max(
+        -Math.PI / 2.2,
+        Math.min(Math.PI / 2.2, orbiting.pitch + (ev.clientY - orbiting.y) * 0.006)
+      );
+      draw();
+    } else if (dragging) {
       const pos = screenToWorld(ev.clientX - rect.left, ev.clientY - rect.top);
       dragging.x = pos.x - offset.x;
       dragging.y = pos.y - offset.y;
@@ -1340,6 +1521,7 @@ function mountGraphCanvas(root, options) {
     }
     dragging = null;
     panning = null;
+    orbiting = null;
     pointerStart = null;
   });
   canvas.addEventListener("wheel", (ev) => {
@@ -1420,6 +1602,19 @@ function formatParamValue(key, value) {
 function renderParamsPanel(params, distance, open) {
   const rows = Object.entries(GRAPH_PARAM_DEFS)
     .map(([key, def]) => {
+      if (def.type === "select") {
+        const options = def.options
+          .map(
+            (option) =>
+              `<option value="${option.value}"${params[key] === option.value ? " selected" : ""}>${esc(option.label)}</option>`
+          )
+          .join("");
+        return `<label class="graph-param">
+          <span class="graph-param-head">${esc(def.label)}</span>
+          <select data-param="${key}">${options}</select>
+          <em>${esc(def.hint)}</em>
+        </label>`;
+      }
       if (def.type === "toggle") {
         return `<label class="graph-param graph-param-toggle">
           <span class="graph-param-head">${esc(def.label)}
@@ -1578,7 +1773,7 @@ export function mountGraphPage(el, data) {
                 ${graphParams.legend ? `<div class="graph-legend">${renderLegend()}</div>` : ""}
                 ${renderParamsPanel(graphParams, distance, paramsOpen)}
                 <div class="graph-zoom"><button type="button" id="graph-zoom-in" title="Zoom in">+</button><button type="button" id="graph-zoom-out" title="Zoom out">−</button><button type="button" id="graph-zoom-reset" title="Reset view">⟲</button></div>
-                <p class="graph-hint">Focus at center · every other node is simulated · drag to pan · scroll to zoom</p>
+                <p class="graph-hint">${graphParams.view === "3d" ? "Drag to orbit" : "Focus at center · drag to pan"} · every other node is simulated · scroll to zoom</p>
               </div>
               <aside class="graph-detail" id="graph-detail"></aside>
             </div></div>`
@@ -1621,6 +1816,7 @@ export function mountGraphPage(el, data) {
     for (const input of el.querySelectorAll("[data-param]")) {
       const key = input.dataset.param;
       input.addEventListener("input", (e) => {
+        if (GRAPH_PARAM_DEFS[key]?.type === "select") return;
         const readout = el.querySelector(`[data-param-value="${key}"]`);
         if (!readout) return;
         readout.textContent =
@@ -1635,6 +1831,9 @@ export function mountGraphPage(el, data) {
           syncGraphFiltersToUrl(selectedId, distance);
         } else if (GRAPH_PARAM_DEFS[key]?.type === "toggle") {
           graphParams[key] = e.target.checked;
+          persistParams();
+        } else if (GRAPH_PARAM_DEFS[key]?.type === "select") {
+          graphParams[key] = e.target.value;
           persistParams();
         } else {
           graphParams[key] = Number(e.target.value);
