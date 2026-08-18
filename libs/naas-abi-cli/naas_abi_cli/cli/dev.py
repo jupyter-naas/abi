@@ -361,9 +361,12 @@ def _launch_api(
     # Keep config-templated frontend URLs in sync when they reference
     # {{ secret.PUBLIC_WEB_HOST }}.
     env["PUBLIC_WEB_HOST"] = f"{BROWSER_HOST}:{nexus_port}"
-    # Module asset URLs are built from public_api_host / NEXUS_API_URL. The
-    # engine default is localhost:9879. This process is on a worktree port.
+    # Module asset URLs are built from public_api_host. The dotenv adapter
+    # prefers .env over process env, so PUBLIC_API_HOST / NEXUS_API_URL here
+    # only win when those keys are absent from .env. ABI_DEV_PUBLIC_API_ORIGIN
+    # is read by public_api_host() from the process env and is never a secret.
     api_origin = f"http://{BROWSER_HOST}:{spec.port}"
+    env["ABI_DEV_PUBLIC_API_ORIGIN"] = api_origin
     env["PUBLIC_API_HOST"] = f"{BROWSER_HOST}:{spec.port}"
     env["NEXUS_API_URL"] = api_origin
     cmd = ["uv", "run", "python", "-m", "naas_abi_core.apps.api.api"]

@@ -10,15 +10,6 @@ from __future__ import annotations
 
 import os
 
-ENGINE_DEFAULT_HOSTS = frozenset(
-    {
-        "localhost",
-        "localhost:9879",
-        "127.0.0.1",
-        "127.0.0.1:9879",
-    }
-)
-
 
 def _strip_scheme(host: str) -> str:
     value = host.strip()
@@ -26,10 +17,6 @@ def _strip_scheme(host: str) -> str:
         if value.startswith(prefix):
             return value[len(prefix) :]
     return value
-
-
-def _is_engine_default(host: str) -> bool:
-    return _strip_scheme(host).rstrip("/") in ENGINE_DEFAULT_HOSTS
 
 
 def _is_loopback_hostname(host: str) -> bool:
@@ -50,17 +37,25 @@ def resolve_public_api_host(
     *,
     abi_port: str | None = None,
     browser_host: str | None = None,
+    dev_origin: str | None = None,
 ) -> str | None:
     """Pick the origin browsers should use for ``/modules`` and ``/logos``.
 
-    An explicit non-default ``public_api_host`` always wins (Docker / remote).
-    When the configured value is still the engine default (loopback + 9879, or
-    empty) and the process exported ``ABI_PORT``, use that port over ``http``.
+    ``dev_origin`` (``ABI_DEV_PUBLIC_API_ORIGIN``) wins. ``abi dev up`` sets it
+    on the process so a ``.env`` public hostname cannot shadow the allocated
+    port. Docker and remote leave it unset.
+
+    Without that, a public hostname in config is left alone. A loopback
+    (any port) plus ``ABI_PORT`` uses the live bind.
     """
+    origin = (dev_origin or "").strip()
+    if origin:
+        return _with_scheme(origin)
+
     configured = (configured or "").strip() or None
     port = (abi_port or "").strip()
 
-    if configured and not _is_engine_default(configured):
+    if configured and not _is_loopback_hostname(configured):
         return _with_scheme(configured)
 
     if port.isdigit():
@@ -76,8 +71,8 @@ def public_api_host() -> str | None:
     """Configured public API host, with a scheme.
 
     Returns ``None`` when the ABIModule instance is not initialized (e.g. unit
-    tests) and ``ABI_PORT`` is unset, so callers can fall back to a relative
-    path.
+    tests) and no live-port override is set, so callers can fall back to a
+    relative path.
     """
     configured: str | None = None
     try:
@@ -93,6 +88,7 @@ def public_api_host() -> str | None:
         configured,
         abi_port=os.environ.get("ABI_PORT"),
         browser_host=os.environ.get("ABI_DEV_BROWSER_HOST"),
+        dev_origin=os.environ.get("ABI_DEV_PUBLIC_API_ORIGIN"),
     )
 
 
