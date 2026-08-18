@@ -35,16 +35,6 @@ const GRAPH_PARAM_DEFS = {
     default: true,
     hint: "Run the force simulation. Off leaves every node where the layout first placed it.",
   },
-  view: {
-    label: "View",
-    type: "select",
-    default: "2d",
-    options: [
-      { value: "2d", label: "2D" },
-      { value: "3d", label: "3D" },
-    ],
-    hint: "3D gives every cluster its own depth and projects the graph in perspective. Drag the background to orbit it; nodes cannot be dragged while orbiting.",
-  },
   clusterBy: {
     label: "Cluster by",
     type: "select",
@@ -123,34 +113,74 @@ const GRAPH_PARAM_DEFS = {
 const DISTANCE_HINT =
   "Hops out from the selected person, who roots the graph. 1 shows what they bear or carry: acts of working, employee roles, missions, skills, profile document. 2 adds what those acts reach: organization, site, temporal region, contract, remuneration. 3 adds the instants bounding each temporal region.";
 
-function defaultGraphParams() {
-  return Object.fromEntries(
+const GRAPH_VIEWS = ["2d", "3d"];
+const GRAPH_VIEW_LABELS = { "2d": "2D view", "3d": "3D view" };
+
+/**
+ * Defaults that differ between the two views. Depth needs more room than the
+ * flat view: longer links, stronger repulsion and a wider spacing floor keep
+ * clusters legible once they are spread through z, and the simulation is given
+ * longer to settle because it has a third axis to resolve.
+ */
+const GRAPH_VIEW_DEFAULT_OVERRIDES = {
+  "3d": {
+    linkDistance: 300,
+    repulsion: 4500,
+    nodeMinGap: 150,
+    settleMs: 7000,
+    zoom: 1,
+  },
+};
+
+function defaultGraphParams(view) {
+  const base = Object.fromEntries(
     Object.entries(GRAPH_PARAM_DEFS).map(([key, def]) => [key, def.default])
   );
+  return { ...base, ...(GRAPH_VIEW_DEFAULT_OVERRIDES[view] || {}) };
 }
 
-function readStoredParams() {
-  const params = defaultGraphParams();
-  try {
-    const stored = JSON.parse(sessionStorage.getItem(PARAMS_KEY) || "{}");
-    for (const [key, def] of Object.entries(GRAPH_PARAM_DEFS)) {
-      const value = stored[key];
-      if (def.type === "toggle") {
-        if (typeof value === "boolean") params[key] = value;
-      } else if (def.type === "select") {
-        if (def.options.some((option) => option.value === value)) params[key] = value;
-      } else if (Number.isFinite(value)) {
-        params[key] = Math.min(def.max, Math.max(def.min, value));
-      }
+function coerceParams(view, stored) {
+  const params = defaultGraphParams(view);
+  for (const [key, def] of Object.entries(GRAPH_PARAM_DEFS)) {
+    const value = stored?.[key];
+    if (def.type === "toggle") {
+      if (typeof value === "boolean") params[key] = value;
+    } else if (def.type === "select") {
+      if (def.options.some((option) => option.value === value)) params[key] = value;
+    } else if (Number.isFinite(value)) {
+      params[key] = Math.min(def.max, Math.max(def.min, value));
     }
-  } catch {
-    // Malformed storage falls back to defaults.
   }
   return params;
 }
 
-// Mutated in place by the panel; the simulation reads it every tick.
-const graphParams = readStoredParams();
+/** Each view keeps its own set of values, so switching tabs does not disturb the other. */
+function readStoredState() {
+  let stored = {};
+  try {
+    stored = JSON.parse(sessionStorage.getItem(PARAMS_KEY) || "{}");
+  } catch {
+    // Malformed storage falls back to defaults.
+  }
+  const view = GRAPH_VIEWS.includes(stored.view) ? stored.view : "2d";
+  const byView = {};
+  for (const name of GRAPH_VIEWS) {
+    byView[name] = coerceParams(name, stored.byView?.[name]);
+  }
+  return { view, byView };
+}
+
+const graphState = readStoredState();
+
+// Mutated in place by the panel; the simulation reads it every tick. Holds the
+// active view's values, mirrored back into graphState on every change.
+const graphParams = { view: graphState.view, ...graphState.byView[graphState.view] };
+
+/** Point graphParams at another view's values without replacing the object. */
+function applyGraphView(view) {
+  graphParams.view = view;
+  Object.assign(graphParams, graphState.byView[view]);
+}
 // The gap floor is enforced positionally every tick - see graphParams.nodeMinGap.
 // The repulsion force alone could not guarantee it: it is scaled by alpha, so
 // as the simulation cools the push fades and nodes settle packed.
@@ -1247,9 +1277,7 @@ export {
  * legible and the canvas is pannable to reach the rest.
  */
 function resetGraphView(canvas, focusNode, setPanScale) {
-  // Perspective pushes the near half of the graph outward, so the same zoom
-  // number lands much closer in 3D than in 2D.
-  const scale = graphParams.zoom * (graphParams.view === "3d" ? 0.55 : 1);
+  const scale = graphParams.zoom;
   setPanScale({
     scale,
     panX: -(focusNode?.x ?? 0) * scale,
@@ -1296,13 +1324,35 @@ function mountGraphCanvas(root, options) {
     pan.y = panY;
   }
 
-  function showDetail(node) {
+  const body = root.querySelector(".graph-body");
+
+  function renderDetail(node) {
     if (!detail) return;
-    if (!node) {
-      detail.innerHTML = `<p class="graph-inspect-kicker">Inspect</p>${renderNodeDetail(null)}`;
-      return;
-    }
-    detail.innerHTML = `<p class="graph-inspect-kicker">Inspect</p>${renderNodeDetail(node, { focusPersonId: focusPerson.id })}`;
+    const close =
+      '<button type="button" class="graph-detail-close" id="graph-detail-close" title="Close inspector" aria-label="Close inspector">×</button>';
+    const content = node
+      ? renderNodeDetail(node, { focusPersonId: focusPerson.id })
+      : renderNodeDetail(null);
+    detail.innerHTML = `${close}<p class="graph-inspect-kicker">Inspect</p>${content}`;
+    detail
+      .querySelector("#graph-detail-close")
+      ?.addEventListener("click", closeDetail);
+  }
+
+  /** Opening and closing changes the stage width, so the canvas is resized. */
+  function setDetailOpen(open) {
+    if (!body) return;
+    body.classList.toggle("detail-open", open);
+    resize();
+  }
+
+  function closeDetail() {
+    setDetailOpen(false);
+  }
+
+  function showDetail(node) {
+    renderDetail(node);
+    setDetailOpen(true);
   }
 
   function resize() {
@@ -1598,7 +1648,7 @@ function mountGraphCanvas(root, options) {
   window.addEventListener("resize", resize);
   resize();
   selected = focusNode;
-  showDetail(focusNode);
+  renderDetail(focusNode);
   if (graphParams.physics) {
     stopPhysics = runClassPhysics(nodes, edges, focusNode, {
       onTick: draw,
@@ -1699,13 +1749,26 @@ function renderParamsPanel(params, distance, open) {
       </svg>
     </button>
     <div class="graph-params-menu" id="graph-params-menu" ${open ? "" : "hidden"}>
-      <label class="graph-param">
-        <span class="graph-param-head">Distance <strong data-param-value="distance">${distance}</strong></span>
-        <input type="range" data-param="distance" min="1" max="3" step="1" value="${distance}" />
-        <em>${esc(DISTANCE_HINT)}</em>
-      </label>
-      <hr />
-      ${rows}
+      <div class="graph-params-tabs" role="tablist">
+        ${GRAPH_VIEWS.map(
+          (view) => `<button type="button" role="tab" data-view="${view}"
+            aria-selected="${params.view === view ? "true" : "false"}"
+            class="${params.view === view ? "is-active" : ""}">${esc(GRAPH_VIEW_LABELS[view])}</button>`
+        ).join("")}
+      </div>
+      <p class="graph-params-note">${
+        params.view === "3d"
+          ? "Every cluster gets its own depth, projected in perspective. Drag the background to orbit; nodes cannot be dragged while orbiting."
+          : "The flat view. Drag the background to pan, drag a node to move it."
+      }</p>
+      <div class="graph-params-grid">
+        <label class="graph-param">
+          <span class="graph-param-head">Distance <strong data-param-value="distance">${distance}</strong></span>
+          <input type="range" data-param="distance" min="1" max="3" step="1" value="${distance}" />
+          <em>${esc(DISTANCE_HINT)}</em>
+        </label>
+        ${rows}
+      </div>
       <button type="button" id="graph-params-reset">Reset to defaults</button>
     </div>
   </div>`;
@@ -1800,7 +1863,12 @@ export function mountGraphPage(el, data) {
   syncGraphFiltersToUrl(selectedId, distance);
 
   function persistParams() {
-    sessionStorage.setItem(PARAMS_KEY, JSON.stringify(graphParams));
+    // Mirror the live values back into the active view's slot before saving,
+    // so the other view's settings survive untouched.
+    const { view, ...values } = graphParams;
+    graphState.view = view;
+    graphState.byView[view] = { ...values };
+    sessionStorage.setItem(PARAMS_KEY, JSON.stringify(graphState));
   }
 
   function persistHiddenClasses() {
@@ -1899,8 +1967,19 @@ export function mountGraphPage(el, data) {
       });
     }
 
+    for (const tab of el.querySelectorAll(".graph-params-tabs [data-view]")) {
+      tab.addEventListener("click", () => {
+        if (tab.dataset.view === graphParams.view) return;
+        // Save what the current view is showing before swapping to the other.
+        persistParams();
+        applyGraphView(tab.dataset.view);
+        persistParams();
+        paint();
+      });
+    }
+
     el.querySelector("#graph-params-reset")?.addEventListener("click", () => {
-      Object.assign(graphParams, defaultGraphParams());
+      Object.assign(graphParams, defaultGraphParams(graphParams.view));
       persistParams();
       paint();
     });
