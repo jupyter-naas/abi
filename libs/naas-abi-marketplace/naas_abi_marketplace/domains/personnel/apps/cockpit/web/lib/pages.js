@@ -14,7 +14,7 @@ export const PAGES = {
     banner: {
       type: "info",
       enabled: true,
-      text: "Hops out from the selected person: 1 shows the acts, missions, roles and skills; 2 adds organizations, sites and temporal regions; 3 adds the bounding instants.",
+      text: "Distance counts hops from the selected person, who roots the graph. 1 is what they bear or carry — acts of working, roles, missions, skills, profile document. 2 is what those acts reach — organization, site, temporal region, contract, remuneration. 3 is the instants bounding each temporal region.",
     },
   },
   processes: {

@@ -42,7 +42,7 @@ const GRAPH_PARAM_DEFS = {
     step: 10,
     default: 260,
     unit: "px",
-    hint: "Rest length of every edge. Longer links give relation labels room to sit between two nodes.",
+    hint: "How far apart the simulation tries to hold two connected nodes. Raise it to stretch the graph out and leave room for the relation name written along each line.",
   },
   repulsion: {
     label: "Repulsion",
@@ -51,7 +51,7 @@ const GRAPH_PARAM_DEFS = {
     step: 100,
     default: 3200,
     unit: "",
-    hint: "How hard each node pushes every other away. Raising it spreads the whole graph outward.",
+    hint: "How strongly every node pushes all the others away, connected or not. Raise it to spread the whole graph outward.",
   },
   nodeMinGap: {
     label: "Node spacing",
@@ -60,7 +60,7 @@ const GRAPH_PARAM_DEFS = {
     step: 5,
     default: 60,
     unit: "px",
-    hint: "Hard floor on the gap between two nodes, applied by moving them apart each tick — it holds however the forces are set.",
+    hint: "The closest two nodes are ever allowed to get. Nodes are pushed apart to honour it after every step, so it holds whatever the other settings are.",
   },
   settleMs: {
     label: "Settle time",
@@ -69,7 +69,7 @@ const GRAPH_PARAM_DEFS = {
     step: 500,
     default: 3000,
     unit: "ms",
-    hint: "How long the simulation runs before it freezes. Longer settles denser graphs; the layout stops moving after this.",
+    hint: "How long nodes keep moving before the layout freezes in place. Raise it if a crowded graph has not finished spreading out.",
   },
   zoom: {
     label: "Default zoom",
@@ -82,8 +82,10 @@ const GRAPH_PARAM_DEFS = {
   },
 };
 
+// Hops are counted from the selected person, who roots the traversal — the
+// acts of working are one hop out, not the origin.
 const DISTANCE_HINT =
-  "How many relationship hops out from the selected person to draw. 1 acts, missions, roles and skills · 2 adds organizations, sites and temporal regions · 3 adds the bounding instants.";
+  "Hops out from the selected person, who roots the graph. 1 — what they bear or carry: acts of working, employee roles, missions, skills, profile document. 2 — what those acts reach: organization, site, temporal region, contract, remuneration. 3 — the instants bounding each temporal region.";
 
 function defaultGraphParams() {
   return Object.fromEntries(
