@@ -13,6 +13,7 @@ import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFilesStore } from '@/stores/files';
 import { useOntologyStore } from '@/stores/ontology';
 import { getWorkspacePath } from './utils';
+import { WorkspaceMark } from '../workspace-mark';
 
 type SectionDef = {
   id: SidebarSection;
@@ -213,14 +214,13 @@ export function Sidebar() {
           style={{ backgroundColor: currentWorkspace?.theme?.primaryColor || '#22c55e' }}
           title={currentWorkspace?.name || 'NEXUS'}
         >
-          {currentWorkspace?.theme?.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={currentWorkspace.theme.logoUrl} alt={currentWorkspace.name} className="h-full w-full object-cover" />
-          ) : (
-            <span className="text-sm font-bold text-white">
-              {currentWorkspace?.theme?.logoEmoji || currentWorkspace?.icon || currentWorkspace?.name?.charAt(0) || 'N'}
-            </span>
-          )}
+          <WorkspaceMark
+            name={currentWorkspace?.name}
+            icon={currentWorkspace?.icon}
+            logoUrl={currentWorkspace?.theme?.logoUrl}
+            logoEmoji={currentWorkspace?.theme?.logoEmoji}
+            letterClassName="text-sm font-bold text-white"
+          />
         </button>
 
         {expanded && (
@@ -336,17 +336,19 @@ export function Sidebar() {
                 )}
               >
                 <div
-                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center overflow-hidden rounded"
-                  style={{ backgroundColor: workspace.theme?.primaryColor || '#22c55e' }}
+                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center overflow-hidden"
+                  style={{
+                    backgroundColor: workspace.theme?.primaryColor || '#22c55e',
+                    borderRadius: 0,
+                  }}
                 >
-                  {workspace.theme?.logoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={workspace.theme.logoUrl} alt={workspace.name} className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="text-xs text-white">
-                      {workspace.theme?.logoEmoji || workspace.icon || workspace.name.charAt(0)}
-                    </span>
-                  )}
+                  <WorkspaceMark
+                    name={workspace.name}
+                    icon={workspace.icon}
+                    logoUrl={workspace.theme?.logoUrl}
+                    logoEmoji={workspace.theme?.logoEmoji}
+                    letterClassName="text-xs text-white"
+                  />
                 </div>
                 <span className="flex-1 text-left font-medium">{workspace.name}</span>
                 {currentWorkspaceId === workspace.id && (

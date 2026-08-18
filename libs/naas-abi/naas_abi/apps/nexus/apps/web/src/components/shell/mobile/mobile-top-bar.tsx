@@ -13,6 +13,7 @@ import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { isMobileChatThreadOpen, parseChatRoute } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { getWorkspacePath } from '../sidebar/utils';
+import { WorkspaceMark } from '../workspace-mark';
 import { useShellTitle } from '../shell-title';
 import { resolveMobileTopBarTitle } from './mobile-top-bar-title';
 
@@ -129,21 +130,14 @@ export function MobileTopBar({
             title={currentWorkspace?.name || 'Workspace'}
             aria-label="Switch workspace"
           >
-            {currentWorkspace?.theme?.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={currentWorkspace.theme.logoUrl}
-                alt={currentWorkspace.name}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span className="text-sm font-bold text-white">
-                {currentWorkspace?.theme?.logoEmoji
-                  || currentWorkspace?.icon
-                  || currentWorkspace?.name?.charAt(0)
-                  || 'Z'}
-              </span>
-            )}
+            <WorkspaceMark
+              name={currentWorkspace?.name}
+              icon={currentWorkspace?.icon}
+              logoUrl={currentWorkspace?.theme?.logoUrl}
+              logoEmoji={currentWorkspace?.theme?.logoEmoji}
+              fallbackLetter="Z"
+              letterClassName="text-sm font-bold text-white"
+            />
           </button>
         )}
 
@@ -203,16 +197,18 @@ export function MobileTopBar({
               >
                 <div
                   className="flex h-6 w-6 flex-shrink-0 items-center justify-center overflow-hidden"
-                  style={{ backgroundColor: workspace.theme?.primaryColor || '#22c55e' }}
+                  style={{
+                    backgroundColor: workspace.theme?.primaryColor || '#22c55e',
+                    borderRadius: 0,
+                  }}
                 >
-                  {workspace.theme?.logoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={workspace.theme.logoUrl} alt={workspace.name} className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="text-xs text-white">
-                      {workspace.theme?.logoEmoji || workspace.icon || workspace.name.charAt(0)}
-                    </span>
-                  )}
+                  <WorkspaceMark
+                    name={workspace.name}
+                    icon={workspace.icon}
+                    logoUrl={workspace.theme?.logoUrl}
+                    logoEmoji={workspace.theme?.logoEmoji}
+                    letterClassName="text-xs text-white"
+                  />
                 </div>
                 <span className="flex-1 text-left font-medium">{workspace.name}</span>
                 {currentWorkspaceId === workspace.id && (
