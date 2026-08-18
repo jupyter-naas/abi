@@ -21,7 +21,99 @@ const GRAPH_NODE_RADIUS = 36;
 const NODE_LABEL_FONT_SIZE = 11;
 const NODE_LABEL_LINE_HEIGHT = 13;
 const PROCESS_ROOT_RADIUS = 320;
-const PHYSICS_SETTLE_MS = 3000;
+const PARAMS_KEY = "cockpit-graph-params";
+
+/**
+ * Live graph parameters. Everything the simulation and the initial view read
+ * comes from here rather than from a constant, so the parameters panel can
+ * change any of it and repaint without a reload.
+ */
+const GRAPH_PARAM_DEFS = {
+  physics: {
+    label: "Physics",
+    type: "toggle",
+    default: true,
+    hint: "Run the force simulation. Off leaves every node where the layout first placed it.",
+  },
+  linkDistance: {
+    label: "Link length",
+    min: 80,
+    max: 520,
+    step: 10,
+    default: 260,
+    unit: "px",
+    hint: "Rest length of every edge. Longer links give relation labels room to sit between two nodes.",
+  },
+  repulsion: {
+    label: "Repulsion",
+    min: 200,
+    max: 9000,
+    step: 100,
+    default: 3200,
+    unit: "",
+    hint: "How hard each node pushes every other away. Raising it spreads the whole graph outward.",
+  },
+  nodeMinGap: {
+    label: "Node spacing",
+    min: 0,
+    max: 180,
+    step: 5,
+    default: 60,
+    unit: "px",
+    hint: "Hard floor on the gap between two nodes, applied by moving them apart each tick — it holds however the forces are set.",
+  },
+  settleMs: {
+    label: "Settle time",
+    min: 500,
+    max: 12000,
+    step: 500,
+    default: 3000,
+    unit: "ms",
+    hint: "How long the simulation runs before it freezes. Longer settles denser graphs; the layout stops moving after this.",
+  },
+  zoom: {
+    label: "Default zoom",
+    min: 0.25,
+    max: 2.5,
+    step: 0.05,
+    default: 1,
+    unit: "×",
+    hint: "Scale the canvas opens at, and returns to with the ⟲ button. The graph may extend past the edges — drag to pan.",
+  },
+};
+
+const DISTANCE_HINT =
+  "How many relationship hops out from the selected person to draw. 1 acts, missions, roles and skills · 2 adds organizations, sites and temporal regions · 3 adds the bounding instants.";
+
+function defaultGraphParams() {
+  return Object.fromEntries(
+    Object.entries(GRAPH_PARAM_DEFS).map(([key, def]) => [key, def.default])
+  );
+}
+
+function readStoredParams() {
+  const params = defaultGraphParams();
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(PARAMS_KEY) || "{}");
+    for (const [key, def] of Object.entries(GRAPH_PARAM_DEFS)) {
+      const value = stored[key];
+      if (def.type === "toggle") {
+        if (typeof value === "boolean") params[key] = value;
+      } else if (Number.isFinite(value)) {
+        params[key] = Math.min(def.max, Math.max(def.min, value));
+      }
+    }
+  } catch {
+    // Malformed storage falls back to defaults.
+  }
+  return params;
+}
+
+// Mutated in place by the panel; the simulation reads it every tick.
+const graphParams = readStoredParams();
+// The gap floor is enforced positionally every tick — see graphParams.nodeMinGap.
+// The repulsion force alone could not guarantee it: it is scaled by alpha, so
+// as the simulation cools the push fades and nodes settle packed.
 
 function buildGraphIndex(data) {
   const peopleById = Object.fromEntries((data.people || []).map((p) => [p.id, p]));
@@ -192,13 +284,21 @@ function applyClassFilter(visible, hiddenClasses, focusPersonId) {
 }
 
 function renderPropertiesTable(properties) {
+  // Property and label share a cell, stacked. As separate columns they left
+  // the narrow inspector too little room and broke URIs mid-token.
   const rows = (properties || [])
     .map(
-      (p) => `<tr><td class="graph-prop-uri">${esc(p.uri || "—")}</td><td>${esc(p.label || "—")}</td><td>${esc(p.value)}</td></tr>`
+      (p) => `<tr>
+        <td class="graph-prop-name">
+          <span class="graph-prop-uri">${esc(p.uri || "—")}</span>
+          <span class="graph-prop-label">${esc(p.label || "—")}</span>
+        </td>
+        <td>${esc(p.value)}</td>
+      </tr>`
     )
     .join("");
   if (!rows) return `<p class="empty">No data properties on this node.</p>`;
-  return `<table class="graph-props"><thead><tr><th>Property</th><th>Label</th><th>Value</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<table class="graph-props"><thead><tr><th>Property</th><th>Value</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function renderBfoBadge(bucketType) {
@@ -377,7 +477,10 @@ function graphNodeExtent(_n) {
   return { rx: GRAPH_NODE_RADIUS + pad, ry: GRAPH_NODE_RADIUS + pad };
 }
 
-function resolveOverlaps(nodes, { iterations = 120, pinnedIds = new Set() } = {}) {
+function resolveOverlaps(
+  nodes,
+  { iterations = 120, pinnedIds = new Set(), minGap = 10 } = {}
+) {
   for (let iter = 0; iter < iterations; iter++) {
     let moved = false;
     for (let i = 0; i < nodes.length; i++) {
@@ -392,7 +495,7 @@ function resolveOverlaps(nodes, { iterations = 120, pinnedIds = new Set() } = {}
         const dist = Math.hypot(dx, dy) || 0.01;
         const ea = graphNodeExtent(a);
         const eb = graphNodeExtent(b);
-        const need = ea.rx + eb.rx + 10;
+        const need = ea.rx + eb.rx + minGap;
         const overlap = need - dist;
         if (overlap <= 0) continue;
         const push = overlap * 0.55 + 0.5;
@@ -539,7 +642,6 @@ function seedSemanticLayout(focusNode, workingNode, nodes, edges, focusPersonId)
     root.rayId = root.id;
     root.radialLevel = 1;
     root.isProcessAnchor = true;
-    root.pinned = true;
 
     const members = nodes
       .filter(
@@ -588,11 +690,14 @@ function seedSemanticLayout(focusNode, workingNode, nodes, edges, focusPersonId)
   resolveOverlaps(nodes, {
     iterations: Math.max(120, nodes.length * 6),
     pinnedIds: new Set([focusNode.id].filter(Boolean)),
+    minGap: graphParams.nodeMinGap,
   });
   for (const node of nodes) {
     node.homeX = node.x;
     node.homeY = node.y;
-    node.physicsEnabled = node.id !== focusNode.id && !rootIds.has(node.id);
+    // Everything but the focus is simulated — the focus stays put so the
+    // canvas keeps a stable centre to fit and pan around.
+    node.physicsEnabled = node.id !== focusNode.id;
   }
 }
 
@@ -748,6 +853,20 @@ function classPhysicsStep(nodes, edges, alpha) {
     node.vy = (node.vy || 0) * 0.68;
   }
 
+  if (!edges.degreesCounted) {
+    const degree = new Map();
+    for (const edge of edges) {
+      if (edge.hidden) continue;
+      degree.set(edge.a.id, (degree.get(edge.a.id) || 0) + 1);
+      degree.set(edge.b.id, (degree.get(edge.b.id) || 0) + 1);
+    }
+    for (const edge of edges) {
+      edge.linkWeight =
+        1 / Math.max(1, Math.min(degree.get(edge.a.id) || 1, degree.get(edge.b.id) || 1));
+    }
+    edges.degreesCounted = true;
+  }
+
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
       const a = nodes[i];
@@ -763,8 +882,8 @@ function classPhysicsStep(nodes, edges, alpha) {
         distance = Math.hypot(dx, dy);
       }
 
-      const minimumDistance = GRAPH_NODE_RADIUS * 2 + 16;
-      let strength = (alpha * 1100) / (distance * distance);
+      const minimumDistance = GRAPH_NODE_RADIUS * 2 + 54;
+      let strength = (alpha * graphParams.repulsion) / (distance * distance);
       if (distance < minimumDistance) {
         strength += ((minimumDistance - distance) / minimumDistance) * 1.2 * alpha;
       }
@@ -790,10 +909,13 @@ function classPhysicsStep(nodes, edges, alpha) {
     const dy = b.y - a.y;
     const distance = Math.hypot(dx, dy) || 0.01;
     if (!Number.isFinite(edge.physicsLength)) {
-      // Preserve the semantic radial layout instead of imposing one fixed edge length.
-      edge.physicsLength = distance;
+      // A uniform target length. Freezing the seeded distance here made every
+      // edge start at rest, so the simulation had no work to do and the seed
+      // was the layout — which is why nothing ever appeared to move.
+      edge.physicsLength = graphParams.linkDistance;
     }
-    const strength = (distance - edge.physicsLength) * 0.015 * alpha;
+    const strength =
+      (distance - edge.physicsLength) * 0.5 * (edge.linkWeight ?? 1) * alpha;
     const forceX = (dx / distance) * strength;
     const forceY = (dy / distance) * strength;
     if (a.physicsEnabled) {
@@ -815,9 +937,8 @@ function classPhysicsStep(nodes, edges, alpha) {
       continue;
     }
 
-    // Weakly retain the node's process ray while allowing local collision physics.
-    node.vx += (node.homeX - node.x) * 0.008 * alpha;
-    node.vy += (node.homeY - node.y) * 0.008 * alpha;
+    // No tether: the seeded ray is a starting point only, and the link and
+    // repulsion forces decide where every node ends up.
     const speed = Math.hypot(node.vx, node.vy);
     if (speed > 10) {
       node.vx = (node.vx / speed) * 10;
@@ -826,6 +947,8 @@ function classPhysicsStep(nodes, edges, alpha) {
     node.x += node.vx;
     node.y += node.vy;
   }
+
+  resolveOverlaps(nodes, { iterations: 2, minGap: graphParams.nodeMinGap });
 }
 
 function settleClassPhysicsSync(nodes, edges, focusNode, { steps = 90 } = {}) {
@@ -843,7 +966,7 @@ function runClassPhysics(
   nodes,
   edges,
   focusNode,
-  { onTick, onEnd, maxMs = PHYSICS_SETTLE_MS } = {}
+  { onTick, onEnd, maxMs = graphParams.settleMs } = {}
 ) {
   const started = performance.now();
   let rafId = 0;
@@ -956,24 +1079,17 @@ export {
   wrapNodeLabelLines,
 };
 
-function fitGraphToView(nodes, canvas, focusNode, setPanScale) {
-  if (!nodes.length) return;
-  const fx = focusNode?.x ?? 0;
-  const fy = focusNode?.y ?? 0;
-  let maxR = 90;
-  for (const n of nodes) {
-    const ext = graphNodeExtent(n);
-    maxR = Math.max(maxR, Math.hypot(n.x - fx, n.y - fy) + Math.max(ext.rx, ext.ry));
-  }
-  const pad = 52;
-  const scale = Math.min(
-    MAX_SCALE,
-    Math.max(MIN_SCALE, Math.min(canvas.clientWidth, canvas.clientHeight) / (2 * (maxR + pad)))
-  );
+/**
+ * Open at 1:1 on the focus node. Fitting the whole graph in shrank it until the
+ * relations between nodes were unreadable; at a standard zoom the labels are
+ * legible and the canvas is pannable to reach the rest.
+ */
+function resetGraphView(canvas, focusNode, setPanScale) {
+  const scale = graphParams.zoom;
   setPanScale({
     scale,
-    panX: -fx * scale,
-    panY: -fy * scale,
+    panX: -(focusNode?.x ?? 0) * scale,
+    panY: -(focusNode?.y ?? 0) * scale,
   });
 }
 
@@ -1028,7 +1144,7 @@ function mountGraphCanvas(root, options) {
     canvas.style.width = `${stage.clientWidth}px`;
     canvas.style.height = `${stage.clientHeight}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (layoutDone) fitGraphToView(nodes, canvas, focusNode, setPanScale);
+    if (layoutDone) resetGraphView(canvas, focusNode, setPanScale);
     draw();
   }
 
@@ -1197,7 +1313,11 @@ function mountGraphCanvas(root, options) {
       const pos = screenToWorld(ev.clientX - rect.left, ev.clientY - rect.top);
       dragging.x = pos.x - offset.x;
       dragging.y = pos.y - offset.y;
-      resolveOverlaps(nodes, { iterations: 16, pinnedIds: new Set([focusNode.id].filter(Boolean)) });
+      resolveOverlaps(nodes, {
+        iterations: 16,
+        pinnedIds: new Set([focusNode.id].filter(Boolean)),
+        minGap: graphParams.nodeMinGap,
+      });
       draw();
     } else if (panning) {
       pan.x = ev.clientX - panning.x;
@@ -1223,7 +1343,7 @@ function mountGraphCanvas(root, options) {
   root.querySelector("#graph-zoom-in")?.addEventListener("click", () => zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 1.15));
   root.querySelector("#graph-zoom-out")?.addEventListener("click", () => zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 0.87));
   root.querySelector("#graph-zoom-reset")?.addEventListener("click", () => {
-    fitGraphToView(nodes, canvas, focusNode, setPanScale);
+    resetGraphView(canvas, focusNode, setPanScale);
     selected = focusNode;
     showDetail(focusNode);
     draw();
@@ -1233,13 +1353,19 @@ function mountGraphCanvas(root, options) {
   resize();
   selected = focusNode;
   showDetail(focusNode);
-  stopPhysics = runClassPhysics(nodes, edges, focusNode, {
-    onTick: draw,
-    onEnd: () => {
-      fitGraphToView(nodes, canvas, focusNode, setPanScale);
-      draw();
-    },
-  });
+  if (graphParams.physics) {
+    stopPhysics = runClassPhysics(nodes, edges, focusNode, {
+      onTick: draw,
+      onEnd: () => {
+        resetGraphView(canvas, focusNode, setPanScale);
+        draw();
+      },
+    });
+  } else {
+    // Physics off: the seeded layout is the layout.
+    resetGraphView(canvas, focusNode, setPanScale);
+    draw();
+  }
 
   return () => {
     window.removeEventListener("resize", resize);
@@ -1277,6 +1403,55 @@ function renderClassFilter(options, hiddenClasses) {
   </div>`;
 }
 
+function formatParamValue(key, value) {
+  const def = GRAPH_PARAM_DEFS[key];
+  const unit = def.unit || "";
+  return def.step < 1 ? `${Number(value).toFixed(2)}${unit}` : `${value}${unit}`;
+}
+
+function renderParamsPanel(params, distance, open) {
+  const rows = Object.entries(GRAPH_PARAM_DEFS)
+    .map(([key, def]) => {
+      if (def.type === "toggle") {
+        return `<label class="graph-param graph-param-toggle">
+          <span class="graph-param-head">${esc(def.label)}
+            <input type="checkbox" data-param="${key}" ${params[key] ? "checked" : ""} />
+          </span>
+          <em>${esc(def.hint)}</em>
+        </label>`;
+      }
+      return `<label class="graph-param">
+        <span class="graph-param-head">${esc(def.label)} <strong data-param-value="${key}">${esc(formatParamValue(key, params[key]))}</strong></span>
+        <input type="range" data-param="${key}" min="${def.min}" max="${def.max}" step="${def.step}" value="${params[key]}" />
+        <em>${esc(def.hint)}</em>
+      </label>`;
+    })
+    .join("");
+
+  return `<div class="graph-params">
+    <button type="button" class="graph-params-toggle" id="graph-params-toggle"
+      aria-expanded="${open ? "true" : "false"}" aria-haspopup="true" title="Graph parameters">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+          d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+          d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+      </svg>
+      <span>Parameters</span>
+    </button>
+    <div class="graph-params-menu" id="graph-params-menu" ${open ? "" : "hidden"}>
+      <label class="graph-param">
+        <span class="graph-param-head">Distance <strong data-param-value="distance">${distance}</strong></span>
+        <input type="range" data-param="distance" min="1" max="3" step="1" value="${distance}" />
+        <em>${esc(DISTANCE_HINT)}</em>
+      </label>
+      <hr />
+      ${rows}
+      <button type="button" id="graph-params-reset">Reset to defaults</button>
+    </div>
+  </div>`;
+}
+
 function renderLegend() {
   const items = BFO_SEVEN.map(
     (b) => `<span><i class="graph-swatch" style="background:${b.color};border:1px solid ${b.border}"></i> ${esc(b.label)}</span>`
@@ -1296,7 +1471,7 @@ function readStoredHiddenClasses() {
 // Landing on an empty canvas hides what the page is for, so the graph opens on
 // a person with a full working history rather than on a prompt to search.
 const DEFAULT_PERSON_LABEL = "Alice Dupont";
-const DEFAULT_DISTANCE = 3;
+const DEFAULT_DISTANCE = 2;
 
 function defaultPerson(people) {
   return (
@@ -1359,8 +1534,15 @@ export function mountGraphPage(el, data) {
   // appear at a larger distance start out visible.
   let hiddenClasses = new Set(readStoredHiddenClasses());
   let classMenuOpen = false;
+  // Survives the repaint each parameter change triggers, so the panel stays
+  // open while several values are being tuned.
+  let paramsOpen = false;
   let disposeCanvas = null;
   syncGraphFiltersToUrl(selectedId, distance);
+
+  function persistParams() {
+    sessionStorage.setItem(PARAMS_KEY, JSON.stringify(graphParams));
+  }
 
   function persistHiddenClasses() {
     sessionStorage.setItem(HIDDEN_CLASSES_KEY, JSON.stringify([...hiddenClasses]));
@@ -1383,20 +1565,12 @@ export function mountGraphPage(el, data) {
                     <input type="search" id="graph-person-search" placeholder="Search people…" value="${esc(person?.label || "")}" autocomplete="off" />
                     <ul class="graph-suggestions" id="graph-suggestions" hidden></ul>
                   </label>
-                  <div class="graph-filters">
-                    <label class="graph-distance"><span>Distance</span>
-                      <select id="graph-distance">
-                        <option value="1" ${distance === 1 ? "selected" : ""}>Distance 1</option>
-                        <option value="2" ${distance === 2 ? "selected" : ""}>Distance 2</option>
-                        <option value="3" ${distance === 3 ? "selected" : ""}>Distance 3</option>
-                      </select>
-                    </label>
-                    ${renderClassFilter(classOptions, hiddenClasses)}
-                  </div>
+                  ${renderClassFilter(classOptions, hiddenClasses)}
                 </div>
                 <div class="graph-legend">${renderLegend()}</div>
-                <div class="graph-zoom"><button type="button" id="graph-zoom-in" title="Zoom in">+</button><button type="button" id="graph-zoom-out" title="Zoom out">−</button><button type="button" id="graph-zoom-reset" title="Fit view">⟲</button></div>
-                <p class="graph-hint">Focus at center · process anchors stay fixed · linked classes use physics · drag nodes · scroll to zoom</p>
+                ${renderParamsPanel(graphParams, distance, paramsOpen)}
+                <div class="graph-zoom"><button type="button" id="graph-zoom-in" title="Zoom in">+</button><button type="button" id="graph-zoom-out" title="Zoom out">−</button><button type="button" id="graph-zoom-reset" title="Reset view">⟲</button></div>
+                <p class="graph-hint">Focus at center · every other node is simulated · drag to pan · scroll to zoom</p>
               </div>
               <aside class="graph-detail" id="graph-detail"></aside>
             </div></div>`
@@ -1425,10 +1599,46 @@ export function mountGraphPage(el, data) {
       syncGraphFiltersToUrl(selectedId, distance);
       paint();
     });
-    el.querySelector("#graph-distance")?.addEventListener("change", (e) => {
-      distance = Number(e.target.value) || 1;
-      sessionStorage.setItem(DISTANCE_KEY, String(distance));
-      syncGraphFiltersToUrl(selectedId, distance);
+    const paramsToggle = el.querySelector("#graph-params-toggle");
+    const paramsMenu = el.querySelector("#graph-params-menu");
+    paramsToggle?.addEventListener("click", () => {
+      paramsOpen = !paramsOpen;
+      paramsMenu.hidden = !paramsOpen;
+      paramsToggle.setAttribute("aria-expanded", paramsOpen ? "true" : "false");
+    });
+
+    // `input` updates the readout on every frame of the drag; `change` — once
+    // the thumb is released — is what repaints, so dragging a slider does not
+    // rebuild the whole canvas dozens of times.
+    for (const input of el.querySelectorAll("[data-param]")) {
+      const key = input.dataset.param;
+      input.addEventListener("input", (e) => {
+        const readout = el.querySelector(`[data-param-value="${key}"]`);
+        if (!readout) return;
+        readout.textContent =
+          key === "distance"
+            ? String(Number(e.target.value) || 1)
+            : formatParamValue(key, Number(e.target.value));
+      });
+      input.addEventListener("change", (e) => {
+        if (key === "distance") {
+          distance = Number(e.target.value) || 1;
+          sessionStorage.setItem(DISTANCE_KEY, String(distance));
+          syncGraphFiltersToUrl(selectedId, distance);
+        } else if (GRAPH_PARAM_DEFS[key]?.type === "toggle") {
+          graphParams[key] = e.target.checked;
+          persistParams();
+        } else {
+          graphParams[key] = Number(e.target.value);
+          persistParams();
+        }
+        paint();
+      });
+    }
+
+    el.querySelector("#graph-params-reset")?.addEventListener("click", () => {
+      Object.assign(graphParams, defaultGraphParams());
+      persistParams();
       paint();
     });
     const classToggle = el.querySelector("#graph-classes-toggle");

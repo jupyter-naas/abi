@@ -177,6 +177,28 @@ def build_graph_page_payload(
             employee_id=row.get("employee_id"),
             organization_label=row.get("organizationLabel"),
         )
+        # Someone with no act of working still bears the role their record
+        # documents; without this edge they would sit on the canvas alone.
+        role_id = compact_graph_id(row.get("role"))
+        if role_id and row.get("job_title"):
+            add_entity(
+                _entity_node(
+                    role_id,
+                    label=row["job_title"],
+                    class_uri="personnel:EmployeeRole",
+                    class_label="Employee Role",
+                    bfo_bucket="Realizable",
+                    properties=[
+                        p
+                        for p in (
+                            _prop("personnel:job_title", "job title", row.get("job_title")),
+                            _prop("personnel:job_family", "job family", row.get("job_family")),
+                        )
+                        if p
+                    ],
+                )
+            )
+            add_rel(label, role_id, "personnel:hasEmployeeRole", "has employee role")
 
     seen_workings: set[str] = set()
 

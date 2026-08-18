@@ -577,8 +577,7 @@ test-api-init-container: build
 		-e GITHUB_ACCESS_TOKEN="${GITHUB_ACCESS_TOKEN}" \
 		abi:latest uv run --no-dev python -m naas_abi_core.apps.api.test_init
 
-# TTL_FILES := $(wildcard src/*/*/ontologies/*.ttl src/marketplace/*/*/ontologies/*.ttl)
-TTL_FILES := $(shell find src -name '*.ttl' 2>/dev/null)
+TTL_FILES := $(shell find libs -name '*.ttl' -not -path '*/.venv/*' 2>/dev/null)
 PY_FILES := $(patsubst %.ttl, %.py, $(TTL_FILES))
 
 onto2py-force: onto2py-clean $(PY_FILES) onto2py-ruff-fix
@@ -596,7 +595,7 @@ onto2py: $(PY_FILES)
 
 %.py: %.ttl
 	@printf "📦 Converting ttl to py for $< ... "
-	@uv run python -m lib.abi.utils.onto2py '$<' '$@'
+	@uv run python -m naas_abi_core.utils.onto2py.onto2py '$<'
 
 # Test command for debugging
 hello:

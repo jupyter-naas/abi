@@ -544,7 +544,7 @@ td.muted { color: var(--muted); font-style: italic; }
 .graph-body {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 30%);
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 24%);
   min-height: 0;
 }
 .graph-toolbar {
@@ -556,7 +556,10 @@ td.muted { color: var(--muted); font-style: italic; }
   flex-wrap: wrap;
   gap: 0.5rem 0.85rem;
   align-items: center;
-  max-width: min(calc(100% - 13rem), 44rem);
+  /* Definite width, not max-width: an absolutely positioned flex container
+     shrink-to-fits, and the resulting line was too narrow to hold Person and
+     Classes side by side. */
+  width: min(calc(100% - 12rem), 34rem);
   padding: 0.55rem 0.75rem;
   background: color-mix(in srgb, var(--panel) 92%, transparent);
   backdrop-filter: blur(6px);
@@ -786,6 +789,114 @@ td.muted { color: var(--muted); font-style: italic; }
   pointer-events: none;
   white-space: nowrap;
 }
+/* Graph parameters — gear button bottom-right, panel opens above it. */
+.graph-params {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+.graph-params-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--ink);
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: color-mix(in srgb, var(--panel) 92%, var(--ink));
+  cursor: pointer;
+}
+.graph-params-toggle:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+.graph-params-toggle[aria-expanded="true"] {
+  border-color: var(--accent);
+}
+.graph-params-menu {
+  order: -1;
+  width: 17rem;
+  max-height: min(30rem, calc(100vh - 12rem));
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.8rem 0.85rem;
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+}
+/* An author `display` wins over the UA rule for [hidden], so restore it. */
+.graph-params-menu[hidden] {
+  display: none;
+}
+.graph-params-menu hr {
+  height: 1px;
+  margin: 0;
+  border: 0;
+  background: var(--line);
+}
+.graph-param {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.graph-param-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink);
+  font-size: 0.8rem;
+}
+.graph-param em {
+  font-style: normal;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+.graph-param strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.graph-param input[type="range"] {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.graph-param-toggle {
+  color: var(--ink);
+}
+.graph-param-toggle input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+#graph-params-reset {
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--muted);
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  background: transparent;
+  cursor: pointer;
+}
+#graph-params-reset:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 5%, var(--panel));
+}
+
 .graph-zoom {
   position: absolute;
   left: 0.75rem;
@@ -816,8 +927,8 @@ td.muted { color: var(--muted); font-style: italic; }
   overflow: auto;
   background: var(--panel);
   border-left: 1px solid var(--line);
-  padding: 1rem 1.1rem;
-  font-size: 0.85rem;
+  padding: 0.85rem 0.9rem;
+  font-size: 0.8rem;
   min-height: 0;
 }
 .graph-inspect-kicker {
@@ -856,8 +967,8 @@ td.muted { color: var(--muted); font-style: italic; }
 }
 .graph-detail .graph-uri {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.78rem;
-  word-break: break-all;
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
 }
 .graph-bfo-badge {
   display: inline-block;
@@ -876,7 +987,7 @@ td.muted { color: var(--muted); font-style: italic; }
 .graph-props th,
 .graph-props td {
   border-top: 1px solid var(--line);
-  padding: 0.35rem 0.25rem;
+  padding: 0.3rem 0.2rem;
   text-align: left;
   vertical-align: top;
 }
@@ -884,10 +995,21 @@ td.muted { color: var(--muted); font-style: italic; }
   color: var(--muted);
   font-weight: 500;
 }
+.graph-prop-name {
+  width: 55%;
+}
 .graph-prop-uri {
+  display: block;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.72rem;
-  word-break: break-all;
+  font-size: 0.68rem;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+.graph-prop-label {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.7rem;
+  color: var(--muted);
 }
 .graph-detail li { margin: 0.25rem 0; }
 .graph-detail .edge-role { color: var(--accent); }

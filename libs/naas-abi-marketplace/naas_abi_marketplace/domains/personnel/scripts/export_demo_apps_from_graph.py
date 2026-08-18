@@ -212,7 +212,7 @@ def main() -> None:
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX abi:  <http://ontology.naas.ai/abi/>
         PREFIX personnel: <http://ontology.naas.ai/personnel/>
-        SELECT DISTINCT ?personLabel ?employeeId ?jobTitle ?jobFamily ?hireDate ?statusValue ?organizationLabel
+        SELECT DISTINCT ?personLabel ?employeeId ?jobTitle ?jobFamily ?hireDate ?statusValue ?organizationLabel ?role
         WHERE {
           ?person rdf:type abi:Person ;
                   personnel:hasEmploymentRecord ?record .
@@ -245,6 +245,7 @@ def main() -> None:
                 "employee_id": row.get("employeeId"),
                 "job_title": row.get("jobTitle"),
                 "job_family": row.get("jobFamily"),
+                "role": row.get("role"),
                 "hire_date": row.get("hireDate"),
                 "status_value": row.get("statusValue"),
                 "organizationLabel": row.get("organizationLabel"),
