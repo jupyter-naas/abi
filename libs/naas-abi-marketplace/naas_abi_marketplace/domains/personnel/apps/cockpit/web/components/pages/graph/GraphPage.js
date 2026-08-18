@@ -1283,6 +1283,7 @@ function mountGraphCanvas(root, options) {
   let panning = null;
   let offset = { x: 0, y: 0 };
   let pointerStart = null;
+  let recentring = null;
   const layoutDone = true;
   let stopPhysics = null;
   // Camera orientation for the 3D view. Ignored entirely in 2D.
@@ -1402,6 +1403,15 @@ function mountGraphCanvas(root, options) {
     drawEdgeLabel(label, labelPoint.x, labelPoint.y);
   }
 
+  /**
+   * Fade nodes with distance so the foreground reads as the foreground. Near
+   * nodes stay fully opaque; far ones recede rather than competing.
+   */
+  function depthAlpha(n) {
+    if (graphParams.view !== "3d") return 1;
+    return Math.min(1, Math.max(0.42, (viewScale(n) - 0.6) / 0.4));
+  }
+
   function drawNodeBody(n) {
     const r = nodeRadius(n);
     ctx.beginPath();
@@ -1423,9 +1433,9 @@ function mountGraphCanvas(root, options) {
   function drawNodeLabel(n) {
     const { fontSize, lineHeight, lines } = nodeLabelLayout(n);
     const depth = viewScale(n);
-    // Labels on distant nodes would be unreadable anyway, and drawing them
-    // only adds clutter behind the nodes in front.
-    if (depth < 0.72) return;
+    // Labels behind this point are unreadable anyway, and drawing them only
+    // adds clutter over the nodes in front.
+    if (graphParams.view === "3d" && depth < 0.88) return;
     ctx.font = `600 ${fontSize * depth}px var(--font-body), sans-serif`;
     ctx.fillStyle = n.dashed ? "rgba(255,255,255,0.82)" : "#ffffff";
     ctx.textAlign = "center";
@@ -1448,13 +1458,21 @@ function mountGraphCanvas(root, options) {
     ctx.translate(w / 2 + pan.x, h / 2 + pan.y);
     ctx.scale(scale, scale);
     for (const e of edges) drawEdge(e);
-    // Painter's algorithm: furthest first, so near nodes occlude far ones.
-    const ordered =
-      graphParams.view === "3d"
-        ? [...nodes].sort((a, b) => (b._depth ?? 0) - (a._depth ?? 0))
-        : nodes;
-    for (const n of ordered) drawNodeBody(n);
-    for (const n of ordered) drawNodeLabel(n);
+    if (graphParams.view === "3d") {
+      // Painter's algorithm, body and label together per node. Drawing all the
+      // bodies and then all the labels would let a distant node's text land on
+      // top of a near node that should be hiding it.
+      const ordered = [...nodes].sort((a, b) => (b._depth ?? 0) - (a._depth ?? 0));
+      for (const n of ordered) {
+        ctx.globalAlpha = depthAlpha(n);
+        drawNodeBody(n);
+        drawNodeLabel(n);
+      }
+      ctx.globalAlpha = 1;
+    } else {
+      for (const n of nodes) drawNodeBody(n);
+      for (const n of nodes) drawNodeLabel(n);
+    }
     ctx.restore();
   }
 
@@ -1484,6 +1502,7 @@ function mountGraphCanvas(root, options) {
     } else {
       panning = { x: ev.clientX - pan.x, y: ev.clientY - pan.y };
     }
+    recentring = null;
     canvas.setPointerCapture(ev.pointerId);
   });
   canvas.addEventListener("pointermove", (ev) => {
@@ -1524,6 +1543,43 @@ function mountGraphCanvas(root, options) {
     orbiting = null;
     pointerStart = null;
   });
+  /**
+   * Slide a node to the middle of the canvas. Projected coordinates are used
+   * so this centres what is actually on screen, in 3D as well as 2D.
+   */
+  function centreOnNode(node) {
+    if (!node) return;
+    const targetX = -viewX(node) * scale;
+    const targetY = -viewY(node) * scale;
+    const startX = pan.x;
+    const startY = pan.y;
+    const startedAt = performance.now();
+    const duration = 260;
+    // A jump is disorienting when the graph is dense: easing the pan keeps the
+    // node you picked traceable on its way to the centre.
+    const frame = (now) => {
+      if (recentring !== frame) return;
+      const t = Math.min(1, (now - startedAt) / duration);
+      const eased = 1 - (1 - t) ** 3;
+      pan.x = startX + (targetX - startX) * eased;
+      pan.y = startY + (targetY - startY) * eased;
+      draw();
+      if (t < 1) requestAnimationFrame(frame);
+      else recentring = null;
+    };
+    recentring = frame;
+    requestAnimationFrame(frame);
+  }
+
+  canvas.addEventListener("dblclick", (ev) => {
+    const rect = canvas.getBoundingClientRect();
+    const node = hit(screenToWorld(ev.clientX - rect.left, ev.clientY - rect.top));
+    if (!node) return;
+    selected = node;
+    showDetail(node);
+    centreOnNode(node);
+  });
+
   canvas.addEventListener("wheel", (ev) => {
     ev.preventDefault();
     const rect = canvas.getBoundingClientRect();
@@ -1773,7 +1829,7 @@ export function mountGraphPage(el, data) {
                 ${graphParams.legend ? `<div class="graph-legend">${renderLegend()}</div>` : ""}
                 ${renderParamsPanel(graphParams, distance, paramsOpen)}
                 <div class="graph-zoom"><button type="button" id="graph-zoom-in" title="Zoom in">+</button><button type="button" id="graph-zoom-out" title="Zoom out">−</button><button type="button" id="graph-zoom-reset" title="Reset view">⟲</button></div>
-                <p class="graph-hint">${graphParams.view === "3d" ? "Drag to orbit" : "Focus at center · drag to pan"} · every other node is simulated · scroll to zoom</p>
+                <p class="graph-hint">${graphParams.view === "3d" ? "Drag to orbit" : "Focus at center · drag to pan"} · every other node is simulated · double-click to centre · scroll to zoom</p>
               </div>
               <aside class="graph-detail" id="graph-detail"></aside>
             </div></div>`
