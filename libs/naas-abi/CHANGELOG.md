@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.54.1 (2026-08-18)
+
+### Bug Fixes
+
+- **nexus**: Show letter when workspace logo fails to load
+  ([`e731463`](https://github.com/jupyter-naas/abi/commit/e731463e84443a838be80a8886a4ac5c95f85210))
+
+
 ## v2.54.0 (2026-08-17)
 
 ### Features
