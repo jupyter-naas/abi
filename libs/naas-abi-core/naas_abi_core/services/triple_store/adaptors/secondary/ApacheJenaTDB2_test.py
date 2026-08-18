@@ -1,3 +1,5 @@
+import threading
+import time
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -364,6 +366,42 @@ def test_distributed_lock_acquired_and_released_on_insert():
     acquire_token = mock_kv.set_if_not_exists.call_args.args[1]
     release_token = mock_kv.delete_if_value_matches.call_args.args[1]
     assert acquire_token == release_token
+
+
+def test_distributed_writes_are_also_serialized_within_process():
+    adapter, _mock_kv = _build_adapter_with_kv()
+    active = 0
+    max_active = 0
+    state_lock = threading.Lock()
+
+    def slow_post(*_args, **_kwargs):
+        nonlocal active, max_active
+        with state_lock:
+            active += 1
+            max_active = max(max_active, active)
+        time.sleep(0.02)
+        with state_lock:
+            active -= 1
+        return _ok_response()
+
+    adapter._session.post.side_effect = slow_post
+    graph = Graph()
+    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+    barrier = threading.Barrier(3)
+
+    def insert() -> None:
+        barrier.wait()
+        adapter.insert(graph)
+
+    threads = [threading.Thread(target=insert) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        thread.join(timeout=1)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert max_active == 1
 
 
 @patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
