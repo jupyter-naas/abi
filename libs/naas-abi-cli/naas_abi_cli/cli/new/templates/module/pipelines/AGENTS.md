@@ -96,7 +96,8 @@ uv run pytest {{module_name_snake}}/pipelines/<Name>Pipeline_test.py -v
 ## Wiring into the module
 
 1. Declare `TripleStoreService` in `ABIModule.dependencies.services`.
-2. Expose `pipeline.as_tools()` from an agent in `../agents/`, **or** invoke the pipeline from an orchestration that batches runs and persists results.
+2. Expose `pipeline.as_tools()` from an agent in `../agents/`, or invoke the pipeline from an orchestration that batches runs and persists results.
+3. HTTP: the kernel calls `as_api` and mounts live pipelines under `/pipelines`. A stub with a typed `run(parameters)` gets a default POST. A stub without `run()` stays unpublished.
 
 ## See also
 

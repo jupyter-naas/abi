@@ -12,7 +12,10 @@ from naas_abi_core.integration.integration import Integration
 from naas_abi_core.module.ModuleAgentLoader import ModuleAgentLoader
 from naas_abi_core.module.ModuleModelLoader import ModuleModelLoader
 from naas_abi_core.module.ModuleOrchestrationLoader import ModuleOrchestrationLoader
+from naas_abi_core.module.ModulePipelineLoader import ModulePipelineLoader
+from naas_abi_core.module.ModuleToolLoader import ModuleToolLoader
 from naas_abi_core.module.ModuleUtils import find_class_module_root_path
+from naas_abi_core.module.ModuleWorkflowLoader import ModuleWorkflowLoader
 from naas_abi_core.orchestrations.Orchestrations import Orchestrations
 from naas_abi_core.pipeline.pipeline import Pipeline
 from naas_abi_core.utils.Expose import Expose
@@ -75,7 +78,12 @@ class BaseModule(Generic[TConfig]):
     __integrations: list[Integration] = []
     __workflows: list[Workflow] = []
     __pipelines: list[Pipeline] = []
+    __tools: list[object] = []
     __orchestrations: list[type[Orchestrations]] = []
+    __workflow_classes: list[type[Workflow]] = []
+    __pipeline_classes: list[type[Pipeline]] = []
+    __tool_classes: list[type] = []
+    __processes_loaded: bool = False
 
     def __init__(self, engine: EngineProxy, configuration: TConfig):
         assert isinstance(configuration, ModuleConfiguration), (
@@ -90,7 +98,12 @@ class BaseModule(Generic[TConfig]):
         self.__agents = []
         self.__workflows = []
         self.__pipelines = []
+        self.__tools = []
         self.__orchestrations = []
+        self.__workflow_classes = []
+        self.__pipeline_classes = []
+        self.__tool_classes = []
+        self.__processes_loaded = False
 
         assert hasattr(self.__class__, "Configuration"), (
             "BaseModule must have a Configuration class"
@@ -143,6 +156,10 @@ class BaseModule(Generic[TConfig]):
         return self.__pipelines
 
     @property
+    def tools(self) -> list[object]:
+        return self.__tools
+
+    @property
     def orchestrations(self) -> list[type[Orchestrations]]:
         return self.__orchestrations
 
@@ -154,6 +171,10 @@ class BaseModule(Generic[TConfig]):
         self.__orchestrations = ModuleOrchestrationLoader.load_orchestrations(
             self.__class__
         )
+        self.__workflow_classes = ModuleWorkflowLoader.load_workflows(self.__class__)
+        self.__pipeline_classes = ModulePipelineLoader.load_pipelines(self.__class__)
+        self.__tool_classes = ModuleToolLoader.load_tools(self.__class__)
+        self.__processes_loaded = False
 
         # Auto-discover models from <module_root>/models/*.py whenever the
         # engine has a registry. ``ModelRegistryService`` is intentionally NOT
@@ -179,6 +200,23 @@ class BaseModule(Generic[TConfig]):
         services, or ontologies to be available and loaded.
         """
         logger.debug(f"on_initialized for module {self.__module__}")
+        self._ensure_processes_loaded()
+
+    def _ensure_processes_loaded(self) -> None:
+        """Instantiate discovered workflows, pipelines, and tools.
+
+        Called from ``on_initialized`` after services are available.
+        Classes that need constructor config we cannot supply are skipped.
+        Subclasses that override ``on_initialized`` must call ``super()``.
+        """
+        if self.__processes_loaded:
+            return
+        from naas_abi_core.utils.process_api import instantiate_all
+
+        self.__workflows = instantiate_all(self.__workflow_classes)
+        self.__pipelines = instantiate_all(self.__pipeline_classes)
+        self.__tools = instantiate_all(self.__tool_classes)
+        self.__processes_loaded = True
 
     def on_unloaded(self):
         pass

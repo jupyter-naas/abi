@@ -94,7 +94,7 @@ uv run pytest {{module_name_snake}}/workflows/<Name>Workflow_test.py -v
 ## Wiring into the module
 
 - **Expose to an agent**: in `../agents/<Name>Agent.py`, instantiate the workflow and add `workflow.as_tools()` to the agent's `tools=[]`.
-- **Expose over HTTP**: workflows have access to `APIRouter` (`from naas_abi_core.utils.Expose import APIRouter`) — wire routes inside the module's `api(app)` hook.
+- **Expose over HTTP**: the kernel mounts live workflows under `/workflows`. Inherit the Expose default (`POST /{slug}` calls `run()`) or override `as_api`. An empty stub is unpublished unless `run(parameters)` is a real typed override.
 - **Schedule a recurring run**: wrap it in an `../orchestrations/<Name>Orchestration.py` Dagster job.
 
 ## See also
