@@ -86,14 +86,20 @@ export function processOverlapsRange(process, rangeStart, rangeEnd) {
   return start <= rangeEnd && end >= rangeStart;
 }
 
-export function filterToFocusPersonOnly(visible, focusPersonId) {
-  const focus = (visible.people || []).find((person) => person.id === focusPersonId);
-  return {
-    people: focus ? [focus] : [],
-    entities: [],
-    processes: [],
-    relations: [],
-  };
+export function filterToFocusRootOnly(visible, focusRootId) {
+  const focusPerson = (visible.people || []).find((person) => person.id === focusRootId);
+  if (focusPerson) {
+    return { people: [focusPerson], entities: [], processes: [], relations: [] };
+  }
+  const focusEntity = (visible.entities || []).find((entity) => entity.id === focusRootId);
+  if (focusEntity) {
+    return { people: [], entities: [focusEntity], processes: [], relations: [] };
+  }
+  const focusProcess = (visible.processes || []).find((process) => process.id === focusRootId);
+  if (focusProcess) {
+    return { people: [], entities: [], processes: [focusProcess], relations: [] };
+  }
+  return { people: [], entities: [], processes: [], relations: [] };
 }
 
 export function applyDateFilter(
@@ -101,7 +107,7 @@ export function applyDateFilter(
   selectedStart,
   selectedEnd,
   globalRange,
-  focusPersonId,
+  focusRootId,
   helpers
 ) {
   if (isFullRange(selectedStart, selectedEnd, globalRange)) return visible;
@@ -119,14 +125,14 @@ export function applyDateFilter(
   }
 
   if (hiddenProcessIds.size === allProcesses.length) {
-    return filterToFocusPersonOnly(visible, focusPersonId);
+    return filterToFocusRootOnly(visible, focusRootId);
   }
 
   return helpers.applyProcessFilter(
     visible,
     hiddenProcessIds,
     new Set(),
-    focusPersonId,
+    focusRootId,
     { strict: true }
   );
 }

@@ -1276,7 +1276,8 @@ td.muted { color: var(--muted); font-style: italic; }
 .graph-detail {
   display: none;
   position: relative;
-  overflow: auto;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--panel);
   border-left: 1px solid var(--line);
   padding: 0.85rem 0.9rem;
@@ -1284,7 +1285,13 @@ td.muted { color: var(--muted); font-style: italic; }
   min-height: 0;
 }
 .graph-body.detail-open .graph-detail {
-  display: block;
+  display: flex;
+}
+.graph-detail-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 0.15rem;
 }
 .graph-detail-close {
   position: absolute;
@@ -1346,6 +1353,46 @@ td.muted { color: var(--muted); font-style: italic; }
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.72rem;
   overflow-wrap: anywhere;
+}
+.graph-detail-actions {
+  flex-shrink: 0;
+  margin-top: 0.75rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+.graph-detail-focus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+.graph-detail-focus-icon {
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.graph-detail-focus:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+.graph-detail-focus.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+  font-weight: 600;
+}
+.graph-detail-focus:disabled:not(.is-active) {
+  opacity: 0.55;
+  cursor: default;
 }
 .graph-node-uri {
   font-family: var(--font-mono, ui-monospace, monospace);

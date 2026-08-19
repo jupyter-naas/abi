@@ -26,7 +26,7 @@ function esc(s) {
 }
 
 const DISTANCE_KEY = "cockpit-graph-distance";
-const LAST_PERSON_KEY = "cockpit-graph-last-person";
+const LAST_ROOT_KEY = "cockpit-graph-last-root";
 const HIDDEN_CLASS_TYPES_KEY = "cockpit-graph-hidden-classes";
 const HIDDEN_CLASS_INSTANCES_KEY = "cockpit-graph-hidden-class-instances";
 const HIDDEN_PROCESS_TYPES_KEY = "cockpit-graph-hidden-process-types";
@@ -171,6 +171,45 @@ function workerLabel(record) {
     (p) => p.uri === "personnel:isActOfWorkingOf" || p.label === "worker"
   );
   return worker?.value || "";
+}
+
+function canvasNodeRecordId(node) {
+  if (!node) return null;
+  if (node.kind === "person") return node.person?.id || null;
+  if (node.kind === "entity") return node.entity?.id || null;
+  if (node.kind === "process") return node.process?.id || null;
+  return null;
+}
+
+function graphRootLabelFromId(rootId, lookup) {
+  if (!rootId) return "";
+  const person = lookup.peopleById[rootId];
+  if (person) return person.label || rootId;
+  const entity = lookup.entitiesById[rootId];
+  if (entity) return entity.label || rootId;
+  const process = lookup.processesById[rootId];
+  if (process) return process.label || process.classLabel || rootId;
+  return rootId;
+}
+
+function isKnownGraphRoot(rootId, lookup) {
+  return Boolean(
+    rootId &&
+      (lookup.peopleById[rootId] ||
+        lookup.entitiesById[rootId] ||
+        lookup.processesById[rootId])
+  );
+}
+
+function renderInspectorFocusAction(node, focusRootId, focusTargetId) {
+  if (!node) return "";
+  const targetId = focusTargetId || focusRootId;
+  const isCurrent = Boolean(targetId && targetId === focusRootId);
+  return `<div class="graph-detail-actions">
+    <button type="button" class="graph-detail-focus${isCurrent ? " is-active" : ""}" id="graph-detail-focus"${
+      !targetId ? " disabled" : ""
+    } aria-pressed="${isCurrent ? "true" : "false"}"><span class="graph-detail-focus-icon" aria-hidden="true">🎯</span><span>Focus</span></button>
+  </div>`;
 }
 
 function buildGraphIndex(data) {
@@ -1443,7 +1482,7 @@ function runClassPhysics(
   return () => stop(false);
 }
 
-function buildGraph(focusPerson, visible, lookup) {
+function buildGraph(focusRootId, visible, lookup) {
   const allowedIds = new Set([
     ...(visible.people || []).map((record) => record.id),
     ...(visible.entities || []).map((record) => record.id),
@@ -1459,7 +1498,10 @@ function buildGraph(focusPerson, visible, lookup) {
     return node;
   };
 
-  const lookupWorkingId = lookup.workingHubByPerson?.get?.(focusPerson.id) || null;
+  const focusPerson = lookup.peopleById[focusRootId];
+  const lookupWorkingId = focusPerson
+    ? lookup.workingHubByPerson?.get?.(focusRootId) || null
+    : null;
   const workingId =
     (lookupWorkingId && allowedIds.has(lookupWorkingId) ? lookupWorkingId : null) ||
     [...(visible.entities || [])]
@@ -1471,7 +1513,7 @@ function buildGraph(focusPerson, visible, lookup) {
       )[0]?.id ||
     null;
   const workingNode = workingId ? addNode(workingId, { isWorkingHub: true }) : null;
-  const focusNode = addNode(focusPerson.id, { isFocus: true, pinned: true });
+  const focusNode = addNode(focusRootId, { isFocus: true, pinned: true });
 
   for (const proc of visible.processes) addNode(proc.id);
 
@@ -1492,14 +1534,14 @@ function buildGraph(focusPerson, visible, lookup) {
   return { nodes, edges, focusNode, workingNode };
 }
 
-export function layoutGraphNodes(focusPerson, visible, lookup) {
-  const graph = buildGraph(focusPerson, visible, lookup);
+export function layoutGraphNodes(focusRootId, visible, lookup) {
+  const graph = buildGraph(focusRootId, visible, lookup);
   seedSemanticLayout(
     graph.focusNode,
     graph.workingNode,
     graph.nodes,
     graph.edges,
-    focusPerson.id
+    focusRootId
   );
   return graph;
 }
@@ -1562,7 +1604,7 @@ function resetGraphView(canvas, focusNode, setPanScale) {
 }
 
 function mountGraphCanvas(root, options) {
-  const { focusPerson, visible, lookup } = options;
+  const { focusRoot, visible, lookup, onFocusRoot } = options;
   const stage = root.querySelector("#graph-stage");
   const canvas = root.querySelector("#graph-canvas");
   const detail = root.querySelector("#graph-detail");
@@ -1578,7 +1620,7 @@ function mountGraphCanvas(root, options) {
     canvas: panel,
   };
 
-  const { nodes, edges, focusNode } = layoutGraphNodes(focusPerson, visible, {
+  const { nodes, edges, focusNode } = layoutGraphNodes(focusRoot.id, visible, {
     ...lookup,
     workingHubByPerson: options.workingHubByPerson,
   });
@@ -1609,12 +1651,17 @@ function mountGraphCanvas(root, options) {
     const close =
       '<button type="button" class="graph-detail-close" id="graph-detail-close" title="Close inspector" aria-label="Close inspector">×</button>';
     const content = node
-      ? renderNodeDetail(node, { focusPersonId: focusPerson.id })
+      ? renderNodeDetail(node, { focusRootId: focusRoot.id })
       : renderNodeDetail(null);
-    detail.innerHTML = `${close}<p class="graph-inspect-kicker">Inspect</p>${content}`;
+    const focusTargetId = canvasNodeRecordId(node);
+    const actions = renderInspectorFocusAction(node, focusRoot.id, focusTargetId);
+    detail.innerHTML = `${close}<div class="graph-detail-scroll"><p class="graph-inspect-kicker">Inspect</p>${content}</div>${actions}`;
     detail
       .querySelector("#graph-detail-close")
       ?.addEventListener("click", closeDetail);
+    detail.querySelector("#graph-detail-focus")?.addEventListener("click", () => {
+      if (focusTargetId) onFocusRoot?.(focusTargetId, node?.label || "");
+    });
   }
 
   /** Opening and closing changes the stage width, so the canvas is resized. */
@@ -2296,23 +2343,32 @@ function defaultPerson(people) {
   );
 }
 
-function graphFiltersFromUrl(people, fallbackDistance) {
+function graphFiltersFromUrl(people, lookup, fallbackDistance) {
   const params = new URLSearchParams(window.location.search);
+  const rootParam = params.get("root");
   const personParam = params.get("person");
-  const selectedPerson = personParam
-    ? people.find((person) => person.id === personParam || person.label === personParam)
-    : defaultPerson(people);
+  let selectedRootId = null;
+  if (rootParam && isKnownGraphRoot(rootParam, lookup)) {
+    selectedRootId = rootParam;
+  } else if (personParam) {
+    const selectedPerson = people.find(
+      (person) => person.id === personParam || person.label === personParam
+    );
+    selectedRootId = selectedPerson?.id || null;
+  } else {
+    selectedRootId = defaultPerson(people)?.id || null;
+  }
   const distanceParam = Number(params.get("distance"));
   const distance = [1, 2, 3].includes(distanceParam) ? distanceParam : fallbackDistance;
   return {
-    selectedId: selectedPerson?.id || null,
+    selectedRootId,
     distance,
   };
 }
 
-/** Min/max ISO dates from temporal regions on a person's visible process roots. */
-function temporalRangeForPerson(adj, personId, hopDistance) {
-  const reachable = collectVisibleGraph(adj, personId, hopDistance);
+/** Min/max ISO dates from temporal regions on visible process roots around a graph root. */
+function temporalRangeForRoot(adj, rootId, hopDistance) {
+  const reachable = collectVisibleGraph(adj, rootId, hopDistance);
   const temporalProcesses = collectProcessTemporalRecords(reachable, { isProcessRoot });
   return computeGlobalDateRange(temporalProcesses);
 }
@@ -2335,11 +2391,15 @@ function entitySlugFromPathname() {
   return DEFAULT_ENTITY_SLUG;
 }
 
-function syncGraphFiltersToUrl(personId, distance) {
+function syncGraphFiltersToUrl(rootId, distance, lookup) {
   const url = new URL(window.location.href);
   url.pathname = `/${entitySlugFromPathname()}/${GRAPH_PAGE_URL}`;
-  if (personId) url.searchParams.set("person", personId);
-  else url.searchParams.delete("person");
+  url.searchParams.delete("person");
+  url.searchParams.delete("root");
+  if (rootId) {
+    if (lookup.peopleById[rootId]) url.searchParams.set("person", rootId);
+    else url.searchParams.set("root", rootId);
+  }
   url.searchParams.set("distance", String(distance));
   window.history.replaceState(window.history.state, "", url);
 }
@@ -2357,18 +2417,19 @@ export function mountGraphPage(el, data) {
     3,
     Math.max(1, Number(sessionStorage.getItem(DISTANCE_KEY)) || DEFAULT_DISTANCE)
   );
-  const initialFilters = graphFiltersFromUrl(people, storedDistance);
+  const initialFilters = graphFiltersFromUrl(people, lookup, storedDistance);
   let dateRangeStart = null;
   let dateRangeEnd = null;
-  let selectedId = initialFilters.selectedId;
+  let selectedRootId = initialFilters.selectedRootId;
+  let selectedRootLabel = graphRootLabelFromId(selectedRootId, lookup);
   let distance = initialFilters.distance;
-  const lastPersonId = sessionStorage.getItem(LAST_PERSON_KEY);
-  const personChanged = Boolean(selectedId && selectedId !== lastPersonId);
+  const lastRootId = sessionStorage.getItem(LAST_ROOT_KEY);
+  const rootChanged = Boolean(selectedRootId && selectedRootId !== lastRootId);
   let hiddenClassTypes;
   let hiddenClassInstances;
   let hiddenProcessTypes;
   let hiddenProcessInstances;
-  if (personChanged) {
+  if (rootChanged) {
     resetGraphParamsToDefaults();
     distance = DEFAULT_DISTANCE;
     sessionStorage.setItem(DISTANCE_KEY, String(distance));
@@ -2382,11 +2443,11 @@ export function mountGraphPage(el, data) {
     hiddenProcessTypes = new Set(readStoredHiddenProcessTypes());
     hiddenProcessInstances = new Set(readStoredHiddenProcesses());
   }
-  if (selectedId) {
-    const initialRange = temporalRangeForPerson(adj, selectedId, distance);
+  if (selectedRootId) {
+    const initialRange = temporalRangeForRoot(adj, selectedRootId, distance);
     dateRangeStart = initialRange.min;
     dateRangeEnd = initialRange.max;
-    sessionStorage.setItem(LAST_PERSON_KEY, selectedId);
+    sessionStorage.setItem(LAST_ROOT_KEY, selectedRootId);
   }
   let classMenuOpen = false;
   let processMenuOpen = false;
@@ -2397,7 +2458,7 @@ export function mountGraphPage(el, data) {
   let paramsOpen = false;
   let disposeCanvas = null;
   let disposeDateSlicer = null;
-  syncGraphFiltersToUrl(selectedId, distance);
+  syncGraphFiltersToUrl(selectedRootId, distance, lookup);
 
   function persistParams() {
     // Mirror the live values back into the active view's slot before saving,
@@ -2460,11 +2521,15 @@ export function mountGraphPage(el, data) {
   }
 
   function persistDateSlicerState() {
-    if (!selectedId) return;
-    persistDateSlicer(`${DATE_SLICER_CONFIG.storageKey}:${selectedId}`, dateRangeStart, dateRangeEnd);
+    if (!selectedRootId) return;
+    persistDateSlicer(
+      `${DATE_SLICER_CONFIG.storageKey}:${selectedRootId}`,
+      dateRangeStart,
+      dateRangeEnd
+    );
   }
 
-  function resetGraphStateForPerson(personId) {
+  function resetGraphStateForFocus(rootId) {
     distance = DEFAULT_DISTANCE;
     sessionStorage.setItem(DISTANCE_KEY, String(distance));
     resetGraphParamsToDefaults();
@@ -2484,14 +2549,14 @@ export function mountGraphPage(el, data) {
     classMenuOpen = false;
     paramsOpen = false;
 
-    const range = temporalRangeForPerson(adj, personId, distance);
+    const range = temporalRangeForRoot(adj, rootId, distance);
     dateRangeStart = range.min;
     dateRangeEnd = range.max;
-    sessionStorage.setItem(LAST_PERSON_KEY, personId);
+    sessionStorage.setItem(LAST_ROOT_KEY, rootId);
     persistDateSlicerState();
   }
 
-  if (personChanged) {
+  if (rootChanged) {
     persistHiddenClassTypes();
     persistHiddenClassInstances();
     persistHiddenProcessTypes();
@@ -2499,8 +2564,12 @@ export function mountGraphPage(el, data) {
   }
 
   function paint() {
-    const person = people.find((p) => p.id === selectedId) || null;
-    const reachable = person ? collectVisibleGraph(adj, person.id, distance) : null;
+    const hasRoot = isKnownGraphRoot(selectedRootId, lookup);
+    const rootLabel =
+      selectedRootLabel || graphRootLabelFromId(selectedRootId, lookup);
+    const reachable = hasRoot
+      ? collectVisibleGraph(adj, selectedRootId, distance)
+      : null;
     const temporalProcesses = reachable
       ? collectProcessTemporalRecords(reachable, { isProcessRoot })
       : [];
@@ -2522,7 +2591,7 @@ export function mountGraphPage(el, data) {
           dateRangeStart,
           dateRangeEnd,
           dateRange,
-          person.id,
+          selectedRootId,
           {
             visibleProcessOptions,
             findProcessRecord,
@@ -2539,11 +2608,11 @@ export function mountGraphPage(el, data) {
           dateFiltered,
           hiddenProcessInstances,
           hiddenProcessTypes,
-          person.id
+          selectedRootId
         )
       : null;
     const allClassInstances = processFiltered
-      ? visibleClassInstanceOptions(processFiltered, person.id)
+      ? visibleClassInstanceOptions(processFiltered, selectedRootId)
       : [];
     const classTypeOptions = visibleClassTypeOptions(allClassInstances);
     pruneHiddenClassTypes(classTypeOptions);
@@ -2553,7 +2622,7 @@ export function mountGraphPage(el, data) {
           processFiltered,
           hiddenClassInstances,
           hiddenClassTypes,
-          person.id
+          selectedRootId
         )
       : null;
 
@@ -2561,13 +2630,13 @@ export function mountGraphPage(el, data) {
 
     el.innerHTML = `
       ${
-        person
+        hasRoot
           ? `<div class="graph-page"><div class="graph-body">
               <div class="graph-stage" id="graph-stage">
                 <canvas id="graph-canvas"></canvas>
                 <div class="graph-toolbar graph-toolbar--${toolbarLayout}">
                   <label class="graph-search"><span>Individual</span>
-                    <input type="search" id="graph-person-search" placeholder="Search individuals (3+ chars)…" value="${esc(person?.label || "")}" autocomplete="off" />
+                    <input type="search" id="graph-person-search" placeholder="Search individuals (3+ chars)…" value="${esc(rootLabel)}" autocomplete="off" />
                     <ul class="graph-suggestions" id="graph-suggestions" hidden></ul>
                   </label>
                   ${renderProcessFilter(
@@ -2630,9 +2699,10 @@ export function mountGraphPage(el, data) {
     suggestions.addEventListener("click", (e) => {
       const li = e.target.closest("[data-person]");
       if (!li) return;
-      selectedId = li.dataset.person;
-      resetGraphStateForPerson(selectedId);
-      syncGraphFiltersToUrl(selectedId, distance);
+      selectedRootId = li.dataset.person;
+      selectedRootLabel = graphRootLabelFromId(selectedRootId, lookup);
+      resetGraphStateForFocus(selectedRootId);
+      syncGraphFiltersToUrl(selectedRootId, distance, lookup);
       paint();
     });
     const paramsToggle = el.querySelector("#graph-params-toggle");
@@ -2671,8 +2741,8 @@ export function mountGraphPage(el, data) {
         if (key === "distance") {
           distance = Number(e.target.value) || 1;
           sessionStorage.setItem(DISTANCE_KEY, String(distance));
-          syncGraphFiltersToUrl(selectedId, distance);
-          const range = temporalRangeForPerson(adj, selectedId, distance);
+          syncGraphFiltersToUrl(selectedRootId, distance, lookup);
+          const range = temporalRangeForRoot(adj, selectedRootId, distance);
           if (range.min) dateRangeStart = range.min;
           if (range.max) dateRangeEnd = range.max;
           persistDateSlicerState();
@@ -2829,12 +2899,19 @@ export function mountGraphPage(el, data) {
     }
 
     if (disposeCanvas) disposeCanvas();
-    if (person) {
+    if (hasRoot) {
       disposeCanvas = mountGraphCanvas(el, {
-        focusPerson: person,
+        focusRoot: { id: selectedRootId, label: rootLabel },
         visible,
         lookup,
         workingHubByPerson: adj.workingHubByPerson,
+        onFocusRoot: (rootId, label) => {
+          selectedRootId = rootId;
+          selectedRootLabel = label || graphRootLabelFromId(rootId, lookup);
+          resetGraphStateForFocus(selectedRootId);
+          syncGraphFiltersToUrl(selectedRootId, distance, lookup);
+          paint();
+        },
       });
     }
   }
