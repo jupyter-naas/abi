@@ -41,6 +41,9 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import (
 from naas_abi_marketplace.domains.personnel.apps.cockpit.processes_payload import (
     build_processes_page_payload,
 )
+from naas_abi_marketplace.domains.personnel.apps.cockpit.scripts.roster_builder import (
+    build_roster_rows,
+)
 from naas_abi_marketplace.domains.personnel.apps.cockpit.scripts.workforce_metrics import (
     build_workforce_metrics,
 )
@@ -224,7 +227,8 @@ def main() -> None:
 
     # --- page datasets ------------------------------------------------------
     print(f"data/entities/{ENTITY_ID}/")
-    roster_rows = [
+    org_label = load_default_entity().get("organizationLabel") or "Demo"
+    employment_rows = [
         {
             "personLabel": row.get("personLabel"),
             "employee_id": row.get("employee_id"),
@@ -237,6 +241,12 @@ def main() -> None:
         }
         for row in source_rows.get("find_employee_roster", [])
     ]
+    roster_rows, roster_source = build_roster_rows(
+        employment_rows,
+        source_rows.get("find_working_processes", []),
+        org_label=org_label,
+    )
+    print(f"  roster: {len(roster_rows)} rows from {roster_source}")
 
     family_by_person = {
         (r.get("personLabel") or ""): r.get("jobFamily") or r.get("job_family")
@@ -247,7 +257,6 @@ def main() -> None:
         if not row.get("job_family"):
             row["job_family"] = family_by_person.get(row.get("personLabel") or "")
 
-    org_label = load_default_entity().get("organizationLabel") or "Demo"
     kpis, roster_rows = build_workforce_metrics(
         roster_rows,
         source_rows.get("find_working_processes", []),
