@@ -45,7 +45,7 @@ class ABIModule(BaseModule):
         super().on_initialized()
         # Resolve cockpit data source: ObjectStorage → TripleStore → data/.
         try:
-            from naas_abi_marketplace.domains.personnel.scripts.demo_fallback import (
+            from naas_abi_marketplace.domains.personnel.sandbox.demo_fallback import (
                 resolve_apps_data_root,
             )
 
