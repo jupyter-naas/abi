@@ -615,6 +615,72 @@ function visibleClassInstanceOptionsForTypes(instances, hiddenClassTypes) {
   return instances.filter((instance) => !hiddenClassTypes.has(instance.type));
 }
 
+/** Process instances that remain visible in the Processes dropdown. */
+function selectedProcessInstances(allProcessInstances, hiddenProcessTypes, hiddenProcessInstances) {
+  return allProcessInstances.filter(
+    (instance) =>
+      !hiddenProcessTypes.has(instance.type) && !hiddenProcessInstances.has(instance.id)
+  );
+}
+
+/** Class labels of non-process nodes directly linked to the focus person. */
+function directNeighborClassLabels(visible, focusPersonId) {
+  const labels = new Set();
+  const recordsById = buildRecordsById(visible);
+  for (const rel of visible.relations || []) {
+    let neighborId = null;
+    if (rel.from === focusPersonId) neighborId = rel.to;
+    else if (rel.to === focusPersonId) neighborId = rel.from;
+    if (!neighborId) continue;
+    const record = recordsById.get(neighborId);
+    if (!record || isProcessRoot(record)) continue;
+    labels.add(classLabelOf(record));
+  }
+  return labels;
+}
+
+/** Union ontology class labels for the currently selected process types. */
+function classLabelsForSelectedProcesses(selectedProcesses, processClassCatalog) {
+  const labels = new Set();
+  const seenTypes = new Set();
+  for (const process of selectedProcesses) {
+    if (seenTypes.has(process.type)) continue;
+    seenTypes.add(process.type);
+    const entry = processClassCatalog?.[process.type];
+    for (const label of entry?.classLabels || []) labels.add(label);
+  }
+  return labels;
+}
+
+function resolveAllowedClassLabels({
+  selectedProcesses,
+  processClassCatalog,
+  visible,
+  focusPersonId,
+}) {
+  if (selectedProcesses.length === 0) {
+    return directNeighborClassLabels(visible, focusPersonId);
+  }
+  const labels = classLabelsForSelectedProcesses(selectedProcesses, processClassCatalog);
+  if (labels.size > 0) return labels;
+  return new Set(
+    visibleClassInstanceOptions(visible, focusPersonId).map((instance) => instance.type)
+  );
+}
+
+function filterClassOptions(allClassInstances, allowedClassLabels) {
+  if (!allowedClassLabels || allowedClassLabels.size === 0) {
+    return { instances: [], types: [] };
+  }
+  const instances = allClassInstances.filter((instance) =>
+    allowedClassLabels.has(instance.type)
+  );
+  return {
+    instances,
+    types: visibleClassTypeOptions(instances),
+  };
+}
+
 /**
  * Drop deselected class types or instances. Process nodes are untouched here -
  * they are controlled by the process filters above.
@@ -2350,13 +2416,13 @@ function defaultPerson(people) {
 function graphFiltersFromUrl(people, lookup, fallbackDistance) {
   const params = new URLSearchParams(window.location.search);
   const rootParam = params.get("root");
-  const personParam = params.get("person");
+  const individualParam = params.get("individual") || params.get("person");
   let selectedRootId = null;
   if (rootParam && isKnownGraphRoot(rootParam, lookup)) {
     selectedRootId = rootParam;
-  } else if (personParam) {
+  } else if (individualParam) {
     const selectedPerson = people.find(
-      (person) => person.id === personParam || person.label === personParam
+      (person) => person.id === individualParam || person.label === individualParam
     );
     selectedRootId = selectedPerson?.id || null;
   } else {
@@ -2398,10 +2464,11 @@ function entitySlugFromPathname() {
 function syncGraphFiltersToUrl(rootId, distance, lookup) {
   const url = new URL(window.location.href);
   url.pathname = `/${entitySlugFromPathname()}/${GRAPH_PAGE_URL}`;
+  url.searchParams.delete("individual");
   url.searchParams.delete("person");
   url.searchParams.delete("root");
   if (rootId) {
-    if (lookup.peopleById[rootId]) url.searchParams.set("person", rootId);
+    if (lookup.peopleById[rootId]) url.searchParams.set("individual", rootId);
     else url.searchParams.set("root", rootId);
   }
   url.searchParams.set("distance", String(distance));
@@ -2410,6 +2477,7 @@ function syncGraphFiltersToUrl(rootId, distance, lookup) {
 
 export function mountGraphPage(el, data) {
   const adj = buildGraphIndex(data);
+  const processClassCatalog = data.processClassCatalog || {};
   const lookup = {
     peopleById: adj.peopleById,
     processesById: adj.processesById,
@@ -2615,10 +2683,27 @@ export function mountGraphPage(el, data) {
           selectedRootId
         )
       : null;
-    const allClassInstances = processFiltered
+    const selectedProcesses = selectedProcessInstances(
+      allProcessInstances,
+      hiddenProcessTypes,
+      hiddenProcessInstances
+    );
+    const classScopeSource = dateFiltered || reachable;
+    const allowedClassLabels = classScopeSource
+      ? resolveAllowedClassLabels({
+          selectedProcesses,
+          processClassCatalog,
+          visible: classScopeSource,
+          focusPersonId: selectedRootId,
+        })
+      : new Set();
+    const scopedClassInstances = processFiltered
       ? visibleClassInstanceOptions(processFiltered, selectedRootId)
       : [];
-    const classTypeOptions = visibleClassTypeOptions(allClassInstances);
+    const { instances: allClassInstances, types: classTypeOptions } = filterClassOptions(
+      scopedClassInstances,
+      allowedClassLabels
+    );
     pruneHiddenClassTypes(classTypeOptions);
     pruneHiddenClassInstances(allClassInstances, classTypeOptions);
     const visible = processFiltered

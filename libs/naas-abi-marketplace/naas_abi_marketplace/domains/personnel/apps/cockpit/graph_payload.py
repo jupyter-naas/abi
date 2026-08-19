@@ -19,6 +19,10 @@ from __future__ import annotations
 
 from naas_abi_marketplace.domains.personnel.utils.individual_uri import compact_personnel
 
+from naas_abi_marketplace.domains.personnel.apps.cockpit.process_class_catalog import (
+    build_process_class_catalog,
+)
+
 PERSONNEL_NS = "http://ontology.naas.ai/personnel/"
 ABI_NS = "http://ontology.naas.ai/abi/"
 
@@ -768,4 +772,5 @@ def build_graph_page_payload(
         "entities": sorted(entities_map.values(), key=lambda entity: entity["label"]),
         "relations": canvas_relations,
         "allRelations": relations,
+        "processClassCatalog": build_process_class_catalog(),
     }

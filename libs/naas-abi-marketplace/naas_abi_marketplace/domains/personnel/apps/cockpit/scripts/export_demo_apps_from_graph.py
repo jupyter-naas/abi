@@ -248,6 +248,7 @@ def main() -> None:
     kpis, roster_rows = build_workforce_metrics(
         roster_rows,
         source_rows.get("find_working_processes", []),
+        source_rows.get("find_acts_of_studying", []),
         org_label=org_label,
     )
 

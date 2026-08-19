@@ -1,7 +1,8 @@
 export function graphSearchFromLocation() {
   const params = new URLSearchParams(window.location.search);
   const next = new URLSearchParams();
-  if (params.has("person")) next.set("person", params.get("person"));
+  const individual = params.get("individual") || params.get("person");
+  if (individual) next.set("individual", individual);
   if (params.has("distance")) next.set("distance", params.get("distance"));
   const query = next.toString();
   return query ? `?${query}` : "";

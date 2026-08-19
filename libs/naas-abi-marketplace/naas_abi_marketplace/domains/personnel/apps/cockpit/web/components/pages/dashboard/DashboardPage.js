@@ -58,6 +58,21 @@ const ROSTER_COLUMNS = [
     render: (row) => formatYears(row.seniority_years),
   },
   {
+    key: "education_count",
+    label: "Education",
+    sortValue: (row) => Number(row.education_count) || 0,
+    filterValue: (row) => String(row.education_count ?? 0),
+    render: (row) => esc(row.education_count ?? 0),
+  },
+  {
+    key: "scolarity_years",
+    label: "Scolarity",
+    sortValue: (row) => Number(row.scolarity_years) || 0,
+    filterValue: (row) => formatYears(row.scolarity_years),
+    render: (row) =>
+      Number(row.scolarity_years) > 0 ? formatYears(row.scolarity_years) : "-",
+  },
+  {
     key: "status_value",
     label: "Status",
     sortValue: (row) => row.status_value || "",
@@ -187,9 +202,9 @@ export async function mountPage(el, ctx) {
           <small class="kpi-note">Average across all members</small>
         </div>
         <div class="kpi">
-          <span>Total Headcount</span>
-          <strong>${esc(k.total_headcount?.value ?? 0)}</strong>
-          <small class="kpi-note">Active + terminated</small>
+          <span>Scolarity</span>
+          <strong>${esc(formatYears(k.avg_scolarity?.value ?? 0))}</strong>
+          <small class="kpi-note">Average across members with education</small>
         </div>
       </div>
 
