@@ -51,7 +51,7 @@ not contain page definitions.
    `web/components/pages/<page_id>/` and register the mount function in
    `web/lib/registry.js`.
 3. Add its dataset mapping to the exporter's `page_datasets` in
-   `domains/personnel/scripts/export_demo_apps_from_graph.py`.
+   `domains/personnel/apps/cockpit/scripts/export_demo_apps_from_graph.py`.
 4. Regenerate data so `data/entities/<id>/manifest.json` contains the page.
 
 Configuration controls the UI and access; the entity manifest controls which

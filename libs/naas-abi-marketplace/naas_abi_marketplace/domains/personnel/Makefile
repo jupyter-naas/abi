@@ -15,13 +15,13 @@ help:  ## list targets
 	  awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
 demo-graph:  ## build data/graph/personnel_demo.ttl from ontology classes
-	$(PYTHON) "$(MODULE_DIR)/scripts/generate_demo_graph.py"
+	$(PYTHON) "$(MODULE_DIR)/sandbox/generate_demo_graph.py"
 
 demo-source:  ## export apps/cockpit/data/source/person/<slug>/index.json
-	$(PYTHON) "$(MODULE_DIR)/scripts/export_source_person_files.py"
+	$(PYTHON) "$(MODULE_DIR)/apps/cockpit/scripts/export_source_person_files.py"
 
 demo-data: demo-graph  ## source JSON → graph TTL → apps/cockpit/data
-	$(PYTHON) "$(MODULE_DIR)/scripts/export_demo_apps_from_graph.py"
+	$(PYTHON) "$(MODULE_DIR)/apps/cockpit/scripts/export_demo_apps_from_graph.py"
 
 demo: demo-data  ## full demo pipeline
 

@@ -12,6 +12,7 @@ personnel/
 ├── __init__.py                  # ABIModule, datastore_path = "personnel"
 ├── agents/
 │   └── PersonnelAgent.py
+├── utils/                       # shared helpers (IRI minting, compaction) — see utils/README.md
 ├── pipelines/
 │   ├── BirthRegistrationPipeline.py
 │   └── BirthRegistrationPipeline_test.py
@@ -162,7 +163,7 @@ make demo-graph
 make demo-data
 ```
 
-**Fallback order** (`scripts/demo_fallback.resolve_apps_data_root`):
+**Fallback order** (`sandbox/demo_fallback.resolve_apps_data_root`):
 
 1. ObjectStorage keys under `{datastore_path}/apps/cockpit/`
 2. Non-empty TripleStore named graph `configuration.graph_name`
