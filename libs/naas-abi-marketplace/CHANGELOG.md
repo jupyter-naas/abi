@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.36.2 (2026-08-19)
+
+### Bug Fixes
+
+- **sanax**: Restore LinkedIn profile URL construction after lint cleanup.
+  ([`00cd7ca`](https://github.com/jupyter-naas/abi/commit/00cd7cab03ae51af4fc2a73fbb322f83367942c2))
+
+
 ## v3.36.1 (2026-08-18)
 
 ### Bug Fixes
