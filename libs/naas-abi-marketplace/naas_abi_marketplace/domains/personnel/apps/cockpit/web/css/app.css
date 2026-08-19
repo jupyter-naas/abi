@@ -681,7 +681,10 @@ td.muted { color: var(--muted); font-style: italic; }
   align-items: stretch;
   width: min(16rem, calc(100% - 1.5rem));
 }
-.graph-toolbar--row .graph-search,
+.graph-toolbar--row .graph-search {
+  flex: 2.5 1 12rem;
+  min-width: 10rem;
+}
 .graph-toolbar--row .graph-processes,
 .graph-toolbar--row .graph-classes {
   flex: 1 1 7.5rem;
@@ -703,6 +706,7 @@ td.muted { color: var(--muted); font-style: italic; }
   min-width: 0;
 }
 .graph-search input {
+  width: 100%;
   min-width: 0;
   font: inherit;
   color: var(--ink);

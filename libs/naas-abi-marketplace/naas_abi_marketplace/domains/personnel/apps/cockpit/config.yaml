@@ -143,6 +143,7 @@ theme:
 graph:
   default_person_label: "Alice Dupont"
   default_distance: 2
+  individual_search_min_chars: 3
   max_processes_per_class: 10
   scale: { min: 0.25, max: 2.5 }
   node:

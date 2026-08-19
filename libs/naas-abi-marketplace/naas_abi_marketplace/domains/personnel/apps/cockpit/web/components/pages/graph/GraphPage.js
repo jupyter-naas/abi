@@ -124,6 +124,10 @@ function configureGraph(config) {
   CAMERA_DISTANCE = graph.camera_distance ?? CAMERA_DISTANCE;
   DEFAULT_PERSON_LABEL = graph.default_person_label ?? DEFAULT_PERSON_LABEL;
   DEFAULT_DISTANCE = graph.default_distance ?? DEFAULT_DISTANCE;
+  INDIVIDUAL_SEARCH_MIN_CHARS = Math.max(
+    0,
+    Number(graph.individual_search_min_chars ?? INDIVIDUAL_SEARCH_MIN_CHARS) || 0
+  );
   DEFAULT_GRAPH_VIEW = GRAPH_VIEWS.includes(graph.default_view)
     ? graph.default_view
     : DEFAULT_GRAPH_VIEW;
@@ -632,7 +636,7 @@ function renderNodeDetail(node, { focusPersonId } = {}) {
   if (node.kind === "person") {
     const person = node.person;
     return `<h2>${esc(person.label)}${node.isFocus ? " · focus" : ""}</h2>
-      <dl>${renderNodeUri(person.id)}<dt>Class</dt><dd>Person</dd><dt>BFO bucket</dt><dd>${renderBfoBadge("Material Entity")}</dd></dl>
+      <dl>${renderNodeUri(person.id)}<dt>Class</dt><dd>Individual</dd><dt>BFO bucket</dt><dd>${renderBfoBadge("Material Entity")}</dd></dl>
       <h3>Data properties</h3>${renderPropertiesFeed(person.properties)}`;
   }
   if (node.kind === "entity") {
@@ -2275,6 +2279,13 @@ function readStoredHiddenProcesses() {
 // a person with a full working history rather than on a prompt to search.
 let DEFAULT_PERSON_LABEL;
 let DEFAULT_DISTANCE;
+let INDIVIDUAL_SEARCH_MIN_CHARS = 3;
+
+function filterIndividualSuggestions(people, query, minChars = INDIVIDUAL_SEARCH_MIN_CHARS) {
+  const q = query.trim().toLowerCase();
+  if (q.length < minChars) return null;
+  return people.filter((person) => person.label.toLowerCase().includes(q)).slice(0, 8);
+}
 
 function defaultPerson(people) {
   return (
@@ -2555,8 +2566,8 @@ export function mountGraphPage(el, data) {
               <div class="graph-stage" id="graph-stage">
                 <canvas id="graph-canvas"></canvas>
                 <div class="graph-toolbar graph-toolbar--${toolbarLayout}">
-                  <label class="graph-search"><span>Person</span>
-                    <input type="search" id="graph-person-search" placeholder="Search people…" value="${esc(person?.label || "")}" autocomplete="off" />
+                  <label class="graph-search"><span>Individual</span>
+                    <input type="search" id="graph-person-search" placeholder="Search individuals (3+ chars)…" value="${esc(person?.label || "")}" autocomplete="off" />
                     <ul class="graph-suggestions" id="graph-suggestions" hidden></ul>
                   </label>
                   ${renderProcessFilter(
@@ -2590,8 +2601,8 @@ export function mountGraphPage(el, data) {
               <aside class="graph-detail" id="graph-detail"></aside>
             </div></div>`
           : `<div class="graph-page"><div class="graph-toolbar">
-              <label class="graph-search"><span>Person</span>
-                <input type="search" id="graph-person-search" placeholder="Search people…" value="" autocomplete="off" />
+              <label class="graph-search"><span>Individual</span>
+                <input type="search" id="graph-person-search" placeholder="Search individuals (3+ chars)…" value="" autocomplete="off" />
                 <ul class="graph-suggestions" id="graph-suggestions" hidden></ul>
               </label>
             </div><div class="graph-empty panel"><h2>Select a person</h2><p>Try <strong>Alice Dupont</strong>, <strong>Emma Petit</strong>, or <strong>Grace Lambert</strong> to decompose their acts of working.</p></div></div>`
@@ -2600,9 +2611,18 @@ export function mountGraphPage(el, data) {
     const input = el.querySelector("#graph-person-search");
     const suggestions = el.querySelector("#graph-suggestions");
     const openSuggestions = (query) => {
-      const q = query.trim().toLowerCase();
-      const hits = people.filter((p) => !q || p.label.toLowerCase().includes(q)).slice(0, 8);
-      suggestions.innerHTML = hits.map((p) => `<li data-person="${esc(p.id)}"><strong>${esc(p.label)}</strong></li>`).join("") || `<li class="muted">No matches</li>`;
+      const hits = filterIndividualSuggestions(people, query);
+      if (hits === null) {
+        suggestions.innerHTML = `<li class="muted">Type at least ${INDIVIDUAL_SEARCH_MIN_CHARS} characters to search</li>`;
+      } else {
+        suggestions.innerHTML =
+          hits
+            .map(
+              (p) =>
+                `<li data-person="${esc(p.id)}"><strong>${esc(p.label)}</strong></li>`
+            )
+            .join("") || `<li class="muted">No matches</li>`;
+      }
       suggestions.hidden = false;
     };
     input.addEventListener("focus", () => openSuggestions(input.value));
