@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Loading…</title>
     <base href="/" />
-    <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="css/app.css?v=3" />
   </head>
   <body>
     <div class="shell">
@@ -49,7 +49,14 @@
         <header class="topbar" id="topbar">
           <div class="topbar-side"></div>
           <h1 class="topbar-title" id="topbar-title"></h1>
-          <div class="topbar-side topbar-end"></div>
+          <div class="topbar-side topbar-end">
+            <button
+              type="button"
+              class="banner-restore"
+              id="banner-restore"
+              hidden
+            ></button>
+          </div>
         </header>
 
         <aside
@@ -66,6 +73,6 @@
         <main id="pages"></main>
       </div>
     </div>
-    <script src="js/shell.js?v=2" type="module"></script>
+    <script src="js/shell.js?v=5" type="module"></script>
   </body>
 </html>

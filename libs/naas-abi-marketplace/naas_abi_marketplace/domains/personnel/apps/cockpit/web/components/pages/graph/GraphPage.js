@@ -7,6 +7,16 @@ import {
   bfoColor,
   configureBfoBuckets,
 } from "../processes/bfo-buckets.js";
+import {
+  applyDateFilter,
+  collectProcessTemporalRecords,
+  computeGlobalDateRange,
+  configureDateSlicer,
+  mountDateRangeSlicer,
+  persistDateSlicer,
+  readStoredDateSlicer,
+  renderDateSlicer,
+} from "./graph-date-slicer.js";
 
 function esc(s) {
   return String(s ?? "")
@@ -28,7 +38,7 @@ let GRAPH_NODE_RADIUS;
 let NODE_LABEL_FONT_SIZE;
 let NODE_LABEL_LINE_HEIGHT;
 let PROCESS_ROOT_RADIUS;
-const PARAMS_KEY = "cockpit-graph-params";
+let PARAMS_KEY = "cockpit-graph-params-v2";
 
 /**
  * Live graph parameters. Everything the simulation and the initial view read
@@ -43,7 +53,7 @@ let DISTANCE_HINT;
 
 const GRAPH_VIEWS = ["2d", "3d"];
 let GRAPH_VIEW_LABELS = {};
-let DEFAULT_GRAPH_VIEW;
+let DEFAULT_GRAPH_VIEW = "3d";
 let GRAPH_PAGE_URL;
 let DEFAULT_ENTITY_SLUG;
 let CONFIGURED_PAGE_URLS = new Set();
@@ -55,6 +65,7 @@ let CONFIGURED_PAGE_URLS = new Set();
  * longer to settle because it has a third axis to resolve.
  */
 let GRAPH_VIEW_DEFAULT_OVERRIDES = {};
+let DATE_SLICER_CONFIG = configureDateSlicer();
 
 function defaultGraphParams(view) {
   const base = Object.fromEntries(
@@ -94,17 +105,16 @@ function readStoredState() {
   return { view, byView };
 }
 
-let graphState = readStoredState();
+let graphState = { view: "2d", byView: { "2d": {}, "3d": {} } };
 
-// Mutated in place by the panel; the simulation reads it every tick. Holds the
-// active view's values, mirrored back into graphState on every change.
-const graphParams = { view: graphState.view, ...graphState.byView[graphState.view] };
+// Populated from config in configureGraph(). Do not read session storage before then.
+const graphParams = { view: "2d" };
 
 function configureGraph(config) {
   const graph = config.graph || {};
   const node = graph.node || {};
   MAX_PROCESSES_PER_CLASS =
-    graph.max_processes_per_class ?? MAX_PROCESSES_PER_CLASS;
+    graph.max_processes_per_class ?? MAX_PROCESSES_PER_CLASS ?? 10;
   MIN_SCALE = graph.scale?.min ?? MIN_SCALE;
   MAX_SCALE = graph.scale?.max ?? MAX_SCALE;
   GRAPH_NODE_RADIUS = node.radius ?? GRAPH_NODE_RADIUS;
@@ -127,6 +137,8 @@ function configureGraph(config) {
   );
   if (graph.parameters) GRAPH_PARAM_DEFS = graph.parameters;
   if (graph.view_defaults) GRAPH_VIEW_DEFAULT_OVERRIDES = graph.view_defaults;
+  if (graph.params_session_key) PARAMS_KEY = graph.params_session_key;
+  DATE_SLICER_CONFIG = configureDateSlicer(graph.date_slicer);
   DISTANCE_HINT = graph.distance_hint;
   GRAPH_VIEW_LABELS = graph.view_labels || {};
   configureBfoBuckets(config.theme?.bfo_buckets);
@@ -144,7 +156,8 @@ function applyGraphView(view) {
   graphParams.view = view;
   Object.assign(graphParams, graphState.byView[view]);
 }
-// The gap floor is enforced positionally every tick - see graphParams.nodeMinGap.
+// Mutated in place by the panel; the simulation reads it every tick. Holds the
+// active view's values, mirrored back into graphState on every change.
 // The repulsion force alone could not guarantee it: it is scaled by alpha, so
 // as the simulation cools the push fades and nodes settle packed.
 
@@ -207,6 +220,7 @@ function isProcessRecord(record) {
  * the relation graph before traversal, so nothing is reached through them.
  */
 function suppressOldProcesses(records, limit = MAX_PROCESSES_PER_CLASS) {
+  const cap = Number.isFinite(limit) && limit > 0 ? limit : 10;
   const byPersonClass = new Map();
   for (const record of records) {
     if (!isProcessRecord(record)) continue;
@@ -220,12 +234,12 @@ function suppressOldProcesses(records, limit = MAX_PROCESSES_PER_CLASS) {
 
   const suppressed = new Set();
   for (const list of byPersonClass.values()) {
-    if (list.length <= limit) continue;
+    if (list.length <= cap) continue;
     const ordered = [...list].sort(
       (a, b) =>
         recencyKey(b).localeCompare(recencyKey(a)) || String(a.id).localeCompare(String(b.id))
     );
-    for (const record of ordered.slice(limit)) suppressed.add(record.id);
+    for (const record of ordered.slice(cap)) suppressed.add(record.id);
   }
   return suppressed;
 }
@@ -281,6 +295,14 @@ function isProcessRoot(record) {
   return Boolean(record?.isWorkingHub || isProcessRecord(record));
 }
 
+function findProcessRecord(visible, id) {
+  return (
+    visible.entities?.find((record) => record.id === id) ||
+    visible.processes?.find((record) => record.id === id) ||
+    null
+  );
+}
+
 function visibleProcessOptions(visible) {
   const byId = new Map();
   const add = (record) => {
@@ -325,8 +347,11 @@ function visibleProcessInstanceOptions(instances, hiddenProcessTypes) {
  * The focus person is excluded from traversal so person-level edges do not
  * merge distinct process rays.
  */
-function assignNodesToProcessRoots(visible, focusPersonId) {
-  const processRoots = visibleProcessOptions(visible);
+function assignNodesToProcessRoots(visible, focusPersonId, { seedRootIds = null } = {}) {
+  let processRoots = visibleProcessOptions(visible);
+  if (seedRootIds) {
+    processRoots = processRoots.filter((process) => seedRootIds.has(process.id));
+  }
   const rootIds = new Set(processRoots.map((process) => process.id));
   if (rootIds.size === 0) return new Map();
 
@@ -364,7 +389,13 @@ function assignNodesToProcessRoots(visible, focusPersonId) {
  * Drop deselected acts of working and every node reached only through them.
  * The focus person and nodes attached directly to the person stay visible.
  */
-function applyProcessFilter(visible, hiddenProcessIds, hiddenProcessTypes, focusPersonId) {
+function applyProcessFilter(
+  visible,
+  hiddenProcessIds,
+  hiddenProcessTypes,
+  focusPersonId,
+  { strict = false, seedRootIds = null } = {}
+) {
   const allProcesses = visibleProcessOptions(visible);
   const hiddenTypes = hiddenProcessTypes || new Set();
   const hiddenIds = hiddenProcessIds || new Set();
@@ -375,14 +406,19 @@ function applyProcessFilter(visible, hiddenProcessIds, hiddenProcessTypes, focus
   if (effectivelyHidden.size === 0) return visible;
 
   const rootIds = new Set(allProcesses.map((process) => process.id));
-  const assignments = assignNodesToProcessRoots(visible, focusPersonId);
+  const visibleRootIds =
+    seedRootIds ||
+    new Set(allProcesses.filter((process) => !effectivelyHidden.has(process.id)).map((p) => p.id));
+  const assignments = assignNodesToProcessRoots(visible, focusPersonId, {
+    seedRootIds: strict ? visibleRootIds : null,
+  });
 
   const keepNode = (record) => {
     if (!record) return false;
     if (record.id === focusPersonId) return true;
     if (rootIds.has(record.id)) return !effectivelyHidden.has(record.id);
     const rootId = assignments.get(record.id);
-    if (!rootId) return true;
+    if (!rootId) return !strict;
     return !effectivelyHidden.has(rootId);
   };
 
@@ -509,30 +545,34 @@ function renderBfoBadge(bucketType) {
   return `<span class="graph-bfo-badge" style="--bfo-color:${def.color};--bfo-border:${def.border}">${esc(def.label)}</span>`;
 }
 
+function renderNodeUri(id) {
+  return `<dt>URI</dt><dd class="graph-node-uri">${esc(id || "-")}</dd>`;
+}
+
 function renderNodeDetail(node, { focusPersonId } = {}) {
   if (!node) return `<h2>Selection</h2><p class="empty">Select a node on the canvas.</p>`;
   if (node.kind === "person") {
     const person = node.person;
     return `<h2>${esc(person.label)}${node.isFocus ? " · focus" : ""}</h2>
-      <dl><dt>Class</dt><dd>Person</dd><dt>BFO bucket</dt><dd>${renderBfoBadge("Material Entity")}</dd></dl>
+      <dl>${renderNodeUri(person.id)}<dt>Class</dt><dd>Person</dd><dt>BFO bucket</dt><dd>${renderBfoBadge("Material Entity")}</dd></dl>
       <h3>Data properties</h3>${renderPropertiesTable(person.properties)}`;
   }
   if (node.kind === "entity") {
     const entity = node.entity;
     return `<h2>${esc(entity.label)}</h2>
-      <dl><dt>Class</dt><dd>${esc(entity.classLabel)}</dd><dt>BFO bucket</dt><dd>${renderBfoBadge(entity.bfoBucket)}</dd></dl>
+      <dl>${renderNodeUri(entity.id)}<dt>Class</dt><dd>${esc(entity.classLabel)}</dd><dt>BFO bucket</dt><dd>${renderBfoBadge(entity.bfoBucket)}</dd></dl>
       <h3>Data properties</h3>${renderPropertiesTable(entity.properties)}`;
   }
   if (node.kind === "process") {
     const process = node.process;
     return `<h2>${esc(process.classLabel || "Process")}</h2>
-      <dl><dt>BFO bucket</dt><dd>${renderBfoBadge(process.bfoBucket || "Process")}</dd></dl>
+      <dl>${renderNodeUri(process.id)}<dt>BFO bucket</dt><dd>${renderBfoBadge(process.bfoBucket || "Process")}</dd></dl>
       <h3>Data properties</h3>${renderPropertiesTable(process.properties)}`;
   }
   if (node.kind === "source") {
     const source = node.source;
     return `<h2>${esc(source.classLabel || "Source")}</h2>
-      <dl><dt>BFO bucket</dt><dd>${renderBfoBadge(source.bfoBucket || "Process")}</dd></dl>
+      <dl>${renderNodeUri(source.id)}<dt>BFO bucket</dt><dd>${renderBfoBadge(source.bfoBucket || "Process")}</dd></dl>
       <h3>Data properties</h3>${renderPropertiesTable(source.properties)}`;
   }
   return renderNodeDetail(null);
@@ -1940,13 +1980,13 @@ function renderClassFilter(
       : visibleCount === allInstances.length
         ? `All ${allInstances.length}`
         : `${visibleCount} of ${allInstances.length}`;
-  return `<div class="graph-classes"><span>Classes</span>
+  return `<div class="graph-classes"><span>Continuants</span>
     <button type="button" class="graph-classes-toggle" id="graph-classes-toggle" aria-expanded="false" aria-haspopup="true"${allInstances.length === 0 ? " disabled" : ""}>
       <span>${esc(summary)}</span>
       <svg class="graph-classes-chevron" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" /></svg>
     </button>
     <div class="graph-classes-menu" id="graph-classes-menu" hidden>
-      <ul class="graph-class-groups">${items || `<li class="muted">No classes at this distance</li>`}</ul>
+      <ul class="graph-class-groups">${items || `<li class="muted">No continuants at this distance</li>`}</ul>
       <div class="graph-classes-actions">
         <button type="button" data-classes-action="all"${allInstances.length === 0 ? " disabled" : ""}>Select all</button>
         <button type="button" data-classes-action="none"${allInstances.length === 0 ? " disabled" : ""}>Clear all</button>
@@ -2133,6 +2173,9 @@ export function mountGraphPage(el, data) {
     Math.max(1, Number(sessionStorage.getItem(DISTANCE_KEY)) || DEFAULT_DISTANCE)
   );
   const initialFilters = graphFiltersFromUrl(people, storedDistance);
+  const initialDateSlicer = readStoredDateSlicer(DATE_SLICER_CONFIG.storageKey);
+  let dateRangeStart = initialDateSlicer.rangeStart;
+  let dateRangeEnd = initialDateSlicer.rangeEnd;
   let selectedId = initialFilters.selectedId;
   let distance = initialFilters.distance;
   // Deselected classes are stored, not selected ones, so classes that only
@@ -2149,6 +2192,7 @@ export function mountGraphPage(el, data) {
   // open while several values are being tuned.
   let paramsOpen = false;
   let disposeCanvas = null;
+  let disposeDateSlicer = null;
   syncGraphFiltersToUrl(selectedId, distance);
 
   function persistParams() {
@@ -2211,16 +2255,50 @@ export function mountGraphPage(el, data) {
     );
   }
 
+  function persistDateSlicerState() {
+    persistDateSlicer(DATE_SLICER_CONFIG.storageKey, dateRangeStart, dateRangeEnd);
+  }
+
   function paint() {
     const person = people.find((p) => p.id === selectedId) || null;
     const reachable = person ? collectVisibleGraph(adj, person.id, distance) : null;
-    const allProcessInstances = reachable ? visibleProcessOptions(reachable) : [];
+    const temporalProcesses = reachable
+      ? collectProcessTemporalRecords(reachable, { isProcessRoot })
+      : [];
+    const dateRange = computeGlobalDateRange(temporalProcesses);
+    if (dateRange.min && !dateRangeStart) dateRangeStart = dateRange.min;
+    if (dateRange.max && !dateRangeEnd) dateRangeEnd = dateRange.max;
+    if (dateRange.min && dateRangeStart && dateRangeStart < dateRange.min) {
+      dateRangeStart = dateRange.min;
+    }
+    if (dateRange.max && dateRangeEnd && dateRangeEnd > dateRange.max) {
+      dateRangeEnd = dateRange.max;
+    }
+    if (dateRangeStart && dateRangeEnd && dateRangeStart > dateRangeEnd) {
+      dateRangeStart = dateRange.min;
+      dateRangeEnd = dateRange.max;
+    }
+    const dateFiltered = reachable
+      ? applyDateFilter(
+          reachable,
+          dateRangeStart,
+          dateRangeEnd,
+          dateRange,
+          person.id,
+          {
+            visibleProcessOptions,
+            findProcessRecord,
+            applyProcessFilter,
+          }
+        )
+      : null;
+    const allProcessInstances = dateFiltered ? visibleProcessOptions(dateFiltered) : [];
     const processTypeOptions = visibleProcessTypeOptions(allProcessInstances);
     pruneHiddenProcessTypes(processTypeOptions);
     pruneHiddenProcessInstances(allProcessInstances, processTypeOptions);
-    const processFiltered = reachable
+    const processFiltered = dateFiltered
       ? applyProcessFilter(
-          reachable,
+          dateFiltered,
           hiddenProcessInstances,
           hiddenProcessTypes,
           person.id
@@ -2241,37 +2319,45 @@ export function mountGraphPage(el, data) {
         )
       : null;
 
+    const toolbarLayout = graphParams.toolbarLayout === "column" ? "column" : "row";
+
     el.innerHTML = `
       ${
         person
           ? `<div class="graph-page"><div class="graph-body">
               <div class="graph-stage" id="graph-stage">
                 <canvas id="graph-canvas"></canvas>
-                <div class="graph-toolbar">
+                <div class="graph-toolbar graph-toolbar--${toolbarLayout}">
                   <label class="graph-search"><span>Person</span>
                     <input type="search" id="graph-person-search" placeholder="Search people…" value="${esc(person?.label || "")}" autocomplete="off" />
                     <ul class="graph-suggestions" id="graph-suggestions" hidden></ul>
                   </label>
-                  <div class="graph-filters">
-                    ${renderProcessFilter(
-                      processTypeOptions,
-                      allProcessInstances,
-                      hiddenProcessTypes,
-                      hiddenProcessInstances,
-                      expandedProcessTypes
-                    )}
-                    ${renderClassFilter(
-                      classTypeOptions,
-                      allClassInstances,
-                      hiddenClassTypes,
-                      hiddenClassInstances,
-                      expandedClassTypes
-                    )}
-                  </div>
+                  ${renderProcessFilter(
+                    processTypeOptions,
+                    allProcessInstances,
+                    hiddenProcessTypes,
+                    hiddenProcessInstances,
+                    expandedProcessTypes
+                  )}
+                  ${renderDateSlicer({
+                    esc,
+                    globalRange: dateRange,
+                    selectedStart: dateRangeStart,
+                    selectedEnd: dateRangeEnd,
+                  })}
+                  ${renderClassFilter(
+                    classTypeOptions,
+                    allClassInstances,
+                    hiddenClassTypes,
+                    hiddenClassInstances,
+                    expandedClassTypes
+                  )}
                 </div>
                 ${graphParams.legend ? `<div class="graph-legend">${renderLegend()}</div>` : ""}
-                ${renderParamsPanel(graphParams, distance, paramsOpen)}
-                <div class="graph-zoom"><button type="button" id="graph-zoom-in" title="Zoom in">+</button><button type="button" id="graph-zoom-out" title="Zoom out">−</button><button type="button" id="graph-zoom-reset" title="Reset view">⟲</button></div>
+                <div class="graph-controls">
+                  <div class="graph-zoom"><button type="button" id="graph-zoom-in" title="Zoom in">+</button><button type="button" id="graph-zoom-out" title="Zoom out">−</button><button type="button" id="graph-zoom-reset" title="Reset view">⟲</button></div>
+                  ${renderParamsPanel(graphParams, distance, paramsOpen)}
+                </div>
                 <p class="graph-hint">${graphParams.view === "3d" ? "Drag to orbit" : "Focus at center · drag to pan"} · every other node is simulated · double-click to centre · scroll to zoom</p>
               </div>
               <aside class="graph-detail" id="graph-detail"></aside>
@@ -2309,6 +2395,16 @@ export function mountGraphPage(el, data) {
       paramsToggle.setAttribute("aria-expanded", paramsOpen ? "true" : "false");
     });
 
+    if (disposeDateSlicer) disposeDateSlicer();
+    disposeDateSlicer = mountDateRangeSlicer(el.querySelector("#graph-date-slicer"), {
+      onRangeChange: (start, end) => {
+        dateRangeStart = start;
+        dateRangeEnd = end;
+        persistDateSlicerState();
+        paint();
+      },
+    });
+
     // `input` updates the readout on every frame of the drag; `change` - once
     // the thumb is released - is what repaints, so dragging a slider does not
     // rebuild the whole canvas dozens of times.
@@ -2333,6 +2429,14 @@ export function mountGraphPage(el, data) {
           persistParams();
         } else if (GRAPH_PARAM_DEFS[key]?.type === "select") {
           graphParams[key] = e.target.value;
+          if (key === "toolbarLayout") {
+            for (const view of GRAPH_VIEWS) {
+              graphState.byView[view] = {
+                ...graphState.byView[view],
+                toolbarLayout: e.target.value,
+              };
+            }
+          }
           persistParams();
         } else {
           graphParams[key] = Number(e.target.value);
@@ -2504,6 +2608,7 @@ export function mountGraphPage(el, data) {
   paint();
   return () => {
     document.removeEventListener("click", closeFilterMenus);
+    if (disposeDateSlicer) disposeDateSlicer();
     if (disposeCanvas) disposeCanvas();
   };
 }

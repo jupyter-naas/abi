@@ -55,6 +55,32 @@ body {
   justify-content: flex-end;
   align-items: center;
 }
+.banner-restore {
+  display: inline-grid;
+  place-items: center;
+  position: absolute;
+  right: var(--bookmark-right);
+  bottom: var(--bookmark-overlap);
+  z-index: 1;
+  width: var(--bookmark-width);
+  height: var(--bookmark-height);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%);
+  color: var(--bookmark-color);
+  cursor: pointer;
+}
+.banner-restore[hidden] { display: none; }
+.banner-restore[data-type="info"] { background: var(--banner-info); }
+.banner-restore[data-type="warning"] { background: var(--banner-warning); }
+.banner-restore[data-type="error"] { background: var(--banner-error); }
+.banner-restore:hover { filter: brightness(0.88); }
+.banner-restore .icon {
+  width: var(--bookmark-icon-size);
+  height: var(--bookmark-icon-size);
+  margin-bottom: 0.15rem;
+}
 
 .page-banner {
   display: flex;
@@ -542,16 +568,33 @@ td.muted { color: var(--muted); font-style: italic; }
   left: 0.75rem;
   z-index: 3;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 0.85rem;
-  align-items: center;
-  /* Definite width, not max-width: an absolutely positioned flex container
-     shrink-to-fits, and the resulting line was too narrow to hold Person and
-     Classes side by side. */
-  width: min(calc(100% - 12rem), 34rem);
-  padding: 0.55rem 0.75rem;
+  gap: 0.65rem;
+  padding: 0.5rem 0.6rem;
   background: color-mix(in srgb, var(--panel) 92%, transparent);
   backdrop-filter: blur(6px);
+}
+.graph-toolbar--row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  width: min(calc(100% - 12rem), 46rem);
+}
+.graph-toolbar--column {
+  flex-direction: column;
+  align-items: stretch;
+  width: min(16rem, calc(100% - 1.5rem));
+}
+.graph-toolbar--row .graph-search,
+.graph-toolbar--row .graph-processes,
+.graph-toolbar--row .graph-classes {
+  flex: 1 1 7.5rem;
+  min-width: 0;
+}
+.graph-toolbar--column .graph-search,
+.graph-toolbar--column .graph-processes,
+.graph-toolbar--column .graph-date-slicer,
+.graph-toolbar--column .graph-classes {
+  width: 100%;
 }
 .graph-search {
   position: relative;
@@ -561,7 +604,6 @@ td.muted { color: var(--muted); font-style: italic; }
   font-size: 0.82rem;
   color: var(--muted);
   min-width: 0;
-  flex: 1 1 14rem;
 }
 .graph-search input {
   min-width: 0;
@@ -571,38 +613,8 @@ td.muted { color: var(--muted); font-style: italic; }
   border: none;
   padding: 0.45rem 0.65rem;
 }
-/* Distance and Classes sit side by side and shrink together rather than wrapping. */
-.graph-filters {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 0.85rem;
-  flex: 1 1 18rem;
-  min-width: 0;
-}
-.graph-distance {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  font-size: 0.82rem;
-  color: var(--muted);
-  flex: 1 1 8rem;
-  min-width: 0;
-}
-.graph-distance select {
-  min-width: 0;
-  font: inherit;
-  color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 5%, var(--panel));
-  border: none;
-  padding: 0.45rem 0.55rem;
-}
-.graph-distance select:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
 
-/* Processes and Classes - nested multi-select dropdowns. */
+/* Processes and Continuants - nested multi-select dropdowns. */
 .graph-processes,
 .graph-classes {
   position: relative;
@@ -611,7 +623,6 @@ td.muted { color: var(--muted); font-style: italic; }
   gap: 0.35rem;
   font-size: 0.82rem;
   color: var(--muted);
-  flex: 1 1 9rem;
   min-width: 0;
 }
 .graph-processes-toggle,
@@ -869,12 +880,121 @@ td.muted { color: var(--muted); font-style: italic; }
   pointer-events: none;
   white-space: nowrap;
 }
-/* Graph parameters - gear button bottom-right, panel opens above it. */
-.graph-params {
+/* Graph controls - zoom above parameters, bottom-right. */
+.graph-controls {
   position: absolute;
   right: 0.75rem;
   bottom: 0.75rem;
   z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+.graph-date-slicer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  min-width: 0;
+}
+.graph-date-slicer-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.graph-date-slicer-fields {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.graph-date-field {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+.graph-date-field-label {
+  flex: none;
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.graph-date-field .graph-date-input {
+  width: 10.5ch;
+  flex: none;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 5%, var(--panel));
+  border: none;
+  padding: 0.45rem 0.55rem;
+  font-variant-numeric: tabular-nums;
+}
+.graph-date-field .graph-date-input::placeholder {
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+.graph-date-field .graph-date-input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 1px;
+}
+.graph-toolbar--row .graph-date-slicer {
+  flex: 2 1 15rem;
+  min-width: 14rem;
+}
+.graph-toolbar--row .graph-date-slicer-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.4rem;
+  align-items: center;
+  width: 100%;
+  flex-wrap: nowrap;
+}
+.graph-toolbar--row .graph-date-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.graph-toolbar--row .graph-date-field .graph-date-input {
+  width: 100%;
+  min-width: 0;
+  text-align: center;
+  padding: 0.45rem 0.55rem;
+  box-sizing: border-box;
+}
+.graph-toolbar--column .graph-date-slicer-fields {
+  flex-direction: column;
+  align-items: stretch;
+  align-self: stretch;
+  gap: 0.35rem;
+  width: 100%;
+}
+.graph-toolbar--column .graph-date-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  width: 100%;
+}
+.graph-toolbar--column .graph-date-field-label {
+  flex: none;
+}
+.graph-toolbar--column .graph-date-field .graph-date-input {
+  width: 100%;
+  flex: none;
+  min-width: 0;
+  text-align: center;
+}
+.graph-toolbar--column .graph-date-slicer {
+  min-width: 0;
+  align-self: stretch;
+}
+.graph-params {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -1029,13 +1149,9 @@ td.muted { color: var(--muted); font-style: italic; }
 }
 
 .graph-zoom {
-  position: absolute;
-  left: 0.75rem;
-  bottom: 0.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  z-index: 3;
 }
 .graph-zoom button {
   width: 1.85rem;
@@ -1162,6 +1278,12 @@ td.muted { color: var(--muted); font-style: italic; }
   display: block;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.68rem;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+.graph-node-uri {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.72rem;
   overflow-wrap: anywhere;
   color: var(--ink);
 }
@@ -1365,7 +1487,7 @@ td.muted { color: var(--muted); font-style: italic; }
     border-bottom: 1px solid var(--line);
   }
   .topbar {
-    position: static;
+    position: relative;
     grid-template-columns: 1fr auto;
   }
   .topbar-side:first-child { display: none; }
@@ -1385,10 +1507,12 @@ td.muted { color: var(--muted); font-style: italic; }
   }
   #nav { flex-direction: row; flex-wrap: wrap; }
   .kpis, .grid-2 { grid-template-columns: 1fr 1fr; }
-  .graph-toolbar { max-width: calc(100% - 1.5rem); }
+  .graph-toolbar--row { width: min(calc(100% - 1.5rem), 46rem); }
+  .graph-toolbar--column { width: min(16rem, calc(100% - 1.5rem)); }
   .graph-body { grid-template-columns: 1fr; grid-template-rows: minmax(320px, 1fr) auto; }
   .graph-detail { border-left: 0; border-top: 1px solid var(--line); max-height: 40vh; }
   .graph-legend { max-width: min(10rem, calc(100% - 1.5rem)); }
+  .graph-controls { bottom: 0.55rem; right: 0.55rem; }
   .onto-buckets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {

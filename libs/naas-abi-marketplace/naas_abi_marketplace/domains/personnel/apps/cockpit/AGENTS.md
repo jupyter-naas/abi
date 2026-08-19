@@ -20,6 +20,7 @@ Configuration ownership:
 - `app.pages` - `page_id`, URL segment, label, order, enabled state,
   permissions, icon, and banner
 - `theme.css_variables` - all shared CSS design tokens
+- `app.banner_restore_label` / `theme.banner_icons` - dismiss and restore controls
 - `theme.bfo_buckets` / `theme.process_slide` - graph and process colours
 - `graph` - initial focus/distance/view, canvas dimensions, and every control
   shown in the graph parameters panel

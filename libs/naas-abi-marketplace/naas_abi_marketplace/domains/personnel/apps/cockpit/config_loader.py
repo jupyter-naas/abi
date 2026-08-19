@@ -109,8 +109,11 @@ def load_config() -> dict[str, Any]:
     default_page = _text(app.get("default_page"), "app.default_page")
     if default_page not in page_ids:
         raise ConfigError("app.default_page must reference a configured page")
+    _text(app.get("banner_restore_label"), "app.banner_restore_label")
     if not isinstance(theme.get("css_variables"), dict):
         raise ConfigError("theme.css_variables must be a mapping")
+    banner_icons = _mapping(theme.get("banner_icons"), "theme.banner_icons")
+    _text(banner_icons.get("restore"), "theme.banner_icons.restore")
     buckets = theme.get("bfo_buckets")
     if not isinstance(buckets, list) or not buckets:
         raise ConfigError("theme.bfo_buckets must be a non-empty list")

@@ -33,6 +33,7 @@ def test_design_and_graph_parameters_are_configured() -> None:
     assert config["theme"]["css_variables"]
     assert config["theme"]["bfo_buckets"]
     assert config["graph"]["parameters"]
+    assert config["graph"]["date_slicer"]["storage_key"]
     assert config["graph"]["default_person_label"]
 
 

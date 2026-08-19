@@ -107,6 +107,27 @@ function dismissBanner(pageId) {
   const element = document.getElementById("page-banner");
   element.hidden = true;
   element.dataset.page = "";
+  syncBannerRestore(pageId);
+}
+
+function restoreBanner(pageId) {
+  const dismissed = dismissedBanners();
+  delete dismissed[pageId];
+  sessionStorage.setItem(BANNER_DISMISS_KEY, JSON.stringify(dismissed));
+  showPageBanner(pageId);
+}
+
+function syncBannerRestore(pageId) {
+  const restore = document.getElementById("banner-restore");
+  const banner = pagesById[pageId]?.banner;
+  restore.dataset.type = ["info", "warning", "error"].includes(banner?.type)
+    ? banner.type
+    : "info";
+  restore.hidden = !(
+    banner?.enabled &&
+    banner.text?.trim() &&
+    dismissedBanners()[pageId]
+  );
 }
 
 function showPageBanner(pageId) {
@@ -115,6 +136,7 @@ function showPageBanner(pageId) {
   if (!banner?.enabled || !banner.text?.trim() || dismissedBanners()[pageId]) {
     element.hidden = true;
     element.dataset.page = "";
+    syncBannerRestore(pageId);
     return;
   }
   const type = ["info", "warning", "error"].includes(banner.type)
@@ -129,6 +151,7 @@ function showPageBanner(pageId) {
   document.getElementById("page-banner-text").textContent = banner.text;
   document.getElementById("page-banner-icon").innerHTML =
     `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="${icon}" /></svg>`;
+  syncBannerRestore(pageId);
 }
 
 async function mountOrgFilter() {
@@ -253,6 +276,14 @@ async function bootstrap() {
     const pageId = document.getElementById("page-banner").dataset.page;
     if (pageId) dismissBanner(pageId);
   });
+  const restore = document.getElementById("banner-restore");
+  const restoreLabel = config.app.banner_restore_label;
+  const restoreIcon = config.theme?.banner_icons?.restore || "";
+  restore.title = restoreLabel;
+  restore.setAttribute("aria-label", restoreLabel);
+  restore.innerHTML =
+    `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="${restoreIcon}" /></svg>`;
+  restore.addEventListener("click", () => restoreBanner(currentPageId));
   window.addEventListener("popstate", handleUrlNavigation);
 
   const { loadGlobal } = createApi(defaultEntityConfig.entity_id);
