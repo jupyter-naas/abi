@@ -14,7 +14,6 @@ import {
   configureDateSlicer,
   mountDateRangeSlicer,
   persistDateSlicer,
-  readStoredDateSlicer,
   renderDateSlicer,
 } from "./graph-date-slicer.js";
 
@@ -27,6 +26,7 @@ function esc(s) {
 }
 
 const DISTANCE_KEY = "cockpit-graph-distance";
+const LAST_PERSON_KEY = "cockpit-graph-last-person";
 const HIDDEN_CLASS_TYPES_KEY = "cockpit-graph-hidden-classes";
 const HIDDEN_CLASS_INSTANCES_KEY = "cockpit-graph-hidden-class-instances";
 const HIDDEN_PROCESS_TYPES_KEY = "cockpit-graph-hidden-process-types";
@@ -348,12 +348,13 @@ function visibleProcessInstanceOptions(instances, hiddenProcessTypes) {
  * merge distinct process rays.
  */
 function assignNodesToProcessRoots(visible, focusPersonId, { seedRootIds = null } = {}) {
-  let processRoots = visibleProcessOptions(visible);
+  const allProcessRoots = visibleProcessOptions(visible);
+  const allRootIds = new Set(allProcessRoots.map((process) => process.id));
+  let processRoots = allProcessRoots;
   if (seedRootIds) {
-    processRoots = processRoots.filter((process) => seedRootIds.has(process.id));
+    processRoots = allProcessRoots.filter((process) => seedRootIds.has(process.id));
   }
-  const rootIds = new Set(processRoots.map((process) => process.id));
-  if (rootIds.size === 0) return new Map();
+  if (processRoots.length === 0) return new Map();
 
   const adjacency = new Map();
   for (const rel of visible.relations || []) {
@@ -374,7 +375,7 @@ function assignNodesToProcessRoots(visible, focusPersonId, { seedRootIds = null 
     const nodeId = queue[cursor];
     const rootId = assignments.get(nodeId);
     for (const neighbour of adjacency.get(nodeId) || []) {
-      if (neighbour === focusPersonId || rootIds.has(neighbour)) continue;
+      if (neighbour === focusPersonId || allRootIds.has(neighbour)) continue;
       if (!assignments.has(neighbour)) {
         assignments.set(neighbour, rootId);
         queue.push(neighbour);
@@ -2141,6 +2142,22 @@ function graphFiltersFromUrl(people, fallbackDistance) {
   };
 }
 
+/** Min/max ISO dates from temporal regions on a person's visible process roots. */
+function temporalRangeForPerson(adj, personId, hopDistance) {
+  const reachable = collectVisibleGraph(adj, personId, hopDistance);
+  const temporalProcesses = collectProcessTemporalRecords(reachable, { isProcessRoot });
+  return computeGlobalDateRange(temporalProcesses);
+}
+
+function resetGraphParamsToDefaults() {
+  graphState = {
+    view: DEFAULT_GRAPH_VIEW,
+    byView: Object.fromEntries(GRAPH_VIEWS.map((view) => [view, defaultGraphParams(view)])),
+  };
+  applyGraphView(DEFAULT_GRAPH_VIEW);
+  sessionStorage.setItem(PARAMS_KEY, JSON.stringify(graphState));
+}
+
 function entitySlugFromPathname() {
   const segments = window.location.pathname.split("/").filter(Boolean);
   if (segments.length >= 2) return segments[0];
@@ -2173,17 +2190,36 @@ export function mountGraphPage(el, data) {
     Math.max(1, Number(sessionStorage.getItem(DISTANCE_KEY)) || DEFAULT_DISTANCE)
   );
   const initialFilters = graphFiltersFromUrl(people, storedDistance);
-  const initialDateSlicer = readStoredDateSlicer(DATE_SLICER_CONFIG.storageKey);
-  let dateRangeStart = initialDateSlicer.rangeStart;
-  let dateRangeEnd = initialDateSlicer.rangeEnd;
+  let dateRangeStart = null;
+  let dateRangeEnd = null;
   let selectedId = initialFilters.selectedId;
   let distance = initialFilters.distance;
-  // Deselected classes are stored, not selected ones, so classes that only
-  // appear at a larger distance start out visible.
-  let hiddenClassTypes = new Set(readStoredHiddenClassTypes());
-  let hiddenClassInstances = new Set(readStoredHiddenClassInstances());
-  let hiddenProcessTypes = new Set(readStoredHiddenProcessTypes());
-  let hiddenProcessInstances = new Set(readStoredHiddenProcesses());
+  const lastPersonId = sessionStorage.getItem(LAST_PERSON_KEY);
+  const personChanged = Boolean(selectedId && selectedId !== lastPersonId);
+  let hiddenClassTypes;
+  let hiddenClassInstances;
+  let hiddenProcessTypes;
+  let hiddenProcessInstances;
+  if (personChanged) {
+    resetGraphParamsToDefaults();
+    distance = DEFAULT_DISTANCE;
+    sessionStorage.setItem(DISTANCE_KEY, String(distance));
+    hiddenClassTypes = new Set();
+    hiddenClassInstances = new Set();
+    hiddenProcessTypes = new Set();
+    hiddenProcessInstances = new Set();
+  } else {
+    hiddenClassTypes = new Set(readStoredHiddenClassTypes());
+    hiddenClassInstances = new Set(readStoredHiddenClassInstances());
+    hiddenProcessTypes = new Set(readStoredHiddenProcessTypes());
+    hiddenProcessInstances = new Set(readStoredHiddenProcesses());
+  }
+  if (selectedId) {
+    const initialRange = temporalRangeForPerson(adj, selectedId, distance);
+    dateRangeStart = initialRange.min;
+    dateRangeEnd = initialRange.max;
+    sessionStorage.setItem(LAST_PERSON_KEY, selectedId);
+  }
   let classMenuOpen = false;
   let processMenuOpen = false;
   let expandedProcessTypes = new Set();
@@ -2256,7 +2292,42 @@ export function mountGraphPage(el, data) {
   }
 
   function persistDateSlicerState() {
-    persistDateSlicer(DATE_SLICER_CONFIG.storageKey, dateRangeStart, dateRangeEnd);
+    if (!selectedId) return;
+    persistDateSlicer(`${DATE_SLICER_CONFIG.storageKey}:${selectedId}`, dateRangeStart, dateRangeEnd);
+  }
+
+  function resetGraphStateForPerson(personId) {
+    distance = DEFAULT_DISTANCE;
+    sessionStorage.setItem(DISTANCE_KEY, String(distance));
+    resetGraphParamsToDefaults();
+
+    hiddenClassTypes = new Set();
+    hiddenClassInstances = new Set();
+    hiddenProcessTypes = new Set();
+    hiddenProcessInstances = new Set();
+    expandedProcessTypes = new Set();
+    expandedClassTypes = new Set();
+    persistHiddenClassTypes();
+    persistHiddenClassInstances();
+    persistHiddenProcessTypes();
+    persistHiddenProcessInstances();
+
+    processMenuOpen = false;
+    classMenuOpen = false;
+    paramsOpen = false;
+
+    const range = temporalRangeForPerson(adj, personId, distance);
+    dateRangeStart = range.min;
+    dateRangeEnd = range.max;
+    sessionStorage.setItem(LAST_PERSON_KEY, personId);
+    persistDateSlicerState();
+  }
+
+  if (personChanged) {
+    persistHiddenClassTypes();
+    persistHiddenClassInstances();
+    persistHiddenProcessTypes();
+    persistHiddenProcessInstances();
   }
 
   function paint() {
@@ -2275,8 +2346,7 @@ export function mountGraphPage(el, data) {
       dateRangeEnd = dateRange.max;
     }
     if (dateRangeStart && dateRangeEnd && dateRangeStart > dateRangeEnd) {
-      dateRangeStart = dateRange.min;
-      dateRangeEnd = dateRange.max;
+      dateRangeEnd = dateRange.max || dateRangeEnd;
     }
     const dateFiltered = reachable
       ? applyDateFilter(
@@ -2384,6 +2454,7 @@ export function mountGraphPage(el, data) {
       const li = e.target.closest("[data-person]");
       if (!li) return;
       selectedId = li.dataset.person;
+      resetGraphStateForPerson(selectedId);
       syncGraphFiltersToUrl(selectedId, distance);
       paint();
     });
@@ -2424,6 +2495,10 @@ export function mountGraphPage(el, data) {
           distance = Number(e.target.value) || 1;
           sessionStorage.setItem(DISTANCE_KEY, String(distance));
           syncGraphFiltersToUrl(selectedId, distance);
+          const range = temporalRangeForPerson(adj, selectedId, distance);
+          if (range.min) dateRangeStart = range.min;
+          if (range.max) dateRangeEnd = range.max;
+          persistDateSlicerState();
         } else if (GRAPH_PARAM_DEFS[key]?.type === "toggle") {
           graphParams[key] = e.target.checked;
           persistParams();

@@ -5,6 +5,7 @@
     "first_name": "Martin",
     "last_name": "Donadieu",
     "full_name": "Frank Moreau",
+    "sexe": "male",
     "linkedin_profile_url": "https://demo.example/profiles/frank-moreau"
   },
   "employment": {

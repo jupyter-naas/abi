@@ -39,7 +39,9 @@ export function resolveSelectedRange(selectedStart, selectedEnd, globalRange) {
   let end = selectedEnd || max;
   start = clampIsoDate(start, min, max);
   end = clampIsoDate(end, min, max);
-  if (start && end && start > end) [start, end] = [end, start];
+  if (start && end && start > end) {
+    end = max || end;
+  }
   return { start, end, min, max };
 }
 

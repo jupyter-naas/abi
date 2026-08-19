@@ -5,6 +5,7 @@
     "first_name": "Valentin",
     "last_name": "Piquard",
     "full_name": "Hugo Girard",
+    "sexe": "male",
     "linkedin_profile_url": "https://demo.example/profiles/demo"
   },
   "employment": {

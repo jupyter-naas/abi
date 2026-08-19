@@ -5,6 +5,7 @@
     "first_name": "Florent",
     "last_name": "Ravenel",
     "full_name": "Alice Dupont",
+    "sexe": "male",
     "linkedin_profile_url": "https://demo.example/profiles/demo"
   },
   "employment": {
@@ -13,9 +14,7 @@
     "job_family": "Executive",
     "hire_date": "2019-06-15",
     "termination_date": null,
-    "status": "active",
-    "remuneration_amount": 95000,
-    "remuneration_currency": "EUR"
+    "status": "active"
   },
   "records": [
     {
@@ -33,9 +32,7 @@
       "skills": [
         "Python (Programming Language)",
         "FastAPI"
-      ],
-      "remuneration_amount": 95000,
-      "remuneration_currency": "EUR"
+      ]
     },
     {
       "process_type": "ActOfWorking",

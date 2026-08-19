@@ -15,12 +15,12 @@ brand:
 # This app currently has no authenticated session, so only the `public`
 # permission is granted. Any other permission name is denied server-side.
 app:
-  default_page: "workforce"
+  default_page: "dashboard"
   banner_restore_label: "Show bookmarked banner"
   pages:
-    - page_id: "workforce"
-      url: "workforce"
-      label: "Workforce"
+    - page_id: "dashboard"
+      url: "dashboard"
+      label: "Dashboard"
       order: 10
       enabled: true
       permissions: ["public"]
@@ -28,7 +28,7 @@ app:
       banner:
         type: "info"
         enabled: true
-        text: "Demo roster from the personnel graph: headcount, job families, and status mix."
+        text: "Headcount, tenure, and seniority from act-of-working temporal regions in the personnel graph."
     - page_id: "graph"
       url: "graph"
       label: "Graph"

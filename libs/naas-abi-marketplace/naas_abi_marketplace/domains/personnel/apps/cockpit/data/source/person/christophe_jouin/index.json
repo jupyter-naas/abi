@@ -5,6 +5,7 @@
     "first_name": "Christophe",
     "last_name": "Jouin",
     "full_name": "David Leroy",
+    "sexe": "male",
     "linkedin_profile_url": "https://demo.example/profiles/david-leroy"
   },
   "employment": {

@@ -5,6 +5,7 @@
     "first_name": "Anthony",
     "last_name": "Chevallier",
     "full_name": "Claire Bernard",
+    "sexe": "male",
     "linkedin_profile_url": "https://demo.example/profiles/demo"
   },
   "employment": {

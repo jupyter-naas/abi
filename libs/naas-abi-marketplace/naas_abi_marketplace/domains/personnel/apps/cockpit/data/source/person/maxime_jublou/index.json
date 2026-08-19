@@ -5,6 +5,7 @@
     "first_name": "Maxime",
     "last_name": "Jublou",
     "full_name": "Grace Lambert",
+    "sexe": "male",
     "linkedin_profile_url": "https://demo.example/profiles/grace-lambert"
   },
   "employment": {

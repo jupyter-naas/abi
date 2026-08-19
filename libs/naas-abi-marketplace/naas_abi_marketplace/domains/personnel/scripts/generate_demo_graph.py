@@ -535,9 +535,6 @@ def build_instances() -> Graph:
             ),
             None,
         )
-        remuneration = item.get("remuneration_amount")
-        if remuneration is None and roster:
-            remuneration = roster.get("remuneration")
 
         _, position_uri = _add_working(
             g,
@@ -553,7 +550,7 @@ def build_instances() -> Graph:
             start=item["start"],
             end=item["end"],
             duration=item["duration"],
-            remuneration_amount=remuneration,
+            remuneration_amount=item.get("remuneration_amount"),
             remuneration_currency=item.get("remuneration_currency") or "EUR",
         )
         if roster:

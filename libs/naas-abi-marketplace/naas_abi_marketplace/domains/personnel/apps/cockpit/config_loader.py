@@ -12,7 +12,7 @@ import yaml
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 ENTITIES_PATH = Path(__file__).resolve().parent / "data" / "globals" / "entities.json"
-REGISTERED_PAGE_IDS = frozenset({"workforce", "graph", "processes", "logs"})
+REGISTERED_PAGE_IDS = frozenset({"dashboard", "graph", "processes", "logs"})
 PAGE_TOKEN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 

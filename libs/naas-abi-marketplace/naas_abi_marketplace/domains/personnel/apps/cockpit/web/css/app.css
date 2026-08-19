@@ -360,6 +360,103 @@ main:has(#page-graph.active) {
   font-size: 1.8rem;
   letter-spacing: -0.03em;
 }
+.kpi-note {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.dashboard-page { display: flex; flex-direction: column; gap: 0.35rem; }
+.roster-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.75rem 0 0.35rem;
+}
+.roster-heading-text {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.roster-heading h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+}
+.roster-filter-note {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.roster-count {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.dashboard-table-panel { padding: 0; overflow: hidden; }
+.data-table-wrap { overflow: auto; max-height: min(70vh, 42rem); }
+.data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.86rem;
+}
+.data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  padding: 0;
+}
+.data-table-filters th {
+  top: 2.35rem;
+  z-index: 1;
+  background: var(--subtle-surface);
+}
+.data-table-sort {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0.65rem 0.75rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.data-table-sort:hover { background: var(--muted-surface); }
+.data-table-sort-indicator::after { content: "↕"; color: var(--muted); font-size: 0.72rem; }
+.data-table-sort[data-sort-active="true"][data-sort-dir="asc"] .data-table-sort-indicator::after { content: "↑"; color: var(--accent); }
+.data-table-sort[data-sort-active="true"][data-sort-dir="desc"] .data-table-sort-indicator::after { content: "↓"; color: var(--accent); }
+.data-table-filter {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--panel);
+  font: inherit;
+  font-size: 0.8rem;
+}
+.data-table-filter:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+.data-table td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  background: var(--panel);
+}
+.data-table tbody tr:hover td { background: var(--subtle-surface); }
 
 .grid-2 {
   display: grid;

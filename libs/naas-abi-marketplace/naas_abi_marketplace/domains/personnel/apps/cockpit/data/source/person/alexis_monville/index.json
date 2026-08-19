@@ -5,6 +5,7 @@
     "first_name": "Alexis",
     "last_name": "Monville",
     "full_name": "Bob Martin",
+    "sexe": "male",
     "linkedin_profile_url": "https://demo.example/profiles/bob-martin"
   },
   "employment": {

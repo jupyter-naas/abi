@@ -23,7 +23,10 @@ from pathlib import Path
 from naas_abi_marketplace.domains.personnel.apps.cockpit.graph_payload import (
     build_graph_page_payload,
 )
-from naas_abi_marketplace.domains.personnel.apps.cockpit.config_loader import load_config
+from naas_abi_marketplace.domains.personnel.apps.cockpit.config_loader import (
+    load_config,
+    load_default_entity,
+)
 from naas_abi_marketplace.domains.personnel.apps.cockpit.log_payload import (
     build_ledger_log_rows,
 )
@@ -33,6 +36,9 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import (
     DEFAULT_ENTITY_SLUG,
     ENTITY_DATA,
     GRAPH_FILE,
+)
+from naas_abi_marketplace.domains.personnel.scripts.workforce_metrics import (
+    build_workforce_metrics,
 )
 from rdflib import Graph, Literal
 
@@ -182,6 +188,8 @@ def main() -> None:
                     "siteLabel": "siteLabel",
                     "temporal": "temporal",
                     "temporalLabel": "temporalLabel",
+                    "temporalStart": "temporalStart",
+                    "temporalEnd": "temporalEnd",
                     "givenName": "givenName",
                     "familyName": "familyName",
                     "headcount": "headcount",
@@ -258,65 +266,6 @@ def main() -> None:
             }
         )
 
-    families = source_rows.get("find_headcount_by_job_family", [])
-    # normalize jobFamily key
-    family_records = [
-        {
-            "jobFamily": r.get("jobFamily") or r.get("job_family"),
-            "headcount": int(r.get("headcount") or 0),
-        }
-        for r in families
-    ]
-
-    status_mix: dict[str, int] = {}
-    for r in roster_rows:
-        s = r.get("status_value") or "unknown"
-        status_mix[s] = status_mix.get(s, 0) + 1
-
-    open_positions = [
-        {
-            "job_title": r.get("job_title") or r.get("jobTitle"),
-            "job_family": r.get("jobFamily") or r.get("job_family"),
-            "descriptionLabel": r.get("descriptionLabel"),
-        }
-        for r in source_rows.get("find_open_job_positions", [])
-    ]
-
-    _dump(
-        ENTITY_DATA / "workforce" / "kpis.json",
-        _envelope(
-            [],
-            kpis={
-                "active_headcount": {
-                    "value": len([r for r in roster_rows if r.get("status_value") == "active"])
-                },
-                "on_leave": {
-                    "value": len(
-                        [r for r in roster_rows if r.get("status_value") == "on-leave"]
-                    )
-                },
-                "notice_period": {
-                    "value": len(
-                        [
-                            r
-                            for r in roster_rows
-                            if r.get("status_value") == "notice-period"
-                        ]
-                    )
-                },
-                "open_roles": {"value": len(open_positions)},
-            },
-        ),
-    )
-    _dump(ENTITY_DATA / "workforce" / "roster.json", _envelope(roster_rows))
-    _dump(ENTITY_DATA / "workforce" / "by_job_family.json", _envelope(family_records))
-    _dump(
-        ENTITY_DATA / "workforce" / "status_mix.json",
-        _envelope(
-            [{"status_value": k, "count": v} for k, v in sorted(status_mix.items())]
-        ),
-    )
-
     family_by_person = {
         (r.get("personLabel") or ""): r.get("jobFamily") or r.get("job_family")
         for r in source_rows.get("find_positions_by_title", [])
@@ -325,6 +274,19 @@ def main() -> None:
     for row in roster_rows:
         if not row.get("job_family"):
             row["job_family"] = family_by_person.get(row.get("personLabel") or "")
+
+    org_label = load_default_entity().get("organizationLabel") or "naas.ai"
+    kpis, roster_rows = build_workforce_metrics(
+        roster_rows,
+        source_rows.get("find_working_processes", []),
+        org_label=org_label,
+    )
+
+    _dump(
+        ENTITY_DATA / "dashboard" / "kpis.json",
+        _envelope([], kpis=kpis),
+    )
+    _dump(ENTITY_DATA / "dashboard" / "roster.json", _envelope(roster_rows))
 
     graph_payload = build_graph_page_payload(
         roster_rows,
@@ -347,11 +309,9 @@ def main() -> None:
 
     data_version = _now_version()
     page_datasets = {
-        "workforce": [
-            "workforce/kpis.json",
-            "workforce/roster.json",
-            "workforce/by_job_family.json",
-            "workforce/status_mix.json",
+        "dashboard": [
+            "dashboard/kpis.json",
+            "dashboard/roster.json",
         ],
         "graph": [
             "graph/index.json",
