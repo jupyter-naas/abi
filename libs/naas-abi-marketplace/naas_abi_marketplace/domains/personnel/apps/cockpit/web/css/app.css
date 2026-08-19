@@ -613,7 +613,8 @@ td.muted { color: var(--muted); font-style: italic; }
   cursor: not-allowed;
 }
 
-/* Classes - multi-select dropdown, styled to match the distance filter. */
+/* Processes and Classes - nested multi-select dropdowns. */
+.graph-processes,
 .graph-classes {
   position: relative;
   display: flex;
@@ -624,6 +625,7 @@ td.muted { color: var(--muted); font-style: italic; }
   flex: 1 1 9rem;
   min-width: 0;
 }
+.graph-processes-toggle,
 .graph-classes-toggle {
   display: flex;
   min-width: 0;
@@ -638,34 +640,55 @@ td.muted { color: var(--muted); font-style: italic; }
   cursor: pointer;
   text-align: left;
 }
+.graph-processes-toggle:disabled,
+.graph-classes-toggle:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.graph-processes-chevron,
 .graph-classes-chevron {
   width: 0.85rem;
   height: 0.85rem;
   flex: none;
   color: var(--muted);
 }
+.graph-processes-toggle[aria-expanded="true"] .graph-processes-chevron,
 .graph-classes-toggle[aria-expanded="true"] .graph-classes-chevron {
   transform: rotate(180deg);
 }
+.graph-processes-menu,
 .graph-classes-menu {
   position: absolute;
   top: 100%;
   left: 0;
   z-index: 6;
-  min-width: 14rem;
+  min-width: 16rem;
   margin-top: 0.2rem;
   background: var(--panel);
   box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
 }
-.graph-classes-menu ul {
+.graph-process-groups,
+.graph-class-groups {
   margin: 0;
   padding: 0.25rem 0;
   list-style: none;
-  max-height: 260px;
+  max-height: 320px;
   overflow: auto;
 }
-.graph-classes-menu label {
+.graph-process-group,
+.graph-class-group {
+  list-style: none;
+}
+.graph-process-type-row,
+.graph-class-type-row {
   display: flex;
+  align-items: stretch;
+  gap: 0.15rem;
+}
+.graph-process-type-row > label,
+.graph-class-type-row > label {
+  display: flex;
+  flex: 1;
   align-items: center;
   gap: 0.45rem;
   padding: 0.35rem 0.6rem;
@@ -673,8 +696,68 @@ td.muted { color: var(--muted); font-style: italic; }
   color: var(--ink);
   font-size: 0.82rem;
 }
-.graph-classes-menu label:hover {
+.graph-process-type-row > label:hover,
+.graph-class-type-row > label:hover {
   background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+.graph-process-expand,
+.graph-class-expand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  flex: none;
+  font: inherit;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.graph-process-expand:hover:not(:disabled),
+.graph-class-expand:hover:not(:disabled) {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+.graph-process-expand:disabled,
+.graph-class-expand:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.graph-process-expand-chevron,
+.graph-class-expand-chevron {
+  width: 0.85rem;
+  height: 0.85rem;
+  transition: transform 0.15s ease;
+}
+.graph-process-expand[aria-expanded="true"] .graph-process-expand-chevron,
+.graph-class-expand[aria-expanded="true"] .graph-class-expand-chevron {
+  transform: rotate(180deg);
+}
+.graph-process-instance-list,
+.graph-class-instance-list {
+  margin: 0;
+  padding: 0 0 0.2rem;
+  list-style: none;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+.graph-process-instance-list label,
+.graph-class-instance-list label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.6rem 0.3rem 2rem;
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 0.8rem;
+}
+.graph-process-instance-list label:hover,
+.graph-class-instance-list label:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+.graph-process-instance-list label.is-muted,
+.graph-class-instance-list label.is-muted {
+  color: var(--muted);
+  cursor: not-allowed;
 }
 .graph-class-name {
   flex: 1;
@@ -684,12 +767,14 @@ td.muted { color: var(--muted); font-style: italic; }
   font-size: 0.74rem;
   font-variant-numeric: tabular-nums;
 }
+.graph-processes-actions,
 .graph-classes-actions {
   display: flex;
   gap: 0.35rem;
   padding: 0.4rem 0.6rem;
   border-top: 1px solid var(--line);
 }
+.graph-processes-actions button,
 .graph-classes-actions button {
   font: inherit;
   font-size: 0.74rem;
@@ -699,7 +784,13 @@ td.muted { color: var(--muted); font-style: italic; }
   padding: 0.15rem 0.2rem;
   cursor: pointer;
 }
-.graph-classes-actions button:hover {
+.graph-processes-actions button:disabled,
+.graph-classes-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.graph-processes-actions button:hover:not(:disabled),
+.graph-classes-actions button:hover:not(:disabled) {
   color: var(--ink);
   text-decoration: underline;
 }

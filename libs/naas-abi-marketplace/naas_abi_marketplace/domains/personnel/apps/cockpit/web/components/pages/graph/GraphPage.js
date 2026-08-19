@@ -13,7 +13,10 @@ function esc(s) {
 }
 
 const DISTANCE_KEY = "cockpit-graph-distance";
-const HIDDEN_CLASSES_KEY = "cockpit-graph-hidden-classes";
+const HIDDEN_CLASS_TYPES_KEY = "cockpit-graph-hidden-classes";
+const HIDDEN_CLASS_INSTANCES_KEY = "cockpit-graph-hidden-class-instances";
+const HIDDEN_PROCESS_TYPES_KEY = "cockpit-graph-hidden-process-types";
+const HIDDEN_PROCESSES_KEY = "cockpit-graph-hidden-processes";
 const MAX_PROCESSES_PER_CLASS = 10;
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 2.5;
@@ -302,44 +305,203 @@ function collectVisibleGraph(adj, rootId, distance) {
   };
 }
 
-/**
- * Distinct classes present in a visible set, with counts and BFO bucket. The
- * list is derived from whatever the current distance reaches, so it grows as
- * the distance grows.
- */
-function visibleClassOptions(visible) {
-  const byLabel = new Map();
-  const add = (record, fallbackBucket) => {
-    if (!record) return;
-    const label = record.classLabel || fallbackBucket || "Unknown";
-    const entry = byLabel.get(label) || {
-      label,
-      bucket: record.bfoBucket || fallbackBucket || "Unknown",
-      count: 0,
-    };
-    entry.count += 1;
-    byLabel.set(label, entry);
+/** Act-of-working roots in a visible set (one row per process instance). */
+function isProcessRoot(record) {
+  return Boolean(record?.isWorkingHub || isProcessRecord(record));
+}
+
+function visibleProcessOptions(visible) {
+  const byId = new Map();
+  const add = (record) => {
+    if (!record || !isProcessRoot(record)) return;
+    const type = record.classLabel || "Process";
+    byId.set(record.id, {
+      id: record.id,
+      label: record.label || type,
+      type,
+      bucket: record.bfoBucket || "Process",
+    });
   };
-  for (const person of visible.people || []) add(person, "Material Entity");
-  for (const entity of visible.entities || []) add(entity, "Process");
-  for (const process of visible.processes || []) add(process, "Process");
-  return [...byLabel.values()].sort(
-    (a, b) => a.bucket.localeCompare(b.bucket) || a.label.localeCompare(b.label)
+  for (const process of visible.processes || []) add(process);
+  for (const entity of visible.entities || []) add(entity);
+  return [...byId.values()].sort(
+    (a, b) => a.type.localeCompare(b.type) || a.label.localeCompare(b.label)
   );
 }
 
+/** Distinct process types (ontology class labels) with instance counts. */
+function visibleProcessTypeOptions(instances) {
+  const byType = new Map();
+  for (const instance of instances) {
+    const entry = byType.get(instance.type) || {
+      label: instance.type,
+      bucket: instance.bucket,
+      count: 0,
+    };
+    entry.count += 1;
+    byType.set(instance.type, entry);
+  }
+  return [...byType.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/** Instances limited to process types that remain selected. */
+function visibleProcessInstanceOptions(instances, hiddenProcessTypes) {
+  return instances.filter((instance) => !hiddenProcessTypes.has(instance.type));
+}
+
 /**
- * Drop every node whose class the user has deselected, plus any relation left
- * dangling. The focus person is always kept - it anchors the canvas.
+ * Map every non-root node to the nearest act of working that reaches it.
+ * The focus person is excluded from traversal so person-level edges do not
+ * merge distinct process rays.
  */
-function applyClassFilter(visible, hiddenClasses, focusPersonId) {
-  if (!hiddenClasses || hiddenClasses.size === 0) return visible;
-  const visibleClass = (record) => !hiddenClasses.has(record.classLabel || "");
-  const people = (visible.people || []).filter(
-    (person) => person.id === focusPersonId || visibleClass(person)
+function assignNodesToProcessRoots(visible, focusPersonId) {
+  const processRoots = visibleProcessOptions(visible);
+  const rootIds = new Set(processRoots.map((process) => process.id));
+  if (rootIds.size === 0) return new Map();
+
+  const adjacency = new Map();
+  for (const rel of visible.relations || []) {
+    if (!adjacency.has(rel.from)) adjacency.set(rel.from, new Set());
+    if (!adjacency.has(rel.to)) adjacency.set(rel.to, new Set());
+    adjacency.get(rel.from).add(rel.to);
+    adjacency.get(rel.to).add(rel.from);
+  }
+
+  const assignments = new Map();
+  const queue = [];
+  for (const root of processRoots) {
+    assignments.set(root.id, root.id);
+    queue.push(root.id);
+  }
+
+  for (let cursor = 0; cursor < queue.length; cursor++) {
+    const nodeId = queue[cursor];
+    const rootId = assignments.get(nodeId);
+    for (const neighbour of adjacency.get(nodeId) || []) {
+      if (neighbour === focusPersonId || rootIds.has(neighbour)) continue;
+      if (!assignments.has(neighbour)) {
+        assignments.set(neighbour, rootId);
+        queue.push(neighbour);
+      }
+    }
+  }
+
+  return assignments;
+}
+
+/**
+ * Drop deselected acts of working and every node reached only through them.
+ * The focus person and nodes attached directly to the person stay visible.
+ */
+function applyProcessFilter(visible, hiddenProcessIds, hiddenProcessTypes, focusPersonId) {
+  const allProcesses = visibleProcessOptions(visible);
+  const hiddenTypes = hiddenProcessTypes || new Set();
+  const hiddenIds = hiddenProcessIds || new Set();
+  const effectivelyHidden = new Set(hiddenIds);
+  for (const process of allProcesses) {
+    if (hiddenTypes.has(process.type)) effectivelyHidden.add(process.id);
+  }
+  if (effectivelyHidden.size === 0) return visible;
+
+  const rootIds = new Set(allProcesses.map((process) => process.id));
+  const assignments = assignNodesToProcessRoots(visible, focusPersonId);
+
+  const keepNode = (record) => {
+    if (!record) return false;
+    if (record.id === focusPersonId) return true;
+    if (rootIds.has(record.id)) return !effectivelyHidden.has(record.id);
+    const rootId = assignments.get(record.id);
+    if (!rootId) return true;
+    return !effectivelyHidden.has(rootId);
+  };
+
+  const people = (visible.people || []).filter(keepNode);
+  const entities = (visible.entities || []).filter(keepNode);
+  const processes = (visible.processes || []).filter(keepNode);
+  const liveIds = new Set(
+    [...people, ...entities, ...processes].map((record) => record.id)
   );
-  const entities = (visible.entities || []).filter(visibleClass);
-  const processes = (visible.processes || []).filter(visibleClass);
+
+  return {
+    people,
+    entities,
+    processes,
+    relations: (visible.relations || []).filter(
+      (rel) => liveIds.has(rel.from) && liveIds.has(rel.to)
+    ),
+  };
+}
+
+function classLabelOf(record) {
+  if (record?.nodeKind === "person" || record?.kind === "employee") return "Person";
+  return record?.classLabel || "Unknown";
+}
+
+/** Non-process nodes that the class filter can toggle (processes have their own filters). */
+function visibleClassInstanceOptions(visible, focusPersonId) {
+  const byId = new Map();
+  const add = (record) => {
+    if (!record || isProcessRoot(record) || record.id === focusPersonId) return;
+    const type = classLabelOf(record);
+    byId.set(record.id, {
+      id: record.id,
+      label: record.label || type,
+      type,
+      bucket: record.bfoBucket || (type === "Person" ? "Material Entity" : "Unknown"),
+    });
+  };
+  for (const person of visible.people || []) add(person);
+  for (const entity of visible.entities || []) add(entity);
+  for (const process of visible.processes || []) add(process);
+  return [...byId.values()].sort(
+    (a, b) => a.type.localeCompare(b.type) || a.label.localeCompare(b.label)
+  );
+}
+
+/** Distinct class types with instance counts, excluding process nodes. */
+function visibleClassTypeOptions(instances) {
+  const byType = new Map();
+  for (const instance of instances) {
+    const entry = byType.get(instance.type) || {
+      label: instance.type,
+      bucket: instance.bucket,
+      count: 0,
+    };
+    entry.count += 1;
+    byType.set(instance.type, entry);
+  }
+  return [...byType.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/** Class instances limited to types that remain selected. */
+function visibleClassInstanceOptionsForTypes(instances, hiddenClassTypes) {
+  return instances.filter((instance) => !hiddenClassTypes.has(instance.type));
+}
+
+/**
+ * Drop deselected class types or instances. Process nodes are untouched here -
+ * they are controlled by the process filters above.
+ */
+function applyClassFilter(visible, hiddenClassInstances, hiddenClassTypes, focusPersonId) {
+  const allInstances = visibleClassInstanceOptions(visible, focusPersonId);
+  const hiddenTypes = hiddenClassTypes || new Set();
+  const hiddenIds = hiddenClassInstances || new Set();
+  const effectivelyHidden = new Set(hiddenIds);
+  for (const instance of allInstances) {
+    if (hiddenTypes.has(instance.type)) effectivelyHidden.add(instance.id);
+  }
+  if (effectivelyHidden.size === 0) return visible;
+
+  const keepNode = (record) => {
+    if (!record) return false;
+    if (record.id === focusPersonId) return true;
+    if (isProcessRoot(record)) return true;
+    return !effectivelyHidden.has(record.id);
+  };
+
+  const people = (visible.people || []).filter(keepNode);
+  const entities = (visible.entities || []).filter(keepNode);
+  const processes = (visible.processes || []).filter(keepNode);
   const liveIds = new Set(
     [...people, ...entities, ...processes].map((record) => record.id)
   );
@@ -1258,7 +1420,14 @@ export {
   MAX_PROCESSES_PER_CLASS,
   buildGraphIndex,
   collectVisibleGraph,
-  visibleClassOptions,
+  visibleProcessOptions,
+  visibleProcessTypeOptions,
+  visibleProcessInstanceOptions,
+  assignNodesToProcessRoots,
+  applyProcessFilter,
+  visibleClassInstanceOptions,
+  visibleClassTypeOptions,
+  visibleClassInstanceOptionsForTypes,
   applyClassFilter,
   suppressOldProcesses,
   resolveNode,
@@ -1669,31 +1838,145 @@ function mountGraphCanvas(root, options) {
   };
 }
 
-function renderClassFilter(options, hiddenClasses) {
-  const items = options
-    .map((option) => {
-      const def = bfoColor(option.bucket);
-      const checked = hiddenClasses.has(option.label) ? "" : " checked";
-      return `<li><label>
-        <input type="checkbox" data-class="${esc(option.label)}"${checked} />
-        <i class="graph-swatch" style="background:${def.color};border:1px solid ${def.border}"></i>
-        <span class="graph-class-name">${esc(option.label)}</span>
-        <span class="graph-class-count">${option.count}</span>
-      </label></li>`;
+function groupInstancesByType(typeOptions, allInstances) {
+  const byType = new Map(typeOptions.map((type) => [type.label, []]));
+  for (const instance of allInstances) {
+    const list = byType.get(instance.type);
+    if (list) list.push(instance);
+  }
+  return typeOptions.map((type) => ({
+    ...type,
+    instances: byType.get(type.label) || [],
+  }));
+}
+
+function renderProcessFilter(
+  typeOptions,
+  allInstances,
+  hiddenProcessTypes,
+  hiddenProcessInstances,
+  expandedProcessTypes
+) {
+  const groups = groupInstancesByType(typeOptions, allInstances);
+  const items = groups
+    .map((group) => {
+      const def = bfoColor(group.bucket);
+      const typeChecked = hiddenProcessTypes.has(group.label) ? "" : " checked";
+      const expanded = expandedProcessTypes.has(group.label);
+      const typeHidden = hiddenProcessTypes.has(group.label);
+      const instanceItems = group.instances
+        .map((instance) => {
+          const checked = hiddenProcessInstances.has(instance.id) ? "" : " checked";
+          return `<li><label class="graph-process-instance-label${typeHidden ? " is-muted" : ""}">
+            <input type="checkbox" data-process-instance="${esc(instance.id)}"${checked}${typeHidden ? " disabled" : ""} />
+            <span class="graph-class-name">${esc(instance.label)}</span>
+          </label></li>`;
+        })
+        .join("");
+      return `<li class="graph-process-group">
+        <div class="graph-process-type-row">
+          <label>
+            <input type="checkbox" data-process-type="${esc(group.label)}"${typeChecked} />
+            <i class="graph-swatch" style="background:${def.color};border:1px solid ${def.border}"></i>
+            <span class="graph-class-name">${esc(group.label)}</span>
+            <span class="graph-class-count">${group.instances.length}</span>
+          </label>
+          <button type="button" class="graph-process-expand" data-process-type-expand="${esc(group.label)}"
+            aria-expanded="${expanded ? "true" : "false"}" aria-label="Show ${esc(group.label)} instances"
+            ${group.instances.length === 0 ? " disabled" : ""}>
+            <svg class="graph-process-expand-chevron" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" /></svg>
+          </button>
+        </div>
+        <ul class="graph-process-instance-list"${expanded ? "" : " hidden"}>${instanceItems || `<li class="muted">No instances</li>`}</ul>
+      </li>`;
     })
     .join("");
-  const shown = options.filter((option) => !hiddenClasses.has(option.label)).length;
-  const summary = shown === options.length ? `All ${options.length}` : `${shown} of ${options.length}`;
+  const visibleCount = allInstances.filter(
+    (instance) =>
+      !hiddenProcessTypes.has(instance.type) && !hiddenProcessInstances.has(instance.id)
+  ).length;
+  const summary =
+    allInstances.length === 0
+      ? "None"
+      : visibleCount === allInstances.length
+        ? `All ${allInstances.length}`
+        : `${visibleCount} of ${allInstances.length}`;
+  return `<div class="graph-processes"><span>Processes</span>
+    <button type="button" class="graph-processes-toggle" id="graph-processes-toggle" aria-expanded="false" aria-haspopup="true"${allInstances.length === 0 ? " disabled" : ""}>
+      <span>${esc(summary)}</span>
+      <svg class="graph-processes-chevron" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" /></svg>
+    </button>
+    <div class="graph-processes-menu" id="graph-processes-menu" hidden>
+      <ul class="graph-process-groups">${items || `<li class="muted">No processes at this distance</li>`}</ul>
+      <div class="graph-processes-actions">
+        <button type="button" data-processes-action="all"${allInstances.length === 0 ? " disabled" : ""}>Select all</button>
+        <button type="button" data-processes-action="none"${allInstances.length === 0 ? " disabled" : ""}>Clear all</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderClassFilter(
+  typeOptions,
+  allInstances,
+  hiddenClassTypes,
+  hiddenClassInstances,
+  expandedClassTypes
+) {
+  const groups = groupInstancesByType(typeOptions, allInstances);
+  const items = groups
+    .map((group) => {
+      const def = bfoColor(group.bucket);
+      const typeChecked = hiddenClassTypes.has(group.label) ? "" : " checked";
+      const expanded = expandedClassTypes.has(group.label);
+      const typeHidden = hiddenClassTypes.has(group.label);
+      const instanceItems = group.instances
+        .map((instance) => {
+          const checked = hiddenClassInstances.has(instance.id) ? "" : " checked";
+          return `<li><label class="graph-class-instance-label${typeHidden ? " is-muted" : ""}">
+            <input type="checkbox" data-class-instance="${esc(instance.id)}"${checked}${typeHidden ? " disabled" : ""} />
+            <span class="graph-class-name">${esc(instance.label)}</span>
+          </label></li>`;
+        })
+        .join("");
+      return `<li class="graph-class-group">
+        <div class="graph-class-type-row">
+          <label>
+            <input type="checkbox" data-class-type="${esc(group.label)}"${typeChecked} />
+            <i class="graph-swatch" style="background:${def.color};border:1px solid ${def.border}"></i>
+            <span class="graph-class-name">${esc(group.label)}</span>
+            <span class="graph-class-count">${group.instances.length}</span>
+          </label>
+          <button type="button" class="graph-class-expand" data-class-type-expand="${esc(group.label)}"
+            aria-expanded="${expanded ? "true" : "false"}" aria-label="Show ${esc(group.label)} instances"
+            ${group.instances.length === 0 ? " disabled" : ""}>
+            <svg class="graph-class-expand-chevron" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" /></svg>
+          </button>
+        </div>
+        <ul class="graph-class-instance-list"${expanded ? "" : " hidden"}>${instanceItems || `<li class="muted">No instances</li>`}</ul>
+      </li>`;
+    })
+    .join("");
+  const visibleCount = allInstances.filter(
+    (instance) =>
+      !hiddenClassTypes.has(instance.type) && !hiddenClassInstances.has(instance.id)
+  ).length;
+  const summary =
+    allInstances.length === 0
+      ? "None"
+      : visibleCount === allInstances.length
+        ? `All ${allInstances.length}`
+        : `${visibleCount} of ${allInstances.length}`;
   return `<div class="graph-classes"><span>Classes</span>
-    <button type="button" class="graph-classes-toggle" id="graph-classes-toggle" aria-expanded="false" aria-haspopup="true">
+    <button type="button" class="graph-classes-toggle" id="graph-classes-toggle" aria-expanded="false" aria-haspopup="true"${allInstances.length === 0 ? " disabled" : ""}>
       <span>${esc(summary)}</span>
       <svg class="graph-classes-chevron" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" /></svg>
     </button>
     <div class="graph-classes-menu" id="graph-classes-menu" hidden>
-      <ul>${items || `<li class="muted">No classes at this distance</li>`}</ul>
+      <ul class="graph-class-groups">${items || `<li class="muted">No classes at this distance</li>`}</ul>
       <div class="graph-classes-actions">
-        <button type="button" data-classes-action="all">Select all</button>
-        <button type="button" data-classes-action="none">Clear all</button>
+        <button type="button" data-classes-action="all"${allInstances.length === 0 ? " disabled" : ""}>Select all</button>
+        <button type="button" data-classes-action="none"${allInstances.length === 0 ? " disabled" : ""}>Clear all</button>
       </div>
     </div>
   </div>`;
@@ -1781,9 +2064,36 @@ function renderLegend() {
   return `<strong>BFO buckets</strong>${items}`;
 }
 
-function readStoredHiddenClasses() {
+function readStoredHiddenClassTypes() {
   try {
-    const stored = JSON.parse(sessionStorage.getItem(HIDDEN_CLASSES_KEY) || "[]");
+    const stored = JSON.parse(sessionStorage.getItem(HIDDEN_CLASS_TYPES_KEY) || "[]");
+    return Array.isArray(stored) ? stored.filter((item) => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function readStoredHiddenClassInstances() {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(HIDDEN_CLASS_INSTANCES_KEY) || "[]");
+    return Array.isArray(stored) ? stored.filter((item) => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function readStoredHiddenProcessTypes() {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(HIDDEN_PROCESS_TYPES_KEY) || "[]");
+    return Array.isArray(stored) ? stored.filter((item) => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function readStoredHiddenProcesses() {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(HIDDEN_PROCESSES_KEY) || "[]");
     return Array.isArray(stored) ? stored.filter((item) => typeof item === "string") : [];
   } catch {
     return [];
@@ -1854,8 +2164,14 @@ export function mountGraphPage(el, data) {
   let distance = initialFilters.distance;
   // Deselected classes are stored, not selected ones, so classes that only
   // appear at a larger distance start out visible.
-  let hiddenClasses = new Set(readStoredHiddenClasses());
+  let hiddenClassTypes = new Set(readStoredHiddenClassTypes());
+  let hiddenClassInstances = new Set(readStoredHiddenClassInstances());
+  let hiddenProcessTypes = new Set(readStoredHiddenProcessTypes());
+  let hiddenProcessInstances = new Set(readStoredHiddenProcesses());
   let classMenuOpen = false;
+  let processMenuOpen = false;
+  let expandedProcessTypes = new Set();
+  let expandedClassTypes = new Set();
   // Survives the repaint each parameter change triggers, so the panel stays
   // open while several values are being tuned.
   let paramsOpen = false;
@@ -1871,15 +2187,86 @@ export function mountGraphPage(el, data) {
     sessionStorage.setItem(PARAMS_KEY, JSON.stringify(graphState));
   }
 
-  function persistHiddenClasses() {
-    sessionStorage.setItem(HIDDEN_CLASSES_KEY, JSON.stringify([...hiddenClasses]));
+  function persistHiddenClassTypes() {
+    sessionStorage.setItem(HIDDEN_CLASS_TYPES_KEY, JSON.stringify([...hiddenClassTypes]));
+  }
+
+  function persistHiddenClassInstances() {
+    sessionStorage.setItem(
+      HIDDEN_CLASS_INSTANCES_KEY,
+      JSON.stringify([...hiddenClassInstances])
+    );
+  }
+
+  function persistHiddenProcessTypes() {
+    sessionStorage.setItem(HIDDEN_PROCESS_TYPES_KEY, JSON.stringify([...hiddenProcessTypes]));
+  }
+
+  function persistHiddenProcessInstances() {
+    sessionStorage.setItem(HIDDEN_PROCESSES_KEY, JSON.stringify([...hiddenProcessInstances]));
+  }
+
+  function pruneHiddenClassTypes(typeOptions) {
+    const liveTypes = new Set(typeOptions.map((option) => option.label));
+    hiddenClassTypes = new Set([...hiddenClassTypes].filter((type) => liveTypes.has(type)));
+  }
+
+  function pruneHiddenClassInstances(instanceOptions, typeOptions) {
+    const liveIds = new Set(instanceOptions.map((option) => option.id));
+    hiddenClassInstances = new Set(
+      [...hiddenClassInstances].filter((id) => liveIds.has(id))
+    );
+    const liveTypes = new Set(typeOptions.map((option) => option.label));
+    expandedClassTypes = new Set(
+      [...expandedClassTypes].filter((type) => liveTypes.has(type))
+    );
+  }
+
+  function pruneHiddenProcessTypes(typeOptions) {
+    const liveTypes = new Set(typeOptions.map((option) => option.label));
+    hiddenProcessTypes = new Set([...hiddenProcessTypes].filter((type) => liveTypes.has(type)));
+  }
+
+  function pruneHiddenProcessInstances(instanceOptions, typeOptions) {
+    const liveIds = new Set(instanceOptions.map((option) => option.id));
+    hiddenProcessInstances = new Set(
+      [...hiddenProcessInstances].filter((id) => liveIds.has(id))
+    );
+    const liveTypes = new Set(typeOptions.map((option) => option.label));
+    expandedProcessTypes = new Set(
+      [...expandedProcessTypes].filter((type) => liveTypes.has(type))
+    );
   }
 
   function paint() {
     const person = people.find((p) => p.id === selectedId) || null;
     const reachable = person ? collectVisibleGraph(adj, person.id, distance) : null;
-    const classOptions = reachable ? visibleClassOptions(reachable) : [];
-    const visible = reachable ? applyClassFilter(reachable, hiddenClasses, person.id) : null;
+    const allProcessInstances = reachable ? visibleProcessOptions(reachable) : [];
+    const processTypeOptions = visibleProcessTypeOptions(allProcessInstances);
+    pruneHiddenProcessTypes(processTypeOptions);
+    pruneHiddenProcessInstances(allProcessInstances, processTypeOptions);
+    const processFiltered = reachable
+      ? applyProcessFilter(
+          reachable,
+          hiddenProcessInstances,
+          hiddenProcessTypes,
+          person.id
+        )
+      : null;
+    const allClassInstances = processFiltered
+      ? visibleClassInstanceOptions(processFiltered, person.id)
+      : [];
+    const classTypeOptions = visibleClassTypeOptions(allClassInstances);
+    pruneHiddenClassTypes(classTypeOptions);
+    pruneHiddenClassInstances(allClassInstances, classTypeOptions);
+    const visible = processFiltered
+      ? applyClassFilter(
+          processFiltered,
+          hiddenClassInstances,
+          hiddenClassTypes,
+          person.id
+        )
+      : null;
 
     el.innerHTML = `
       ${
@@ -1892,7 +2279,22 @@ export function mountGraphPage(el, data) {
                     <input type="search" id="graph-person-search" placeholder="Search people…" value="${esc(person?.label || "")}" autocomplete="off" />
                     <ul class="graph-suggestions" id="graph-suggestions" hidden></ul>
                   </label>
-                  ${renderClassFilter(classOptions, hiddenClasses)}
+                  <div class="graph-filters">
+                    ${renderProcessFilter(
+                      processTypeOptions,
+                      allProcessInstances,
+                      hiddenProcessTypes,
+                      hiddenProcessInstances,
+                      expandedProcessTypes
+                    )}
+                    ${renderClassFilter(
+                      classTypeOptions,
+                      allClassInstances,
+                      hiddenClassTypes,
+                      hiddenClassInstances,
+                      expandedClassTypes
+                    )}
+                  </div>
                 </div>
                 ${graphParams.legend ? `<div class="graph-legend">${renderLegend()}</div>` : ""}
                 ${renderParamsPanel(graphParams, distance, paramsOpen)}
@@ -1983,38 +2385,115 @@ export function mountGraphPage(el, data) {
       persistParams();
       paint();
     });
+    const processToggle = el.querySelector("#graph-processes-toggle");
+    const processMenu = el.querySelector("#graph-processes-menu");
+    if (processToggle && processMenu) {
+      const setProcessMenuOpen = (open) => {
+        processMenuOpen = open;
+        processMenu.hidden = !open;
+        processToggle.setAttribute("aria-expanded", String(open));
+      };
+      setProcessMenuOpen(processMenuOpen);
+      processToggle.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (processToggle.disabled) return;
+        setProcessMenuOpen(processMenu.hidden);
+      });
+      processMenu.addEventListener("click", (e) => e.stopPropagation());
+      processMenu.addEventListener("click", (e) => {
+        const expand = e.target.closest("[data-process-type-expand]");
+        if (!expand || expand.disabled) return;
+        e.stopPropagation();
+        const type = expand.dataset.processTypeExpand;
+        if (expandedProcessTypes.has(type)) expandedProcessTypes.delete(type);
+        else expandedProcessTypes.add(type);
+        paint();
+      });
+      processMenu.addEventListener("change", (e) => {
+        const typeBox = e.target.closest("input[data-process-type]");
+        if (typeBox) {
+          if (typeBox.checked) hiddenProcessTypes.delete(typeBox.dataset.processType);
+          else hiddenProcessTypes.add(typeBox.dataset.processType);
+          persistHiddenProcessTypes();
+          paint();
+          return;
+        }
+        const instanceBox = e.target.closest("input[data-process-instance]");
+        if (!instanceBox || instanceBox.disabled) return;
+        if (instanceBox.checked) hiddenProcessInstances.delete(instanceBox.dataset.processInstance);
+        else hiddenProcessInstances.add(instanceBox.dataset.processInstance);
+        persistHiddenProcessInstances();
+        paint();
+      });
+      processMenu.querySelectorAll("[data-processes-action]").forEach((button) => {
+        button.addEventListener("click", () => {
+          if (button.disabled) return;
+          if (button.dataset.processesAction === "none") {
+            for (const option of processTypeOptions) hiddenProcessTypes.add(option.label);
+            for (const option of allProcessInstances) hiddenProcessInstances.add(option.id);
+          } else {
+            hiddenProcessTypes = new Set();
+            hiddenProcessInstances = new Set();
+          }
+          persistHiddenProcessTypes();
+          persistHiddenProcessInstances();
+          paint();
+        });
+      });
+    }
+
     const classToggle = el.querySelector("#graph-classes-toggle");
     const classMenu = el.querySelector("#graph-classes-menu");
     if (classToggle && classMenu) {
-      // The menu survives the repaint a checkbox triggers, so several classes
-      // can be toggled without reopening it.
-      const setMenuOpen = (open) => {
+      const setClassMenuOpen = (open) => {
         classMenuOpen = open;
         classMenu.hidden = !open;
         classToggle.setAttribute("aria-expanded", String(open));
       };
-      setMenuOpen(classMenuOpen);
+      setClassMenuOpen(classMenuOpen);
       classToggle.addEventListener("click", (e) => {
         e.stopPropagation();
-        setMenuOpen(classMenu.hidden);
+        if (classToggle.disabled) return;
+        setClassMenuOpen(classMenu.hidden);
       });
       classMenu.addEventListener("click", (e) => e.stopPropagation());
+      classMenu.addEventListener("click", (e) => {
+        const expand = e.target.closest("[data-class-type-expand]");
+        if (!expand || expand.disabled) return;
+        e.stopPropagation();
+        const type = expand.dataset.classTypeExpand;
+        if (expandedClassTypes.has(type)) expandedClassTypes.delete(type);
+        else expandedClassTypes.add(type);
+        paint();
+      });
       classMenu.addEventListener("change", (e) => {
-        const box = e.target.closest("input[data-class]");
-        if (!box) return;
-        if (box.checked) hiddenClasses.delete(box.dataset.class);
-        else hiddenClasses.add(box.dataset.class);
-        persistHiddenClasses();
+        const typeBox = e.target.closest("input[data-class-type]");
+        if (typeBox) {
+          if (typeBox.checked) hiddenClassTypes.delete(typeBox.dataset.classType);
+          else hiddenClassTypes.add(typeBox.dataset.classType);
+          persistHiddenClassTypes();
+          paint();
+          return;
+        }
+        const instanceBox = e.target.closest("input[data-class-instance]");
+        if (!instanceBox || instanceBox.disabled) return;
+        if (instanceBox.checked) hiddenClassInstances.delete(instanceBox.dataset.classInstance);
+        else hiddenClassInstances.add(instanceBox.dataset.classInstance);
+        persistHiddenClassInstances();
         paint();
       });
       classMenu.querySelectorAll("[data-classes-action]").forEach((button) => {
         button.addEventListener("click", () => {
+          if (button.disabled) return;
           if (button.dataset.classesAction === "none") {
-            for (const option of classOptions) hiddenClasses.add(option.label);
+            for (const option of classTypeOptions) hiddenClassTypes.add(option.label);
+            for (const option of allClassInstances) hiddenClassInstances.add(option.id);
           } else {
-            hiddenClasses = new Set();
+            hiddenClassTypes = new Set();
+            hiddenClassInstances = new Set();
           }
-          persistHiddenClasses();
+          persistHiddenClassTypes();
+          persistHiddenClassInstances();
           paint();
         });
       });
@@ -2031,19 +2510,27 @@ export function mountGraphPage(el, data) {
     }
   }
 
-  const closeClassMenu = () => {
-    if (!classMenuOpen) return;
-    classMenuOpen = false;
-    const menu = el.querySelector("#graph-classes-menu");
-    const toggle = el.querySelector("#graph-classes-toggle");
-    if (menu) menu.hidden = true;
-    toggle?.setAttribute("aria-expanded", "false");
+  const closeFilterMenus = () => {
+    if (classMenuOpen) {
+      classMenuOpen = false;
+      const menu = el.querySelector("#graph-classes-menu");
+      const toggle = el.querySelector("#graph-classes-toggle");
+      if (menu) menu.hidden = true;
+      toggle?.setAttribute("aria-expanded", "false");
+    }
+    if (processMenuOpen) {
+      processMenuOpen = false;
+      const menu = el.querySelector("#graph-processes-menu");
+      const toggle = el.querySelector("#graph-processes-toggle");
+      if (menu) menu.hidden = true;
+      toggle?.setAttribute("aria-expanded", "false");
+    }
   };
-  document.addEventListener("click", closeClassMenu);
+  document.addEventListener("click", closeFilterMenus);
 
   paint();
   return () => {
-    document.removeEventListener("click", closeClassMenu);
+    document.removeEventListener("click", closeFilterMenus);
     if (disposeCanvas) disposeCanvas();
   };
 }
