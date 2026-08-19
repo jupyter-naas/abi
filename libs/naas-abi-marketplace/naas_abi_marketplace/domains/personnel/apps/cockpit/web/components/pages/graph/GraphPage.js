@@ -181,7 +181,16 @@ function buildGraphIndex(data) {
     if (rel.predicateLabel === "has act of working" && peopleById[rel.from]) {
       const target = entitiesById[rel.to] || processesById[rel.to];
       if (target?.isWorkingHub || isProcessRecord(target)) {
-        workingHubByPerson.set(rel.from, rel.to);
+        const existingId = workingHubByPerson.get(rel.from);
+        const existing = existingId
+          ? entitiesById[existingId] || processesById[existingId]
+          : null;
+        if (
+          !existing ||
+          recencyKey(target).localeCompare(recencyKey(existing)) > 0
+        ) {
+          workingHubByPerson.set(rel.from, rel.to);
+        }
         if (!personToProcesses.has(rel.from)) personToProcesses.set(rel.from, []);
         personToProcesses.get(rel.from).push(rel.to);
       }
@@ -1431,8 +1440,14 @@ function runClassPhysics(
 }
 
 function buildGraph(focusPerson, visible, lookup) {
+  const allowedIds = new Set([
+    ...(visible.people || []).map((record) => record.id),
+    ...(visible.entities || []).map((record) => record.id),
+    ...(visible.processes || []).map((record) => record.id),
+  ]);
   const nodeMap = new Map();
   const addNode = (id, extra = {}) => {
+    if (!allowedIds.has(id)) return null;
     const base = resolveNode(id, lookup);
     if (!base || nodeMap.has(base.id)) return nodeMap.get(base.id);
     const node = { ...base, x: 0, y: 0, ...extra };
@@ -1440,9 +1455,17 @@ function buildGraph(focusPerson, visible, lookup) {
     return node;
   };
 
+  const lookupWorkingId = lookup.workingHubByPerson?.get?.(focusPerson.id) || null;
   const workingId =
-    lookup.workingHubByPerson?.get?.(focusPerson.id) ||
-    visible.entities.find((e) => e.isWorkingHub)?.id;
+    (lookupWorkingId && allowedIds.has(lookupWorkingId) ? lookupWorkingId : null) ||
+    [...(visible.entities || [])]
+      .filter((entity) => entity.isWorkingHub)
+      .sort(
+        (a, b) =>
+          recencyKey(b).localeCompare(recencyKey(a)) ||
+          String(a.id).localeCompare(String(b.id))
+      )[0]?.id ||
+    null;
   const workingNode = workingId ? addNode(workingId, { isWorkingHub: true }) : null;
   const focusNode = addNode(focusPerson.id, { isFocus: true, pinned: true });
 
