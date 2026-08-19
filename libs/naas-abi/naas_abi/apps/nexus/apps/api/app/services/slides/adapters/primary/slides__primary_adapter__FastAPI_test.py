@@ -91,7 +91,7 @@ def test_friendly_coding_detail_hides_raw_coder_json() -> None:
 def test_friendly_git_detail_hides_pushrejected_dump() -> None:
     raw = (
         "Forgejo API request failed (500): PushRejected ... "
-        "cannot lock ref 'refs/heads/slides/naas-ai-deck': "
+        "cannot lock ref 'refs/heads/slides/demo-deck': "
         "is at 4c232bab... but expected e621205..."
     )
     assert _is_git_write_race(raw) is True

@@ -25,7 +25,7 @@ x:XOntology a owl:Ontology ;
   dc:description "Ontology for the X (Twitter) domain. Models tweets — both those matching a query and the ReferencedTweet individuals pulled in as reply/quote/retweet context — along with X user accounts, media, context annotations, URL entities and public engagement metrics. The retrieval processes that produce these individuals live in sibling process ontologies: SearchRecentTweetsProcess (GET /2/tweets/search/recent) and CountRecentTweetsProcess (GET /2/tweets/counts/recent). SearchRecentTweetsProcess imports this ontology rather than the reverse, since it constrains its result sets over the Tweet and ReferencedTweet classes defined here."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Ontology for the X (Twitter) domain."@en ;
-  dc11:contributor "Florent Ravenel" ;
+  dc11:contributor "Alice Dupont" ;
   dc11:date "2026-06-02"^^xsd:date .
 
 #################################################################

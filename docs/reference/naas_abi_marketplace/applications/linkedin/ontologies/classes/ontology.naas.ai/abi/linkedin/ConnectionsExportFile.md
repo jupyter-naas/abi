@@ -1,19 +1,19 @@
 # ConnectionsExportFile
 
 ## What it is
-- A thin wrapper class that subclasses an existing `ConnectionsExportFile` implementation from the LinkedIn ontologies module.
-- Intended as an extension point for adding custom action logic.
+- A thin subclass of the LinkedIn ontologies `ConnectionsExportFile` class.
+- Provides an extension point (`actions`) for adding custom logic.
 
 ## Public API
 - `class ConnectionsExportFile(_ConnectionsExportFile)`
-  - Subclasses: `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.ConnectionsExportFile`
+  - Inherits from: `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.ConnectionsExportFile`
   - `actions(self)`
-    - Placeholder method for implementing custom logic.
-    - Currently does nothing (`pass`).
+    - Placeholder instance method intended for custom action logic.
+    - Currently has no implementation (empty method body).
 
 ## Configuration/Dependencies
-- Depends on:
-  - `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.ConnectionsExportFile` (imported as `_ConnectionsExportFile`)
+- Imports and depends on:
+  - `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.ConnectionsExportFile` (aliased as `_ConnectionsExportFile`)
 
 ## Usage
 ```python
@@ -22,9 +22,9 @@ from naas_abi_marketplace.applications.linkedin.ontologies.classes.ontology.naas
 )
 
 obj = ConnectionsExportFile()
-obj.actions()  # no-op by default
+obj.actions()  # no behavior unless implemented in subclass or filled in here
 ```
 
 ## Caveats
-- `actions()` is unimplemented and performs no behavior until overridden or filled in.
-- Actual capabilities and required initialization parameters (if any) are defined in the parent class `_ConnectionsExportFile`.
+- `actions()` is unimplemented and will not perform any action unless you add logic.
+- Any required initialization arguments and behavior come from the parent `_ConnectionsExportFile` class.

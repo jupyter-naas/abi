@@ -1,36 +1,48 @@
 # ExecutePythonCodeWorkflow
 
 ## What it is
-- A `Workflow` implementation that executes provided Python code in a separate process (`subprocess.run`) using a temporary `.py` file.
-- Supports a configurable execution timeout and an optional restriction on `import` usage.
+- A `Workflow` that executes provided Python code by writing it to a temporary `.py` file and running it in a separate process via `subprocess.run`.
+- Supports:
+  - Execution timeout.
+  - Optional blocking of `import`/`from` statements via a simple substring check.
 
 ## Public API
-- **`ExecutePythonCodeWorkflowConfiguration` (dataclass)**
-  - `timeout: int = 10` — max execution time (seconds) for the subprocess.
-  - `allow_imports: bool = True` — if `False`, rejects code containing `"import "` or `"from "`.
+- **`ExecutePythonCodeWorkflowConfiguration` (dataclass, `WorkflowConfiguration`)**
+  - `timeout: int = 10` — subprocess timeout in seconds.
+  - `allow_imports: bool = True` — when `False`, rejects code containing `"import "` or `"from "`.
 
-- **`ExecutePythonCodeWorkflowParameters` (pydantic/WorkflowParameters)**
-  - `code: str` — Python code to execute.
+- **`ExecutePythonCodeWorkflowParameters` (`WorkflowParameters`)**
+  - `code: str` — Python code to execute (`pydantic.Field` description: “Python code to execute”).
 
-- **`ExecutePythonCodeWorkflow` (Workflow)**
+- **`ExecutePythonCodeWorkflow` (`Workflow`)**
+  - `__init__(configuration: ExecutePythonCodeWorkflowConfiguration)`
+    - Stores configuration.
   - `execute_python_code(parameters: ExecutePythonCodeWorkflowParameters) -> Any`
-    - Writes `parameters.code` to a temporary `.py` file, runs `python <tempfile>`, and returns:
-      - stdout (trimmed) when exit code is `0`,
-      - `"Code executed successfully (no output)"` when stdout is empty and exit code is `0`,
-      - `"Error: <stderr>"` when exit code is non-zero,
-      - `"Error: Code execution timed out after <timeout> seconds"` on timeout,
-      - `"Error: <exception message>"` for other exceptions.
-    - Always attempts to delete the temporary file.
+    - Behavior:
+      - If `allow_imports=False` and code contains `"import "` or `"from "`, returns:  
+        `"Error: Import statements are not allowed in this configuration"`
+      - Runs `python <tempfile>` with `capture_output=True`, `text=True`, `timeout=<timeout>`.
+      - Return values:
+        - On success (`returncode == 0`): returns `stdout.strip()` or `"Code executed successfully (no output)"`.
+        - On failure: returns `"Error: <stderr.strip()>"`.
+        - On timeout: returns `"Error: Code execution timed out after <timeout> seconds"`.
+        - On other exceptions: returns `"Error: <exception message>"`.
+      - Always attempts to delete the temporary file.
   - `as_tools() -> list[BaseTool]`
-    - Exposes a LangChain `StructuredTool` named `execute_python_code` with `ExecutePythonCodeWorkflowParameters` as the args schema.
+    - Returns a single LangChain `StructuredTool`:
+      - `name="execute_python_code"`
+      - `args_schema=ExecutePythonCodeWorkflowParameters`
+      - Calls `execute_python_code(...)`.
   - `as_api(router: APIRouter, ...) -> None`
-    - Currently a no-op (returns `None` and does not register routes).
+    - No-op; does not register any routes.
 
 ## Configuration/Dependencies
-- **Runtime dependencies**
-  - Requires `python` to be available on `PATH` (invoked as `subprocess.run(["python", temp_file_path], ...)`).
-- **Libraries**
-  - Uses `fastapi` (only for type in `as_api`), `langchain_core.tools`, `pydantic`, and `naas_abi_core` (`Workflow`, `WorkflowConfiguration`, `WorkflowParameters`, `logger`).
+- **Requires** a `python` executable on `PATH` (invoked as `subprocess.run(["python", temp_file_path], ...)`).
+- **Key imports**
+  - `fastapi.APIRouter` (only for typing in `as_api`)
+  - `langchain_core.tools` (`BaseTool`, `StructuredTool`)
+  - `naas_abi_core` (`logger`, `Workflow`, `WorkflowConfiguration`, `WorkflowParameters`)
+  - `pydantic.Field`
 
 ## Usage
 ```python
@@ -44,19 +56,19 @@ wf = ExecutePythonCodeWorkflow(
     ExecutePythonCodeWorkflowConfiguration(timeout=5, allow_imports=True)
 )
 
-result = wf.execute_python_code(
+out = wf.execute_python_code(
     ExecutePythonCodeWorkflowParameters(code="print('hello')")
 )
-print(result)  # -> "hello"
+print(out)  # "hello"
 ```
 
-Using the tool wrapper:
+Using the LangChain tool wrapper:
 ```python
 tool = wf.as_tools()[0]
-print(tool.invoke({"code": "print(1 + 2)"}))  # -> "3"
+print(tool.invoke({"code": "print(1 + 2)"}))  # "3"
 ```
 
 ## Caveats
-- **Not a sandbox**: code is executed as a normal Python subprocess and can perform arbitrary operations (file system, network, etc.) unless constrained externally.
-- **Import restriction is heuristic**: when `allow_imports=False`, it only checks for substring occurrences of `"import "` or `"from "` and may be bypassed or produce false positives.
-- **API integration is unimplemented**: `as_api(...)` does not register any FastAPI routes.
+- Code is executed as a normal subprocess (not sandboxed).
+- The import restriction is a simple substring check and may be bypassed or yield false positives.
+- `as_api(...)` is intentionally unimplemented (returns `None`).

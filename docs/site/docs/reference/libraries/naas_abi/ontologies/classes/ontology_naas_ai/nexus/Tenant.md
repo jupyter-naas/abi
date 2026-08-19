@@ -16,7 +16,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.Tenant import Tenant
+from naas_abi.ontologies.classes.ontology_demo.nexus.Tenant import Tenant
 
 class MyTenant(Tenant):
     def actions(self):

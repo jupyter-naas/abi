@@ -2,11 +2,11 @@
 
 ## What it is
 A workflow that:
-- Builds an RDF graph from all triples of individuals of a given RDF class (by `class_uri`),
-- Enriches the graph with labels/types for ABI URIs found as objects,
-- Delegates conversion of that graph to YAML (and push to Naas workspace) to `ConvertOntologyGraphToYamlWorkflow`.
+- Builds an RDFLib `Graph` from all triples of individuals of a given RDF class (`class_uri`) stored in a triple store.
+- Enriches the graph with `rdfs:label` and `rdf:type` (plus `owl:NamedIndividual`) for ABI URIs found as objects.
+- Serializes the graph to Turtle and delegates YAML creation + push to Naas workspace to `ConvertOntologyGraphToYamlWorkflow`.
 
-It also includes a trigger hook to automatically run for specific class URIs on triple-store insert events.
+It also provides a `trigger(...)` hook intended for triple-store insert events, with a hard-coded allowlist of class URIs.
 
 ## Public API
 
@@ -23,41 +23,48 @@ It also includes a trigger hook to automatically run for specific class URIs on 
 
 - `CreateClassOntologyYamlWorkflow(Workflow)`
   - `__init__(configuration: CreateClassOntologyYamlWorkflowConfiguration)`
-    - Wires the triple store SPARQL utilities and the downstream conversion workflow.
+    - Creates:
+      - `SPARQLUtils` bound to the provided triple store
+      - a `ConvertOntologyGraphToYamlWorkflow` for downstream conversion
   - `trigger(event: OntologyEvent, triple: tuple[Any, Any, Any]) -> str | None`
-    - On `OntologyEvent.INSERT`, attempts to derive a class URI from the inserted subject (treated as an individual URI).
-    - Only triggers YAML creation for a fixed allowlist of class URIs:
+    - On insert-like events (checked by string comparison to `OntologyEvent.INSERT`), derives the class URI from the inserted subject (treated as an individual URI) using `SPARQLUtils.get_class_uri_from_individual_uri(s)`.
+    - Only runs conversion for these class URIs:
       - `https://www.commoncoreontologies.org/ont00001262` (Person)
       - `https://www.commoncoreontologies.org/ont00000443` (Commercial Organization)
-    - Returns an ontology id (string) on success, otherwise `None`.
+    - Returns the downstream `ontology_id` on success, otherwise `None`.
   - `graph_to_yaml(parameters: CreateClassOntologyYamlWorkflowParameters) -> str`
     - Queries the triple store to:
-      - Fetch `rdfs:label` and `skos:definition` for `class_uri` (used as label/description).
-      - Fetch all triples `?subject a <class_uri> ; ?predicate ?object` and add them to an RDFLib `Graph`.
-      - For any object that is a string starting with `http://ontology.naas.ai/abi/`, treat it as a URI and additionally query for its `rdfs:label` and `rdf:type`, adding those to the graph (plus `owl:NamedIndividual`).
+      - Fetch `rdfs:label` and `skos:definition` for `class_uri` (used as label/description; empty strings if missing).
+      - Fetch all triples for all individuals of the class: `?subject a <class_uri> . ?subject ?predicate ?object`.
+    - Adds those triples to an RDFLib graph:
+      - Objects that are `str` starting with `http://ontology.naas.ai/abi/` are treated as `URIRef` and collected for enrichment.
+      - All other objects are stored as RDF literals.
+    - For collected ABI URIs, queries their `rdfs:label` and `rdf:type`, and adds:
+      - `?object rdf:type ?type`
+      - `?object rdf:type owl:NamedIndividual`
+      - `?object rdfs:label ?label`
     - Serializes the graph to Turtle and calls `ConvertOntologyGraphToYamlWorkflow.graph_to_yaml(...)`.
-    - Returns the resulting ontology id.
+    - Returns the resulting `ontology_id`.
   - `as_tools() -> list[BaseTool]`
     - Exposes a LangChain `StructuredTool`:
       - Name: `ontology_create_class_yaml`
       - Args schema: `CreateClassOntologyYamlWorkflowParameters`
       - Calls `graph_to_yaml(...)`.
   - `as_api(...) -> None`
-    - Currently a no-op; returns `None` immediately and does not register routes.
+    - No-op (returns immediately; does not register routes).
 
 ## Configuration/Dependencies
-- Requires a triple store implementation:
-  - `ITripleStoreService` (must support `.query(query: str)`).
-- Requires configuration for downstream conversion:
-  - `ConvertOntologyGraphToYamlWorkflowConfiguration`
+- Requires:
+  - `ITripleStoreService` providing `query(query: str)` returning iterable SPARQL rows (`rdflib.query.ResultRow` compatible in usage here).
+  - `ConvertOntologyGraphToYamlWorkflowConfiguration` for downstream conversion.
 - Uses:
-  - `SPARQLUtils` (for `get_class_uri_from_individual_uri` and results conversion),
-  - `rdflib` (`Graph`, `URIRef`, `Literal`, RDF/RDFS/OWL constants),
-  - `langchain_core.tools.StructuredTool`.
+  - `SPARQLUtils` (`get_class_uri_from_individual_uri`, `results_to_list`)
+  - `rdflib` (`Graph`, `URIRef`, `Literal`, `RDF`, `RDFS`, `OWL`)
+  - `langchain_core.tools.StructuredTool`
 
 ## Usage
 
-### Run conversion for a class URI
+### Convert a class to YAML
 ```python
 from naas_abi_marketplace.applications.naas.workflows.CreateClassOntologyYamlWorkflow import (
     CreateClassOntologyYamlWorkflow,
@@ -65,8 +72,7 @@ from naas_abi_marketplace.applications.naas.workflows.CreateClassOntologyYamlWor
     CreateClassOntologyYamlWorkflowParameters,
 )
 
-# Provide concrete implementations/configs from your environment:
-triple_store = ...  # ITripleStoreService
+triple_store = ...  # ITripleStoreService implementation
 convert_cfg = ...   # ConvertOntologyGraphToYamlWorkflowConfiguration
 
 wf = CreateClassOntologyYamlWorkflow(
@@ -92,6 +98,10 @@ print(result)
 ```
 
 ## Caveats
-- `trigger(...)` only runs on `OntologyEvent.INSERT` and only for two hard-coded class URIs (Person, Commercial Organization).
-- Objects are treated as ABI URIs only if they are `str` and start with `http://ontology.naas.ai/abi/`; everything else is stored as an RDF literal.
-- `as_api(...)` does nothing (early `return None`), so no HTTP endpoints are exposed from this module.
+- `trigger(...)`:
+  - Only proceeds when `event` string-matches `OntologyEvent.INSERT`.
+  - Skips if the triple’s object does not start with `"http"` or is exactly `owl:NamedIndividual`.
+  - Only triggers for two hard-coded class URIs (Person, Commercial Organization).
+- Object handling in `graph_to_yaml(...)`:
+  - Only `str` objects starting with `http://ontology.naas.ai/abi/` are treated as URIs; everything else becomes an RDF literal.
+- `as_api(...)` does nothing and exposes no HTTP endpoints.

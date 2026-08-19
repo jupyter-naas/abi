@@ -15,7 +15,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.FileSystem import FileSystem
+from naas_abi.ontologies.classes.ontology_demo.nexus.FileSystem import FileSystem
 
 fs = FileSystem()
 fs.actions()  # currently no-op

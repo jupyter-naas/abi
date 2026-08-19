@@ -11,7 +11,7 @@
 @prefix github: <http://ontology.naas.ai/abi/github/> .
 
 <http://ontology.naas.ai/abi/github.ttl> rdf:type owl:Ontology ;
-    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc11:contributor "Emma Petit" , "Grace Lambert" , "Alice Dupont" ;
     dc:description "Application ontology for GitHub."@en ;
     dc:title "GitHub Application Ontology" .
 

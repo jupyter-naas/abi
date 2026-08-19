@@ -14,7 +14,7 @@ abi:BFO7Buckets a owl:Ontology ;
   dc:description "Ontology for the BFO 7 buckets"@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Ontology for the BFO 7 buckets"@en ;
-  dc11:contributor "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou" ;
+  dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
   dc11:date "2026-01-14"^^xsd:date .
 
 # Process (WHAT)

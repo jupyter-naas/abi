@@ -1,19 +1,19 @@
 # CurrentJobPosition
 
 ## What it is
-- A thin subclass wrapper around `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.CurrentJobPosition`.
-- Provides an `actions()` method stub intended to be implemented with custom logic.
+- A thin subclass of `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.CurrentJobPosition`.
+- Intended as a customization point for adding action logic via an `actions()` method.
 
 ## Public API
 - `class CurrentJobPosition(_CurrentJobPosition)`
-  - Subclasses the imported base `CurrentJobPosition`.
+  - Inherits all behavior from the upstream `_CurrentJobPosition`.
   - `actions(self)`
-    - Placeholder action method.
-    - Currently does nothing (`pass`).
+    - Declared action hook.
+    - **Not implemented** (method body is empty in the source).
 
 ## Configuration/Dependencies
-- Depends on:
-  - `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.CurrentJobPosition` (imported as `_CurrentJobPosition`)
+- Imports and extends:
+  - `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.CurrentJobPosition` (aliased as `_CurrentJobPosition`)
 
 ## Usage
 ```python
@@ -22,9 +22,9 @@ from naas_abi_marketplace.applications.linkedin.ontologies.classes.ontology.naas
 )
 
 job_position = CurrentJobPosition()
-job_position.actions()  # no-op unless overridden
+job_position.actions()  # no behavior unless implemented in the base class or overridden
 ```
 
 ## Caveats
-- `actions()` is a no-op and must be implemented/overridden to perform any work.
-- Instantiation requirements (constructor args, inherited behavior) are defined by the upstream `_CurrentJobPosition` class.
+- `actions()` has no implementation in this subclass; override it to add functionality.
+- Any required constructor arguments and inherited methods come from `_CurrentJobPosition`.

@@ -1,38 +1,43 @@
 # AirtableAgent
 
 ## What it is
-A minimal `IntentAgent` implementation configured to provide general guidance about Airtable (no Airtable tools are wired in).
+An `IntentAgent` specialized for providing general guidance about Airtable (databases, records, collaboration). It does **not** wire any Airtable tools, so it cannot access or modify Airtable data.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Factory that builds and returns an `AirtableAgent` with:
-    - A predefined system prompt describing constraints (no tool access).
-    - No tools (`tools=[]`).
-    - Two predefined RAW intents providing informational responses.
-    - A ChatGPT model imported from `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1`.
-
 - `class AirtableAgent(IntentAgent)`
-  - Concrete agent type (no additional behavior beyond `IntentAgent`).
+  - Agent definition with preset:
+    - `name = "Airtable"`
+    - `description = "Helps you interact with Airtable for database and spreadsheet management."`
+    - `system_prompt` describing scope and constraints (no tool access)
+    - `suggestions = []`
+
+- `AirtableAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> AirtableAgent`
+  - Factory that:
+    - Fetches the default chat and embedding models from the application `ModelRegistryService`.
+    - Configures `tools=[]`.
+    - Adds two predefined `IntentType.RAW` intents with informational responses.
+    - Creates default `AgentConfiguration(system_prompt=...)` if not provided.
+    - Creates default `AgentSharedState(thread_id="0")` if not provided.
 
 ## Configuration/Dependencies
-- Depends on `naas_abi_core.services.agent.IntentAgent`:
+- Imports from `naas_abi_core.services.agent.IntentAgent`:
   - `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentAgent`, `IntentType`
-- Depends on model module:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1` (uses `model.model`)
-- Key constants:
-  - `NAME = "Airtable"`
-  - `DESCRIPTION = "Helps you interact with Airtable for database and spreadsheet management."`
-  - `SYSTEM_PROMPT` (states the agent has no Airtable tool access)
-  - `SUGGESTIONS: list = []` (defined but unused in this file)
+- Runtime dependency inside `New`:
+  - `naas_abi_marketplace.applications.airtable.ABIModule.get_instance()`
+  - Uses `abi_module.engine.services.model_registry`:
+    - `get_default_chat_model()`
+    - `get_default_embedding_model().model`
+- Requires the model registry to be initialized (asserts non-`None`).
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.airtable.agents.AirtableAgent import create_agent
+from naas_abi_marketplace.applications.airtable.agents.AirtableAgent import AirtableAgent
 
-agent = create_agent()
-# Use `agent` via the IntentAgent interface provided by naas_abi_core.
+agent = AirtableAgent.New()
+# Interact with `agent` using the IntentAgent interface from naas_abi_core.
 ```
 
 ## Caveats
-- No Airtable tools are configured (`tools=[]`), so the agent cannot access or modify Airtable data; it only provides general information and guidance.
-- `AirtableAgent` adds no methods of its own; all behavior is inherited from `IntentAgent`.
+- No tools are configured (`tools=[]`), so the agent cannot perform Airtable operations or access Airtable data.
+- `New()` asserts that `ModelRegistryService` is initialized; otherwise it raises an `AssertionError`.
+- `suggestions` is defined but unused in this file.

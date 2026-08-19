@@ -212,9 +212,8 @@ Specialized agents designed for specific professional roles and tasks.
 #### Available Domain Experts
 
 **Engineering & Development:**
-- `domains.software-engineer` - Software engineering expertise
-- `domains.devops-engineer` - DevOps and infrastructure
-- `domains.data-engineer` - Data engineering and pipelines
+**Engineering & Data:**
+- `domains.signals` — includes `SoftwareEngineerAgent`, `DevOpsEngineerAgent`, `DataEngineerAgent`
 
 **Business & Sales:**
 - `domains.account-executive` - Account management
@@ -223,28 +222,23 @@ Specialized agents designed for specific professional roles and tasks.
 - `domains.inside-sales-representative` - Inside sales operations
 
 **Marketing & Content:**
-- `domains.content-creator` - Content creation
-- `domains.content-strategist` - Content strategy
-- `domains.content-analyst` - Content analysis
-- `domains.campaign-manager` - Campaign management
-- `domains.community-manager` - Community management
+- `domains.external` — includes `ContentCreatorAgent`, `CommunityManagerAgent`
+- `domains.plans` — includes `ContentStrategistAgent` (content strategy)
+- `domains.operations` — includes `ContentAnalystAgent`, `CampaignManagerAgent`
 
 **Finance & Accounting:**
-- `domains.accountant` - Accounting expertise
-- `domains.financial-controller` - Financial control
-- `domains.treasurer` - Treasury management
+- `domains.finance` — includes `AccountantAgent`, `FinancialControllerAgent`, `TreasurerAgent`
 
 **Management & Operations:**
 - `domains.project-manager` - Project management
 - `domains.customer-success-manager` - Customer success
-- `domains.human-resources-manager` - HR management
+- `domains.personnel` - HR management
 
 **Research & Investigation:**
-- `domains.osint-researcher` - Open source intelligence
-- `domains.private-investigator` - Investigation services
+- `domains.intelligence` — includes `OSINTResearcherAgent`, `PrivateInvestigatorAgent`
 
 **Support:**
-- `domains.support` - Technical support and issue management
+- `domains.operations.modules.support` - Technical support and issue management
 
 **Usage Example:**
 
@@ -252,12 +246,14 @@ Specialized agents designed for specific professional roles and tasks.
 from naas_abi_core.engine.Engine import Engine
 
 engine = Engine()
-engine.load(module_names=["naas_abi_marketplace.domains.software-engineer"])
+engine.load(module_names=["naas_abi_marketplace.domains.signals"])
 
 # Access Software Engineer agent
-from naas_abi_marketplace.domains.software_engineer.agents.SoftwareEngineerAgent import create_agent
+from naas_abi_marketplace.domains.signals.agents.SoftwareEngineerAgent import (
+    SoftwareEngineerAgent,
+)
 
-agent = create_agent()
+agent = SoftwareEngineerAgent.New()
 response = agent.invoke("Design a microservices architecture for an e-commerce platform")
 ```
 
@@ -314,10 +310,10 @@ modules:
       linkedin_api_key: "${LINKEDIN_API_KEY}"
   
   # Domain Experts
-  - module: naas_abi_marketplace.domains.software-engineer
+  - module: naas_abi_marketplace.domains.signals
     enabled: true
   
-  - module: naas_abi_marketplace.domains.support
+  - module: naas_abi_marketplace.domains.operations
     enabled: true
 ```
 
@@ -345,7 +341,7 @@ engine.load(module_names=[
     "naas_abi_marketplace.ai.chatgpt",
     "naas_abi_marketplace.ai.anthropic",
     "naas_abi_marketplace.applications.github",
-    "naas_abi_marketplace.domains.software-engineer"
+    "naas_abi_marketplace.domains.signals"
 ])
 ```
 

@@ -1,0 +1,295 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix personnel: <http://ontology.naas.ai/personnel/> .
+
+personnel:ActOfWorkingProcess a owl:Ontology ;
+  # Slice: process class + process-only properties. Shared classes
+  # (EmploymentContract, Remuneration, EmployeeRole, JobPosition) live in
+  # PersonnelOntology. Does NOT import PersonnelOntology (the module imports this file).
+  #
+  # Seven-bucket mapping for one working experience:
+  #   WHO          Person (the worker), Organization (the employer)
+  #   WHAT         ActOfWorking (the process itself)
+  #   WHEN         TemporalRegion, bounded by two TemporalInstants
+  #   WHERE        Site
+  #   WHY          EmployeeRole (SDC) - the job title borne by the worker
+  #   HOW IT IS    Skill (quality) - what the worker bears and develops in the act
+  #   HOW WE KNOW  Mission, EmploymentContract, ProfileDocument (GDCs)
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/personnel/PersonnelOntology> ;
+  rdfs:member "bpl-processes/personnel" ;
+  abi:pythonPackage "naas_abi_marketplace.domains.personnel" ;
+  abi:ontologyResource "ontologies/processes/ActOfWorkingProcess.ttl" ;
+  abi:pythonResource "ontologies/processes/ActOfWorkingProcess.py" ;
+  dc:title "Act of Working Process Ontology"@en ;
+  dc:description "Process slice for the act of working - a CCO Planned Act (and Act of Employment) in which a person performs work for an organization at a site over a temporal region, realizing an employee role that concretizes a mission, developing the skills the person bears, and concretizing an employment contract."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Process slice for Act of Working. Reuses shared personnel classes."@en ;
+  dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
+  dc11:date "2026-08-18"^^xsd:date .
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+personnel:ActOfWorking a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 ,
+    cco:ont00001226 ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:forOrganization ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:Site ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom personnel:EmployeeRole ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:developsSkill ; owl:someValuesFrom personnel:Skill ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:hasContract ; owl:someValuesFrom personnel:EmploymentContract ] ;
+  rdfs:label "Act of Working"@en ;
+  skos:definition "A Planned Act, and an Act of Employment, in which a person performs work for an organization at a site over a temporal region, realizing an employee role, developing skills, under an employment contract."@en ;
+  skos:example "Alice Dupont working as Head of Product for Demo, worldwide, since April 2023."@en .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+personnel:Mission a owl:Class ;
+  rdfs:subClassOf abi:GenericallyDependentContinuant ,
+    [ a owl:Restriction ; owl:onProperty abi:genericallyDependsOn ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty abi:isConcretizedBy ; owl:someValuesFrom personnel:EmployeeRole ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:isSourcedFrom ; owl:someValuesFrom personnel:ProfileDocument ] ;
+  rdfs:label "Mission"@en ;
+  skos:definition "An information content entity that states what a person is charged with achieving in an employment relationship: the remit, its objectives and its main activities. Generically dependent on the person, and concretized by the employee role through which the person carries it out."@en ;
+  skos:example "'Leading the development of an open Universal Data & AI Platform to help organizations create powerful ecosystems of AI Agents.'"@en ;
+  rdfs:comment "Deliberately a GDC and NOT a BFO function. A mission is stated, copied between systems and survives the person leaving the post, which a disposition inhering in the person could not. The WHY that inheres in the person is personnel:EmployeeRole; the mission is what that role concretizes, mirroring the JobPosition ← EmployeeRole pattern in PersonnelOntology. rdfs:label carries the opening sentence; personnel:mission_content carries the full text."@en .
+
+personnel:ProfileDocument a owl:Class ;
+  rdfs:subClassOf abi:DocumentContentEntity ,
+    [ a owl:Restriction ; owl:onProperty abi:genericallyDependsOn ; owl:someValuesFrom abi:Person ] ;
+  rdfs:label "Profile Document"@en ;
+  skos:definition "A document content entity, published at a retrievable address, from which statements about a person's working and studying history are taken. Carried by the person the profile is about."@en ;
+  skos:example "https://demo.example/profiles/demo"@en ;
+  rdfs:comment "The provenance anchor of the demo graph: every Mission, EmployeeRole and Skill asserted from a profile page points back to the ProfileDocument it was read from."@en .
+
+#################################################################
+#    Classes - HOW IT IS
+#################################################################
+
+personnel:Skill a owl:Class ;
+  rdfs:subClassOf abi:Quality ,
+    [ a owl:Restriction ; owl:onProperty abi:inheresIn ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:isSkillDevelopedIn ; owl:someValuesFrom [ a owl:Class ; owl:unionOf ( personnel:ActOfWorking personnel:ActOfStudying ) ] ] ;
+  rdfs:label "Skill"@en ;
+  skos:definition "A quality that inheres in a person, consisting in a learned capacity to perform a kind of task, developed and exercised in the acts of working the person carries out."@en ;
+  skos:example "Python (Programming Language); Business Analysis; SAP BFC."@en ;
+  rdfs:comment "Borne by the person, not by the process: the skill outlives any one act of working. personnel:developsSkill links the act to the skills exercised and grown in it."@en .
+
+#################################################################
+#    Object properties - process-only
+#################################################################
+
+personnel:hasActOfWorking a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf personnel:isActOfWorkingOf ;
+  rdfs:label "has act of working"@en ;
+  skos:definition "Relates a person to an act of working in which they perform the work."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  personnel:ActOfWorking .
+
+personnel:isActOfWorkingOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf personnel:hasActOfWorking ;
+  rdfs:label "is act of working of"@en ;
+  skos:definition "Relates an act of working to the person performing the work."@en ;
+  rdfs:domain personnel:ActOfWorking ;
+  rdfs:range  abi:Person .
+
+personnel:forOrganization a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf personnel:isOrganizationOfWorking ;
+  rdfs:label "for organization"@en ;
+  skos:definition "Relates an act of working to the organization that participates as employer."@en ;
+  rdfs:domain personnel:ActOfWorking ;
+  rdfs:range  abi:Organization .
+
+personnel:isOrganizationOfWorking a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf personnel:forOrganization ;
+  rdfs:label "is organization of working"@en ;
+  skos:definition "Relates an organization to an act of working it participates in as employer."@en ;
+  rdfs:domain abi:Organization ;
+  rdfs:range  personnel:ActOfWorking .
+
+personnel:hasContract a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:concretizes ;
+  owl:inverseOf personnel:isContractOf ;
+  rdfs:label "has contract"@en ;
+  skos:definition "Relates an act of working to the employment contract it concretizes."@en ;
+  rdfs:domain personnel:ActOfWorking ;
+  rdfs:range  personnel:EmploymentContract .
+
+personnel:isContractOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:isConcretizedBy ;
+  owl:inverseOf personnel:hasContract ;
+  rdfs:label "is contract of"@en ;
+  skos:definition "Relates an employment contract to the act of working that concretizes it."@en ;
+  rdfs:domain personnel:EmploymentContract ;
+  rdfs:range  personnel:ActOfWorking .
+
+# WHAT ↔ HOW IT IS - the act develops the skills the worker bears
+personnel:developsSkill a owl:ObjectProperty ;
+  owl:inverseOf personnel:isSkillDevelopedIn ;
+  rdfs:label "develops skill"@en ;
+  skos:definition "Relates an act of working or studying to a skill exercised and developed in the course of it."@en ;
+  rdfs:domain [ a owl:Class ; owl:unionOf ( personnel:ActOfWorking personnel:ActOfStudying ) ] ;
+  rdfs:range  personnel:Skill .
+
+personnel:isSkillDevelopedIn a owl:ObjectProperty ;
+  owl:inverseOf personnel:developsSkill ;
+  rdfs:label "is skill developed in"@en ;
+  skos:definition "Relates a skill to an act of working or studying in which it is exercised and developed."@en ;
+  rdfs:domain personnel:Skill ;
+  rdfs:range  [ a owl:Class ; owl:unionOf ( personnel:ActOfWorking personnel:ActOfStudying ) ] .
+
+# WHO ↔ HOW IT IS - the person bears the skill
+personnel:hasSkill a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:bearerOf ;
+  owl:inverseOf personnel:isSkillOf ;
+  rdfs:label "has skill"@en ;
+  skos:definition "Relates a person to a skill quality that inheres in them."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  personnel:Skill .
+
+personnel:isSkillOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:inheresIn ;
+  owl:inverseOf personnel:hasSkill ;
+  rdfs:label "is skill of"@en ;
+  skos:definition "Relates a skill to the person in whom it inheres."@en ;
+  rdfs:domain personnel:Skill ;
+  rdfs:range  abi:Person .
+
+# WHY ↔ HOW WE KNOW - the employee role concretizes the mission
+personnel:hasMission a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:concretizes ;
+  owl:inverseOf personnel:isMissionOf ;
+  rdfs:label "has mission"@en ;
+  skos:definition "Relates an employee role to the mission it concretizes. Named sub-property of abi:concretizes: a role (SDC) concretizes a mission (GDC)."@en ;
+  rdfs:domain personnel:EmployeeRole ;
+  rdfs:range  personnel:Mission .
+
+personnel:isMissionOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:isConcretizedBy ;
+  owl:inverseOf personnel:hasMission ;
+  rdfs:label "is mission of"@en ;
+  skos:definition "Relates a mission to the employee role that concretizes it while the post is occupied."@en ;
+  rdfs:domain personnel:Mission ;
+  rdfs:range  personnel:EmployeeRole .
+
+# WHO ↔ HOW WE KNOW - the person carries the mission
+personnel:hasMissionCarried a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:isCarrierOf ;
+  owl:inverseOf personnel:isMissionCarriedBy ;
+  rdfs:label "carries mission"@en ;
+  skos:definition "Relates a person to a mission that generically depends on them."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  personnel:Mission .
+
+personnel:isMissionCarriedBy a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:genericallyDependsOn ;
+  owl:inverseOf personnel:hasMissionCarried ;
+  rdfs:label "is mission carried by"@en ;
+  skos:definition "Relates a mission to the person on which it generically depends."@en ;
+  rdfs:domain personnel:Mission ;
+  rdfs:range  abi:Person .
+
+# WHO ↔ HOW WE KNOW - the person carries the profile document
+personnel:hasProfileDocument a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:isCarrierOf ;
+  owl:inverseOf personnel:isProfileDocumentOf ;
+  rdfs:label "has profile document"@en ;
+  skos:definition "Relates a person to a profile document that generically depends on them."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  personnel:ProfileDocument .
+
+personnel:isProfileDocumentOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:genericallyDependsOn ;
+  owl:inverseOf personnel:hasProfileDocument ;
+  rdfs:label "is profile document of"@en ;
+  skos:definition "Relates a profile document to the person it is about and on which it generically depends."@en ;
+  rdfs:domain personnel:ProfileDocument ;
+  rdfs:range  abi:Person .
+
+# HOW WE KNOW ↔ HOW WE KNOW - provenance of an asserted entity
+personnel:isSourcedFrom a owl:ObjectProperty ;
+  rdfs:subPropertyOf cco:ont00001808 ;
+  owl:inverseOf personnel:isSourceOf ;
+  rdfs:label "is sourced from"@en ;
+  skos:definition "Relates an information content entity to the profile document it was read from."@en ;
+  rdfs:domain abi:GenericallyDependentContinuant ;
+  rdfs:range  personnel:ProfileDocument .
+
+personnel:isSourceOf a owl:ObjectProperty ;
+  owl:inverseOf personnel:isSourcedFrom ;
+  rdfs:label "is source of"@en ;
+  skos:definition "Relates a profile document to an information content entity read from it."@en ;
+  rdfs:domain personnel:ProfileDocument ;
+  rdfs:range  abi:GenericallyDependentContinuant .
+
+# WHO ↔ WHERE - convenience shortcut from the worker to the site of execution.
+# The backbone remains ActOfWorking abi:occursIn Site; this collapses the hop so
+# a person can be shown against the places they work without traversing the act.
+personnel:hasWorkLocation a owl:ObjectProperty ;
+  owl:inverseOf personnel:isWorkLocationOf ;
+  rdfs:label "has work location"@en ;
+  skos:definition "Convenience relation from a person to a site at which an act of working they participate in is executed. Derived from ActOfWorking + occursIn; not a BFO primitive."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  abi:Site .
+
+personnel:isWorkLocationOf a owl:ObjectProperty ;
+  owl:inverseOf personnel:hasWorkLocation ;
+  rdfs:label "is work location of"@en ;
+  skos:definition "Relates a site to a person who works there."@en ;
+  rdfs:domain abi:Site ;
+  rdfs:range  abi:Person .
+
+#################################################################
+#    Data properties
+#################################################################
+
+personnel:mission_content a owl:DatatypeProperty ;
+  rdfs:label "mission content"@en ;
+  skos:definition "Full stated text of a mission, including the objectives and activities listed under its opening sentence. The opening sentence alone is carried by rdfs:label."@en ;
+  rdfs:domain personnel:Mission ;
+  rdfs:range  xsd:string .
+
+personnel:skill_name a owl:DatatypeProperty ;
+  rdfs:label "skill name"@en ;
+  skos:definition "Name of a skill as stated on the source profile."@en ;
+  rdfs:domain personnel:Skill ;
+  rdfs:range  xsd:string .
+
+personnel:contract_type a owl:DatatypeProperty ;
+  rdfs:label "contract type"@en ;
+  skos:definition "Engagement type of an employment contract, e.g. 'Permanent', 'Freelance', 'Self-employed'."@en ;
+  rdfs:domain personnel:EmploymentContract ;
+  rdfs:range  xsd:string .
+
+personnel:source_url a owl:DatatypeProperty ;
+  rdfs:label "source url"@en ;
+  skos:definition "Address at which a profile document can be retrieved."@en ;
+  rdfs:domain personnel:ProfileDocument ;
+  rdfs:range  xsd:anyURI .
+
+personnel:duration_label a owl:DatatypeProperty ;
+  rdfs:label "duration label"@en ;
+  skos:definition "Human-readable span of a temporal region as stated on the source profile, e.g. '3 yrs 5 mos'."@en ;
+  rdfs:domain abi:TemporalRegion ;
+  rdfs:range  xsd:string .

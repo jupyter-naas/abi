@@ -46,7 +46,7 @@ test.describe('Authentication Flow', () => {
     await page.waitForURL(/\/workspace/);
     
     // Verify user name visible
-    await expect(page.locator('text=Jeremy Ravenel')).toBeVisible();
+    await expect(page.locator('text=Emma Petit')).toBeVisible();
   });
 
   test('should fail login with wrong password', async ({ page }) => {

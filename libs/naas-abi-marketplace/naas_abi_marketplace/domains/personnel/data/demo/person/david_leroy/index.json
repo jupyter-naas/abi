@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-08-19 17:25",
+  "person": {
+    "first_name": "David",
+    "last_name": "Leroy",
+    "full_name": "David Leroy",
+    "linkedin_profile_url": "https://demo.example/profiles/david_leroy"
+  },
+  "records": [
+    {
+      "process_type": "ActOfWorking",
+      "organization": "Demo",
+      "title": "Lead Developer Frontend",
+      "contract_type": "Freelance",
+      "site": "Remote",
+      "start": "2024-02-01",
+      "end": "2026-03-31",
+      "duration": "2 yrs",
+      "mission_label": "Ship ontology-driven UI components for the Demo platform.",
+      "mission": "Ship ontology-driven UI components for the Demo platform.",
+      "skills": [
+        "TypeScript",
+        "React"
+      ],
+      "source": "https://demo.example/profiles/david_leroy"
+    },
+    {
+      "process_type": "ActOfWorking",
+      "organization": "LegalTech Co",
+      "title": "Fullstack Developer",
+      "contract_type": "Permanent",
+      "site": "Lyon, France",
+      "start": "2017-07-01",
+      "end": "2023-11-30",
+      "duration": "6 yrs",
+      "mission_label": "Migrated a legal workflow product from legacy stack to React.",
+      "mission": "Migrated a legal workflow product from legacy stack to React.",
+      "skills": [
+        "TypeScript",
+        "React"
+      ],
+      "source": "https://demo.example/profiles/david_leroy"
+    }
+  ]
+}

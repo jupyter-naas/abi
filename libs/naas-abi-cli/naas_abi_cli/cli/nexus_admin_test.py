@@ -154,9 +154,9 @@ def test_workspace_create_postgres_dry_run_prints_sql(runner: CliRunner) -> None
             "workspace",
             "create",
             "--name",
-            "Jeremy Ravenel",
+            "Emma Petit",
             "--slug",
-            "jeremy-ravenel",
+            "emma-petit",
             "--org",
             "org-960fbfdd82bc",
             "--owner-id",
@@ -168,7 +168,7 @@ def test_workspace_create_postgres_dry_run_prints_sql(runner: CliRunner) -> None
     )
     assert result.exit_code == 0, result.output
     assert "INSERT INTO workspaces" in result.output
-    assert "jeremy-ravenel" in result.output
+    assert "emma-petit" in result.output
     assert "user-0d9665ad586d" in result.output
 
 
