@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-08-19 17:25",
+  "person": {
+    "first_name": "Frank",
+    "last_name": "Moreau",
+    "full_name": "Frank Moreau",
+    "linkedin_profile_url": "https://demo.example/profiles/frank_moreau"
+  },
+  "records": [
+    {
+      "process_type": "ActOfWorking",
+      "organization": "Demo",
+      "title": "Head of Growth",
+      "contract_type": "Permanent",
+      "site": "France",
+      "start": "2020-01-01",
+      "end": "2022-12-31",
+      "duration": "3 yrs",
+      "mission_label": "Drove outbound and inbound growth for Demo.",
+      "mission": "Drove outbound and inbound growth for Demo.",
+      "skills": [
+        "Sales",
+        "Automation"
+      ],
+      "source": "https://demo.example/profiles/frank_moreau"
+    },
+    {
+      "process_type": "ActOfWorking",
+      "organization": "SalesPlatform",
+      "title": "Account Executive",
+      "contract_type": null,
+      "site": "Remote",
+      "start": "2023-01-01",
+      "end": "2024-12-31",
+      "duration": "2 yrs",
+      "mission_label": "Closed SMB SaaS deals across European markets.",
+      "mission": "Closed SMB SaaS deals across European markets.",
+      "skills": [
+        "Sales",
+        "CRM"
+      ],
+      "source": "https://demo.example/profiles/frank_moreau"
+    },
+    {
+      "process_type": "ActOfWorking",
+      "organization": "Translation Corp",
+      "title": "Account Manager",
+      "contract_type": null,
+      "site": "Paris",
+      "start": "2017-02-01",
+      "end": "2019-12-31",
+      "duration": "3 yrs",
+      "mission_label": "Managed enterprise localization accounts.",
+      "mission": "Managed enterprise localization accounts.",
+      "skills": [
+        "Account Management"
+      ],
+      "source": "https://demo.example/profiles/frank_moreau"
+    }
+  ]
+}

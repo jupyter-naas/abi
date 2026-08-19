@@ -9,7 +9,7 @@ ONTOLOGIES_DIR = PERSONNEL_ROOT / "ontologies"
 COCKPIT_ROOT = PERSONNEL_ROOT / "apps" / "cockpit"
 COCKPIT_DATA_ROOT = COCKPIT_ROOT / "data"  # structure reference copy; app reads ObjectStorage
 
-# Demo inputs (LinkedIn-derived source JSON) — not served by the cockpit app.
+# Demo inputs (fictional person JSON) — not served by the cockpit app.
 DEMO_SOURCE_DIR = PERSONNEL_ROOT / "data" / "demo" / "person"
 
 # Demo instance graph (TTL) — built from demo sources, consumed by export scripts.

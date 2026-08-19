@@ -2763,7 +2763,7 @@ export function mountGraphPage(el, data) {
                 <input type="search" id="graph-person-search" placeholder="Search individuals (3+ chars)…" value="" autocomplete="off" />
                 <ul class="graph-suggestions" id="graph-suggestions" hidden></ul>
               </label>
-            </div><div class="graph-empty panel"><h2>Select a person</h2><p>Try <strong>Alice Dupont</strong>, <strong>Emma Petit</strong>, or <strong>Grace Lambert</strong> to decompose their acts of working.</p></div></div>`
+            </div><div class="graph-empty panel"><h2>Select a person</h2><p>Try <strong>Alice Dupont</strong>, <strong>Bob Martin</strong>, or <strong>Claire Bernard</strong> to decompose their acts of working.</p></div></div>`
       }`;
 
     const input = el.querySelector("#graph-person-search");

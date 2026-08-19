@@ -61,7 +61,7 @@ def _working_record(exp: dict, roster: dict | None, *, source: str | None) -> di
         "mission": exp["mission"],
         "skills": list(exp.get("skills") or []),
     }
-    if roster and exp["organization"].lower().startswith("naas"):
+    if roster and exp["organization"].lower() == "demo":
         if roster.get("remuneration_amount") is not None:
             row["remuneration_amount"] = roster["remuneration_amount"]
             row["remuneration_currency"] = roster.get("remuneration_currency", "EUR")

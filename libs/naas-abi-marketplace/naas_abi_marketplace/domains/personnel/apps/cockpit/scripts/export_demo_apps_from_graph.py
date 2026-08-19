@@ -27,6 +27,9 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.config_loader import (
 from naas_abi_marketplace.domains.personnel.apps.cockpit.log_payload import (
     build_ledger_log_rows,
 )
+from naas_abi_marketplace.domains.personnel.apps.cockpit.processes_payload import (
+    build_processes_page_payload,
+)
 from naas_abi_marketplace.domains.personnel.apps.cockpit.data_store import (
     publish_data_tree,
     runtime_storage_prefix,
@@ -244,7 +247,7 @@ def main() -> None:
         if not row.get("job_family"):
             row["job_family"] = family_by_person.get(row.get("personLabel") or "")
 
-    org_label = load_default_entity().get("organizationLabel") or "naas.ai"
+    org_label = load_default_entity().get("organizationLabel") or "Demo"
     kpis, roster_rows = build_workforce_metrics(
         roster_rows,
         source_rows.get("find_working_processes", []),
@@ -271,6 +274,11 @@ def main() -> None:
     logs_config = load_config()["logs"]
     mutation_started_at = datetime.now(UTC).isoformat()
     mutation_completed_at = datetime.now(UTC).isoformat()
+    data_version = _now_version()
+    _dump(
+        ENTITY_DATA / "processes" / "processes.json",
+        build_processes_page_payload(entity_id=ENTITY_ID, data_version=data_version),
+    )
     _dump(
         ENTITY_DATA / "logs" / "ledger.json",
         _envelope(
@@ -295,7 +303,6 @@ def main() -> None:
         ),
     )
 
-    data_version = _now_version()
     page_datasets = {
         "dashboard": [
             "dashboard/kpis.json",
@@ -335,11 +342,11 @@ def main() -> None:
             "entities": [
                 {
                     "entity_id": ENTITY_ID,
-                    "display_name": "Naas.ai",
+                    "display_name": "Demo",
                     "url_slug": DEFAULT_ENTITY_SLUG,
                     "entity_type": "organization",
                     "is_default": True,
-                    "organizationLabel": "Naas.ai",
+                    "organizationLabel": "Demo",
                     "organization_uri": "http://ontology.naas.ai/abi/Organization/demo",
                 }
             ],

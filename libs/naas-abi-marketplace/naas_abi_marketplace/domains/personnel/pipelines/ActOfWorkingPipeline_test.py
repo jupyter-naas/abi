@@ -30,17 +30,17 @@ PERSONNEL_IS_SOURCED_FROM = URIRef("http://ontology.naas.ai/personnel/isSourcedF
 
 def _working_params(**overrides: object) -> ActOfWorkingPipelineParameters:
     base = {
-        "first_name": "Florent",
-        "last_name": "Ravenel",
-        "organization": "naas.ai",
-        "title": "Co-Founder & COO",
-        "site": "World",
+        "first_name": "Alice",
+        "last_name": "Dupont",
+        "organization": "Demo",
+        "title": "Head of Product",
+        "site": "Remote",
         "start": date(2023, 4, 1),
-        "mission_label": "Lead the Universal Data & AI Platform",
-        "mission": "Build agent ecosystems for organizations.",
-        "contract_type": "Self-employed",
-        "skills": ["Python (Programming Language)"],
-        "source_url": "https://demo.example/profiles/demo",
+        "mission_label": "Lead product strategy",
+        "mission": "Ship workforce analytics features.",
+        "contract_type": "Permanent",
+        "skills": ["Product management"],
+        "source_url": "https://demo.example/profiles/alice-dupont",
     }
     base.update(overrides)
     return ActOfWorkingPipelineParameters(**base)

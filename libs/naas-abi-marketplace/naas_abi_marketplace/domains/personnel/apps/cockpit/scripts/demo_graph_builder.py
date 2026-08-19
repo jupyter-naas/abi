@@ -221,7 +221,7 @@ def build_instances(source_dir: Path | None = None) -> Graph:
                 e
                 for e in employees
                 if (e["first"], e["last"]) == item["person"]
-                and item["organization"].lower().startswith("naas")
+                and item["organization"].lower() == "demo"
             ),
             None,
         )

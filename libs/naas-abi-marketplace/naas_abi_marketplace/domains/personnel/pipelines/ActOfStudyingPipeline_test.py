@@ -37,16 +37,16 @@ PERSONNEL_SITE = URIRef(Site._class_uri)
 
 def _studying_params(**overrides: object) -> ActOfStudyingPipelineParameters:
     base = {
-        "first_name": "Florent",
-        "last_name": "Ravenel",
-        "organization": "KEDGE Business School",
-        "program": "Master's Degree, Corporate Finance",
-        "site": "Bordeaux",
+        "first_name": "Alice",
+        "last_name": "Dupont",
+        "organization": "Demo University",
+        "program": "Master's Degree, Business Administration",
+        "site": "Paris",
         "start": date(2012, 9, 1),
         "end": date(2016, 6, 30),
         "duration": "2012 – 2016",
-        "skills": ["Microsoft Excel"],
-        "source_url": "https://demo.example/profiles/demo",
+        "skills": ["Statistics"],
+        "source_url": "https://demo.example/profiles/alice-dupont/education",
         "activities": None,
     }
     base.update(overrides)

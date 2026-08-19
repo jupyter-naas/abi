@@ -6,9 +6,9 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.log_payload import (
 )
 
 MUTATION = {
-    "owner_person_id": f"{PERSONNEL}alice-dupont",
+    "owner_person_id": f"{ABI}Person/alice-dupont",
     "owner_person_label": "Alice Dupont",
-    "owner_agent_id": f"{PERSONNEL}demo-agent",
+    "owner_agent_id": f"{ABI}Agent/demo-agent",
     "owner_agent_label": "Demo Agent",
     "server_site_id": f"{PERSONNEL}Site/local-development",
     "server_label": "Local development server",

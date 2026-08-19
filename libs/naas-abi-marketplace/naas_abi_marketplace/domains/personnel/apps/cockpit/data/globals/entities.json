@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
-  "data_version": "2026-08-19 16:42",
+  "data_version": "2026-08-19 17:41",
   "entities": [
     {
       "entity_id": "demo",
-      "display_name": "Naas.ai",
+      "display_name": "Demo",
       "url_slug": "demo",
       "entity_type": "organization",
       "is_default": true,
-      "organizationLabel": "Naas.ai",
+      "organizationLabel": "Demo",
       "organization_uri": "http://ontology.naas.ai/abi/Organization/demo"
     }
   ]
