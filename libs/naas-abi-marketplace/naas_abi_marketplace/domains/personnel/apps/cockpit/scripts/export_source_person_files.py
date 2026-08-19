@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
-"""Export per-person source JSON for the personnel cockpit graph pipeline.
-
-Each folder under ``apps/cockpit/data/source/person/<slug>/`` holds one person's
-canonical input (``index.json``):
-
-- ``records[]`` — one row per process (``ActOfWorking`` or ``ActOfStudying``),
-  each carrying a ``source`` URL (LinkedIn profile for working experiences)
-- ``person`` — identity + LinkedIn profile URL
-- ``employment`` — naas.ai roster facts when the person appears in ``EMPLOYEES``
-
-Run from the personnel module root::
-
-    python scripts/export_source_person_files.py
-"""
+"""Export per-person source JSON for the personnel cockpit graph pipeline."""
 
 from __future__ import annotations
 
@@ -20,17 +7,16 @@ import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from naas_abi_marketplace.domains.personnel.scripts.generate_demo_graph import (
+from naas_abi_marketplace.domains.personnel.sandbox.linkedin_experience import (
+    EDUCATION,
     EMPLOYEES,
-    STUDY,
-)
-from naas_abi_marketplace.domains.personnel.scripts.linkedin_experience import (
     EXPERIENCES,
+    LINKEDIN_EDUCATION_URLS,
     LINKEDIN_PROFILE_URLS,
 )
 
-PERSONNEL_ROOT = Path(__file__).resolve().parents[1]
-SOURCE_DIR = PERSONNEL_ROOT / "apps" / "cockpit" / "data" / "source" / "person"
+COCKPIT_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_DIR = COCKPIT_ROOT / "data" / "source" / "person"
 
 
 def _person_slug(first: str, last: str) -> str:
@@ -81,16 +67,18 @@ def _working_record(exp: dict, roster: dict | None, *, source: str | None) -> di
     return row
 
 
-def _studying_record(study: dict) -> dict:
+def _studying_record(study: dict, *, source: str | None) -> dict:
     return {
         "process_type": "ActOfStudying",
+        "source": source,
         "organization": study["organization"],
         "program": study["program"],
         "site": study["site"],
         "start": _iso(study["start"]),
         "end": _iso(study.get("end")),
-        "duration": None,
-        "skills": [],
+        "duration": study.get("duration"),
+        "skills": list(study.get("skills") or []),
+        "activities": study.get("activities"),
     }
 
 
@@ -105,10 +93,12 @@ def build_person_payload(first: str, last: str) -> dict:
             continue
         records.append(_working_record(exp, roster, source=profile_url))
 
-    if (first, last) == STUDY["person"]:
-        records.append(_studying_record(STUDY))
+    education_url = LINKEDIN_EDUCATION_URLS.get(full_name)
+    for study in EDUCATION:
+        if study["person"] != (first, last):
+            continue
+        records.append(_studying_record(study, source=education_url))
 
-    # Most recent first, matching LinkedIn ordering in linkedin_experience.py.
     records.sort(key=lambda row: row.get("start") or "", reverse=True)
 
     return {
@@ -128,14 +118,14 @@ def build_person_payload(first: str, last: str) -> dict:
 def main() -> None:
     SOURCE_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Drop legacy flat files from source/person/*.json
     for legacy in SOURCE_DIR.glob("*.json"):
         legacy.unlink()
 
     people: dict[tuple[str, str], None] = {}
     for exp in EXPERIENCES:
         people[exp["person"]] = None
-    people[STUDY["person"]] = None
+    for study in EDUCATION:
+        people[study["person"]] = None
 
     written: list[str] = []
     for first, last in sorted(people, key=lambda pair: (pair[1], pair[0])):
@@ -150,7 +140,7 @@ def main() -> None:
         )
         written.append(f"{slug}/index.json ({len(payload['records'])} processes)")
 
-    print(f"Wrote {len(written)} folders under {SOURCE_DIR.relative_to(PERSONNEL_ROOT)}/")
+    print(f"Wrote {len(written)} folders under {SOURCE_DIR.relative_to(COCKPIT_ROOT)}/")
     for line in written:
         print(f"  {line}")
 

@@ -9,8 +9,8 @@ stripped for local rdflib), and writes directly to the committed cockpit tree::
 
 Requires ``generate_demo_graph.py`` to have run first::
 
-    python scripts/generate_demo_graph.py
-    python scripts/export_demo_apps_from_graph.py
+    python sandbox/generate_demo_graph.py
+    python apps/cockpit/scripts/export_demo_apps_from_graph.py
 """
 
 from __future__ import annotations
@@ -37,12 +37,12 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import (
     ENTITY_DATA,
     GRAPH_FILE,
 )
-from naas_abi_marketplace.domains.personnel.scripts.workforce_metrics import (
+from naas_abi_marketplace.domains.personnel.sandbox.workforce_metrics import (
     build_workforce_metrics,
 )
 from rdflib import Graph, Literal
 
-PERSONNEL_ROOT = Path(__file__).resolve().parents[1]
+PERSONNEL_ROOT = Path(__file__).resolve().parents[3]
 QUERIES_TTL = (
     PERSONNEL_ROOT / "ontologies" / "queries" / "PersonnelSparqlQueries.ttl"
 )
@@ -144,7 +144,7 @@ def _run_select(graph: Graph, sparql: str) -> list[dict]:
 def main() -> None:
     if not GRAPH_FILE.exists():
         raise SystemExit(
-            f"Missing {GRAPH_FILE}. Run scripts/generate_demo_graph.py first."
+            f"Missing {GRAPH_FILE}. Run sandbox/generate_demo_graph.py first."
         )
 
     print(f"Loading {GRAPH_FILE.relative_to(PERSONNEL_ROOT)}…")
