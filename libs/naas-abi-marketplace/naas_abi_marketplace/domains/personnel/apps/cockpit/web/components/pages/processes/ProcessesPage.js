@@ -66,7 +66,6 @@ function bfoSlideSvg(proc, design) {
           .join("")}
         <circle cx="${cx}" cy="${cy}" r="52" fill="${fill}" stroke="${stroke}" stroke-width="1.8"></circle>
         ${multilabel(word, cx, cy + (key === "how_to_know" ? 0 : 5), wordFill, key === "how_to_know" ? 13 : 15)}
-        ${key === "where" ? `<line x1="${cx - 29}" y1="${cy + 11}" x2="${cx + 29}" y2="${cy + 11}" stroke="${wordFill}" stroke-width="1.2"></line>` : ""}
       </g>`;
   };
 

@@ -297,12 +297,27 @@ def main() -> None:
         ENTITY_DATA / "graph" / "index.json",
         _envelope([], **graph_payload),
     )
+    logs_config = load_config()["logs"]
+    mutation_started_at = datetime.now(UTC).isoformat()
+    mutation_completed_at = datetime.now(UTC).isoformat()
     _dump(
         ENTITY_DATA / "logs" / "ledger.json",
         _envelope(
             build_ledger_log_rows(
                 source_rows.get("find_working_processes", []),
                 source_rows.get("find_acts_of_studying", []),
+                actor_id=logs_config["actor"]["person_id"],
+                actor_label=logs_config["actor"]["display_name"],
+                server_site_id=logs_config["server"]["site_id"],
+                server_label=logs_config["server"]["display_name"],
+                server_ip=logs_config["server"]["ip_address"],
+                target_graph=logs_config["target_graph"],
+                target_graph_label=logs_config["target_graph_label"],
+                process_label=logs_config["process_label"],
+                started_at=mutation_started_at,
+                completed_at=mutation_completed_at,
+                default_operation=logs_config["default_operation"],
+                default_status=logs_config["default_status"],
             )
         ),
     )

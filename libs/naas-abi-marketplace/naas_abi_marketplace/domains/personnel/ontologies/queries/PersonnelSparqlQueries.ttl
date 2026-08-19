@@ -263,7 +263,7 @@ intentMapping:findWorkingProcessesQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX abi:  <http://ontology.naas.ai/abi/>
         PREFIX personnel: <http://ontology.naas.ai/personnel/>
 
-        SELECT DISTINCT ?personLabel ?working ?workingLabel ?org ?orgLabel ?site ?siteLabel
+        SELECT DISTINCT ?person ?personLabel ?working ?workingLabel ?org ?orgLabel ?site ?siteLabel
                         ?temporal ?temporalLabel ?temporalStart ?temporalEnd ?durationLabel
                         ?firstInstant ?firstInstantLabel ?lastInstant ?lastInstantLabel
                         ?contract ?contractLabel ?contractType
@@ -372,7 +372,7 @@ intentMapping:findActsOfStudyingQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX abi:  <http://ontology.naas.ai/abi/>
         PREFIX personnel: <http://ontology.naas.ai/personnel/>
 
-        SELECT DISTINCT ?personLabel ?studying ?org ?orgLabel ?site ?siteLabel
+        SELECT DISTINCT ?person ?personLabel ?studying ?org ?orgLabel ?site ?siteLabel
                         ?temporal ?temporalLabel ?temporalStart ?temporalEnd
                         ?enrollment ?enrollmentLabel ?programName
                         ?role ?roleLabel

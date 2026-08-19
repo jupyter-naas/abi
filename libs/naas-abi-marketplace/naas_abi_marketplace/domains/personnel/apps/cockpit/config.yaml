@@ -61,7 +61,7 @@ app:
       banner:
         type: "info"
         enabled: true
-        text: "One row per act of working or studying sourced from the personnel graph."
+        text: "Demo graph mutation audit: one mutation row per imported person, with temporal bounds, owner, server, status, changed triples, and target graph."
 
 # Values are applied as CSS custom properties on :root. Add any application
 # token here without changing shell.js.
@@ -187,3 +187,19 @@ graph:
     settleMs: { label: "Settle time", min: 500, max: 12000, step: 500, default: 3000, unit: "ms", hint: "How long nodes move before the layout freezes." }
     legend: { label: "BFO legend", type: "toggle", default: false, hint: "Show the BFO colour key." }
     zoom: { label: "Default zoom", min: 0.25, max: 2.5, step: 0.05, default: 1, unit: "×", hint: "Initial and reset canvas scale." }
+
+# Technical graph-write audit defaults. In production these values should come
+# from the authenticated session and triple-store adapter.
+logs:
+  default_operation: "insert"
+  default_status: "succeeded"
+  process_label: "Graph mutation"
+  target_graph: "http://ontology.naas.ai/graph/personnel"
+  target_graph_label: "Personnel graph"
+  actor:
+    person_id: "http://ontology.naas.ai/abi/Person/alice-dupont"
+    display_name: "Alice Dupont"
+  server:
+    site_id: "http://ontology.naas.ai/personnel/Site/local-development"
+    display_name: "Local development server"
+    ip_address: "127.0.0.1"

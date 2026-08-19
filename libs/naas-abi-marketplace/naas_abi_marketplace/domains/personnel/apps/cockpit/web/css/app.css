@@ -542,15 +542,168 @@ tr:last-child td { border-bottom: 0; }
   color: var(--ink);
 }
 .logs-panel { margin-bottom: 1rem; }
-.logs-table { table-layout: auto; font-size: 0.82rem; min-width: 56rem; }
-.logs-table th, .logs-table td { white-space: nowrap; }
-.logs-table td.ledger-uri {
-  max-width: 16rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.logs-table {
+  table-layout: fixed;
+  min-width: 80rem;
+  font-size: 0.76rem;
 }
-.logs-table a { color: var(--accent); }
+.logs-table th,
+.logs-table td {
+  vertical-align: top;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.logs-table th:nth-child(1) { width: 18%; }
+.logs-table th:nth-child(2),
+.logs-table th:nth-child(3) { width: 11%; }
+.logs-table th:nth-child(4) { width: 10%; }
+.logs-table th:nth-child(5) { width: 8%; }
+.logs-table th:nth-child(6) { width: 6%; }
+.logs-table th:nth-child(7) { width: 7%; }
+.logs-table th:nth-child(8) { width: 8%; }
+.logs-table th:nth-child(9) { width: 21%; }
+.logs-table th small {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 500;
+  text-transform: none;
+}
+.log-process-id {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+.log-process-id small {
+  display: block;
+}
+.log-process-id small {
+  margin-top: 0.35rem;
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+.log-date {
+  font-variant-numeric: tabular-nums;
+}
+.log-date small {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+}
+.log-resource summary {
+  color: var(--ink);
+  font-weight: 700;
+  cursor: pointer;
+}
+.log-resource summary:hover {
+  color: var(--accent);
+}
+.log-resource-meta {
+  display: block;
+  margin-top: 0.4rem;
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.log-resource code {
+  display: block;
+  margin-top: 0.15rem;
+  padding: 0.3rem;
+  color: var(--ink);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.62rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  background: color-mix(in srgb, var(--ink) 4%, var(--panel));
+}
+.log-operation {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.log-operation.insert {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.log-operation.delete {
+  background: color-mix(in srgb, var(--banner-error) 12%, transparent);
+  color: var(--banner-error);
+}
+.log-status {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.log-status.success {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.log-status.error {
+  color: var(--banner-error);
+  background: color-mix(in srgb, var(--banner-error) 12%, transparent);
+}
+.log-triples-open {
+  padding: 0.3rem 0.55rem;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: var(--accent-soft);
+  cursor: pointer;
+}
+.log-triples-open:hover {
+  border-color: var(--accent);
+}
+.log-triples-dialog {
+  width: min(68rem, calc(100vw - 2rem));
+  max-width: none;
+  max-height: calc(100vh - 2rem);
+  padding: 0;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 0.35);
+}
+.log-triples-dialog::backdrop {
+  background: rgb(0 0 0 / 0.55);
+}
+.log-triples-dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.log-triples-dialog h2 {
+  margin: 0;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.log-dialog-close {
+  padding: 0.15rem 0.45rem;
+  color: var(--muted);
+  font: inherit;
+  font-size: 1.3rem;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.log-turtle {
+  max-height: calc(100vh - 8rem);
+  margin: 0;
+  padding: 1rem;
+  overflow: auto;
+  color: var(--ink);
+  font: 0.72rem/1.55 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 
 .ledger-scroll { overflow-x: auto; }
 .ledger-table {

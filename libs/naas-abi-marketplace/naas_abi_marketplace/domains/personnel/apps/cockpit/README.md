@@ -64,7 +64,7 @@ in `data/globals/entities.json`, or the first organization is used.
 | **Hiring** | Open positions, filled vs vacant by title | What are we hiring for? Who fills “Data Engineer”? |
 | **Graph** | Person → process canvas | Which Birth Registration / Employment processes link to Jeremy? |
 | **Processes** | BFO 7-buckets process docs | Explain BirthProcess. EmployeeRole vs JobPosition? |
-| **Logs** | Acts of working and studying | List working history. What did Hugo Girard work on? |
+| **Logs** | Graph mutation audit by transaction, actor and target graph | Which triples were added or deleted? |
 
 ---
 

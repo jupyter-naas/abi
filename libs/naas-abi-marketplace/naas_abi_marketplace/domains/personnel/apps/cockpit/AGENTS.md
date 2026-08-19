@@ -24,6 +24,8 @@ Configuration ownership:
 - `theme.bfo_buckets` / `theme.process_slide` - graph and process colours
 - `graph` - initial focus/distance/view, canvas dimensions, and every control
   shown in the graph parameters panel
+- `logs` - graph mutation operation, actor, and target named graph used when
+  exporting the demo audit ledger
 
 `config_loader.py` validates the YAML. The browser receives a safe subset from
 `GET /api/personnel-cockpit/config`; `web/lib/config.js` applies it, and
@@ -63,6 +65,10 @@ Without an authentication adapter, `public` is the only granted permission;
 pages with any other permission are omitted from public config/manifests and
 their datasets return HTTP 403. Do not claim role-based security until an
 authenticated session is implemented server-side.
+
+The configured `logs.actor` is only a demo export default. A production audit
+must take the actor and timestamps from the authenticated graph-write request
+and the triple-store adapter, rather than trusting browser-provided values.
 
 ## Naming
 
@@ -106,7 +112,7 @@ URLs: ``/{entity_url_slug}/{configured_page_url}`` (e.g.
 | workforce | `find_active_employees`, `find_employees_by_status`, `find_headcount_by_job_family` |
 | graph | person search + distance 1–3 hop filter on process graph |
 | processes | BFO 7-buckets process docs (`processes/processes.json`) |
-| logs | acts of working / studying → `logs/ledger.json` (one row per process) |
+| logs | demo graph mutation audit → `logs/ledger.json`, one aggregated graph-mutation row per imported person (process, start/end, owner, server IP/site, type, status, triples, graph); labels expand to URIs and triples open as Turtle in a dialog |
 
 ## Verification
 
