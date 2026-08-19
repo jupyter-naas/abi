@@ -132,15 +132,12 @@ def _run_body_is_trivial(run: Any) -> bool:
     for node in tree.body:
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        body = [
-            stmt
-            for stmt in node.body
-            if not (
-                isinstance(stmt, ast.Expr)
-                and isinstance(getattr(stmt, "value", None), ast.Constant)
-                and isinstance(stmt.value.value, str)
-            )
-        ]
+        body: list[ast.stmt] = []
+        for stmt in node.body:
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant):
+                if isinstance(stmt.value.value, str):
+                    continue
+            body.append(stmt)
         if not body:
             return True
         if len(body) == 1 and isinstance(body[0], ast.Pass):

@@ -32,7 +32,22 @@ class EchoWorkflowParameters(WorkflowParameters):
     text: Annotated[str, Field(..., description="Text to echo")]
 
 
-class EchoWorkflow(Workflow):
+class _StubAsApi:
+    """Empty as_api with the Expose signature. Kernel should fall back to run()."""
+
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[str | Enum] | None = None,
+    ) -> None:
+        return None
+
+
+class EchoWorkflow(_StubAsApi, Workflow):
     """Fixture workflow with a stub as_api and a live run()."""
 
     def run(self, parameters: EchoWorkflowParameters) -> dict:
@@ -41,18 +56,12 @@ class EchoWorkflow(Workflow):
     def as_tools(self) -> list[BaseTool]:
         return []
 
-    def as_api(self, router, **kwargs) -> None:
-        return None
 
-
-class DeadWorkflow(Workflow):
+class DeadWorkflow(_StubAsApi, Workflow):
     """Fixture workflow: stub as_api and no run() override."""
 
     def as_tools(self) -> list[BaseTool]:
         return []
-
-    def as_api(self, router, **kwargs) -> None:
-        return None
 
 
 class LiveWorkflow(Workflow):
@@ -64,7 +73,15 @@ class LiveWorkflow(Workflow):
     def as_tools(self) -> list[BaseTool]:
         return []
 
-    def as_api(self, router, **kwargs) -> None:
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[str | Enum] | None = None,
+    ) -> None:
         @router.post("/custom_live")
         def custom(parameters: EchoWorkflowParameters) -> dict:
             return self.run(parameters)
@@ -75,19 +92,12 @@ class EchoPipelineConfiguration(PipelineConfiguration):
     pass
 
 
-class EchoPipelineParameters(PipelineParameters):
-    text: Annotated[str, Field(..., description="Unused")] = "ok"
-
-
-class EchoPipeline(Pipeline):
-    def run(self, parameters: EchoPipelineParameters) -> Graph:
+class EchoPipeline(_StubAsApi, Pipeline):
+    def run(self, parameters: PipelineParameters) -> Graph:
         return Graph()
 
     def as_tools(self) -> list[BaseTool]:
         return []
-
-    def as_api(self, router, **kwargs) -> None:
-        return None
 
 
 @dataclass
@@ -296,7 +306,7 @@ class InheritedRunWorkflow(Workflow):
 
 
 class PassOnlyWorkflow(Workflow):
-    def run(self, parameters: EchoWorkflowParameters) -> dict:  # type: ignore[return-value]
+    def run(self, parameters: EchoWorkflowParameters) -> dict:  # type: ignore[empty-body]
         pass
 
     def as_tools(self) -> list[BaseTool]:
