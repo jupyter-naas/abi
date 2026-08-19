@@ -1,33 +1,11 @@
-:root {
-  --ink: #1a1f2b;
-  --muted: #5c6578;
-  --paper: #f4f0e8;
-  --panel: #fffcf7;
-  --line: #d9d2c5;
-  --accent: #0f6b5c;
-  --accent-soft: #d7efe9;
-  --warn: #8a5a12;
-  --warn-soft: #f5e6c8;
-  --male: #2f5d8c;
-  --female: #a3546e;
-  --rail-width: 240px;
-  --rail-collapsed: 4.25rem;
-  --nav-icon-size: 1.15rem;
-  --brand-mark-size: 1.9rem;
-  --brand-mark-collapsed-size: 1.45rem;
-  --chrome-height: 3.25rem;
-  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  --font-body: "Avenir Next", "Segoe UI", Helvetica, Arial, sans-serif;
-}
-
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
 body {
   font-family: var(--font-body);
   color: var(--ink);
   background:
-    radial-gradient(1200px 600px at 10% -10%, #e7efe8 0%, transparent 55%),
-    linear-gradient(160deg, #ebe4d6 0%, var(--paper) 45%, #e2ddd2 100%);
+    radial-gradient(1200px 600px at 10% -10%, var(--background-glow) 0%, transparent 55%),
+    linear-gradient(160deg, var(--background-start) 0%, var(--paper) 45%, var(--background-end) 100%);
 }
 
 .shell {
@@ -104,17 +82,17 @@ body {
   background: rgba(59, 130, 246, 0.12);
   border-color: rgba(59, 130, 246, 0.4);
 }
-.page-banner.type-info .page-banner-icon { color: #1d4ed8; }
+.page-banner.type-info .page-banner-icon { color: var(--banner-info); }
 .page-banner.type-warning {
   background: rgba(245, 158, 11, 0.12);
   border-color: rgba(245, 158, 11, 0.4);
 }
-.page-banner.type-warning .page-banner-icon { color: #b45309; }
+.page-banner.type-warning .page-banner-icon { color: var(--banner-warning); }
 .page-banner.type-error {
   background: rgba(220, 38, 38, 0.1);
   border-color: rgba(220, 38, 38, 0.35);
 }
-.page-banner.type-error .page-banner-icon { color: #b91c1c; }
+.page-banner.type-error .page-banner-icon { color: var(--banner-error); }
 .page-banner:hover { filter: brightness(0.98); }
 
 .rail {
@@ -165,7 +143,7 @@ body {
   display: grid;
   place-items: center;
   background: var(--accent);
-  color: #f7fff9;
+  color: var(--rail-accent-text);
   font-weight: 700;
   font-size: 0.9rem;
   line-height: 1;
@@ -397,7 +375,7 @@ tr:last-child td { border-bottom: 0; }
 .ledger-entry-head {
   padding: 1rem 1.1rem 0.85rem;
   border-bottom: 1px solid var(--line);
-  background: linear-gradient(180deg, #f7f3eb 0%, var(--panel) 100%);
+  background: linear-gradient(180deg, var(--panel-gradient-start) 0%, var(--panel) 100%);
 }
 .ledger-entry-title {
   display: flex;
@@ -501,13 +479,13 @@ td.muted { color: var(--muted); font-style: italic; }
   color: var(--accent);
 }
 .chip.warn { background: var(--warn-soft); color: var(--warn); }
-.chip.muted { background: #ece8e0; color: var(--muted); }
+.chip.muted { background: var(--muted-surface); color: var(--muted); }
 
 .bars { display: flex; flex-direction: column; gap: 0.55rem; }
 .bar-row { display: grid; grid-template-columns: 7rem 1fr 2rem; gap: 0.55rem; align-items: center; }
 .bar-track {
   height: 0.55rem;
-  background: #ece7dc;
+  background: var(--bar-track);
   border-radius: 0;
   overflow: hidden;
 }
@@ -1249,7 +1227,7 @@ td.muted { color: var(--muted); font-style: italic; }
   position: relative;
   overflow: hidden;
   background: #000;
-  border: 1px solid #242424;
+  border: 1px solid var(--slide-border);
 }
 .slide-frame > figure {
   position: absolute;
@@ -1277,7 +1255,7 @@ td.muted { color: var(--muted); font-style: italic; }
   width: 900px;
   font-family: Roboto, ui-sans-serif, system-ui, sans-serif;
   font-size: 12px;
-  color: #34d399;
+  color: var(--slide-accent);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1287,7 +1265,7 @@ td.muted { color: var(--muted); font-style: italic; }
   width: 1160px;
   font-family: Lora, Georgia, serif;
   font-size: 28px;
-  color: #f8fafc;
+  color: var(--slide-text);
   font-weight: 600;
 }
 .slide-frame .ly.sub {
@@ -1296,7 +1274,7 @@ td.muted { color: var(--muted); font-style: italic; }
   width: 1160px;
   font-family: Roboto, ui-sans-serif, system-ui, sans-serif;
   font-size: 14px;
-  color: #6b7280;
+  color: var(--slide-muted);
 }
 .slide-frame .naas-logo {
   position: absolute;
@@ -1306,7 +1284,7 @@ td.muted { color: var(--muted); font-style: italic; }
   font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.03em;
-  color: #f8fafc;
+  color: var(--slide-text);
   line-height: 1;
   z-index: 2;
   pointer-events: none;
@@ -1334,7 +1312,7 @@ td.muted { color: var(--muted); font-style: italic; }
 }
 .onto-bucket {
   border: 1px solid var(--line);
-  background: #faf8f3;
+  background: var(--subtle-surface);
   padding: 0.55rem 0.5rem;
   display: flex;
   flex-direction: column;

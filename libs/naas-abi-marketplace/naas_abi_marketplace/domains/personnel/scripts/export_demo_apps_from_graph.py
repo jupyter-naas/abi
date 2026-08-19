@@ -23,6 +23,7 @@ from pathlib import Path
 from naas_abi_marketplace.domains.personnel.apps.cockpit.graph_payload import (
     build_graph_page_payload,
 )
+from naas_abi_marketplace.domains.personnel.apps.cockpit.config_loader import load_config
 from naas_abi_marketplace.domains.personnel.apps.cockpit.log_payload import (
     build_ledger_log_rows,
 )
@@ -345,7 +346,7 @@ def main() -> None:
     )
 
     data_version = _now_version()
-    pages = {
+    page_datasets = {
         "workforce": [
             "workforce/kpis.json",
             "workforce/roster.json",
@@ -361,6 +362,11 @@ def main() -> None:
         "logs": [
             "logs/ledger.json",
         ],
+    }
+    pages = {
+        page["page_id"]: page_datasets[page["page_id"]]
+        for page in load_config()["app"]["pages"]
+        if page.get("enabled") and page["page_id"] in page_datasets
     }
 
     _dump(
@@ -384,6 +390,7 @@ def main() -> None:
                     "display_name": "Naas.ai",
                     "url_slug": DEFAULT_ENTITY_SLUG,
                     "entity_type": "organization",
+                    "is_default": True,
                     "organizationLabel": "Naas.ai",
                     "organization_uri": "http://ontology.naas.ai/abi/Organization/demo",
                 }

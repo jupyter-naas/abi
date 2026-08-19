@@ -3423,6 +3423,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "ijson" },
     { name = "naas-abi-core" },
+    { name = "pyyaml" },
 ]
 
 [package.optional-dependencies]
@@ -3553,6 +3554,7 @@ requires-dist = [
     { name = "pymupdf4llm", marker = "extra == 'domains-document'", specifier = ">=1.27.2.2" },
     { name = "pynacl", marker = "extra == 'applications-github'", specifier = ">=1.5.0,<2" },
     { name = "python-pptx", marker = "extra == 'applications-powerpoint'", specifier = ">=1.0.2,<2" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "ratelimit", marker = "extra == 'applications-pubmed'", specifier = ">=2.2.1" },
     { name = "ratelimit-types", marker = "extra == 'applications-pubmed'", specifier = "==0.0.3" },
     { name = "thefuzz", marker = "extra == 'domains-ontology-engineer'", specifier = "==0.22.1" },

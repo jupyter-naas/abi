@@ -1,10 +1,7 @@
-import { PAGE_IDS } from "./pages.js";
 import { mountPage as mountWorkforcePage } from "../components/pages/workforce/WorkforcePage.js";
 import { mountPage as mountGraphPage } from "../components/pages/graph/GraphPage.js";
 import { mountPage as mountProcessesPage } from "../components/pages/processes/ProcessesPage.js";
 import { mountPage as mountLogsPage } from "../components/pages/logs/LogsPage.js";
-
-export { PAGE_IDS };
 
 const PAGE_MOUNTS = {
   workforce: mountWorkforcePage,
@@ -12,6 +9,8 @@ const PAGE_MOUNTS = {
   processes: mountProcessesPage,
   logs: mountLogsPage,
 };
+
+export const PAGE_IDS = Object.freeze(Object.keys(PAGE_MOUNTS));
 
 /**
  * Mount a page into its section element.

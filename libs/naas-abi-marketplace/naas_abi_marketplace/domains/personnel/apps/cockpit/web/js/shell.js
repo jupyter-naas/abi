@@ -4,42 +4,47 @@ import {
   loadEntitiesRegistry,
   loadLatestPublishedAt,
 } from "../lib/api.js";
-import { APP_NAME, BANNER_ICONS, PAGES } from "../lib/pages.js";
-import { mountPageFor } from "../lib/registry.js";
 import {
-  buildPageUrl,
+  applyBrand,
+  applyTheme,
+  loadAppConfig,
+  pageMaps,
+  renderConfiguredPages,
+} from "../lib/config.js?v=2";
+import { mountPageFor } from "../lib/registry.js?v=2";
+import {
   migrateLegacyUrls,
   routeFromUrl,
   syncPageUrl,
   urlHasEntitySegment,
-} from "../lib/routes.js";
+} from "../lib/routes.js?v=2";
 
-const DEFAULT_ENTITY_ID = "demo";
-const DEFAULT_ENTITY_SLUG = "demo";
 const ORG_KEY = "cockpit-org-filter";
 const RAIL_KEY = "cockpit-rail-collapsed";
 const PAGE_KEY = "cockpit-page";
 const BANNER_DISMISS_KEY = "cockpit-banner-dismissed";
 
-const DEFAULT_ENTITY = {
-  entity_id: DEFAULT_ENTITY_ID,
-  url_slug: DEFAULT_ENTITY_SLUG,
-  display_name: "Naas.ai",
-  entity_type: "organization",
-};
-
-let currentEntity = DEFAULT_ENTITY_ID;
-let currentEntitySlug = DEFAULT_ENTITY_SLUG;
-let currentPageId = "workforce";
+let config;
+let pages = [];
+let pagesById = {};
+let pagesByUrl = {};
+let defaultEntityConfig;
+let currentEntity;
+let currentEntitySlug;
+let currentPageId;
 let entities = [];
-let api = createApi(currentEntity);
+let api;
 const pageDisposers = {};
 
 function defaultEntity() {
+  const configured = entities.find(
+    (entity) => entity.entity_id === defaultEntityConfig.entity_id
+  );
   return (
+    configured ||
     entities.find((entity) => entity.entity_type === "organization") ||
     entities[0] ||
-    DEFAULT_ENTITY
+    defaultEntityConfig
   );
 }
 
@@ -53,6 +58,8 @@ function routeContext() {
     resolveStoredPageId,
     defaultEntity,
     entityBySlug,
+    pagesById,
+    pagesByUrl,
   };
 }
 
@@ -66,8 +73,10 @@ function applyEntity(entity) {
 
 function syncOrgSelect() {
   const select = document.getElementById("org-filter");
-  if (!select) return;
-  if ([...select.options].some((option) => option.value === currentEntitySlug)) {
+  if (
+    select &&
+    [...select.options].some((option) => option.value === currentEntitySlug)
+  ) {
     select.value = currentEntitySlug;
   }
 }
@@ -92,36 +101,38 @@ function dismissedBanners() {
 }
 
 function dismissBanner(pageId) {
-  const map = dismissedBanners();
-  map[pageId] = true;
-  sessionStorage.setItem(BANNER_DISMISS_KEY, JSON.stringify(map));
-  const el = document.getElementById("page-banner");
-  el.hidden = true;
-  el.dataset.page = "";
+  const dismissed = dismissedBanners();
+  dismissed[pageId] = true;
+  sessionStorage.setItem(BANNER_DISMISS_KEY, JSON.stringify(dismissed));
+  const element = document.getElementById("page-banner");
+  element.hidden = true;
+  element.dataset.page = "";
 }
 
 function showPageBanner(pageId) {
-  const el = document.getElementById("page-banner");
-  const cfg = PAGES[pageId]?.banner;
-  if (!cfg?.enabled || !cfg.text?.trim() || dismissedBanners()[pageId]) {
-    el.hidden = true;
-    el.dataset.page = "";
+  const element = document.getElementById("page-banner");
+  const banner = pagesById[pageId]?.banner;
+  if (!banner?.enabled || !banner.text?.trim() || dismissedBanners()[pageId]) {
+    element.hidden = true;
+    element.dataset.page = "";
     return;
   }
-  const type = ["info", "warning", "error"].includes(cfg.type) ? cfg.type : "info";
-  el.hidden = false;
-  el.dataset.page = pageId;
-  el.dataset.type = type;
-  el.className = `page-banner type-${type}`;
-  el.title = "Click to dismiss";
-  document.getElementById("page-banner-text").textContent = cfg.text;
+  const type = ["info", "warning", "error"].includes(banner.type)
+    ? banner.type
+    : "info";
+  const icon = config.theme?.banner_icons?.[type] || "";
+  element.hidden = false;
+  element.dataset.page = pageId;
+  element.dataset.type = type;
+  element.className = `page-banner type-${type}`;
+  element.title = "Click to dismiss";
+  document.getElementById("page-banner-text").textContent = banner.text;
   document.getElementById("page-banner-icon").innerHTML =
-    `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="${BANNER_ICONS[type]}" /></svg>`;
+    `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="${icon}" /></svg>`;
 }
 
 async function mountOrgFilter() {
   const select = document.getElementById("org-filter");
-  if (!select) return;
   select.innerHTML = entities
     .map(
       (entity) =>
@@ -133,28 +144,26 @@ async function mountOrgFilter() {
     const entity = entityBySlug(select.value);
     if (!entity) return;
     applyEntity(entity);
-    syncPageUrl(currentPageId, currentEntitySlug);
+    syncPageUrl(currentPageId, currentEntitySlug, pagesById);
     showPage(currentPageId, { syncUrl: false });
   });
 }
 
 async function mountRailPublished() {
-  const el = document.getElementById("rail-published");
-  if (!el) return;
+  const element = document.getElementById("rail-published");
   try {
     const publishedAt = await loadLatestPublishedAt(api.loadJson);
-    el.textContent = publishedAt
+    element.textContent = publishedAt
       ? `Published ${formatPublishedAt(publishedAt)}`
       : "Publication time unavailable";
   } catch {
-    el.textContent = "Publication time unavailable";
+    element.textContent = "Publication time unavailable";
   }
 }
 
 function resolveStoredPageId() {
   const stored = localStorage.getItem(PAGE_KEY);
-  if (stored && PAGES[stored]) return stored;
-  return "workforce";
+  return pagesById[stored] ? stored : config.app.default_page;
 }
 
 function disposeOtherPages(activePageId) {
@@ -167,57 +176,35 @@ function disposeOtherPages(activePageId) {
 }
 
 async function showPage(pageId, { syncUrl = true, replaceUrl = false } = {}) {
-  if (!PAGES[pageId]) pageId = "workforce";
+  if (!pagesById[pageId]) pageId = config.app.default_page;
   currentPageId = pageId;
   localStorage.setItem(PAGE_KEY, pageId);
-  if (syncUrl) syncPageUrl(pageId, currentEntitySlug, { replace: replaceUrl });
+  if (syncUrl) {
+    syncPageUrl(pageId, currentEntitySlug, pagesById, { replace: replaceUrl });
+  }
   disposeOtherPages(pageId);
-  document.querySelectorAll("#nav button").forEach((b) => {
-    b.classList.toggle("active", b.dataset.page === pageId);
+  document.querySelectorAll("#nav button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.page === pageId);
   });
-  document.querySelectorAll(".page").forEach((p) => {
-    p.classList.toggle("active", p.id === `page-${pageId}`);
+  document.querySelectorAll(".page").forEach((page) => {
+    page.classList.toggle("active", page.id === `page-${pageId}`);
   });
-  const title = PAGES[pageId].title;
+
+  const title = pagesById[pageId].label;
   document.getElementById("topbar-title").textContent = title;
-  document.title = `${title} | ${APP_NAME}`;
+  document.title = `${title} | ${config.brand.name}`;
   showPageBanner(pageId);
-  const el = document.getElementById(`page-${pageId}`);
-  el.innerHTML = `<p style="color:var(--muted)">Loading…</p>`;
+
+  const element = document.getElementById(`page-${pageId}`);
+  element.innerHTML = `<p style="color:var(--muted)">Loading…</p>`;
   try {
-    if (pageDisposers[pageId]) {
-      pageDisposers[pageId]();
-      delete pageDisposers[pageId];
-    }
-    const dispose = await mountPageFor(pageId, el, api);
+    if (pageDisposers[pageId]) pageDisposers[pageId]();
+    const dispose = await mountPageFor(pageId, element, { ...api, config });
     if (typeof dispose === "function") pageDisposers[pageId] = dispose;
-  } catch (err) {
-    el.innerHTML = `<p class="load-error">Failed to load data: ${err.message}. Run <code>make demo-data</code> in <code>domains/personnel</code> first.</p>`;
+  } catch (error) {
+    element.innerHTML = `<p class="load-error">Failed to load data: ${error.message}.</p>`;
   }
 }
-
-document.getElementById("nav").addEventListener("click", (e) => {
-  const btn = e.target.closest("button[data-page]");
-  if (!btn) return;
-  e.stopPropagation();
-  showPage(btn.dataset.page);
-});
-
-document.getElementById("rail-toggle").addEventListener("click", (e) => {
-  e.stopPropagation();
-  setRailCollapsed(true);
-});
-
-document.getElementById("rail").addEventListener("click", () => {
-  if (document.querySelector(".shell").classList.contains("rail-collapsed")) {
-    setRailCollapsed(false);
-  }
-});
-
-document.getElementById("page-banner").addEventListener("click", () => {
-  const pageId = document.getElementById("page-banner").dataset.page;
-  if (pageId) dismissBanner(pageId);
-});
 
 function handleUrlNavigation() {
   const route = routeFromUrl(routeContext());
@@ -233,28 +220,58 @@ function handleUrlNavigation() {
   }
 }
 
-window.addEventListener("popstate", handleUrlNavigation);
-
 async function bootstrap() {
-  setRailCollapsed(localStorage.getItem(RAIL_KEY) === "1");
-  const { loadGlobal } = createApi(DEFAULT_ENTITY_ID);
-  entities = await loadEntitiesRegistry(loadGlobal, DEFAULT_ENTITY);
+  config = await loadAppConfig();
+  ({ pages, byId: pagesById, byUrl: pagesByUrl } = pageMaps(config));
+  defaultEntityConfig = config.app.default_entity;
+  currentPageId = config.app.default_page;
+  currentEntity = defaultEntityConfig.entity_id;
+  currentEntitySlug = defaultEntityConfig.url_slug;
+  api = createApi(currentEntity);
 
+  applyTheme(config);
+  applyBrand(config);
+  renderConfiguredPages(config);
+  setRailCollapsed(localStorage.getItem(RAIL_KEY) === "1");
+
+  document.getElementById("nav").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-page]");
+    if (!button) return;
+    event.stopPropagation();
+    showPage(button.dataset.page);
+  });
+  document.getElementById("rail-toggle").addEventListener("click", (event) => {
+    event.stopPropagation();
+    setRailCollapsed(true);
+  });
+  document.getElementById("rail").addEventListener("click", () => {
+    if (document.querySelector(".shell").classList.contains("rail-collapsed")) {
+      setRailCollapsed(false);
+    }
+  });
+  document.getElementById("page-banner").addEventListener("click", () => {
+    const pageId = document.getElementById("page-banner").dataset.page;
+    if (pageId) dismissBanner(pageId);
+  });
+  window.addEventListener("popstate", handleUrlNavigation);
+
+  const { loadGlobal } = createApi(defaultEntityConfig.entity_id);
+  entities = await loadEntitiesRegistry(loadGlobal, defaultEntityConfig);
   const route = routeFromUrl(routeContext());
   if (urlHasEntitySegment(routeContext())) {
     applyEntity(entityBySlug(route.entitySlug) || defaultEntity());
   } else {
-    const storedEntityId = localStorage.getItem(ORG_KEY);
-    const storedEntity = entities.find((entity) => entity.entity_id === storedEntityId);
-    applyEntity(storedEntity || defaultEntity());
+    const storedId = localStorage.getItem(ORG_KEY);
+    applyEntity(
+      entities.find((entity) => entity.entity_id === storedId) || defaultEntity()
+    );
   }
 
   await mountOrgFilter();
   mountRailPublished();
-
   const migrated = migrateLegacyUrls({
+    ...routeContext(),
     currentEntitySlug,
-    defaultEntity,
   });
   const initialRoute = migrated || routeFromUrl(routeContext());
   applyEntity(entityBySlug(initialRoute.entitySlug) || defaultEntity());
@@ -262,4 +279,7 @@ async function bootstrap() {
   showPage(initialRoute.pageId || resolveStoredPageId(), { replaceUrl: true });
 }
 
-bootstrap();
+bootstrap().catch((error) => {
+  document.getElementById("pages").innerHTML =
+    `<p class="load-error">Failed to load cockpit configuration: ${error.message}</p>`;
+});

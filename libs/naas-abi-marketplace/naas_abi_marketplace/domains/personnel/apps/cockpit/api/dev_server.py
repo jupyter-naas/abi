@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import errno
-import json
 import os
 import socket
 
@@ -14,47 +13,49 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from naas_abi_marketplace.domains.personnel.apps.cockpit.api.routes import router
-from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import DATA_ROOT, DEFAULT_ENTITY_ID, WEB_ROOT
+from naas_abi_marketplace.domains.personnel.apps.cockpit.config_loader import (
+    public_config,
+    public_page_urls,
+)
+from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import WEB_ROOT
 
 
-def _load_page_ids() -> frozenset[str]:
-    manifest_path = DATA_ROOT / "entities" / DEFAULT_ENTITY_ID / "manifest.json"
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        pages = manifest.get("datasets", {}).get("pages", {})
-        return frozenset(pages.keys())
-    except (OSError, json.JSONDecodeError, AttributeError):
-        return frozenset({"workforce", "graph", "processes", "logs"})
-
-
-PAGE_IDS = _load_page_ids()
+PAGE_URLS = public_page_urls()
 
 
 class SPAStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope):
         try:
-            return await super().get_response(path, scope)
+            response = await super().get_response(path, scope)
         except StarletteHTTPException as exc:
             if exc.status_code != 404:
                 raise
             if _is_spa_path(path):
-                return await super().get_response("index.html", scope)
-            raise
+                response = await super().get_response("index.html", scope)
+            else:
+                raise
+        if (
+            path.endswith((".html", ".js", ".css"))
+            or not path
+            or response.headers.get("content-type", "").startswith("text/html")
+        ):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
 
 
 def _is_spa_path(path: str) -> bool:
     if not path:
         return True
     parts = path.split("/")
-    if parts[0] in PAGE_IDS:
+    if parts[0] in PAGE_URLS:
         return True
-    if len(parts) >= 2 and parts[1] in PAGE_IDS:
+    if len(parts) >= 2 and parts[1] in PAGE_URLS:
         return True
     return len(parts) == 1 and "." not in parts[0]
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Personnel Cockpit")
+    app = FastAPI(title=public_config()["brand"]["name"])
     app.include_router(router, prefix="/api/personnel-cockpit")
     app.mount("/", SPAStaticFiles(directory=WEB_ROOT, html=True), name="web")
     return app

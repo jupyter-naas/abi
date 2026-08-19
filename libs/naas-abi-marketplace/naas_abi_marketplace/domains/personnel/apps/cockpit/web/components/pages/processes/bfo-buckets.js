@@ -1,65 +1,26 @@
-/** BFO 7-bucket palette - aligned with Nexus `bfo-buckets.ts`. */
-export const BFO_BUCKETS = [
-  {
-    uri: "http://purl.obolibrary.org/obo/BFO_0000040",
-    type: "Material Entity",
-    label: "Who",
-    color: "#3b82f6",
-    border: "#2563eb",
-  },
-  {
-    uri: "http://purl.obolibrary.org/obo/BFO_0000015",
-    type: "Process",
-    label: "What",
-    color: "#22c55e",
-    border: "#16a34a",
-  },
-  {
-    uri: "http://purl.obolibrary.org/obo/BFO_0000008",
-    type: "Temporal Region",
-    label: "When",
-    color: "#a855f7",
-    border: "#9333ea",
-  },
-  {
-    uri: "http://purl.obolibrary.org/obo/BFO_0000029",
-    type: "Site",
-    label: "Where",
-    color: "#f97316",
-    border: "#ea580c",
-  },
-  {
-    uri: "http://purl.obolibrary.org/obo/BFO_0000019",
-    type: "Quality",
-    label: "How it is",
-    color: "#ec4899",
-    border: "#db2777",
-  },
-  {
-    uri: "http://purl.obolibrary.org/obo/BFO_0000017",
-    type: "Realizable",
-    label: "Why",
-    color: "#eab308",
-    border: "#ca8a04",
-  },
-  {
-    uri: "http://purl.obolibrary.org/obo/BFO_0000031",
-    type: "GDC",
-    label: "How we know",
-    color: "#06b6d4",
-    border: "#0891b2",
-  },
-  { uri: "http://purl.obolibrary.org/obo/BFO_0000001", type: "Entity", label: "Entity", color: "#6b7280", border: "#4b5563" },
-  { uri: "", type: "Unknown", label: "Unknown", color: "#9ca3af", border: "#6b7280" },
-];
+/** BFO palette populated from config.yaml before the graph mounts. */
+export const BFO_BUCKETS = [];
+export const BFO_SEVEN = [];
+export const BFO_BY_TYPE = {};
 
-export const BFO_SEVEN = BFO_BUCKETS.filter((b) =>
-  ["Material Entity", "Process", "Temporal Region", "Site", "Quality", "Realizable", "GDC"].includes(
-    b.type
-  )
-);
-
-export const BFO_BY_TYPE = Object.fromEntries(BFO_BUCKETS.map((b) => [b.type, b]));
+export function configureBfoBuckets(configured) {
+  if (!Array.isArray(configured) || !configured.length) return;
+  BFO_BUCKETS.splice(0, BFO_BUCKETS.length, ...configured);
+  BFO_SEVEN.splice(
+    0,
+    BFO_SEVEN.length,
+    ...BFO_BUCKETS.filter((bucket) =>
+      ["Material Entity", "Process", "Temporal Region", "Site", "Quality", "Realizable", "GDC"].includes(
+        bucket.type
+      )
+    )
+  );
+  for (const key of Object.keys(BFO_BY_TYPE)) delete BFO_BY_TYPE[key];
+  Object.assign(
+    BFO_BY_TYPE,
+    Object.fromEntries(BFO_BUCKETS.map((bucket) => [bucket.type, bucket]))
+  );
+}
 
 export function bfoColor(bucketType, { faded = false } = {}) {
   const def = BFO_BY_TYPE[bucketType] || BFO_BY_TYPE.Unknown;

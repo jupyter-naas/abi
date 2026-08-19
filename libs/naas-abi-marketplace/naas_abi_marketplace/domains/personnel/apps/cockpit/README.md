@@ -9,6 +9,25 @@ cd domains/personnel && make demo-data              # regenerate apps/cockpit/da
 cd domains/personnel && make app-personnel-cockpit  # API + static UI dev server
 ```
 
+## Configuration
+
+`config.yaml` controls the runtime shell:
+
+- `brand`: product name, rail label/mark, favicon, and font stylesheet
+- `app.default_page`: landing page
+- `app.pages`: page URL, label, order, enabled state, permissions, icon, banner
+- `theme`: CSS variables, banner icons, BFO colours, and process-slide colours
+- `graph`: initial person/distance/view, canvas sizing, and parameter controls
+
+The server validates this file at startup and exposes only its public UI fields
+through `GET /api/personnel-cockpit/config`. Page components still have to exist
+in `web/lib/registry.js`. This static demo has no authenticated user session, so
+`public` is the only granted permission; other permissions are denied by the
+dataset API.
+
+The default entity is data-driven: set `"is_default": true` on an organization
+in `data/globals/entities.json`, or the first organization is used.
+
 ---
 
 ## What the graph can represent (analysis)
@@ -103,7 +122,7 @@ cockpit/
 ├── web/                 # static UI (fetch /api/personnel-cockpit/…)
 │   ├── app/[entitySlug]/[pageId]/page.js
 │   ├── components/pages/{workforce,graph,processes,logs}/
-│   ├── lib/{api,routes,pages,registry}.js
+│   ├── lib/{api,config,routes,registry}.js
 │   ├── js/shell.js
 │   ├── index.html
 │   └── css/app.css

@@ -2,7 +2,11 @@
  * Graph page - acts of working around a focus person, with labeled relations.
  */
 
-import { BFO_SEVEN, bfoColor } from "../processes/bfo-buckets.js";
+import {
+  BFO_SEVEN,
+  bfoColor,
+  configureBfoBuckets,
+} from "../processes/bfo-buckets.js";
 
 function esc(s) {
   return String(s ?? "")
@@ -17,13 +21,13 @@ const HIDDEN_CLASS_TYPES_KEY = "cockpit-graph-hidden-classes";
 const HIDDEN_CLASS_INSTANCES_KEY = "cockpit-graph-hidden-class-instances";
 const HIDDEN_PROCESS_TYPES_KEY = "cockpit-graph-hidden-process-types";
 const HIDDEN_PROCESSES_KEY = "cockpit-graph-hidden-processes";
-const MAX_PROCESSES_PER_CLASS = 10;
-const MIN_SCALE = 0.25;
-const MAX_SCALE = 2.5;
-const GRAPH_NODE_RADIUS = 36;
-const NODE_LABEL_FONT_SIZE = 11;
-const NODE_LABEL_LINE_HEIGHT = 13;
-const PROCESS_ROOT_RADIUS = 320;
+let MAX_PROCESSES_PER_CLASS;
+let MIN_SCALE;
+let MAX_SCALE;
+let GRAPH_NODE_RADIUS;
+let NODE_LABEL_FONT_SIZE;
+let NODE_LABEL_LINE_HEIGHT;
+let PROCESS_ROOT_RADIUS;
 const PARAMS_KEY = "cockpit-graph-params";
 
 /**
@@ -31,93 +35,18 @@ const PARAMS_KEY = "cockpit-graph-params";
  * comes from here rather than from a constant, so the parameters panel can
  * change any of it and repaint without a reload.
  */
-const GRAPH_PARAM_DEFS = {
-  physics: {
-    label: "Physics",
-    type: "toggle",
-    default: true,
-    hint: "Run the force simulation. Off leaves every node where the layout first placed it.",
-  },
-  clusterBy: {
-    label: "Cluster by",
-    type: "select",
-    default: "process",
-    options: [
-      { value: "none", label: "Nothing" },
-      { value: "process", label: "Act of working" },
-      { value: "bucket", label: "BFO bucket" },
-    ],
-    hint: "Pull related nodes into groups instead of spreading them evenly. By act of working, each job gathers its own organization, site, role and dates; by BFO bucket, all the people group, all the sites group, and so on.",
-  },
-  clusterPull: {
-    label: "Cluster pull",
-    min: 0,
-    max: 100,
-    step: 5,
-    default: 50,
-    unit: "%",
-    hint: "How tightly each group is drawn together. At 0 clustering is off; raise it for compact, clearly separated groups.",
-  },
-  linkDistance: {
-    label: "Link length",
-    min: 80,
-    max: 520,
-    step: 10,
-    default: 260,
-    unit: "px",
-    hint: "How far apart the simulation tries to hold two connected nodes. Raise it to stretch the graph out and leave room for the relation name written along each line.",
-  },
-  repulsion: {
-    label: "Repulsion",
-    min: 200,
-    max: 9000,
-    step: 100,
-    default: 3200,
-    unit: "",
-    hint: "How strongly every node pushes all the others away, connected or not. Raise it to spread the whole graph outward.",
-  },
-  nodeMinGap: {
-    label: "Node spacing",
-    min: 0,
-    max: 180,
-    step: 5,
-    default: 60,
-    unit: "px",
-    hint: "The closest two nodes are ever allowed to get. Nodes are pushed apart to honour it after every step, so it holds whatever the other settings are.",
-  },
-  settleMs: {
-    label: "Settle time",
-    min: 500,
-    max: 12000,
-    step: 500,
-    default: 3000,
-    unit: "ms",
-    hint: "How long nodes keep moving before the layout freezes in place. Raise it if a crowded graph has not finished spreading out.",
-  },
-  legend: {
-    label: "BFO legend",
-    type: "toggle",
-    default: true,
-    hint: "Show the colour key for the seven BFO buckets in the top-right corner of the canvas.",
-  },
-  zoom: {
-    label: "Default zoom",
-    min: 0.25,
-    max: 2.5,
-    step: 0.05,
-    default: 1,
-    unit: "×",
-    hint: "Scale the canvas opens at, and returns to with the ⟲ button. The graph may extend past the edges, so drag to pan.",
-  },
-};
+let GRAPH_PARAM_DEFS = {};
 
 // Hops are counted from the selected person, who roots the traversal - the
 // acts of working are one hop out, not the origin.
-const DISTANCE_HINT =
-  "Hops out from the selected person, who roots the graph. 1 shows what they bear or carry: acts of working, employee roles, missions, skills, profile document. 2 adds what those acts reach: organization, site, temporal region, contract, remuneration. 3 adds the instants bounding each temporal region.";
+let DISTANCE_HINT;
 
 const GRAPH_VIEWS = ["2d", "3d"];
-const GRAPH_VIEW_LABELS = { "2d": "2D view", "3d": "3D view" };
+let GRAPH_VIEW_LABELS = {};
+let DEFAULT_GRAPH_VIEW;
+let GRAPH_PAGE_URL;
+let DEFAULT_ENTITY_SLUG;
+let CONFIGURED_PAGE_URLS = new Set();
 
 /**
  * Defaults that differ between the two views. Depth needs more room than the
@@ -125,21 +54,7 @@ const GRAPH_VIEW_LABELS = { "2d": "2D view", "3d": "3D view" };
  * clusters legible once they are spread through z, and the simulation is given
  * longer to settle because it has a third axis to resolve.
  */
-const GRAPH_VIEW_DEFAULT_OVERRIDES = {
-  "2d": {
-    clusterBy: "bucket",
-    nodeMinGap: 150,
-    zoom: 0.75,
-  },
-  "3d": {
-    clusterBy: "bucket",
-    linkDistance: 300,
-    repulsion: 4500,
-    nodeMinGap: 150,
-    settleMs: 3000,
-    zoom: 0.6,
-  },
-};
+let GRAPH_VIEW_DEFAULT_OVERRIDES = {};
 
 function defaultGraphParams(view) {
   const base = Object.fromEntries(
@@ -171,7 +86,7 @@ function readStoredState() {
   } catch {
     // Malformed storage falls back to defaults.
   }
-  const view = GRAPH_VIEWS.includes(stored.view) ? stored.view : "2d";
+  const view = GRAPH_VIEWS.includes(stored.view) ? stored.view : DEFAULT_GRAPH_VIEW;
   const byView = {};
   for (const name of GRAPH_VIEWS) {
     byView[name] = coerceParams(name, stored.byView?.[name]);
@@ -179,11 +94,50 @@ function readStoredState() {
   return { view, byView };
 }
 
-const graphState = readStoredState();
+let graphState = readStoredState();
 
 // Mutated in place by the panel; the simulation reads it every tick. Holds the
 // active view's values, mirrored back into graphState on every change.
 const graphParams = { view: graphState.view, ...graphState.byView[graphState.view] };
+
+function configureGraph(config) {
+  const graph = config.graph || {};
+  const node = graph.node || {};
+  MAX_PROCESSES_PER_CLASS =
+    graph.max_processes_per_class ?? MAX_PROCESSES_PER_CLASS;
+  MIN_SCALE = graph.scale?.min ?? MIN_SCALE;
+  MAX_SCALE = graph.scale?.max ?? MAX_SCALE;
+  GRAPH_NODE_RADIUS = node.radius ?? GRAPH_NODE_RADIUS;
+  NODE_LABEL_FONT_SIZE = node.label_font_size ?? NODE_LABEL_FONT_SIZE;
+  NODE_LABEL_LINE_HEIGHT = node.label_line_height ?? NODE_LABEL_LINE_HEIGHT;
+  PROCESS_ROOT_RADIUS = node.process_root_radius ?? PROCESS_ROOT_RADIUS;
+  CAMERA_DISTANCE = graph.camera_distance ?? CAMERA_DISTANCE;
+  DEFAULT_PERSON_LABEL = graph.default_person_label ?? DEFAULT_PERSON_LABEL;
+  DEFAULT_DISTANCE = graph.default_distance ?? DEFAULT_DISTANCE;
+  DEFAULT_GRAPH_VIEW = GRAPH_VIEWS.includes(graph.default_view)
+    ? graph.default_view
+    : DEFAULT_GRAPH_VIEW;
+  GRAPH_PAGE_URL =
+    config.app?.pages?.find((page) => page.page_id === "graph")?.url ||
+    GRAPH_PAGE_URL;
+  DEFAULT_ENTITY_SLUG =
+    config.app?.default_entity?.url_slug || DEFAULT_ENTITY_SLUG;
+  CONFIGURED_PAGE_URLS = new Set(
+    (config.app?.pages || []).map((page) => page.url)
+  );
+  if (graph.parameters) GRAPH_PARAM_DEFS = graph.parameters;
+  if (graph.view_defaults) GRAPH_VIEW_DEFAULT_OVERRIDES = graph.view_defaults;
+  DISTANCE_HINT = graph.distance_hint;
+  GRAPH_VIEW_LABELS = graph.view_labels || {};
+  configureBfoBuckets(config.theme?.bfo_buckets);
+
+  graphState = readStoredState();
+  for (const key of Object.keys(graphParams)) delete graphParams[key];
+  Object.assign(graphParams, {
+    view: graphState.view,
+    ...graphState.byView[graphState.view],
+  });
+}
 
 /** Point graphParams at another view's values without replacing the object. */
 function applyGraphView(view) {
@@ -1073,7 +1027,7 @@ function annotateEdgeCurves(edges) {
   }
 }
 
-const CAMERA_DISTANCE = 2400;
+let CAMERA_DISTANCE;
 
 /** Screen-space X of a node: the projection in 3D, the raw position in 2D. */
 function viewX(node) {
@@ -1478,10 +1432,12 @@ function mountGraphCanvas(root, options) {
   const detail = root.querySelector("#graph-detail");
   const ctx = canvas.getContext("2d");
   const style = getComputedStyle(document.documentElement);
-  const panel = style.getPropertyValue("--panel").trim() || "#fff";
+  const panel = style.getPropertyValue("--panel").trim();
   const colors = {
-    ink: style.getPropertyValue("--ink").trim() || "#1a1f2b",
-    muted: style.getPropertyValue("--muted").trim() || "#5c6578",
+    ink: style.getPropertyValue("--ink").trim(),
+    muted: style.getPropertyValue("--muted").trim(),
+    nodeFill: style.getPropertyValue("--graph-node-fill").trim(),
+    nodeFillMuted: style.getPropertyValue("--graph-node-fill-muted").trim(),
     panel,
     canvas: panel,
   };
@@ -1673,7 +1629,7 @@ function mountGraphCanvas(root, options) {
     // adds clutter over the nodes in front.
     if (graphParams.view === "3d" && depth < 0.88) return;
     ctx.font = `600 ${fontSize * depth}px var(--font-body), sans-serif`;
-    ctx.fillStyle = n.dashed ? "rgba(255,255,255,0.82)" : "#ffffff";
+    ctx.fillStyle = n.dashed ? colors.nodeFillMuted : colors.nodeFill;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const scaledLineHeight = lineHeight * depth;
@@ -2119,8 +2075,8 @@ function readStoredHiddenProcesses() {
 
 // Landing on an empty canvas hides what the page is for, so the graph opens on
 // a person with a full working history rather than on a prompt to search.
-const DEFAULT_PERSON_LABEL = "Alice Dupont";
-const DEFAULT_DISTANCE = 2;
+let DEFAULT_PERSON_LABEL;
+let DEFAULT_DISTANCE;
 
 function defaultPerson(people) {
   return (
@@ -2148,15 +2104,15 @@ function graphFiltersFromUrl(people, fallbackDistance) {
 function entitySlugFromPathname() {
   const segments = window.location.pathname.split("/").filter(Boolean);
   if (segments.length >= 2) return segments[0];
-  if (segments.length === 1 && !["workforce", "graph", "processes", "logs"].includes(segments[0])) {
+  if (segments.length === 1 && !CONFIGURED_PAGE_URLS.has(segments[0])) {
     return segments[0];
   }
-  return "demo";
+  return DEFAULT_ENTITY_SLUG;
 }
 
 function syncGraphFiltersToUrl(personId, distance) {
   const url = new URL(window.location.href);
-  url.pathname = `/${entitySlugFromPathname()}/graph`;
+  url.pathname = `/${entitySlugFromPathname()}/${GRAPH_PAGE_URL}`;
   if (personId) url.searchParams.set("person", personId);
   else url.searchParams.delete("person");
   url.searchParams.set("distance", String(distance));
@@ -2554,6 +2510,7 @@ export function mountGraphPage(el, data) {
 
 /** @param {HTMLElement} el @param {{ loadJson: (rel: string) => Promise<object> }} ctx */
 export async function mountPage(el, ctx) {
+  configureGraph(ctx.config);
   const data = await ctx.loadJson("graph/index.json");
   return mountGraphPage(el, data);
 }

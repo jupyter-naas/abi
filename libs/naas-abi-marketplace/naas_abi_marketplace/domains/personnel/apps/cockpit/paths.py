@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from naas_abi_marketplace.domains.personnel.apps.cockpit.config_loader import (
+    load_default_entity,
+)
+
 COCKPIT_ROOT = Path(__file__).resolve().parent
 PERSONNEL_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_ENTITY_ID = "demo"
-DEFAULT_ENTITY_SLUG = "demo"
+_DEFAULT_ENTITY = load_default_entity()
+DEFAULT_ENTITY_ID = _DEFAULT_ENTITY["entity_id"]
+DEFAULT_ENTITY_SLUG = _DEFAULT_ENTITY["url_slug"]
 WEB_ROOT = COCKPIT_ROOT / "web"
 DATA_ROOT = COCKPIT_ROOT / "data"
 ENTITY_DATA = DATA_ROOT / "entities" / DEFAULT_ENTITY_ID
