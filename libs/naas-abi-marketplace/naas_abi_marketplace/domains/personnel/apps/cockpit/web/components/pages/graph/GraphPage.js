@@ -1660,6 +1660,23 @@ function mountGraphCanvas(root, options) {
     return graphNodeRadius(n) * viewScale(n);
   }
 
+  /**
+   * Fade nodes with distance so the foreground reads as the foreground. Near
+   * nodes stay fully opaque; far ones recede rather than competing.
+   */
+  function depthAlpha(n) {
+    if (graphParams.view !== "3d") return 1;
+    return Math.min(1, Math.max(0.42, (viewScale(n) - 0.6) / 0.4));
+  }
+
+  function edgeDepthAlpha(edge) {
+    return (depthAlpha(edge.a) + depthAlpha(edge.b)) / 2;
+  }
+
+  function edgeAverageDepth(edge) {
+    return ((edge.a._depth ?? 0) + (edge.b._depth ?? 0)) / 2;
+  }
+
   function drawEdgeLabel(text, x, y) {
     const fontSize = 10;
     ctx.font = `${fontSize}px var(--font-body), sans-serif`;
@@ -1706,12 +1723,12 @@ function mountGraphCanvas(root, options) {
       ctx.lineTo(end.x, end.y);
     }
     ctx.strokeStyle = stroke;
-    ctx.globalAlpha = 0.7;
+    const depthFade = graphParams.view === "3d" ? edgeDepthAlpha(e) : 1;
+    ctx.globalAlpha = 0.7 * depthFade;
     ctx.lineWidth = 1.6 / Math.max(scale, 0.6);
     if (e.b.dashed) ctx.setLineDash([4, 3]);
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.globalAlpha = 1;
 
     const tangent = curved
       ? tangentOnQuadratic(0.985, start, control, end)
@@ -1720,20 +1737,22 @@ function mountGraphCanvas(root, options) {
     drawArrowhead(end.x, end.y, angle, 14 / Math.max(scale, 0.6), stroke);
 
     const label = e.predicateLabel;
-    if (!label) return;
+    if (!label) {
+      ctx.globalAlpha = 1;
+      return;
+    }
+    if (graphParams.view === "3d") {
+      const avgScale = (viewScale(e.a) + viewScale(e.b)) / 2;
+      if (avgScale < 0.88) {
+        ctx.globalAlpha = 1;
+        return;
+      }
+    }
     const labelPoint = curved
       ? pointOnQuadratic(0.5, start, control, end)
       : { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
     drawEdgeLabel(label, labelPoint.x, labelPoint.y);
-  }
-
-  /**
-   * Fade nodes with distance so the foreground reads as the foreground. Near
-   * nodes stay fully opaque; far ones recede rather than competing.
-   */
-  function depthAlpha(n) {
-    if (graphParams.view !== "3d") return 1;
-    return Math.min(1, Math.max(0.42, (viewScale(n) - 0.6) / 0.4));
+    ctx.globalAlpha = 1;
   }
 
   function drawNodeBody(n) {
@@ -1781,7 +1800,14 @@ function mountGraphCanvas(root, options) {
     ctx.save();
     ctx.translate(w / 2 + pan.x, h / 2 + pan.y);
     ctx.scale(scale, scale);
-    for (const e of edges) drawEdge(e);
+    if (graphParams.view === "3d") {
+      const orderedEdges = [...edges].sort(
+        (a, b) => edgeAverageDepth(b) - edgeAverageDepth(a)
+      );
+      for (const e of orderedEdges) drawEdge(e);
+    } else {
+      for (const e of edges) drawEdge(e);
+    }
     if (graphParams.view === "3d") {
       // Painter's algorithm, body and label together per node. Drawing all the
       // bodies and then all the labels would let a distant node's text land on
