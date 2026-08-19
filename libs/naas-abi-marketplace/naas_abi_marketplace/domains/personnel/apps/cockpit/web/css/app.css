@@ -598,6 +598,18 @@ tr:last-child td { border-bottom: 0; }
 .log-resource summary:hover {
   color: var(--accent);
 }
+.log-resource summary small {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 500;
+}
+.log-owners {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
 .log-resource-meta {
   display: block;
   margin-top: 0.4rem;
@@ -1606,31 +1618,6 @@ td.muted { color: var(--muted); font-style: italic; }
 }
 
 /* Processes / BFO 7 buckets (schema from example/BFO_7B.html) */
-.onto-picker {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-.onto-picker button {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.2rem;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  padding: 0.65rem 0.85rem;
-  font: inherit;
-  color: var(--ink);
-  cursor: pointer;
-  text-align: left;
-  min-width: 10rem;
-}
-.onto-picker button small { color: var(--muted); font-size: 0.72rem; }
-.onto-picker button.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
 .onto-status {
   font-size: 0.65rem;
   font-weight: 700;
@@ -1642,6 +1629,35 @@ td.muted { color: var(--muted); font-style: italic; }
 .onto-status.vocabulary { color: var(--warn); }
 
 .bfo-stage { width: 100%; margin-bottom: 1rem; }
+.onto-process-picker {
+  margin-bottom: 0.65rem;
+  width: min(420px, 100%);
+}
+.onto-process-select {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.55rem 2rem 0.6rem 0.65rem;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1.5;
+  min-height: 2.35rem;
+  cursor: pointer;
+  appearance: none;
+  box-sizing: border-box;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%231a1f2b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
+      no-repeat right 0.65rem center / 14px,
+    var(--panel);
+  border: 1px solid var(--line);
+}
+.onto-process-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
+}
 .slide-frame {
   width: 100%;
   aspect-ratio: 1280 / 720;

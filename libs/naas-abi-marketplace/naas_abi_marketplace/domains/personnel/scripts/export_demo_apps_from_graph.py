@@ -306,8 +306,10 @@ def main() -> None:
             build_ledger_log_rows(
                 source_rows.get("find_working_processes", []),
                 source_rows.get("find_acts_of_studying", []),
-                actor_id=logs_config["actor"]["person_id"],
-                actor_label=logs_config["actor"]["display_name"],
+                owner_person_id=logs_config["owner"]["person"]["entity_id"],
+                owner_person_label=logs_config["owner"]["person"]["display_name"],
+                owner_agent_id=logs_config["owner"]["agent"]["entity_id"],
+                owner_agent_label=logs_config["owner"]["agent"]["display_name"],
                 server_site_id=logs_config["server"]["site_id"],
                 server_label=logs_config["server"]["display_name"],
                 server_ip=logs_config["server"]["ip_address"],

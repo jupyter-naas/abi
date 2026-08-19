@@ -24,7 +24,7 @@ Configuration ownership:
 - `theme.bfo_buckets` / `theme.process_slide` - graph and process colours
 - `graph` - initial focus/distance/view, canvas dimensions, and every control
   shown in the graph parameters panel
-- `logs` - graph mutation operation, actor, and target named graph used when
+- `logs` - graph mutation operation, human/agent owners, and target named graph used when
   exporting the demo audit ledger
 
 `config_loader.py` validates the YAML. The browser receives a safe subset from
@@ -66,8 +66,8 @@ pages with any other permission are omitted from public config/manifests and
 their datasets return HTTP 403. Do not claim role-based security until an
 authenticated session is implemented server-side.
 
-The configured `logs.actor` is only a demo export default. A production audit
-must take the actor and timestamps from the authenticated graph-write request
+The configured `logs.owner` is only a demo export default. A production audit
+must take the human and software-agent owners and timestamps from the authenticated graph-write request
 and the triple-store adapter, rather than trusting browser-provided values.
 
 ## Naming

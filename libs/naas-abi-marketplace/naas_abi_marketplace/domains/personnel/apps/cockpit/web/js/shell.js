@@ -11,7 +11,7 @@ import {
   pageMaps,
   renderConfiguredPages,
 } from "../lib/config.js?v=2";
-import { mountPageFor } from "../lib/registry.js?v=11";
+import { mountPageFor } from "../lib/registry.js?v=12";
 import {
   migrateLegacyUrls,
   routeFromUrl,

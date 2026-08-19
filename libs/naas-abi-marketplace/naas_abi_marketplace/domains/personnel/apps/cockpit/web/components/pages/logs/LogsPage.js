@@ -65,6 +65,20 @@ function resourceCell(label, uri, meta = "") {
   </td>`;
 }
 
+function ownersCell(owners) {
+  if (!Array.isArray(owners) || !owners.length) {
+    return `<td class="muted">-</td>`;
+  }
+  return `<td><div class="log-owners">${owners
+    .map(
+      (owner) => `<details class="log-resource">
+        <summary>${esc(owner.label || "Owner")}<small>${esc(owner.entity_type)}</small></summary>
+        <code>${esc(owner.entity_id)}</code>
+      </details>`
+    )
+    .join("")}</div></td>`;
+}
+
 function processCell(row) {
   return `<td class="log-process-id">
     <details class="log-resource">
@@ -85,7 +99,7 @@ export async function mountPage(el, ctx) {
         ${processCell(row)}
         ${dateCell(row.started_at)}
         ${dateCell(row.completed_at)}
-        ${resourceCell(row.actor, row.actor_id)}
+        ${ownersCell(row.owners)}
         ${resourceCell(row.server_label, row.server_site_id, row.server_ip)}
         <td><span class="log-operation ${row.type === "delete" ? "delete" : "insert"}">${esc(row.type)}</span></td>
         <td><span class="log-status ${row.status === "succeeded" ? "success" : "error"}">${esc(row.status)}</span></td>

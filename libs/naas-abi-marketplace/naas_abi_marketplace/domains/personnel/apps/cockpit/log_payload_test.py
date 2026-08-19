@@ -6,8 +6,10 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.log_payload import (
 )
 
 MUTATION = {
-    "actor_id": f"{PERSONNEL}alice-dupont",
-    "actor_label": "Alice Dupont",
+    "owner_person_id": f"{PERSONNEL}alice-dupont",
+    "owner_person_label": "Alice Dupont",
+    "owner_agent_id": f"{PERSONNEL}demo-agent",
+    "owner_agent_label": "Demo Agent",
     "server_site_id": f"{PERSONNEL}Site/local-development",
     "server_label": "Local development server",
     "server_ip": "127.0.0.1",
@@ -48,8 +50,18 @@ def test_working_process_is_an_insert_with_rdf_triples() -> None:
     assert "source_process_id" not in events[0]
     assert events[0]["type"] == "insert"
     assert events[0]["status"] == "succeeded"
-    assert events[0]["actor"] == "Alice Dupont"
-    assert events[0]["actor_id"] == MUTATION["actor_id"]
+    assert events[0]["owners"] == [
+        {
+            "entity_id": MUTATION["owner_person_id"],
+            "label": "Alice Dupont",
+            "entity_type": "Person",
+        },
+        {
+            "entity_id": MUTATION["owner_agent_id"],
+            "label": "Demo Agent",
+            "entity_type": "Agent",
+        },
+    ]
     assert events[0]["server_site_id"] == MUTATION["server_site_id"]
     assert events[0]["server_label"] == MUTATION["server_label"]
     assert events[0]["server_ip"] == MUTATION["server_ip"]

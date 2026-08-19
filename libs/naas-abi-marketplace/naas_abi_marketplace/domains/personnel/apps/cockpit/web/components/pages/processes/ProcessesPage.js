@@ -192,21 +192,17 @@ export function mountProcessesPage(el, data, design) {
       return;
     }
     el.innerHTML = `
-      <div class="onto-picker" role="tablist" aria-label="Processes">
-        ${processes
-          .map(
-            (p) => `<button type="button" role="tab" data-proc="${esc(p.id)}"
-              class="${p.id === proc.id ? "active" : ""}"
-              aria-selected="${p.id === proc.id}">
-              <span class="onto-status ${esc(p.status)}">${esc(p.status)}</span>
-              ${esc(p.label)}
-              <small>${(p.pages || []).join(" · ")}</small>
-            </button>`
-          )
-          .join("")}
-      </div>
-
       <div class="bfo-stage">
+        <div class="onto-process-picker">
+          <select class="onto-process-select" data-proc-select aria-label="Process">
+            ${processes
+              .map(
+                (p) =>
+                  `<option value="${esc(p.id)}"${p.id === proc.id ? " selected" : ""}>${esc(p.title || p.label)}</option>`
+              )
+              .join("")}
+          </select>
+        </div>
         <div class="slide-frame" data-slide-frame>
           <figure>
             <p class="ly kicker f-roboto">${esc(proc.kicker)}</p>
@@ -240,11 +236,9 @@ export function mountProcessesPage(el, data, design) {
       <div class="agent-q"><strong>Ask PersonnelAgent:</strong> “Explain ActOfWorking.” · “Explain ActOfStudying.”</div>
     `;
 
-    el.querySelectorAll("[data-proc]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        activeId = btn.dataset.proc;
-        paint();
-      });
+    el.querySelector("[data-proc-select]")?.addEventListener("change", (event) => {
+      activeId = event.target.value;
+      paint();
     });
 
     const frame = el.querySelector("[data-slide-frame]");

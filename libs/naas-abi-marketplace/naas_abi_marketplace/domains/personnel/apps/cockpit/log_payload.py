@@ -49,7 +49,8 @@ def _operation(record: dict, default_operation: str) -> str:
 def _mutation_process_id(
     record: dict,
     context_process_id: str,
-    actor_id: str,
+    owner_person_id: str,
+    owner_agent_id: str,
     server_ip: str,
     target_graph: str,
     started_at: str,
@@ -58,7 +59,14 @@ def _mutation_process_id(
     if explicit:
         return str(explicit)
     seed = "|".join(
-        (context_process_id, actor_id, server_ip, target_graph, started_at)
+        (
+            context_process_id,
+            owner_person_id,
+            owner_agent_id,
+            server_ip,
+            target_graph,
+            started_at,
+        )
     )
     return f"{PERSONNEL}GraphMutation/{uuid.uuid5(MUTATION_NAMESPACE, seed)}"
 
@@ -68,8 +76,10 @@ def _event(
     context_process_id: Any,
     triples: list[dict[str, str]],
     *,
-    actor_id: str,
-    actor_label: str,
+    owner_person_id: str,
+    owner_person_label: str,
+    owner_agent_id: str,
+    owner_agent_label: str,
     server_site_id: str,
     server_label: str,
     server_ip: str,
@@ -91,7 +101,8 @@ def _event(
         "process_id": _mutation_process_id(
             record,
             context_process_id,
-            actor_id,
+            owner_person_id,
+            owner_agent_id,
             server_ip,
             target_graph,
             started_at,
@@ -117,8 +128,18 @@ def _event(
         ),
         "started_at": started_at,
         "completed_at": completed_at,
-        "actor_id": actor_id,
-        "actor": actor_label,
+        "owners": [
+            {
+                "entity_id": owner_person_id,
+                "label": owner_person_label,
+                "entity_type": "Person",
+            },
+            {
+                "entity_id": owner_agent_id,
+                "label": owner_agent_label,
+                "entity_type": "Agent",
+            },
+        ],
         "server_site_id": server_site_id,
         "server_label": server_label,
         "server_ip": server_ip,
@@ -187,8 +208,10 @@ def build_ledger_log_rows(
     working_rows: list[dict] | None = None,
     studying_rows: list[dict] | None = None,
     *,
-    actor_id: str,
-    actor_label: str,
+    owner_person_id: str,
+    owner_person_label: str,
+    owner_agent_id: str,
+    owner_agent_label: str,
     server_site_id: str,
     server_label: str,
     server_ip: str,
@@ -203,8 +226,10 @@ def build_ledger_log_rows(
     """Return one demo graph-mutation audit event per unique person."""
     events_by_person: dict[str, dict[str, Any]] = {}
     mutation = {
-        "actor_id": actor_id,
-        "actor_label": actor_label,
+        "owner_person_id": owner_person_id,
+        "owner_person_label": owner_person_label,
+        "owner_agent_id": owner_agent_id,
+        "owner_agent_label": owner_agent_label,
         "server_site_id": server_site_id,
         "server_label": server_label,
         "server_ip": server_ip,
@@ -230,7 +255,8 @@ def build_ledger_log_rows(
             event["process_id"] = _mutation_process_id(
                 record,
                 person_id,
-                actor_id,
+                owner_person_id,
+                owner_agent_id,
                 server_ip,
                 target_graph,
                 started_at,

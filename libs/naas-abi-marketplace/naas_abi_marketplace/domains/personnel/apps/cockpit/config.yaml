@@ -196,9 +196,13 @@ logs:
   process_label: "Graph mutation"
   target_graph: "http://ontology.naas.ai/graph/personnel"
   target_graph_label: "Personnel graph"
-  actor:
-    person_id: "http://ontology.naas.ai/abi/Person/alice-dupont"
-    display_name: "Alice Dupont"
+  owner:
+    person:
+      entity_id: "http://ontology.naas.ai/abi/Person/alice-dupont"
+      display_name: "Alice Dupont"
+    agent:
+      entity_id: "http://ontology.naas.ai/abi/Agent/demo-agent"
+      display_name: "Demo Agent"
   server:
     site_id: "http://ontology.naas.ai/personnel/Site/local-development"
     display_name: "Local development server"
