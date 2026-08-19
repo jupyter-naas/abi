@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "data_version": "2026-08-19 17:41",
+  "data_version": "2026-08-19 18:53",
   "entity_id": "demo",
   "source": "graphs/demo/personnel.ttl",
   "records": [],
@@ -13,33 +13,12 @@
       "classUri": "abi:Person",
       "classLabel": "Person",
       "bfoBucket": "Material Entity",
-      "job_title": "COO",
-      "job_family": "Executive",
-      "status_value": "active",
-      "employee_id": "E-10429",
+      "job_title": null,
+      "job_family": null,
+      "status_value": null,
+      "employee_id": null,
       "organizationLabel": null,
-      "properties": [
-        {
-          "uri": "personnel:job_title",
-          "label": "job title",
-          "value": "COO"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Executive"
-        },
-        {
-          "uri": "personnel:employee_id",
-          "label": "employee id",
-          "value": "E-10429"
-        },
-        {
-          "uri": "personnel:status_value",
-          "label": "status",
-          "value": "active"
-        }
-      ]
+      "properties": []
     },
     {
       "id": "Bob Martin",
@@ -49,33 +28,12 @@
       "classUri": "abi:Person",
       "classLabel": "Person",
       "bfoBucket": "Material Entity",
-      "job_title": "CEO",
-      "job_family": "Executive",
-      "status_value": "active",
-      "employee_id": "E-10428",
+      "job_title": null,
+      "job_family": null,
+      "status_value": null,
+      "employee_id": null,
       "organizationLabel": null,
-      "properties": [
-        {
-          "uri": "personnel:job_title",
-          "label": "job title",
-          "value": "CEO"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Executive"
-        },
-        {
-          "uri": "personnel:employee_id",
-          "label": "employee id",
-          "value": "E-10428"
-        },
-        {
-          "uri": "personnel:status_value",
-          "label": "status",
-          "value": "active"
-        }
-      ]
+      "properties": []
     },
     {
       "id": "Claire Bernard",
@@ -85,33 +43,12 @@
       "classUri": "abi:Person",
       "classLabel": "Person",
       "bfoBucket": "Material Entity",
-      "job_title": "CTO",
-      "job_family": "Executive",
-      "status_value": "active",
-      "employee_id": "E-10430",
+      "job_title": null,
+      "job_family": null,
+      "status_value": null,
+      "employee_id": null,
       "organizationLabel": null,
-      "properties": [
-        {
-          "uri": "personnel:job_title",
-          "label": "job title",
-          "value": "CTO"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Executive"
-        },
-        {
-          "uri": "personnel:employee_id",
-          "label": "employee id",
-          "value": "E-10430"
-        },
-        {
-          "uri": "personnel:status_value",
-          "label": "status",
-          "value": "active"
-        }
-      ]
+      "properties": []
     },
     {
       "id": "David Leroy",
@@ -121,33 +58,12 @@
       "classUri": "abi:Person",
       "classLabel": "Person",
       "bfoBucket": "Material Entity",
-      "job_title": "Lead Developer Frontend",
-      "job_family": "Engineering",
-      "status_value": "terminated",
-      "employee_id": "E-10431",
+      "job_title": null,
+      "job_family": null,
+      "status_value": null,
+      "employee_id": null,
       "organizationLabel": null,
-      "properties": [
-        {
-          "uri": "personnel:job_title",
-          "label": "job title",
-          "value": "Lead Developer Frontend"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Engineering"
-        },
-        {
-          "uri": "personnel:employee_id",
-          "label": "employee id",
-          "value": "E-10431"
-        },
-        {
-          "uri": "personnel:status_value",
-          "label": "status",
-          "value": "terminated"
-        }
-      ]
+      "properties": []
     },
     {
       "id": "Emma Petit",
@@ -157,33 +73,12 @@
       "classUri": "abi:Person",
       "classLabel": "Person",
       "bfoBucket": "Material Entity",
-      "job_title": "CTO",
-      "job_family": "Executive",
-      "status_value": "terminated",
-      "employee_id": "E-10432",
+      "job_title": null,
+      "job_family": null,
+      "status_value": null,
+      "employee_id": null,
       "organizationLabel": null,
-      "properties": [
-        {
-          "uri": "personnel:job_title",
-          "label": "job title",
-          "value": "CTO"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Executive"
-        },
-        {
-          "uri": "personnel:employee_id",
-          "label": "employee id",
-          "value": "E-10432"
-        },
-        {
-          "uri": "personnel:status_value",
-          "label": "status",
-          "value": "terminated"
-        }
-      ]
+      "properties": []
     },
     {
       "id": "Frank Moreau",
@@ -193,33 +88,12 @@
       "classUri": "abi:Person",
       "classLabel": "Person",
       "bfoBucket": "Material Entity",
-      "job_title": "Head of Growth",
-      "job_family": "Growth",
-      "status_value": "terminated",
-      "employee_id": "E-10433",
+      "job_title": null,
+      "job_family": null,
+      "status_value": null,
+      "employee_id": null,
       "organizationLabel": null,
-      "properties": [
-        {
-          "uri": "personnel:job_title",
-          "label": "job title",
-          "value": "Head of Growth"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Growth"
-        },
-        {
-          "uri": "personnel:employee_id",
-          "label": "employee id",
-          "value": "E-10433"
-        },
-        {
-          "uri": "personnel:status_value",
-          "label": "status",
-          "value": "terminated"
-        }
-      ]
+      "properties": []
     },
     {
       "id": "Grace Lambert",
@@ -229,33 +103,12 @@
       "classUri": "abi:Person",
       "classLabel": "Person",
       "bfoBucket": "Material Entity",
-      "job_title": "Board Advisor",
-      "job_family": "Advisory",
-      "status_value": "active",
-      "employee_id": "E-10434",
+      "job_title": null,
+      "job_family": null,
+      "status_value": null,
+      "employee_id": null,
       "organizationLabel": null,
-      "properties": [
-        {
-          "uri": "personnel:job_title",
-          "label": "job title",
-          "value": "Board Advisor"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Advisory"
-        },
-        {
-          "uri": "personnel:employee_id",
-          "label": "employee id",
-          "value": "E-10434"
-        },
-        {
-          "uri": "personnel:status_value",
-          "label": "status",
-          "value": "active"
-        }
-      ]
+      "properties": []
     },
     {
       "id": "Hugo Girard",
@@ -265,33 +118,12 @@
       "classUri": "abi:Person",
       "classLabel": "Person",
       "bfoBucket": "Material Entity",
-      "job_title": "Advisor",
-      "job_family": "Advisory",
-      "status_value": "active",
-      "employee_id": "E-10435",
+      "job_title": null,
+      "job_family": null,
+      "status_value": null,
+      "employee_id": null,
       "organizationLabel": null,
-      "properties": [
-        {
-          "uri": "personnel:job_title",
-          "label": "job title",
-          "value": "Advisor"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Advisory"
-        },
-        {
-          "uri": "personnel:employee_id",
-          "label": "employee id",
-          "value": "E-10435"
-        },
-        {
-          "uri": "personnel:status_value",
-          "label": "status",
-          "value": "active"
-        }
-      ]
+      "properties": []
     }
   ],
   "processes": [],
@@ -1144,14 +976,9 @@
       "endedAt": null,
       "properties": [
         {
-          "uri": "personnel:job_title",
-          "label": "job title",
-          "value": "Advisor"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Advisory"
+          "uri": "personnel:forOrganization",
+          "label": "organization",
+          "value": "Demo"
         }
       ]
     },
@@ -1302,14 +1129,9 @@
       "endedAt": null,
       "properties": [
         {
-          "uri": "personnel:job_title",
-          "label": "job title",
-          "value": "Board Advisor"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Advisory"
+          "uri": "personnel:forOrganization",
+          "label": "organization",
+          "value": "Demo"
         }
       ]
     },
@@ -1463,14 +1285,9 @@
       "endedAt": null,
       "properties": [
         {
-          "uri": "personnel:job_title",
-          "label": "job title",
-          "value": "CEO"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Executive"
+          "uri": "personnel:forOrganization",
+          "label": "organization",
+          "value": "Demo"
         }
       ]
     },
@@ -1519,14 +1336,9 @@
       "endedAt": null,
       "properties": [
         {
-          "uri": "personnel:job_title",
-          "label": "job title",
-          "value": "COO"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Executive"
+          "uri": "personnel:forOrganization",
+          "label": "organization",
+          "value": "Demo"
         }
       ]
     },
@@ -1593,37 +1405,9 @@
       "endedAt": null,
       "properties": [
         {
-          "uri": "personnel:job_title",
-          "label": "job title",
-          "value": "CTO"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Executive"
-        }
-      ]
-    },
-    {
-      "id": "personnel:EmployeeRole/emma-petit-demo-cto",
-      "nodeKind": "entity",
-      "label": "CTO",
-      "classUri": "personnel:EmployeeRole",
-      "classLabel": "Employee Role",
-      "bfoBucket": "Realizable",
-      "isWorkingHub": false,
-      "startedAt": null,
-      "endedAt": null,
-      "properties": [
-        {
-          "uri": "personnel:job_title",
-          "label": "job title",
-          "value": "CTO"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Executive"
+          "uri": "personnel:forOrganization",
+          "label": "organization",
+          "value": "Demo"
         }
       ]
     },
@@ -1642,6 +1426,24 @@
           "uri": "personnel:forOrganization",
           "label": "organization",
           "value": "Nexus Labs"
+        }
+      ]
+    },
+    {
+      "id": "personnel:EmployeeRole/emma-petit-demo-cto",
+      "nodeKind": "entity",
+      "label": "CTO",
+      "classUri": "personnel:EmployeeRole",
+      "classLabel": "Employee Role",
+      "bfoBucket": "Realizable",
+      "isWorkingHub": false,
+      "startedAt": null,
+      "endedAt": null,
+      "properties": [
+        {
+          "uri": "personnel:forOrganization",
+          "label": "organization",
+          "value": "Demo"
         }
       ]
     },
@@ -2696,14 +2498,9 @@
       "endedAt": null,
       "properties": [
         {
-          "uri": "personnel:job_title",
-          "label": "job title",
-          "value": "Head of Growth"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Growth"
+          "uri": "personnel:forOrganization",
+          "label": "organization",
+          "value": "Demo"
         }
       ]
     },
@@ -2997,14 +2794,9 @@
       "endedAt": null,
       "properties": [
         {
-          "uri": "personnel:job_title",
-          "label": "job title",
-          "value": "Lead Developer Frontend"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Engineering"
+          "uri": "personnel:forOrganization",
+          "label": "organization",
+          "value": "Demo"
         }
       ]
     },
@@ -4157,62 +3949,6 @@
   "relations": [
     {
       "from": "Alice Dupont",
-      "to": "personnel:EmployeeRole/alice-dupont-demo-coo",
-      "predicateUri": "personnel:hasEmployeeRole",
-      "predicateLabel": "has employee role",
-      "canvas": true
-    },
-    {
-      "from": "Bob Martin",
-      "to": "personnel:EmployeeRole/bob-martin-demo-ceo",
-      "predicateUri": "personnel:hasEmployeeRole",
-      "predicateLabel": "has employee role",
-      "canvas": true
-    },
-    {
-      "from": "Claire Bernard",
-      "to": "personnel:EmployeeRole/claire-bernard-demo-cto",
-      "predicateUri": "personnel:hasEmployeeRole",
-      "predicateLabel": "has employee role",
-      "canvas": true
-    },
-    {
-      "from": "David Leroy",
-      "to": "personnel:EmployeeRole/david-leroy-demo-lead-developer-frontend",
-      "predicateUri": "personnel:hasEmployeeRole",
-      "predicateLabel": "has employee role",
-      "canvas": true
-    },
-    {
-      "from": "Emma Petit",
-      "to": "personnel:EmployeeRole/emma-petit-demo-cto",
-      "predicateUri": "personnel:hasEmployeeRole",
-      "predicateLabel": "has employee role",
-      "canvas": true
-    },
-    {
-      "from": "Frank Moreau",
-      "to": "personnel:EmployeeRole/frank-moreau-demo-head-of-growth",
-      "predicateUri": "personnel:hasEmployeeRole",
-      "predicateLabel": "has employee role",
-      "canvas": true
-    },
-    {
-      "from": "Grace Lambert",
-      "to": "personnel:EmployeeRole/grace-lambert-demo-board-advisor",
-      "predicateUri": "personnel:hasEmployeeRole",
-      "predicateLabel": "has employee role",
-      "canvas": true
-    },
-    {
-      "from": "Hugo Girard",
-      "to": "personnel:EmployeeRole/hugo-girard-demo-advisor",
-      "predicateUri": "personnel:hasEmployeeRole",
-      "predicateLabel": "has employee role",
-      "canvas": true
-    },
-    {
-      "from": "Alice Dupont",
       "to": "personnel:ActOfWorking/alice-dupont-demo-coo",
       "predicateUri": "personnel:hasActOfWorking",
       "predicateLabel": "has act of working",
@@ -4258,6 +3994,13 @@
       "to": "personnel:EmployeeRole/alice-dupont-demo-coo",
       "predicateUri": "abi:realizes",
       "predicateLabel": "realizes",
+      "canvas": true
+    },
+    {
+      "from": "Alice Dupont",
+      "to": "personnel:EmployeeRole/alice-dupont-demo-coo",
+      "predicateUri": "personnel:hasEmployeeRole",
+      "predicateLabel": "has employee role",
       "canvas": true
     },
     {
@@ -4584,6 +4327,13 @@
     },
     {
       "from": "Bob Martin",
+      "to": "personnel:EmployeeRole/bob-martin-demo-ceo",
+      "predicateUri": "personnel:hasEmployeeRole",
+      "predicateLabel": "has employee role",
+      "canvas": true
+    },
+    {
+      "from": "Bob Martin",
       "to": "personnel:Mission/bob-martin-demo-ceo",
       "predicateUri": "personnel:hasMissionCarried",
       "predicateLabel": "carries mission",
@@ -4720,6 +4470,13 @@
       "to": "personnel:EmployeeRole/claire-bernard-demo-cto",
       "predicateUri": "abi:realizes",
       "predicateLabel": "realizes",
+      "canvas": true
+    },
+    {
+      "from": "Claire Bernard",
+      "to": "personnel:EmployeeRole/claire-bernard-demo-cto",
+      "predicateUri": "personnel:hasEmployeeRole",
+      "predicateLabel": "has employee role",
       "canvas": true
     },
     {
@@ -4965,6 +4722,13 @@
       "to": "personnel:EmployeeRole/david-leroy-demo-lead-developer-frontend",
       "predicateUri": "abi:realizes",
       "predicateLabel": "realizes",
+      "canvas": true
+    },
+    {
+      "from": "David Leroy",
+      "to": "personnel:EmployeeRole/david-leroy-demo-lead-developer-frontend",
+      "predicateUri": "personnel:hasEmployeeRole",
+      "predicateLabel": "has employee role",
       "canvas": true
     },
     {
@@ -5221,6 +4985,13 @@
     },
     {
       "from": "Emma Petit",
+      "to": "personnel:EmployeeRole/emma-petit-demo-cto",
+      "predicateUri": "personnel:hasEmployeeRole",
+      "predicateLabel": "has employee role",
+      "canvas": true
+    },
+    {
+      "from": "Emma Petit",
       "to": "personnel:Mission/emma-petit-demo-cto",
       "predicateUri": "personnel:hasMissionCarried",
       "predicateLabel": "carries mission",
@@ -5382,6 +5153,13 @@
     },
     {
       "from": "Frank Moreau",
+      "to": "personnel:EmployeeRole/frank-moreau-demo-head-of-growth",
+      "predicateUri": "personnel:hasEmployeeRole",
+      "predicateLabel": "has employee role",
+      "canvas": true
+    },
+    {
+      "from": "Frank Moreau",
       "to": "personnel:Mission/frank-moreau-demo-head-of-growth",
       "predicateUri": "personnel:hasMissionCarried",
       "predicateLabel": "carries mission",
@@ -5518,6 +5296,13 @@
       "to": "personnel:EmployeeRole/grace-lambert-demo-board-advisor",
       "predicateUri": "abi:realizes",
       "predicateLabel": "realizes",
+      "canvas": true
+    },
+    {
+      "from": "Grace Lambert",
+      "to": "personnel:EmployeeRole/grace-lambert-demo-board-advisor",
+      "predicateUri": "personnel:hasEmployeeRole",
+      "predicateLabel": "has employee role",
       "canvas": true
     },
     {
@@ -5819,6 +5604,13 @@
       "to": "personnel:EmployeeRole/hugo-girard-demo-advisor",
       "predicateUri": "abi:realizes",
       "predicateLabel": "realizes",
+      "canvas": true
+    },
+    {
+      "from": "Hugo Girard",
+      "to": "personnel:EmployeeRole/hugo-girard-demo-advisor",
+      "predicateUri": "personnel:hasEmployeeRole",
+      "predicateLabel": "has employee role",
       "canvas": true
     },
     {
@@ -6406,62 +6198,6 @@
   "allRelations": [
     {
       "from": "Alice Dupont",
-      "to": "personnel:EmployeeRole/alice-dupont-demo-coo",
-      "predicateUri": "personnel:hasEmployeeRole",
-      "predicateLabel": "has employee role",
-      "canvas": true
-    },
-    {
-      "from": "Bob Martin",
-      "to": "personnel:EmployeeRole/bob-martin-demo-ceo",
-      "predicateUri": "personnel:hasEmployeeRole",
-      "predicateLabel": "has employee role",
-      "canvas": true
-    },
-    {
-      "from": "Claire Bernard",
-      "to": "personnel:EmployeeRole/claire-bernard-demo-cto",
-      "predicateUri": "personnel:hasEmployeeRole",
-      "predicateLabel": "has employee role",
-      "canvas": true
-    },
-    {
-      "from": "David Leroy",
-      "to": "personnel:EmployeeRole/david-leroy-demo-lead-developer-frontend",
-      "predicateUri": "personnel:hasEmployeeRole",
-      "predicateLabel": "has employee role",
-      "canvas": true
-    },
-    {
-      "from": "Emma Petit",
-      "to": "personnel:EmployeeRole/emma-petit-demo-cto",
-      "predicateUri": "personnel:hasEmployeeRole",
-      "predicateLabel": "has employee role",
-      "canvas": true
-    },
-    {
-      "from": "Frank Moreau",
-      "to": "personnel:EmployeeRole/frank-moreau-demo-head-of-growth",
-      "predicateUri": "personnel:hasEmployeeRole",
-      "predicateLabel": "has employee role",
-      "canvas": true
-    },
-    {
-      "from": "Grace Lambert",
-      "to": "personnel:EmployeeRole/grace-lambert-demo-board-advisor",
-      "predicateUri": "personnel:hasEmployeeRole",
-      "predicateLabel": "has employee role",
-      "canvas": true
-    },
-    {
-      "from": "Hugo Girard",
-      "to": "personnel:EmployeeRole/hugo-girard-demo-advisor",
-      "predicateUri": "personnel:hasEmployeeRole",
-      "predicateLabel": "has employee role",
-      "canvas": true
-    },
-    {
-      "from": "Alice Dupont",
       "to": "personnel:ActOfWorking/alice-dupont-demo-coo",
       "predicateUri": "personnel:hasActOfWorking",
       "predicateLabel": "has act of working",
@@ -6514,6 +6250,13 @@
       "to": "personnel:EmployeeRole/alice-dupont-demo-coo",
       "predicateUri": "abi:realizes",
       "predicateLabel": "realizes",
+      "canvas": true
+    },
+    {
+      "from": "Alice Dupont",
+      "to": "personnel:EmployeeRole/alice-dupont-demo-coo",
+      "predicateUri": "personnel:hasEmployeeRole",
+      "predicateLabel": "has employee role",
       "canvas": true
     },
     {
@@ -6868,6 +6611,13 @@
     },
     {
       "from": "Bob Martin",
+      "to": "personnel:EmployeeRole/bob-martin-demo-ceo",
+      "predicateUri": "personnel:hasEmployeeRole",
+      "predicateLabel": "has employee role",
+      "canvas": true
+    },
+    {
+      "from": "Bob Martin",
       "to": "personnel:Mission/bob-martin-demo-ceo",
       "predicateUri": "personnel:hasMissionCarried",
       "predicateLabel": "carries mission",
@@ -7018,6 +6768,13 @@
       "to": "personnel:EmployeeRole/claire-bernard-demo-cto",
       "predicateUri": "abi:realizes",
       "predicateLabel": "realizes",
+      "canvas": true
+    },
+    {
+      "from": "Claire Bernard",
+      "to": "personnel:EmployeeRole/claire-bernard-demo-cto",
+      "predicateUri": "personnel:hasEmployeeRole",
+      "predicateLabel": "has employee role",
       "canvas": true
     },
     {
@@ -7277,6 +7034,13 @@
       "to": "personnel:EmployeeRole/david-leroy-demo-lead-developer-frontend",
       "predicateUri": "abi:realizes",
       "predicateLabel": "realizes",
+      "canvas": true
+    },
+    {
+      "from": "David Leroy",
+      "to": "personnel:EmployeeRole/david-leroy-demo-lead-developer-frontend",
+      "predicateUri": "personnel:hasEmployeeRole",
+      "predicateLabel": "has employee role",
       "canvas": true
     },
     {
@@ -7547,6 +7311,13 @@
     },
     {
       "from": "Emma Petit",
+      "to": "personnel:EmployeeRole/emma-petit-demo-cto",
+      "predicateUri": "personnel:hasEmployeeRole",
+      "predicateLabel": "has employee role",
+      "canvas": true
+    },
+    {
+      "from": "Emma Petit",
       "to": "personnel:Mission/emma-petit-demo-cto",
       "predicateUri": "personnel:hasMissionCarried",
       "predicateLabel": "carries mission",
@@ -7722,6 +7493,13 @@
     },
     {
       "from": "Frank Moreau",
+      "to": "personnel:EmployeeRole/frank-moreau-demo-head-of-growth",
+      "predicateUri": "personnel:hasEmployeeRole",
+      "predicateLabel": "has employee role",
+      "canvas": true
+    },
+    {
+      "from": "Frank Moreau",
       "to": "personnel:Mission/frank-moreau-demo-head-of-growth",
       "predicateUri": "personnel:hasMissionCarried",
       "predicateLabel": "carries mission",
@@ -7872,6 +7650,13 @@
       "to": "personnel:EmployeeRole/grace-lambert-demo-board-advisor",
       "predicateUri": "abi:realizes",
       "predicateLabel": "realizes",
+      "canvas": true
+    },
+    {
+      "from": "Grace Lambert",
+      "to": "personnel:EmployeeRole/grace-lambert-demo-board-advisor",
+      "predicateUri": "personnel:hasEmployeeRole",
+      "predicateLabel": "has employee role",
       "canvas": true
     },
     {
@@ -8194,6 +7979,13 @@
       "to": "personnel:EmployeeRole/hugo-girard-demo-advisor",
       "predicateUri": "abi:realizes",
       "predicateLabel": "realizes",
+      "canvas": true
+    },
+    {
+      "from": "Hugo Girard",
+      "to": "personnel:EmployeeRole/hugo-girard-demo-advisor",
+      "predicateUri": "personnel:hasEmployeeRole",
+      "predicateLabel": "has employee role",
       "canvas": true
     },
     {

@@ -225,8 +225,54 @@ async function showPage(pageId, { syncUrl = true, replaceUrl = false } = {}) {
     const dispose = await mountPageFor(pageId, element, { ...api, config });
     if (typeof dispose === "function") pageDisposers[pageId] = dispose;
   } catch (error) {
-    element.innerHTML = `<p class="load-error">Failed to load data: ${error.message}.</p>`;
+    element.innerHTML = renderLoadError(error);
   }
+}
+
+function escapeHtml(value) {
+  return String(value).replace(
+    /[&<>"']/g,
+    (char) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[char]
+  );
+}
+
+/** Explain a missing dataset: what, where it was expected, how to produce it. */
+function renderLoadError(error, { fallbackPrefix = "Failed to load data" } = {}) {
+  if (!error.expectedStorageKey) {
+    return `<div class="load-error"><p class="load-error-title">${fallbackPrefix}: ${escapeHtml(
+      error.message
+    )}.</p></div>`;
+  }
+  const rows = [
+    ["Dataset", error.dataset],
+    ["Expected in storage", error.expectedStorageKey],
+    ["Local file", error.expectedLocalPath],
+  ]
+    .filter(([, value]) => value)
+    .map(
+      ([label, value]) =>
+        `<div class="load-error-row"><span>${label}</span><code>${escapeHtml(
+          value
+        )}</code></div>`
+    )
+    .join("");
+  const command = error.command
+    ? `<p class="load-error-hint">Publish it with:</p><pre class="load-error-command"><code>${escapeHtml(
+        error.command
+      )}</code></pre>`
+    : "";
+  return `<div class="load-error">
+    <p class="load-error-title">This page has no data in the storage system yet.</p>
+    ${rows}
+    ${command}
+  </div>`;
 }
 
 function handleUrlNavigation() {
@@ -311,6 +357,7 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error) => {
-  document.getElementById("pages").innerHTML =
-    `<p class="load-error">Failed to load cockpit configuration: ${error.message}</p>`;
+  document.getElementById("pages").innerHTML = renderLoadError(error, {
+    fallbackPrefix: "Failed to load cockpit configuration",
+  });
 });

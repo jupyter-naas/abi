@@ -1,17 +1,20 @@
-# Cockpit data export scripts
+# Cockpit demo build scripts
 
-Scripts that **write committed cockpit datasets** under `apps/cockpit/data/`.
-
-Graph builders, LinkedIn seed data, and shared helpers live in
-[`../../sandbox/`](../../sandbox/) instead — they prepare inputs or compute
-metrics but do not emit the JSON the UI serves.
+Everything the cockpit demo needs to go from committed source JSON to the
+datasets the UI serves. Runtime modules the app imports (config loader, data
+store, payload builders, `data_source.py`) live one level up in
+[`../`](../) — this folder holds the build-time pieces only.
 
 ## Layout
 
 ```
 scripts/
-├── export_source_person_files.py   # seed → data/source/person/<slug>/index.json
+├── person_sources.py                 # read data/demo/person/<slug>/index.json
+├── demo_graph_builder.py             # source JSON → graphs/demo/personnel.ttl
+├── workforce_metrics.py              # tenure / seniority / scolarity KPIs
+├── workforce_metrics_test.py         # unit tests for the metrics
 ├── export_demo_apps_from_graph.py    # graph TTL → data/entities/<id>/<page>/
+├── validate_graph_layout.mjs         # graph page layout sanity check
 └── README.md                         # this file
 ```
 
@@ -20,51 +23,52 @@ scripts/
 Run from the personnel module root (`domains/personnel/`):
 
 ```bash
-make demo-source   # optional: refresh source JSON from sandbox LinkedIn seeds
-make demo-graph    # sandbox/generate_demo_graph.py → data/graph/personnel_demo.ttl
-make demo-data     # export_demo_apps_from_graph.py → apps/cockpit/data/
+make demo-graph    # demo_graph_builder.py → graphs/demo/personnel.ttl
+make demo-data     # export_demo_apps_from_graph.py → apps/cockpit/data/ + ObjectStorage
 ```
 
-Or the full chain in one step:
+Serving:
 
 ```bash
-make demo-data
+make app-personnel-cockpit        # dev server on whatever datasets already exist
+make app-personnel-cockpit-demo   # rebuild the demo datasets first, then serve
 ```
 
-Start the dev server after regenerating:
-
-```bash
-make app-personnel-cockpit
-```
+`make app-personnel-cockpit` never rebuilds: with no datasets published the
+server still starts and the pages render empty.
 
 ## Scripts
 
-### `export_source_person_files.py`
+### `person_sources.py`
 
-Materialises per-person build inputs from sandbox seed data
-(`sandbox/linkedin_experience.py`).
+Loads the committed demo inputs from `data/demo/person/<slug>/index.json` and
+shapes them for the pipelines:
 
-**Writes:**
+- `load_person_sources(dir)` — read every `<slug>/index.json`
+- `sources_to_employees(payloads)` — HR roster rows from an optional `roster` block (none of the demo files carry one today, so this yields no employment records)
+- `sources_to_profile_urls(payloads)` — full name → profile URL
+- `sources_to_experiences(payloads)` — `ActOfWorking` / `ActOfStudying` records
 
-```
-apps/cockpit/data/source/person/<slug>/index.json
-```
+These JSON files are the source of truth for the demo — edit them directly,
+then re-run `make demo-data`. Each file holds `person` and `records[]` (one row
+per process).
 
-Each file holds `person`, optional `employment`, and `records[]` (one row per
-process). Edit these JSON files directly when tuning demo people; re-run
-`make demo-graph` and `make demo-data` afterward.
+### `demo_graph_builder.py`
+
+Runs the `ActOfWorking` / `ActOfStudying` pipelines over the source JSON and
+serialises schema + individuals to `graphs/demo/personnel.ttl`.
 
 ### `export_demo_apps_from_graph.py`
 
-Runs personnel SPARQL queries against `data/graph/personnel_demo.ttl` and writes
+Runs personnel SPARQL queries against `graphs/demo/personnel.ttl` and writes
 page-ready aggregates the static UI loads via `api/routes.py`.
 
 **Reads:**
 
-- `data/graph/personnel_demo.ttl` (requires `make demo-graph` first)
+- `graphs/demo/personnel.ttl` (requires `make demo-graph` first)
 - `ontologies/queries/PersonnelSparqlQueries.ttl`
 - `config.yaml` (page list, logs defaults)
-- `sandbox/workforce_metrics.py` (workforce KPI enrichment)
+- `workforce_metrics.py` (workforce KPI enrichment)
 
 **Writes:**
 
@@ -72,6 +76,9 @@ page-ready aggregates the static UI loads via `api/routes.py`.
 apps/cockpit/data/entities/<entity_id>/<page_id>/*.json
 apps/cockpit/data/entities/<entity_id>/manifest.json
 ```
+
+…and publishes the same tree to ObjectStorage under
+`personnel/apps/cockpit/data/`, which is what the server reads.
 
 When adding a page, register its dataset mapping in this script's
 `page_datasets`, then regenerate with `make demo-data`. See
@@ -82,7 +89,6 @@ When adding a page, register its dataset mapping in this script's
 From the ABI repository root:
 
 ```bash
-uv run python libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/apps/cockpit/scripts/export_source_person_files.py
-uv run python libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/sandbox/generate_demo_graph.py
+uv run python libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/apps/cockpit/scripts/demo_graph_builder.py
 uv run python libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/apps/cockpit/scripts/export_demo_apps_from_graph.py
 ```

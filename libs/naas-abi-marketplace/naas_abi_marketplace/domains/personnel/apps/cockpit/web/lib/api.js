@@ -1,16 +1,44 @@
 const API = "/api/personnel-cockpit";
 
+/**
+ * Turn a failed dataset response into an Error carrying whatever the API
+ * explained about it — for a missing dataset that is where the file was
+ * expected in storage and the command that produces it.
+ */
+async function datasetError(res, rel) {
+  let detail = null;
+  try {
+    detail = (await res.json()).detail;
+  } catch {
+    // non-JSON body: fall back to the bare status below
+  }
+  if (detail && typeof detail === "object") {
+    const error = new Error(detail.message || `${rel} → ${res.status}`);
+    error.dataset = detail.dataset || rel;
+    error.expectedStorageKey = detail.expected_storage_key || null;
+    error.expectedLocalPath = detail.expected_local_path || null;
+    error.command = detail.command || null;
+    error.status = res.status;
+    return error;
+  }
+  const error = new Error(
+    typeof detail === "string" ? detail : `${rel} → ${res.status}`
+  );
+  error.status = res.status;
+  return error;
+}
+
 /** @param {string} entityId */
 export function createApi(entityId) {
   async function loadJson(rel) {
     const res = await fetch(`${API}/entities/${entityId}/${rel}`);
-    if (!res.ok) throw new Error(`${rel} → ${res.status}`);
+    if (!res.ok) throw await datasetError(res, rel);
     return res.json();
   }
 
   async function loadGlobal(name) {
     const res = await fetch(`${API}/globals/${name}`);
-    if (!res.ok) throw new Error(`globals/${name} → ${res.status}`);
+    if (!res.ok) throw await datasetError(res, `globals/${name}`);
     return res.json();
   }
 
