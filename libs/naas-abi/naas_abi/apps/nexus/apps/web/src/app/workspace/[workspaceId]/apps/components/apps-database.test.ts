@@ -14,9 +14,9 @@ import {
 } from './types';
 
 const app = (overrides: Partial<AppInfo> & Pick<AppInfo, 'app_id' | 'name'>): AppInfo => ({
-  module_path: 'naas_abi_marketplace.alpha.wsr',
-  module_name: 'wsr',
-  app_name: 'dashboard',
+  module_path: 'naas_abi_marketplace.domains.intelligence',
+  module_name: 'intelligence',
+  app_name: 'wsr',
   category: 'application',
   description: '',
   url: 'https://example.com/app',
@@ -60,7 +60,7 @@ const names = (rows: AppRecord[]) => rows.map((r) => r.name);
 describe('normalisation', () => {
   it('derives the module name from the path when the API omits it', () => {
     const record = toRecord(app({ app_id: 'x', name: 'X', module_name: undefined }));
-    expect(record.module).toBe('wsr');
+    expect(record.module).toBe('intelligence');
   });
 
   it('marks tenant apps as external and keeps the URL as the row id', () => {

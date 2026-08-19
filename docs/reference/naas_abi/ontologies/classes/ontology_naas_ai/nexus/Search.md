@@ -15,7 +15,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.Search import Search
+from naas_abi.ontologies.classes.ontology_demo.nexus.Search import Search
 
 class MySearch(Search):
     def actions(self):

@@ -1,76 +1,84 @@
 # OpenRouterAPIIntegration
 
 ## What it is
-- A small integration client for the **OpenRouter API**.
-- Wraps several OpenRouter endpoints (models, providers, credits, analytics, beta responses).
+- A small Python integration client for the **OpenRouter API** (`https://openrouter.ai/api/v1`).
+- Provides typed configuration plus convenience methods for:
+  - Models, model parameters
+  - Providers
+  - Credits and activity analytics
+  - API key endpoints
+  - Beta `/responses` endpoint
 - Includes:
-  - Request handling with bearer auth
-  - A 1-day filesystem cache for API requests
-  - Optional JSON persistence of model lists to object storage (via `StorageUtils`)
+  - Bearer-token auth via `Authorization: Bearer ...`
+  - Filesystem-backed caching of requests for **1 day**
+  - Optional JSON persistence of model lists to object storage via `StorageUtils`
 
 ## Public API
 
 ### `OpenRouterAPIIntegrationConfiguration`
-Dataclass configuration for the integration.
+Dataclass extending `IntegrationConfiguration`.
+
 - **Fields**
-  - `api_key: str` — OpenRouter API key (Bearer token)
-  - `object_storage: ObjectStorageService` — backing storage used by `StorageUtils` for JSON saving
+  - `api_key: str` — OpenRouter API key (used as Bearer token)
+  - `object_storage: ObjectStorageService` — used by `StorageUtils` for JSON persistence
   - `base_url: str = "https://openrouter.ai/api/v1"` — API base URL
-  - `datastore_path: str = "openrouter"` — base path used when saving JSON (e.g., models)
+  - `datastore_path: str = "openrouter"` — base path for saved JSON artifacts
 
 ### `OpenRouterAPIIntegration`
-Integration client.
+Client extending `Integration`.
 
-- `create_response(input_prompt: str, tools: Optional[list[Dict]] = None, model: str = "openai/gpt-4.1-mini", temperature: float = 0.7, top_p: float = 0.9) -> Dict`
-  - POST `/responses`
-  - Sends a beta “responses” payload with a single user message.
-  - Accepts optional `tools` list.
+- `create_response(input_prompt: str, tools: list[dict] | None = None, model: str = "openai/gpt-4.1-mini", temperature: float = 0.7, top_p: float = 0.9) -> dict`
+  - `POST /responses`
+  - Sends a payload with a single user message in `input`, plus optional `tools`.
 
-- `get_user_activity(date: Optional[str] = None) -> Dict`
-  - GET `/activity`
-  - Query param: `date` (YYYY-MM-DD, last 30 days)
+- `get_user_activity(date: str | None = None) -> dict`
+  - `GET /activity`
+  - Always passes `params={"date": date}` (even if `date` is `None`).
 
-- `get_remaining_credits() -> Dict`
-  - GET `/credits`
+- `get_remaining_credits() -> dict`
+  - `GET /credits`
 
-- `get_total_models_count() -> Dict`
-  - GET `/models/count`
+- `get_total_models_count() -> dict`
+  - `GET /models/count`
 
-- `list_models(params: Optional[Dict] = None, save_json: bool = True) -> List`
-  - GET `/models`
-  - Returns the unwrapped list from `response["data"]` (or `[]`).
+- `list_models(params: dict | None = None, save_json: bool = True) -> list`
+  - `GET /models`
+  - Returns `response["data"]` (or `[]`).
   - If `save_json=True`, saves:
-    - All models to: `{datastore_path}/models/_all/models.json`
-    - Models split by owner prefix (before `/` in model id) to: `{datastore_path}/models/{owner}/models.json`
+    - All models: `{datastore_path}/models/_all/models.json`
+    - Models grouped by owner (prefix before `/` in `model["id"]`, otherwise `"unknown"`):
+      `{datastore_path}/models/{owner}/models.json`
 
-- `get_model_parameters(author: str, slug: str) -> Dict`
-  - GET `/parameters` with `author` and `slug` query params
+- `get_model_parameters(author: str, slug: str) -> dict`
+  - `GET /parameters` with query params `author` and `slug`
 
-- `list_providers() -> Dict`
-  - GET `/providers`
+- `list_providers() -> dict`
+  - `GET /providers`
 
-- `list_api_keys() -> Dict`
-  - GET `/keys`
+- `list_api_keys() -> dict`
+  - `GET /keys`
 
-- `get_current_api_key() -> Dict`
-  - GET `/key`
+- `get_current_api_key() -> dict`
+  - `GET /key`
 
-### `as_tools(configuration: OpenRouterAPIIntegrationConfiguration)`
-Builds LangChain tools from this integration.
-- Returns a list of `langchain_core.tools.StructuredTool`:
-  - `openrouter_list_models` → calls `integration.list_models()`
-  - `openrouter_list_providers` → calls `integration.list_providers()`
+> Note: `_make_request(...)` is an internal method but is central to behavior; it performs the HTTP call and raises `IntegrationConnectionError` on request errors.
+
+### `as_tools(configuration: OpenRouterAPIIntegrationConfiguration) -> list`
+- Builds two LangChain `StructuredTool` tools backed by an internal `OpenRouterAPIIntegration` instance:
+  - `openrouter_list_models` → `integration.list_models()`
+  - `openrouter_list_providers` → `integration.list_providers()`
+- Uses an empty Pydantic schema (`EmptySchema`) for arguments.
 
 ## Configuration/Dependencies
 - **HTTP**: `requests`
-- **Core integration types**: `naas_abi_core.integration.integration`
-  - Uses `IntegrationConnectionError` on request failures.
+- **Core integration types** (exceptions/base classes):
+  - `Integration`, `IntegrationConfiguration`, `IntegrationConnectionError` from `naas_abi_core.integration.integration`
 - **Caching**:
-  - Uses `CacheFactory.CacheFS_find_storage(subpath="openrouter")`
-  - `_make_request` is cached for **1 day** with cache key based on method/endpoint/params.
+  - `CacheFactory.CacheFS_find_storage(subpath="openrouter")`
+  - `_make_request` is cached for **1 day** (`ttl=datetime.timedelta(days=1)`) as `DataType.JSON`
 - **Object storage**:
-  - `object_storage: ObjectStorageService` is required by configuration.
-  - Used by `StorageUtils.save_json(...)` when `list_models(save_json=True)`.
+  - `ObjectStorageService` required in configuration
+  - `StorageUtils(configuration.object_storage)` used for `save_json(...)` in `list_models`
 
 ## Usage
 
@@ -80,34 +88,30 @@ from naas_abi_marketplace.applications.openrouter.integrations.OpenRouterAPIInte
     OpenRouterAPIIntegrationConfiguration,
 )
 
-# Provide a concrete ObjectStorageService implementation from your environment
-object_storage = ...  # ObjectStorageService
+object_storage = ...  # Provide an ObjectStorageService from your environment
 
-config = OpenRouterAPIIntegrationConfiguration(
+cfg = OpenRouterAPIIntegrationConfiguration(
     api_key="YOUR_OPENROUTER_API_KEY",
     object_storage=object_storage,
 )
 
-client = OpenRouterAPIIntegration(config)
+client = OpenRouterAPIIntegration(cfg)
 
-# Models
 models = client.list_models(save_json=False)
-print(len(models))
+print("models:", len(models))
 
-# Providers
 providers = client.list_providers()
-print(providers)
+print("providers keys:", providers.keys() if isinstance(providers, dict) else type(providers))
 
-# Credits
 credits = client.get_remaining_credits()
-print(credits)
+print("credits:", credits)
 
-# Beta responses
 resp = client.create_response("Say hello in one sentence.")
-print(resp)
+print("response:", resp)
 ```
 
 ## Caveats
-- `_make_request` caches responses for 1 day; repeated calls with the same method/endpoint/params may return cached data.
-- `list_models(save_json=True)` writes JSON via `StorageUtils` to paths derived from `datastore_path`; ensure `object_storage` is correctly configured.
-- Cache key uses only `method`, `endpoint`, and `params` (not request body); POST calls with different payloads but same endpoint may collide in cache.
+- **Request caching (1 day)**: `_make_request` is cached by a key built from `method`, `endpoint`, and `params` only.
+  - The cache key does **not** include the request body (`data`), so different POST payloads to the same endpoint with the same params may collide.
+- **`get_user_activity` params**: passes `{"date": None}` when no date is provided; behavior depends on the server’s handling of that query parameter.
+- **Model JSON persistence**: `list_models(save_json=True)` writes JSON to paths derived from `datastore_path`; ensure `object_storage` is configured and writable.

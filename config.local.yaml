@@ -160,23 +160,26 @@ modules:
     config:
       openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
 
-  # Q: How do I connect the WSR module to live real-world data feeds?
-  # A: Provide API keys for each source. Leave blank to skip that source gracefully.
+  # Q: How do I connect the WSR app to live real-world data feeds?
+  # A: WSR is an app of the intelligence bucket, not a module of its own -- configure
+  #    it under the "wsr" key below. Provide API keys for each source; leave blank to
+  #    skip that source gracefully.
   #    OpenSky: flight tracking | TfL: Transport for London | OpenWebcamDB: public webcams
-  - module: naas_abi_marketplace.alpha.wsr
+  - module: naas_abi_marketplace.domains.intelligence
     enabled: true
     config:
-      opensky_client_id: ""
-      opensky_client_secret: ""
-      tfl_app_key: ""
-      openwebcamdb_api_key: ""
-      demo_login: "demo@naas.ai"
-      demo_password: "demo1234"
+      wsr:
+        opensky_client_id: ""
+        opensky_client_secret: ""
+        tfl_app_key: ""
+        openwebcamdb_api_key: ""
+        demo_login: "demo@naas.ai"
+        demo_password: "demo1234"
 
   # Q: How do I make documents searchable by meaning, not just keywords?
   # A: Pick an embedding model -- the pipeline converts text to vectors automatically.
   #    dimension 1536 is fixed for text-embedding-3-small, do not change it.
-  - module: naas_abi_marketplace.domains.document
+  - module: naas_abi_marketplace.domains.operations.modules.document
     enabled: true
     config:
       document_agent:

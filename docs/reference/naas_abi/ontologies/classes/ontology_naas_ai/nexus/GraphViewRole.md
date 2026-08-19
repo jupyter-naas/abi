@@ -19,7 +19,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.GraphViewRole import GraphViewRole
+from naas_abi.ontologies.classes.ontology_demo.nexus.GraphViewRole import GraphViewRole
 
 role = GraphViewRole()
 role.actions()  # currently no-op

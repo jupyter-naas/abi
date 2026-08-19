@@ -100,4 +100,4 @@ uv run pytest {{module_name_snake}}/workflows/<Name>Workflow_test.py -v
 ## See also
 
 - Reference scaffold: [`.abi/libs/naas-abi-marketplace/.../__demo__/workflows/ExecutePythonCodeWorkflow.py`](../../../.abi/libs/naas-abi-marketplace/naas_abi_marketplace/__demo__/workflows/ExecutePythonCodeWorkflow.py)
-- Per-domain workflow examples: [`.abi/libs/naas-abi-marketplace/.../domains/software-engineer/workflows/`](../../../.abi/libs/naas-abi-marketplace/naas_abi_marketplace/domains/software-engineer/workflows)
+- Per-domain workflow examples: [`.abi/libs/naas-abi-marketplace/.../domains/operations/modules/support/workflows/`](../../../.abi/libs/naas-abi-marketplace/naas_abi_marketplace/domains/operations/modules/support/workflows)

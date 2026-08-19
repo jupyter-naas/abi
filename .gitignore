@@ -17,6 +17,7 @@ config.*.yaml
 !config.local.yaml
 !config.dev.yaml
 !config.remote.yaml
+!libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/apps/cockpit/config.yaml
 
 # Python
 __pycache__/

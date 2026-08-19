@@ -1,39 +1,48 @@
 # InstagramAgent
 
 ## What it is
-An `IntentAgent` implementation for Instagram-related guidance (features, content management, engagement). This agent is configured **without any Instagram tools**, so it only returns general information via predefined intents.
+`InstagramAgent` is an `IntentAgent` specialized for Instagram-related guidance (social media management, content creation, engagement). It is configured with **no Instagram tools**, so it provides **general information only** via predefined intents and a system prompt that enforces this limitation.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Factory that builds and returns an `InstagramAgent` with:
-    - Name/description constants
-    - A system prompt describing constraints (no tool access)
-    - No tools (`tools = []`)
-    - Two predefined RAW intents for general Instagram guidance
-    - A ChatGPT model from `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1`
 - `class InstagramAgent(IntentAgent)`
-  - Concrete agent class; no additional behavior beyond `IntentAgent` (inherits all functionality).
+  - Agent definition with class attributes:
+    - `name = "Instagram"`
+    - `description = "Helps you interact with Instagram for social media management and content operations."`
+    - `system_prompt` describing role/objective/constraints (no tool access)
+    - `suggestions = []`
+- `InstagramAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> InstagramAgent`
+  - Factory constructor that:
+    - Retrieves default chat and embedding models from the application `ABIModule` model registry.
+    - Configures `tools` as an empty list.
+    - Registers two RAW intents for:
+      - Instagram feature information
+      - Content management and engagement concepts
+    - Defaults:
+      - `AgentConfiguration(system_prompt=InstagramAgent.system_prompt)` if not provided
+      - `AgentSharedState(thread_id="0")` if not provided
 
 ## Configuration/Dependencies
-- Depends on:
-  - `naas_abi_core.services.agent.IntentAgent`:
-    - `IntentAgent`, `Intent`, `IntentType`, `AgentConfiguration`, `AgentSharedState`
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1` (imports `model`, uses `model.model` as `chat_model`)
-- Configuration:
-  - If `agent_configuration` is not provided, `AgentConfiguration(system_prompt=SYSTEM_PROMPT)` is used.
-  - If `agent_shared_state` is not provided, a new `AgentSharedState()` is created.
+- Depends on `naas_abi_core.services.agent.IntentAgent`:
+  - `IntentAgent`, `Intent`, `IntentType`, `AgentConfiguration`, `AgentSharedState`
+- Depends on application module:
+  - `naas_abi_marketplace.applications.instagram.ABIModule.get_instance()`
+  - Requires `abi_module.engine.services.model_registry` to be initialized (asserted)
+- Models:
+  - `chat_model = registry.get_default_chat_model()`
+  - `embedding_model = registry.get_default_embedding_model().model`
 - Tools:
-  - None configured (`tools = []`)
+  - None (`tools = []`)
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.instagram.agents.InstagramAgent import create_agent
+from naas_abi_marketplace.applications.instagram.agents.InstagramAgent import InstagramAgent
 
-agent = create_agent()
-print(agent.name)          # "Instagram"
-print(agent.description)   # Helps you interact with Instagram...
+agent = InstagramAgent.New()
+print(agent.name)
+print(agent.description)
 ```
 
 ## Caveats
-- No Instagram tool integration is provided in this file (`tools` is empty).
-- The system prompt explicitly constrains the agent to **general information and guidance only**; it should not perform Instagram actions or access account/content.
+- No Instagram actions are possible from this agent as configured (`tools` is empty).
+- Creation requires the Instagram `ABIModule` engine/model registry to be initialized; otherwise the assertion will fail.
+- The system prompt constrains the agent to **general guidance only** (no account/content access, no operational actions).

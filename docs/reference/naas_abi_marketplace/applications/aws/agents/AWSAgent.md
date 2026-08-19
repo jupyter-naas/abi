@@ -1,42 +1,51 @@
 # AWSAgent
 
 ## What it is
-- A thin `IntentAgent` specialization for answering general AWS questions.
-- Ships with:
-  - A fixed system prompt emphasizing **no AWS tool access** (guidance only).
-  - A couple of predefined RAW intents.
-  - No tools configured (`tools = []`).
+- An `IntentAgent` specialization for answering general Amazon Web Services (AWS) questions.
+- Provides guidance only:
+  - Explicitly states it has **no AWS tool access**.
+  - Ships with a fixed `system_prompt`, empty `tools`, and a couple of predefined RAW intents.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Factory that constructs and returns an `AWSAgent` with defaults:
-    - `name="AWS"`, `description=...`
-    - `chat_model` from `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1`
-    - `intents` (RAW) for AWS info and infrastructure/resource management
-    - `AgentConfiguration(system_prompt=SYSTEM_PROMPT)` if not provided
-    - `AgentSharedState()` if not provided
-    - `tools=[]`, `memory=None`
-
 - `class AWSAgent(IntentAgent)`
-  - Marker subclass of `IntentAgent` (no additional methods/overrides).
+  - Agent definition with class attributes:
+    - `name = "AWS"`
+    - `description = "Helps you interact with Amazon Web Services for cloud infrastructure and services."`
+    - `system_prompt` (guidance-only, no tool access)
+    - `suggestions = []`
+
+- `AWSAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> AWSAgent`
+  - Class factory that constructs an `AWSAgent` instance.
+  - Behavior:
+    - Fetches default chat and embedding models from the application `ModelRegistryService`.
+    - Initializes:
+      - `tools = []`
+      - `intents` with two `IntentType.RAW` entries (AWS services info; infrastructure/resource management)
+    - Defaults:
+      - `agent_configuration = AgentConfiguration(system_prompt=AWSAgent.system_prompt)` if not provided
+      - `agent_shared_state = AgentSharedState(thread_id="0")` if not provided
+    - Returns `AWSAgent(..., memory=None)`.
 
 ## Configuration/Dependencies
 - Depends on `naas_abi_core.services.agent.IntentAgent`:
   - `IntentAgent`, `Intent`, `IntentType`, `AgentConfiguration`, `AgentSharedState`
-- Depends on chat model module:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1` (uses `model.model`)
-- Configuration inputs:
-  - `AgentConfiguration(system_prompt=SYSTEM_PROMPT)` controls the agent’s operating constraints (guidance only, no actions).
+- Depends on AWS application module singleton:
+  - `naas_abi_marketplace.applications.aws.ABIModule.get_instance()`
+  - Uses `abi_module.engine.services.model_registry`:
+    - `get_default_chat_model()`
+    - `get_default_embedding_model().model`
+- Configuration input:
+  - `AgentConfiguration(system_prompt=...)` controls the agent’s operating constraints (guidance only).
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.aws.agents.AWSAgent import create_agent
+from naas_abi_marketplace.applications.aws.agents.AWSAgent import AWSAgent
 
-agent = create_agent()
+agent = AWSAgent.New()
 
-# Interact with the agent using your IntentAgent runtime/orchestrator.
-# (This module only provides the agent factory and definition.)
+# Use `agent` with your IntentAgent runtime/orchestrator.
 ```
 
 ## Caveats
-- No AWS tools are configured (`tools=[]`), so the agent cannot access or modify AWS resources; it only provides general guidance.
+- No tools are configured (`tools = []`), so the agent cannot access or modify AWS resources; it only provides general information and guidance.
+- Requires the AWS `ABIModule` engine and its `model_registry` service to be initialized; otherwise an assertion will fail.

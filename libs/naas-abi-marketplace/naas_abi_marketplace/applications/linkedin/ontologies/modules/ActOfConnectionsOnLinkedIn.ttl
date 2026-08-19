@@ -19,7 +19,7 @@
   dc:title "Act of Connection"@en ;
   dc:description "Ontology for the Act of Connections on LinkedIn"@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
-  dc11:contributor "Florent Ravenel";
+  dc11:contributor "Alice Dupont";
   dc11:date "2026-01-21"^^xsd:date .
 
 # Process (WHAT): Act of connection on LinkedIn
@@ -241,7 +241,7 @@ linkedin:hasCurrentPublicUrl a owl:ObjectProperty ;
     rdfs:domain cco:ont00001262 ; # Person
     rdfs:range linkedin:CurrentPublicUrl ; # Current Public URL
     skos:definition "A person has LinkedIn public URL y if and only if y is a CurrentPublicUrl (a quality) that inheres in the person and expresses their public web address as recorded on LinkedIn. This property connects a Person to the specific public web address they have registered on their LinkedIn profile."@en ;
-    skos:example "John Doe (a person) has LinkedIn public URL 'https://www.linkedin.com/in/johndoe/', meaning that 'https://www.linkedin.com/in/johndoe/' is the current public URL quality inhering in John Doe on his LinkedIn profile."@en .
+    skos:example "John Doe (a person) has LinkedIn public URL 'https://demo.example/profiles/demo meaning that 'https://demo.example/profiles/demo is the current public URL quality inhering in John Doe on his LinkedIn profile."@en .
 
 linkedin:hasEmailAddress a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000196 ; # bearer of
@@ -377,7 +377,7 @@ linkedin:CurrentOrganization a owl:Class ;
 linkedin:CurrentPublicUrl a owl:Class ;
     rdfs:label "Current Public URL"@en ;
     skos:definition "The current public URL of a person on LinkedIn."@en ;
-    skos:example "John Doe's current public URL on LinkedIn is 'https://www.linkedin.com/in/johndoe'."@en ;
+    skos:example "John Doe's current public URL on LinkedIn is 'https://demo.example/profiles/demo"@en ;
     rdfs:subClassOf bfo:BFO_0000019 ,  # quality
     [ a owl:Restriction ;
         owl:onProperty bfo:BFO_0000059 ; # concretizes

@@ -15,7 +15,7 @@ A thin subclass of `naas_abi.ontologies.modules.NexusPlatformOntology.Marketplac
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.MarketplaceAppRole import MarketplaceAppRole
+from naas_abi.ontologies.classes.ontology_demo.nexus.MarketplaceAppRole import MarketplaceAppRole
 
 role = MarketplaceAppRole()
 role.actions()  # no-op by default

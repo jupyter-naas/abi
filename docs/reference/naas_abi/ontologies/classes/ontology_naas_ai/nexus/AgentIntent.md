@@ -17,7 +17,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.AgentIntent import AgentIntent
+from naas_abi.ontologies.classes.ontology_demo.nexus.AgentIntent import AgentIntent
 
 class MyAgentIntent(AgentIntent):
     def actions(self):

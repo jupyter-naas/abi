@@ -2,13 +2,14 @@
 
 ## What it is
 - A thin subclass of `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.ProfilePage`.
-- Intended as an action class hook point for implementing ProfilePage-specific logic.
+- Intended as an extension point to add `ProfilePage`-specific action logic.
 
 ## Public API
 - `class ProfilePage(_ProfilePage)`
+  - Inherits all behavior from the upstream `_ProfilePage`.
   - `actions(self)`
-    - Placeholder method for implementing custom action logic.
-    - Currently a no-op (`pass`).
+    - Placeholder method for custom logic.
+    - No implementation in this file (method body is empty).
 
 ## Configuration/Dependencies
 - Depends on:
@@ -19,9 +20,9 @@
 from naas_abi_marketplace.applications.linkedin.ontologies.classes.ontology.naas.ai.abi.linkedin.ProfilePage import ProfilePage
 
 page = ProfilePage()
-page.actions()  # currently does nothing
+page.actions()  # currently a no-op placeholder
 ```
 
 ## Caveats
-- `actions()` is unimplemented in this class; it will not perform any behavior until you add logic.
-- Instantiation/behavior may rely on `_ProfilePage` initialization requirements (not shown here).
+- `actions()` does nothing until you implement it.
+- Any constructor requirements/behavior are defined by the parent `_ProfilePage` class (not shown here).

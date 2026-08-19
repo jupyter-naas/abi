@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Loading…</title>
+    <base href="/" />
+    <link rel="stylesheet" href="css/app.css?v=10" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="rail" id="rail">
+        <div class="rail-top">
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <div class="brand-text">
+              <strong></strong>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="rail-toggle"
+            id="rail-toggle"
+            aria-label="Collapse sidebar"
+            aria-expanded="true"
+            title="Collapse sidebar"
+          >
+            <svg class="icon icon-collapse" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="square"
+                d="M15 6l-6 6 6 6M4 4v16"
+              />
+            </svg>
+          </button>
+        </div>
+        <div class="rail-filter">
+          <label for="org-filter">
+            <select id="org-filter" title="Global organization filter" aria-label="Organization"></select>
+          </label>
+        </div>
+        <nav id="nav"></nav>
+        <p class="rail-note" id="rail-published">Published …</p>
+      </aside>
+
+      <div class="workspace">
+        <header class="topbar" id="topbar">
+          <div class="topbar-side"></div>
+          <h1 class="topbar-title" id="topbar-title"></h1>
+          <div class="topbar-side topbar-end">
+            <button
+              type="button"
+              class="banner-restore"
+              id="banner-restore"
+              hidden
+            ></button>
+          </div>
+        </header>
+
+        <aside
+          class="page-banner"
+          id="page-banner"
+          role="status"
+          hidden
+          title="Click to dismiss"
+        >
+          <span class="page-banner-icon" id="page-banner-icon" aria-hidden="true"></span>
+          <span class="page-banner-text" id="page-banner-text"></span>
+        </aside>
+
+        <main id="pages"></main>
+      </div>
+    </div>
+    <script src="js/shell.js?v=15" type="module"></script>
+  </body>
+</html>

@@ -350,7 +350,7 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
                 lk_linkedin_id = lk_sales_navigator_linkedin_url.split("/lead/")[
                     1
                 ].split(",")[0]
-                linkedin_profile_url = f"https://www.linkedin.com/in/{lk_linkedin_id}"
+                linkedin_profile_url = f"https://demo.example/profiles/demo"
             logger.debug(
                 f"Step 3.2: Adding LinkedIn profile page: '{linkedin_profile_url}'"
             )

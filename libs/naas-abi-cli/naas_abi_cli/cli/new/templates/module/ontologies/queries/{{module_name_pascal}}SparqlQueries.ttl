@@ -1,0 +1,90 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
+
+#################################################################
+#  {{module_name_pascal}} Queries
+#  Data: GRAPH <http://ontology.naas.ai/graph/{{module_name_snake}}>
+#  Schema: <http://ontology.naas.ai/{{module_name_snake}}/>
+#
+#  Use this header to record the traps in the data — the distinctions a
+#  query author would otherwise get wrong. Two populations that look alike,
+#  a count that double-counts, a join that silently drops rows. That note is
+#  worth more than the queries themselves.
+#################################################################
+
+#-----------------------------------------------------------------
+# Queries
+#-----------------------------------------------------------------
+
+# TemplatableSparqlQueryLoader turns each entry below into a callable agent
+# tool. intentDescription is matched against user intent, so write it as the
+# question a user would actually ask — it is a prompt, not a comment.
+intentMapping:find{{module_name_pascal}}RecordsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_{{module_name_snake}}_records"@en ;
+    intentMapping:intentDescription "Return {{module_name}} records with the person each one depends on. TODO: state which question this answers and, if the query filters anything out, say so here — the agent surfaces this text when choosing a tool." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+        PREFIX {{module_name_snake}}: <http://ontology.naas.ai/{{module_name_snake}}/>
+
+        SELECT DISTINCT ?record ?recordId ?person ?personLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/{{module_name_snake}}> {
+            ?record rdf:type {{module_name_snake}}:{{module_name_pascal}}Record ;
+                    {{module_name_snake}}:record_id ?recordId .
+            OPTIONAL {
+              ?record {{module_name_snake}}:isRecordOf ?person .
+              OPTIONAL { ?person rdfs:label ?personLabel . }
+            }
+          }
+        }
+        ORDER BY ?recordId
+        LIMIT {% raw %}{{ limit }}{% endraw %}
+    """ ;
+    intentMapping:hasArgument intentMapping:{{module_name_snake}}LimitArg .
+
+intentMapping:find{{module_name_pascal}}RecordByIdQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_{{module_name_snake}}_record_by_id"@en ;
+    intentMapping:intentDescription "Look up a single {{module_name}} record by its identifier. TODO: say whether this returns archived or superseded records too." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+        PREFIX {{module_name_snake}}: <http://ontology.naas.ai/{{module_name_snake}}/>
+
+        SELECT DISTINCT ?record ?recordId ?person ?personLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/{{module_name_snake}}> {
+            ?record {{module_name_snake}}:record_id ?recordId .
+            FILTER(STR(?recordId) = "{% raw %}{{ record_id }}{% endraw %}")
+            OPTIONAL {
+              ?record {{module_name_snake}}:isRecordOf ?person .
+              OPTIONAL { ?person rdfs:label ?personLabel . }
+            }
+          }
+        }
+    """ ;
+    intentMapping:hasArgument intentMapping:{{module_name_snake}}RecordIdArg .
+
+#-----------------------------------------------------------------
+# Query arguments
+#-----------------------------------------------------------------
+
+# Every {% raw %}{{ placeholder }}{% endraw %} in a sparqlTemplate needs a matching QueryArgument,
+# linked by intentMapping:hasArgument. validationPattern is applied to the
+# value before substitution — keep it tight enough to block injection.
+intentMapping:{{module_name_snake}}LimitArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "limit" ;
+    intentMapping:argumentDescription "Maximum number of rows to return (positive integer)." ;
+    intentMapping:validationPattern "^[1-9][0-9]{0,3}$" ;
+    intentMapping:validationFormat "integer" .
+
+intentMapping:{{module_name_snake}}RecordIdArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "record_id" ;
+    intentMapping:argumentDescription "Identifier of the record in the source system." ;
+    intentMapping:validationPattern "." ;
+    intentMapping:validationFormat "string" .

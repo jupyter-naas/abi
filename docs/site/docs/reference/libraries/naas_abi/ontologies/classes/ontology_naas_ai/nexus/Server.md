@@ -16,7 +16,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.Server import Server
+from naas_abi.ontologies.classes.ontology_demo.nexus.Server import Server
 
 server = Server()
 server.actions()  # currently no-op

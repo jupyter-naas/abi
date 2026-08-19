@@ -16,7 +16,7 @@ nexus:PlatformOntology a owl:Ontology ;
   dc:description "Ontology for the Nexus platform."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Ontology for the Nexus platform."@en ;
-  dc11:contributor "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou" ;
+  dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
   dc11:date "2026-05-22"^^xsd:date .
 
 #################################################################

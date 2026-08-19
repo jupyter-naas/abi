@@ -20,16 +20,17 @@ If you're adding to the marketplace, you're almost always adding **one more modu
 naas_abi_marketplace/
 ├── ai/                # AI provider modules (Claude, ChatGPT, Gemini, …)
 ├── applications/      # Third-party app integrations (GitHub, Postgres, LinkedIn, …)
-├── domains/           # Domain expert agents (Software Engineer, Accountant, …)
-├── __demo__/          # Reference implementations + sample apps
-└── alpha/             # Experimental modules
+├── domains/           # Organizational capability, in 9 subsystems of the staff system (S1–S9)
+└── __demo__/          # Reference implementations + sample apps
 ```
+
+`ai/` and `applications/` are flat lists. `domains/` is bucketed — see below.
 
 Every category follows the **same module shape** — once you understand one, you understand them all.
 
 ## The Module Shape (canonical)
 
-Every module under `ai/<name>/`, `applications/<name>/`, `domains/<name>/` looks roughly like:
+Every module under `ai/<name>/`, `applications/<name>/`, `domains/<bucket>/<component>/<name>/` looks roughly like:
 
 ```
 <name>/
@@ -51,7 +52,9 @@ Each category has its own quick index — read these for a full per-module list:
 
 - [`ai/AGENTS.md`](naas_abi_marketplace/ai/AGENTS.md) — LLM providers (11 modules, 42 models)
 - [`applications/AGENTS.md`](naas_abi_marketplace/applications/AGENTS.md) — third-party integrations (47 modules)
-- [`domains/AGENTS.md`](naas_abi_marketplace/domains/AGENTS.md) — domain expert agents (24 modules)
+- [`domains/AGENTS.md`](naas_abi_marketplace/domains/AGENTS.md) — organizational capability, 9 subsystems of the staff system (25 modules).
+  See also [`domains/README.md`](naas_abi_marketplace/domains/README.md) for the framework and
+  [`domains/AGENT.md`](naas_abi_marketplace/domains/AGENT.md) for how to file a new module.
 
 ### `ai/` — LLM provider modules
 
@@ -79,11 +82,29 @@ Each contains:
 
 **To add a new application**: scaffold the directory with `__init__.py` + `integrations/` + `agents/`, model dependencies in `ModuleDependencies.modules`, declare config fields. Wire intents in the agent.
 
-### `domains/` — domain expert agents
+### `domains/` — organizational capability, in 9 subsystems of the staff system
 
-24 roles: `account-executive`, `accountant`, `business-development-representative`, `campaign-manager`, `community-manager`, `content-analyst`, `content-creator`, `content-strategist`, `customer-success-manager`, `data-engineer`, `devops-engineer`, `document`, `financial-controller`, `human-resources-manager`, `inside-sales representative`, `ontology_engineer`, `organizations`, `osint-researcher`, `private-investigator`, `project-manager`, `sales-development-representative`, `software-engineer`, `support`, `treasurer`. Grouped by category in [`domains/AGENTS.md`](naas_abi_marketplace/domains/AGENTS.md).
+25 modules organized by the **continental staff system** (S1–S9) rather than by job title, so the
+structure maps onto any organization — government, university, non-profit or commercial:
 
-Each contains:
+| Subsystem | Covers | Modules |
+|---|---|:--:|
+| `personnel/` | HR, staffing, records | 1 |
+| `intelligence/` | Research, OSINT, situational awareness | 5 |
+| `operations/` | Revenue, delivery, support — the current mission | 7 |
+| `logistics/` | Procurement, supply, facilities — *reserved* | 0 |
+| `plans/` | Strategy, roadmaps, campaign design | 2 |
+| `signals/` | Engineering, IT, data & knowledge infrastructure | 5 |
+| `training/` | Onboarding, enablement — *reserved* | 0 |
+| `finance/` | Accounting, treasury, control | 4 |
+| `external/` | Community, brand, partnerships | 2 |
+
+Modules are filed as `domains/<bucket>/<component>/<module>/`, where `<component>` is the
+module's **primary component** (`agents/`, `apps/`, `pipelines/`, `ontologies/`, …). Full index in
+[`domains/AGENTS.md`](naas_abi_marketplace/domains/AGENTS.md); the framework and per-module
+rationale in [`domains/README.md`](naas_abi_marketplace/domains/README.md).
+
+Each module contains:
 
 - `__init__.py` — `ABIModule` listing the LLM module it uses (usually `ai.chatgpt` or a specific provider).
 - `agents/<RoleName>Agent.py` — an `IntentAgent` with role-specific `SYSTEM_PROMPT`, default `MODEL`, exposed `NAME` / `SLUG` / `DESCRIPTION` / `AVATAR_URL`.
@@ -92,12 +113,15 @@ Each contains:
 - `ontologies/` — domain vocabulary (e.g. `ProgrammingLanguages.ttl`, `DesignPatterns.ttl`).
 - `models/` — (when present) pinned model overrides for this domain.
 
-**To add a new domain**: pick a role, create the dir with `__init__.py` declaring the LLM dependency, add the agent + workflows + ontology TTL. The role-naming convention is **kebab-case directory** (`software-engineer`), **PascalCase agent file** (`SoftwareEngineerAgent.py`), and `SLUG = "software-engineer"` inside the agent.
+**To add a new domain module**: read [`domains/AGENT.md`](naas_abi_marketplace/domains/AGENT.md) — it covers picking the bucket (*what organizational function does this serve?*) and the component folder (*what is this module primarily?*). Then create the dir with `__init__.py` declaring the LLM dependency, and add the agent + workflows + ontology TTL. The role-naming convention is **kebab-case directory** (`software-engineer`), **PascalCase agent file** (`SoftwareEngineerAgent.py`), and `SLUG = "software-engineer"` inside the agent.
 
-### `__demo__/` and `alpha/`
+Note: every bucket and every filed module carries an `__init__.py` declaring an `ABIModule`. `personnel/` is the one bucket with no filed module — its `PersonnelAgent.py` sits directly in `personnel/agents/`.
+
+### `__demo__/`
 
 - `__demo__/` — reference implementations: `agents/MultiModelAgent.py`, `workflows/ExecutePythonCodeWorkflow.py`, `apps/` (Streamlit + dashboard / kanban / calendar / network visualization demos), `orchestration/` (Dagster definitions). Use these as the canonical "how it's done" examples when scaffolding.
-- `alpha/` — experimental modules not yet promoted (`wsr`).
+
+`alpha/` no longer exists — its two modules (`wsr`, `financial_cockpit`) were promoted into `domains/intelligence/apps/` and `domains/finance/apps/`.
 
 ## Agent file conventions
 
@@ -138,10 +162,10 @@ modules:
     config:
       github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
 
-  - module: naas_abi_marketplace.domains.software-engineer
+  - module: naas_abi_marketplace.domains.operations
     enabled: true
     config:
-      datastore_path: "software-engineer"
+      datastore_path: "operations"
 ```
 
 The `{{ secret.X }}` syntax is resolved by the `secret` service (see [services/secret/AGENTS.md](../naas-abi-core/naas_abi_core/services/secret/AGENTS.md)). `dependencies.modules` are auto-loaded; you don't need to list a module's deps in `config.yaml`.
@@ -152,7 +176,8 @@ The `{{ secret.X }}` syntax is resolved by the `secret` service (see [services/s
 |---|---|
 | Find available LLMs / providers | `naas_abi_marketplace/ai/<provider>/models/` |
 | See which third-party apps are wrapped | `naas_abi_marketplace/applications/` |
-| Find a role-specific agent | `naas_abi_marketplace/domains/<role>/agents/` |
+| Find a role-specific agent | `naas_abi_marketplace/domains/<bucket>/agents/<role>/agents/` |
+| Work out which bucket something belongs in | [`domains/AGENT.md`](naas_abi_marketplace/domains/AGENT.md) |
 | Browse reusable workflows | `*/workflows/`, especially `__demo__/workflows/` and per-domain |
 | Find a working scaffold to copy | `__demo__/agents/MultiModelAgent.py`, `__demo__/workflows/ExecutePythonCodeWorkflow.py` |
 | Understand a module's config schema | Its `__init__.py` → `class Configuration` |
@@ -168,7 +193,7 @@ uv run pytest libs/naas-abi-marketplace
 # One module
 uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/ai/anthropic
 uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/applications/github
-uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/domains/software-engineer
+uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/domains/signals/agents/software-engineer
 
 # A single agent test
 uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/applications/github/agents/GitHubAgent_test.py -v
@@ -177,6 +202,7 @@ uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/applications/github
 ## Adding a new module (checklist)
 
 1. Pick the category: `ai/`, `applications/`, or `domains/`.
+   For `domains/`, also pick the staff bucket and component folder — see [`domains/AGENT.md`](naas_abi_marketplace/domains/AGENT.md).
 2. Create `<name>/__init__.py` with an `ABIModule(BaseModule)`:
    - `dependencies` — list the modules and core services it needs.
    - `Configuration` — typed config fields; include a docstring config example for operators.

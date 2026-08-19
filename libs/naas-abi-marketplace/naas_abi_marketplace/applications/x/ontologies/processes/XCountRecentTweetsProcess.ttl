@@ -20,7 +20,7 @@ x:CountRecentTweetsProcess a owl:Ontology ;
   dc:description "Process ontology for the X v2 GET /2/tweets/counts/recent endpoint. Models the CountRecentTweets process, the time-bucketed count result it produces (TweetCountResultSet), each time-bucketed count (TweetCountBucket) and the temporal interval each bucket occupies (CountInterval). Used to follow how many posts match a query over time without retrieving tweet content."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Process ontology for following X tweet counts over time."@en ;
-  dc11:contributor "Florent Ravenel" ;
+  dc11:contributor "Alice Dupont" ;
   dc11:date "2026-07-23"^^xsd:date .
 
 #################################################################

@@ -1,44 +1,50 @@
 # TwilioAgent
 
 ## What it is
-- An `IntentAgent` implementation that provides **general guidance** about Twilio (SMS, voice, messaging).
-- Ships **without Twilio tools** configured; it does not send messages or place calls.
+- An `IntentAgent` implementation focused on **Twilio communication services** (SMS, voice, messaging).
+- Provides **information and guidance only**; it **does not** execute Twilio operations because **no tools are configured**.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Factory that constructs and returns a configured `TwilioAgent`.
-  - Sets:
-    - `name`: `"Twilio"`
-    - `description`: Twilio-focused helper text
-    - `system_prompt`: constraints and operating guidelines (no tools)
-    - `tools`: empty list
-    - `intents`: two RAW intents providing informational responses
-    - `state`: provided or new `AgentSharedState`
-    - `memory`: `None`
 - `class TwilioAgent(IntentAgent)`
-  - Concrete agent type; no additional methods beyond `IntentAgent`.
+  - Agent metadata (class attributes):
+    - `name = "Twilio"`
+    - `description = "Helps you interact with Twilio for communication services and messaging."`
+    - `system_prompt`: instructions emphasizing guidance-only behavior (no tools)
+    - `suggestions = []`
+- `TwilioAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> TwilioAgent`
+  - Factory constructor that:
+    - Fetches default chat and embedding models from the module engine’s `model_registry`.
+    - Sets `tools = []` and defines two RAW intents:
+      - “Get information about Twilio features”
+      - “Understand messaging and voice communication”
+    - Defaults:
+      - `AgentConfiguration(system_prompt=TwilioAgent.system_prompt)` if not provided
+      - `AgentSharedState(thread_id="0")` if not provided
+    - Returns a configured `TwilioAgent` with `memory=None`.
 
 ## Configuration/Dependencies
 - Depends on `naas_abi_core.services.agent.IntentAgent`:
   - `IntentAgent`, `Intent`, `IntentType`, `AgentConfiguration`, `AgentSharedState`
-- Uses chat model from:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1` (`model.model`)
-- Configuration points:
-  - `AgentConfiguration(system_prompt=SYSTEM_PROMPT)` if none provided.
-  - `AgentSharedState()` if none provided.
+- Requires Twilio application module wiring:
+  - `from naas_abi_marketplace.applications.twilio import ABIModule`
+  - `ABIModule.get_instance().engine.services.model_registry` must be initialized
+    - Uses:
+      - `registry.get_default_chat_model()`
+      - `registry.get_default_embedding_model().model`
+- No external Twilio SDK usage in this file.
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.twilio.agents.TwilioAgent import create_agent
+from naas_abi_marketplace.applications.twilio.agents.TwilioAgent import TwilioAgent
 
-agent = create_agent()
-
-# Use the returned IntentAgent according to your framework's execution/run method.
-# (This module only provides the agent construction and configuration.)
-print(agent.name)  # "Twilio"
+agent = TwilioAgent.New()
+print(agent.name)         # Twilio
+print(agent.description)  # Helps you interact with Twilio for communication services and messaging.
 ```
 
 ## Caveats
-- No Twilio tools are configured (`tools = []`), so the agent:
-  - cannot send SMS, make calls, or perform Twilio operations
-  - only provides general information and guidance per `SYSTEM_PROMPT` constraints
+- **No tools are configured** (`tools = []`), so the agent:
+  - cannot send SMS, place calls, or interact with Twilio APIs
+  - should only provide general guidance per `system_prompt`
+- Construction asserts that a model registry exists:
+  - `assert registry is not None, "ModelRegistryService not initialized"`

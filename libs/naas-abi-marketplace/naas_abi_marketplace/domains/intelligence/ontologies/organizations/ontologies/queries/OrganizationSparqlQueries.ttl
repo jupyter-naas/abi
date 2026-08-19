@@ -1,0 +1,367 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
+
+#################################################################
+#  Organization Queries
+#  Data: GRAPH <http://ontology.naas.ai/graph/organizations>
+#  Schema: <http://ontology.naas.ai/abi/> (OrganizationOntology,
+#          OrganizationAllianceProcess, OrganizationRestructuringProcess)
+#
+#  Acts vs records
+#  ---------------
+#  Every relationship between organizations is modelled twice, and the two
+#  halves answer different questions.
+#
+#    abi:ActOf*            the occurrent — it happens, has participants,
+#                          occupies an interval
+#    abi:StrategicAlliance the continuant document that records it, and that
+#    and subclasses        outlives the act
+#
+#  Ask "who is allied with whom" over the acts, because only the acts carry
+#  participants. Ask "what does the agreement say" over the records. Counting
+#  records instead of acts overstates activity, since one act can be recorded
+#  in several documents (an MOU plus a definitive agreement).
+#
+#  Alliance vs restructuring
+#  -------------------------
+#  An alliance leaves every party a distinct entity; restructuring changes the
+#  set of organizations or who controls whom. So find_alliances_by_organization
+#  never returns mergers, and a merged-away entity keeps its alliance history.
+#
+#  Merger vs acquisition
+#  ---------------------
+#  Merger participants are symmetric (abi:hasMergingOrganization). Acquisition
+#  is directional (abi:hasAcquiringOrganization / abi:hasAcquiredOrganization).
+#  Querying acquisitions through a symmetric relation loses the direction and
+#  makes "who bought whom" unanswerable, so they have separate queries.
+#################################################################
+
+#-----------------------------------------------------------------
+# Organization profile queries
+#-----------------------------------------------------------------
+
+intentMapping:findOrganizationsByNameQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_organizations_by_name"@en ;
+    intentMapping:intentDescription "Find organizations whose label or legal name contains a given substring, returning the website, ticker and industry known for each. Useful to answer 'what do we know about <company>?' or to resolve a name to an organization before asking a follow-up question." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX cco:  <https://www.commoncoreontologies.org/>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?organization ?organizationLabel ?organizationId ?websiteUrl ?tickerSymbol ?industryLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/organizations> {
+            ?organization rdf:type cco:ont00001180 ;
+                          rdfs:label ?organizationLabel .
+            FILTER(CONTAINS(LCASE(STR(?organizationLabel)), LCASE("{{ organization_name }}")))
+            OPTIONAL { ?organization abi:organization_id ?organizationId . }
+            OPTIONAL { ?organization abi:hasWebsite ?website . ?website abi:website_url ?websiteUrl . }
+            OPTIONAL { ?organization abi:hasTickerSymbol ?ticker . ?ticker abi:ticker_symbol ?tickerSymbol . }
+            OPTIONAL { ?organization abi:hasIndustry ?industry . ?industry rdfs:label ?industryLabel . }
+          }
+        }
+        ORDER BY ?organizationLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:organizationNameArg ,
+                              intentMapping:organizationLimitArg .
+
+intentMapping:findOrganizationsByIndustryQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_organizations_by_industry"@en ;
+    intentMapping:intentDescription "Return the organizations belonging to an industry whose name contains a given substring. Useful to answer 'who operates in <sector>?' or to build a competitive set." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX cco:  <https://www.commoncoreontologies.org/>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?organization ?organizationLabel ?industry ?industryLabel ?websiteUrl
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/organizations> {
+            ?organization rdf:type cco:ont00001180 ;
+                          abi:hasIndustry ?industry .
+            ?industry rdfs:label ?industryLabel .
+            FILTER(CONTAINS(LCASE(STR(?industryLabel)), LCASE("{{ industry_name }}")))
+            OPTIONAL { ?organization rdfs:label ?organizationLabel . }
+            OPTIONAL { ?organization abi:hasWebsite ?website . ?website abi:website_url ?websiteUrl . }
+          }
+        }
+        ORDER BY ?industryLabel ?organizationLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:organizationIndustryNameArg ,
+                              intentMapping:organizationLimitArg .
+
+intentMapping:findOrganizationByTickerQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_organization_by_ticker"@en ;
+    intentMapping:intentDescription "Look up the organization behind a stock ticker symbol, e.g. 'AAPL'. Returns only publicly traded organizations, since a ticker is assigned by an exchange." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX cco:  <https://www.commoncoreontologies.org/>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?organization ?organizationLabel ?tickerSymbol ?websiteUrl
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/organizations> {
+            ?ticker rdf:type abi:Ticker ;
+                    abi:ticker_symbol ?tickerSymbol .
+            FILTER(UCASE(STR(?tickerSymbol)) = UCASE("{{ ticker_symbol }}"))
+            ?ticker abi:isTickerSymbolOf ?organization .
+            OPTIONAL { ?organization rdfs:label ?organizationLabel . }
+            OPTIONAL { ?organization abi:hasWebsite ?website . ?website abi:website_url ?websiteUrl . }
+          }
+        }
+    """ ;
+    intentMapping:hasArgument intentMapping:organizationTickerSymbolArg .
+
+intentMapping:findOrganizationHeadquartersQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_organization_headquarters"@en ;
+    intentMapping:intentDescription "Return the headquarters facilities of organizations matching a name substring, distinguishing global from regional headquarters via the ?headquartersType column. Useful to answer 'where is <company> based?'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX cco:  <https://www.commoncoreontologies.org/>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?organization ?organizationLabel ?headquarters ?headquartersLabel ?headquartersType
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/organizations> {
+            ?organization rdf:type cco:ont00001180 ;
+                          rdfs:label ?organizationLabel ;
+                          abi:hasHeadquarters ?headquarters .
+            FILTER(CONTAINS(LCASE(STR(?organizationLabel)), LCASE("{{ organization_name }}")))
+            ?headquarters rdf:type ?headquartersType .
+            FILTER(?headquartersType IN (abi:GlobalHeadquarters, abi:RegionalHeadquarters))
+            OPTIONAL { ?headquarters rdfs:label ?headquartersLabel . }
+          }
+        }
+        ORDER BY ?organizationLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:organizationNameArg ,
+                              intentMapping:organizationLimitArg .
+
+#-----------------------------------------------------------------
+# Alliance-process queries
+#-----------------------------------------------------------------
+
+intentMapping:findAlliancesByOrganizationQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_alliances_by_organization"@en ;
+    intentMapping:intentDescription "Return the alliances an organization takes part in — partnerships, joint ventures, marketing alliances, research collaborations, technology licensing and distribution agreements — together with the counterpart organization in each. Covers only cooperation that leaves both parties independent; mergers and acquisitions are returned by find_acquisitions_by_organization and find_mergers instead." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX cco:  <https://www.commoncoreontologies.org/>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?act ?actType ?actLabel ?organization ?organizationLabel ?counterpart ?counterpartLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/organizations> {
+            ?organization rdf:type cco:ont00001180 ;
+                          rdfs:label ?organizationLabel .
+            FILTER(CONTAINS(LCASE(STR(?organizationLabel)), LCASE("{{ organization_name }}")))
+            ?act abi:hasAllianceParticipant ?organization ;
+                 rdf:type ?actType .
+            FILTER(?actType IN (abi:ActOfPartnership, abi:ActOfJointVenture,
+                                abi:ActOfMarketingAlliance, abi:ActOfResearchCollaboration,
+                                abi:ActOfTechnologyLicensing, abi:ActOfDistributionAgreement))
+            OPTIONAL { ?act rdfs:label ?actLabel . }
+            OPTIONAL {
+              ?act abi:hasAllianceParticipant ?counterpart .
+              FILTER(?counterpart != ?organization)
+              OPTIONAL { ?counterpart rdfs:label ?counterpartLabel . }
+            }
+          }
+        }
+        ORDER BY ?organizationLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:organizationNameArg ,
+                              intentMapping:organizationLimitArg .
+
+intentMapping:findAlliancesByTypeQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_alliances_by_type"@en ;
+    intentMapping:intentDescription "Return alliance acts of one kind, named by its class label — 'Act of Joint Venture', 'Act of Research Collaboration', 'Act of Technology Licensing', 'Act of Partnership', 'Act of Marketing Alliance' or 'Act of Distribution Agreement' — with every participating organization. Useful to answer 'show me all our joint ventures'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX cco:  <https://www.commoncoreontologies.org/>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?act ?actLabel ?actTypeLabel ?organization ?organizationLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/organizations> {
+            ?act rdf:type ?actType .
+            FILTER(?actType IN (abi:ActOfPartnership, abi:ActOfJointVenture,
+                                abi:ActOfMarketingAlliance, abi:ActOfResearchCollaboration,
+                                abi:ActOfTechnologyLicensing, abi:ActOfDistributionAgreement))
+            ?actType rdfs:label ?actTypeLabel .
+            FILTER(CONTAINS(LCASE(STR(?actTypeLabel)), LCASE("{{ alliance_type }}")))
+            OPTIONAL { ?act rdfs:label ?actLabel . }
+            OPTIONAL {
+              ?act abi:hasAllianceParticipant ?organization .
+              OPTIONAL { ?organization rdfs:label ?organizationLabel . }
+            }
+          }
+        }
+        ORDER BY ?actTypeLabel ?actLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:organizationAllianceTypeArg ,
+                              intentMapping:organizationLimitArg .
+
+intentMapping:findAllianceAgreementsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_alliance_agreements"@en ;
+    intentMapping:intentDescription "Return the agreement documents recording alliances — MOUs, collaboration agreements, licensing terms — with the act each one concretizes. Ask this when the question is about what an agreement says; ask find_alliances_by_organization when the question is who is allied with whom, since only the act carries participants." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?agreement ?agreementLabel ?agreementTypeLabel ?act ?actLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/organizations> {
+            # The subclasses are listed explicitly rather than matching
+            # abi:StrategicAlliance alone: the triple store runs no reasoner, so
+            # a document typed only as abi:JointVenture would not match its
+            # superclass and the query would silently return nothing.
+            ?agreement rdf:type ?agreementType .
+            FILTER(?agreementType IN (abi:StrategicAlliance, abi:Partnership,
+                                      abi:JointVenture, abi:MarketingAlliance,
+                                      abi:ResearchCollaboration, abi:TechnologyLicensing,
+                                      abi:DistributionAgreement))
+            OPTIONAL { ?agreementType rdfs:label ?agreementTypeLabel . }
+            OPTIONAL { ?agreement rdfs:label ?agreementLabel . }
+            OPTIONAL {
+              ?agreement abi:isAllianceAgreementOf ?act .
+              OPTIONAL { ?act rdfs:label ?actLabel . }
+            }
+          }
+        }
+        ORDER BY ?agreementTypeLabel ?agreementLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:organizationLimitArg .
+
+#-----------------------------------------------------------------
+# Restructuring-process queries
+#-----------------------------------------------------------------
+
+intentMapping:findAcquisitionsByOrganizationQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_acquisitions_by_organization"@en ;
+    intentMapping:intentDescription "Return acquisitions involving an organization, with the acquirer and the target in separate columns so the direction is explicit. The ?role column says whether the named organization was the acquirer or the acquired party. Use this rather than a merger query when the question is 'who bought whom'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX cco:  <https://www.commoncoreontologies.org/>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?act ?actLabel ?role ?acquirer ?acquirerLabel ?acquired ?acquiredLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/organizations> {
+            ?act rdf:type abi:ActOfOrganizationalAcquisition ;
+                 abi:hasAcquiringOrganization ?acquirer ;
+                 abi:hasAcquiredOrganization ?acquired .
+            OPTIONAL { ?acquirer rdfs:label ?acquirerLabel . }
+            OPTIONAL { ?acquired rdfs:label ?acquiredLabel . }
+            OPTIONAL { ?act rdfs:label ?actLabel . }
+            FILTER(CONTAINS(LCASE(STR(?acquirerLabel)), LCASE("{{ organization_name }}"))
+                || CONTAINS(LCASE(STR(?acquiredLabel)), LCASE("{{ organization_name }}")))
+            BIND(IF(CONTAINS(LCASE(STR(?acquirerLabel)), LCASE("{{ organization_name }}")),
+                    "acquirer", "acquired") AS ?role)
+          }
+        }
+        ORDER BY ?actLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:organizationNameArg ,
+                              intentMapping:organizationLimitArg .
+
+intentMapping:findMergersQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_mergers"@en ;
+    intentMapping:intentDescription "Return acts of organizational merger with every uniting organization. Merger participants are symmetric — no party is the buyer — so this query does not distinguish roles. For directional deals use find_acquisitions_by_organization." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX cco:  <https://www.commoncoreontologies.org/>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?act ?actLabel ?organization ?organizationLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/organizations> {
+            ?act rdf:type abi:ActOfOrganizationalMerger .
+            OPTIONAL { ?act rdfs:label ?actLabel . }
+            OPTIONAL {
+              ?act abi:hasMergingOrganization ?organization .
+              OPTIONAL { ?organization rdfs:label ?organizationLabel . }
+            }
+          }
+        }
+        ORDER BY ?actLabel ?organizationLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:organizationLimitArg .
+
+intentMapping:findSubsidiariesQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_subsidiaries"@en ;
+    intentMapping:intentDescription "Return the subsidiaries controlled by organizations matching a name substring. Answers 'what does <company> own?'. Reports the standing control relation, not the act that created it — use find_acquisitions_by_organization for how control was obtained." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX cco:  <https://www.commoncoreontologies.org/>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?parent ?parentLabel ?subsidiary ?subsidiaryLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/organizations> {
+            ?parent rdf:type cco:ont00001180 ;
+                    rdfs:label ?parentLabel ;
+                    abi:hasSubsidiaryOrganization ?subsidiary .
+            FILTER(CONTAINS(LCASE(STR(?parentLabel)), LCASE("{{ organization_name }}")))
+            OPTIONAL { ?subsidiary rdfs:label ?subsidiaryLabel . }
+          }
+        }
+        ORDER BY ?parentLabel ?subsidiaryLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:organizationNameArg ,
+                              intentMapping:organizationLimitArg .
+
+#-----------------------------------------------------------------
+# Query arguments
+#-----------------------------------------------------------------
+
+intentMapping:organizationLimitArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "limit" ;
+    intentMapping:argumentDescription "Maximum number of rows to return (positive integer)." ;
+    intentMapping:validationPattern "^[1-9][0-9]{0,3}$" ;
+    intentMapping:validationFormat "integer" .
+
+intentMapping:organizationNameArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "organization_name" ;
+    intentMapping:argumentDescription "Substring to match against an organization's label, case-insensitive. Pass an empty string to return every organization." ;
+    intentMapping:validationPattern ".*" ;
+    intentMapping:validationFormat "string" .
+
+intentMapping:organizationIndustryNameArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "industry_name" ;
+    intentMapping:argumentDescription "Substring to match against an industry name, case-insensitive (e.g. 'technology', 'finance', 'healthcare')." ;
+    intentMapping:validationPattern ".*" ;
+    intentMapping:validationFormat "string" .
+
+intentMapping:organizationTickerSymbolArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "ticker_symbol" ;
+    intentMapping:argumentDescription "Stock ticker symbol, matched case-insensitively (e.g. 'AAPL', 'GOOGL')." ;
+    intentMapping:validationPattern "^[A-Za-z0-9.\\\\-]{1,12}$" ;
+    intentMapping:validationFormat "ticker" .
+
+intentMapping:organizationAllianceTypeArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "alliance_type" ;
+    intentMapping:argumentDescription "Substring of an alliance act's class label, case-insensitive: 'partnership', 'joint venture', 'marketing alliance', 'research collaboration', 'technology licensing' or 'distribution agreement'." ;
+    intentMapping:validationPattern ".*" ;
+    intentMapping:validationFormat "string" .

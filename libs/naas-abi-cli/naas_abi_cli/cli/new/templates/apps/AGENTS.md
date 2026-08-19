@@ -72,4 +72,4 @@ Drop the folder in, restart the API, and it shows up.
 ## See also
 
 - Apps adapter (discovery + `html:` resolution + serving routes): `.abi/libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/apps/adapters/primary/apps__primary_adapter__FastAPI.py`
-- Reference apps: `.abi/libs/naas-abi-marketplace/.../alpha/wsr/apps/dashboard/manifest.json` (external URL), `.abi/libs/naas-abi-marketplace/.../domains/document/apps/sandbox/manifest.json` (`html:` bundled page)
+- Reference apps: `.abi/libs/naas-abi-marketplace/.../domains/intelligence/apps/wsr/manifest.json` (external URL), `.abi/libs/naas-abi-marketplace/.../domains/operations/modules/document/apps/sandbox/manifest.json` (`html:` bundled page)

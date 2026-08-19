@@ -1,41 +1,47 @@
 # OpenWeatherMapAgent
 
 ## What it is
-- An `IntentAgent` factory and stub agent class configured to provide **general guidance** about OpenWeatherMap (features, weather data, forecasts).
-- No OpenWeatherMap tools are configured in this module; it does **not** fetch real weather data.
+- An `IntentAgent` implementation for providing **general guidance** about OpenWeatherMap (features, weather data concepts, forecasts).
+- This agent is **not connected to OpenWeatherMap tools/APIs** in this module and therefore **cannot retrieve live weather data**.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Builds and returns an `OpenWeatherMapAgent` with:
-    - `NAME`, `DESCRIPTION`
-    - `SYSTEM_PROMPT` (explicitly states tools are unavailable)
-    - Empty `tools` list
-    - Two `IntentType.RAW` intents for informational responses
-    - Optional injected `AgentSharedState` and `AgentConfiguration`
 - `class OpenWeatherMapAgent(IntentAgent)`
-  - No additional methods/overrides; inherits all behavior from `IntentAgent`.
+  - Class attributes:
+    - `name`: `"OpenWeatherMap"`
+    - `description`: `"Helps you interact with OpenWeatherMap for weather data and forecasts."`
+    - `system_prompt`: System instructions emphasizing guidance-only behavior and no tool access.
+    - `suggestions`: empty list
+  - `@classmethod New(cls, agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> OpenWeatherMapAgent`
+    - Factory that constructs and returns a configured `OpenWeatherMapAgent`.
+    - Initializes:
+      - `chat_model` and `embedding_model` from the application `ModelRegistryService` (via `ABIModule`).
+      - `tools` as an empty list.
+      - Two `IntentType.RAW` intents with pre-defined informational targets.
+      - Defaults:
+        - `agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)` if not provided
+        - `agent_shared_state = AgentSharedState(thread_id="0")` if not provided
 
 ## Configuration/Dependencies
-- Imports from `naas_abi_core.services.agent.IntentAgent`:
+- Depends on `naas_abi_core.services.agent.IntentAgent` for:
   - `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentAgent`, `IntentType`
-- Chat model dependency (imported inside `create_agent`):
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1.model` (uses `model.model`)
-- Module constants:
-  - `SYSTEM_PROMPT`: instructs the agent to provide guidance only and acknowledge missing tools.
-  - `SUGGESTIONS`: empty list (unused in this file).
+- Runtime dependency on the OpenWeatherMap application module:
+  - `from naas_abi_marketplace.applications.openweathermap import ABIModule`
+  - Requires `ABIModule.get_instance().engine.services.model_registry` to be initialized.
+  - Uses:
+    - `registry.get_default_chat_model()`
+    - `registry.get_default_embedding_model().model`
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.openweathermap.agents.OpenWeatherMapAgent import create_agent
+from naas_abi_marketplace.applications.openweathermap.agents.OpenWeatherMapAgent import OpenWeatherMapAgent
 
-agent = create_agent()
+agent = OpenWeatherMapAgent.New()
 
-# Agent can be used via the IntentAgent interface provided by naas_abi_core.
-# (Exact invocation depends on the IntentAgent implementation in your environment.)
-print(agent.name)         # "OpenWeatherMap"
-print(agent.description)  # "Helps you interact with OpenWeatherMap for weather data and forecasts."
+print(agent.name)
+print(agent.description)
 ```
 
 ## Caveats
-- No tools are configured (`tools = []`), so the agent cannot retrieve live or historical weather data.
-- The system prompt explicitly constrains the agent to general information and guidance only.
+- `tools` is always `[]` in `New()`, so the agent cannot fetch or act on real OpenWeatherMap data.
+- `New()` asserts that the model registry is initialized:
+  - `assert registry is not None, "ModelRegistryService not initialized"`

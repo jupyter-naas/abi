@@ -1,51 +1,46 @@
 # Scheduling & Calendar Interface (`scheduling_interface.py`)
 
 ## What it is
-- A Streamlit app that renders a multi-role scheduling dashboard with:
-  - Calendar views (week/month/day/agenda)
-  - Basic metrics (today/this week/high priority/conflicts)
-  - Mock resource availability (rooms, equipment)
-  - Quick action buttons (mocked)
-  - Simple analytics charts (Plotly)
+- A Streamlit dashboard for scheduling and calendar management across multiple roles (e.g., Project Manager, HR, Sales).
+- Renders multiple calendar views (Week/Month/Day/Agenda), summary metrics, resource availability, quick actions, and basic analytics charts.
+- Uses randomly generated (mock) event and availability data.
 
 ## Public API
-This module is a Streamlit script (UI-first) with one reusable function:
+This module is primarily a Streamlit script. The only reusable function is:
 
 - `load_calendar_data() -> pandas.DataFrame`
-  - Generates a mock events dataset (50 events across the next ~30 days).
-  - Cached via `@st.cache_data`.
-  - Output columns: `Title`, `Type`, `Date` (datetime), `Start_Time` (HH:00), `Duration` (minutes), `Attendees`, `Location`, `Priority`, `Status`.
+  - Generates a mock dataset of 50 events over the next 30 days.
+  - Cached with `@st.cache_data`.
+  - Returns a DataFrame with columns:
+    - `Title`, `Type`, `Date` (`datetime`), `Start_Time` (`"HH:00"`), `Duration` (minutes),
+      `Attendees`, `Location`, `Priority`, `Status`.
 
-There are no public classes.
+No public classes are defined.
 
 ## Configuration/Dependencies
-- **Runtime**: Streamlit script; intended to be launched with `streamlit run`.
-- **Sets Streamlit page config**:
-  - `page_title="Scheduling Center"`, `page_icon="📅"`, `layout="wide"`.
-- **Environment** (only when executed as `__main__`):
-  - Sets `STREAMLIT_SERVER_PORT=8504` (note: Streamlit CLI may still control the port depending on how it’s launched).
+- **Runs as a Streamlit app**: intended to be started via `streamlit run ...`.
+- **Streamlit page config**: `page_title="Scheduling Center"`, `page_icon="📅"`, `layout="wide"`.
+- **Environment variable (only under `__main__`)**:
+  - Sets `STREAMLIT_SERVER_PORT=8504`.
 - **Dependencies**:
   - `streamlit`, `pandas`, `plotly.express`, `numpy`
-  - Standard library: `datetime`, `calendar`, `os` (only on SOP page / main guard)
+  - Standard library: `datetime`, `timedelta`, `calendar`, `os` (used in `__main__` and SOP loader)
 
 ## Usage
 Run the app:
-
 ```bash
 streamlit run libs/naas-abi-marketplace/naas_abi_marketplace/__demo__/apps/calendar/scheduling_interface.py
 ```
 
-Minimal example of using the only reusable function (outside Streamlit context):
-
+Use the data generator function directly:
 ```python
 from naas_abi_marketplace.__demo__.apps.calendar.scheduling_interface import load_calendar_data
 
 df = load_calendar_data()
-print(df.head())
+print(df[["Title", "Type", "Date"]].head())
 ```
 
 ## Caveats
-- Data is **mocked/random** (`numpy.random`), including event generation and resource availability; results change across runs.
-- The “Schedule Conflicts” metric is also mocked (`np.random.randint(0, 3)`).
-- SOP view expects a `SOP.md` file in the same directory; if missing, the UI shows an error.
-- The weekly-load bar chart uses `groupby(dayofweek).size()` and plots `weekly_load.values` against fixed day labels; missing weekdays in the data can lead to a mismatch between labels and counts.
+- All events, conflicts, and resource availability are **randomly generated** via `numpy.random`; outputs vary between runs.
+- The SOP page attempts to load `SOP.md` from the same directory; if missing, the UI displays an error.
+- The weekly-load bar chart uses fixed day labels (`Mon`..`Sun`) but plots `weekly_load.values`; if some weekdays are absent in the data, label/value alignment may not reflect missing days.
