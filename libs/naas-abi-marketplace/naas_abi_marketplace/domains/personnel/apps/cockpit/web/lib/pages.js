@@ -25,6 +25,14 @@ export const PAGES = {
       text: "Acts of Working and Studying mapped to the BFO 7 buckets. Employment continuants remain in PersonnelOntology for HR records.",
     },
   },
+  logs: {
+    title: "Logs",
+    banner: {
+      type: "info",
+      enabled: true,
+      text: "One row per act of working or studying sourced from the personnel graph: person, role, organization, site, dates, and profile URL.",
+    },
+  },
 };
 
 export const PAGE_IDS = Object.freeze(Object.keys(PAGES));

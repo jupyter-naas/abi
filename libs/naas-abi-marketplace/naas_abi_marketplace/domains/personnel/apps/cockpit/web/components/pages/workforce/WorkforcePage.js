@@ -45,25 +45,23 @@ export async function mountPage(el, ctx) {
         ${renderBars(status.records, "status_value", "count")}
       </div>
     </div>
-    <div class="grid-2">
-      <div class="panel">
-        <h2>Roster</h2>
-        <table>
-          <thead><tr><th>Name</th><th>Title</th><th>Family</th><th>Status</th></tr></thead>
-          <tbody>
-            ${roster.records
-              .map(
-                (r) => `<tr>
-                <td>${r.personLabel}<br><small style="color:var(--muted)">${r.employee_id}</small></td>
-                <td>${r.job_title}</td>
-                <td>${r.job_family}</td>
-                <td>${chip(r.status_value)}</td>
-              </tr>`
-              )
-              .join("")}
-          </tbody>
-        </table>
-      </div>
+    <div class="panel">
+      <h2>Roster</h2>
+      <table>
+        <thead><tr><th>Name</th><th>Title</th><th>Family</th><th>Status</th></tr></thead>
+        <tbody>
+          ${roster.records
+            .map(
+              (r) => `<tr>
+              <td>${r.personLabel}<br><small style="color:var(--muted)">${r.employee_id}</small></td>
+              <td>${r.job_title}</td>
+              <td>${r.job_family}</td>
+              <td>${chip(r.status_value)}</td>
+            </tr>`
+            )
+            .join("")}
+        </tbody>
+      </table>
     </div>
     <div class="agent-q"><strong>Ask PersonnelAgent:</strong> “Who is on leave?” · “How is headcount split by job family?” · “Tell me about employee E-10428.”</div>
   `;

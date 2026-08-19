@@ -24,7 +24,7 @@ def _load_page_ids() -> frozenset[str]:
         pages = manifest.get("datasets", {}).get("pages", {})
         return frozenset(pages.keys())
     except (OSError, json.JSONDecodeError, AttributeError):
-        return frozenset({"workforce", "graph", "processes"})
+        return frozenset({"workforce", "graph", "processes", "logs"})
 
 
 PAGE_IDS = _load_page_ids()

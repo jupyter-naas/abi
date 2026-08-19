@@ -39,5 +39,5 @@ URLs: ``/{url_slug}/{pageId}`` (e.g. ``/demo/graph``). API reads ``entity_id`` p
 |---|---|
 | workforce | `find_active_employees`, `find_employees_by_status`, `find_headcount_by_job_family` |
 | graph | person search + distance 1–3 hop filter on process graph |
-| logs | acts of working / studying → `logs/ledger.json` (one row per process) |
 | processes | BFO 7-buckets process docs (`processes/processes.json`) |
+| logs | acts of working / studying → `logs/ledger.json` (one row per process) |

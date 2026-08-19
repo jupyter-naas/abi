@@ -126,12 +126,18 @@ const GRAPH_VIEW_LABELS = { "2d": "2D view", "3d": "3D view" };
  * longer to settle because it has a third axis to resolve.
  */
 const GRAPH_VIEW_DEFAULT_OVERRIDES = {
+  "2d": {
+    clusterBy: "bucket",
+    nodeMinGap: 150,
+    zoom: 0.75,
+  },
   "3d": {
+    clusterBy: "bucket",
     linkDistance: 300,
     repulsion: 4500,
     nodeMinGap: 150,
-    settleMs: 7000,
-    zoom: 1,
+    settleMs: 3000,
+    zoom: 0.6,
   },
 };
 
@@ -188,6 +194,14 @@ function applyGraphView(view) {
 // The repulsion force alone could not guarantee it: it is scaled by alpha, so
 // as the simulation cools the push fades and nodes settle packed.
 
+function workerLabel(record) {
+  const props = record?.properties || [];
+  const worker = props.find(
+    (p) => p.uri === "personnel:isActOfWorkingOf" || p.label === "worker"
+  );
+  return worker?.value || "";
+}
+
 function buildGraphIndex(data) {
   const peopleById = Object.fromEntries((data.people || []).map((p) => [p.id, p]));
   const processesById = Object.fromEntries((data.processes || []).map((p) => [p.id, p]));
@@ -197,12 +211,13 @@ function buildGraphIndex(data) {
   const relations = data.relations || [];
 
   for (const rel of relations) {
-    if (rel.predicateLabel === "has working" && peopleById[rel.from] && entitiesById[rel.to]?.isWorkingHub) {
-      workingHubByPerson.set(rel.from, rel.to);
-    }
-    if (rel.predicateLabel === "Employee" && peopleById[rel.from] && processesById[rel.to]) {
-      if (!personToProcesses.has(rel.from)) personToProcesses.set(rel.from, []);
-      personToProcesses.get(rel.from).push(rel.to);
+    if (rel.predicateLabel === "has act of working" && peopleById[rel.from]) {
+      const target = entitiesById[rel.to] || processesById[rel.to];
+      if (target?.isWorkingHub || isProcessRecord(target)) {
+        workingHubByPerson.set(rel.from, rel.to);
+        if (!personToProcesses.has(rel.from)) personToProcesses.set(rel.from, []);
+        personToProcesses.get(rel.from).push(rel.to);
+      }
     }
   }
 
@@ -238,17 +253,19 @@ function isProcessRecord(record) {
  * the relation graph before traversal, so nothing is reached through them.
  */
 function suppressOldProcesses(records, limit = MAX_PROCESSES_PER_CLASS) {
-  const byClass = new Map();
+  const byPersonClass = new Map();
   for (const record of records) {
     if (!isProcessRecord(record)) continue;
-    const key = record.classLabel || "Process";
-    const list = byClass.get(key) || [];
+    const worker = workerLabel(record);
+    const classKey = record.classLabel || "Process";
+    const key = worker ? `${worker}\0${classKey}` : classKey;
+    const list = byPersonClass.get(key) || [];
     list.push(record);
-    byClass.set(key, list);
+    byPersonClass.set(key, list);
   }
 
   const suppressed = new Set();
-  for (const list of byClass.values()) {
+  for (const list of byPersonClass.values()) {
     if (list.length <= limit) continue;
     const ordered = [...list].sort(
       (a, b) =>
@@ -2131,7 +2148,7 @@ function graphFiltersFromUrl(people, fallbackDistance) {
 function entitySlugFromPathname() {
   const segments = window.location.pathname.split("/").filter(Boolean);
   if (segments.length >= 2) return segments[0];
-  if (segments.length === 1 && !["workforce", "graph", "logs", "processes"].includes(segments[0])) {
+  if (segments.length === 1 && !["workforce", "graph", "processes", "logs"].includes(segments[0])) {
     return segments[0];
   }
   return "demo";

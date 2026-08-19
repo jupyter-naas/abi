@@ -23,6 +23,9 @@ from pathlib import Path
 from naas_abi_marketplace.domains.personnel.apps.cockpit.graph_payload import (
     build_graph_page_payload,
 )
+from naas_abi_marketplace.domains.personnel.apps.cockpit.log_payload import (
+    build_ledger_log_rows,
+)
 from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import (
     DATA_ROOT,
     DEFAULT_ENTITY_ID,
@@ -153,6 +156,8 @@ def main() -> None:
         "find_employees_by_organization": {"organization_name": ""},
         "find_positions_by_title": {"job_title": ""},
         "find_employee_by_id": {"employee_id": "E-10428"},
+        "find_working_processes": {"limit": "500"},
+        "find_acts_of_studying": {"limit": "500"},
     }
     for label, template in templates.items():
         sparql = _strip_graph(_fill_args(template, **arg_overrides.get(label, {})))
@@ -329,6 +334,15 @@ def main() -> None:
         ENTITY_DATA / "graph" / "index.json",
         _envelope([], **graph_payload),
     )
+    _dump(
+        ENTITY_DATA / "logs" / "ledger.json",
+        _envelope(
+            build_ledger_log_rows(
+                source_rows.get("find_working_processes", []),
+                source_rows.get("find_acts_of_studying", []),
+            )
+        ),
+    )
 
     data_version = _now_version()
     pages = {
@@ -343,6 +357,9 @@ def main() -> None:
         ],
         "processes": [
             "processes/processes.json",
+        ],
+        "logs": [
+            "logs/ledger.json",
         ],
     }
 

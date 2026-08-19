@@ -440,6 +440,17 @@ tr:last-child td { border-bottom: 0; }
   font-size: 0.86rem;
   color: var(--ink);
 }
+.logs-panel { margin-bottom: 1rem; }
+.logs-table { table-layout: auto; font-size: 0.82rem; min-width: 56rem; }
+.logs-table th, .logs-table td { white-space: nowrap; }
+.logs-table td.ledger-uri {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.logs-table a { color: var(--accent); }
+
 .ledger-scroll { overflow-x: auto; }
 .ledger-table {
   width: 100%;

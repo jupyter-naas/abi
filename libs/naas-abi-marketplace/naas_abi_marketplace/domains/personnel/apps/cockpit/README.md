@@ -44,8 +44,8 @@ cd domains/personnel && make app-personnel-cockpit  # API + static UI dev server
 | **Workforce** | KPIs, roster, status mix, job-family bars, age pyramid | Who works here? Who is on leave? Headcount by job family? |
 | **Hiring** | Open positions, filled vs vacant by title | What are we hiring for? Who fills “Data Engineer”? |
 | **Graph** | Person → process canvas | Which Birth Registration / Employment processes link to Jeremy? |
-| **Logs** | Births, kinship, trust | List birth registrations. Reconstruct Emma Petit’s lineage. |
 | **Processes** | BFO 7-buckets process docs | Explain BirthProcess. EmployeeRole vs JobPosition? |
+| **Logs** | Acts of working and studying | List working history. What did Hugo Girard work on? |
 
 ---
 
@@ -85,8 +85,8 @@ Browser paths use `url_slug`; datasets use `entity_id` (hyphens → underscores)
 |---|---|---|
 | `/demo/workforce` | `web/components/pages/workforce/` | `data/entities/demo/workforce/` |
 | `/demo/graph` | `web/components/pages/graph/` | `data/entities/demo/graph/` |
-| `/demo/logs` | `web/components/pages/logs/` | `data/entities/demo/logs/` |
 | `/demo/processes` | `web/components/pages/processes/` | `data/entities/demo/processes/` |
+| `/demo/logs` | `web/components/pages/logs/` | `data/entities/demo/logs/` |
 
 Page ids and dataset paths are joined in `data/entities/<id>/manifest.json`.
 
@@ -102,7 +102,7 @@ cockpit/
 ├── graph_payload.py     # Graph page JSON builder
 ├── web/                 # static UI (fetch /api/personnel-cockpit/…)
 │   ├── app/[entitySlug]/[pageId]/page.js
-│   ├── components/pages/{workforce,graph,logs,processes}/
+│   ├── components/pages/{workforce,graph,processes,logs}/
 │   ├── lib/{api,routes,pages,registry}.js
 │   ├── js/shell.js
 │   ├── index.html

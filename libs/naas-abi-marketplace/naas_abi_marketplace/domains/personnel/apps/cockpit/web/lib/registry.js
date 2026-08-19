@@ -2,6 +2,7 @@ import { PAGE_IDS } from "./pages.js";
 import { mountPage as mountWorkforcePage } from "../components/pages/workforce/WorkforcePage.js";
 import { mountPage as mountGraphPage } from "../components/pages/graph/GraphPage.js";
 import { mountPage as mountProcessesPage } from "../components/pages/processes/ProcessesPage.js";
+import { mountPage as mountLogsPage } from "../components/pages/logs/LogsPage.js";
 
 export { PAGE_IDS };
 
@@ -9,6 +10,7 @@ const PAGE_MOUNTS = {
   workforce: mountWorkforcePage,
   graph: mountGraphPage,
   processes: mountProcessesPage,
+  logs: mountLogsPage,
 };
 
 /**
