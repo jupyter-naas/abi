@@ -7,6 +7,7 @@ from pathlib import Path
 from naas_abi_marketplace.domains.personnel.apps.cockpit.config_loader import (
     load_default_entity,
 )
+from naas_abi_marketplace.domains.personnel.paths import DEMO_GRAPH_FILE
 
 COCKPIT_ROOT = Path(__file__).resolve().parent
 PERSONNEL_ROOT = Path(__file__).resolve().parents[2]
@@ -14,9 +15,9 @@ _DEFAULT_ENTITY = load_default_entity()
 DEFAULT_ENTITY_ID = _DEFAULT_ENTITY["entity_id"]
 DEFAULT_ENTITY_SLUG = _DEFAULT_ENTITY["url_slug"]
 WEB_ROOT = COCKPIT_ROOT / "web"
-DATA_ROOT = COCKPIT_ROOT / "data"
+DATA_ROOT = COCKPIT_ROOT / "data"  # committed structure reference; runtime data is in ObjectStorage
 ENTITY_DATA = DATA_ROOT / "entities" / DEFAULT_ENTITY_ID
-GRAPH_FILE = PERSONNEL_ROOT / "data" / "graph" / "personnel_demo.ttl"
+GRAPH_FILE = DEMO_GRAPH_FILE
 
 
 def entity_dir(entity_id: str) -> Path:

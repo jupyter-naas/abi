@@ -185,6 +185,7 @@ logs which source won via ``cockpit_data_source()``.
 | `find_employee_by_id` | Everything on one person, by employee id | `employee_id` |
 | `find_employees_by_status` | Who is on leave / serving notice? | `status_value`, `limit` |
 | `find_employees_by_organization` | Who works at which legal entity? | `organization_name`, `limit` |
+| `find_employee_roster` | Full roster with every status (dashboard / graph) | `limit` |
 | `find_open_job_positions` | What are we hiring for? | `limit` |
 | `find_positions_by_title` | Who fills the positions matching a title? | `job_title`, `limit` |
 | `find_headcount_by_job_family` | How is the org split across disciplines? | `limit` |

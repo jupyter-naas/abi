@@ -166,6 +166,44 @@ intentMapping:findEmployeesByOrganizationQuery a intentMapping:TemplatableSparql
     intentMapping:hasArgument intentMapping:personnelOrganizationNameArg ,
                               intentMapping:personnelLimitArg .
 
+intentMapping:findEmployeeRosterQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_employee_roster"@en ;
+    intentMapping:intentDescription "Return every person with an employment record together with their current job family, status, organization and employee role. Unlike find_active_employees, no status or termination filter is applied, so dashboards can show the full status mix." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+        PREFIX personnel: <http://ontology.naas.ai/personnel/>
+
+        SELECT DISTINCT ?personLabel ?employeeId ?jobTitle ?jobFamily ?hireDate ?statusValue ?organizationLabel ?role
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/personnel> {
+            ?person rdf:type abi:Person ;
+                    personnel:hasEmploymentRecord ?record .
+            ?record personnel:employee_id ?employeeId .
+            OPTIONAL { ?person rdfs:label ?personLabel . }
+            OPTIONAL { ?record personnel:hire_date ?hireDate . }
+            # job_family marks the person's current post, so this join picks out
+            # exactly one position even when they have held many.
+            ?person personnel:hasEmployeeRole ?role .
+            ?role personnel:hasJobPosition ?position .
+            ?position personnel:job_family ?jobFamily .
+            OPTIONAL { ?position personnel:job_title ?jobTitle . }
+            OPTIONAL {
+              ?person personnel:hasEmploymentStatus ?status .
+              ?status personnel:status_value ?statusValue .
+            }
+            OPTIONAL {
+              ?person personnel:isEmployedBy ?org .
+              ?org rdfs:label ?organizationLabel .
+            }
+          }
+        }
+        ORDER BY ?personLabel
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:personnelLimitArg .
+
 #-----------------------------------------------------------------
 # Position queries
 #-----------------------------------------------------------------
@@ -372,23 +410,35 @@ intentMapping:findActsOfStudyingQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX abi:  <http://ontology.naas.ai/abi/>
         PREFIX personnel: <http://ontology.naas.ai/personnel/>
 
-        SELECT DISTINCT ?person ?personLabel ?studying ?org ?orgLabel ?site ?siteLabel
-                        ?temporal ?temporalLabel ?temporalStart ?temporalEnd
+        SELECT DISTINCT ?person ?personLabel ?studying ?studyingLabel ?org ?orgLabel ?site ?siteLabel
+                        ?temporal ?temporalLabel ?temporalStart ?temporalEnd ?durationLabel
+                        ?firstInstant ?firstInstantLabel ?lastInstant ?lastInstantLabel
                         ?enrollment ?enrollmentLabel ?programName
                         ?role ?roleLabel
+                        ?degree ?degreeLabel
         WHERE {
           GRAPH <http://ontology.naas.ai/graph/personnel> {
             ?person rdf:type abi:Person ;
                     rdfs:label ?personLabel ;
                     personnel:hasActOfStudying ?studying .
             ?studying rdf:type personnel:ActOfStudying .
+            OPTIONAL { ?studying rdfs:label ?studyingLabel . }
             OPTIONAL { ?studying personnel:forEducationalOrganization ?org . ?org rdfs:label ?orgLabel . }
             OPTIONAL { ?studying abi:occursIn ?site . ?site rdfs:label ?siteLabel . }
             OPTIONAL {
               ?studying abi:occupiesTemporalRegion ?temporal .
               ?temporal rdfs:label ?temporalLabel .
-              OPTIONAL { ?temporal abi:hasFirstInstant / personnel:instant_date ?temporalStart . }
-              OPTIONAL { ?temporal abi:hasLastInstant  / personnel:instant_date ?temporalEnd . }
+              OPTIONAL { ?temporal personnel:duration_label ?durationLabel . }
+              OPTIONAL {
+                ?temporal abi:hasFirstInstant ?firstInstant .
+                ?firstInstant personnel:instant_date ?temporalStart .
+                OPTIONAL { ?firstInstant rdfs:label ?firstInstantLabel . }
+              }
+              OPTIONAL {
+                ?temporal abi:hasLastInstant ?lastInstant .
+                ?lastInstant personnel:instant_date ?temporalEnd .
+                OPTIONAL { ?lastInstant rdfs:label ?lastInstantLabel . }
+              }
             }
             OPTIONAL {
               ?studying personnel:hasEnrollment ?enrollment .
@@ -396,12 +446,16 @@ intentMapping:findActsOfStudyingQuery a intentMapping:TemplatableSparqlQuery ;
               OPTIONAL { ?enrollment personnel:program_name ?programName . }
             }
             OPTIONAL {
-              ?person personnel:hasStudentRole ?role .
+              ?studying abi:realizes ?role .
               OPTIONAL { ?role rdfs:label ?roleLabel . }
+            }
+            OPTIONAL {
+              ?studying personnel:hasDegree ?degree .
+              ?degree rdfs:label ?degreeLabel .
             }
           }
         }
-        ORDER BY ?personLabel
+        ORDER BY ?personLabel DESC(?temporalStart)
         LIMIT {{ limit }}
     """ ;
     intentMapping:hasArgument intentMapping:personnelLimitArg .

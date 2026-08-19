@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 """Run personnel SPARQL queries against the demo TTL and write app JSON.
 
-Reads ``data/graph/personnel_demo.ttl``, executes the competency
-queries from ``ontologies/queries/PersonnelSparqlQueries.ttl`` (GRAPH wrappers
-stripped for local rdflib), and writes directly to the committed cockpit tree::
+Reads ``graphs/demo/personnel.ttl``, executes competency queries, then:
 
-    apps/cockpit/data/entities/demo/<page>/  # page aggregates only
+1. Writes a **structure reference copy** under ``apps/cockpit/data/`` (committed).
+2. Publishes the **runtime datasets** to ObjectStorage at
+   ``personnel/apps/cockpit/data/`` (fs: ``.abi/storage/datastore/...``).
 
-Requires ``generate_demo_graph.py`` to have run first::
-
-    python sandbox/generate_demo_graph.py
-    python apps/cockpit/scripts/export_demo_apps_from_graph.py
+The dev server reads from ObjectStorage only. Regenerate with ``make demo-data``.
 """
 
 from __future__ import annotations
@@ -30,6 +27,10 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.config_loader import (
 from naas_abi_marketplace.domains.personnel.apps.cockpit.log_payload import (
     build_ledger_log_rows,
 )
+from naas_abi_marketplace.domains.personnel.apps.cockpit.data_store import (
+    publish_data_tree,
+    runtime_storage_prefix,
+)
 from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import (
     DATA_ROOT,
     DEFAULT_ENTITY_ID,
@@ -37,12 +38,12 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import (
     ENTITY_DATA,
     GRAPH_FILE,
 )
+from naas_abi_marketplace.domains.personnel.paths import PERSONNEL_ROOT
 from naas_abi_marketplace.domains.personnel.sandbox.workforce_metrics import (
     build_workforce_metrics,
 )
 from rdflib import Graph, Literal
 
-PERSONNEL_ROOT = Path(__file__).resolve().parents[3]
 QUERIES_TTL = (
     PERSONNEL_ROOT / "ontologies" / "queries" / "PersonnelSparqlQueries.ttl"
 )
@@ -144,7 +145,7 @@ def _run_select(graph: Graph, sparql: str) -> list[dict]:
 def main() -> None:
     if not GRAPH_FILE.exists():
         raise SystemExit(
-            f"Missing {GRAPH_FILE}. Run sandbox/generate_demo_graph.py first."
+            f"Missing {GRAPH_FILE}. Run make demo-graph first."
         )
 
     print(f"Loading {GRAPH_FILE.relative_to(PERSONNEL_ROOT)}…")
@@ -163,7 +164,9 @@ def main() -> None:
         "find_employees_by_organization": {"organization_name": ""},
         "find_positions_by_title": {"job_title": ""},
         "find_employee_by_id": {"employee_id": "E-10428"},
+        "find_employee_roster": {"limit": "500"},
         "find_working_processes": {"limit": "500"},
+        "find_skills_developed": {"limit": "500"},
         "find_acts_of_studying": {"limit": "500"},
     }
     for label, template in templates.items():
@@ -218,53 +221,19 @@ def main() -> None:
 
     # --- page datasets ------------------------------------------------------
     print(f"data/entities/{ENTITY_ID}/")
-    # Status mix needs every status, so the roster is re-queried unfiltered
-    # rather than reusing the status-filtered competency queries.
-    status_all_sparql = _strip_graph(
-        """
-        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX abi:  <http://ontology.naas.ai/abi/>
-        PREFIX personnel: <http://ontology.naas.ai/personnel/>
-        SELECT DISTINCT ?personLabel ?employeeId ?jobTitle ?jobFamily ?hireDate ?statusValue ?organizationLabel ?role
-        WHERE {
-          ?person rdf:type abi:Person ;
-                  personnel:hasEmploymentRecord ?record .
-          ?record personnel:employee_id ?employeeId .
-          OPTIONAL { ?person rdfs:label ?personLabel . }
-          OPTIONAL { ?record personnel:hire_date ?hireDate . }
-          # job_family marks the person's current post, so this join picks out
-          # exactly one position even when they have held many.
-          ?person personnel:hasEmployeeRole ?role .
-          ?role personnel:hasJobPosition ?position .
-          ?position personnel:job_family ?jobFamily .
-          OPTIONAL { ?position personnel:job_title ?jobTitle . }
-          OPTIONAL {
-            ?person personnel:hasEmploymentStatus ?status .
-            ?status personnel:status_value ?statusValue .
-          }
-          OPTIONAL {
-            ?person personnel:isEmployedBy ?org .
-            ?org rdfs:label ?organizationLabel .
-          }
+    roster_rows = [
+        {
+            "personLabel": row.get("personLabel"),
+            "employee_id": row.get("employee_id"),
+            "job_title": row.get("job_title"),
+            "job_family": row.get("jobFamily") or row.get("job_family"),
+            "role": row.get("role"),
+            "hire_date": row.get("hire_date"),
+            "status_value": row.get("status_value"),
+            "organizationLabel": row.get("organizationLabel"),
         }
-        ORDER BY ?personLabel
-        """
-    )
-    roster_rows = []
-    for row in _run_select(graph, status_all_sparql):
-        roster_rows.append(
-            {
-                "personLabel": row.get("personLabel"),
-                "employee_id": row.get("employeeId"),
-                "job_title": row.get("jobTitle"),
-                "job_family": row.get("jobFamily"),
-                "role": row.get("role"),
-                "hire_date": row.get("hireDate"),
-                "status_value": row.get("statusValue"),
-                "organizationLabel": row.get("organizationLabel"),
-            }
-        )
+        for row in source_rows.get("find_employee_roster", [])
+    ]
 
     family_by_person = {
         (r.get("personLabel") or ""): r.get("jobFamily") or r.get("job_family")
@@ -292,6 +261,7 @@ def main() -> None:
         roster_rows,
         source_rows.get("find_working_processes", []),
         source_rows.get("find_skills_developed", []),
+        source_rows.get("find_acts_of_studying", []),
     )
     _dump(
         ENTITY_DATA / "graph" / "index.json",
@@ -375,6 +345,11 @@ def main() -> None:
         },
     )
     print("done.")
+    published = publish_data_tree(DATA_ROOT)
+    print(
+        f"  published {len(published)} files to object storage "
+        f"({runtime_storage_prefix()}/)"
+    )
 
 
 if __name__ == "__main__":

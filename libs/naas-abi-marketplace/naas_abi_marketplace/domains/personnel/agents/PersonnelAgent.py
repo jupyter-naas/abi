@@ -96,6 +96,7 @@ Help the user accomplish their human resources tasks using the tools available t
             "find_employee_by_id",
             "find_employees_by_status",
             "find_employees_by_organization",
+            "find_employee_roster",
             "find_open_job_positions",
             "find_positions_by_title",
             "find_headcount_by_job_family",
@@ -106,9 +107,39 @@ Help the user accomplish their human resources tasks using the tools available t
         return list(templatable_sparql_query_module.get_tools(personnel_sparql_tools))
 
     @classmethod
+    def get_pipeline_tools(cls) -> list:
+        """Process registration tools (Act of Working, Act of Studying)."""
+        from rdflib import URIRef
+
+        from naas_abi_marketplace.domains.personnel import ABIModule
+        from naas_abi_marketplace.domains.personnel.pipelines.ActOfStudyingPipeline import (
+            ActOfStudyingPipeline,
+            ActOfStudyingPipelineConfiguration,
+        )
+        from naas_abi_marketplace.domains.personnel.pipelines.ActOfWorkingPipeline import (
+            ActOfWorkingPipeline,
+            ActOfWorkingPipelineConfiguration,
+        )
+
+        module = ABIModule.get_instance()
+        triple_store = module.engine.services.triple_store
+        graph_name = URIRef(module.configuration.graph_name)
+        working = ActOfWorkingPipeline(
+            ActOfWorkingPipelineConfiguration(
+                triple_store=triple_store, graph_name=graph_name, persist=True
+            )
+        )
+        studying = ActOfStudyingPipeline(
+            ActOfStudyingPipelineConfiguration(
+                triple_store=triple_store, graph_name=graph_name, persist=True
+            )
+        )
+        return [*working.as_tools(), *studying.as_tools()]
+
+    @classmethod
     def get_tools(cls) -> list:
-        """SPARQL query tools."""
-        return list(cls.get_sparql_tools())
+        """SPARQL query tools and process registration pipelines."""
+        return list(cls.get_sparql_tools()) + list(cls.get_pipeline_tools())
 
     @classmethod
     def New(

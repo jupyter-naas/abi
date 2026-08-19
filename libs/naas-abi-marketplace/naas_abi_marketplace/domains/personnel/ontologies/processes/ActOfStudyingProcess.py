@@ -325,8 +325,10 @@ class ActOfStudying(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "develops_skill": "http://ontology.naas.ai/personnel/developsSkill",
         "for_educational_organization": "http://ontology.naas.ai/personnel/forEducationalOrganization",
         "hasParticipant": "http://ontology.naas.ai/abi/hasParticipant",
+        "has_degree": "http://ontology.naas.ai/personnel/hasDegree",
         "has_enrollment": "http://ontology.naas.ai/personnel/hasEnrollment",
         "is_act_of_studying_of": "http://ontology.naas.ai/personnel/isActOfStudyingOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
@@ -335,8 +337,10 @@ class ActOfStudying(RDFEntity):
         "realizes": "http://ontology.naas.ai/abi/realizes",
     }
     _object_properties: ClassVar[set[str]] = {
+        "develops_skill",
         "for_educational_organization",
         "hasParticipant",
+        "has_degree",
         "has_enrollment",
         "is_act_of_studying_of",
         "occupiesTemporalRegion",
@@ -372,6 +376,22 @@ class ActOfStudying(RDFEntity):
             Union[URIRef, str],
             Field(
                 description="Relates an act of studying to the enrollment record it concretizes."
+            ),
+        ]
+    ] = None
+    has_degree: Optional[
+        Annotated[
+            Union[URIRef, str],
+            Field(
+                description="Relates an act of studying to the academic degree it concretizes."
+            ),
+        ]
+    ] = None
+    develops_skill: Optional[
+        Annotated[
+            List[Union[URIRef, str]],
+            Field(
+                description="Relates an act of studying to a skill exercised and developed in the course of it."
             ),
         ]
     ] = None

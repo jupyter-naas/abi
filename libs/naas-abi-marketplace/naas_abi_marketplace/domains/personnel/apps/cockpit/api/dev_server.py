@@ -17,6 +17,10 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.config_loader import (
     public_config,
     public_page_urls,
 )
+from naas_abi_marketplace.domains.personnel.apps.cockpit.data_store import (
+    runtime_storage_prefix,
+    storage_has_datasets,
+)
 from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import WEB_ROOT
 
 
@@ -55,6 +59,11 @@ def _is_spa_path(path: str) -> bool:
 
 
 def create_app() -> FastAPI:
+    if not storage_has_datasets():
+        raise SystemExit(
+            f"No cockpit datasets in ObjectStorage ({runtime_storage_prefix()}/). "
+            "Run: cd domains/personnel && make demo-data"
+        )
     app = FastAPI(title=public_config()["brand"]["name"])
     app.include_router(router, prefix="/api/personnel-cockpit")
     app.mount("/", SPAStaticFiles(directory=WEB_ROOT, html=True), name="web")

@@ -168,7 +168,11 @@ function applyGraphView(view) {
 function workerLabel(record) {
   const props = record?.properties || [];
   const worker = props.find(
-    (p) => p.uri === "personnel:isActOfWorkingOf" || p.label === "worker"
+    (p) =>
+      p.uri === "personnel:isActOfWorkingOf" ||
+      p.uri === "personnel:isActOfStudyingOf" ||
+      p.label === "worker" ||
+      p.label === "student"
   );
   return worker?.value || "";
 }

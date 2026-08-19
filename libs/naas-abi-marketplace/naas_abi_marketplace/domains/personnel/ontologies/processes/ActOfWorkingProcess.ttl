@@ -86,7 +86,7 @@ personnel:ProfileDocument a owl:Class ;
 personnel:Skill a owl:Class ;
   rdfs:subClassOf abi:Quality ,
     [ a owl:Restriction ; owl:onProperty abi:inheresIn ; owl:someValuesFrom abi:Person ] ,
-    [ a owl:Restriction ; owl:onProperty personnel:isSkillDevelopedIn ; owl:someValuesFrom personnel:ActOfWorking ] ;
+    [ a owl:Restriction ; owl:onProperty personnel:isSkillDevelopedIn ; owl:someValuesFrom [ a owl:Class ; owl:unionOf ( personnel:ActOfWorking personnel:ActOfStudying ) ] ] ;
   rdfs:label "Skill"@en ;
   skos:definition "A quality that inheres in a person, consisting in a learned capacity to perform a kind of task, developed and exercised in the acts of working the person carries out."@en ;
   skos:example "Python (Programming Language); Business Analysis; SAP BFC."@en ;
@@ -148,16 +148,16 @@ personnel:isContractOf a owl:ObjectProperty ;
 personnel:developsSkill a owl:ObjectProperty ;
   owl:inverseOf personnel:isSkillDevelopedIn ;
   rdfs:label "develops skill"@en ;
-  skos:definition "Relates an act of working to a skill exercised and developed in the course of it."@en ;
-  rdfs:domain personnel:ActOfWorking ;
+  skos:definition "Relates an act of working or studying to a skill exercised and developed in the course of it."@en ;
+  rdfs:domain [ a owl:Class ; owl:unionOf ( personnel:ActOfWorking personnel:ActOfStudying ) ] ;
   rdfs:range  personnel:Skill .
 
 personnel:isSkillDevelopedIn a owl:ObjectProperty ;
   owl:inverseOf personnel:developsSkill ;
   rdfs:label "is skill developed in"@en ;
-  skos:definition "Relates a skill to an act of working in which it is exercised and developed."@en ;
+  skos:definition "Relates a skill to an act of working or studying in which it is exercised and developed."@en ;
   rdfs:domain personnel:Skill ;
-  rdfs:range  personnel:ActOfWorking .
+  rdfs:range  [ a owl:Class ; owl:unionOf ( personnel:ActOfWorking personnel:ActOfStudying ) ] .
 
 # WHO ↔ HOW IT IS - the person bears the skill
 personnel:hasSkill a owl:ObjectProperty ;

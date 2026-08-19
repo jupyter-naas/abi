@@ -43,7 +43,7 @@ class ABIModule(BaseModule):
     # Override this method to implement any post-initialization logic your module requires.
     def on_initialized(self):
         super().on_initialized()
-        # Resolve cockpit data source: ObjectStorage → TripleStore → data/.
+        # Resolve cockpit data source: ObjectStorage (required) or TripleStore hint.
         try:
             from naas_abi_marketplace.domains.personnel.sandbox.demo_fallback import (
                 resolve_apps_data_root,
@@ -58,12 +58,12 @@ class ABIModule(BaseModule):
             self._cockpit_data_source = source
             self._cockpit_data_root = root
         except Exception:
-            self._cockpit_data_source = "web_data"
+            self._cockpit_data_source = "missing"
             self._cockpit_data_root = None
 
     def cockpit_data_source(self) -> str:
-        """``object_storage`` | ``triple_store`` | ``web_data``."""
-        return getattr(self, "_cockpit_data_source", "web_data")
+        """``object_storage`` | ``triple_store`` | ``missing``."""
+        return getattr(self, "_cockpit_data_source", "missing")
 
     def api(self, app: FastAPI) -> None:
         from naas_abi_marketplace.domains.personnel.apps.cockpit.api.routes import router

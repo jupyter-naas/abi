@@ -1,23 +1,23 @@
-"""Build Graph page payload (people + act-of-working instances) for the cockpit UI.
+"""Build Graph page payload (people + act-of-working/studying instances) for the cockpit UI.
 
 The canvas is explored breadth-first from the focused person, so which edges are
 drawn decides what appears at each distance:
 
-    distance 1  the acts of working, and everything hanging directly off the
-                person - the missions and profile document they carry, the
-                employee roles and skills they bear
+    distance 1  the acts of working and studying, and everything hanging directly
+                off the person - the missions and profile document they carry,
+                the employee/student roles and skills they bear
     distance 2  what those acts reach - organization, site, temporal region,
-                employment contract
+                employment contract or enrollment record
     distance 3  the temporal instants bounding each temporal region
 
-``personnel:hasWorkLocation`` (person → site) is emitted with ``canvas=False``:
-it belongs in the data, but drawing it would pull Site up to distance 1 and
-collapse the layering above.
+``personnel:hasWorkLocation`` / ``personnel:hasStudyLocation`` (person → site)
+are emitted with ``canvas=False``: they belong in the data, but drawing them would
+pull Site up to distance 1 and collapse the layering above.
 """
 
 from __future__ import annotations
 
-from naas_abi_marketplace.domains.personnel.individual_uri import compact_personnel
+from naas_abi_marketplace.domains.personnel.utils.individual_uri import compact_personnel
 
 PERSONNEL_NS = "http://ontology.naas.ai/personnel/"
 ABI_NS = "http://ontology.naas.ai/abi/"
@@ -78,6 +78,7 @@ def build_graph_page_payload(
     roster_rows: list[dict],
     working_rows: list[dict] | None = None,
     skill_rows: list[dict] | None = None,
+    studying_rows: list[dict] | None = None,
 ) -> dict:
     """Return people, entities and relations for ``graph/index.json``."""
     people_map: dict[str, dict] = {}
@@ -504,6 +505,235 @@ def build_graph_page_payload(
                 )
             )
             add_rel(working_id, rem_id, "abi:hasParticipant", "has remuneration")
+
+    seen_studyings: set[str] = set()
+
+    for study in studying_rows or []:
+        subject = study.get("personLabel")
+        if not subject:
+            continue
+        ensure_person(subject, kind="employee")
+
+        studying_id = compact_graph_id(study.get("studying"))
+        if not studying_id or studying_id in seen_studyings:
+            continue
+        seen_studyings.add(studying_id)
+
+        org_label = study.get("orgLabel")
+        program = study.get("programName") or study.get("roleLabel") or "Act of Studying"
+
+        add_entity(
+            _entity_node(
+                studying_id,
+                label=study.get("studyingLabel") or f"{program} @ {org_label}",
+                class_uri="personnel:ActOfStudying",
+                class_label="Act of Studying",
+                bfo_bucket="Process",
+                started_at=study.get("temporalStart"),
+                ended_at=study.get("temporalEnd"),
+                properties=[
+                    p
+                    for p in (
+                        _prop("personnel:isActOfStudyingOf", "student", subject),
+                        _prop(
+                            "personnel:forEducationalOrganization",
+                            "organization",
+                            org_label,
+                        ),
+                        _prop("personnel:program_name", "program", study.get("programName")),
+                        _prop("abi:hasFirstInstant", "start", study.get("temporalStart")),
+                        _prop("abi:hasLastInstant", "end", study.get("temporalEnd")),
+                        _prop(
+                            "personnel:duration_label",
+                            "duration",
+                            study.get("durationLabel"),
+                        ),
+                    )
+                    if p
+                ],
+            )
+        )
+        add_rel(subject, studying_id, "personnel:hasActOfStudying", "has act of studying")
+
+        org_id = compact_graph_id(study.get("org"))
+        if org_id and org_label:
+            add_entity(
+                _entity_node(
+                    org_id,
+                    label=org_label,
+                    class_uri="abi:Organization",
+                    class_label="Organization",
+                    bfo_bucket="Material Entity",
+                )
+            )
+            add_rel(
+                studying_id,
+                org_id,
+                "personnel:forEducationalOrganization",
+                "for educational organization",
+            )
+
+        site_id = compact_graph_id(study.get("site"))
+        site_label = study.get("siteLabel")
+        if site_id and site_label:
+            add_entity(
+                _entity_node(
+                    site_id,
+                    label=site_label,
+                    class_uri="abi:Site",
+                    class_label="Site",
+                    bfo_bucket="Site",
+                )
+            )
+            add_rel(studying_id, site_id, "abi:occursIn", "occurs in")
+            add_rel(
+                subject,
+                site_id,
+                "personnel:hasStudyLocation",
+                "has study location",
+                canvas=False,
+            )
+
+        temporal_id = compact_graph_id(study.get("temporal"))
+        if temporal_id and study.get("temporalLabel"):
+            add_entity(
+                _entity_node(
+                    temporal_id,
+                    label=study["temporalLabel"],
+                    class_uri="abi:TemporalRegion",
+                    class_label="Temporal Region",
+                    bfo_bucket="Temporal Region",
+                    started_at=study.get("temporalStart"),
+                    ended_at=study.get("temporalEnd"),
+                    properties=[
+                        p
+                        for p in (
+                            _prop(
+                                "personnel:duration_label",
+                                "duration",
+                                study.get("durationLabel"),
+                            ),
+                        )
+                        if p
+                    ],
+                )
+            )
+            add_rel(
+                studying_id,
+                temporal_id,
+                "abi:occupiesTemporalRegion",
+                "occupies temporal region",
+            )
+
+            for uri_key, label_key, date_key, predicate, predicate_label in (
+                (
+                    "firstInstant",
+                    "firstInstantLabel",
+                    "temporalStart",
+                    "abi:hasFirstInstant",
+                    "has first instant",
+                ),
+                (
+                    "lastInstant",
+                    "lastInstantLabel",
+                    "temporalEnd",
+                    "abi:hasLastInstant",
+                    "has last instant",
+                ),
+            ):
+                instant_id = compact_graph_id(study.get(uri_key))
+                if not instant_id:
+                    continue
+                add_entity(
+                    _entity_node(
+                        instant_id,
+                        label=study.get(label_key) or study.get(date_key) or "instant",
+                        class_uri="abi:TemporalInstant",
+                        class_label="Temporal Instant",
+                        bfo_bucket="Temporal Region",
+                        started_at=study.get(date_key),
+                        ended_at=study.get(date_key),
+                        properties=[
+                            p
+                            for p in (
+                                _prop(
+                                    "personnel:instant_date",
+                                    "instant date",
+                                    study.get(date_key),
+                                ),
+                            )
+                            if p
+                        ],
+                    )
+                )
+                add_rel(temporal_id, instant_id, predicate, predicate_label)
+
+        enrollment_id = compact_graph_id(study.get("enrollment"))
+        if enrollment_id and study.get("enrollmentLabel"):
+            add_entity(
+                _entity_node(
+                    enrollment_id,
+                    label=study.get("programName") or study["enrollmentLabel"],
+                    class_uri="personnel:EnrollmentRecord",
+                    class_label="Enrollment Record",
+                    bfo_bucket="GDC",
+                    properties=[
+                        p
+                        for p in (
+                            _prop(
+                                "personnel:program_name",
+                                "program",
+                                study.get("programName"),
+                            ),
+                        )
+                        if p
+                    ],
+                )
+            )
+            add_rel(studying_id, enrollment_id, "personnel:hasEnrollment", "has enrollment")
+
+        role_id = compact_graph_id(study.get("role"))
+        if role_id and study.get("roleLabel"):
+            add_entity(
+                _entity_node(
+                    role_id,
+                    label=study["roleLabel"],
+                    class_uri="personnel:StudentRole",
+                    class_label="Student Role",
+                    bfo_bucket="Realizable",
+                    properties=[
+                        p
+                        for p in (
+                            _prop(
+                                "personnel:program_name",
+                                "program",
+                                study.get("programName"),
+                            ),
+                            _prop(
+                                "personnel:forEducationalOrganization",
+                                "organization",
+                                org_label,
+                            ),
+                        )
+                        if p
+                    ],
+                )
+            )
+            add_rel(studying_id, role_id, "abi:realizes", "realizes")
+            add_rel(subject, role_id, "personnel:hasStudentRole", "has student role")
+
+        degree_id = compact_graph_id(study.get("degree"))
+        if degree_id and study.get("degreeLabel"):
+            add_entity(
+                _entity_node(
+                    degree_id,
+                    label=study["degreeLabel"],
+                    class_uri="personnel:AcademicDegree",
+                    class_label="Academic Degree",
+                    bfo_bucket="GDC",
+                )
+            )
+            add_rel(studying_id, degree_id, "personnel:hasDegree", "has degree")
 
     # --- HOW IT IS: skills, one node per person and skill ------------------
     # A skill exercised in several jobs is a single node several acts point at,

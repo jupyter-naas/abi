@@ -7,6 +7,7 @@ import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 
+from naas_abi_marketplace.domains.personnel.paths import DEMO_SOURCE_DIR, PERSONNEL_ROOT
 from naas_abi_marketplace.domains.personnel.sandbox.linkedin_experience import (
     EDUCATION,
     EMPLOYEES,
@@ -16,7 +17,7 @@ from naas_abi_marketplace.domains.personnel.sandbox.linkedin_experience import (
 )
 
 COCKPIT_ROOT = Path(__file__).resolve().parents[1]
-SOURCE_DIR = COCKPIT_ROOT / "data" / "source" / "person"
+SOURCE_DIR = DEMO_SOURCE_DIR
 
 
 def _person_slug(first: str, last: str) -> str:
@@ -110,7 +111,6 @@ def build_person_payload(first: str, last: str) -> dict:
             "full_name": full_name,
             "linkedin_profile_url": profile_url,
         },
-        "employment": roster,
         "records": records,
     }
 
@@ -140,7 +140,7 @@ def main() -> None:
         )
         written.append(f"{slug}/index.json ({len(payload['records'])} processes)")
 
-    print(f"Wrote {len(written)} folders under {SOURCE_DIR.relative_to(COCKPIT_ROOT)}/")
+    print(f"Wrote {len(written)} folders under {SOURCE_DIR.relative_to(PERSONNEL_ROOT)}/")
     for line in written:
         print(f"  {line}")
 
