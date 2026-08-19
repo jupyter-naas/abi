@@ -1,0 +1,137 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-08-19 08:36",
+  "person": {
+    "first_name": "Anthony",
+    "last_name": "Chevallier",
+    "full_name": "Claire Bernard",
+    "linkedin_profile_url": "https://demo.example/profiles/demo"
+  },
+  "employment": {
+    "employee_id": "E-10431",
+    "job_title": "Lead Developer Frontend",
+    "job_family": "Engineering",
+    "hire_date": "2024-02-01",
+    "termination_date": "2026-03-31",
+    "status": "terminated",
+    "remuneration_amount": 72000,
+    "remuneration_currency": "EUR"
+  },
+  "records": [
+    {
+      "process_type": "ActOfWorking",
+      "source": "https://demo.example/profiles/demo",
+      "organization": "Goodweek",
+      "title": "Ingénieur logiciel senior",
+      "contract_type": "Permanent",
+      "site": "Remote",
+      "start": "2026-04-01",
+      "end": null,
+      "duration": "5 mos",
+      "mission_label": "Senior software engineering role at Goodweek.",
+      "mission": "Senior software engineering role at Goodweek.",
+      "skills": []
+    },
+    {
+      "process_type": "ActOfWorking",
+      "source": "https://demo.example/profiles/demo",
+      "organization": "GoSpot.me",
+      "title": "Software Developer",
+      "contract_type": "Freelance",
+      "site": "Remote",
+      "start": "2024-03-01",
+      "end": "2024-05-31",
+      "duration": "3 mos",
+      "mission_label": "GoSpot.me est une agence immobilière parisienne qui propose un service en ligne de recherche de biens grâce à un système de matching.",
+      "mission": "GoSpot.me est une agence immobilière parisienne qui propose un service en ligne de recherche de biens grâce à un système de matching avec les biens gérés par l'agence.\nGrâce à un produit low-code, l'agence permet à ses clients de définir une recherche précise et d'obtenir des notifications quand un bien correspondant est matché.\nMissions :\n- Créer l'algorithme de matching\n- Créer le système de notification",
+      "skills": [
+        "JavaScript",
+        "Airtable"
+      ]
+    },
+    {
+      "process_type": "ActOfWorking",
+      "source": "https://demo.example/profiles/demo",
+      "organization": "naas.ai",
+      "title": "Lead Developer Frontend",
+      "contract_type": "Freelance",
+      "site": "Remote",
+      "start": "2024-02-01",
+      "end": "2026-03-31",
+      "duration": "2 yrs 2 mos",
+      "mission_label": "Naas.ai construit une plateforme universelle ouverte mêlant données et IA.",
+      "mission": "Naas.ai construit une plateforme universelle ouverte mêlant données et IA. L'objectif est d'aider n'importe quelle organisation à créer son propre écosystème d'assistants IA, en s'appuyant sur des ontologies comme terrain unificateur entre données, modèles, workflows, analytics et systèmes externes.\nMissions :\n- Réécrire des parties cruciales de l'application pour passer du POC à la prod\n- Aider l'équipe à appliquer et définir les best practices et les guidelines de l'application\n- Concevoir et développer des interfaces utilisateurs lisibles et efficaces.\n- Refondre l'application en Web App orientée ontologies et événements.\nStack : React, TypeScript, Ontologies, Graph architecture, AI workflows, Node.js, Python",
+      "skills": [
+        "Design d'interface utilisateur",
+        "TypeScript"
+      ],
+      "remuneration_amount": 72000,
+      "remuneration_currency": "EUR"
+    },
+    {
+      "process_type": "ActOfWorking",
+      "source": "https://demo.example/profiles/demo",
+      "organization": "MyNotary - Lajuristech",
+      "title": "Fullstack Web Developer",
+      "contract_type": "Permanent",
+      "site": "Lyon, Auvergne-Rhône-Alpes, France",
+      "start": "2017-07-01",
+      "end": "2023-11-30",
+      "duration": "6 yrs 5 mos",
+      "mission_label": "MyNotary est une plateforme de mise en relation entre les différents participants opérant lors d'une vente d'un bien immobilier.",
+      "mission": "MyNotary est une plateforme de mise en relation entre les différents participants opérant lors d'une vente d'un bien immobilier. Elle permet la fluidification des échanges entre les parties, une rédaction collaborative et la signature électronique de contrats sécurisant pour les clients.\nMissions :\n- Piloter la migration progressive de l'app AngularJs vers ReactJs\n- Concevoir et développer de nouvelles fonctionnalités métier tout en assurant maintenance, support et déploiements\n- Refondre l'API Java vers NodeJs/NestJS pour homogénéiser les stacks et accélérer la livraison\n- Industrialiser la qualité : mise en place de tests unitaires/E2E (Jest, Playwright), guidelines UI/UX et design system\n- Collaborer avec les équipes produit et juridiques pour traduire les besoins réglementaires en parcours digitaux",
+      "skills": [
+        "Design d'interface utilisateur",
+        "TypeScript"
+      ]
+    },
+    {
+      "process_type": "ActOfWorking",
+      "source": "https://demo.example/profiles/demo",
+      "organization": "MyNotary - Lajuristech",
+      "title": "Fullstack Mobile Developer",
+      "contract_type": "Permanent",
+      "site": "Lyon, Auvergne-Rhône-Alpes, France",
+      "start": "2017-07-01",
+      "end": "2019-08-31",
+      "duration": "2 yrs 2 mos",
+      "mission_label": "Développement d'applications mobiles Android et iOS pour la plateforme MyNotary.",
+      "mission": "Dans la continuité de la plateforme MyNotary, l'objectif était de rendre l'expérience plus accessible au plus grand nombre. Le développement d'applications mobiles Android et iOS devenait essentiel pour fluidifier les interactions entre utilisateurs, simplifier les parcours et permettre un usage plus naturel lors des échanges, signatures et consultations de documents.\nMissions :\n- Concevoir et structurer les applications mobiles Android/iOS pour rendre accessibles les fonctionnalités clés de la plateforme.\n- Créer des interfaces utilisateur intuitives et esthétiques en collaboration avec l'équipe design, basées sur les retours clients et l'analyse des usages.\n- Développer des applications mobiles performantes en appliquant les bonnes pratiques techniques et une architecture inspirée de la Clean Architecture pour assurer scalabilité et maintenabilité.\n- Organiser des sessions d'échange avec les utilisateurs afin d'identifier les besoins, prioriser les améliorations et ajuster les parcours en continu.\n- Mettre en place des outils analytiques avancés afin de comprendre les comportements utilisateurs et guider les décisions produit.\n- Contribuer à l'amélioration stratégique de l'expérience mobile globale en intégrant des retours terrain et en optimisant les parcours existants.",
+      "skills": [
+        "Design d'interface utilisateur",
+        "Swift"
+      ]
+    },
+    {
+      "process_type": "ActOfWorking",
+      "source": "https://demo.example/profiles/demo",
+      "organization": "WeeSurf",
+      "title": "Développeur Android",
+      "contract_type": "Internship",
+      "site": "Ville de Paris",
+      "start": "2016-04-01",
+      "end": "2016-09-30",
+      "duration": "6 mos",
+      "mission_label": "Weesurf est une application mobile communautaire dédiée au surf.",
+      "mission": "Weesurf est une application mobile communautaire dédiée au surf permettant de découvrir et partager des spots, équipements et bons plans. La plateforme s'appuie sur une carte interactive recensant plusieurs milliers de points d'intérêt liés à l'univers du surf et propose des fonctionnalités sociales (profils, abonnements, partage de contenus).\nMissions :\n- Concevoir et développer l'application Android native from scratch, en s'appuyant sur l'application iOS existante comme référence fonctionnelle\n- Définir l'architecture technique de l'application et assurer l'intégration avec l'API backend Ruby on Rails\n- Implémenter une carte interactive à grande échelle (≈3000 points d'intérêt) avec clustering et optimisation du rendu en fonction du viewport pour garantir de bonnes performances\n- Développer les fonctionnalités sociales de la plateforme : profils utilisateurs, système de suivi (follow) et partage de contenus\n- Gérer le processus de build et de déploiement Android jusqu'à la mise en production\n- Accompagner et former un second développeur sur la stack et les bonnes pratiques Android",
+      "skills": []
+    },
+    {
+      "process_type": "ActOfWorking",
+      "source": "https://demo.example/profiles/demo",
+      "organization": "Petit Comptoir Français",
+      "title": "Développeur web",
+      "contract_type": "Internship",
+      "site": "Remote",
+      "start": "2014-07-01",
+      "end": "2014-12-31",
+      "duration": "6 mos",
+      "mission_label": "Petit Comptoir Français est un service d'abonnement gastronomique mettant en avant les spécialités régionales françaises.",
+      "mission": "Petit Comptoir Français est un service d'abonnement gastronomique mettant en avant les spécialités régionales françaises à travers des coffrets mensuels, un site e-commerce et des contenus éditoriaux autour de l'œnotourisme et de la culture culinaire.\nMissions :\n- Reprendre et internaliser la gestion d'un site e-commerce PrestaShop initialement maintenu par une agence externe\n- Migrer la plateforme vers un hébergement dédié afin d'améliorer la maîtrise technique, les performances et la fiabilité du service\n- Développer des modules PrestaShop en PHP pour répondre aux besoins métier spécifiques de la plateforme d'abonnement\n- Concevoir et intégrer des thèmes et personnalisations front-end (HTML, CSS, JavaScript) pour adapter l'expérience utilisateur\n- Automatiser certaines tâches d'exploitation et de déploiement via scripts Bash",
+      "skills": [
+        "PrestaShop",
+        "PHP"
+      ]
+    }
+  ]
+}

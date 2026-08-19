@@ -8,7 +8,7 @@ ABI_ROOT := $(shell d="$(MODULE_DIR)"; while [ "$$d" != / ]; do \
 PYTHON := uv run --directory "$(ABI_ROOT)" python
 COCKPIT_API := apps/cockpit/api/dev_server.py
 
-.PHONY: help demo-graph demo-data demo app-personnel-cockpit
+.PHONY: help demo-graph demo-source demo-data demo app-personnel-cockpit
 
 help:  ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -17,7 +17,10 @@ help:  ## list targets
 demo-graph:  ## build data/graph/personnel_demo.ttl from ontology classes
 	$(PYTHON) "$(MODULE_DIR)/scripts/generate_demo_graph.py"
 
-demo-data: demo-graph  ## SPARQL the demo TTL → apps/cockpit/data
+demo-source:  ## export apps/cockpit/data/source/person/<slug>/index.json
+	$(PYTHON) "$(MODULE_DIR)/scripts/export_source_person_files.py"
+
+demo-data: demo-graph demo-source  ## SPARQL the demo TTL → apps/cockpit/data
 	$(PYTHON) "$(MODULE_DIR)/scripts/export_demo_apps_from_graph.py"
 
 demo: demo-data  ## full demo pipeline

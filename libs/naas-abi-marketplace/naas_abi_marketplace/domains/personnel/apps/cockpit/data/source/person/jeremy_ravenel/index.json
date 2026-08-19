@@ -1,0 +1,184 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-08-19 08:36",
+  "person": {
+    "first_name": "Jeremy",
+    "last_name": "Ravenel",
+    "full_name": "Emma Petit",
+    "linkedin_profile_url": "https://demo.example/profiles/emma-petit"
+  },
+  "employment": {
+    "employee_id": "E-10428",
+    "job_title": "Founder & CEO",
+    "job_family": "Executive",
+    "hire_date": "2018-03-01",
+    "termination_date": null,
+    "status": "active",
+    "remuneration_amount": 120000,
+    "remuneration_currency": "EUR"
+  },
+  "records": [
+    {
+      "process_type": "ActOfWorking",
+      "source": "https://demo.example/profiles/emma-petit",
+      "organization": "Forvis Mazars Group",
+      "title": "Senior Advisor, Data & AI Services",
+      "contract_type": "Permanent Part-time",
+      "site": "Remote",
+      "start": "2024-11-01",
+      "end": null,
+      "duration": "1 yr 10 mos",
+      "mission_label": "Advising on projects from strategy to execution for Data & AI Products",
+      "mission": "Advising on projects from strategy to execution for Data & AI Products\n- Focusing on creating profitable, auditable, and trustworthy AI solutions for clients\n- Providing expert guidance on integrating data and AI technologies into business processes\n- Assisting in developing strategies for AI adoption and implementation across various industries\n- Collaborating with cross-functional teams to ensure successful delivery of data and AI initiatives",
+      "skills": [
+        "AI Strategy",
+        "Business Intelligence (BI)"
+      ]
+    },
+    {
+      "process_type": "ActOfWorking",
+      "source": "https://demo.example/profiles/emma-petit",
+      "organization": "University at Buffalo",
+      "title": "Research Associate in Applied Ontology, Department of Philosophy",
+      "contract_type": "Permanent Part-time",
+      "site": "Buffalo, NY",
+      "start": "2024-11-01",
+      "end": null,
+      "duration": "1 yr 10 mos",
+      "mission_label": "Conducting research on how executable ontologies can serve as a universal method for AI assistants/agents alignment, explainability, and compliance",
+      "mission": "Conducting research on how executable ontologies can serve as a universal method for AI assistants/agents alignment, explainability, and compliance\n- Exploring the intersection of philosophy, technology, and business in the context of AI systems\n- Contributing to academic publications and presentations in the field of applied ontology and AI\n- Collaborating with interdisciplinary teams to advance the understanding and application of ontologies in AI",
+      "skills": [
+        "Applied Ontology",
+        "Explainable AI (XAI)"
+      ]
+    },
+    {
+      "process_type": "ActOfWorking",
+      "source": "https://demo.example/profiles/emma-petit",
+      "organization": "naas.ai",
+      "title": "Founder & CEO",
+      "contract_type": "Permanent",
+      "site": "World",
+      "start": "2023-04-01",
+      "end": null,
+      "duration": "3 yrs 5 mos",
+      "mission_label": "Leading the development of an open Universal Data & AI Platform to help organizations create powerful ecosystems of AI assistants",
+      "mission": "Leading the development of an open Universal Data & AI Platform to help organizations create powerful ecosystems of AI assistants\n- Leveraging ontologies as a unifying field between data, AI models, workflows, analytics, and external systems\n- Driving innovation in making data and AI accessible and affordable for organizations of all sizes\n- Overseeing product development, business strategy, partnerships and team management",
+      "skills": [
+        "Strategic Thinking",
+        "Data Engineering"
+      ],
+      "remuneration_amount": 120000,
+      "remuneration_currency": "EUR"
+    },
+    {
+      "process_type": "ActOfWorking",
+      "source": "https://demo.example/profiles/emma-petit",
+      "organization": "CashStory",
+      "title": "Founder",
+      "contract_type": null,
+      "site": "Paris",
+      "start": "2016-11-01",
+      "end": "2023-04-30",
+      "duration": "6 yrs 6 mos",
+      "mission_label": "Automation services company for business professionals.",
+      "mission": "Automation services company for business professionals.\n- Developed a framework to help professionals approach data, automation & AI through Education and Open source products.\n- Trained business professionals on how to take back control over their data and build an infinite solution maker mindset.\n- Strived to build a better way to see financial & extra-financial information for wiser decision making, taking into consideration environmental issues & well being as much as cash, profit and value.",
+      "skills": [
+        "Strategic Thinking",
+        "Data Engineering"
+      ]
+    },
+    {
+      "process_type": "ActOfWorking",
+      "source": "https://demo.example/profiles/emma-petit",
+      "organization": "Technip",
+      "title": "Group Cash Manager",
+      "contract_type": null,
+      "site": "Paris",
+      "start": "2013-04-01",
+      "end": "2016-10-31",
+      "duration": "3 yrs 7 mos",
+      "mission_label": "Group Treasury Cash Management at Technip Corporate Services, Porte Maillot, Paris.",
+      "mission": "Technip, Paris, France (World leader in project management and engineering in the energy industry | Listed on NYSE EURONEXT CAC 40)\nCorporate Cash Manager, Group Treasury Department, April 2013 – October 2016\nGroup Treasury Cash Management\n• Perform daily treasury management and driving global liquidity initiatives\n• Monitor Cash flows (by nature and by projects), Debt and Working Capital Requirement actuals and forecasts.\n• Drive implementation of new structures to maximize cash available at HQ and minimize operational cash balances\n• Work with the treasury senior management on board/other executive presentations\n• Develop sound relationships with banking partners for Working Capital Management, Financial result optimization\n• Act in constant relation with internal constituencies (Strategy, Group Consolidation, Tax, Legal, IT, Compliance)\nStrategic Business Systems & Process Management\n• Project Manager/Administrator of the Group Treasury Systems (Diapason / Treasury Management Software, Hyperion / Business Intelligence tool) focusing on the continuous development of new functionalities and implementation of the TMS\n• Define cash management and Treasury system architecture of the future\n• Lead cross organizational partnership for proposed treasury and finance strategy\n• Develop clear project plans and ownership metrics (KPI's) to drive accountability and execution throughout the group treasury organization.",
+      "skills": [
+        "Strategic Thinking",
+        "Cash Management"
+      ]
+    },
+    {
+      "process_type": "ActOfWorking",
+      "source": "https://demo.example/profiles/emma-petit",
+      "organization": "ESI Group",
+      "title": "Cash Control Project Manager",
+      "contract_type": null,
+      "site": "Greater Paris Metropolitan Region",
+      "start": "2011-07-01",
+      "end": "2013-04-30",
+      "duration": "1 yr 10 mos",
+      "mission_label": "Corporate Cash Controller, Financial Controlling at ESI Group, Paris, France.",
+      "mission": "ESI Group, Paris, France (Pioneer and world-leading provider in Virtual Prototyping | Listed on NYSE EURONEXT Part C)\nCorporate Cash Controller, Financial Controlling, July 2011 – April 2013\n• Work closely with Board members (CEO, CFO, Director of Financial Operations) to integrate Cash in the financial monitoring of the group: development of Cash-flow reporting process, Balance Scorecard KPI's, bi-monthly cash flow analysis consolidation, monthly usage during the Board.\n• In depth analysis of the financial impact of French R&D Tax Credit (Crédit d'impôt recherche), Taxes and Working Capital Management\n• Build operating excel models at local and group level to challenge Cash forecast direct method",
+      "skills": [
+        "Strategic Thinking",
+        "Cash Management"
+      ]
+    },
+    {
+      "process_type": "ActOfWorking",
+      "source": "https://demo.example/profiles/emma-petit",
+      "organization": "Brittany Ferries",
+      "title": "Onboard Sales",
+      "contract_type": null,
+      "site": "At sea",
+      "start": "2009-07-01",
+      "end": "2009-12-31",
+      "duration": "6 mos",
+      "mission_label": "Onboard sales during cross-channel ferry crossings.",
+      "mission": "Onboard sales during cross-channel ferry crossings.",
+      "skills": [
+        "Strategic Thinking"
+      ]
+    },
+    {
+      "process_type": "ActOfWorking",
+      "source": "https://demo.example/profiles/emma-petit",
+      "organization": "Schneider Electric",
+      "title": "Supply Chain Financial and Administrative intern",
+      "contract_type": null,
+      "site": "Chartres de Bretagne, France",
+      "start": "2009-01-01",
+      "end": "2009-02-28",
+      "duration": "2 mos",
+      "mission_label": "Supply Chain Financial and Administrative Intern, Region EMEA and Asia Pacific.",
+      "mission": "Schneider Electric, Chartres de Bretagne, France (Worldwide energy solution provider | Listed on NYSE EURONEXT Part A)\nSupply Chain Financial and Administrative Intern, Region EMEA and Asia Pacific\n• Contact with clients/providers for credit collection (means and delay of payment)\n• Internal logistics control, order entry and invoicing and follow-up on orders in SAP\n• Relationship with logistics companies and shipping agents",
+      "skills": []
+    },
+    {
+      "process_type": "ActOfWorking",
+      "source": "https://demo.example/profiles/emma-petit",
+      "organization": "Comité National Olympique et Sportif Français",
+      "title": "Volontaire, Jeux Olympiques de Pékin 2008 (Beijing 2008)",
+      "contract_type": null,
+      "site": "Beijing, China",
+      "start": "2008-07-01",
+      "end": "2008-08-31",
+      "duration": "2 mos",
+      "mission_label": "Membre du Club France aux Jeux Olympiques de Pékin 2008, Novotel Xin Qiao, Pékin, Chine",
+      "mission": "Membre du Club France aux Jeux Olympiques de Pékin 2008, Novotel Xin Qiao, Pékin, Chine\nAu sein de l'équipe Réceptions/Bar: organisation events officiels & médias, soirées des médaillés, permanence journalière",
+      "skills": []
+    },
+    {
+      "process_type": "ActOfWorking",
+      "source": "https://demo.example/profiles/emma-petit",
+      "organization": "Parker Hannifin",
+      "title": "Marketing Intern (May 2008 : New Delhi,Inde + June 2008 : Singapour)",
+      "contract_type": null,
+      "site": "Asia",
+      "start": "2008-05-01",
+      "end": "2008-06-30",
+      "duration": "2 mos",
+      "mission_label": "Qualitative study before the launch of a new product in Asia (focus on India).",
+      "mission": "Mission in 2 subsidies : New Delhi, Inde (May 2008), Singapore (June 2008)\nObjective : realize a qualitative study before the launch of a new product in Asia (focus on India)",
+      "skills": []
+    }
+  ]
+}

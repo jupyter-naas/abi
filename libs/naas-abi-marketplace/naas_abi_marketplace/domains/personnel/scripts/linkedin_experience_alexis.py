@@ -1,0 +1,526 @@
+"""LinkedIn experience for Bob Martin — imported by linkedin_experience.py."""
+
+from datetime import date
+
+ALEXIS_EXPERIENCES = [
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Pearlside",
+        "title": "Co-Founder and Leadership Coach",
+        "contract_type": None,
+        "site": "France · Remote",
+        "start": date(2023, 11, 1),
+        "end": None,
+        "duration": "2 yrs 10 mos",
+        "mission_label": (
+            "I help tech leaders scale—without losing what makes their organization great."
+        ),
+        "mission": (
+            "I help tech leaders scale—without losing what makes their organization great.\n"
+            "As Co-Founder of Pearlside, I partner with founders and leadership teams to build "
+            "aligned, high-impact organizations where people take responsibility and lead real "
+            "change."
+        ),
+        "skills": ["Organizational Design", "Start-up Ventures"],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Team for the Planet",
+        "title": "Investor",
+        "contract_type": None,
+        "site": "Remote",
+        "start": date(2024, 4, 1),
+        "end": None,
+        "duration": "2 yrs 5 mos",
+        "mission_label": "Investor at Team for the Planet.",
+        "mission": "Investor at Team for the Planet.",
+        "skills": [],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Engramm",
+        "title": "Investor and Advisor",
+        "contract_type": None,
+        "site": "Remote",
+        "start": date(2025, 4, 1),
+        "end": None,
+        "duration": "1 yr 5 mos",
+        "mission_label": "Investor and advisor at Engramm.",
+        "mission": "Investor and advisor at Engramm.",
+        "skills": [],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Yneuro",
+        "title": "Investor and Advisor",
+        "contract_type": None,
+        "site": "Remote",
+        "start": date(2025, 4, 1),
+        "end": None,
+        "duration": "1 yr 5 mos",
+        "mission_label": "Investor and advisor at Yneuro.",
+        "mission": "Investor and advisor at Yneuro.",
+        "skills": [],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Beyond the Sea",
+        "title": "Investor",
+        "contract_type": None,
+        "site": "Remote",
+        "start": date(2025, 2, 1),
+        "end": None,
+        "duration": "1 yr 7 mos",
+        "mission_label": "Investor at Beyond the Sea.",
+        "mission": "Investor at Beyond the Sea.",
+        "skills": [],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "COMIN",
+        "title": "Investor",
+        "contract_type": None,
+        "site": "Remote",
+        "start": date(2024, 5, 1),
+        "end": None,
+        "duration": "2 yrs 4 mos",
+        "mission_label": "Investor at COMIN.",
+        "mission": "Investor at COMIN.",
+        "skills": [],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Corma",
+        "title": "Investor and Advisor",
+        "contract_type": None,
+        "site": "Remote",
+        "start": date(2023, 12, 1),
+        "end": None,
+        "duration": "2 yrs 9 mos",
+        "mission_label": "Investor and advisor at Corma.",
+        "mission": "Investor and advisor at Corma.",
+        "skills": [],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Mesetys",
+        "title": "Investor and Advisor",
+        "contract_type": None,
+        "site": "Remote",
+        "start": date(2023, 10, 1),
+        "end": None,
+        "duration": "2 yrs 11 mos",
+        "mission_label": "Investor and advisor at Mesetys.",
+        "mission": "Investor and advisor at Mesetys.",
+        "skills": [],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Escape",
+        "title": "Investor and Advisor",
+        "contract_type": None,
+        "site": "Remote",
+        "start": date(2023, 2, 1),
+        "end": None,
+        "duration": "3 yrs 7 mos",
+        "mission_label": "Investor and advisor at Escape.",
+        "mission": "Investor and advisor at Escape.",
+        "skills": [],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Offsite",
+        "title": "Investor",
+        "contract_type": None,
+        "site": "Remote",
+        "start": date(2022, 2, 1),
+        "end": None,
+        "duration": "4 yrs 7 mos",
+        "mission_label": "Investor at Offsite.",
+        "mission": "Investor at Offsite.",
+        "skills": [],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "naas.ai",
+        "title": "Advisor",
+        "contract_type": None,
+        "site": "France",
+        "start": date(2022, 1, 1),
+        "end": None,
+        "duration": "4 yrs 8 mos",
+        "mission_label": "Advisor at naas.ai.",
+        "mission": "Advisor at naas.ai.",
+        "skills": [],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Red Hat",
+        "title": "Chief of Staff to the CTO",
+        "contract_type": "Permanent",
+        "site": "Remote",
+        "start": date(2022, 3, 1),
+        "end": date(2023, 10, 31),
+        "duration": "1 yr 8 mos",
+        "mission_label": (
+            "Chief of Staff to the CTO, operationalizing a 10,000-person engineering "
+            "organization."
+        ),
+        "mission": (
+            "As the Chief of Staff to the CTO at Red Hat, I am responsible for working closely "
+            "with the CTO and SVP Global Engineering (a 10,000-person organization) and "
+            "supporting staff members to operationalize the organization. I serve as an "
+            "extension of the CTO, understanding the strategic vision and assisting with "
+            "balancing priorities and maximizing the effectiveness of the leadership team."
+        ),
+        "skills": [],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Red Hat",
+        "title": "EMEA Leadership Team - Chief of Staff to the EMEA General Manager",
+        "contract_type": "Full-time",
+        "site": "Remote",
+        "start": date(2020, 4, 1),
+        "end": date(2022, 3, 31),
+        "duration": "2 yrs",
+        "mission_label": (
+            "Chief of Staff to the SVP of EMEA and General Manager at Red Hat."
+        ),
+        "mission": (
+            "As the Chief of Staff to the Senior Vice President of EMEA and General Manager at "
+            "Red Hat, I was responsible for formulating the strategic agenda of the leadership "
+            "team, ensuring the establishment of priorities and key results, and supporting "
+            "cross-functional working groups. Notable achievements during my tenure include:\n"
+            "- Building presentations for key events and leading internal communications, "
+            "creating a strong multi-channel presence, including the intranet, podcast, and "
+            "video, which helped to foster a culture of collaboration and transparency across "
+            "the organization.\n"
+            "- Nurturing a strong, candid leadership team dynamic through an environment for "
+            "productive, professional dialogue, which helped to ensure that the organization "
+            "was able to work together effectively and efficiently.\n"
+            "- Collaborating with cross-functional teams to implement agile methodologies and "
+            "processes, resulting in faster delivery of high-quality products and services.\n"
+            "As the Chief of Staff, I worked remotely, which allowed me to effectively manage "
+            "a geographically dispersed team and gain valuable experience in leadership, "
+            "strategic planning, and cross-functional collaboration while contributing to the "
+            "growth and success of a leading open-source software company."
+        ),
+        "skills": ["Agile", "Management"],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Red Hat",
+        "title": "Engineering Leadership Team - Chief of Staff",
+        "contract_type": None,
+        "site": "Greater Boston Area",
+        "start": date(2016, 8, 1),
+        "end": date(2020, 4, 30),
+        "duration": "3 yrs 9 mos",
+        "mission_label": (
+            "Chief of Staff to the SVP of Software Engineering at Red Hat."
+        ),
+        "mission": (
+            "As the Chief of Staff to the Senior Vice President of Software Engineering at Red "
+            "Hat, I was responsible for creating the initial leadership team and formulating "
+            "the strategic agenda of the engineering leadership team. My role also included "
+            "ensuring the establishment of objectives and key results spanning the Product and "
+            "Technologies organization. Notable achievements during my tenure include:\n"
+            "- Building presentations for key events, such as the PnT Leadership Exchange, and "
+            "serving as a co-organizer of the first PnT Leadership Exchange, which brought "
+            "together leaders from across the organization to share knowledge and best "
+            "practices.\n"
+            "- Supporting all operations that spanned more than one leader, including budgeting "
+            "and hiring, to ensure that the organization operated smoothly and efficiently.\n"
+            "- Nurturing a strong, candid team dynamic through an environment for productive, "
+            "professional dialogue.\n"
+            "- Collaborating with cross-functional teams to implement agile methodologies and "
+            "processes, resulting in faster delivery of high-quality products and services."
+        ),
+        "skills": ["Agile", "Management"],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Red Hat",
+        "title": "Transformation Leader - OpenStack Leadership Team",
+        "contract_type": None,
+        "site": "Greater Bordeaux Metropolitan Area",
+        "start": date(2015, 12, 1),
+        "end": date(2016, 8, 31),
+        "duration": "9 mos",
+        "mission_label": (
+            "Transformation Leader on the OpenStack Leadership Team at Red Hat."
+        ),
+        "mission": (
+            "As a Transformation Leader on the OpenStack Leadership Team at Red Hat, I was "
+            "responsible for creating the initial leadership team composed of high-level "
+            "leaders from the main functions, including Product Management, Engineering, "
+            "Quality, and Support. Notable achievements during my tenure include:\n"
+            "- Leading the transformation of the OpenStack organization into small, "
+            "cross-functional delivery-focused groups, resulting in a significant reduction "
+            "in product delivery time from 8 months to just 4 weeks.\n"
+            "- Defining new roles and supporting the onboarding of team members through the "
+            "use of Communities of Practice, which allowed team members to share knowledge "
+            "and develop their skills more effectively.\n"
+            "- Collaborating with cross-functional teams to implement agile methodologies and "
+            "processes, resulting in faster delivery of high-quality products and services.\n"
+            "- Creating and leading initiatives that helped to foster a culture of innovation "
+            "and experimentation within the OpenStack organization."
+        ),
+        "skills": ["Agile Methodologies", "Agile"],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Red Hat",
+        "title": "Director, Sales and Services Enablement",
+        "contract_type": None,
+        "site": "Bordeaux",
+        "start": date(2015, 3, 1),
+        "end": date(2015, 11, 30),
+        "duration": "9 mos",
+        "mission_label": (
+            "Director of Sales and Services Enablement for the Red Hat Cloud Innovation "
+            "Practice after the eNovance acquisition."
+        ),
+        "mission": (
+            "After Red Hat acquired eNovance, I joined the company as Director of Sales and "
+            "Services Enablement for the Red Hat Cloud Innovation Practice. My role was to "
+            "organize and lead efforts to fast-track cloud deployments and help companies "
+            "embrace agile and DevOps practices. Notable achievements during my tenure include:\n"
+            "- Organizing and leveraging the existing organization to enable Red Hat associates "
+            "and partners from sales to services to develop their skills and shorten the "
+            "feedback loop from the field to the product development team.\n"
+            "- Collaborating with cross-functional teams to implement agile methodologies and "
+            "processes, resulting in faster delivery of high-quality products and services.\n"
+            "- Developing and delivering training programs that helped Red Hat associates and "
+            "partners build new skills and achieve personal and professional growth.\n"
+            "- Creating feedback loops between the field and product development teams to "
+            "ensure that customer needs were effectively translated into new product and "
+            "service offerings."
+        ),
+        "skills": ["Agile", "Project Management"],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "eNovance",
+        "title": "Chief Agility Officer",
+        "contract_type": None,
+        "site": "Bordeaux",
+        "start": date(2013, 9, 1),
+        "end": date(2015, 2, 28),
+        "duration": "1 yr 6 mos",
+        "mission_label": (
+            "Chief Agility Officer at eNovance, nurturing an Agile culture across the "
+            "organization."
+        ),
+        "mission": (
+            "As a Chief Agility Officer at eNovance, an innovative startup in the cloud "
+            "computing and open-source software space, I was responsible for creating and "
+            "nurturing an Agile culture that pervaded the whole organization. My relationship "
+            "with eNovance began in 2009, when I started working with the company as a "
+            "contractor while at Ayeba, an organization and management consulting and coaching "
+            "company I co-founded. Notable achievements during my tenure include:\n"
+            "- Helping grow the organization from around 20 people to nearly 120 in less than "
+            "8 months, developing the organization and the people, our approach to engage "
+            "with customers, and our agile way to deliver services.\n"
+            "- Collaborating with cross-functional teams to implement agile methodologies "
+            "across the organization, resulting in faster delivery of high-quality products "
+            "and services.\n"
+            "- Developing an innovation-driven mindset that encouraged experimentation and "
+            "learning, which helped eNovance stay ahead of its competitors.\n"
+            "- Playing a key role in the successful acquisition of eNovance by Red Hat in "
+            "June 2014."
+        ),
+        "skills": ["Agile Methodologies", "Agile"],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Ayeba",
+        "title": "Co-founder and Partner",
+        "contract_type": "Permanent",
+        "site": "Greater Bordeaux Metropolitan Area",
+        "start": date(2009, 2, 1),
+        "end": date(2013, 8, 31),
+        "duration": "4 yrs 7 mos",
+        "mission_label": (
+            "Organization and management consulting and coaching for 20+ customers."
+        ),
+        "mission": (
+            "Helping people and organizations to succeed in what they want to achieve is a "
+            "calling for me and that's what drove me to set up Ayeba, an organization and "
+            "management consulting and coaching company.\n"
+            "I worked with more than 20 different customers from different activity sectors "
+            "like telecommunication, industry, communication, software engineering, web, and "
+            "NGOs. I experienced many things from managing organization transformation with "
+            "agile and lean, developing people through training, mentoring, and coaching, "
+            "facilitating workshops, innovation games, open spaces, and developing my coaching, "
+            "and public speaking skills.\n"
+            "Notable achievements during my tenure include:\n"
+            "- Helping organizations navigate complex transformations using agile and lean "
+            "methodologies\n"
+            "- Developing people through training, mentoring, and coaching\n"
+            "- Facilitating workshops, innovation games, and open spaces\n"
+            "- Developing my coaching and public speaking skills"
+        ),
+        "skills": ["Agile Methodologies", "Agile"],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Directorate General for State modernisation",
+        "title": "Strategic Plan Manager",
+        "contract_type": None,
+        "site": "Paris",
+        "start": date(2006, 1, 1),
+        "end": date(2009, 1, 31),
+        "duration": "3 yrs 1 mo",
+        "mission_label": (
+            "Strategic Plan Manager at the Finance Ministry — French E-government Strategic Plan."
+        ),
+        "mission": (
+            "As a Strategic Plan Manager at the Finance Ministry in France, I continued my "
+            "work on the French E-government Strategic Plan, which had been transferred to the "
+            "ministry and renamed to reflect its expanded scope. My responsibilities remained "
+            "the same, including developing and implementing strategic initiatives, assessing "
+            "feasibility, and coordinating cross-functional projects. Notable achievements "
+            "during my tenure include:\n"
+            "- Successfully leading the transition of the E-government Strategic Plan to the "
+            "Finance Ministry and expanding its scope to include new initiatives that enhanced "
+            "citizen engagement and government efficiency.\n"
+            "- Collaborating with stakeholders across government agencies and the private "
+            "sector to develop cross-functional projects and initiatives.\n"
+            "- Developing performance metrics to assess the impact of various initiatives and "
+            "ensure continuous improvement."
+        ),
+        "skills": ["Public Sector", "Project Management"],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Services du Premier ministre",
+        "title": "Strategic Plan Manager",
+        "contract_type": "Permanent",
+        "site": "Paris",
+        "start": date(2004, 10, 1),
+        "end": date(2006, 1, 31),
+        "duration": "1 yr 4 mos",
+        "mission_label": (
+            "Developed and implemented the French E-government Strategic Plan at ADAE."
+        ),
+        "mission": (
+            "As a Strategic Plan Manager at the e-government Agency (ADAE) within the Services "
+            "du Premier ministre in France, I was responsible for developing and implementing "
+            "the French E-government Strategic Plan. This involved working with various "
+            "stakeholders to identify strategic goals and initiatives, assessing the "
+            "feasibility of different options, and coordinating the implementation of key "
+            "projects. Additionally, I served as the Open Source French representative to the "
+            "European Union, advocating for the use of open-source technologies in government "
+            "IT systems. Notable achievements during my tenure include:\n"
+            "- Successfully managing the development and implementation of the French "
+            "E-government Strategic Plan, which helped streamline government services and "
+            "improve citizen engagement.\n"
+            "- Advocating for the use of open-source technologies in government IT systems.\n"
+            "- Collaborating with stakeholders across government agencies and the private "
+            "sector to develop cross-functional projects and initiatives."
+        ),
+        "skills": ["Public Sector", "Project Management"],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "net-entreprises.fr / GIP-MDS",
+        "title": "Project Director",
+        "contract_type": "Permanent",
+        "site": "Paris, Île-de-France, France",
+        "start": date(2003, 6, 1),
+        "end": date(2004, 9, 30),
+        "duration": "1 yr 4 mos",
+        "mission_label": (
+            "Project Director for the net-entreprises.fr website and compliance platform."
+        ),
+        "mission": (
+            "As Project Director at net-entreprises.fr / GIP-MDS, an association of social "
+            "service organizations in France, I oversaw developing and promoting of the "
+            "net-entreprises.fr website, which helps companies comply with their formalities.\n"
+            "Other key responsibilities during my tenure included:\n"
+            "- Launched a new version of the website dedicated to self-employed people\n"
+            "- Defined the process for support services\n"
+            "- Managed a promotion campaign to increase awareness of the website's services"
+        ),
+        "skills": ["IT Strategy", "Public Sector"],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "Self-employed",
+        "title": "Startup Consultant",
+        "contract_type": "Self-employed",
+        "site": "Paris, Île-de-France, France",
+        "start": date(2000, 8, 1),
+        "end": date(2003, 5, 31),
+        "duration": "2 yrs 10 mos",
+        "mission_label": (
+            "Startup consultant — technical architecture, organization design, and feasibility "
+            "studies."
+        ),
+        "mission": (
+            "As a startup consultant, I worked with various businesses to help them design and "
+            "implement effective solutions. Some of my notable achievements during this time "
+            "include:\n"
+            "- Technical: Designed the computer telephony architecture of a multimedia "
+            "multi-site contact centre using voice over IP technology.\n"
+            "- Management: Defined the organization of departments, including implementation, "
+            "production, and customer care.\n"
+            "- Business: Conducted a feasibility study of a range of remote administration "
+            "services dedicated to backup and storage infrastructure."
+        ),
+        "skills": ["Organizational Design", "Start-up Ventures"],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "integra SA",
+        "title": "Co-founder and Operations Director",
+        "contract_type": "Permanent",
+        "site": "Paris, Île-de-France, France",
+        "start": date(1995, 9, 1),
+        "end": date(2000, 7, 31),
+        "duration": "4 yrs 11 mos",
+        "mission_label": (
+            "Co-founder and Operations Director at Integra — managed hosting operations "
+            "across Europe."
+        ),
+        "mission": (
+            "As a co-founder and member of the management committee at Integra, a leading "
+            "provider of managed web and application hosting for businesses with "
+            "mission-critical Internet operations across Europe, I oversaw the company's entire "
+            "service activities. We grew from 0 to 850 employees in less than five years.\n"
+            "Notable achievements during my tenure include:\n"
+            "- Managed a European project to build new hosting data centers\n"
+            "- Built two data centers in 1997 and 1999 (with a total investment of €1.05m)\n"
+            "- Integrated a software engineering company acquired in 1998\n"
+            "- Designed, implemented, and managed the internal information system"
+        ),
+        "skills": ["Management", "Start-up Ventures"],
+    },
+    {
+        "person": ("Alexis", "Monville"),
+        "organization": "AlliedSignal (Bendix)",
+        "title": "Manufacturing Manager",
+        "contract_type": "Permanent",
+        "site": "France",
+        "start": date(1993, 4, 1),
+        "end": date(1995, 8, 31),
+        "duration": "2 yrs 5 mos",
+        "mission_label": (
+            "Managed assembly of ABS Mecatronic Braking Systems at AlliedSignal."
+        ),
+        "mission": (
+            "At AlliedSignal, a multinational company with a significant automotive supplier "
+            "segment, I managed the assembly of ABS Mecatronic Braking Systems. This involved "
+            "overseeing three assembly lines, a team of 120 staff, and 15 technicians. Notable "
+            "achievements during my tenure include:\n"
+            "- Successfully transferring an assembly line from Drancy to Moulins\n"
+            "- Implementing ISO 9000 quality standards and earning a Six Sigma Black Belt "
+            "certification\n"
+            "- Managing a daily turnover of €400,000 and being responsible for the operating "
+            "budget."
+        ),
+        "skills": ["Management", "Automotive"],
+    },
+]

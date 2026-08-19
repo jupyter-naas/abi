@@ -3,7 +3,8 @@
 
 Loads schema TTLs under ``ontologies/`` (modules + processes) and emits demo
 individuals with the generated RDFEntity classes. The working experiences are
-transcribed from a real LinkedIn profile (see ``scripts/linkedin_experience.py``)
+transcribed from ``apps/cockpit/data/source/person/*/index.json`` (one row =
+one process per ``index.json``)
 and expanded into the seven buckets the Act of Working slice declares:
 
     WHO          Person, Organization
@@ -57,9 +58,11 @@ from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfWorkingPro
     ProfileDocument,
     Skill,
 )
-from naas_abi_marketplace.domains.personnel.scripts.linkedin_experience import (
-    EXPERIENCES,
-    LINKEDIN_PROFILE_URL,
+from naas_abi_marketplace.domains.personnel.scripts.load_person_sources import (
+    load_person_sources,
+    sources_to_employees,
+    sources_to_experiences,
+    sources_to_profile_urls,
 )
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import RDF, XSD
@@ -68,6 +71,7 @@ PERSONNEL_ROOT = Path(__file__).resolve().parents[1]
 ONTOLOGIES = PERSONNEL_ROOT / "ontologies"
 GRAPH_DIR = PERSONNEL_ROOT / "data" / "graph"
 GRAPH_FILE = GRAPH_DIR / "personnel_demo.ttl"
+SOURCE_DIR = PERSONNEL_ROOT / "apps" / "cockpit" / "data" / "source" / "person"
 
 ABI = Namespace("http://ontology.naas.ai/abi/")
 PERSONNEL = Namespace("http://ontology.naas.ai/personnel/")
@@ -75,50 +79,8 @@ CCO = Namespace("https://www.commoncoreontologies.org/")
 BFO = Namespace("http://purl.obolibrary.org/obo/")
 GRAPH_NAME = URIRef("http://ontology.naas.ai/graph/personnel")
 
-# Roster facts for the Workforce page.
-EMPLOYEES = [
-    {
-        "first": "Jeremy",
-        "last": "Ravenel",
-        "employee_id": "E-10428",
-        "job_title": "CEO",
-        "job_family": "Executive",
-        "hire_date": date(2018, 3, 1),
-        "status": "active",
-        "remuneration": 120_000,
-    },
-    {
-        "first": "Florent",
-        "last": "Ravenel",
-        "employee_id": "E-10429",
-        "job_title": "COO",
-        "job_family": "Executive",
-        "hire_date": date(2019, 6, 15),
-        "status": "active",
-        "remuneration": 95_000,
-    },
-    {
-        "first": "Maxime",
-        "last": "Jublou",
-        "employee_id": "E-10430",
-        "job_title": "CTO",
-        "job_family": "Executive",
-        "hire_date": date(2020, 1, 10),
-        "status": "active",
-        "remuneration": 85_000,
-    },
-]
-
-# The one course of study in the demo. Not from LinkedIn - kept from the
-# previous demo set so the Act of Studying slice still has an instance.
-STUDY = {
-    "person": ("Florent", "Ravenel"),
-    "organization": "Université de Rennes 1",
-    "program": "Licence Informatique",
-    "site": "Rennes",
-    "start": date(2009, 9, 1),
-    "end": date(2014, 6, 30),
-}
+# Roster and experiences are loaded from apps/cockpit/data/source/person/*/index.json
+# at build time (see scripts/load_person_sources.py).
 
 
 def _slug(*parts: str) -> str:
@@ -289,12 +251,14 @@ def _ensure_skill(
     return skill
 
 
-def _add_profile_document(graph: Graph, person: Person) -> ProfileDocument:
+def _add_profile_document(
+    graph: Graph, person: Person, source_url: str
+) -> ProfileDocument:
     """The LinkedIn page every experience below was read from."""
     doc = ProfileDocument(
         _uri=_uri(str(PERSONNEL), "ProfileDocument", _slug(person.label or "", "linkedin")),
         label=f"LinkedIn experience - {person.label}",
-        source_url=LINKEDIN_PROFILE_URL,
+        source_url=source_url,
         is_profile_document_of=[person._uri],
         created=_now(),
         creator="generate_demo_graph",
@@ -520,37 +484,60 @@ def _add_studying(
 
 
 def build_instances() -> Graph:
-    """Emit the demo individuals: roster facts plus the LinkedIn experience graph."""
+    """Emit demo individuals from ``source/person/*/index.json``."""
+    payloads = load_person_sources(SOURCE_DIR)
+    employees = sources_to_employees(payloads)
+    profile_urls = sources_to_profile_urls(payloads)
+    experiences = sources_to_experiences(payloads)
+
     g = Graph()
     people: dict[str, Person] = {}
     orgs: dict[str, Organization] = {}
     sites: dict[str, Site] = {}
     skills: dict[str, Skill] = {}
 
-    # --- LinkedIn working experience ---------------------------------------
-    # Runs before the roster pass: the roster needs the position of each
-    # person's current job, which this creates.
     profiles: dict[str, ProfileDocument] = {}
     current_position: dict[str, str] = {}
-    for exp in EXPERIENCES:
-        first, last = exp["person"]
-        person = _ensure_person(g, people, first, last)
-        if person.label not in profiles:
-            profiles[person.label] = _add_profile_document(g, person)
 
-        org = _ensure_org(g, orgs, exp["organization"])
-        site = _ensure_site(g, sites, exp["site"])
-        exp_skills = [_ensure_skill(g, skills, name, person) for name in exp["skills"]]
+    for item in experiences:
+        first, last = item["person"]
+        person = _ensure_person(g, people, first, last)
+        person_key = person.label or f"{first} {last}"
+
+        if item["kind"] == "studying":
+            _add_studying(
+                g,
+                person=person,
+                org=_ensure_org(g, orgs, item["organization"], educational=True),
+                site=_ensure_site(g, sites, item["site"]),
+                program=item["program"],
+                start=item["start"],
+                end=item["end"],
+            )
+            continue
+
+        if person_key not in profiles:
+            profile_url = profile_urls.get(person_key)
+            if not profile_url:
+                raise KeyError(f"No profile URL for {person_key!r}")
+            profiles[person_key] = _add_profile_document(g, person, profile_url)
+
+        org = _ensure_org(g, orgs, item["organization"])
+        site = _ensure_site(g, sites, item["site"])
+        exp_skills = [_ensure_skill(g, skills, name, person) for name in item["skills"]]
 
         roster = next(
             (
                 e
-                for e in EMPLOYEES
-                if (e["first"], e["last"]) == exp["person"]
-                and exp["organization"].lower().startswith("naas")
+                for e in employees
+                if (e["first"], e["last"]) == item["person"]
+                and item["organization"].lower().startswith("naas")
             ),
             None,
         )
+        remuneration = item.get("remuneration_amount")
+        if remuneration is None and roster:
+            remuneration = roster.get("remuneration")
 
         _, position_uri = _add_working(
             g,
@@ -558,33 +545,21 @@ def build_instances() -> Graph:
             org=org,
             site=site,
             skills=exp_skills,
-            profile=profiles[person.label],
-            title=exp["title"],
-            mission_label=exp["mission_label"],
-            mission_content=exp["mission"],
-            contract_type=exp["contract_type"],
-            start=exp["start"],
-            end=exp["end"],
-            duration=exp["duration"],
-            remuneration_amount=roster["remuneration"] if roster else None,
+            profile=profiles[person_key],
+            title=item["title"],
+            mission_label=item["mission_label"],
+            mission_content=item["mission"],
+            contract_type=item["contract_type"],
+            start=item["start"],
+            end=item["end"],
+            duration=item["duration"],
+            remuneration_amount=remuneration,
+            remuneration_currency=item.get("remuneration_currency") or "EUR",
         )
         if roster:
             current_position[person.label] = position_uri
 
-    # --- One course of study ------------------------------------------------
-    first, last = STUDY["person"]
-    _add_studying(
-        g,
-        person=_ensure_person(g, people, first, last),
-        org=_ensure_org(g, orgs, STUDY["organization"], educational=True),
-        site=_ensure_site(g, sites, STUDY["site"]),
-        program=STUDY["program"],
-        start=STUDY["start"],
-        end=STUDY["end"],
-    )
-
-    # --- Workforce roster: employment records, job family, status ----------
-    for emp in EMPLOYEES:
+    for emp in employees:
         person = _ensure_person(g, people, emp["first"], emp["last"])
         slug = _slug(emp["first"], emp["last"])
 
@@ -601,6 +576,7 @@ def build_instances() -> Graph:
             label=f"Employment record {emp['employee_id']}",
             employee_id=emp["employee_id"],
             hire_date=emp["hire_date"],
+            termination_date=emp.get("termination_date"),
             is_employment_record_of=[person._uri],
             created=_now(),
             creator="generate_demo_graph",
