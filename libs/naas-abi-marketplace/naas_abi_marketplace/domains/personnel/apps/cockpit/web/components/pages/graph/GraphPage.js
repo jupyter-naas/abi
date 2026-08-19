@@ -342,10 +342,69 @@ function visibleProcessInstanceOptions(instances, hiddenProcessTypes) {
   return instances.filter((instance) => !hiddenProcessTypes.has(instance.type));
 }
 
+const CAREER_ARTIFACT_CLASSES = new Set([
+  "Employee Role",
+  "Mission",
+  "Skill",
+  "Employment Contract",
+]);
+
+function buildRecordsById(visible) {
+  const byId = new Map();
+  for (const record of visible.people || []) byId.set(record.id, record);
+  for (const record of visible.entities || []) byId.set(record.id, record);
+  for (const record of visible.processes || []) byId.set(record.id, record);
+  return byId;
+}
+
+function buildUndirectedAdjacency(relations) {
+  const adjacency = new Map();
+  for (const rel of relations || []) {
+    if (!adjacency.has(rel.from)) adjacency.set(rel.from, new Set());
+    if (!adjacency.has(rel.to)) adjacency.set(rel.to, new Set());
+    adjacency.get(rel.from).add(rel.to);
+    adjacency.get(rel.to).add(rel.from);
+  }
+  return adjacency;
+}
+
+/** Profile docs and person-linked nodes merge distinct process rays — do not traverse through them. */
+function isProcessRayBridge(nodeId, record, focusPersonId, adjacency) {
+  if (record?.classLabel === "Profile Document") return true;
+  return (adjacency.get(nodeId) || new Set()).has(focusPersonId);
+}
+
+/** Resolve the act of working that owns a career artifact (directly or via its employee role). */
+function findOwnedProcessRoot(nodeId, adjacency, allRootIds, recordsById) {
+  for (const neighbour of adjacency.get(nodeId) || []) {
+    if (allRootIds.has(neighbour)) return neighbour;
+  }
+  for (const neighbour of adjacency.get(nodeId) || []) {
+    if (recordsById.get(neighbour)?.classLabel !== "Employee Role") continue;
+    for (const next of adjacency.get(neighbour) || []) {
+      if (allRootIds.has(next)) return next;
+    }
+  }
+  return null;
+}
+
+function resolveNodeProcessRoot(record, assignments, adjacency, allRootIds, recordsById) {
+  if (!record) return null;
+  if (CAREER_ARTIFACT_CLASSES.has(classLabelOf(record))) {
+    return (
+      findOwnedProcessRoot(record.id, adjacency, allRootIds, recordsById) ||
+      assignments.get(record.id) ||
+      null
+    );
+  }
+  return assignments.get(record.id) || null;
+}
+
 /**
- * Map every non-root node to the nearest act of working that reaches it.
+ * Map every non-root node to the act of working that owns it.
  * The focus person is excluded from traversal so person-level edges do not
- * merge distinct process rays.
+ * merge distinct process rays. Profile documents and person-linked nodes are
+ * not used as BFS bridges; career artifacts resolve to their adjacent act of working.
  */
 function assignNodesToProcessRoots(visible, focusPersonId, { seedRootIds = null } = {}) {
   const allProcessRoots = visibleProcessOptions(visible);
@@ -356,13 +415,8 @@ function assignNodesToProcessRoots(visible, focusPersonId, { seedRootIds = null 
   }
   if (processRoots.length === 0) return new Map();
 
-  const adjacency = new Map();
-  for (const rel of visible.relations || []) {
-    if (!adjacency.has(rel.from)) adjacency.set(rel.from, new Set());
-    if (!adjacency.has(rel.to)) adjacency.set(rel.to, new Set());
-    adjacency.get(rel.from).add(rel.to);
-    adjacency.get(rel.to).add(rel.from);
-  }
+  const recordsById = buildRecordsById(visible);
+  const adjacency = buildUndirectedAdjacency(visible.relations);
 
   const assignments = new Map();
   const queue = [];
@@ -374,6 +428,9 @@ function assignNodesToProcessRoots(visible, focusPersonId, { seedRootIds = null 
   for (let cursor = 0; cursor < queue.length; cursor++) {
     const nodeId = queue[cursor];
     const rootId = assignments.get(nodeId);
+    const record = recordsById.get(nodeId);
+    if (isProcessRayBridge(nodeId, record, focusPersonId, adjacency)) continue;
+
     for (const neighbour of adjacency.get(nodeId) || []) {
       if (neighbour === focusPersonId || allRootIds.has(neighbour)) continue;
       if (!assignments.has(neighbour)) {
@@ -383,12 +440,19 @@ function assignNodesToProcessRoots(visible, focusPersonId, { seedRootIds = null 
     }
   }
 
+  for (const [nodeId, record] of recordsById) {
+    if (allRootIds.has(nodeId) || assignments.has(nodeId)) continue;
+    if (!CAREER_ARTIFACT_CLASSES.has(classLabelOf(record))) continue;
+    const ownedRoot = findOwnedProcessRoot(nodeId, adjacency, allRootIds, recordsById);
+    if (ownedRoot) assignments.set(nodeId, ownedRoot);
+  }
+
   return assignments;
 }
 
 /**
- * Drop deselected acts of working and every node reached only through them.
- * The focus person and nodes attached directly to the person stay visible.
+ * Drop deselected acts of working and every node owned by them.
+ * The focus person always stays visible; strict mode drops unassigned nodes.
  */
 function applyProcessFilter(
   visible,
@@ -413,12 +477,21 @@ function applyProcessFilter(
   const assignments = assignNodesToProcessRoots(visible, focusPersonId, {
     seedRootIds: strict ? visibleRootIds : null,
   });
+  const recordsById = buildRecordsById(visible);
+  const adjacency = buildUndirectedAdjacency(visible.relations);
+  const allRootIds = rootIds;
 
   const keepNode = (record) => {
     if (!record) return false;
     if (record.id === focusPersonId) return true;
     if (rootIds.has(record.id)) return !effectivelyHidden.has(record.id);
-    const rootId = assignments.get(record.id);
+    const rootId = resolveNodeProcessRoot(
+      record,
+      assignments,
+      adjacency,
+      allRootIds,
+      recordsById
+    );
     if (!rootId) return !strict;
     return !effectivelyHidden.has(rootId);
   };
@@ -523,22 +596,17 @@ function applyClassFilter(visible, hiddenClassInstances, hiddenClassTypes, focus
   };
 }
 
-function renderPropertiesTable(properties) {
-  // Property and label share a cell, stacked. As separate columns they left
-  // the narrow inspector too little room and broke URIs mid-token.
-  const rows = (properties || [])
+function renderPropertiesFeed(properties) {
+  const items = (properties || [])
     .map(
-      (p) => `<tr>
-        <td class="graph-prop-name">
-          <span class="graph-prop-uri">${esc(p.uri || "-")}</span>
-          <span class="graph-prop-label">${esc(p.label || "-")}</span>
-        </td>
-        <td>${esc(p.value)}</td>
-      </tr>`
+      (p) => `<li class="graph-prop-feed-item">
+        <span class="graph-prop-feed-name">${esc(p.label || p.uri || "-")}</span>
+        <span class="graph-prop-feed-value">${esc(p.value)}</span>
+      </li>`
     )
     .join("");
-  if (!rows) return `<p class="empty">No data properties on this node.</p>`;
-  return `<table class="graph-props"><thead><tr><th>Property</th><th>Value</th></tr></thead><tbody>${rows}</tbody></table>`;
+  if (!items) return `<p class="empty">No data properties on this node.</p>`;
+  return `<ul class="graph-prop-feed">${items}</ul>`;
 }
 
 function renderBfoBadge(bucketType) {
@@ -556,25 +624,25 @@ function renderNodeDetail(node, { focusPersonId } = {}) {
     const person = node.person;
     return `<h2>${esc(person.label)}${node.isFocus ? " · focus" : ""}</h2>
       <dl>${renderNodeUri(person.id)}<dt>Class</dt><dd>Person</dd><dt>BFO bucket</dt><dd>${renderBfoBadge("Material Entity")}</dd></dl>
-      <h3>Data properties</h3>${renderPropertiesTable(person.properties)}`;
+      <h3>Data properties</h3>${renderPropertiesFeed(person.properties)}`;
   }
   if (node.kind === "entity") {
     const entity = node.entity;
     return `<h2>${esc(entity.label)}</h2>
       <dl>${renderNodeUri(entity.id)}<dt>Class</dt><dd>${esc(entity.classLabel)}</dd><dt>BFO bucket</dt><dd>${renderBfoBadge(entity.bfoBucket)}</dd></dl>
-      <h3>Data properties</h3>${renderPropertiesTable(entity.properties)}`;
+      <h3>Data properties</h3>${renderPropertiesFeed(entity.properties)}`;
   }
   if (node.kind === "process") {
     const process = node.process;
     return `<h2>${esc(process.classLabel || "Process")}</h2>
       <dl>${renderNodeUri(process.id)}<dt>BFO bucket</dt><dd>${renderBfoBadge(process.bfoBucket || "Process")}</dd></dl>
-      <h3>Data properties</h3>${renderPropertiesTable(process.properties)}`;
+      <h3>Data properties</h3>${renderPropertiesFeed(process.properties)}`;
   }
   if (node.kind === "source") {
     const source = node.source;
     return `<h2>${esc(source.classLabel || "Source")}</h2>
       <dl>${renderNodeUri(source.id)}<dt>BFO bucket</dt><dd>${renderBfoBadge(source.bfoBucket || "Process")}</dd></dl>
-      <h3>Data properties</h3>${renderPropertiesTable(source.properties)}`;
+      <h3>Data properties</h3>${renderPropertiesFeed(source.properties)}`;
   }
   return renderNodeDetail(null);
 }
