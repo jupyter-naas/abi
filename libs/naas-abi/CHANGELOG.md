@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v2.54.1 (2026-08-18)
+
+### Bug Fixes
+
+- **nexus**: Show letter when workspace logo fails to load
+  ([`e731463`](https://github.com/jupyter-naas/abi/commit/e731463e84443a838be80a8886a4ac5c95f85210))
+
+
+## v2.54.0 (2026-08-17)
+
+### Features
+
+- **nexus**: Let ABI agents declare multiple chat models
+  ([`0851d13`](https://github.com/jupyter-naas/abi/commit/0851d13e875c71987eede88b5a409c58d7edb3d0))
+
+
 ## v2.53.0 (2026-08-11)
 
 ### Features

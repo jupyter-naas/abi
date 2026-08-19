@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v2.26.2 (2026-08-18)
+
+### Bug Fixes
+
+- **rabbitmq**: Add thread-safe locking to publish calls
+  ([`005efa3`](https://github.com/jupyter-naas/abi/commit/005efa3e0f7659a258c02a441d872923a2499f7c))
+
+- **triple_store**: Clarify and improve distributed write lock
+  ([`005efa3`](https://github.com/jupyter-naas/abi/commit/005efa3e0f7659a258c02a441d872923a2499f7c))
+
+
+## v2.26.1 (2026-08-17)
+
+### Bug Fixes
+
+- Make it possible to comment in yaml config and discard required secrets
+  ([`9b38d61`](https://github.com/jupyter-naas/abi/commit/9b38d616e0518db381c97aeea64020b5e27ab79a))
+
+
+## v2.26.0 (2026-08-17)
+
+### Features
+
+- **event**: Add cursor seeking and setting functionality for event consumers
+  ([`37b424d`](https://github.com/jupyter-naas/abi/commit/37b424d69099114e57e3597656756ad0b20a70f6))
+
+
 ## v2.25.0 (2026-08-11)
 
 ### Chores

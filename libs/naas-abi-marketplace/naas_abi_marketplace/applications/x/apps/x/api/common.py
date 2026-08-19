@@ -22,10 +22,10 @@ DEFAULT_TWEET_GRAPH = "http://ontology.naas.ai/graph/x"
 DEFAULT_NAMESPACE = "http://ontology.naas.ai/x/"
 DEFAULT_APP_PREFIX = "x/apps/x"
 
-# Cap for Search page tweet tables / author bars (KPI counts are uncapped).
-# ``tweets_in_window`` orders the *full* graph match by recency before applying
-# this LIMIT, so a capped read is the newest N tweets in the window — never an
-# arbitrary sample.
+# Cap for Search page tweet tables / author bars (KPI counts and the ingested
+# tweets line chart are uncapped). ``tweets_in_window`` orders the *full* graph
+# match by recency before applying this LIMIT, so a capped read is the newest N
+# tweets in the window — never an arbitrary sample.
 DEFAULT_TWEET_LIMIT = 1000
 
 # The Users page reads a published dataset rather than querying the graph, so
@@ -133,8 +133,81 @@ def previous_window(start_time: str, end_time: str) -> tuple[str, str]:
     return prev_start.isoformat(), prev_end.isoformat()
 
 
+def scenario_bands(
+    scenarios: list[dict[str, str]], *, include_previous: bool = True
+) -> list[tuple[str, str]]:
+    """Consecutive ``[start, end)`` bands that tile every scenario window.
+
+    :func:`build_scenarios` gives every scenario the *same* ``end_time``, so the
+    windows are strictly nested and each one — plus each :func:`previous_window`
+    — is exactly a union of consecutive bands. Splitting the graph once at every
+    window boundary lets a single banded aggregate answer all of them, instead of
+    one full scan per window.
+
+    Bands are returned newest first, so band 0 is the most recent slice. Pass
+    ``include_previous=False`` for the current windows only, which is all the
+    column facets need — the extra previous-period edges would just split the
+    aggregate into more groups for no benefit.
+    """
+    edges: set[str] = set()
+    for scenario in scenarios:
+        start, end = scenario["start_time"], scenario["end_time"]
+        edges.add(start)
+        edges.add(end)
+        if include_previous:
+            prev_start, prev_end = previous_window(start, end)
+            edges.add(prev_start)
+            edges.add(prev_end)
+    ordered = sorted(edges, key=datetime.fromisoformat, reverse=True)
+    return [(ordered[i + 1], ordered[i]) for i in range(len(ordered) - 1)]
+
+
+def bands_for_window(
+    bands: list[tuple[str, str]], start_time: str, end_time: str
+) -> list[int] | None:
+    """Indices of the bands that exactly tile ``[start_time, end_time)``.
+
+    ``None`` when the window is not band-aligned — every caller then falls back
+    to querying that window directly, so a caller passing an arbitrary range
+    (the HTTP layer does) still gets an exact answer.
+    """
+    start = datetime.fromisoformat(start_time)
+    end = datetime.fromisoformat(end_time)
+    indices = [
+        index
+        for index, (band_start, band_end) in enumerate(bands)
+        if datetime.fromisoformat(band_start) >= start
+        and datetime.fromisoformat(band_end) <= end
+    ]
+    if not indices:
+        return None
+    # The selected bands must cover the window with no gap, or a sum over them
+    # would silently under-report.
+    covered_start = datetime.fromisoformat(bands[indices[-1]][0])
+    covered_end = datetime.fromisoformat(bands[indices[0]][1])
+    if covered_start != start or covered_end != end:
+        return None
+    return indices
+
+
 def _escape_sparql_string(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _band_bind_expression(
+    bands: list[tuple[str, str]], variable: str = "?created"
+) -> str:
+    """Nested ``IF`` assigning each row the index of the band it falls in.
+
+    Rows older than the last band are never bound — the query carrying this
+    expression also filters to the banded range — so the final ``else`` can be
+    the last index rather than a sentinel.
+    """
+    expression = str(len(bands) - 1)
+    for index in range(len(bands) - 2, -1, -1):
+        edge = _escape_sparql_string(bands[index][0])
+        expression = f'IF({variable} >= "{edge}"^^xsd:dateTime, {index}, {expression})'
+    return expression
 
 
 def extrapolate_partial_hour(
@@ -342,6 +415,7 @@ class SnapshotContext:
         app_prefix: str = DEFAULT_APP_PREFIX,
         tweet_limit: int = DEFAULT_TWEET_LIMIT,
         built_at: datetime | None = None,
+        cache: Any | None = None,
     ) -> None:
         self.object_storage = object_storage
         self.triple_store = triple_store
@@ -354,6 +428,17 @@ class SnapshotContext:
         self.app_prefix = app_prefix.rstrip("/")
         self.tweet_limit = int(tweet_limit)
         self.built_at = built_at or datetime.now(UTC)
+        # Optional columnar projection of the same ingest. When present, the
+        # snapshots that would otherwise scan the whole graph read it instead;
+        # everything else keeps using SPARQL, so a missing projection degrades
+        # to the previous behaviour rather than failing.
+        self.cache = cache
+        # Band decompositions of the scenario windows, computed once. ``bands``
+        # covers the current *and* previous windows (the KPI counts need both);
+        # ``facet_bands`` splits only at the current windows' edges, since the
+        # column facets never look at a previous period.
+        self.bands = scenario_bands(self.scenarios)
+        self.facet_bands = scenario_bands(self.scenarios, include_previous=False)
         # Per-publish SPARQL memo. A SnapshotContext is built once per
         # publish_app run and thrown away, so a hit can never serve state from
         # an earlier publish — and nothing reads the graph at HTTP request time
@@ -361,11 +446,48 @@ class SnapshotContext:
         # this could go stale on.
         #
         # It exists because the page scripts ask for the same rows repeatedly:
-        # tables, barcharts and linecharts each call tweets_in_window for the
-        # same (query, scenario) — 5 executions per scenario where 2 windows are
-        # actually distinct — and every sum_counts_in_window re-runs the same
-        # graph-wide timeseries aggregate.
+        # tables and barcharts each call tweets_in_window for the same
+        # (query, scenario) — and every sum_counts_in_window re-runs the same
+        # graph-wide timeseries aggregate. The Search line chart reads
+        # ingested_timeseries instead (uncapped matched tweets, by created_at).
         self._query_cache: dict[tuple, Any] = {}
+        # Unfiltered tweet pages actually fetched this publish, keyed by
+        # (query, end_time, cap) — the pool :meth:`_derive_tweets` reuses so the
+        # nested scenario windows cost one scan rather than four.
+        self._tweet_pages: dict[tuple[str, str, int], list[tuple[str, list]]] = {}
+
+    def _cache_slug(self, query_string: str) -> str | None:
+        """The projection's slug for *query_string*, or ``None`` to use SPARQL.
+
+        Gates every read that could be served columnar. Two conditions, both
+        required, and both failing *closed* — an unusable projection returns
+        ``None`` and the caller queries the graph exactly as before:
+
+        * a projection is attached at all (``publish_app`` only attaches one it
+          could read a watermark from), and
+        * it actually holds rows for this query.
+
+        The second is not paranoia. The SPARQL path matches a configured query
+        against the ingested ``SearchQuery`` by substring in either direction, so
+        it still answers when the two differ; slug equality is exact. Without the
+        check, a query renamed since its envelopes were written would publish a
+        confident zero instead of falling back to the graph that still has it.
+        """
+        if self.cache is None:
+            return None
+        slug = slugify(query_string)
+        try:
+            known = self._memo(("cache_slugs",), self.cache.known_query_slugs)
+        except Exception as exc:  # noqa: BLE001 — an unreadable projection is not fatal
+            logger.warning(f"X app: projection unreadable ({exc}); using SPARQL")
+            return None
+        if slug not in known:
+            logger.info(
+                f"X app: projection has no rows for {query_string!r} "
+                f"(slug {slug!r}); using SPARQL"
+            )
+            return None
+        return slug
 
     def _memo(self, key: tuple, compute: Callable[[], _T]) -> _T:
         """Run *compute* at most once per *key* for this publish.
@@ -513,6 +635,94 @@ class SnapshotContext:
                 total += int(bucket["count"])
         return total
 
+    def ingested_timeseries(
+        self, query_string: str, start_time: str, end_time: str
+    ) -> list[dict[str, Any]]:
+        """Hourly ``{start, end, count}`` of ingested **matched** tweets.
+
+        Bucketed by each tweet's ``created_at``, not by ingest time. Referenced
+        context is excluded — quoted/replied-to originals can predate the
+        window. Count-endpoint totals are a different population (what X
+        reported, not what was ingested).
+
+        Memoized per publish: the Search line chart derives every scenario
+        window (and its previous period) from one span.
+        """
+        return self._memo(
+            ("ingested_timeseries", query_string, start_time, end_time),
+            lambda: self._ingested_timeseries(query_string, start_time, end_time),
+        )
+
+    def _ingested_timeseries(
+        self, query_string: str, start_time: str, end_time: str
+    ) -> list[dict[str, Any]]:
+        cache = self.cache
+        slug = self._cache_slug(query_string)
+        if cache is not None and slug is not None:
+            return cache.hourly_counts(start_time, end_time, query_slug=slug)
+        return self._ingested_timeseries_sparql(query_string, start_time, end_time)
+
+    def _ingested_timeseries_sparql(
+        self, query_string: str, start_time: str, end_time: str
+    ) -> list[dict[str, Any]]:
+        escaped = _escape_sparql_string(query_string)
+        start_lit = _escape_sparql_string(start_time)
+        end_lit = _escape_sparql_string(end_time)
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        PREFIX x:   <{self.namespace}>
+        SELECT DISTINCT ?tweet ?created
+        WHERE {{
+          GRAPH <{self.tweet_graph_name}> {{
+            ?sq rdf:type x:SearchQuery ; x:query_string ?qs .
+            FILTER(
+              CONTAINS(LCASE(STR(?qs)), LCASE("{escaped}"))
+              || CONTAINS(LCASE("{escaped}"), LCASE(STR(?qs)))
+            )
+            ?proc rdf:type x:SearchRecentTweets ;
+                  x:usesSearchQuery ?sq ;
+                  x:producesSearchResult ?rs .
+            ?tweet rdf:type x:Tweet ;
+                   x:isContainedInSearchResultSet ?rs ;
+                   x:tweet_created_at ?created .
+            FILTER(
+              ?created >= "{start_lit}"^^xsd:dateTime
+              && ?created < "{end_lit}"^^xsd:dateTime
+            )
+          }}
+        }}
+        """
+        counts: dict[datetime, int] = {}
+        rows = self._query_rows(
+            sparql,
+            f"ingested_timeseries for {query_string!r} [{start_time} → {end_time}]",
+        )
+        for row in rows:
+            raw = getattr(row, "created", None)
+            if raw is None:
+                continue
+            try:
+                created = (
+                    raw
+                    if isinstance(raw, datetime)
+                    else datetime.fromisoformat(str(raw))
+                )
+            except ValueError:
+                continue
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=UTC)
+            hour = created.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+            counts[hour] = counts.get(hour, 0) + 1
+        return [
+            {
+                "start": hour.isoformat(),
+                "end": (hour + timedelta(hours=1)).isoformat(),
+                "count": n,
+            }
+            for hour, n in sorted(counts.items())
+        ]
+
     # ----- SPARQL: ingested tweets -----------------------------------------
 
     def count_tweets_in_window(
@@ -639,6 +849,245 @@ class SnapshotContext:
         except (TypeError, ValueError):
             return 0
 
+    # ----- SPARQL: banded aggregates ---------------------------------------
+    #
+    # One scan per population / column, split by :func:`scenario_bands`, instead
+    # of one scan per window. Every scenario window and its previous period is a
+    # union of consecutive bands, so the per-window numbers are Python sums over
+    # the same result — which is what the KPI and facet snapshots read.
+
+    def banded_count_for_window(
+        self, query_string: str, start_time: str, end_time: str, *, referenced: bool
+    ) -> int:
+        """Posts in ``[start, end)``, summed from the banded aggregate.
+
+        Answered from the projection when one covers this query — it filters a
+        resident column instead of scanning the graph, and needs no band
+        alignment because any window is just a predicate. Otherwise the banded
+        aggregate, falling back to a direct windowed count when the window is
+        not band-aligned, so an arbitrary range still gets an exact answer.
+        """
+        cache = self.cache
+        slug = self._cache_slug(query_string)
+        if cache is not None and slug is not None:
+            return cache.count_in_window(
+                start_time, end_time, referenced=referenced, query_slug=slug
+            )
+        indices = bands_for_window(self.bands, start_time, end_time)
+        if indices is None:
+            if referenced:
+                return self.count_referenced_tweets_in_window(
+                    query_string, start_time, end_time, limit=0
+                )
+            return self.count_tweets_in_window(
+                query_string, start_time, end_time, limit=0
+            )
+        counts = self._banded_post_counts(query_string, referenced=referenced)
+        return sum(counts.get(index, 0) for index in indices)
+
+    def _banded_post_counts(
+        self, query_string: str, *, referenced: bool
+    ) -> dict[int, int]:
+        """``{band index: post count}`` for one population, memoized per publish."""
+        return self._memo(
+            ("banded_counts", query_string, referenced),
+            lambda: self._query_banded_post_counts(query_string, referenced=referenced),
+        )
+
+    def _query_banded_post_counts(
+        self, query_string: str, *, referenced: bool
+    ) -> dict[int, int]:
+        tweet_class = "x:ReferencedTweet" if referenced else "x:Tweet"
+        membership = (
+            "x:isReferencedTweetOfSearchResultSet"
+            if referenced
+            else "x:isContainedInSearchResultSet"
+        )
+        escaped = _escape_sparql_string(query_string)
+        range_start = _escape_sparql_string(self.bands[-1][0])
+        range_end = _escape_sparql_string(self.bands[0][1])
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        PREFIX x:   <{self.namespace}>
+        SELECT ?band (COUNT(DISTINCT ?tweet) AS ?n)
+        WHERE {{
+          GRAPH <{self.tweet_graph_name}> {{
+            ?sq rdf:type x:SearchQuery ; x:query_string ?qs .
+            FILTER(
+              CONTAINS(LCASE(STR(?qs)), LCASE("{escaped}"))
+              || CONTAINS(LCASE("{escaped}"), LCASE(STR(?qs)))
+            )
+            ?proc rdf:type x:SearchRecentTweets ;
+                  x:usesSearchQuery ?sq ;
+                  x:producesSearchResult ?rs .
+            ?tweet rdf:type {tweet_class} ;
+                   {membership} ?rs ;
+                   x:tweet_created_at ?created .
+            FILTER(
+              ?created >= "{range_start}"^^xsd:dateTime
+              && ?created < "{range_end}"^^xsd:dateTime
+            )
+          }}
+          BIND({_band_bind_expression(self.bands)} AS ?band)
+        }}
+        GROUP BY ?band
+        """
+        counts: dict[int, int] = {}
+        rows = self._query_rows(
+            sparql,
+            f"banded_post_counts({tweet_class}) for {query_string!r}",
+        )
+        for row in rows:
+            band = getattr(row, "band", None)
+            n = getattr(row, "n", None)
+            if band is None:
+                continue
+            try:
+                counts[int(str(band))] = int(str(n)) if n is not None else 0
+            except (TypeError, ValueError):
+                continue
+        return counts
+
+    def facet_values_for_window(
+        self,
+        query_string: str,
+        start_time: str,
+        end_time: str,
+        column: str,
+        *,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        """Distinct values of *column* in ``[start, end)``, most frequent first.
+
+        The banded equivalent of :meth:`distinct_column_values` with no active
+        filters — same payload, one scan per column for every scenario instead
+        of one per column *per* scenario. Unaligned windows and filtered reads
+        keep going through :meth:`distinct_column_values`.
+
+        Values that differ only in surrounding whitespace are merged, because
+        that is how they are displayed: ``user_location`` holds both
+        ``"United States"`` and ``"United States "``, and the per-window query
+        returned them as two rows that rendered as two identical checkboxes
+        splitting one country's count. Merging also survives the value cap —
+        the old query applied its ``LIMIT`` to the *unmerged* rows, so variants
+        ranked below it were dropped instead of counted.
+
+        Note the filter side is unchanged and still matches on the stored value,
+        so ticking a merged entry selects the exact spelling, not the variants.
+        """
+        cache = self.cache
+        slug = self._cache_slug(query_string)
+        if cache is not None and slug is not None and column in TWEET_FACET_COLUMNS:
+            return cache.facet_values(
+                start_time, end_time, column, limit=limit, query_slug=slug
+            )
+        indices = bands_for_window(self.facet_bands, start_time, end_time)
+        if indices is None or column not in TWEET_COLUMN_EXPRESSIONS:
+            return self.distinct_column_values(
+                query_string, start_time, end_time, column, limit=limit
+            )
+        banded = self._banded_facet_values(query_string, column)
+        totals: dict[str, int] = {}
+        for index in indices:
+            for value, count in banded.get(index, {}).items():
+                # Keyed on the displayed form, so whitespace variants of the
+                # same value land in one entry rather than several identical
+                # checkboxes.
+                display = value.strip()
+                totals[display] = totals.get(display, 0) + count
+        # Ties broken by value so the published order is stable across runs;
+        # SPARQL's ORDER BY DESC(?n) alone left them at the engine's mercy.
+        ranked = sorted(totals.items(), key=lambda kv: (-kv[1], kv[0]))
+        return [{"value": value, "count": count} for value, count in ranked[:limit]]
+
+    def _banded_facet_values(
+        self, query_string: str, column: str
+    ) -> dict[int, dict[str, int]]:
+        """``{band index: {value: tweet count}}`` for *column*, memoized."""
+        return self._memo(
+            ("banded_facets", query_string, column),
+            lambda: self._query_banded_facet_values(query_string, column),
+        )
+
+    def _query_banded_facet_values(
+        self, query_string: str, column: str
+    ) -> dict[int, dict[str, int]]:
+        """One aggregate per column.
+
+        Deliberately *not* one query grouping all faceted columns at once: an
+        author carrying two ``x:user_location`` values would contribute two rows,
+        and summing them per username would count that tweet twice, where
+        ``COUNT(DISTINCT ?tweet)`` per column counts it once.
+        """
+        expression = TWEET_COLUMN_EXPRESSIONS[column]
+        range_start = self.facet_bands[-1][0]
+        range_end = self.facet_bands[0][1]
+        block = self._tweet_match_block(query_string, range_start, range_end, {})
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        PREFIX x:   <{self.namespace}>
+        SELECT ?band ?value (COUNT(DISTINCT ?tweet) AS ?n)
+        WHERE {{
+{block}
+          BIND({_band_bind_expression(self.facet_bands)} AS ?band)
+          BIND({expression} AS ?value)
+        }}
+        GROUP BY ?band ?value
+        """
+        out: dict[int, dict[str, int]] = {}
+        rows = self._query_rows(
+            sparql, f"banded_facet_values for {query_string!r} column={column!r}"
+        )
+        for row in rows:
+            band = getattr(row, "band", None)
+            raw = getattr(row, "value", None)
+            count = getattr(row, "n", None)
+            if band is None:
+                continue
+            try:
+                index = int(str(band))
+                n = int(str(count)) if count is not None else 0
+            except (TypeError, ValueError):
+                continue
+            value = "" if raw is None else str(raw).strip()
+            bucket = out.setdefault(index, {})
+            bucket[value] = bucket.get(value, 0) + n
+        return out
+
+    def tweet_graph_state(self) -> dict[str, str]:
+        """Cheap fingerprint of the tweet graph: post total + newest timestamp.
+
+        Used to decide whether the Users dataset needs rebuilding at all. The
+        pair catches every change that would alter it — new posts (both move), a
+        backfill of older posts (only the total moves) and deletions (the total
+        drops) — for one small aggregate instead of the two full-graph scans the
+        rebuild itself costs.
+        """
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX x:   <{self.namespace}>
+        SELECT (COUNT(?tweet) AS ?tweets) (MAX(?created) AS ?newest)
+        WHERE {{
+          GRAPH <{self.tweet_graph_name}> {{
+            ?tweet rdf:type x:Tweet ;
+                   x:tweet_created_at ?created .
+          }}
+        }}
+        """
+        rows = self._query_rows(sparql, "tweet_graph_state")
+        if not rows:
+            return {}
+        tweets = getattr(rows[0], "tweets", None)
+        newest = getattr(rows[0], "newest", None)
+        if tweets is None:
+            return {}
+        return {
+            "tweets": str(tweets),
+            "newest": "" if newest is None else str(newest),
+        }
+
     def _tweet_match_block(
         self,
         query_string: str,
@@ -701,16 +1150,45 @@ class SnapshotContext:
         other columns' *filters*), not just the rows currently in the table, so
         the offered values are the full graph's — the same guarantee
         :meth:`search_tweets` gives for the rows themselves.
+
+        Memoized per publish on the *normalized* filters, like
+        :meth:`search_tweets`. The publish path reads facets through
+        :meth:`facet_values_for_window` instead, which needs one scan per column
+        for all scenarios rather than one per column per scenario.
         """
         if column not in TWEET_COLUMN_EXPRESSIONS:
             return []
-        expression = TWEET_COLUMN_EXPRESSIONS[column]
         # The column being enumerated must not filter its own value list, or
         # ticking one box would hide every other option (Excel behaviour).
         active = normalize_tweet_filters(filters)
         active.pop(column, None)
         if contains.strip():
             active[column] = {"contains": contains.strip(), "values": []}
+        return self._memo(
+            (
+                "distinct_column_values",
+                query_string,
+                start_time,
+                end_time,
+                column,
+                int(limit),
+                self._filters_key(active),
+            ),
+            lambda: self._distinct_column_values(
+                query_string, start_time, end_time, column, active, int(limit)
+            ),
+        )
+
+    def _distinct_column_values(
+        self,
+        query_string: str,
+        start_time: str,
+        end_time: str,
+        column: str,
+        active: dict[str, dict[str, Any]],
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        expression = TWEET_COLUMN_EXPRESSIONS[column]
         block = self._tweet_match_block(query_string, start_time, end_time, active)
         sparql = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -761,22 +1239,101 @@ class SnapshotContext:
         Memoized per publish on the *normalized* filters, so the tables /
         barcharts / linecharts scripts share one execution per
         (query, window) instead of running five.
+
+        Unfiltered reads are additionally resolved against pages already fetched
+        for the same ``end_time`` — see :meth:`_derive_tweets`. Since every
+        scenario shares an ``end_time`` and the scenarios are visited
+        narrowest-first, one 24 h scan typically answers all four.
         """
         cap = self.tweet_limit if limit is None else int(limit)
         active = normalize_tweet_filters(filters)
-        return self._memo(
-            (
-                "search_tweets",
-                query_string,
-                start_time,
-                end_time,
-                cap,
-                self._filters_key(active),
-            ),
-            lambda: self._search_tweets(
-                query_string, start_time, end_time, active, cap
-            ),
+        key = (
+            "search_tweets",
+            query_string,
+            start_time,
+            end_time,
+            cap,
+            self._filters_key(active),
         )
+        if key in self._query_cache:
+            return self._query_cache[key]
+
+        rows: list[dict[str, Any]] | None = None
+        if not active:
+            # The projection answers an unfiltered page directly — no page-reuse
+            # reasoning needed, since a window is just a predicate over resident
+            # rows. Filtered reads stay on SPARQL: the filters are pushed into
+            # the query so a keyword search sees the whole graph, not a capped
+            # page, and the projection has no equivalent.
+            cache = self.cache
+            slug = self._cache_slug(query_string)
+            if cache is not None and slug is not None:
+                rows = cache.newest_posts(
+                    start_time, end_time, limit=cap, query_slug=slug
+                )
+            else:
+                rows = self._derive_tweets(query_string, start_time, end_time, cap)
+        if rows is None:
+            rows = self._search_tweets(query_string, start_time, end_time, active, cap)
+            if not active:
+                self._tweet_pages.setdefault((query_string, end_time, cap), []).append(
+                    (start_time, rows)
+                )
+        self._query_cache[key] = rows
+        return rows
+
+    def _derive_tweets(
+        self, query_string: str, start_time: str, end_time: str, cap: int
+    ) -> list[dict[str, Any]] | None:
+        """Reuse an already-fetched page for ``[start_time, end_time)``, or ``None``.
+
+        Two rules, both exact, for pages sharing this window's ``end_time``:
+
+        **Wider → narrower.** A page for ``[s', end)`` with ``s' <= start`` holds
+        the newest *cap* posts of a window that contains this one. Every post in
+        ``[start, end)`` that could belong in this window's newest *cap* is newer
+        than that page's oldest row, so filtering the page to ``start`` is exact
+        — whether or not the page came back full.
+
+        **Narrower → wider.** A *full* page for ``[s', end)`` with ``s' > start``
+        whose oldest row is newer than its own ``s'`` never reached its window's
+        edge: there are already *cap* posts newer than that row, so the wider
+        window's newest *cap* are the very same rows.
+        """
+        pages = self._tweet_pages.get((query_string, end_time, cap))
+        if not pages:
+            return None
+        try:
+            start = datetime.fromisoformat(start_time)
+        except ValueError:
+            return None
+
+        def created(row: dict[str, Any]) -> datetime | None:
+            try:
+                return datetime.fromisoformat(str(row["created_at"]))
+            except (KeyError, ValueError):
+                return None
+
+        for page_start, rows in pages:
+            try:
+                page_start_dt = datetime.fromisoformat(page_start)
+            except ValueError:
+                continue
+            if page_start_dt == start:
+                return rows
+            if page_start_dt < start:
+                filtered = []
+                for row in rows:
+                    moment = created(row)
+                    if moment is None or moment >= start:
+                        filtered.append(row)
+                return filtered
+            # Narrower page: only usable when it never reached its own edge.
+            if len(rows) >= cap and rows:
+                oldest = created(rows[-1])
+                if oldest is not None and oldest > page_start_dt:
+                    return rows
+        return None
 
     def _search_tweets(
         self,
@@ -933,6 +1490,37 @@ class SnapshotContext:
                 out[username] = description
         return out
 
+    def all_display_names(self) -> dict[str, str]:
+        """Every author display name in the graph, keyed by username.
+
+        Same shape as :meth:`all_descriptions`: one pass over hydrated accounts
+        (those that carry ``x:user_name``), not the per-shard account query.
+        An author can have several ``XUser`` individuals; the longest name wins.
+        """
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX x:   <{self.namespace}>
+        SELECT ?username ?displayName
+        WHERE {{
+          GRAPH <{self.tweet_graph_name}> {{
+            ?user rdf:type x:XUser ;
+                  x:username ?username ;
+                  x:user_name ?displayName .
+          }}
+        }}
+        """
+        out: dict[str, str] = {}
+        for row in self._query_rows(sparql, "all_display_names"):
+            username = str(getattr(row, "username", "") or "").strip()
+            display_name = " ".join(
+                str(getattr(row, "displayName", "") or "").split()
+            ).strip()
+            if not username or not display_name:
+                continue
+            if len(display_name) > len(out.get(username, "")):
+                out[username] = display_name
+        return out
+
     def _values_clause(self, usernames: Iterable[str]) -> str:
         """``VALUES ?username { … }`` binding an exact batch of author names.
 
@@ -950,6 +1538,11 @@ class SnapshotContext:
         self, usernames: list[str]
     ) -> dict[str, list[dict[str, Any]]]:
         """Every post by each of *usernames*, newest first, keyed by username.
+
+        Covers search matches *and* referenced context (a quote/reply/retweet
+        original this account wrote). Context-only rows are flagged
+        ``referenced=True``; matches omit the key. ``x:Tweet`` already includes
+        ``x:ReferencedTweet``, so no extra type filter is needed.
 
         Resolved in batches of :data:`AUTHOR_BATCH_SIZE` so peak memory is a
         function of the batch, not of the graph. Photos carry ``media_url``;
@@ -971,7 +1564,7 @@ class SnapshotContext:
             sparql = f"""
             PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
             PREFIX x:   <{self.namespace}>
-            SELECT ?username ?created ?fullText ?text ?url
+            SELECT ?username ?created ?fullText ?text ?url ?isReferenced
                    (GROUP_CONCAT(DISTINCT COALESCE(?mediaAny, "");
                                  separator=" ") AS ?mediaUrls)
             WHERE {{
@@ -981,6 +1574,7 @@ class SnapshotContext:
                 ?tweet rdf:type x:Tweet ;
                        x:tweet_created_at ?created ;
                        x:isAuthoredBy ?author .
+                BIND(EXISTS {{ ?tweet rdf:type x:ReferencedTweet }} AS ?isReferenced)
                 OPTIONAL {{ ?tweet x:full_text ?fullText . }}
                 OPTIONAL {{ ?tweet x:tweet_text ?text . }}
                 OPTIONAL {{ ?tweet x:url ?url . }}
@@ -992,7 +1586,7 @@ class SnapshotContext:
                 }}
               }}
             }}
-            GROUP BY ?tweet ?username ?created ?fullText ?text ?url
+            GROUP BY ?tweet ?username ?created ?fullText ?text ?url ?isReferenced
             """
             rows = self._query_rows(
                 sparql, f"posts_for_usernames for a batch of {len(batch)} author(s)"
@@ -1014,6 +1608,8 @@ class SnapshotContext:
                     "url": _s(row, "url"),
                     "username": username,
                 }
+                if _s(row, "isReferenced").lower() in ("true", "1"):
+                    post["referenced"] = True
                 # Space-separated: a tweet can carry up to four media. Omitted
                 # rather than published empty — most posts have none, and the
                 # table renders a missing key and an empty one identically.
@@ -1197,3 +1793,50 @@ class SnapshotContext:
             }
             for day, value in sorted(by_day.items())
         ]
+
+
+def complete_hourly_buckets(
+    buckets: list[dict[str, Any]],
+    start_time: str,
+    end_time: str,
+) -> list[dict[str, Any]]:
+    """Pad *buckets* so every hour in ``[start, end)`` is present.
+
+    The Search line chart plots by index (same as Count), so a sparse series of
+    only the hours that had a tweet would stretch those hours across the axis
+    and overlay current vs previous by rank rather than by clock hour. Zero
+    hours keep the series aligned with the window, the way the count endpoint's
+    hourly buckets already are.
+    """
+    by_hour: dict[datetime, int] = {}
+    for bucket in buckets:
+        try:
+            hour = datetime.fromisoformat(str(bucket["start"]))
+        except ValueError:
+            continue
+        if hour.tzinfo is None:
+            hour = hour.replace(tzinfo=UTC)
+        hour = hour.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+        by_hour[hour] = by_hour.get(hour, 0) + int(bucket.get("count") or 0)
+
+    start = datetime.fromisoformat(start_time)
+    end = datetime.fromisoformat(end_time)
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=UTC)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=UTC)
+    start = start.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+
+    out: list[dict[str, Any]] = []
+    hour = start
+    while hour < end:
+        nxt = hour + timedelta(hours=1)
+        out.append(
+            {
+                "start": hour.isoformat(),
+                "end": nxt.isoformat(),
+                "count": by_hour.get(hour, 0),
+            }
+        )
+        hour = nxt
+    return out

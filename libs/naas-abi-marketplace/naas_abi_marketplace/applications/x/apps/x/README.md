@@ -105,15 +105,20 @@ page directly. Only the state a path cannot carry stays in the query string
 |---|---|---|
 | Count Recent Tweets | `/posts/get-posts-counts-recent/` | `scenario`, `query` |
 | Search Recent Tweets | `/posts/search-posts-recent/` | `scenario`, `query` |
-| Search Users | `/users/search/` | `q`, `user` |
+| Search Users | `/users/search` | `q`, `user`, `post` |
 | Parameters | `/parameters/` | — |
 
 So `…/x/apps/x/posts/search-posts-recent/?scenario=last_7d&query=ai` opens the
-Search page on that window and query, `…/x/apps/x/users/search/?q=grok` opens
-that search, and adding `&user=grok` opens that author's page. `scenario` is an
+Search page on that window and query, `…/x/apps/x/users/search?q=grok` opens
+that search, adding `&user=grok` opens that author's page, and `&post=<tweet id>`
+pins that post to the top of the author page. `scenario` is an
 id from `globals/scenarios.json`, `query` a slug from `globals/queries.json`,
 `user` a handle from the search index, `q` whatever was typed in the Users
-search box.
+search box, `post` the numeric tweet id. The Users path has **no trailing slash**
+before the query string (`search?user=` not `search/?user=`).
+
+`?token=` (the `/app-html/` access credential) is kept on every in-app link and
+snapshot fetch so switching pages does not drop authorisation.
 
 Rules the app keeps:
 
@@ -143,22 +148,28 @@ Rules the app keeps:
 The Users page is **not** scoped by the Scenario / Query filters — those are
 hidden there. It has two exclusive states, both of them URLs:
 
-**The search** (`/users/search/?q=grok`) answers with a list of results rather
-than a grid of tiles — one row per author: its address, the handle as the link,
-the account bio as the snippet when it has one, then what the graph knows about
-it (posts ingested, location, verification, last post). Bios come from the
-search index itself, which is why `users.json` carries a `description` column
-(see below) rather than the page fetching a shard per result. Results are ranked
-by how well the handle answers the needle (`rankUsers`
-in `lib/userSearch.ts`): exact handle, then prefix, then substring, then a
-location match, with the busiest author first inside each band — so searching
-"grok" answers with @grok, not with whichever louder account happens to contain
-those letters. An empty box lists everyone, busiest first, 10 per page.
+**The search** (`/users/search?q=grok`) answers with a list of results rather
+than a grid of tiles — one row per author: its address, the display name as the
+link with the `@handle` under it, the account bio as the snippet when it has
+one, then what the graph knows about it (posts ingested, location, verification,
+last post). Names and bios come from the search index itself, which is why
+`users.json` carries `display_name` and `description` columns (see below)
+rather than the page fetching a shard per result. Results are ranked
+by how well the handle or display name answers the needle (`rankUsers`
+in `lib/userSearch.ts`): exact handle, then exact name, then prefix / substring
+on each, then a location match, with the busiest author first inside each band
+— so searching "grok" answers with @grok, not with whichever louder account
+happens to contain those letters. The box is submitted with Enter (Google
+style); typing does not re-filter. An empty query lists everyone, busiest
+first, **100 per page**, with a count of `N results in the X graph`. A submitted
+query updates that line to `N results for “…”`. The × in the box clears the
+query and returns to the full-graph listing.
 
-**One author** (`/users/search/?q=grok&user=grok`) replaces the results with
-that account's page: profile metadata, then the KPIs of what was ingested from
-them, then the table of those posts, 100 per page. Closing it — the ✕ or *Back
-to search* — drops `user` and lands back on the results it was opened from,
+**One author** (`/users/search?q=grok&user=grok`) replaces the results with
+that account's page: profile metadata, KPIs of what was ingested, then the
+posts as a feed (URL, date | kind, then the text and image). Clicking a post
+URL pins it to the top and sets `?post=<tweet id>`. Closing it — the ✕ or *Back
+to search* — drops `user` (and `post`) and lands back on the results it was opened from,
 needle intact, which is why `q` rides along in the URL. A handle absent from the
 published dataset renders as "not in the published X graph" rather than as an
 empty page.
@@ -180,17 +191,22 @@ The whole page is one published dataset:
 
 | Object | Holds |
 |---|---|
-| `search_users/users.json` | Every author (~60k) — the search index, as compact arrays: `[username, posts, last_post_at, location, verified_type, shard, description]` |
+| `search_users/users.json` | Every author (~60k) — the search index, as compact arrays: `[username, posts, last_post_at, location, verified_type, shard, description, display_name]` |
 | `search_users/posts/<shard>.json` | For each author in the shard: `profile` + every post, newest first |
 | `search_users/shards.json` | Per-shard content hash, author count, post count, byte size |
 
-`description` is a trailing column, and `DATASET_FORMAT` is deliberately *not*
-bumped for it: an older app ignores it, a newer one reads a missing one as
-empty, and a bump would force all 256 shards to be re-queried for a change that
-touches none of them. Bios are capped at `MAX_DESCRIPTION_CHARS` (160, which is
-X's own limit) — that cap is what bounds their share of a ~60k-row index — and
-come from one pass over the hydrated accounts (`all_descriptions`), not from the
+`description` and `display_name` are trailing columns, and `DATASET_FORMAT` is
+deliberately *not* bumped for them: an older app ignores extras, a newer one
+reads a missing one as empty, and a bump would force all 256 shards to be
+re-queried for a change that touches none of them. Bios are capped at
+`MAX_DESCRIPTION_CHARS` (160, which is X's own limit) — that cap is what bounds
+their share of a ~60k-row index — and names + bios come from one pass each over
+the hydrated accounts (`all_descriptions`, `all_display_names`), not from the
 per-shard account query.
+
+`DATASET_FORMAT` **is** bumped to 2 when author posts start including referenced
+context (not only search matches): index counts and shard payloads both change,
+so the next publish rebuilds every shard once.
 
 Authors are grouped into 256 shards by `sha1(username)` (`user_shard`), so
 selecting an author downloads one file of a few hundred KB instead of the whole
@@ -207,7 +223,7 @@ several times in the same second keep a stable order.
 
 Each author's `profile` is the tweet aggregates merged with their `XUser`
 individual — display name, bio, location, URL, join date,
-verification/protected flags, pinned + most-recent tweet ids, profile image and
+verification/protected flags, pinned tweet id, profile image and
 banner, plus the `XUserPublicMetrics` counts (followers, following, tweets,
 listed, likes, media). Those render as a profile card between the KPIs and the
 post table. Empty fields are **dropped** rather than published as `""`/`null`:
@@ -266,9 +282,29 @@ excluded, which matches the count workflow (it only ingests complete hours).
 scenario** (4× for the default Scenario filter) per followed query. Tweet
 tables and author/location bars still use `DEFAULT_TWEET_LIMIT` (1 000).
 
+The Search page shows four cards: **Total Posts Ingested** (matched + referenced,
+delta vs the previous window, hint = coverage period), **Tweets** and
+**Referenced Tweets** (each with a delta and share of posts ingested), and
+**Coverage** (matched / count-endpoint total; hint is that count, no
+period-over-period comparison).
+
 `tweets_in_window` orders the full graph match by recency *before* applying that
 LIMIT, so a capped read is the newest N tweets in the window — never an
 arbitrary sample.
+
+## Ingested tweets over time
+
+The Search page line chart matches Count's **Posts over time**: per-hour (24h /
+48h) or per-day (7d / 30d) **counts**, current vs previous period — not a
+cumulative running total, and not the newest-1 000 table sample.
+
+Each point is ingested **matched** tweets whose `created_at` falls in that
+bucket (`ingested_timeseries`). Referenced tweets are left out (a quoted original
+can be months older than the window). Count-endpoint totals are a different
+population and are not used here.
+
+Empty hours/days are kept as zero so the series lines up with the window (and
+current vs previous overlay by clock hour, not by rank).
 
 ## Column filters
 

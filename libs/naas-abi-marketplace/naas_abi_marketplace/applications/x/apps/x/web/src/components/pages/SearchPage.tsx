@@ -66,6 +66,13 @@ export function SearchPage({
         t.scenario_id === scenarioId,
     ) || null;
   const scenario = scenarios.find((s) => s.id === scenarioId);
+  const kpiItems = (kpis?.items || []).map((it) => {
+    if (it.id !== "tweets_ingested" || !scenario) return it;
+    return {
+      ...it,
+      hint: `${formatWindowInstant(scenario.start_time, timezone)} to ${formatWindowInstant(scenario.end_time, timezone)}`,
+    };
+  });
   // The checkbox lists come from the published facets, which are aggregated
   // over the whole query + window — not just the rows in the table above.
   const facets: Record<string, ColumnValue[]> = {};
@@ -84,7 +91,7 @@ export function SearchPage({
 
   return (
     <div>
-      <KpiGrid items={kpis?.items || []} columns={3} accentFirst />
+      <KpiGrid items={kpiItems} accentFirst />
       <div className="kpi-charts">
         <div className="kpi-chart">
           <div className="kpi-label">Top authors</div>
@@ -99,8 +106,8 @@ export function SearchPage({
         <div className="section-head">
           <h2>Ingested tweets over time</h2>
           <p className="sub">
-            {line?.granularity === "day" ? "Per day" : "Per hour"} · ingested
-            tweets (sample ≤ 1 000)
+            {line?.granularity === "day" ? "Per day" : "Per hour"} · current vs
+            previous period
           </p>
         </div>
         <div className="card">

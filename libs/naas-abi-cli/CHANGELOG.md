@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v2.17.2 (2026-08-18)
+
+### Bug Fixes
+
+- Bump uv.lock libs
+  ([`ef92f2c`](https://github.com/jupyter-naas/abi/commit/ef92f2c380878e8525ad7edb2f6009abd71dbd6f))
+
+
+## v2.17.1 (2026-08-14)
+
+
 ## v2.17.0 (2026-08-11)
 
 ### Features

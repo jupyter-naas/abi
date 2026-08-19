@@ -93,12 +93,21 @@ def test_missing_payload_falls_through_instead_of_erroring() -> None:
     assert response.json() == {"detail": "App HTML not found"}
 
 
-def test_page_without_trailing_slash_redirects_keeping_the_query() -> None:
+def test_users_page_serves_without_a_trailing_slash() -> None:
+    """``search?user=`` must not bounce to ``search/?user=``."""
     response = _client(_published()).get(
         f"{BASE}/users/search?user=grok", follow_redirects=False
     )
-    assert response.status_code == 308
-    assert response.headers["location"] == f"{BASE}/users/search/?user=grok"
+    assert response.status_code == 200
+    assert b"users" in response.content
+    assert response.headers["content-type"].startswith("text/html")
+
+
+def test_unslashed_router_payload_aliases_the_exported_index() -> None:
+    response = _client(_published()).get(f"{BASE}/users/search.txt")
+    assert response.status_code == 200
+    assert response.content == b"users payload"
+    assert response.headers["content-type"].startswith("text/plain")
 
 
 def test_unpublished_page_falls_back_to_the_app_root() -> None:

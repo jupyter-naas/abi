@@ -162,7 +162,7 @@ intentMapping:findTopEngagingTweetsQuery a intentMapping:TemplatableSparqlQuery 
 
 intentMapping:findTweetsByAuthorQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_tweets_by_author"@en ;
-    intentMapping:intentDescription "Return tweets authored by a specific X user, identified by their numeric author_id. Useful to answer 'what has user <author_id> posted?' Covers only tweets that matched an ingestion query; referenced tweets (reply parents, quoted tweets and retweeted originals kept as context) are excluded." ;
+    intentMapping:intentDescription "Return tweets authored by a specific X user, identified by their numeric author_id. Useful to answer 'what has user <author_id> posted?' Covers only tweets that matched an ingestion query; referenced tweets (reply parents, quoted tweets and retweeted originals kept as context) are excluded. Prefer find_tweets_by_username when the user gives a handle." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -191,6 +191,44 @@ intentMapping:findTweetsByAuthorQuery a intentMapping:TemplatableSparqlQuery ;
         LIMIT {{ limit }}
     """ ;
     intentMapping:hasArgument intentMapping:xAuthorIdArg ;
+    intentMapping:hasArgument intentMapping:xLimitArg .
+
+intentMapping:findTweetsByUsernameQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_tweets_by_username"@en ;
+    intentMapping:intentDescription "Return tweets authored by a specific X handle (username, with or without a leading @). Useful to answer 'what has @<username> posted?' or 'show me all tweets by <username>'. Match is case-insensitive. Covers only tweets that matched an ingestion query; referenced tweets (reply parents, quoted tweets and retweeted originals kept as context) are excluded." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX x:    <http://ontology.naas.ai/x/>
+
+        SELECT DISTINCT ?tweet ?tweetId ?tweetUrl ?text ?username ?authorId ?createdAt ?likeCount ?retweetCount ?impressionCount
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/x> {
+            BIND(LCASE(REPLACE("{{ username }}", "^@", "")) AS ?handle)
+            ?author x:username ?username .
+            FILTER(LCASE(STR(?username)) = ?handle)
+            OPTIONAL { ?author x:author_id ?authorId . }
+            ?tweet  rdf:type x:Tweet ;
+                    x:tweet_id ?tweetId ;
+                    x:isAuthoredBy ?author .
+            FILTER NOT EXISTS { ?tweet rdf:type x:ReferencedTweet }
+            BIND(CONCAT("https://x.com/i/status/", STR(?tweetId)) AS ?tweetUrl)
+            OPTIONAL { ?tweet x:full_text ?fullText . }
+            OPTIONAL { ?tweet x:tweet_text ?tweetText . }
+            BIND(COALESCE(?fullText, ?tweetText) AS ?text)
+            OPTIONAL { ?tweet x:tweet_created_at ?createdAt . }
+            OPTIONAL {
+              ?tweet x:hasPublicMetrics ?metrics .
+              OPTIONAL { ?metrics x:like_count ?likeCount . }
+              OPTIONAL { ?metrics x:retweet_count ?retweetCount . }
+              OPTIONAL { ?metrics x:impression_count ?impressionCount . }
+            }
+          }
+        }
+        ORDER BY DESC(?createdAt)
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:xUsernameArg ;
     intentMapping:hasArgument intentMapping:xLimitArg .
 
 intentMapping:findTweetsContainingKeywordQuery a intentMapping:TemplatableSparqlQuery ;
@@ -580,6 +618,12 @@ intentMapping:xAuthorIdArg a intentMapping:QueryArgument ;
     intentMapping:argumentDescription "Numeric X user id (the `author_id` field returned by the X v2 API)." ;
     intentMapping:validationPattern "^[0-9]+$" ;
     intentMapping:validationFormat "x_author_id" .
+
+intentMapping:xUsernameArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "username" ;
+    intentMapping:argumentDescription "X handle of the author, with or without a leading @ (e.g. 'mexicannarcos' or '@mexicannarcos'). Match is case-insensitive." ;
+    intentMapping:validationPattern "^@?[A-Za-z0-9_]{1,15}$" ;
+    intentMapping:validationFormat "x_username" .
 
 intentMapping:xKeywordArg a intentMapping:QueryArgument ;
     intentMapping:argumentName "keyword" ;

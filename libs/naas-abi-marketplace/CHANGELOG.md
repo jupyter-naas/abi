@@ -2,6 +2,124 @@
 
 <!-- version list -->
 
+## v3.36.1 (2026-08-18)
+
+### Bug Fixes
+
+- Bump uv.lock libs
+  ([`ef92f2c`](https://github.com/jupyter-naas/abi/commit/ef92f2c380878e8525ad7edb2f6009abd71dbd6f))
+
+
+## v3.36.0 (2026-08-17)
+
+### Features
+
+- **x**: Add support for scheduled files-reprocessing triggers with cron
+  ([`0f625fe`](https://github.com/jupyter-naas/abi/commit/0f625fe39f22fe239c1348dc57919e4a38092fe2))
+
+
+## v3.35.2 (2026-08-17)
+
+### Bug Fixes
+
+- **naas_abi_marketplace**: Remove unused import field_validator from pydantic
+  ([`fb2c548`](https://github.com/jupyter-naas/abi/commit/fb2c548dcff47b6bcddf686ef0be2c51bd618972))
+
+
+## v3.35.1 (2026-08-17)
+
+### Bug Fixes
+
+- Remove orchestration count recents tweets not used
+  ([`fdd7fc4`](https://github.com/jupyter-naas/abi/commit/fdd7fc471500d5a2be971ed43553d2ff05ff1506))
+
+
+## v3.35.0 (2026-08-17)
+
+### Chores
+
+- **x/orchestrations**: Update orchestration config schema
+  ([`c7da479`](https://github.com/jupyter-naas/abi/commit/c7da4797ab310bc48d8b45d6871641eb03d8f142))
+
+### Features
+
+- **x/cache**: Improve watermark handling and batch processing
+  ([`c7da479`](https://github.com/jupyter-naas/abi/commit/c7da4797ab310bc48d8b45d6871641eb03d8f142))
+
+### Testing
+
+- **x/cache**: Add tests for Redis watermark fallback and manifest rebuild
+  ([`c7da479`](https://github.com/jupyter-naas/abi/commit/c7da4797ab310bc48d8b45d6871641eb03d8f142))
+
+
+## v3.34.6 (2026-08-14)
+
+### Bug Fixes
+
+- Refactor posts search page
+  ([`86fe1f6`](https://github.com/jupyter-naas/abi/commit/86fe1f6162a74dcb389d9760633b6b19d152a9bb))
+
+- Ruff errors
+  ([`c816229`](https://github.com/jupyter-naas/abi/commit/c816229ad4c8274d2f5034d4e959b897659e1b02))
+
+### Refactoring
+
+- X user page & posts
+  ([`5f2f2c2`](https://github.com/jupyter-naas/abi/commit/5f2f2c265d2241fb67f89534d7a1073f76790f26))
+
+
+## v3.34.5 (2026-08-14)
+
+
+## v3.34.4 (2026-08-14)
+
+### Bug Fixes
+
+- Search username on x app
+  ([`1739501`](https://github.com/jupyter-naas/abi/commit/1739501c5fbdf427e3c09efeb7e9252a7fee92ff))
+
+
+## v3.34.3 (2026-08-14)
+
+
+## v3.34.2 (2026-08-14)
+
+### Bug Fixes
+
+- Display referenced tweets in author page
+  ([`87f84be`](https://github.com/jupyter-naas/abi/commit/87f84beaf838f28d7ebef072268d0e8ac913fc39))
+
+
+## v3.34.1 (2026-08-14)
+
+### Bug Fixes
+
+- Rename x app
+  ([`686cba0`](https://github.com/jupyter-naas/abi/commit/686cba08d7fa5278aec9f12fe49754cc5fd3b026))
+
+
+## v3.34.0 (2026-08-14)
+
+### Bug Fixes
+
+- **cache**: Update import paths for x app cache modules
+  ([`8534b01`](https://github.com/jupyter-naas/abi/commit/8534b01cffbd42a638ff1a35adb703eb93148546))
+
+- **x-app**: Update cache handling and schema version
+  ([`65d54b0`](https://github.com/jupyter-naas/abi/commit/65d54b0f6947962c3a6e65f3fdddd24ca7dcc540))
+
+### Features
+
+- **x**: Add banded aggregates for efficient scenario window queries
+  ([`34a66e6`](https://github.com/jupyter-naas/abi/commit/34a66e64506f957e5c4d4fe7fe54537c09fd284d))
+
+- **x**: Add Parquet projection cache for X app ingest envelopes
+  ([`c025c07`](https://github.com/jupyter-naas/abi/commit/c025c07676fba2c1592df7c9034d3b0f0d9920d9))
+
+- **x-app**: Add projection routing for query caching
+  ([`cdde220`](https://github.com/jupyter-naas/abi/commit/cdde220bc36936741988e103ab707faef4a3a0a3))
+
+
 ## v3.33.6 (2026-08-10)
 
 ### Bug Fixes

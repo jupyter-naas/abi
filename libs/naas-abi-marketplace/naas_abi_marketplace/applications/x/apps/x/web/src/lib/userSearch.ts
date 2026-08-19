@@ -4,29 +4,42 @@
  * Everything here is a plain GET against object storage — no SPARQL runs at
  * request time. The picker index (`users.json`) carries every author in the
  * tweet graph, so searching "grok" reaches an account with a single post; the
- * selected author's posts live in one shard file (`posts/<shard>.json`), and
- * the index row names the shard so the browser never has to hash anything.
+ * selected author's posts live in one shard file (`posts/<shard>.json`) —
+ * search matches plus referenced context (quotes / replies / retweets they
+ * wrote) — and the index row names the shard so the browser never has to hash
+ * anything.
  *
  * Index and shards are fetched once and memoised: both are immutable between
  * publishes, and the index is a few MB.
  */
 import type { TweetRow, UserBundle, UserProfile, UserRow } from "@/lib/types";
+import { withAccessToken } from "@/lib/routes";
 
 const BASE = "/app-html/x/apps/x";
 
 /** Posts per page in the table. Pagination is client-side over the shard. */
 export const USER_POSTS_PAGE_SIZE = 100;
 
-/** Search results per page. */
-export const USER_RESULTS_PAGE_SIZE = 10;
+/** Search results per page. Empty query lists the busiest 100 first. */
+export const USER_RESULTS_PAGE_SIZE = 100;
 
 /**
  * Must match INDEX_COLUMNS in api/search_users/users.py.
  *
- * ``description`` is trailing and optional: a publish older than that column
- * simply has six entries, and the row reads as a bio-less author.
+ * ``description`` and ``display_name`` are trailing and optional: a publish
+ * older than those columns simply has fewer entries, and the row reads as a
+ * bio-less / nameless author.
  */
-type IndexRow = [string, number, string, string, string, string, string?];
+type IndexRow = [
+  string,
+  number,
+  string,
+  string,
+  string,
+  string,
+  string?,
+  string?,
+];
 
 type IndexDoc = {
   format?: number;
@@ -57,7 +70,7 @@ const shardPromises = new Map<string, Promise<ShardDoc | null>>();
 async function getJson<T>(path: string): Promise<T | null> {
   let res: Response;
   try {
-    res = await fetch(`${BASE}/${path}`, { cache: "no-store" });
+    res = await fetch(withAccessToken(`${BASE}/${path}`), { cache: "no-store" });
   } catch {
     return null;
   }
@@ -84,6 +97,7 @@ export function loadUserIndex(): Promise<UserIndex> {
           verified_type,
           shard,
           description,
+          display_name,
         ] = row;
         users.push({
           username,
@@ -92,6 +106,7 @@ export function loadUserIndex(): Promise<UserIndex> {
           location,
           verified_type,
           description: description || "",
+          display_name: display_name || "",
         });
         shardOf.set(username, shard);
       }
@@ -134,21 +149,25 @@ export async function loadUserBundle(
  * The index arrives busiest-first, which is the right answer for an empty box
  * but the wrong one for a search: typing "grok" must not bury @grok under every
  * louder account whose handle merely contains those letters. So matches are
- * ranked by how well the handle answers the needle, and only then by how much
- * the author has posted.
+ * ranked by how well the handle *or display name* answers the needle, and only
+ * then by how much the author has posted.
  */
 export function rankUsers(users: UserRow[], needle: string): UserRow[] {
-  const q = needle.trim().toLowerCase();
+  const q = needle.trim().toLowerCase().replace(/^@/, "");
   if (!q) return users;
 
   const scored: { user: UserRow; score: number }[] = [];
   for (const user of users) {
     const username = user.username.toLowerCase();
+    const name = (user.display_name || "").toLowerCase();
     let score: number;
     if (username === q) score = 0;
-    else if (username.startsWith(q)) score = 1;
-    else if (username.includes(q)) score = 2;
-    else if ((user.location || "").toLowerCase().includes(q)) score = 3;
+    else if (name === q) score = 1;
+    else if (username.startsWith(q)) score = 2;
+    else if (name.startsWith(q)) score = 3;
+    else if (username.includes(q)) score = 4;
+    else if (name.includes(q)) score = 5;
+    else if ((user.location || "").toLowerCase().includes(q)) score = 6;
     else continue;
     scored.push({ user, score });
   }
@@ -156,6 +175,12 @@ export function rankUsers(users: UserRow[], needle: string): UserRow[] {
   // keeps the busiest author first within each band.
   scored.sort((a, b) => a.score - b.score);
   return scored.map((entry) => entry.user);
+}
+
+/** Tweet id from an ingested post URL (`https://x.com/{user}/status/{id}`). */
+export function tweetIdOf(post: { url?: string }): string | null {
+  const match = (post.url || "").match(/\/status\/(\d+)/);
+  return match ? match[1] : null;
 }
 
 /** One page of an author's posts, sliced from an already-loaded bundle. */

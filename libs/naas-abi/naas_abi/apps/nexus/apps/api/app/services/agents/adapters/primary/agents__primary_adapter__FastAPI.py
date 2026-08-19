@@ -350,6 +350,25 @@ def _catalog_model_id_for_provider(provider: str) -> str | None:
     return None
 
 
+def _class_declared_model_ids(agent_cls: type | None) -> list[str]:
+    """Chat model ids the agent class can load (``get_chat_model_ids`` / ``MODEL_IDS``)."""
+    if agent_cls is None:
+        return []
+    getter = getattr(agent_cls, "get_chat_model_ids", None)
+    if callable(getter):
+        try:
+            ids = getter()
+        except Exception:
+            ids = None
+        if isinstance(ids, (list, tuple)):
+            return [str(item).strip() for item in ids if str(item).strip()]
+    attr = getattr(agent_cls, "MODEL_IDS", None)
+    if isinstance(attr, (list, tuple)):
+        return [str(item).strip() for item in attr if str(item).strip()]
+    single = _class_declared_model_id(agent_cls)
+    return [single] if single else []
+
+
 def _class_declared_model_id(agent_cls: type | None) -> str | None:
     """Model id declared by the agent class via ``get_chat_model_id``.
 
@@ -444,6 +463,7 @@ def _enrich_agent(
         logo_url=logo_url,
         intents=intents,
         resolved_model_id=_resolve_agent_model_id(agent, resolved_cls),
+        model_ids=_class_declared_model_ids(resolved_cls) or None,
     )
 
 

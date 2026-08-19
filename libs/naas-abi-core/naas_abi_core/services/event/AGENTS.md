@@ -40,6 +40,7 @@ query(event_type, since_seq, until_seq,
       json_filter, limit) -> list[StoredEvent]
 max_seq(event_type=None) -> int
 get_cursor(consumer_id, event_type) -> int
+set_cursor(consumer_id, event_type, last_seq) -> None
 query_for_consumer(consumer_id, event_type, limit) -> list[StoredEvent]   # atomic cursor advance
 ```
 
@@ -61,6 +62,7 @@ iter_query(event_class, since_seq=None, since_timestamp=None,
 query_for_consumer(consumer_id, event_class, limit=None) -> list[Any]
 iter_query_for_consumer(consumer_id, event_class, limit=None, batch_size=500) -> Iterator[Any]
 # Atomically advance the consumer cursor per batch.
+seek_consumer_to_end(consumer_id, event_class) -> dict  # jump cursor to max seq
 
 subscribe(event_class, callback, filter=None) -> Thread
 # Live-only fanout. Each subscriber is independent. Filter evaluated in-memory.

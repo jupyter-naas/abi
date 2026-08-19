@@ -17,11 +17,12 @@ import type { PageKey } from "@/lib/types";
  * The Posts paths are named after the X endpoints they visualise —
  * `GET /2/tweets/search/recent` and `GET /2/tweets/counts/recent`. Trailing
  * slash matches `trailingSlash: true`, so a link never bounces through a
- * redirect. */
+ * redirect. Users is the exception: the URL is ``/users/search?user=`` with
+ * no slash before the query string. */
 export const PAGE_PATHS: Record<PageKey, string> = {
   count: "/posts/get-posts-counts-recent/",
   search: "/posts/search-posts-recent/",
-  users: "/users/search/",
+  users: "/users/search",
   parameters: "/parameters/",
 };
 
@@ -30,6 +31,8 @@ export const DEFAULT_PAGE: PageKey = "count";
 
 const USER_PARAM = "user";
 const NEEDLE_PARAM = "q";
+const POST_PARAM = "post";
+const TOKEN_PARAM = "token";
 const SCENARIO_PARAM = "scenario";
 const QUERY_PARAM = "query";
 /** Pre-routing links carried the page in `?page=`; still honoured at `/`. */
@@ -42,6 +45,8 @@ export type PageParams = {
   /** What the Users search box is looking for; kept so closing an author's
    * page returns to the results it was opened from. */
   q: string | null;
+  /** Tweet id of the post pinned to the top of an author's page. */
+  post: string | null;
   /** Scenario id and query slug; only meaningful on Count / Search. */
   scenario: string | null;
   query: string | null;
@@ -50,6 +55,7 @@ export type PageParams = {
 export const NO_PARAMS: PageParams = {
   user: null,
   q: null,
+  post: null,
   scenario: null,
   query: null,
 };
@@ -71,9 +77,28 @@ function parse(search: string): PageParams {
   return {
     user: normalizeHandle(params.get(USER_PARAM)),
     q: clean(params.get(NEEDLE_PARAM)),
+    post: clean(params.get(POST_PARAM)),
     scenario: clean(params.get(SCENARIO_PARAM)),
     query: clean(params.get(QUERY_PARAM)),
   };
+}
+
+/** ``?token=`` that authorises ``/app-html/`` — must ride on every in-app URL. */
+export function readAccessToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return clean(new URLSearchParams(window.location.search).get(TOKEN_PARAM));
+}
+
+/** Append the current access token so a fetch is authorised like the page. */
+export function withAccessToken(url: string): string {
+  const token = readAccessToken();
+  if (!token || /(?:\?|&)token=/.test(url)) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
+}
+
+function attachAccessToken(search: URLSearchParams): void {
+  const token = readAccessToken();
+  if (token) search.set(TOKEN_PARAM, token);
 }
 
 /** The params in the current URL. */
@@ -100,10 +125,12 @@ export function searchFor(page: PageKey, params: Partial<PageParams>): string {
     // The needle comes first: an author's page is a result opened from it.
     if (params.q) search.set(NEEDLE_PARAM, params.q);
     if (params.user) search.set(USER_PARAM, params.user);
+    if (params.user && params.post) search.set(POST_PARAM, params.post);
   } else if (page === "count" || page === "search") {
     if (params.scenario) search.set(SCENARIO_PARAM, params.scenario);
     if (params.query) search.set(QUERY_PARAM, params.query);
   }
+  attachAccessToken(search);
   const qs = search.toString();
   return qs ? `?${qs}` : "";
 }
@@ -132,7 +159,12 @@ export function writeParams(
 ): void {
   if (typeof window === "undefined") return;
   const { pathname, hash, search } = window.location;
-  const next = `${pathname}${searchFor(page, params)}${hash}`;
+  // Keep Users as ``/users/search?…`` — no slash between path and query.
+  const path =
+    page === "users"
+      ? pathname.replace(/\/users\/search\/?$/, "/users/search")
+      : pathname;
+  const next = `${path}${searchFor(page, params)}${hash}`;
   if (next === `${pathname}${search}${hash}`) return;
   const state = window.history.state;
   if (mode === "push") {
@@ -165,5 +197,10 @@ export function landingHref(search: string): string {
   const page = (Object.keys(PAGE_PATHS) as PageKey[]).find(
     (key) => key === wanted,
   );
-  return hrefFor(page || (params.user ? "users" : DEFAULT_PAGE), params);
+  const href = hrefFor(page || (params.user ? "users" : DEFAULT_PAGE), params);
+  const token = clean(new URLSearchParams(search).get(TOKEN_PARAM));
+  if (token && !/[?&]token=/.test(href)) {
+    return `${href}${href.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
+  }
+  return href;
 }

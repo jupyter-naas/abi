@@ -95,6 +95,11 @@ export type TweetRow = {
   verified_type: string;
   /** Space-separated media URLs; Users page nests these under the Post cell. */
   media_url?: string;
+  /**
+   * True when this post was ingested only as expansion context (a quote,
+   * reply parent or retweeted original). Omitted on search matches.
+   */
+  referenced?: boolean;
 };
 
 export type TableEntry = {
@@ -141,6 +146,8 @@ export type UserRow = {
   verified_type: string;
   /** Account bio, truncated by the publisher. Empty for the many stubs. */
   description?: string;
+  /** Profile display name (X ``name``). Empty when the account is a stub. */
+  display_name?: string;
 };
 
 /**

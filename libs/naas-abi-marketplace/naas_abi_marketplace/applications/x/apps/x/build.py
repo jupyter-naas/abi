@@ -48,6 +48,23 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--rebuild-cache",
+        action="store_true",
+        help=(
+            "Re-project the Parquet cache from the whole envelope archive before "
+            "publishing, instead of only the envelopes past the watermark. Needed "
+            "after a schema change; costs a full archive read."
+        ),
+    )
+    parser.add_argument(
+        "--no-cache-refresh",
+        action="store_true",
+        help=(
+            "Publish without bringing the projection up to date first. The "
+            "snapshots then reflect the last refresh, not the current archive."
+        ),
+    )
+    parser.add_argument(
         "--config",
         default=None,
         help=(
@@ -103,6 +120,20 @@ def main() -> None:
                 queries.append(
                     {"name": flt.name, "query": flt.query, "label": flt.name}
                 )
+
+    # Same order as the orchestration's publish_x_app: bring the projection level
+    # with the envelope archive first, so the snapshots below read a view that
+    # includes everything ingested since the last run. Skipping this would
+    # publish from whatever the last refresh left behind — and on a stack that
+    # has never refreshed, from no projection at all (the publish then falls back
+    # to SPARQL, which is correct but slower).
+    if not args.no_cache_refresh:
+        from naas_abi_marketplace.applications.x.orchestrations.utils import (
+            refresh_x_cache,
+        )
+
+        projection = refresh_x_cache(module, full=args.rebuild_cache)
+        print(f"Projection: {json.dumps(projection)}")
 
     result = publish_app(
         module.engine.services.object_storage,

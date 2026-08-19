@@ -25,7 +25,7 @@ _UNSET: Any = object()
 
 # Dedicated named graph for the recent-posts count triples (mirrors
 # XCountRecentTweetsPipeline). Kept here so the count helpers below stay in one
-# place shared by the count schedule and the search orchestration's count opt-in.
+# place shared by search/event orchestrations when count_recent_tweets is enabled.
 _COUNT_GRAPH_NAME = "http://ontology.naas.ai/graph/x_recent_posts_count"
 
 # Dagster run statuses that mean "a run is still pending or in flight". Used to
@@ -379,7 +379,7 @@ def run_search_and_map_for_query(
     }
 
 
-# ----- Recent-post COUNT helpers (shared by both orchestrations) -------------
+# ----- Recent-post COUNT helpers ---------------------------------------------
 
 
 def followed_count_entries(module) -> list[dict]:
@@ -387,9 +387,8 @@ def followed_count_entries(module) -> list[dict]:
 
     The union of enabled ``count_recent_tweets_workflow`` entries and any
     ``search_recent_tweets_workflow`` filter that opts in via
-    ``count_recent_tweets: true`` — deduped by query string. Both the count
-    schedule and the search orchestration publish this same full list so the
-    app catalog stays complete regardless of which one runs.
+    ``count_recent_tweets: true`` — deduped by query string. Search and event
+    orchestrations publish this same full list so the app catalog stays complete.
     """
     entries: list[dict] = []
     seen: set[str] = set()
@@ -525,12 +524,45 @@ def publish_x_app(
 
     from naas_abi_marketplace.applications.x.apps.x.hub import XAppHubBuilder
 
+    # Bring the columnar projection level with the envelope archive first, so the
+    # snapshots below read a view that includes this tick's ingest.
+    projection = refresh_x_cache(module)
+
     hub = XAppHubBuilder(
         module.engine.services.object_storage,
         module.engine.services.triple_store,
         namespace=module.configuration.ontology_namespace,
     )
-    return hub.publish(followed_count_entries(module), full_users=full_users)
+    published = hub.publish(followed_count_entries(module), full_users=full_users)
+    if projection is not None:
+        published = {**published, "projection": projection}
+    return published
+
+
+def refresh_x_cache(module, *, full: bool = False) -> dict | None:
+    """Update the Parquet projection from any envelopes written since last time.
+
+    Returns the refresh summary, or ``None`` when the projection is unavailable
+    (polars not installed, object storage unreachable). A failure here must never
+    fail the publish: the snapshots fall back to SPARQL, which is what ran before
+    the projection existed.
+    """
+    try:
+        from naas_abi_marketplace.applications.x.apps.x.cache import refresh
+    except ImportError as exc:
+        logger.info(f"refresh_x_cache: projection unavailable ({exc})")
+        return None
+    try:
+        kv = getattr(module.engine.services, "kv", None)
+    except Exception:  # noqa: BLE001 — kv is optional; the watermark degrades to a rescan
+        kv = None
+    try:
+        return refresh(module.engine.services.object_storage, kv, full=full)
+    except Exception as exc:  # noqa: BLE001 — degrade to the SPARQL path
+        logger.warning(
+            f"refresh_x_cache: refresh failed ({exc}) — snapshots use SPARQL"
+        )
+        return None
 
 
 def republish_x_app_after_pipeline(

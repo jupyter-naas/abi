@@ -123,26 +123,15 @@ export function UserProfileCard({ profile, username, timezone }: Props) {
           </div>
         ) : null}
 
-        {profile.pinned_tweet_id || profile.most_recent_tweet_id ? (
+        {profile.pinned_tweet_id ? (
           <div className="profile-meta profile-meta-ids">
-            {profile.pinned_tweet_id ? (
-              <a
-                href={`https://x.com/${username}/status/${profile.pinned_tweet_id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Pinned post
-              </a>
-            ) : null}
-            {profile.most_recent_tweet_id ? (
-              <a
-                href={`https://x.com/${username}/status/${profile.most_recent_tweet_id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Most recent post
-              </a>
-            ) : null}
+            <a
+              href={`https://x.com/${username}/status/${profile.pinned_tweet_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Pinned post
+            </a>
           </div>
         ) : null}
       </div>

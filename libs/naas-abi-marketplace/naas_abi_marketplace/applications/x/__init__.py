@@ -12,15 +12,15 @@ from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import (
     TripleStoreService,
 )
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 # Cadence applied to a search filter that sets neither `interval_seconds` nor
 # `cron` — the sensor wakes every minute (the spend guard bounds the spend).
 DEFAULT_SEARCH_INTERVAL_SECONDS = 60
 
-# Cron the hourly XCountRecentTweetsOrchestration schedule runs on by default.
-DEFAULT_COUNT_RECENT_TWEETS_CRON = "0 * * * *"
-
+# Cadence applied to a files-reprocess entry that sets neither `interval_seconds`
+# nor `cron` — the sensor wakes every 1 h 30 min.
+DEFAULT_FILES_INTERVAL_SECONDS = 5400
 
 def validate_cron(value: str, setting: str) -> str:
     """Return *value* stripped, or raise if it is not cron-shaped.
@@ -325,12 +325,14 @@ class XSearchRecentTweetsEventConfiguration(BaseModel):
 
 
 class XSearchRecentTweetsFilesConfiguration(BaseModel):
-    """One configured files-reprocessing sensor built by
+    """One configured files-reprocessing trigger built by
     :class:`XSearchRecentTweetsFilesOrchestration`.
 
-    Each entry produces its own (job, sensor) pair. Every ``interval_seconds``
-    the sensor — unless a previous run is still in flight — triggers a job that
-    sweeps every persisted search envelope under ``prefix`` and feeds it to
+    Each entry produces its own (job, trigger) pair — a **sensor** when the
+    entry sets ``interval_seconds`` (elapsed-time cadence) or a **schedule**
+    when it sets ``cron`` (wall-clock times, UTC). Unless a previous run is
+    still in flight, the trigger starts a job that sweeps every persisted search
+    envelope under ``prefix`` and feeds it to
     :class:`XSearchRecentTweetsPipeline` in ``file_path`` mode. When
     ``skip_existing`` is true the job first reads the ``x:file_path`` of every
     ``x:SearchResultSet`` already mapped and reprocesses only the envelopes not
@@ -357,12 +359,21 @@ class XSearchRecentTweetsFilesConfiguration(BaseModel):
             "is created STOPPED; enable it from the Dagster UI)."
         ),
     )
-    interval_seconds: int = Field(
-        default=5400,
+    interval_seconds: int | None = Field(
+        default=None,
         ge=60,
         description=(
-            "Minimum delay between two sensor evaluations. Defaults to 5400 "
-            "(every 1 h 30 min)."
+            "Minimum delay between two sensor evaluations. Mutually exclusive "
+            f"with `cron`; when neither is set, defaults to "
+            f"{DEFAULT_FILES_INTERVAL_SECONDS}s."
+        ),
+    )
+    cron: str | None = Field(
+        default=None,
+        description=(
+            "Cron expression (5 or 6 fields, or a @-macro such as '@hourly') "
+            "firing this sweep at fixed wall-clock times in UTC. Mutually "
+            "exclusive with `interval_seconds`."
         ),
     )
     prefix: str = Field(
@@ -404,18 +415,34 @@ class XSearchRecentTweetsFilesConfiguration(BaseModel):
         ),
     )
 
+    @model_validator(mode="after")
+    def _resolve_schedule_mode(self) -> "XSearchRecentTweetsFilesConfiguration":
+        """Exactly one trigger per entry: sensor cadence *or* cron schedule."""
+        if self.cron is not None and self.interval_seconds is not None:
+            raise ValueError(
+                f"search_recent_tweets_files[{self.name!r}]: set either "
+                f"'interval_seconds' (sensor cadence) or 'cron' (schedule), "
+                f"not both."
+            )
+
+        if self.cron is not None:
+            self.cron = validate_cron(
+                self.cron, f"search_recent_tweets_files[{self.name!r}]"
+            )
+        elif self.interval_seconds is None:
+            self.interval_seconds = DEFAULT_FILES_INTERVAL_SECONDS
+
+        return self
+
 
 class XCountFollowConfiguration(BaseModel):
-    """One configured X query whose recent-post counts are followed over time by
-    :class:`XCountRecentTweetsOrchestration`.
+    """One configured X query whose recent-post counts appear in the dashboard.
 
-    Every hour the orchestration runs :class:`XCountRecentTweetsWorkflow` for
-    ``query`` (7-day hourly backfill on the first run, last-full-hour only
-    afterwards), maps the counts into the ``x_recent_posts_count`` graph via
-    :class:`XCountRecentTweetsPipeline`, and republishes the "Post Count
-    Following" dashboard (``x/apps/x/``). Counts are free — the counts endpoint
-    returns only time-bucketed totals (no tweet content), so there is no spend
-    guard here.
+    Counts are fetched and mapped when a search filter opts in via
+    ``count_recent_tweets: true`` on the same ``query``, or when an event/files
+    orchestration maps a search envelope whose query is listed here. The
+    ``enabled`` flag controls whether this entry is included in the dashboard
+    catalog (``x/apps/x/``).
     """
 
     name: str = Field(
@@ -438,8 +465,8 @@ class XCountFollowConfiguration(BaseModel):
     enabled: bool = Field(
         default=False,
         description=(
-            "Include this query in the hourly count schedule. When no configured "
-            "query is enabled the schedule is created STOPPED."
+            "Include this query in the dashboard catalog. Counts still require "
+            "a search filter with ``count_recent_tweets: true`` or manual ingest."
         ),
     )
 
@@ -537,34 +564,30 @@ class ABIModule(BaseModule):
                 persist: true
                 app_publish: false       # opt in to republish x/apps/x/ per map
 
-            # ----- Scheduled files-reprocessing sensors --------------------
-            # One (job, sensor) pair per entry. Every `interval_seconds` the
-            # sensor — unless a previous run is still in flight — sweeps every
-            # search envelope under `prefix` and feeds it to
-            # XSearchRecentTweetsPipeline. With `skip_existing: true` the run
-            # first reads the x:file_path of every x:SearchResultSet already in
-            # the graph and reprocesses only the envelopes not yet mapped.
-            # Created STOPPED unless `enabled: true`. Use it to backfill /
-            # re-ingest a folder on a cadence without re-querying the X API.
+            # ----- Scheduled files-reprocessing triggers -------------------
+            # One (job, trigger) pair per entry — sensor (`interval_seconds`)
+            # or schedule (`cron`), not both. Unless a previous run is still in
+            # flight, the trigger sweeps every search envelope under `prefix`
+            # and feeds it to XSearchRecentTweetsPipeline. With
+            # `skip_existing: true` the run first reads the x:file_path of
+            # every x:SearchResultSet already in the graph and reprocesses
+            # only the envelopes not yet mapped. Created STOPPED unless
+            # `enabled: true`. Use it to backfill / re-ingest a folder on a
+            # cadence without re-querying the X API.
             search_recent_tweets_files:
               - name: reprocess_envelopes
                 enabled: true
-                interval_seconds: 5400   # every 1 h 30 min
+                cron: "0,15,30,45 * * * *"  # 5 min after :10/:25/:40/:55 search ticks
                 prefix: x/search_recent_tweets
                 skip_existing: true      # skip files already in the graph
                 max_age_hours: 24        # only envelopes from the last 24h
                 persist: true
                 app_publish: false       # opt in to republish x/apps/x/ after sweep
 
-            # ----- Hourly post-count following -----------------------------
-            # One schedule for ALL entries below: every tick it fetches the
-            # newly completed clock hour(s) of counts (free endpoint — no tweet
-            # budget), maps them into the x_recent_posts_count graph and
-            # republishes the "Post Count Following" dashboard. The schedule
-            # starts RUNNING only when at least one entry is `enabled: true`.
-            # `count_recent_tweets_cron` sets when it fires (UTC) — offset it
-            # from the search filters so the two do not share a tick.
-            count_recent_tweets_cron: "30 * * * *"   # half past every hour
+            # ----- Post-count dashboard catalog ------------------------------
+            # Queries listed here appear in the "Post Count Following" dashboard
+            # when `enabled: true`. Fetch counts via `count_recent_tweets: true`
+            # on a matching search_recent_tweets_workflow filter.
             count_recent_tweets_workflow:
               - name: drones
                 query: "(drone OR drones OR uas OR uav) lang:en -is:retweet"
@@ -579,11 +602,8 @@ class ABIModule(BaseModule):
         search_recent_tweets_workflow: list[XTweetSearchWorkflowConfiguration] = []
         search_recent_tweets_event: list[XSearchRecentTweetsEventConfiguration] = []
         search_recent_tweets_files: list[XSearchRecentTweetsFilesConfiguration] = []
-        # ----- Hourly post-count following -----------------------------------
-        # One entry per query whose recent-post counts to follow over time. The
-        # hourly XCountRecentTweetsOrchestration fetches the newly completed
-        # clock hour(s), maps them into the x_recent_posts_count graph and
-        # republishes the "Post Count Following" dashboard (x/apps/x/).
+        # ----- Post-count dashboard catalog ----------------------------------
+        # One entry per query shown in the "Post Count Following" dashboard.
         #
         #     count_recent_tweets_workflow:
         #       - name: drones
@@ -591,14 +611,6 @@ class ABIModule(BaseModule):
         #         label: "Drones / UAS"
         #         enabled: true
         count_recent_tweets_workflow: list[XCountFollowConfiguration] = []
-        # Cron the single count schedule fires on, in UTC — it covers every
-        # enabled entry above, so it is a module-level setting rather than a
-        # per-query one. Offset it from the search filters (e.g. "30 * * * *",
-        # half past every hour) to keep the two off the same tick. The schedule
-        # only starts RUNNING when at least one entry above is enabled.
-        #
-        #     count_recent_tweets_cron: "30 * * * *"
-        count_recent_tweets_cron: str = DEFAULT_COUNT_RECENT_TWEETS_CRON
         # ----- Recent Tweets catalog app (x/apps/x/) ------------------------
         # Snapshot republish is independent of sensor ``enabled`` flags and of
         # ``count_recent_tweets`` on search filters.
@@ -606,11 +618,6 @@ class ABIModule(BaseModule):
         #     app:
         #       publish: true
         app: XAppConfiguration = Field(default_factory=XAppConfiguration)
-
-        @field_validator("count_recent_tweets_cron")
-        @classmethod
-        def _check_count_cron(cls, value: str) -> str:
-            return validate_cron(value, "count_recent_tweets_cron")
 
     # on_initialized is called by the engine after all modules and services have been fully loaded.
     # At this point, you can safely access other modules and services through the engine's interfaces.

@@ -242,7 +242,29 @@ a {
 }
 
 .results-input::-webkit-search-cancel-button {
-  filter: invert(0.6);
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+.results-clear {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  margin-right: -4px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.results-clear:hover {
+  color: var(--text);
+  background: var(--panel-2);
 }
 
 .results-count {
@@ -281,7 +303,7 @@ a {
 }
 
 .result-title {
-  display: inline-block;
+  display: block;
   margin-top: 2px;
   color: var(--accent);
   font-size: 1.15rem;
@@ -291,6 +313,13 @@ a {
 
 .result-title:hover {
   text-decoration: underline;
+}
+
+.result-handle {
+  display: block;
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 0.88rem;
 }
 
 .result-snippet {
@@ -381,6 +410,61 @@ a {
 .detail-close:hover {
   background: var(--panel-2);
   color: var(--text);
+}
+
+.user-post {
+  max-width: 720px;
+  padding: 16px 0 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.user-post.selected {
+  padding: 16px 14px 20px;
+  margin: 12px 0 8px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.user-post-url {
+  display: block;
+  color: var(--accent);
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.user-post-url:hover {
+  text-decoration: underline;
+}
+
+.user-post-url.muted {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.user-post-meta {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.user-post-sep {
+  margin: 0 8px;
+  color: var(--border);
+}
+
+.user-post-text {
+  margin: 1.35em 0 0;
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.user-post .dt-media-below {
+  margin-top: 12px;
 }
 
 /* ---- Second bar: pinned authors ----------------------------------------- */
