@@ -711,7 +711,7 @@ td.muted { color: var(--muted); font-style: italic; }
   padding: 0.45rem 0.65rem;
 }
 
-/* Processes and Continuants - nested multi-select dropdowns. */
+/* Processes and Classes - nested multi-select dropdowns. */
 .graph-processes,
 .graph-classes {
   position: relative;

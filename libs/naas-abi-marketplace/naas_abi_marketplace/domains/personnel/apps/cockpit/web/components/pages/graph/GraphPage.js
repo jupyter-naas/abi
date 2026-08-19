@@ -1955,6 +1955,46 @@ function groupInstancesByType(typeOptions, allInstances) {
   }));
 }
 
+const CONTINUANT_BUCKET_ORDER = [
+  "Site",
+  "Temporal Region",
+  "Quality",
+  "Realizable",
+  "GDC",
+  "Material Entity",
+  "Process",
+  "Unknown",
+];
+
+function continuantBucketRank(bucket) {
+  const index = CONTINUANT_BUCKET_ORDER.indexOf(bucket || "Unknown");
+  return index === -1 ? CONTINUANT_BUCKET_ORDER.length : index;
+}
+
+/** Class type groups ordered by BFO bucket, then class label ascending (no bucket headers). */
+function groupClassTypesByBucket(typeOptions, allInstances) {
+  const byType = new Map(
+    typeOptions.map((type) => [type.label, { ...type, instances: [] }])
+  );
+  for (const instance of allInstances) {
+    const group = byType.get(instance.type);
+    if (group) group.instances.push(instance);
+  }
+  const byBucket = new Map();
+  for (const group of byType.values()) {
+    const bucket = group.bucket || "Unknown";
+    if (!byBucket.has(bucket)) byBucket.set(bucket, []);
+    byBucket.get(bucket).push(group);
+  }
+  return [...byBucket.entries()]
+    .sort(
+      ([bucketA], [bucketB]) =>
+        continuantBucketRank(bucketA) - continuantBucketRank(bucketB) ||
+        bucketA.localeCompare(bucketB)
+    )
+    .flatMap(([, groups]) => groups.sort((a, b) => a.label.localeCompare(b.label)));
+}
+
 function renderProcessFilter(
   typeOptions,
   allInstances,
@@ -2028,7 +2068,7 @@ function renderClassFilter(
   hiddenClassInstances,
   expandedClassTypes
 ) {
-  const groups = groupInstancesByType(typeOptions, allInstances);
+  const groups = groupClassTypesByBucket(typeOptions, allInstances);
   const items = groups
     .map((group) => {
       const def = bfoColor(group.bucket);
@@ -2072,13 +2112,13 @@ function renderClassFilter(
       : visibleCount === allInstances.length
         ? `All ${allInstances.length}`
         : `${visibleCount} of ${allInstances.length}`;
-  return `<div class="graph-classes"><span>Continuants</span>
+  return `<div class="graph-classes"><span>Classes</span>
     <button type="button" class="graph-classes-toggle" id="graph-classes-toggle" aria-expanded="false" aria-haspopup="true"${allInstances.length === 0 ? " disabled" : ""}>
       <span>${esc(summary)}</span>
       <svg class="graph-classes-chevron" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" /></svg>
     </button>
     <div class="graph-classes-menu" id="graph-classes-menu" hidden>
-      <ul class="graph-class-groups">${items || `<li class="muted">No continuants at this distance</li>`}</ul>
+      <ul class="graph-class-groups">${items || `<li class="muted">No classes at this distance</li>`}</ul>
       <div class="graph-classes-actions">
         <button type="button" data-classes-action="all"${allInstances.length === 0 ? " disabled" : ""}>Select all</button>
         <button type="button" data-classes-action="none"${allInstances.length === 0 ? " disabled" : ""}>Clear all</button>
