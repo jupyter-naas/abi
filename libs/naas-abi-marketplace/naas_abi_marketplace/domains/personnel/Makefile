@@ -20,10 +20,10 @@ demo-graph:  ## build data/graph/personnel_demo.ttl from ontology classes
 demo-source:  ## export apps/cockpit/data/source/person/<slug>/index.json
 	$(PYTHON) "$(MODULE_DIR)/scripts/export_source_person_files.py"
 
-demo-data: demo-graph demo-source  ## SPARQL the demo TTL → apps/cockpit/data
+demo-data: demo-graph  ## source JSON → graph TTL → apps/cockpit/data
 	$(PYTHON) "$(MODULE_DIR)/scripts/export_demo_apps_from_graph.py"
 
 demo: demo-data  ## full demo pipeline
 
-app-personnel-cockpit:  ## API + static UI dev server (optional PORT env)
+app-personnel-cockpit: demo-data  ## source JSON → cockpit data → dev server
 	$(PYTHON) "$(MODULE_DIR)/$(COCKPIT_API)"
