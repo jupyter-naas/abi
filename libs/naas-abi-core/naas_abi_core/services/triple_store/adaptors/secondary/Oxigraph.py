@@ -38,6 +38,7 @@ import os
 
 import rdflib
 import requests
+from naas_abi_core.services.triple_store.resolve import resolve_local_http_url
 from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStorePort,
     OntologyEvent,
@@ -45,6 +46,8 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
 from rdflib import BNode, Graph, URIRef
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_OXIGRAPH_URL = "http://localhost:7878"
 
 
 class Oxigraph(ITripleStorePort):
@@ -96,7 +99,7 @@ class Oxigraph(ITripleStorePort):
         ...     print(f"Person: {row.person}, Name: {row.name}")
     """
 
-    def __init__(self, oxigraph_url: str = "http://localhost:7878", timeout: int = 60):
+    def __init__(self, oxigraph_url: str = _DEFAULT_OXIGRAPH_URL, timeout: int = 60):
         """
         Initialize Oxigraph adapter.
 
@@ -111,7 +114,14 @@ class Oxigraph(ITripleStorePort):
         Raises:
             requests.exceptions.ConnectionError: If Oxigraph is not accessible
         """
-        oxigraph_url = os.environ.get("OXIGRAPH_URL", oxigraph_url)
+        if oxigraph_url == _DEFAULT_OXIGRAPH_URL:
+            oxigraph_url = resolve_local_http_url(
+                "oxigraph",
+                env_var="OXIGRAPH_URL",
+                default_url=_DEFAULT_OXIGRAPH_URL,
+            )
+        else:
+            oxigraph_url = os.environ.get("OXIGRAPH_URL", oxigraph_url)
         self.oxigraph_url = oxigraph_url.rstrip("/")
         self.query_endpoint = f"{self.oxigraph_url}/query"
         self.update_endpoint = f"{self.oxigraph_url}/update"
@@ -583,8 +593,11 @@ if __name__ == "__main__":
 
     load_dotenv()
 
-    # Initialize Oxigraph adapter
-    oxigraph_url = os.getenv("OXIGRAPH_URL", "http://localhost:7878")
+    oxigraph_url = resolve_local_http_url(
+        "oxigraph",
+        env_var="OXIGRAPH_URL",
+        default_url=_DEFAULT_OXIGRAPH_URL,
+    )
 
     print(f"Connecting to Oxigraph at {oxigraph_url}")
 
