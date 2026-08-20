@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.27.1 (2026-08-20)
+
+### Bug Fixes
+
+- Resolve triplestore url in local
+  ([`a078140`](https://github.com/jupyter-naas/abi/commit/a07814087ed6ce4415edbf38311076092398d36e))
+
+
 ## v2.27.0 (2026-08-20)
 
 ### Bug Fixes
