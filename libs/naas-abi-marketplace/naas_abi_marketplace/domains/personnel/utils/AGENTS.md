@@ -35,7 +35,7 @@ compact_personnel(uri: str | None) -> str | None
 2. **Seeded IRIs are stable.** `personnel_individual_uri("alice-dupont")` must stay identical across runs — changing `DEMO_UUID_NS` breaks committed demo TTL/JSON.
 3. **Namespace stays in sync.** `PERSONNEL_ONTOLOGY` must match `ABIModule.Configuration.ontology_namespace` in `personnel/__init__.py`.
 4. **Do not hand-edit compact ids in JSON.** Generate them via `compact_personnel` / `compact_graph_id` so exports stay consistent with the graph.
-5. **Add a file here only when reused.** One-off script logic stays in `sandbox/` or `apps/cockpit/scripts/` (data exporters only) or the relevant pipeline.
+5. **Add a file here only when reused.** One-off script logic stays in `apps/cockpit/scripts/` (demo build + data exporters) or the relevant pipeline.
 
 ## Consumers
 

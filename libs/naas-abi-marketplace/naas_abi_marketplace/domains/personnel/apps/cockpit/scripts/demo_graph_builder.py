@@ -9,6 +9,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from naas_abi_marketplace.domains.personnel.apps.cockpit.scripts.person_sources import (
+    load_person_sources,
+    sources_to_employees,
+    sources_to_experiences,
+    sources_to_profile_urls,
+)
 from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
     EmployeeRole,
     EmploymentRecord,
@@ -39,12 +45,6 @@ from naas_abi_marketplace.domains.personnel.pipelines.utils.graph_builders impor
     individual_uri,
     slug,
     utc_now,
-)
-from naas_abi_marketplace.domains.personnel.sandbox.load_person_sources import (
-    load_person_sources,
-    sources_to_employees,
-    sources_to_experiences,
-    sources_to_profile_urls,
 )
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import XSD

@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v2.18.0 (2026-08-20)
+
+### Bug Fixes
+
+- **api**: Satisfy mypy on process API mounts
+  ([#1203](https://github.com/jupyter-naas/abi/pull/1203),
+  [`19d538d`](https://github.com/jupyter-naas/abi/commit/19d538d7fec8b24d262c5f90b1416a6963c0a234))
+
+### Features
+
+- **api**: Mount module workflows, pipelines, and Expose tools
+  ([#1203](https://github.com/jupyter-naas/abi/pull/1203),
+  [`19d538d`](https://github.com/jupyter-naas/abi/commit/19d538d7fec8b24d262c5f90b1416a6963c0a234))
+
+
 ## v2.17.2 (2026-08-18)
 
 ### Bug Fixes

@@ -2384,7 +2384,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "2.54.0"
+version = "2.54.1"
 source = { editable = "../naas-abi" }
 dependencies = [
     { name = "aiosqlite" },
@@ -2466,7 +2466,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-cli"
-version = "2.17.2"
+version = "2.18.0"
 source = { editable = "." }
 dependencies = [
     { name = "naas-abi" },
@@ -2499,7 +2499,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "2.26.2"
+version = "2.27.0"
 source = { editable = "../naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -2615,11 +2615,12 @@ dev = [
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "3.36.1"
+version = "3.36.3"
 source = { editable = "../naas-abi-marketplace" }
 dependencies = [
     { name = "ijson" },
     { name = "naas-abi-core" },
+    { name = "pyyaml" },
 ]
 
 [package.optional-dependencies]
@@ -2659,6 +2660,7 @@ requires-dist = [
     { name = "pymupdf4llm", marker = "extra == 'domains-document'", specifier = ">=1.27.2.2" },
     { name = "pynacl", marker = "extra == 'applications-github'", specifier = ">=1.5.0,<2" },
     { name = "python-pptx", marker = "extra == 'applications-powerpoint'", specifier = ">=1.0.2,<2" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "ratelimit", marker = "extra == 'applications-pubmed'", specifier = ">=2.2.1" },
     { name = "ratelimit-types", marker = "extra == 'applications-pubmed'", specifier = "==0.0.3" },
     { name = "thefuzz", marker = "extra == 'domains-ontology-engineer'", specifier = "==0.22.1" },

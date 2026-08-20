@@ -10,19 +10,18 @@ import socket
 import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from starlette.exceptions import HTTPException as StarletteHTTPException
-
 from naas_abi_marketplace.domains.personnel.apps.cockpit.api.routes import router
 from naas_abi_marketplace.domains.personnel.apps.cockpit.config_loader import (
     public_config,
     public_page_urls,
 )
 from naas_abi_marketplace.domains.personnel.apps.cockpit.data_store import (
+    DEMO_DATA_COMMAND,
     runtime_storage_prefix,
     storage_has_datasets,
 )
 from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import WEB_ROOT
-
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 PAGE_URLS = public_page_urls()
 
@@ -60,9 +59,11 @@ def _is_spa_path(path: str) -> bool:
 
 def create_app() -> FastAPI:
     if not storage_has_datasets():
-        raise SystemExit(
-            f"No cockpit datasets in ObjectStorage ({runtime_storage_prefix()}/). "
-            "Run: cd domains/personnel && make demo-data"
+        # Serve the UI anyway: dataset routes answer 404 and the pages stay empty.
+        print(
+            f"No cockpit datasets in ObjectStorage ({runtime_storage_prefix()}/); "
+            f"pages will be empty. Load the demo with: {DEMO_DATA_COMMAND}",
+            flush=True,
         )
     app = FastAPI(title=public_config()["brand"]["name"])
     app.include_router(router, prefix="/api/personnel-cockpit")

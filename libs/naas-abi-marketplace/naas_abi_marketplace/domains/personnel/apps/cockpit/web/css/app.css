@@ -330,6 +330,41 @@ main:has(#page-graph.active) {
   color: var(--muted);
   margin: 0;
 }
+.load-error-title {
+  margin: 0 0 0.75rem;
+  color: var(--ink);
+  font-weight: 600;
+}
+.load-error-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  padding: 0.15rem 0;
+  font-size: 0.85rem;
+}
+.load-error-row span {
+  flex: 0 0 10.5rem;
+  color: var(--muted);
+}
+.load-error-row code,
+.load-error-command code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--ink);
+  word-break: break-all;
+}
+.load-error-hint {
+  margin: 0.9rem 0 0.35rem;
+  font-size: 0.85rem;
+}
+.load-error-command {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 0.8rem;
+}
 
 .page { display: none; }
 .page.active { display: block; }

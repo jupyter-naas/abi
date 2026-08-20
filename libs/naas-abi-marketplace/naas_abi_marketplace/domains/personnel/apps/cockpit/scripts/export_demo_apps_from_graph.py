@@ -17,22 +17,19 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 
-from naas_abi_marketplace.domains.personnel.apps.cockpit.graph_payload import (
-    build_graph_page_payload,
-)
 from naas_abi_marketplace.domains.personnel.apps.cockpit.config_loader import (
     load_config,
     load_default_entity,
 )
-from naas_abi_marketplace.domains.personnel.apps.cockpit.log_payload import (
-    build_ledger_log_rows,
-)
-from naas_abi_marketplace.domains.personnel.apps.cockpit.processes_payload import (
-    build_processes_page_payload,
-)
 from naas_abi_marketplace.domains.personnel.apps.cockpit.data_store import (
     publish_data_tree,
     runtime_storage_prefix,
+)
+from naas_abi_marketplace.domains.personnel.apps.cockpit.graph_payload import (
+    build_graph_page_payload,
+)
+from naas_abi_marketplace.domains.personnel.apps.cockpit.log_payload import (
+    build_ledger_log_rows,
 )
 from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import (
     DATA_ROOT,
@@ -41,10 +38,16 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import (
     ENTITY_DATA,
     GRAPH_FILE,
 )
-from naas_abi_marketplace.domains.personnel.paths import PERSONNEL_ROOT
-from naas_abi_marketplace.domains.personnel.sandbox.workforce_metrics import (
+from naas_abi_marketplace.domains.personnel.apps.cockpit.processes_payload import (
+    build_processes_page_payload,
+)
+from naas_abi_marketplace.domains.personnel.apps.cockpit.scripts.roster_builder import (
+    build_roster_rows,
+)
+from naas_abi_marketplace.domains.personnel.apps.cockpit.scripts.workforce_metrics import (
     build_workforce_metrics,
 )
+from naas_abi_marketplace.domains.personnel.paths import PERSONNEL_ROOT
 from rdflib import Graph, Literal
 
 QUERIES_TTL = (
@@ -224,7 +227,8 @@ def main() -> None:
 
     # --- page datasets ------------------------------------------------------
     print(f"data/entities/{ENTITY_ID}/")
-    roster_rows = [
+    org_label = load_default_entity().get("organizationLabel") or "Demo"
+    employment_rows = [
         {
             "personLabel": row.get("personLabel"),
             "employee_id": row.get("employee_id"),
@@ -237,6 +241,12 @@ def main() -> None:
         }
         for row in source_rows.get("find_employee_roster", [])
     ]
+    roster_rows, roster_source = build_roster_rows(
+        employment_rows,
+        source_rows.get("find_working_processes", []),
+        org_label=org_label,
+    )
+    print(f"  roster: {len(roster_rows)} rows from {roster_source}")
 
     family_by_person = {
         (r.get("personLabel") or ""): r.get("jobFamily") or r.get("job_family")
@@ -247,7 +257,6 @@ def main() -> None:
         if not row.get("job_family"):
             row["job_family"] = family_by_person.get(row.get("personLabel") or "")
 
-    org_label = load_default_entity().get("organizationLabel") or "Demo"
     kpis, roster_rows = build_workforce_metrics(
         roster_rows,
         source_rows.get("find_working_processes", []),

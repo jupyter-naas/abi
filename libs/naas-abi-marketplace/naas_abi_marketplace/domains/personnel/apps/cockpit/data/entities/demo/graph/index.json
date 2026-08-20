@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "data_version": "2026-08-19 17:41",
+  "data_version": "2026-08-19 19:05",
   "entity_id": "demo",
   "source": "graphs/demo/personnel.ttl",
   "records": [],
@@ -14,10 +14,10 @@
       "classLabel": "Person",
       "bfoBucket": "Material Entity",
       "job_title": "COO",
-      "job_family": "Executive",
+      "job_family": null,
       "status_value": "active",
-      "employee_id": "E-10429",
-      "organizationLabel": null,
+      "employee_id": null,
+      "organizationLabel": "Demo",
       "properties": [
         {
           "uri": "personnel:job_title",
@@ -25,19 +25,14 @@
           "value": "COO"
         },
         {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Executive"
-        },
-        {
-          "uri": "personnel:employee_id",
-          "label": "employee id",
-          "value": "E-10429"
-        },
-        {
           "uri": "personnel:status_value",
           "label": "status",
           "value": "active"
+        },
+        {
+          "uri": "abi:organizationLabel",
+          "label": "organization",
+          "value": "Demo"
         }
       ]
     },
@@ -50,10 +45,10 @@
       "classLabel": "Person",
       "bfoBucket": "Material Entity",
       "job_title": "CEO",
-      "job_family": "Executive",
+      "job_family": null,
       "status_value": "active",
-      "employee_id": "E-10428",
-      "organizationLabel": null,
+      "employee_id": null,
+      "organizationLabel": "Demo",
       "properties": [
         {
           "uri": "personnel:job_title",
@@ -61,19 +56,14 @@
           "value": "CEO"
         },
         {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Executive"
-        },
-        {
-          "uri": "personnel:employee_id",
-          "label": "employee id",
-          "value": "E-10428"
-        },
-        {
           "uri": "personnel:status_value",
           "label": "status",
           "value": "active"
+        },
+        {
+          "uri": "abi:organizationLabel",
+          "label": "organization",
+          "value": "Demo"
         }
       ]
     },
@@ -86,10 +76,10 @@
       "classLabel": "Person",
       "bfoBucket": "Material Entity",
       "job_title": "CTO",
-      "job_family": "Executive",
+      "job_family": null,
       "status_value": "active",
-      "employee_id": "E-10430",
-      "organizationLabel": null,
+      "employee_id": null,
+      "organizationLabel": "Demo",
       "properties": [
         {
           "uri": "personnel:job_title",
@@ -97,19 +87,14 @@
           "value": "CTO"
         },
         {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Executive"
-        },
-        {
-          "uri": "personnel:employee_id",
-          "label": "employee id",
-          "value": "E-10430"
-        },
-        {
           "uri": "personnel:status_value",
           "label": "status",
           "value": "active"
+        },
+        {
+          "uri": "abi:organizationLabel",
+          "label": "organization",
+          "value": "Demo"
         }
       ]
     },
@@ -122,10 +107,10 @@
       "classLabel": "Person",
       "bfoBucket": "Material Entity",
       "job_title": "Lead Developer Frontend",
-      "job_family": "Engineering",
+      "job_family": null,
       "status_value": "terminated",
-      "employee_id": "E-10431",
-      "organizationLabel": null,
+      "employee_id": null,
+      "organizationLabel": "Demo",
       "properties": [
         {
           "uri": "personnel:job_title",
@@ -133,19 +118,14 @@
           "value": "Lead Developer Frontend"
         },
         {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Engineering"
-        },
-        {
-          "uri": "personnel:employee_id",
-          "label": "employee id",
-          "value": "E-10431"
-        },
-        {
           "uri": "personnel:status_value",
           "label": "status",
           "value": "terminated"
+        },
+        {
+          "uri": "abi:organizationLabel",
+          "label": "organization",
+          "value": "Demo"
         }
       ]
     },
@@ -158,10 +138,10 @@
       "classLabel": "Person",
       "bfoBucket": "Material Entity",
       "job_title": "CTO",
-      "job_family": "Executive",
+      "job_family": null,
       "status_value": "terminated",
-      "employee_id": "E-10432",
-      "organizationLabel": null,
+      "employee_id": null,
+      "organizationLabel": "Demo",
       "properties": [
         {
           "uri": "personnel:job_title",
@@ -169,19 +149,14 @@
           "value": "CTO"
         },
         {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Executive"
-        },
-        {
-          "uri": "personnel:employee_id",
-          "label": "employee id",
-          "value": "E-10432"
-        },
-        {
           "uri": "personnel:status_value",
           "label": "status",
           "value": "terminated"
+        },
+        {
+          "uri": "abi:organizationLabel",
+          "label": "organization",
+          "value": "Demo"
         }
       ]
     },
@@ -194,10 +169,10 @@
       "classLabel": "Person",
       "bfoBucket": "Material Entity",
       "job_title": "Head of Growth",
-      "job_family": "Growth",
+      "job_family": null,
       "status_value": "terminated",
-      "employee_id": "E-10433",
-      "organizationLabel": null,
+      "employee_id": null,
+      "organizationLabel": "Demo",
       "properties": [
         {
           "uri": "personnel:job_title",
@@ -205,19 +180,14 @@
           "value": "Head of Growth"
         },
         {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Growth"
-        },
-        {
-          "uri": "personnel:employee_id",
-          "label": "employee id",
-          "value": "E-10433"
-        },
-        {
           "uri": "personnel:status_value",
           "label": "status",
           "value": "terminated"
+        },
+        {
+          "uri": "abi:organizationLabel",
+          "label": "organization",
+          "value": "Demo"
         }
       ]
     },
@@ -230,10 +200,10 @@
       "classLabel": "Person",
       "bfoBucket": "Material Entity",
       "job_title": "Board Advisor",
-      "job_family": "Advisory",
+      "job_family": null,
       "status_value": "active",
-      "employee_id": "E-10434",
-      "organizationLabel": null,
+      "employee_id": null,
+      "organizationLabel": "Demo",
       "properties": [
         {
           "uri": "personnel:job_title",
@@ -241,19 +211,14 @@
           "value": "Board Advisor"
         },
         {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Advisory"
-        },
-        {
-          "uri": "personnel:employee_id",
-          "label": "employee id",
-          "value": "E-10434"
-        },
-        {
           "uri": "personnel:status_value",
           "label": "status",
           "value": "active"
+        },
+        {
+          "uri": "abi:organizationLabel",
+          "label": "organization",
+          "value": "Demo"
         }
       ]
     },
@@ -266,10 +231,10 @@
       "classLabel": "Person",
       "bfoBucket": "Material Entity",
       "job_title": "Advisor",
-      "job_family": "Advisory",
+      "job_family": null,
       "status_value": "active",
-      "employee_id": "E-10435",
-      "organizationLabel": null,
+      "employee_id": null,
+      "organizationLabel": "Demo",
       "properties": [
         {
           "uri": "personnel:job_title",
@@ -277,19 +242,14 @@
           "value": "Advisor"
         },
         {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Advisory"
-        },
-        {
-          "uri": "personnel:employee_id",
-          "label": "employee id",
-          "value": "E-10435"
-        },
-        {
           "uri": "personnel:status_value",
           "label": "status",
           "value": "active"
+        },
+        {
+          "uri": "abi:organizationLabel",
+          "label": "organization",
+          "value": "Demo"
         }
       ]
     }
@@ -1147,11 +1107,6 @@
           "uri": "personnel:job_title",
           "label": "job title",
           "value": "Advisor"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Advisory"
         }
       ]
     },
@@ -1305,11 +1260,6 @@
           "uri": "personnel:job_title",
           "label": "job title",
           "value": "Board Advisor"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Advisory"
         }
       ]
     },
@@ -1466,11 +1416,6 @@
           "uri": "personnel:job_title",
           "label": "job title",
           "value": "CEO"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Executive"
         }
       ]
     },
@@ -1522,11 +1467,6 @@
           "uri": "personnel:job_title",
           "label": "job title",
           "value": "COO"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Executive"
         }
       ]
     },
@@ -1596,11 +1536,6 @@
           "uri": "personnel:job_title",
           "label": "job title",
           "value": "CTO"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Executive"
         }
       ]
     },
@@ -1619,11 +1554,6 @@
           "uri": "personnel:job_title",
           "label": "job title",
           "value": "CTO"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Executive"
         }
       ]
     },
@@ -2699,11 +2629,6 @@
           "uri": "personnel:job_title",
           "label": "job title",
           "value": "Head of Growth"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Growth"
         }
       ]
     },
@@ -3000,11 +2925,6 @@
           "uri": "personnel:job_title",
           "label": "job title",
           "value": "Lead Developer Frontend"
-        },
-        {
-          "uri": "personnel:job_family",
-          "label": "job family",
-          "value": "Engineering"
         }
       ]
     },

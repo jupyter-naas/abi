@@ -89,7 +89,7 @@ Production ObjectStorage keys mirror the same shape under
 Build pipeline:
 
 ```
-data/graph/personnel_demo.ttl   ← sandbox/generate_demo_graph.py
+graphs/demo/personnel.ttl       ← scripts/demo_graph_builder.py
         ↓ SPARQL export
 data/entities/demo/        ← apps/cockpit/scripts/export_demo_apps_from_graph.py
 ```

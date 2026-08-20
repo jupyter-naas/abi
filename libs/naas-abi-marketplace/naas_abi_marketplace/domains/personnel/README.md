@@ -163,7 +163,7 @@ make demo-graph
 make demo-data
 ```
 
-**Fallback order** (`sandbox/demo_fallback.resolve_apps_data_root`):
+**Fallback order** (`apps/cockpit/data_source.resolve_apps_data_root`):
 
 1. ObjectStorage keys under `{datastore_path}/apps/cockpit/`
 2. Non-empty TripleStore named graph `configuration.graph_name`
