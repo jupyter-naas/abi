@@ -228,12 +228,30 @@ def _scan_apps_catalog() -> tuple[AppInfo, ...]:
     return tuple(catalog)
 
 
+_APP_ASSET_SUFFIXES = {
+    ".css",
+    ".gif",
+    ".html",
+    ".ico",
+    ".jpeg",
+    ".jpg",
+    ".js",
+    ".mjs",
+    ".png",
+    ".svg",
+    ".webp",
+    ".woff",
+    ".woff2",
+}
+
+
 @lru_cache(maxsize=1)
 def _scan_apps_html_paths() -> dict[str, str]:
-    """Build a {url_path: absolute_file_path} map for every HTML asset under app dirs.
+    """Build a URL map for safe browser assets under app directories.
 
-    Walks each discovered app's folder so subpaths (e.g. ``reports/foo.html``)
-    are served under ``/app-html/`` without listing them in the manifest.
+    HTML entry points commonly import colocated scripts, styles, fonts, and
+    images. Serve those assets from the same authenticated ``/app-html/``
+    namespace while excluding source, configuration, and dataset files.
     """
     html_map: dict[str, str] = {}
     for module in _iter_loaded_modules():
@@ -251,11 +269,16 @@ def _scan_apps_html_paths() -> dict[str, str]:
             manifest_path = app_dir / "manifest.json"
             if not manifest_path.is_file():
                 continue
-            for html_file in app_dir.rglob("*.html"):
-                rel = html_file.relative_to(app_dir).as_posix()
+            for asset_file in app_dir.rglob("*"):
+                if (
+                    not asset_file.is_file()
+                    or asset_file.suffix.lower() not in _APP_ASSET_SUFFIXES
+                ):
+                    continue
+                rel = asset_file.relative_to(app_dir).as_posix()
                 url_key = f"{module_path_url}/{app_dir.name}/{rel}"
-                html_map[url_key] = str(html_file.resolve())
-    _log.info("Apps HTML map built: %d entries", len(html_map))
+                html_map[url_key] = str(asset_file.resolve())
+    _log.info("Apps browser asset map built: %d entries", len(html_map))
     return html_map
 
 

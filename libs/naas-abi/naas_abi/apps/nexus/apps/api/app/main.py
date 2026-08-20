@@ -368,9 +368,9 @@ def _configure_middleware(app: FastAPI) -> None:
 
 
 async def serve_app_html(path: str) -> FileResponse:
-    """Serve an HTML asset from any loaded module's apps directory.
+    """Serve a browser asset from any loaded module's apps directory.
 
-    Resolution uses the pre-built html-path map from the apps catalog scan
+    Resolution uses the pre-built asset-path map from the apps catalog scan
     so no module lookup is needed at request time.
     """
     from naas_abi.apps.nexus.apps.api.app.services.apps.adapters.primary.apps__primary_adapter__FastAPI import (
