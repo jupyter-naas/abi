@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.54.2 (2026-08-20)
+
+### Bug Fixes
+
+- Error loading app html
+  ([`4f84087`](https://github.com/jupyter-naas/abi/commit/4f8408731bbb30711d0512ea8f907f65130975aa))
+
+
 ## v2.54.1 (2026-08-18)
 
 ### Bug Fixes
