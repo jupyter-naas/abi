@@ -108,6 +108,10 @@ storage/vectorstore/*
 !libs/naas-abi/naas_abi/apps/nexus/demo/**
 !libs/naas-abi/naas_abi/apps/nexus/apps/*/public/**
 
+# Financial cockpit brand source files (`npm run sync:brand`)
+!libs/naas-abi-marketplace/naas_abi_marketplace/domains/finance/apps/financial_cockpit/web/assets/**
+
+
 # `abi dev` runtime artefacts (per-worktree instance/pid/log files)
 .abi/
 # Dagster local home dir created by `abi dev up`

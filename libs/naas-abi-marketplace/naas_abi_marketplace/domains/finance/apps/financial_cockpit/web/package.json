@@ -12,7 +12,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "sync:brand": "cp assets/logo.png public/logo.png && cp assets/favicon.ico app/icon.png",
+    "sync:brand": "node scripts/sync-brand.mjs",
     "push:r2": "python ../scripts/push_to_r2.py",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview"
   },
