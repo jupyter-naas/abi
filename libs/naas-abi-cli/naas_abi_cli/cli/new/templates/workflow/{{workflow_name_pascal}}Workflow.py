@@ -1,10 +1,8 @@
 from dataclasses import dataclass
-from enum import Enum
 from typing import Annotated, Optional
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
-from naas_abi_core.utils.Expose import APIRouter
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
 from pydantic import Field
@@ -59,15 +57,5 @@ class {{workflow_name_pascal}}Workflow(Workflow[{{workflow_name_pascal}}Workflow
             )
         ]
 
-    def as_api(
-        self,
-        router: APIRouter,
-        route_name: str = "",
-        name: str = "",
-        description: str = "",
-        description_stream: str = "",
-        tags: list[str | Enum] | None = None,
-    ) -> None:
-        if tags is None:
-            tags = []
-        return None
+    # as_api is inherited from Expose: POST /{slug} calls run() when this
+    # method is not overridden. Override only for a custom HTTP surface.
