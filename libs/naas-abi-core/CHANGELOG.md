@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.27.2 (2026-08-20)
+
+### Bug Fixes
+
+- Ruff errors
+  ([`7f992f4`](https://github.com/jupyter-naas/abi/commit/7f992f45eda9d1994840e7975c4010bffdf8f8ed))
+
+
 ## v2.27.1 (2026-08-20)
 
 ### Bug Fixes
