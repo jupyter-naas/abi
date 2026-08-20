@@ -13,7 +13,7 @@ _ABI_DEV_INSTANCE_REL = Path(".abi") / "dev" / "instance.json"
 def local_probe_host() -> str:
     """Server-to-server dial target for services started by ``abi dev up``."""
     host = os.environ.get("ABI_DEV_BIND_HOST") or "127.0.0.1"
-    if host in ("0.0.0.0", "::", "*"):
+    if host in ("0.0.0.0", "::", "*"):  # nosec B104 - wildcard bind host normalized to localhost
         return "127.0.0.1"
     return host
 

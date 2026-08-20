@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from naas_abi_core.services.triple_store.resolve import (
     abi_dev_service_port,
     load_abi_dev_instance,
@@ -69,7 +68,7 @@ def test_abi_dev_service_port_uses_probe_host(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ):
     _write_instance(tmp_path, ports={"api": 7001})
-    monkeypatch.setenv("ABI_DEV_BIND_HOST", "0.0.0.0")
+    monkeypatch.setenv("ABI_DEV_BIND_HOST", "0.0.0.0")  # nosec B104 - test wildcard bind normalization
 
     assert abi_dev_service_port("api", start=tmp_path) == 7001
     assert (
