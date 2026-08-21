@@ -522,7 +522,7 @@ def publish_x_app(
         logger.info(f"publish_x_app: skipped ({reason})")
         return {"skipped": True, "reason": reason}
 
-    from naas_abi_marketplace.applications.x.apps.x.hub import XAppHubBuilder
+    from naas_abi_marketplace.applications.x.apps.x_proxy.hub import XAppHubBuilder
 
     # Bring the columnar projection level with the envelope archive first, so the
     # snapshots below read a view that includes this tick's ingest.
@@ -548,7 +548,7 @@ def refresh_x_cache(module, *, full: bool = False) -> dict | None:
     the projection existed.
     """
     try:
-        from naas_abi_marketplace.applications.x.apps.x.cache import refresh
+        from naas_abi_marketplace.applications.x.apps.x_proxy.cache import refresh
     except ImportError as exc:
         logger.info(f"refresh_x_cache: projection unavailable ({exc})")
         return None

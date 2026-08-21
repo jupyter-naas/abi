@@ -9,7 +9,7 @@ SearchQuery / SearchResultSet / SearchRecentTweets structure into the graph.
 This is the event-system pay-off: the search workflow only fetches and saves;
 the put event then drives all graph mapping here, with no polling. Set
 ``app_publish: true`` on an entry to also republish the Recent Tweets app
-(``x/apps/x/``) after each successful map; it is off by default and the hourly
+(``x/apps/x_proxy/``) after each successful map; it is off by default and the hourly
 ``x_build_app`` schedule keeps the dashboard fresh instead.
 
 Each entry's sensor, watched prefix and ingestion knobs (persist, events drained
@@ -81,7 +81,7 @@ _PIPELINE_CONFIG_SCHEMA = {
         bool,
         is_required=False,
         description=(
-            "After mapping, republish x/apps/x/ snapshots (+ web export). "
+            "After mapping, republish x/apps/x_proxy/ snapshots (+ web export). "
             "Defaults to the entry's configured app_publish (itself false "
             "unless set) — turn on here to force a rebuild for one run."
         ),

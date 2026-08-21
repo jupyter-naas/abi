@@ -152,7 +152,7 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
     app_publish: bool = Field(
         default=False,
         description=(
-            "After fetching, republish ``x/apps/x/`` JSON snapshots (+ web "
+            "After fetching, republish ``x/apps/x_proxy/`` JSON snapshots (+ web "
             "export) on this filter's tick. Defaults to false — a publish reads "
             "the whole graph and re-renders every snapshot, which costs far more "
             "than the fetch itself and grows with the graph, while the hourly "
@@ -224,7 +224,7 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
 
 
 class XAppConfiguration(BaseModel):
-    """Publishing controls for the Nexus Recent Tweets app (``x/apps/x/``).
+    """Publishing controls for the Nexus Recent Tweets app (``x/apps/x_proxy/``).
 
     Independent of ``search_recent_tweets_event.enabled`` / Dagster UI sensor
     state and of ``count_recent_tweets`` on search filters. When ``publish`` is
@@ -236,7 +236,7 @@ class XAppConfiguration(BaseModel):
     publish: bool = Field(
         default=True,
         description=(
-            "Republish ``x/apps/x/`` snapshots (and web export) after ingest / "
+            "Republish ``x/apps/x_proxy/`` snapshots (and web export) after ingest / "
             "count cycles that update the graph. Set false to keep fetching and "
             "mapping without refreshing the catalog app."
         ),
@@ -315,7 +315,7 @@ class XSearchRecentTweetsEventConfiguration(BaseModel):
     app_publish: bool = Field(
         default=False,
         description=(
-            "After mapping an envelope into the graph, republish ``x/apps/x/`` "
+            "After mapping an envelope into the graph, republish ``x/apps/x_proxy/`` "
             "JSON snapshots (+ web export). Defaults to false — the hourly "
             "``x_build_app`` schedule already rebuilds the app from the graph, "
             "so turn this on only when the dashboard must follow each envelope. "
@@ -409,7 +409,7 @@ class XSearchRecentTweetsFilesConfiguration(BaseModel):
         default=False,
         description=(
             "After reprocessing at least one envelope into the graph, republish "
-            "``x/apps/x/`` JSON snapshots (+ web export). Defaults to false — "
+            "``x/apps/x_proxy/`` JSON snapshots (+ web export). Defaults to false — "
             "the hourly ``x_build_app`` schedule already rebuilds the app from "
             "the graph. Independent of ``enabled``."
         ),
@@ -442,7 +442,7 @@ class XCountFollowConfiguration(BaseModel):
     ``count_recent_tweets: true`` on the same ``query``, or when an event/files
     orchestration maps a search envelope whose query is listed here. The
     ``enabled`` flag controls whether this entry is included in the dashboard
-    catalog (``x/apps/x/``).
+    catalog (``x/apps/x_proxy/``).
     """
 
     name: str = Field(
@@ -523,7 +523,7 @@ class ABIModule(BaseModule):
                 save_every_pages: 10     # flush envelope every N pages
                 save_every_tweets: 1000  # …or every N tweets (whichever first)
                 persist: true
-                app_publish: false       # opt in to republish x/apps/x/ per tick
+                app_publish: false       # opt in to republish x/apps/x_proxy/ per tick
                 cost_per_tweet_usd: 0.005
                 daily_max_usd: 20        # ~4000 tweets/day at $0.005
                 monthly_max_usd: 250     # ~50000 tweets/month at $0.005
@@ -562,7 +562,7 @@ class ABIModule(BaseModule):
                 events_per_tick: 100     # max ObjectPut events drained per tick
                 max_concurrent_runs: 1   # skip (no cursor advance) when full
                 persist: true
-                app_publish: false       # opt in to republish x/apps/x/ per map
+                app_publish: false       # opt in to republish x/apps/x_proxy/ per map
 
             # ----- Scheduled files-reprocessing triggers -------------------
             # One (job, trigger) pair per entry — sensor (`interval_seconds`)
@@ -582,7 +582,7 @@ class ABIModule(BaseModule):
                 skip_existing: true      # skip files already in the graph
                 max_age_hours: 24        # only envelopes from the last 24h
                 persist: true
-                app_publish: false       # opt in to republish x/apps/x/ after sweep
+                app_publish: false       # opt in to republish x/apps/x_proxy/ after sweep
 
             # ----- Post-count dashboard catalog ------------------------------
             # Queries listed here appear in the "Post Count Following" dashboard
@@ -611,7 +611,7 @@ class ABIModule(BaseModule):
         #         label: "Drones / UAS"
         #         enabled: true
         count_recent_tweets_workflow: list[XCountFollowConfiguration] = []
-        # ----- Recent Tweets catalog app (x/apps/x/) ------------------------
+        # ----- Recent Tweets catalog app (x/apps/x_proxy/) ------------------------
         # Snapshot republish is independent of sensor ``enabled`` flags and of
         # ``count_recent_tweets`` on search filters.
         #
@@ -637,10 +637,10 @@ class ABIModule(BaseModule):
     # Override and adapt to your module if you expose HTTP routes.
     def api(self, app: FastAPI) -> None:
         # Serve the X dashboard + its whole JSON dataset from object storage
-        # (x/apps/x/) via /app-html/x/apps/x/… — registered before the Nexus
+        # (x/apps/x_proxy/) via /app-html/x/apps/x_proxy/… — registered before the Nexus
         # static catch-all so the published dashboard wins.
         try:
-            from naas_abi_marketplace.applications.x.apps.x.routes import (
+            from naas_abi_marketplace.applications.x.apps.x_proxy.routes import (
                 register_x_count_app_routes,
             )
 

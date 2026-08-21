@@ -114,7 +114,7 @@ _SEARCH_WORKFLOW_OP_CONFIG_SCHEMA = {
         bool,
         is_required=False,
         description=(
-            "Republish the x/apps/x/ snapshots after this run. Off by default — "
+            "Republish the x/apps/x_proxy/ snapshots after this run. Off by default — "
             "a publish re-reads the whole graph and the hourly x_build_app "
             "schedule already does it."
         ),

@@ -106,7 +106,7 @@ _FILES_CONFIG_SCHEMA = {
         bool,
         is_required=False,
         description=(
-            "After reprocessing, republish x/apps/x/ snapshots (+ web export). "
+            "After reprocessing, republish x/apps/x_proxy/ snapshots (+ web export). "
             "Defaults to the entry's configured app_publish (itself false "
             "unless set) — turn on here to force a rebuild for one run."
         ),

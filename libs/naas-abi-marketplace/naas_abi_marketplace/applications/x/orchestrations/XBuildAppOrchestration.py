@@ -5,7 +5,7 @@ the current graph — no X API calls, no re-ingest, no re-map. On every tick it
 calls :func:`publish_x_app`, which:
 
 1. reads the ``x_recent_posts_count`` / tweet graphs from the triple store, then
-2. re-renders the ``x/apps/x/`` JSON snapshots (globals + count_recent_tweets +
+2. re-renders the ``x/apps/x_proxy/`` JSON snapshots (globals + count_recent_tweets +
    search_recents_tweets) and the static web export from that graph state.
 
 Use it to keep the published dashboard fresh on a fixed cadence, independent of
@@ -80,7 +80,7 @@ def _run_build_cycle(
 class XBuildAppOrchestration(DagsterOrchestration):
     """Scheduled job that rebuilds the X app dashboard from the graph.
 
-    Launchpad: run ``x_build_app`` to re-render the ``x/apps/x/`` snapshots +
+    Launchpad: run ``x_build_app`` to re-render the ``x/apps/x_proxy/`` snapshots +
     web export from the current triple-store state on demand::
 
         ops:
