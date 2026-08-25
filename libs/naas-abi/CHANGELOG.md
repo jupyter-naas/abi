@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v2.54.3 (2026-08-25)
+
+### Bug Fixes
+
+- **nexus**: Point module asset URLs at the live API port
+  ([`e47fc0d`](https://github.com/jupyter-naas/abi/commit/e47fc0d7a2543950a9b985bd40b1ea422c95254e))
+
+- **nexus**: Resolve module asset URLs from the live API port
+  ([`d3b02f2`](https://github.com/jupyter-naas/abi/commit/d3b02f2f5555907a482555a2df3e54c9191cf131))
+
+
 ## v2.54.2 (2026-08-20)
 
 ### Bug Fixes
