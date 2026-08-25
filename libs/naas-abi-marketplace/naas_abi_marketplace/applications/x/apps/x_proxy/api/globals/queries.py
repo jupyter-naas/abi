@@ -1,4 +1,4 @@
-"""Publish ``globals/queries.json`` — Query dropdown values."""
+"""Publish ``globals/queries.json`` - Query dropdown values."""
 
 from __future__ import annotations
 

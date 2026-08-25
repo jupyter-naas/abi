@@ -20,7 +20,7 @@ export function KpiGrid({ items, columns = 4, accentFirst = false }: Props) {
               {it.text != null
                 ? it.text
                 : it.value == null
-                  ? "—"
+                  ? "-"
                   : fmt(it.value)}
               {it.text == null && it.unit === "%" ? "%" : ""}
             </span>

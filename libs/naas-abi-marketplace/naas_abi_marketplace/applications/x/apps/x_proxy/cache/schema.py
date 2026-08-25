@@ -32,7 +32,7 @@ POSTS_DIR = f"{CACHE_PREFIX}/posts"
 AUTHORS_KEY = "authors.parquet"
 MANIFEST_KEY = "manifest.json"
 
-# Where the ingest writes its envelopes — the log this projection reads.
+# Where the ingest writes its envelopes - the log this projection reads.
 ENVELOPE_PREFIX = "x/search_recent_tweets"
 
 # Redis key holding the newest envelope timestamp already projected. Kept in the
@@ -45,12 +45,12 @@ WATERMARK_KEY = "x:cache:watermark"
 #
 # 2: added ``full_text``. Without it the tweets table truncated every long post,
 #    because X returns a cut-off ``text`` and the untruncated content only in
-#    ``note_tweet.text`` — which is what the graph stores as ``x:full_text``.
+#    ``note_tweet.text`` - which is what the graph stores as ``x:full_text``.
 SCHEMA_VERSION = 2
 
-# A post is one row per (tweet_id, kind, query_slug) — the same post answering
+# A post is one row per (tweet_id, kind, query_slug) - the same post answering
 # two different queries is two rows. ``kind`` separates the posts that answered
-# the query from the ones the expansions pulled in as context — the dashboard
+# the query from the ones the expansions pulled in as context - the dashboard
 # reports them separately and must never conflate them. The write side holds this
 # per refresh batch; ``CacheReader.posts`` holds it across part files.
 KIND_MATCHED = "matched"
@@ -67,7 +67,7 @@ def post_schema() -> dict[str, Any]:
         "created_at": pl.Datetime(time_unit="us", time_zone="UTC"),
         "author_id": pl.Utf8,
         "text": pl.Utf8,
-        # ``note_tweet.text`` when X sent one, else ``text`` — the graph's
+        # ``note_tweet.text`` when X sent one, else ``text`` - the graph's
         # ``x:full_text``. The tables read this, not ``text``.
         "full_text": pl.Utf8,
         "lang": pl.Utf8,
@@ -103,7 +103,7 @@ def author_schema() -> dict[str, Any]:
         "listed_count": pl.Int64,
         "user_like_count": pl.Int64,
         "media_count": pl.Int64,
-        # When this profile was last observed in an envelope — the tie-breaker
+        # When this profile was last observed in an envelope - the tie-breaker
         # that decides which of several observations of one author wins.
         "seen_at": pl.Utf8,
     }

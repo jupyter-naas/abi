@@ -177,6 +177,11 @@ a {
   display: none;
 }
 
+/* The favorites bar carries the boundary instead. */
+.tabstrip.joined {
+  border-bottom-color: transparent;
+}
+
 .tab {
   display: flex;
   align-items: center;
@@ -225,7 +230,7 @@ a {
   gap: 2px;
   flex: 1 1 auto;
   min-width: 0;
-  /* Room for the drop caret at either end — it sits 2px outside a chip, and
+  /* Room for the drop caret at either end - it sits 2px outside a chip, and
      this bar clips whatever leaves its content box. */
   padding: 0 2px;
   overflow-x: auto;
@@ -309,6 +314,11 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A pinned post reads as its tweet id - tabular so the digits line up. */
+.fav-chip .fav-label:only-of-type {
+  font-variant-numeric: tabular-nums;
 }
 
 .fav-avatar {
@@ -656,6 +666,64 @@ a {
   line-height: 1.4;
 }
 
+/* Under a result: when the post was written, and the query that pulled it in.
+   The query is set in mono - it is what was sent to X, not prose. */
+.result-meta {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.result-meta-label {
+  color: var(--label);
+  font-weight: 700;
+}
+
+.result-query {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  word-break: break-word;
+}
+
+/* Search Tweets: the title is the post's id and author - set a little smaller
+   than an author's display name, and never wrapped into a paragraph. */
+.result-title.as-text {
+  color: var(--label);
+  cursor: default;
+}
+
+.result-list .result-title {
+  font-size: 1.02rem;
+}
+
+.result-author {
+  color: var(--label);
+  text-decoration: none;
+}
+
+.result-author:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* Sits where the Pin button sits on an author result. */
+.result-open {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.result-open:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
 .pin-toggle {
   flex: 0 0 auto;
   padding: 6px 10px;
@@ -727,7 +795,7 @@ a {
   color: var(--text);
 }
 
-/* The feed spans the page, like the KPI grid above it — a post is a panel of
+/* The feed spans the page, like the KPI grid above it - a post is a panel of
    the same family, not a column pinned to the left of a wide page. */
 /* Sits directly under the feed tabs. */
 .user-posts {
@@ -743,7 +811,7 @@ a {
   border: 1px solid var(--border);
 }
 
-/* The post `?post=` names — the one open on its own page. */
+/* The post `?post=` names - the one open on its own page. */
 .user-post.selected {
   border-color: var(--accent);
 }
@@ -799,17 +867,24 @@ a {
   color: var(--muted);
 }
 
-/* Dimmed until the card is hovered, but always reachable by tab. */
+/* The followed query a matched post answered. */
+.user-post-queries {
+  color: var(--label);
+}
+
+/* Just the glyph: dimmed until the card is hovered, but always reachable by
+   tab. */
 .user-post-expand {
   margin-left: auto;
-  padding: 3px 8px;
-  border: 1px solid var(--border);
+  padding: 2px 4px;
+  border: 0;
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 0.95rem;
+  line-height: 1;
   cursor: pointer;
-  opacity: 0.45;
+  opacity: 0.4;
   transition: opacity 0.12s ease;
 }
 
@@ -819,8 +894,8 @@ a {
 }
 
 .user-post-expand:hover:not(:disabled) {
-  background: var(--panel-2);
-  color: var(--text);
+  color: var(--accent);
+  opacity: 1;
 }
 
 .user-post-expand:disabled {
@@ -1230,7 +1305,7 @@ a {
   border-bottom: 1px solid var(--border);
 }
 
-/* Reads as the window title it is — "X Proxy - Users" — so it keeps its own
+/* Reads as the window title it is - "X Proxy - Users" - so it keeps its own
    casing rather than the uppercase the section labels elsewhere wear. */
 .topnav h1 {
   margin: 0;
@@ -1284,6 +1359,29 @@ select {
   max-width: 1360px;
   margin: 0 auto;
   padding: 24px 24px 56px;
+}
+
+/* `?expand=1`: the post alone on the viewport, no chrome around it. */
+.page-full {
+  max-width: 900px;
+  min-height: 100vh;
+}
+
+/* Top right of a post's header - the toggle in and out of the full view. */
+.post-expand {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.post-expand:hover {
+  background: var(--panel-2);
+  color: var(--text);
 }
 
 .kpis {
@@ -1792,7 +1890,7 @@ table.dt td.empty {
     align-items: center;
     border-right: 0;
     border-bottom: 1px solid var(--border);
-    /* The bar itself scrolls if the items outgrow it — a nav that scrolls
+    /* The bar itself scrolls if the items outgrow it - a nav that scrolls
        inside a nav would hide "Users" behind an edge nobody sees. */
     overflow-x: auto;
     overflow-y: hidden;

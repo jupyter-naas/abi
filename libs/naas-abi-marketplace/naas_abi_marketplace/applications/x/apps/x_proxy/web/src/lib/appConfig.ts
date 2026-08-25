@@ -3,12 +3,13 @@
  *
  * `config.yaml` at the app root is the source of truth; `app_config.py` compiles
  * it into `appConfig.generated.ts`, and this module turns that data into the
- * lookups the chrome needs. Nothing here decides anything — change the YAML,
+ * lookups the chrome needs. Nothing here decides anything - change the YAML,
  * not this file.
  */
 import {
   DEFAULT_PAGE,
   SECTIONS,
+  type FavoritesBar,
   type PageConfig,
   type PageKey,
   type SectionConfig,
@@ -21,9 +22,11 @@ export {
   DEFAULT_PAGE,
   FAVORITES_LIMITS,
   FEED,
+  RESULTS,
   SECTIONS,
 } from "@/lib/appConfig.generated";
 export type {
+  FavoritesBar,
   IconName,
   PageConfig,
   PageKey,
@@ -75,7 +78,7 @@ export function sectionOf(page: PageKey): SectionConfig {
   return found;
 }
 
-/** The section's tabs — hidden pages keep their route but leave the strip. */
+/** The section's tabs - hidden pages keep their route but leave the strip. */
 export function tabsOf(section: SectionKey): PageConfig[] {
   return sectionConfig(section).pages.filter((page) => page.visible);
 }
@@ -96,6 +99,24 @@ export function landingPageOf(section: SectionKey): PageKey {
   return (pages.find((page) => page.visible) || pages[0]).key;
 }
 
+/** Which favorites bar a page shows - its own setting, else its section's. */
+export function favoritesOn(page: PageKey): FavoritesBar {
+  return pageConfig(page).favorites ?? sectionOf(page).favorites;
+}
+
+/** The tab lit while a page is open - itself, unless it names another. */
+export function tabOf(page: PageKey): PageKey {
+  return pageConfig(page).tab ?? page;
+}
+
+/**
+ * Which page a section should reopen - the page itself when it is a tab,
+ * otherwise the tab that page belongs to (e.g. a post opens under Search Tweets).
+ */
+export function sectionLandingPage(page: PageKey): PageKey {
+  return pageConfig(page).visible ? page : tabOf(page);
+}
+
 /** `"X Proxy - Users"`, from `app.title` in the YAML. */
 export function titleOf(section: SectionKey): string {
   return APP_TITLE.replace("{app}", APP_NAME).replace(
@@ -104,7 +125,7 @@ export function titleOf(section: SectionKey): string {
   );
 }
 
-/** Every section's landing page, keyed by section — the initial "last visited". */
+/** Every section's landing page, keyed by section - the initial "last visited". */
 export function landingPages(): Record<SectionKey, PageKey> {
   return Object.fromEntries(
     SECTIONS.map((section) => [section.key, landingPageOf(section.key)]),

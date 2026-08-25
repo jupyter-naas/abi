@@ -1,4 +1,4 @@
-"""Search Recent Tweets page — kpis / barcharts / linecharts / tables."""
+"""Search Recent Tweets page - kpis / barcharts / linecharts / tables."""
 
 from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import SnapshotContext
 from naas_abi_marketplace.applications.x.apps.x_proxy.api.search_recents_tweets import (

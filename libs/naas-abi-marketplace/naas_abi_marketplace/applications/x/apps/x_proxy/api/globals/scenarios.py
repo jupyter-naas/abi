@@ -1,4 +1,4 @@
-"""Publish ``globals/scenarios.json`` — Scenario filter values."""
+"""Publish ``globals/scenarios.json`` - Scenario filter values."""
 
 from __future__ import annotations
 

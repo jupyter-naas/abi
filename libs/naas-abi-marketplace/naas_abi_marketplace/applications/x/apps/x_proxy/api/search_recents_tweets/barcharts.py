@@ -1,4 +1,4 @@
-"""Publish ``search_recents_tweets/barcharts.json`` — top authors / locations."""
+"""Publish ``search_recents_tweets/barcharts.json`` - top authors / locations."""
 
 from __future__ import annotations
 
@@ -9,9 +9,12 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import (
     previous_window,
     slugify,
 )
+from naas_abi_marketplace.applications.x.apps.x_proxy.app_config import app_config
 
 
 def publish(ctx: SnapshotContext) -> dict:
+    # How many bars each chart carries - `charts:` in config.yaml.
+    limits = app_config().charts
     charts: list[dict] = []
     for entry in ctx.queries:
         query_string = str(entry.get("query") or "").strip()
@@ -24,8 +27,8 @@ def publish(ctx: SnapshotContext) -> dict:
             cur = ctx.tweets_in_window(query_string, start, end)
             prev = ctx.tweets_in_window(query_string, prev_start, prev_end)
 
-            cur_authors = Counter((t.get("username") or "—") for t in cur)
-            prev_authors = Counter((t.get("username") or "—") for t in prev)
+            cur_authors = Counter((t.get("username") or "-") for t in cur)
+            prev_authors = Counter((t.get("username") or "-") for t in prev)
             cur_locs = Counter(
                 (t.get("location") or "").strip()
                 for t in cur
@@ -38,7 +41,7 @@ def publish(ctx: SnapshotContext) -> dict:
             )
 
             author_bars = []
-            for username, value in cur_authors.most_common(10):
+            for username, value in cur_authors.most_common(limits.top_authors_bars):
                 author_bars.append(
                     {
                         "label": f"@{username}",
@@ -46,13 +49,13 @@ def publish(ctx: SnapshotContext) -> dict:
                         "delta": value - prev_authors.get(username, 0),
                         "href": (
                             f"https://x.com/{username}"
-                            if username and username != "—"
+                            if username and username != "-"
                             else None
                         ),
                     }
                 )
             location_bars = []
-            for location, value in cur_locs.most_common(10):
+            for location, value in cur_locs.most_common(limits.top_locations_bars):
                 location_bars.append(
                     {
                         "label": location,

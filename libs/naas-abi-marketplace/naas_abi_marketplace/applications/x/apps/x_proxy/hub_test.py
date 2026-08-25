@@ -451,7 +451,9 @@ def test_every_page_has_a_route():
     web = Path(__file__).resolve().parent / "web"
     paths = {page.key: page.path for page in load_config().pages}
     assert paths == {
+        "tweets": "/posts/search-tweets/",
         "search": "/posts/search-posts-recent/",
+        "post": "/posts/post/",
         "count": "/posts/get-posts-counts-recent/",
         "users": "/users/search",
         "parameters": "/parameters/",
@@ -619,7 +621,7 @@ def _counting_corpus() -> _CountingTripleStore:
 
 
 def test_repeated_tweets_in_window_runs_one_query_per_publish():
-    """tables / barcharts ask for the same rows — run it once."""
+    """tables / barcharts ask for the same rows - run it once."""
     store = _counting_corpus()
     ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
 
@@ -675,7 +677,7 @@ def test_sum_counts_in_window_reuses_one_timeseries_query():
 
 
 def test_posts_for_usernames_survives_a_corpus_with_no_media():
-    """rdflib raises on an unbound GROUP_CONCAT — this must not kill a publish.
+    """rdflib raises on an unbound GROUP_CONCAT - this must not kill a publish.
 
     Regression: the ``fs`` local-dev adapter returns a lazy rdflib Result, so
     the query only evaluated during iteration and ``NotBoundError`` escaped the
@@ -710,7 +712,7 @@ def test_posts_for_usernames_keeps_media_urls_clean():
 
 
 def test_query_failure_degrades_to_an_empty_section():
-    """A broken triple store logs and yields nothing — it never raises."""
+    """A broken triple store logs and yields nothing - it never raises."""
 
     class _Broken:
         def query(self, sparql: str):
@@ -728,7 +730,7 @@ def test_query_failure_degrades_to_an_empty_section():
 
 
 def test_lazily_failing_result_is_caught_like_an_eager_one():
-    """The fs adapter fails during iteration, not at query() — catch it anyway."""
+    """The fs adapter fails during iteration, not at query() - catch it anyway."""
 
     class _LazilyBroken:
         def query(self, sparql: str):

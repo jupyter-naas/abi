@@ -1,11 +1,11 @@
-"""Publish ``search_recents_tweets/linecharts.json`` — ingested tweets over time.
+"""Publish ``search_recents_tweets/linecharts.json`` - ingested tweets over time.
 
 Same shape as the Count page's "Posts over time": per-hour or per-day **counts**
 (not a cumulative running total), current vs previous period.
 
 The series is ingested **matched** tweets bucketed by ``created_at``. It is not
 the count-endpoint total (a different population) and not referenced context
-(those posts can predate the window). The 1 000-row table sample is not used —
+(those posts can predate the window). The 1 000-row table sample is not used -
 the cardinality is the same uncapped window the Tweets KPI reports.
 """
 

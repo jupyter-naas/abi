@@ -115,7 +115,7 @@ export function UserProfileCard({ profile, username, timezone }: Props) {
                 <span className="profile-metric-value">
                   {typeof metrics?.[key] === "number"
                     ? fmt(metrics[key] as number)
-                    : "—"}
+                    : "-"}
                 </span>
                 <span className="profile-metric-label">{label}</span>
               </div>

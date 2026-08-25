@@ -31,6 +31,38 @@ def _followed_queries_from_config(module) -> list[dict]:
     return followed_count_entries(module)
 
 
+def _read_config(args) -> tuple[str | None, str | None]:
+    """Return ``(yaml content, path printed to stdout)``."""
+    config_path = args.config
+    if config_path is None:
+        for candidate in ("config.local.yaml", ".abi/config.local.yaml"):
+            if os.path.isfile(candidate):
+                config_path = candidate
+                break
+    if config_path is None:
+        return None, None
+    with open(config_path, encoding="utf-8") as fh:
+        return fh.read(), config_path
+
+
+def _upload_web_only(config_yaml: str | None) -> None:
+    """Upload ``web/out/`` using only object storage - no graph, no Fuseki."""
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        EngineConfiguration,
+    )
+    from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import (
+        DEFAULT_APP_PREFIX,
+    )
+    from naas_abi_marketplace.applications.x.apps.x_proxy.web.publish_assets import (
+        upload_web_export,
+    )
+
+    configuration = EngineConfiguration.load_configuration(config_yaml)
+    object_storage = configuration.services.object_storage.load()
+    result = upload_web_export(object_storage, DEFAULT_APP_PREFIX)
+    print(json.dumps(result, indent=2))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -43,7 +75,7 @@ def main() -> None:
         "--web-only",
         action="store_true",
         help=(
-            "Upload web/out/ and nothing else — no SPARQL, no snapshot rebuild. "
+            "Upload web/out/ and nothing else - no SPARQL, no snapshot rebuild. "
             "For iterating on the UI against snapshots already published."
         ),
     )
@@ -74,40 +106,21 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    config_yaml, config_path = _read_config(args)
+    if config_path is not None:
+        print(f"Using config: {config_path}")
+
+    if args.web_only:
+        _upload_web_only(config_yaml)
+        return
+
     from naas_abi_core.engine.Engine import Engine
     from naas_abi_marketplace.applications.x import ABIModule
     from naas_abi_marketplace.applications.x.apps.x_proxy.api.publish import publish_app
 
-    # Engine(configuration=…) expects YAML *content*, not a filesystem path.
-    config_yaml: str | None = None
-    config_path = args.config
-    if config_path is None:
-        for candidate in ("config.local.yaml", ".abi/config.local.yaml"):
-            if os.path.isfile(candidate):
-                config_path = candidate
-                break
-    if config_path is not None:
-        with open(config_path, encoding="utf-8") as fh:
-            config_yaml = fh.read()
-        print(f"Using config: {config_path}")
-
     engine = Engine(configuration=config_yaml)
     engine.load(module_names=["naas_abi_marketplace.applications.x"])
     module = ABIModule.get_instance()
-
-    if args.web_only:
-        from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import (
-            DEFAULT_APP_PREFIX,
-        )
-        from naas_abi_marketplace.applications.x.apps.x_proxy.web.publish_assets import (
-            upload_web_export,
-        )
-
-        result = upload_web_export(
-            module.engine.services.object_storage, DEFAULT_APP_PREFIX
-        )
-        print(json.dumps(result, indent=2))
-        return
 
     if args.query:
         queries = [{"name": q, "query": q, "label": q} for q in args.query]
@@ -124,7 +137,7 @@ def main() -> None:
     # Same order as the orchestration's publish_x_app: bring the projection level
     # with the envelope archive first, so the snapshots below read a view that
     # includes everything ingested since the last run. Skipping this would
-    # publish from whatever the last refresh left behind — and on a stack that
+    # publish from whatever the last refresh left behind - and on a stack that
     # has never refreshed, from no projection at all (the publish then falls back
     # to SPARQL, which is correct but slower).
     if not args.no_cache_refresh:

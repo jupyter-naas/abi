@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { useAppState } from "@/components/AppProvider";
 import {
   folders as foldersOf,
+  hintOf,
+  labelOf,
   MAX_FOLDER_NAME,
   MAX_FOLDERS,
   parentOf,
@@ -14,6 +16,7 @@ import type {
   FavoriteFolder,
   FavoriteLink,
   FavoriteNode,
+  FavoritesScope,
 } from "@/lib/pins";
 import { hrefFor } from "@/lib/routes";
 
@@ -23,8 +26,10 @@ export type OpenUserHandler = (
 ) => (event: React.MouseEvent<HTMLAnchorElement>) => void;
 
 type Props = {
-  /** Author currently open, so its chip can be marked active. */
-  activeUser: string | null;
+  /** Which bar this is: pinned authors, or pinned posts. */
+  scope: FavoritesScope;
+  /** Id of the favorite the page is currently showing, if any. */
+  activeId: string | null;
   openUser: OpenUserHandler;
 };
 
@@ -33,12 +38,25 @@ type Popup = { kind: "folder" | "menu"; id: string };
 
 const POPUP_WIDTH = 232;
 
-function initial(username: string): string {
-  return username.slice(0, 1).toUpperCase();
+function initial(link: FavoriteLink): string {
+  return (link.postId ? "#" : link.username.slice(0, 1).toUpperCase()) || "?";
+}
+
+/** Where a chip goes: a post's page, or an author's. */
+function linkHref(link: FavoriteLink): string {
+  return link.postId
+    ? hrefFor("post", {
+        post: link.postId,
+        user: link.username,
+        // Older pins carry no origin; Search Tweets is where posts are pinned.
+        from: link.from ?? "tweets",
+        q: link.q,
+      })
+    : hrefFor("users", { user: link.username });
 }
 
 /**
- * The favorites bar — pinned authors and the folders filing them.
+ * The favorites bar - pinned authors and the folders filing them.
  *
  * A browser bookmarks bar, in the app: chips sit under the tabs on every page,
  * a chip is either an author or a folder, and both can be dragged to reorder,
@@ -46,14 +64,15 @@ function initial(username: string): string {
  * does is also on each chip's menu, because a control that only answers to a
  * pointer is a control keyboard users do not have.
  */
-export function FavoritesBar({ activeUser, openUser }: Props) {
+export function FavoritesBar({ scope, activeId, openUser }: Props) {
   const {
-    favorites,
+    favorites: allFavorites,
     createFolder,
     renameFavoriteFolder,
     removeFavorite,
     moveFavorite,
   } = useAppState();
+  const favorites = allFavorites[scope];
 
   const [popup, setPopup] = useState<Popup | null>(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
@@ -127,7 +146,7 @@ export function FavoritesBar({ activeUser, openUser }: Props) {
   }, [popup]);
 
   function addFolder() {
-    const id = createFolder();
+    const id = createFolder(scope);
     if (!id) return;
     // Straight into its name: an unnamed "New folder" organises nothing.
     setPopup(null);
@@ -135,23 +154,23 @@ export function FavoritesBar({ activeUser, openUser }: Props) {
   }
 
   function commitName(id: string, name: string) {
-    renameFavoriteFolder(id, name);
+    renameFavoriteFolder(scope, id, name);
     setEditing(null);
   }
 
   function move(id: string, target: DropTarget) {
-    moveFavorite(id, target);
+    moveFavorite(scope, id, target);
     closePopup();
   }
 
   function drop(event: React.DragEvent) {
     event.preventDefault();
-    if (dragId && dropAt) moveFavorite(dragId, dropAt);
+    if (dragId && dropAt) moveFavorite(scope, dragId, dropAt);
     setDragId(null);
     setDropAt(null);
   }
 
-  /** The bar node after ``id`` — where "drop on the right half" inserts. */
+  /** The bar node after ``id`` - where "drop on the right half" inserts. */
   function nextOnBar(id: string): string | null {
     const at = favorites.findIndex((node) => node.id === id);
     return at < 0 ? null : favorites[at + 1]?.id || null;
@@ -256,9 +275,13 @@ export function FavoritesBar({ activeUser, openUser }: Props) {
         onDragOver={(event) => overChip(event, link)}
       >
         <Link
-          className={`fav-chip${link.username === activeUser ? " active" : ""}`}
-          href={hrefFor("users", { user: link.username })}
-          onClick={openUser(link.username)}
+          className={`fav-chip${link.id === activeId ? " active" : ""}`}
+          href={linkHref(link)}
+          // A post chip is a route change like any other link; an author chip
+          // may only be a param change, which the Users page has to be told
+          // about (see `openUser`).
+          onClick={link.postId ? undefined : openUser(link.username)}
+          title={hintOf(link)}
           onContextMenu={(event) => {
             event.preventDefault();
             openPopup("menu", link.id, event.currentTarget);
@@ -266,9 +289,9 @@ export function FavoritesBar({ activeUser, openUser }: Props) {
           {...dragProps(link.id)}
         >
           <span className="fav-avatar" aria-hidden>
-            {initial(link.username)}
+            {initial(link)}
           </span>
-          <span className="fav-label">@{link.username}</span>
+          <span className="fav-label">{labelOf(link)}</span>
         </Link>
         {chipMenuButton(link)}
       </span>
@@ -331,26 +354,25 @@ export function FavoritesBar({ activeUser, openUser }: Props) {
           folder.items.map((item) => (
             <div className="fav-pop-row" key={item.id}>
               <Link
-                className={`fav-pop-item${
-                  item.username === activeUser ? " active" : ""
-                }`}
-                href={hrefFor("users", { user: item.username })}
+                className={`fav-pop-item${item.id === activeId ? " active" : ""}`}
+                href={linkHref(item)}
+                title={hintOf(item)}
                 onClick={(event) => {
                   closePopup();
-                  openUser(item.username)(event);
+                  if (!item.postId) openUser(item.username)(event);
                 }}
                 {...dragProps(item.id)}
               >
                 <span className="fav-avatar" aria-hidden>
-                  {initial(item.username)}
+                  {initial(item)}
                 </span>
-                <span className="fav-label">@{item.username}</span>
+                <span className="fav-label">{labelOf(item)}</span>
               </Link>
               <button
                 type="button"
                 className="fav-pop-out"
-                title={`Move @${item.username} to the favorites bar`}
-                aria-label={`Move @${item.username} to the favorites bar`}
+                title={`Move ${labelOf(item)} to the favorites bar`}
+                aria-label={`Move ${labelOf(item)} to the favorites bar`}
                 onClick={() => move(item.id, { into: "bar", before: null })}
               >
                 ↥
@@ -359,7 +381,7 @@ export function FavoritesBar({ activeUser, openUser }: Props) {
           ))
         ) : (
           <p className="fav-pop-empty">
-            Empty — drop a favorite here, or file one from its ⋮ menu.
+            Empty - drop a favorite here, or file one from its ⋮ menu.
           </p>
         )}
       </div>
@@ -386,7 +408,7 @@ export function FavoritesBar({ activeUser, openUser }: Props) {
             type="button"
             className="fav-pop-action"
             onClick={() => {
-              removeFavorite(node.id);
+              removeFavorite(scope, node.id);
               closePopup();
             }}
           >
@@ -432,7 +454,7 @@ export function FavoritesBar({ activeUser, openUser }: Props) {
           type="button"
           className="fav-pop-action"
           onClick={() => {
-            removeFavorite(node.id);
+            removeFavorite(scope, node.id);
             closePopup();
           }}
         >

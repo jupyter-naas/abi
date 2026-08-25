@@ -30,7 +30,7 @@ type Props = {
   facetsTruncated?: Record<string, boolean>;
 };
 
-/** Rows rendered at once — the DOM cost is what's capped here, not the query. */
+/** Rows rendered at once - the DOM cost is what's capped here, not the query. */
 const MAX_RENDERED_ROWS = 1000;
 
 const EMPTY_FILTER: ColumnFilterState = { contains: "", values: [] };
@@ -194,7 +194,7 @@ function renderCell(
   const v = row[key];
 
   if (key === "text" && nestUrlUnderText) {
-    const text = v == null || v === "" ? "—" : String(v);
+    const text = v == null || v === "" ? "-" : String(v);
     const url = typeof row.url === "string" ? row.url : "";
     const media =
       typeof row.media_url === "string" ? row.media_url.trim() : "";
@@ -218,7 +218,7 @@ function renderCell(
 
   if (key === "media_url") {
     const media = String(v ?? "").trim();
-    return media ? <MediaCarousel value={media} /> : <>—</>;
+    return media ? <MediaCarousel value={media} /> : <>-</>;
   }
 
   if (key === "url" && typeof v === "string" && v) {
@@ -228,7 +228,7 @@ function renderCell(
       </a>
     );
   }
-  if (key === "username" && typeof v === "string" && v && v !== "—") {
+  if (key === "username" && typeof v === "string" && v && v !== "-") {
     return (
       <a
         href={`https://x.com/${v}`}
@@ -249,6 +249,6 @@ function renderCell(
       return v;
     }
   }
-  if (v == null || v === "") return "—";
+  if (v == null || v === "") return "-";
   return String(v);
 }

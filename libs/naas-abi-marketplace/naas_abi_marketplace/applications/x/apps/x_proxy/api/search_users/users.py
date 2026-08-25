@@ -1,7 +1,7 @@
 """Publish the Users page dataset: every author in the tweet graph, sharded.
 
-The web app reads this dataset straight from object storage — no SPARQL runs at
-request time — so everything the page needs has to be here::
+The web app reads this dataset straight from object storage - no SPARQL runs at
+request time - so everything the page needs has to be here::
 
     search_users/
     ├── users.json          # the search index: every author, compact rows
@@ -15,11 +15,11 @@ the browser over the author's full post list.
 
 Re-publishing is incremental in three stages:
 
-0. ``shards.json`` records the tweet graph's ``source_state`` — its post total
+0. ``shards.json`` records the tweet graph's ``source_state`` - its post total
    and newest timestamp. When that pair is unchanged the dataset cannot have
    changed either, so the publish returns immediately and the two full-graph
    aggregates below are never run. This is the common case on a quiet tick.
-1. Each shard carries a ``fingerprint`` in ``shards.json`` — a digest of the
+1. Each shard carries a ``fingerprint`` in ``shards.json`` - a digest of the
    tweet-derived state (``username``, post count, ``last_post_at``) of its
    authors, all of which comes from the single :meth:`all_authors` aggregate.
    A shard whose fingerprint is unchanged is **not queried at all**: its posts
@@ -28,8 +28,8 @@ Re-publishing is incremental in three stages:
    bytes differ from the last publish.
 
 Stage 1 is what keeps a republish cheap when posts *did* land. Without it every publish ran
-``posts_for_usernames`` over *every* author — a full dump of the tweet graph,
-with a media join and ``GROUP_CONCAT`` per post — on a dataset that only grows.
+``posts_for_usernames`` over *every* author - a full dump of the tweet graph,
+with a media join and ``GROUP_CONCAT`` per post - on a dataset that only grows.
 On a typical ingest tick a handful of authors post, so one or two of the 256
 shards are stale and the rest cost nothing.
 
@@ -58,7 +58,7 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import (
 # search page has to download.
 #
 # ``shard`` is carried per row so the web app never has to hash a username to
-# find an author's posts — a browser can only compute sha1 through SubtleCrypto,
+# find an author's posts - a browser can only compute sha1 through SubtleCrypto,
 # which is undefined on a page served over plain http from a non-localhost host.
 INDEX_COLUMNS = [
     "username",
@@ -75,7 +75,7 @@ INDEX_COLUMNS = [
 # export can tell it is looking at a dataset it does not understand.
 #
 # NOT bumped for trailing columns (``description``, ``display_name``): both
-# directions degrade rather than break — an older app destructures the columns
+# directions degrade rather than break - an older app destructures the columns
 # it knows and ignores extras, a newer one reads a missing one as empty. The
 # format also gates shard reuse below, and a bump would force all
 # :data:`USER_SHARD_COUNT` shards to be re-queried for a change that touches
@@ -84,7 +84,10 @@ INDEX_COLUMNS = [
 # 2: author posts include referenced context (quoted / replied-to / retweeted
 #    originals), not only search matches. Index ``posts`` counts and shard
 #    payloads both change, so every shard must rebuild once.
-DATASET_FORMAT = 2
+# 3: matched posts carry the ``queries`` (slugs) they answered, so the author
+#    feed can name which followed query pulled a post in. Shard payloads change,
+#    so every shard must rebuild once.
+DATASET_FORMAT = 3
 
 # Bios are rendered as the one-line snippet under a search result, and X caps
 # them at 160 characters anyway; the cap is what bounds this column's share of
@@ -116,7 +119,7 @@ def _index_row(
 def _profile(author: dict[str, Any], account: dict[str, Any]) -> dict[str, Any]:
     """Merge the tweet-derived aggregates with the account's own fields.
 
-    The account wins where it has a value — ``accounts_for_usernames`` only sets
+    The account wins where it has a value - ``accounts_for_usernames`` only sets
     ``location`` / ``verified_type`` when the XUser individual actually carries
     one, so a stub account never blanks out the sample taken from the tweets.
 
@@ -170,18 +173,18 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
     page looks an author up across the entire tweet graph.
 
     Only shards whose fingerprint changed since the last publish are queried and
-    rebuilt. Pass *full* to rebuild every shard regardless — also what happens
+    rebuilt. Pass *full* to rebuild every shard regardless - also what happens
     automatically when the previous manifest is missing or was written by a
     different dataset format / shard layout.
 
     Before any of that, the whole rebuild is skipped when the tweet graph has not
-    moved since the last publish — see :meth:`SnapshotContext.tweet_graph_state`.
+    moved since the last publish - see :meth:`SnapshotContext.tweet_graph_state`.
     """
     previous_doc = ctx.read_json("search_users", "shards.json") or {}
     previous = previous_doc.get("shards") or {}
     # A manifest from a different format / shard layout describes files this
     # publish cannot reuse, and one without fingerprints (written before this
-    # was incremental) can't be compared — either way, rebuild everything once.
+    # was incremental) can't be compared - either way, rebuild everything once.
     reusable = (
         not full
         and previous_doc.get("format") == DATASET_FORMAT
@@ -202,7 +205,7 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
         and previous_doc.get("index_columns") == INDEX_COLUMNS
     ):
         logger.info(
-            f"X app users dataset: source unchanged ({source_state}) — "
+            f"X app users dataset: source unchanged ({source_state}) - "
             "kept the published dataset"
         )
         return {
@@ -224,7 +227,7 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
         display_names = ctx.all_display_names()
 
     # Digested without ``updated_at`` so an unchanged index is recognised as
-    # unchanged — the timestamp alone would make every publish look different
+    # unchanged - the timestamp alone would make every publish look different
     # and re-upload a multi-MB file for nothing.
     index_body = {
         "format": DATASET_FORMAT,
@@ -269,7 +272,7 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
             "shards_unchanged": 0,
         }
 
-    # Group by shard from the index alone — no per-author query yet.
+    # Group by shard from the index alone - no per-author query yet.
     by_shard: dict[str, list[dict[str, Any]]] = {}
     for author in authors:
         by_shard.setdefault(user_shard(author["username"]), []).append(author)
@@ -281,7 +284,7 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
         if not reusable or (previous.get(shard) or {}).get("fingerprint") != fingerprint
     ]
 
-    # The expensive pair — one full-graph post dump each on the SPARQL path — now
+    # The expensive pair - one full-graph post dump each on the SPARQL path - now
     # sees only the authors sitting in a stale shard.
     stale_usernames = [a["username"] for shard in stale for a in by_shard[shard]]
     if cache is not None:
@@ -299,7 +302,7 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
             ctx.posts_for_usernames(stale_usernames) if stale_usernames else {}
         )
     logger.info(
-        f"X app users dataset: {len(stale)}/{len(by_shard)} shard(s) stale — "
+        f"X app users dataset: {len(stale)}/{len(by_shard)} shard(s) stale - "
         f"queried posts for {len(stale_usernames)} of {len(authors)} author(s)"
     )
 
@@ -341,7 +344,7 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
             "bytes": len(payload),
         }
         # A rebuilt shard can still be byte-identical (e.g. a fingerprint that
-        # moved on a field the payload does not carry) — don't re-upload it.
+        # moved on a field the payload does not carry) - don't re-upload it.
         if (previous.get(shard) or {}).get("hash") == digest:
             unchanged += 1
             continue

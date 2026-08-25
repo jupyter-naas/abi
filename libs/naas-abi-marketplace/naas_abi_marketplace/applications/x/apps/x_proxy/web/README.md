@@ -1,4 +1,4 @@
-# X Recent Tweets — web
+# X Recent Tweets - web
 
 Next.js App Router UI for the X catalog app. Same layout conventions as Nexus
 (`src/app`, `src/components`, `src/lib`) and WSR marketplace apps.

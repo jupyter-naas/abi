@@ -15,6 +15,6 @@ export function writeSessionTimezone(timezone: string): void {
   try {
     window.sessionStorage.setItem(TIMEZONE_SESSION_KEY, timezone);
   } catch {
-    // Private mode / blocked storage — ignore.
+    // Private mode / blocked storage - ignore.
   }
 }

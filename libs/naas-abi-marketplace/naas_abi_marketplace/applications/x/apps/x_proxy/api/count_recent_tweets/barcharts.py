@@ -1,4 +1,4 @@
-"""Publish ``count_recent_tweets/barcharts.json`` — peak hours/days bars."""
+"""Publish ``count_recent_tweets/barcharts.json`` - peak hours/days bars."""
 
 from __future__ import annotations
 

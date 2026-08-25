@@ -2,11 +2,11 @@
 
 Four cards per query × scenario, all uncapped over the window:
 
-* ``tweets_ingested`` — matched + referenced, delta vs the previous window,
+* ``tweets_ingested`` - matched + referenced, delta vs the previous window,
   hint is the coverage period.
-* ``tweets`` — matched only, delta vs previous, hint is share of posts ingested.
-* ``referenced_tweets`` — expansion context, same shape as ``tweets``.
-* ``coverage`` — matched / count-endpoint total (referenced excluded, or
+* ``tweets`` - matched only, delta vs previous, hint is share of posts ingested.
+* ``referenced_tweets`` - expansion context, same shape as ``tweets``.
+* ``coverage`` - matched / count-endpoint total (referenced excluded, or
   coverage would exceed 100%). Hint is that count-endpoint total; no
   period-over-period comparison.
 
@@ -61,7 +61,7 @@ def publish(ctx: SnapshotContext) -> dict:
             prev_ingested = prev_matched + prev_referenced
             total = ctx.sum_counts_in_window(query_string, start, end)
             # Coverage is measured against the count endpoint's total for the
-            # query, whose population is matches only — referenced tweets never
+            # query, whose population is matches only - referenced tweets never
             # answered the query, so folding them in here would push coverage
             # past 100%.
             coverage = (100.0 * matched / total) if total > 0 else None
@@ -101,9 +101,7 @@ def publish(ctx: SnapshotContext) -> dict:
                                 round(coverage, 1) if coverage is not None else None
                             ),
                             "unit": "%",
-                            "hint": (
-                                f"{total:,} tweets" if total else "no count data"
-                            ),
+                            "hint": (f"{total:,} tweets" if total else "no count data"),
                         },
                     ],
                 }

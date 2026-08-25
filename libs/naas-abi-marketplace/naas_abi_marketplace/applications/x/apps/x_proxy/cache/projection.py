@@ -7,9 +7,9 @@ the last hour.
 
 The watermark is also written into ``manifest.json``. Redis is the fast path;
 if it is empty (restart, OOM) the manifest value is used rather than re-reading
-the whole archive into RAM — that is what SIGKILL'd ``x_build_app``.
+the whole archive into RAM - that is what SIGKILL'd ``x_build_app``.
 
-Everything lives in the platform's services — envelopes and Parquet in
+Everything lives in the platform's services - envelopes and Parquet in
 ``object_storage``, the watermark in ``kv``. Nothing is written to local disk, so
 the projection survives a container replacement like any other published artifact.
 """
@@ -48,7 +48,7 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.cache.storage import (
 )
 
 # Envelopes are fetched concurrently inside a small batch: each is a separate
-# object-storage GET. The batch bound is what keeps raw JSON off the heap —
+# object-storage GET. The batch bound is what keeps raw JSON off the heap -
 # ``executor.map`` over the whole archive would hold every body at once.
 FETCH_WORKERS = 8
 FETCH_BATCH = 32
@@ -57,7 +57,7 @@ FETCH_BATCH = 32
 def _read_manifest(object_storage: ObjectStorageService) -> dict[str, Any]:
     try:
         raw = object_storage.get_object(CACHE_PREFIX, MANIFEST_KEY)
-    except Exception:  # noqa: BLE001 — absent before the first build
+    except Exception:  # noqa: BLE001 - absent before the first build
         return {}
     try:
         doc = json.loads(raw.decode("utf-8"))
@@ -80,7 +80,7 @@ def _read_watermark(kv: KeyValueService | None) -> datetime | None:
         return None
     try:
         raw = kv.get(WATERMARK_KEY)
-    except Exception:  # noqa: BLE001 — treat any kv trouble as "no watermark"
+    except Exception:  # noqa: BLE001 - treat any kv trouble as "no watermark"
         return None
     if not raw:
         return None
@@ -96,7 +96,7 @@ def _write_watermark(kv: KeyValueService | None, moment: datetime) -> None:
         return
     try:
         kv.set(WATERMARK_KEY, moment.isoformat().encode("utf-8"))
-    except Exception as exc:  # noqa: BLE001 — a lost watermark only costs a rescan
+    except Exception as exc:  # noqa: BLE001 - a lost watermark only costs a rescan
         logger.warning(f"X cache: could not store watermark ({exc})")
 
 
@@ -117,8 +117,7 @@ def _resolve_watermark(
     )
     if fallback is not None:
         logger.info(
-            f"X cache: Redis watermark missing — using manifest "
-            f"{fallback.isoformat()}"
+            f"X cache: Redis watermark missing - using manifest {fallback.isoformat()}"
         )
         # Put it back so the next tick does not have to read the manifest again.
         _write_watermark(kv, fallback)
@@ -136,7 +135,7 @@ def _fetch_one(
     directory, name = split_key(key)
     try:
         return key, object_storage.get_object(directory, name)
-    except Exception as exc:  # noqa: BLE001 — one bad object must not stop the run
+    except Exception as exc:  # noqa: BLE001 - one bad object must not stop the run
         logger.warning(f"X cache: could not read {key} ({exc})")
         return key, None
 
@@ -199,7 +198,7 @@ def refresh(
 ) -> dict[str, Any]:
     """Project any envelopes newer than the watermark into Parquet.
 
-    *full* ignores the watermark and rebuilds from the whole archive — the
+    *full* ignores the watermark and rebuilds from the whole archive - the
     recovery path for a schema change or a suspected gap. It rewrites partitions
     rather than appending, so it is safe to run repeatedly.
 
@@ -213,7 +212,7 @@ def refresh(
     if stale_schema and manifest:
         logger.info(
             f"X cache: manifest schema {manifest.get('schema_version')} != "
-            f"{SCHEMA_VERSION} — rebuilding from the full archive"
+            f"{SCHEMA_VERSION} - rebuilding from the full archive"
         )
 
     watermark = _resolve_watermark(kv, manifest, rebuild=rebuild)
@@ -222,7 +221,7 @@ def refresh(
     if not rebuild and watermark is None and manifest:
         rebuild = True
         logger.info(
-            "X cache: no watermark in Redis or manifest — rebuilding "
+            "X cache: no watermark in Redis or manifest - rebuilding "
             "(replace parts, do not append a full-archive dump)"
         )
 
@@ -230,7 +229,7 @@ def refresh(
     pending: list[tuple[str, datetime | None]] = []
     for key in keys:
         moment = envelope_timestamp(key)
-        # An unreadable key is processed rather than skipped — better a redundant
+        # An unreadable key is processed rather than skipped - better a redundant
         # read than a silently dropped tick.
         if watermark is not None and moment is not None and moment <= watermark:
             continue
@@ -251,17 +250,13 @@ def refresh(
     read = 0
     for start in range(0, len(pending), FETCH_BATCH):
         batch = pending[start : start + FETCH_BATCH]
-        posts, authors, batch_read, batch_newest = _project_batch(
-            object_storage, batch
-        )
+        posts, authors, batch_read, batch_newest = _project_batch(object_storage, batch)
         read += batch_read
         if not posts.is_empty():
             posts_parts.append(posts)
         if not authors.is_empty():
             authors_parts.append(authors)
-        if batch_newest is not None and (
-            newest is None or batch_newest > newest
-        ):
+        if batch_newest is not None and (newest is None or batch_newest > newest):
             newest = batch_newest
         done = start + len(batch)
         if done == len(pending) or done % (FETCH_BATCH * 4) == 0:
@@ -309,7 +304,7 @@ def refresh(
             }
         ).encode("utf-8"),
     )
-    logger.info(f"X cache refresh: done — {summary}")
+    logger.info(f"X cache refresh: done - {summary}")
     return summary
 
 
@@ -364,7 +359,7 @@ def _write_authors(
                 [pl.read_parquet(io.BytesIO(existing)), authors],
                 how="vertical_relaxed",
             )
-        except Exception as exc:  # noqa: BLE001 — absent before the first build
+        except Exception as exc:  # noqa: BLE001 - absent before the first build
             logger.debug(f"X cache: no existing authors table to merge ({exc})")
     merged = authors.sort("seen_at").unique(subset=["author_id"], keep="last")
     buffer = io.BytesIO()

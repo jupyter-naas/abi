@@ -31,14 +31,14 @@ def walk(
 
     Directory markers (``.nexus_folder`` and the trailing-slash entries) are not
     returned. A prefix that does not exist yields an empty list rather than
-    raising — an absent partition is a normal state before the first build.
+    raising - an absent partition is a normal state before the first build.
     """
     if _depth > MAX_DEPTH:
         logger.warning(f"X cache: stopped walking below {prefix} (max depth)")
         return []
     try:
         entries = object_storage.list_objects(prefix)
-    except Exception as exc:  # noqa: BLE001 — absent prefix, or storage hiccup
+    except Exception as exc:  # noqa: BLE001 - absent prefix, or storage hiccup
         logger.debug(f"X cache: could not list {prefix} ({exc})")
         return []
 

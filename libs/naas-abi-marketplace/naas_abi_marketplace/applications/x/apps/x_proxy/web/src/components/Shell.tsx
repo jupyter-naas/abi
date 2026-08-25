@@ -5,8 +5,10 @@ import { useAppState } from "@/components/AppProvider";
 import { FavoritesBar } from "@/components/FavoritesBar";
 import {
   APP_NAME,
+  favoritesOn,
   railSections,
   sectionOf,
+  tabOf,
   tabsOf,
   titleOf,
 } from "@/lib/appConfig";
@@ -16,7 +18,7 @@ import type { PageKey } from "@/lib/types";
 /**
  * The rail icons a section may ask for by name in `config.yaml`.
  *
- * The drawing stays here — a config file is no place for path data — so adding
+ * The drawing stays here - a config file is no place for path data - so adding
  * an icon means adding it to this map and to `ICONS` in `app_config.py`.
  */
 const ICONS: Record<IconName, React.ReactNode> = {
@@ -49,8 +51,10 @@ type Props = {
   builtAt: string | null;
   filters: React.ReactNode;
   children: React.ReactNode;
-  /** Author currently open, so the favorites bar can mark its chip as active. */
+  /** Author currently open, so the Users links can be intercepted. */
   activeUser?: string | null;
+  /** Id of the favorite this page is showing, so its chip reads as active. */
+  activeFavorite?: string | null;
   /**
    * Opens an author (or closes the open one, with ``null``) from the chrome.
    *
@@ -65,12 +69,12 @@ type Props = {
 /**
  * The app chrome: section rail, then a browser-shaped header.
  *
- * What it lists — sections, their pages, their order, what is visible, which
- * section shows a title bar or the favorites bar — all comes from `config.yaml`
+ * What it lists - sections, their pages, their order, what is visible, which
+ * section shows a title bar or the favorites bar - all comes from `config.yaml`
  * at the app root, by way of `lib/appConfig`.
  *
- * The header stacks the way a browser window does — the app and section name on
- * top, the section's pages as tabs under it, then the favorites bar on Users —
+ * The header stacks the way a browser window does - the app and section name on
+ * top, the section's pages as tabs under it, then the favorites bar on Users -
  * so the only rail left is the one that switches sections. Everything in it is
  * sticky: moving between tabs and favorites never means scrolling back up.
  */
@@ -81,6 +85,7 @@ export function Shell({
   filters,
   children,
   activeUser = null,
+  activeFavorite = null,
   onOpenUser,
 }: Props) {
   // Collapse, last-subpage and favorites all outlive a page change, so they
@@ -92,6 +97,10 @@ export function Shell({
   } = useAppState();
   const section = sectionOf(page);
   const tabs = tabsOf(section.key);
+  // A page that is not a tab keeps another one lit - the post page keeps
+  // Search Tweets lit, the way an author's page keeps Search Users lit.
+  const activeTab = tabOf(page);
+  const favorites = favoritesOn(page);
 
   /**
    * One rail entry.
@@ -138,6 +147,31 @@ export function Shell({
       onOpenUser(username);
     };
 
+  /**
+   * A tab click opens that tab's page. When the tab is already lit because a
+   * detail page belongs under it (a post keeps Search Tweets active), the
+   * link still navigates to the tab route. On Users, clicking Search Users
+   * again closes the open author instead of doing nothing.
+   */
+  const onTabClick =
+    (tabKey: PageKey) => (event: React.MouseEvent<HTMLAnchorElement>) => {
+      if (
+        page === tabKey &&
+        tabKey === "users" &&
+        activeUser &&
+        onOpenUser &&
+        event.button === 0 &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.shiftKey &&
+        !event.altKey &&
+        !event.defaultPrevented
+      ) {
+        event.preventDefault();
+        onOpenUser(null);
+      }
+    };
+
   return (
     <div className="app">
       <aside className={`sidebar${collapsed ? " collapsed" : ""}`}>
@@ -181,22 +215,32 @@ export function Shell({
               <h1>{titleOf(section.key)}</h1>
             </div>
           ) : null}
-          <nav className="tabstrip" aria-label={`${section.label} pages`}>
+          {/* No rule under the tabs when the favorites bar follows them: two
+              lines that close nothing between them read as a seam. */}
+          <nav
+            className={`tabstrip${favorites !== "none" ? " joined" : ""}`}
+            aria-label={`${section.label} pages`}
+          >
             {tabs.map((tab) => (
               <Link
                 key={tab.key}
-                className={`tab${page === tab.key ? " active" : ""}`}
+                className={`tab${activeTab === tab.key ? " active" : ""}`}
                 href={hrefOf(tab.key)}
-                aria-current={page === tab.key ? "page" : undefined}
+                aria-current={activeTab === tab.key ? "page" : undefined}
+                onClick={onTabClick(tab.key)}
               >
                 {tab.label}
               </Link>
             ))}
           </nav>
-          {/* Which sections carry the favorites bar is configured; today only
-              Users does, its chips being jumps into that section. */}
-          {section.favorites ? (
-            <FavoritesBar activeUser={activeUser} openUser={openUser} />
+          {/* Configured per section, and per page where a page differs: the
+              chips are jumps to an author, so they show where authors are. */}
+          {favorites !== "none" ? (
+            <FavoritesBar
+              scope={favorites}
+              activeId={activeFavorite}
+              openUser={openUser}
+            />
           ) : null}
           {filters}
         </div>

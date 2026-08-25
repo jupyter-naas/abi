@@ -1,4 +1,4 @@
-"""Publish ``search_recents_tweets/tables.json`` — tweets + authors tables."""
+"""Publish ``search_recents_tweets/tables.json`` - tweets + authors tables."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ AUTHORS_COLUMNS = [
 def _author_rows(tweets: list[dict]) -> list[dict]:
     by_user: dict[str, dict] = {}
     for t in tweets:
-        u = t.get("username") or "—"
+        u = t.get("username") or "-"
         e = by_user.get(u) or {
             "username": u,
             "location": t.get("location") or "",

@@ -18,7 +18,7 @@ export function isVideoUrl(href: string): boolean {
  * A post's media, one item at a time.
  *
  * X allows up to four attachments per post; stacking them turned a single post
- * into a page of its own, so they are shown as a carousel instead — one slide
+ * into a page of its own, so they are shown as a carousel instead - one slide
  * in a fixed frame, arrows and dots to move between them. The frame keeps its
  * ratio whatever the item is, so moving between a portrait photo and a video
  * never shifts the feed under the pointer.
@@ -74,7 +74,7 @@ export function MediaCarousel({ value }: { value: string }) {
             rel="noopener noreferrer"
             title="Open media"
           >
-            media unavailable — open on X
+            media unavailable - open on X
           </a>
         ) : isVideoUrl(href) ? (
           <video

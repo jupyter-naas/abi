@@ -25,7 +25,7 @@ DEFAULT_APP_PREFIX = "x/apps/x_proxy"
 # Cap for Search page tweet tables / author bars (KPI counts and the ingested
 # tweets line chart are uncapped). ``tweets_in_window`` orders the *full* graph
 # match by recency before applying this LIMIT, so a capped read is the newest N
-# tweets in the window — never an arbitrary sample.
+# tweets in the window - never an arbitrary sample.
 DEFAULT_TWEET_LIMIT = 1000
 
 # The Users page reads a published dataset rather than querying the graph, so
@@ -34,13 +34,13 @@ DEFAULT_TWEET_LIMIT = 1000
 #
 # Authors resolved per bulk SPARQL query. The graph-wide dump is split into
 # batches of this many usernames (bound with VALUES) so peak memory stays flat
-# whatever the graph size — a single unbounded dump of ~110k posts parses into
+# whatever the graph size - a single unbounded dump of ~110k posts parses into
 # hundreds of MB of rdflib terms, which the orchestration container runs on
 # every ingest tick.
 AUTHOR_BATCH_SIZE = 2000
 
 # Authors are grouped into ``16 ** USER_SHARD_HEX`` post files by the first hex
-# digits of sha1(username). Two digits gives 256 shards — a few hundred KB each
+# digits of sha1(username). Two digits gives 256 shards - a few hundred KB each
 # at ~110k posts, so the Users page downloads one small file per selected
 # author instead of the whole dataset.
 USER_SHARD_HEX = 2
@@ -71,14 +71,14 @@ def user_shard(username: str) -> str:
     """Which post shard an author's tweets are published in.
 
     Hashed rather than derived from the username's first letter so the shards
-    stay evenly filled — usernames cluster hard on a few prefixes.
+    stay evenly filled - usernames cluster hard on a few prefixes.
     """
     digest = hashlib.sha1(username.strip().lower().encode("utf-8")).hexdigest()
     return digest[:USER_SHARD_HEX]
 
 
 def encode_compact(data: dict | list) -> bytes:
-    """Minified UTF-8 JSON — the on-disk form of every published snapshot."""
+    """Minified UTF-8 JSON - the on-disk form of every published snapshot."""
     return json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
@@ -99,7 +99,7 @@ def build_scenarios(now: datetime | None = None) -> list[dict[str, str]]:
 
     Both edges are floored to the clock hour. The count workflow only ever
     ingests *complete* clock hours, and :meth:`SnapshotContext.aggregate_buckets`
-    keeps a bucket only when its ``start`` falls inside the window — so an
+    keeps a bucket only when its ``start`` falls inside the window - so an
     unaligned window silently dropped the partially-overlapped first bucket
     (a publish at 13:02 lost the whole 13:00–14:00 hour). Flooring also makes a
     window reproducible: two publishes in the same hour describe the same range.
@@ -139,14 +139,14 @@ def scenario_bands(
     """Consecutive ``[start, end)`` bands that tile every scenario window.
 
     :func:`build_scenarios` gives every scenario the *same* ``end_time``, so the
-    windows are strictly nested and each one — plus each :func:`previous_window`
-    — is exactly a union of consecutive bands. Splitting the graph once at every
+    windows are strictly nested and each one - plus each :func:`previous_window`
+    - is exactly a union of consecutive bands. Splitting the graph once at every
     window boundary lets a single banded aggregate answer all of them, instead of
     one full scan per window.
 
     Bands are returned newest first, so band 0 is the most recent slice. Pass
     ``include_previous=False`` for the current windows only, which is all the
-    column facets need — the extra previous-period edges would just split the
+    column facets need - the extra previous-period edges would just split the
     aggregate into more groups for no benefit.
     """
     edges: set[str] = set()
@@ -167,7 +167,7 @@ def bands_for_window(
 ) -> list[int] | None:
     """Indices of the bands that exactly tile ``[start_time, end_time)``.
 
-    ``None`` when the window is not band-aligned — every caller then falls back
+    ``None`` when the window is not band-aligned - every caller then falls back
     to querying that window directly, so a caller passing an arbitrary range
     (the HTTP layer does) still gets an exact answer.
     """
@@ -199,8 +199,8 @@ def _band_bind_expression(
 ) -> str:
     """Nested ``IF`` assigning each row the index of the band it falls in.
 
-    Rows older than the last band are never bound — the query carrying this
-    expression also filters to the banded range — so the final ``else`` can be
+    Rows older than the last band are never bound - the query carrying this
+    expression also filters to the banded range - so the final ``else`` can be
     the last index rather than a sentinel.
     """
     expression = str(len(bands) - 1)
@@ -224,7 +224,7 @@ def extrapolate_partial_hour(
     Returns ``{start, end, observed, estimated_value, missing_minutes, value}``
     where ``value`` is observed + estimate, or ``None`` when there is nothing to
     extrapolate. When yesterday's hour is absent (a gap, or under 24 h of
-    history) no estimate is invented — ``value`` is the observed count and
+    history) no estimate is invented - ``value`` is the observed count and
     ``estimated_value`` is 0, so the point is honest rather than guessed.
     """
     if not partial:
@@ -391,7 +391,7 @@ def _account_from_row(row: Any) -> dict[str, Any]:
 
 
 def _account_richness(account: dict[str, Any]) -> int:
-    """How many fields an account actually carries — used to pick a winner."""
+    """How many fields an account actually carries - used to pick a winner."""
     filled = sum(
         1 for k, v in account.items() if k != "metrics" and v not in (None, "")
     )
@@ -441,18 +441,18 @@ class SnapshotContext:
         self.facet_bands = scenario_bands(self.scenarios, include_previous=False)
         # Per-publish SPARQL memo. A SnapshotContext is built once per
         # publish_app run and thrown away, so a hit can never serve state from
-        # an earlier publish — and nothing reads the graph at HTTP request time
+        # an earlier publish - and nothing reads the graph at HTTP request time
         # (routes.py serves published objects only), so there is no live path
         # this could go stale on.
         #
         # It exists because the page scripts ask for the same rows repeatedly:
         # tables and barcharts each call tweets_in_window for the same
-        # (query, scenario) — and every sum_counts_in_window re-runs the same
+        # (query, scenario) - and every sum_counts_in_window re-runs the same
         # graph-wide timeseries aggregate. The Search line chart reads
         # ingested_timeseries instead (uncapped matched tweets, by created_at).
         self._query_cache: dict[tuple, Any] = {}
         # Unfiltered tweet pages actually fetched this publish, keyed by
-        # (query, end_time, cap) — the pool :meth:`_derive_tweets` reuses so the
+        # (query, end_time, cap) - the pool :meth:`_derive_tweets` reuses so the
         # nested scenario windows cost one scan rather than four.
         self._tweet_pages: dict[tuple[str, str, int], list[tuple[str, list]]] = {}
 
@@ -460,7 +460,7 @@ class SnapshotContext:
         """The projection's slug for *query_string*, or ``None`` to use SPARQL.
 
         Gates every read that could be served columnar. Two conditions, both
-        required, and both failing *closed* — an unusable projection returns
+        required, and both failing *closed* - an unusable projection returns
         ``None`` and the caller queries the graph exactly as before:
 
         * a projection is attached at all (``publish_app`` only attaches one it
@@ -478,7 +478,7 @@ class SnapshotContext:
         slug = slugify(query_string)
         try:
             known = self._memo(("cache_slugs",), self.cache.known_query_slugs)
-        except Exception as exc:  # noqa: BLE001 — an unreadable projection is not fatal
+        except Exception as exc:  # noqa: BLE001 - an unreadable projection is not fatal
             logger.warning(f"X app: projection unreadable ({exc}); using SPARQL")
             return None
         if slug not in known:
@@ -492,7 +492,7 @@ class SnapshotContext:
     def _memo(self, key: tuple, compute: Callable[[], _T]) -> _T:
         """Run *compute* at most once per *key* for this publish.
 
-        Cached values are handed back **shared, not copied** — callers must
+        Cached values are handed back **shared, not copied** - callers must
         treat query results as read-only (every current one does: they build
         new dicts rather than mutating rows).
         """
@@ -508,8 +508,8 @@ class SnapshotContext:
     def _query_rows(self, sparql: str, description: str) -> list[Any]:
         """Run *sparql* and return its rows, or ``[]`` when it fails.
 
-        The materialization is the point: an rdflib-backed adapter — the ``fs``
-        local-dev triple store returns ``Graph.query()`` straight through —
+        The materialization is the point: an rdflib-backed adapter - the ``fs``
+        local-dev triple store returns ``Graph.query()`` straight through -
         evaluates the query lazily, *during iteration*, not inside ``query()``.
         A ``try`` around the call alone therefore caught nothing, and a SPARQL
         error escaped the fail-soft handler and took down the whole publish
@@ -517,12 +517,12 @@ class SnapshotContext:
         result set up front, which is why this only ever bit locally.
 
         Every caller treats "the query failed" and "the query matched nothing"
-        identically — an empty section rather than a broken publish — so one
+        identically - an empty section rather than a broken publish - so one
         empty list serves both.
         """
         try:
             return list(self.triple_store.query(sparql))
-        except Exception as exc:  # noqa: BLE001 — degrade this snapshot, not the run
+        except Exception as exc:  # noqa: BLE001 - degrade this snapshot, not the run
             logger.warning(f"SnapshotContext.{description} failed ({exc})")
             return []
 
@@ -539,7 +539,7 @@ class SnapshotContext:
         prefix = f"{self.app_prefix}/{relative_dir}".rstrip("/")
         try:
             raw = self.object_storage.get_object(prefix, filename)
-        except Exception:  # noqa: BLE001 — absent on a first publish
+        except Exception:  # noqa: BLE001 - absent on a first publish
             return {}
         try:
             decoded = json.loads(raw.decode("utf-8"))
@@ -641,7 +641,7 @@ class SnapshotContext:
         """Hourly ``{start, end, count}`` of ingested **matched** tweets.
 
         Bucketed by each tweet's ``created_at``, not by ingest time. Referenced
-        context is excluded — quoted/replied-to originals can predate the
+        context is excluded - quoted/replied-to originals can predate the
         window. Count-endpoint totals are a different population (what X
         reported, not what was ingested).
 
@@ -736,13 +736,13 @@ class SnapshotContext:
         """Number of ingested tweets **matching the query** in ``[start, end)``.
 
         Counts only posts linked to the result set by
-        ``x:isContainedInSearchResultSet`` — the X v2 ``data`` array. The reply
+        ``x:isContainedInSearchResultSet`` - the X v2 ``data`` array. The reply
         parents, quoted tweets and retweeted originals the expansions pulled in
         are counted by :meth:`count_referenced_tweets_in_window` instead.
 
         When *limit* is ``None`` or ``<= 0``, the count is uncapped (full graph
         cardinality). A positive *limit* wraps an inner ``SELECT DISTINCT`` with
-        ``LIMIT`` — used only when a capped sample is intentional.
+        ``LIMIT`` - used only when a capped sample is intentional.
 
         Memoized per publish: adjacent scenarios ask for overlapping windows
         (a scenario's ``previous_window`` is often another's current one).
@@ -771,7 +771,7 @@ class SnapshotContext:
         """Number of ingested **referenced** tweets in ``[start, end)``.
 
         These are the ``x:ReferencedTweet`` individuals a search brought back
-        as conversational context for its matches — linked to the result set by
+        as conversational context for its matches - linked to the result set by
         ``x:isReferencedTweetOfSearchResultSet``. They did not match the query,
         so they are reported alongside the matched count rather than folded
         into it.
@@ -854,14 +854,14 @@ class SnapshotContext:
     # One scan per population / column, split by :func:`scenario_bands`, instead
     # of one scan per window. Every scenario window and its previous period is a
     # union of consecutive bands, so the per-window numbers are Python sums over
-    # the same result — which is what the KPI and facet snapshots read.
+    # the same result - which is what the KPI and facet snapshots read.
 
     def banded_count_for_window(
         self, query_string: str, start_time: str, end_time: str, *, referenced: bool
     ) -> int:
         """Posts in ``[start, end)``, summed from the banded aggregate.
 
-        Answered from the projection when one covers this query — it filters a
+        Answered from the projection when one covers this query - it filters a
         resident column instead of scanning the graph, and needs no band
         alignment because any window is just a predicate. Otherwise the banded
         aggregate, falling back to a direct windowed count when the window is
@@ -961,7 +961,7 @@ class SnapshotContext:
         """Distinct values of *column* in ``[start, end)``, most frequent first.
 
         The banded equivalent of :meth:`distinct_column_values` with no active
-        filters — same payload, one scan per column for every scenario instead
+        filters - same payload, one scan per column for every scenario instead
         of one per column *per* scenario. Unaligned windows and filtered reads
         keep going through :meth:`distinct_column_values`.
 
@@ -969,7 +969,7 @@ class SnapshotContext:
         that is how they are displayed: ``user_location`` holds both
         ``"United States"`` and ``"United States "``, and the per-window query
         returned them as two rows that rendered as two identical checkboxes
-        splitting one country's count. Merging also survives the value cap —
+        splitting one country's count. Merging also survives the value cap -
         the old query applied its ``LIMIT`` to the *unmerged* rows, so variants
         ranked below it were dropped instead of counted.
 
@@ -1060,9 +1060,9 @@ class SnapshotContext:
         """Cheap fingerprint of the tweet graph: post total + newest timestamp.
 
         Used to decide whether the Users dataset needs rebuilding at all. The
-        pair catches every change that would alter it — new posts (both move), a
+        pair catches every change that would alter it - new posts (both move), a
         backfill of older posts (only the total moves) and deletions (the total
-        drops) — for one small aggregate instead of the two full-graph scans the
+        drops) - for one small aggregate instead of the two full-graph scans the
         rebuild itself costs.
         """
         sparql = f"""
@@ -1148,7 +1148,7 @@ class SnapshotContext:
         Powers the checkbox list behind a column filter. The scan covers every
         tweet matching *query_string* in the window (optionally narrowed by the
         other columns' *filters*), not just the rows currently in the table, so
-        the offered values are the full graph's — the same guarantee
+        the offered values are the full graph's - the same guarantee
         :meth:`search_tweets` gives for the rows themselves.
 
         Memoized per publish on the *normalized* filters, like
@@ -1233,7 +1233,7 @@ class SnapshotContext:
 
         The column *filters* are pushed into SPARQL rather than applied to an
         already-capped page, so a keyword search returns the newest ``limit``
-        tweets that actually match across the whole graph — not the matches
+        tweets that actually match across the whole graph - not the matches
         that happen to fall inside the newest ``limit`` tweets overall.
 
         Memoized per publish on the *normalized* filters, so the tables /
@@ -1241,7 +1241,7 @@ class SnapshotContext:
         (query, window) instead of running five.
 
         Unfiltered reads are additionally resolved against pages already fetched
-        for the same ``end_time`` — see :meth:`_derive_tweets`. Since every
+        for the same ``end_time`` - see :meth:`_derive_tweets`. Since every
         scenario shares an ``end_time`` and the scenarios are visited
         narrowest-first, one 24 h scan typically answers all four.
         """
@@ -1260,7 +1260,7 @@ class SnapshotContext:
 
         rows: list[dict[str, Any]] | None = None
         if not active:
-            # The projection answers an unfiltered page directly — no page-reuse
+            # The projection answers an unfiltered page directly - no page-reuse
             # reasoning needed, since a window is just a predicate over resident
             # rows. Filtered reads stay on SPARQL: the filters are pushed into
             # the query so a keyword search sees the whole graph, not a capped
@@ -1293,7 +1293,7 @@ class SnapshotContext:
         the newest *cap* posts of a window that contains this one. Every post in
         ``[start, end)`` that could belong in this window's newest *cap* is newer
         than that page's oldest row, so filtering the page to ``start`` is exact
-        — whether or not the page came back full.
+        - whether or not the page came back full.
 
         **Narrower → wider.** A *full* page for ``[s', end)`` with ``s' > start``
         whose oldest row is newer than its own ``s'`` never reached its window's
@@ -1394,9 +1394,9 @@ class SnapshotContext:
 
     # ----- SPARQL: authors, graph-wide (no query / window scope) -----------
     #
-    # These feed the published Users dataset. They are deliberately unscoped —
+    # These feed the published Users dataset. They are deliberately unscoped -
     # the Users page looks an author up across the whole tweet graph, not inside
-    # a followed query's rolling window — and deliberately *bulk*: the app reads
+    # a followed query's rolling window - and deliberately *bulk*: the app reads
     # the published dataset, so nothing here runs per HTTP request.
 
     def all_authors(self) -> list[dict[str, Any]]:
@@ -1459,8 +1459,8 @@ class SnapshotContext:
         Deliberately *not* :meth:`accounts_for_usernames`: that one reads whole
         accounts in ``VALUES`` batches, and the search index needs one field for
         every author at once. Requiring ``x:user_description`` (rather than
-        making it OPTIONAL) keeps this to the hydrated accounts — most authors
-        are tweet-author stubs with no bio at all — so it stays one pass over a
+        making it OPTIONAL) keeps this to the hydrated accounts - most authors
+        are tweet-author stubs with no bio at all - so it stays one pass over a
         small slice of the graph.
 
         An author can have several ``XUser`` individuals across ingests (a stub
@@ -1541,7 +1541,9 @@ class SnapshotContext:
 
         Covers search matches *and* referenced context (a quote/reply/retweet
         original this account wrote). Context-only rows are flagged
-        ``referenced=True``; matches omit the key. ``x:Tweet`` already includes
+        ``referenced=True``; matches omit the key and carry instead the
+        ``queries`` they answered, as slugs - the same field
+        :meth:`CacheReader.posts_by_username` publishes from the projection. ``x:Tweet`` already includes
         ``x:ReferencedTweet``, so no extra type filter is needed.
 
         Resolved in batches of :data:`AUTHOR_BATCH_SIZE` so peak memory is a
@@ -1567,6 +1569,8 @@ class SnapshotContext:
             SELECT ?username ?created ?fullText ?text ?url ?isReferenced
                    (GROUP_CONCAT(DISTINCT COALESCE(?mediaAny, "");
                                  separator=" ") AS ?mediaUrls)
+                   (GROUP_CONCAT(DISTINCT COALESCE(?qs, "");
+                                 separator="\u0001") AS ?queryStrings)
             WHERE {{
               GRAPH <{self.tweet_graph_name}> {{
                 {self._values_clause(batch)}
@@ -1578,6 +1582,15 @@ class SnapshotContext:
                 OPTIONAL {{ ?tweet x:full_text ?fullText . }}
                 OPTIONAL {{ ?tweet x:tweet_text ?text . }}
                 OPTIONAL {{ ?tweet x:url ?url . }}
+                # Which followed query pulled this post in - the author page
+                # names it. A post can answer several, and a referenced-only
+                # post answers none, which is what being context means.
+                OPTIONAL {{
+                  ?tweet x:isContainedInSearchResultSet ?rs .
+                  ?proc x:producesSearchResult ?rs ;
+                        x:usesSearchQuery ?sq .
+                  ?sq x:query_string ?qs .
+                }}
                 OPTIONAL {{
                   ?tweet x:hasAttachedMedia ?media .
                   OPTIONAL {{ ?media x:media_url ?mediaUrl . }}
@@ -1608,10 +1621,23 @@ class SnapshotContext:
                     "url": _s(row, "url"),
                     "username": username,
                 }
-                if _s(row, "isReferenced").lower() in ("true", "1"):
+                referenced = _s(row, "isReferenced").lower() in ("true", "1")
+                if referenced:
                     post["referenced"] = True
+                else:
+                    # Slugged here so both publish paths agree: the projection
+                    # stores the slug, the graph stores the query string.
+                    slugs = sorted(
+                        {
+                            slugify(q)
+                            for q in _s(row, "queryStrings").split("\u0001")
+                            if q.strip()
+                        }
+                    )
+                    if slugs:
+                        post["queries"] = slugs
                 # Space-separated: a tweet can carry up to four media. Omitted
-                # rather than published empty — most posts have none, and the
+                # rather than published empty - most posts have none, and the
                 # table renders a missing key and an empty one identically.
                 # Re-joined on whitespace rather than just stripped: the
                 # COALESCE above contributes an empty string per media node that
@@ -1633,7 +1659,7 @@ class SnapshotContext:
 
         Separate from the tweet aggregates in :meth:`all_authors`: this reads
         the accounts themselves (bio, images, join date, follower counts). Every
-        field is OPTIONAL — accounts ingested only as a tweet-author stub carry
+        field is OPTIONAL - accounts ingested only as a tweet-author stub carry
         just ``author_id`` and ``username``.
         """
         out: dict[str, dict[str, Any]] = {}

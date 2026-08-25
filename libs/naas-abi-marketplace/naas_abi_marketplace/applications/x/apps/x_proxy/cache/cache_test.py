@@ -1,8 +1,8 @@
 """Unit tests for the X Parquet projection.
 
 The projection is a second reading of the same envelopes the graph is built from,
-so the tests that matter are the ones pinning it to the pipeline's semantics —
-what counts as a match, what counts as context — and the ones proving a refresh
+so the tests that matter are the ones pinning it to the pipeline's semantics -
+what counts as a match, what counts as context - and the ones proving a refresh
 costs only the new envelopes.
 """
 
@@ -28,7 +28,7 @@ class _Storage:
     """In-memory object storage with the directory-listing semantics of the real one.
 
     ``list_objects`` deliberately returns one level only, with nested prefixes
-    marked by a trailing slash — the behaviour that broke the first draft of the
+    marked by a trailing slash - the behaviour that broke the first draft of the
     projection, so the tests must reproduce it rather than a flat listing.
     """
 
@@ -145,7 +145,7 @@ def test_an_unreadable_key_yields_none_so_it_is_not_skipped():
 
 
 def test_a_post_that_matched_is_not_also_emitted_as_context():
-    """``includes.tweets`` is a superset of ``data`` — the overlap is not context."""
+    """``includes.tweets`` is a superset of ``data`` - the overlap is not context."""
     posts, _ = parse_envelope(
         _envelope(
             matched=[_tweet("1", "2026-08-12T05:00:00.000Z")],
@@ -326,7 +326,7 @@ def test_a_post_carried_by_two_refreshes_is_read_once():
     )
     projection.refresh(storage, kv)  # type: ignore[arg-type]
 
-    # Both parts are on disk — this is a read-side collapse, not a lost write.
+    # Both parts are on disk - this is a read-side collapse, not a lost write.
     assert len(walk(storage, "x/cache/posts", suffix=".parquet")) == 2  # type: ignore[arg-type]
 
     reader = CacheReader(storage)  # type: ignore[arg-type]
@@ -389,9 +389,7 @@ def test_manifest_without_watermark_rebuilds_instead_of_appending():
     manifest_raw = storage.get_object("x/cache", "manifest.json")
     manifest = json.loads(manifest_raw.decode("utf-8"))
     manifest.pop("watermark", None)
-    storage.put_object(
-        "x/cache", "manifest.json", json.dumps(manifest).encode("utf-8")
-    )
+    storage.put_object("x/cache", "manifest.json", json.dumps(manifest).encode("utf-8"))
 
     again = projection.refresh(storage, kv)  # type: ignore[arg-type]
 
@@ -514,9 +512,7 @@ def test_hourly_counts_are_matched_by_created_at_not_referenced():
         "2026-08-13T00:00:00+00:00",
         query_slug="drone_or_drones_lang_en",
     )
-    by_hour = {
-        datetime.fromisoformat(b["start"]).hour: b["count"] for b in buckets
-    }
+    by_hour = {datetime.fromisoformat(b["start"]).hour: b["count"] for b in buckets}
     # bob's referenced post at 03:00 is out; matched posts at 04:00 and 05:00.
     assert 3 not in by_hour
     assert by_hour == {4: 1, 5: 1}
@@ -530,6 +526,63 @@ def test_posts_by_username_includes_referenced_context():
     by_id = {p["url"].rsplit("/", 1)[-1]: p for p in bob}
     assert "referenced" not in by_id["2"]
     assert by_id["9"]["referenced"] is True
+
+
+def test_graph_totals_count_distinct_posts_not_rows():
+    """The Search Tweets count line quotes the graph, not the published rows.
+
+    The projection holds one row per (tweet, kind, query), so the same post
+    under two queries must count once - and a post that ever matched counts as
+    matched, never as context.
+    """
+    from naas_abi_marketplace.applications.x.apps.x_proxy.api.globals.graph import (
+        _counts_from_cache,
+    )
+
+    class _Ctx:
+        cache = None
+
+    ctx = _Ctx()
+    ctx.cache = _seeded_reader()
+    counts = _counts_from_cache(ctx)  # type: ignore[arg-type]
+    # Three posts seeded: two matched, one referenced.
+    assert counts == {"posts": 3, "matched": 2, "referenced": 1}
+
+
+def test_posts_by_username_names_the_queries_a_match_answered():
+    """The author feed says *which* followed query pulled a post in.
+
+    A referenced-only post names none - answering no query is what makes it
+    context - and a post matching two queries names both, since the projection
+    holds one row per (tweet, kind, query).
+    """
+    storage, kv = _Storage(), _KV()
+    _store_envelope(
+        storage,
+        "2026-08-12T05:00:00+00:00_a.json",
+        _envelope(
+            matched=[_tweet("2", "2026-08-12T04:00:00.000Z", author="a2")],
+            referenced=[_tweet("9", "2026-08-12T03:00:00.000Z", author="a2")],
+            users=[{"id": "a2", "username": "bob"}],
+        ),
+    )
+    # The same post, answering a second followed query.
+    _store_envelope(
+        storage,
+        "2026-08-12T05:00:00+00:00_b.json",
+        _envelope(
+            matched=[_tweet("2", "2026-08-12T04:00:00.000Z", author="a2")],
+            users=[{"id": "a2", "username": "bob"}],
+            query="counter uas",
+        ),
+    )
+    projection.refresh(storage, kv)  # type: ignore[arg-type]
+    by_id = {
+        p["url"].rsplit("/", 1)[-1]: p
+        for p in CacheReader(storage).posts_by_username(["bob"])["bob"]  # type: ignore[arg-type]
+    }
+    assert by_id["2"]["queries"] == ["counter_uas", "drone_or_drones_lang_en"]
+    assert "queries" not in by_id["9"]
 
 
 def test_reads_are_scoped_to_one_query():
@@ -564,7 +617,7 @@ def test_reads_are_scoped_to_one_query():
     assert reader.known_query_slugs() == {"drone_or_drones_lang_en", "ships_lang_en"}
     assert reader.count_in_window(*window, query_slug="drone_or_drones_lang_en") == 2
     assert reader.count_in_window(*window, query_slug="ships_lang_en") == 1
-    # Unscoped still spans both — the Users dataset wants every followed query.
+    # Unscoped still spans both - the Users dataset wants every followed query.
     assert reader.count_in_window(*window) == 3
     assert reader.facet_values(*window, "location", query_slug="ships_lang_en") == [
         {"value": "USA", "count": 1}
@@ -603,7 +656,7 @@ def test_a_long_post_is_projected_untruncated():
 
 
 def test_a_projection_from_an_older_schema_is_not_attached(monkeypatch):
-    """Its parts lack columns this reader selects by name — fall back, don't crash."""
+    """Its parts lack columns this reader selects by name - fall back, don't crash."""
     from naas_abi_marketplace.applications.x.apps.x_proxy.api.publish import (
         _attach_cache,
     )

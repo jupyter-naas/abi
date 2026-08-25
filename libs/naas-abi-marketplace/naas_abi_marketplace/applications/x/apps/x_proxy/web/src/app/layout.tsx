@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   // Each page names itself in its own `layout.tsx`; the template puts the app
   // in front of it, so a tab reads "X Proxy | Search Users".
   title: { default: "X Proxy", template: "X Proxy | %s" },
-  description: "X proxy — post counts, post search, and authors",
+  description: "X proxy - post counts, post search, and authors",
   // Metadata icon URLs are not rewritten by basePath, so this is the full
   // served path: public/favicon.svg lands at the export root.
   icons: { icon: "/app-html/x/apps/x_proxy/favicon.svg" },
@@ -25,7 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        {/* Mounted once and kept across page changes — see AppProvider. */}
+        {/* Mounted once and kept across page changes - see AppProvider. */}
         <AppProvider>{children}</AppProvider>
       </body>
     </html>

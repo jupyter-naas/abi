@@ -1,7 +1,7 @@
 """Unit tests for the X app's HTTP surface.
 
 Every page of the app is a path exported as its own ``index.html``, so the
-middleware has to serve a directory tree rather than a single index — these
+middleware has to serve a directory tree rather than a single index - these
 tests pin that down against a fake object storage holding a published export.
 """
 

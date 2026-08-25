@@ -1,4 +1,4 @@
-"""Publish ``count_recent_tweets/linecharts.json`` — posts over time."""
+"""Publish ``count_recent_tweets/linecharts.json`` - posts over time."""
 
 from __future__ import annotations
 

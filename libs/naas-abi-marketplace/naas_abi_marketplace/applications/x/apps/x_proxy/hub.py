@@ -95,7 +95,7 @@ class XAppHubBuilder:
 
         Called from the orchestration, which runs in an image without Node, so
         a missing ``web/out/`` skips the asset upload instead of failing the
-        whole run — the snapshot refresh is what the schedule is for.
+        whole run - the snapshot refresh is what the schedule is for.
 
         *full_users* forces a complete Users-dataset rebuild; the default only
         rebuilds the shards whose authors changed.

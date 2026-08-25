@@ -1,25 +1,25 @@
 /**
  * Reader for the published Users dataset under `x/apps/x_proxy/search_users/`.
  *
- * Everything here is a plain GET against object storage — no SPARQL runs at
+ * Everything here is a plain GET against object storage - no SPARQL runs at
  * request time. The picker index (`users.json`) carries every author in the
  * tweet graph, so searching "grok" reaches an account with a single post; the
- * selected author's posts live in one shard file (`posts/<shard>.json`) —
+ * selected author's posts live in one shard file (`posts/<shard>.json`) -
  * search matches plus referenced context (quotes / replies / retweets they
- * wrote) — and the index row names the shard so the browser never has to hash
+ * wrote) - and the index row names the shard so the browser never has to hash
  * anything.
  *
  * Index and shards are fetched once and memoised: both are immutable between
  * publishes, and the index is a few MB.
  */
-import { FEED } from "@/lib/appConfig";
+import { FEED, RESULTS } from "@/lib/appConfig";
 import type { TweetRow, UserBundle, UserProfile, UserRow } from "@/lib/types";
 import { withAccessToken } from "@/lib/routes";
 
 const BASE = "/app-html/x/apps/x_proxy";
 
 /**
- * Posts the author feed shows per batch — `feed.batch` in `config.yaml`.
+ * Posts the author feed shows per batch - `feed.batch` in `config.yaml`.
  *
  * The whole shard is already in memory, so a batch is a slice, not a fetch: the
  * feed opens with one and grows by one whenever the end comes into view or the
@@ -27,8 +27,9 @@ const BASE = "/app-html/x/apps/x_proxy";
  */
 export const USER_FEED_BATCH = FEED.batch;
 
-/** Search results per page. Empty query lists the busiest 100 first. */
-export const USER_RESULTS_PAGE_SIZE = 100;
+/** Search results per page - `results.per_page` in `config.yaml`. An empty
+ * query lists the busiest first. */
+export const USER_RESULTS_PAGE_SIZE = RESULTS.perPage;
 
 /**
  * Must match INDEX_COLUMNS in api/search_users/users.py.
@@ -65,7 +66,7 @@ export type UserIndex = {
 };
 
 /** Which posts of an author the feed is showing. */
-export type FeedTab = "all" | "matched" | "context";
+export type FeedTab = "all" | "matched" | "referenced";
 
 export type UserFeed = {
   /** The batch on screen. */
@@ -205,13 +206,16 @@ export function postAnchorId(tweetId: string): string {
 /**
  * Posts of one tab.
  *
- * ``matched`` are the posts that answered the search query; ``context`` are the
- * reply parents, quoted tweets and retweeted originals ingested only to explain
- * them — the same split the "Posts retrieved" KPI shows.
+ * ``matched`` are the posts that answered a followed query - each names which
+ * one - and ``referenced`` are the reply parents, quoted tweets and retweeted
+ * originals ingested only to explain a match. The words the tabs wear are in
+ * `feed.tabs` in `config.yaml`; these keys are the split the data carries.
  */
 export function postsInTab(posts: TweetRow[], tab: FeedTab): TweetRow[] {
   if (tab === "matched") return posts.filter((post) => !post.referenced);
-  if (tab === "context") return posts.filter((post) => Boolean(post.referenced));
+  if (tab === "referenced") {
+    return posts.filter((post) => Boolean(post.referenced));
+  }
   return posts;
 }
 
@@ -247,7 +251,7 @@ export function feedOf(
     counts: {
       all: posts.length,
       matched,
-      context: posts.length - matched,
+      referenced: posts.length - matched,
     },
   };
 }

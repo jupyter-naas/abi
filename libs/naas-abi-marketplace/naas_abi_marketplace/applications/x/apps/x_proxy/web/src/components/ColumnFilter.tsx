@@ -181,7 +181,7 @@ export function ColumnFilter({
               </div>
               {truncated ? (
                 <p className="cf-hint">
-                  Showing the most frequent values — narrow with the search box.
+                  Showing the most frequent values - narrow with the search box.
                 </p>
               ) : null}
             </>

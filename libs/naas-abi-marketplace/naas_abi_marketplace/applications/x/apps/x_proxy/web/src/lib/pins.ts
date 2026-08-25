@@ -1,26 +1,55 @@
 /**
- * The favorites bar: pinned authors, optionally filed into folders.
+ * The favorites bars: pinned authors, or pinned posts, filed into folders.
  *
- * Modelled on a browser bookmarks bar — a flat row of chips, where a chip is
- * either an author or a folder holding authors. Folders never nest: the bar is
- * one row and a menu, not a tree.
+ * Modelled on a browser bookmarks bar - a flat row of chips, where a chip is
+ * either a link or a folder holding links. Folders never nest: the bar is one
+ * row and a menu, not a tree.
  *
- * Favorites are a working set — the handles someone comes back to across
- * sessions — so unlike the timezone they live in ``localStorage`` rather than in
+ * There are two bars, one per :type:`FavoritesScope`, and they never mix: the
+ * Users section pins authors, a post's page pins posts, each in its own storage
+ * key. Which bar a page shows is `favorites:` in `config.yaml`.
+ *
+ * Favorites are a working set - the handles someone comes back to across
+ * sessions - so unlike the timezone they live in ``localStorage`` rather than in
  * the session. Blocked storage (private mode, embedded frames) degrades to
  * favorites that simply do not survive a reload.
  */
 
 import { FAVORITES_LIMITS } from "@/lib/appConfig";
 
-const PINS_KEY = "x.apps.x_proxy.pinnedUsers";
+/**
+ * One bar per scope, one storage key per bar. Authors and posts are never in
+ * the same bar: a chip means "go to this author" or "go to this post", and
+ * mixing them would make the bar unreadable.
+ */
+export type FavoritesScope = "users" | "posts";
 
-/** One pinned author. */
+const PINS_KEYS: Record<FavoritesScope, string> = {
+  users: "x.apps.x_proxy.pinnedUsers",
+  posts: "x.apps.x_proxy.pinnedPosts",
+};
+
+/**
+ * One pinned thing: an author, or a post.
+ *
+ * ``id`` is what the bar is keyed by, so nothing is pinned twice: ``u:<handle>``
+ * for an author, ``p:<tweet id>`` for a post. A post pin also carries the
+ * author it belongs to, since that is how its page is addressed.
+ */
 export type FavoriteLink = {
   kind: "link";
-  /** ``u:<username>`` — an author is on the bar at most once. */
   id: string;
   username: string;
+  /** Set on a post pin: the tweet the chip opens. */
+  postId?: string;
+  /** What the chip reads. Defaults to `@username` for an author. */
+  label?: string;
+  /** Longer text for the chip's tooltip - a post's own words. */
+  hint?: string;
+  /** Where the pin was made from, so reopening restores the back link. */
+  from?: string;
+  /** Search needle when pinned from Search Tweets. */
+  q?: string;
 };
 
 /** A folder of pinned authors. Folders hold links only, never other folders. */
@@ -46,13 +75,58 @@ export const DEFAULT_FOLDER_NAME = "New folder";
 
 /** Where a dragged node is being dropped. */
 export type DropTarget =
-  /** On the bar itself, before ``before`` — or at the end when it is ``null``. */
+  /** On the bar itself, before ``before`` - or at the end when it is ``null``. */
   | { into: "bar"; before: string | null }
   /** Inside a folder, at the end of its items. */
   | { into: "folder"; folderId: string };
 
-function linkFor(username: string): FavoriteLink {
+export function userLink(username: string): FavoriteLink {
   return { kind: "link", id: `u:${username}`, username };
+}
+
+/** How much of a post's text the chip's tooltip carries. */
+export const MAX_POST_HINT = 140;
+
+/**
+ * A pinned post.
+ *
+ * The chip reads the **tweet id** - that is what identifies a post, and what a
+ * reader looking for one has in hand. Its own words go to the tooltip, where a
+ * long line costs nothing.
+ */
+export function postLink(
+  postId: string,
+  username: string,
+  text = "",
+  from?: string | null,
+  q?: string | null,
+): FavoriteLink {
+  const trimmed = text.trim().replace(/\s+/g, " ");
+  const origin = from?.trim() || undefined;
+  const needle = q?.trim() || undefined;
+  return {
+    kind: "link",
+    id: `p:${postId}`,
+    username,
+    postId,
+    label: postId,
+    hint:
+      trimmed.length > MAX_POST_HINT
+        ? `${trimmed.slice(0, MAX_POST_HINT - 1)}…`
+        : trimmed || undefined,
+    from: origin,
+    q: origin === "tweets" ? needle : undefined,
+  };
+}
+
+/** What a chip reads: a post's id, or the author's handle. */
+export function labelOf(link: FavoriteLink): string {
+  return link.label || `@${link.username}`;
+}
+
+/** What a chip's tooltip reads: the post's words when it has them. */
+export function hintOf(link: FavoriteLink): string {
+  return link.hint || labelOf(link);
 }
 
 /** Ids only have to be unique on this bar, so the clock plus noise is enough. */
@@ -68,17 +142,18 @@ export function cleanName(name: string): string {
   return name.trim().slice(0, MAX_FOLDER_NAME) || DEFAULT_FOLDER_NAME;
 }
 
-/** Every pinned author, bar order first then folder order. */
-export function listUsers(nodes: FavoriteNode[]): string[] {
-  return nodes.flatMap((node) =>
-    node.kind === "link"
-      ? [node.username]
-      : node.items.map((item) => item.username),
-  );
+/** Every pinned link, bar order first then folder order. */
+export function listLinks(nodes: FavoriteNode[]): FavoriteLink[] {
+  return nodes.flatMap((node) => (node.kind === "link" ? [node] : node.items));
 }
 
-export function isPinned(nodes: FavoriteNode[], username: string): boolean {
-  return listUsers(nodes).includes(username);
+/** Ids of everything pinned - what a pin button checks itself against. */
+export function listIds(nodes: FavoriteNode[]): string[] {
+  return listLinks(nodes).map((link) => link.id);
+}
+
+export function isPinned(nodes: FavoriteNode[], id: string): boolean {
+  return listIds(nodes).includes(id);
 }
 
 export function findFolder(
@@ -111,7 +186,7 @@ export function parentOf(
  *
  * Reads both shapes: the plain ``["grok", …]`` written before the bar had
  * folders, and the current node list. Anything unrecognisable is dropped rather
- * than throwing — a corrupted key should cost the favorites, not the app.
+ * than throwing - a corrupted key should cost the favorites, not the app.
  */
 function parse(raw: unknown): FavoriteNode[] {
   if (!Array.isArray(raw)) return [];
@@ -120,16 +195,29 @@ function parse(raw: unknown): FavoriteNode[] {
   let folderCount = 0;
 
   const takeLink = (value: unknown): FavoriteLink | null => {
-    const username =
-      typeof value === "string"
-        ? value
-        : typeof (value as FavoriteLink)?.username === "string"
-          ? (value as FavoriteLink).username
-          : "";
-    if (!username || seen.has(username)) return null;
-    if (seen.size >= MAX_PINNED_USERS) return null;
-    seen.add(username);
-    return linkFor(username);
+    // A bare string is the shape written before the bar held anything but
+    // authors; a link carries its own id, label and (for a post) tweet id.
+    if (typeof value === "string") {
+      return value && !seen.has(`u:${value}`) && seen.size < MAX_PINNED_USERS
+        ? (seen.add(`u:${value}`), userLink(value))
+        : null;
+    }
+    const link = value as Partial<FavoriteLink>;
+    const username = typeof link?.username === "string" ? link.username : "";
+    const postId = typeof link?.postId === "string" ? link.postId : "";
+    if (!username && !postId) return null;
+    const id = postId ? `p:${postId}` : `u:${username}`;
+    if (seen.has(id) || seen.size >= MAX_PINNED_USERS) return null;
+    seen.add(id);
+    return postId
+      ? postLink(
+          postId,
+          username,
+          typeof link.hint === "string" ? link.hint : "",
+          typeof link.from === "string" ? link.from : null,
+          typeof link.q === "string" ? link.q : null,
+        )
+      : userLink(username);
   };
 
   for (const entry of raw) {
@@ -153,10 +241,10 @@ function parse(raw: unknown): FavoriteNode[] {
   return nodes;
 }
 
-export function readFavorites(): FavoriteNode[] {
+export function readFavorites(scope: FavoritesScope): FavoriteNode[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(PINS_KEY);
+    const raw = window.localStorage.getItem(PINS_KEYS[scope]);
     if (!raw) return [];
     return parse(JSON.parse(raw) as unknown);
   } catch {
@@ -164,12 +252,15 @@ export function readFavorites(): FavoriteNode[] {
   }
 }
 
-export function writeFavorites(nodes: FavoriteNode[]): void {
+export function writeFavorites(
+  scope: FavoritesScope,
+  nodes: FavoriteNode[],
+): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(PINS_KEY, JSON.stringify(nodes));
+    window.localStorage.setItem(PINS_KEYS[scope], JSON.stringify(nodes));
   } catch {
-    // Private mode / blocked storage — the favorites stay in memory only.
+    // Private mode / blocked storage - the favorites stay in memory only.
   }
 }
 
@@ -185,22 +276,20 @@ export function removeNode(nodes: FavoriteNode[], id: string): FavoriteNode[] {
 }
 
 /**
- * ``nodes`` with ``username`` pinned or unpinned.
+ * ``nodes`` with ``link`` pinned or unpinned.
  *
- * A new favorite goes to the front of the bar, so the most recently pinned
- * author is the first chip; unpinning finds it wherever it was filed. The cap
- * refuses the new pin rather than silently dropping an older one out of a
- * folder someone organised.
+ * A new favorite goes to the front of the bar, so the most recently pinned one
+ * is the first chip; unpinning finds it wherever it was filed. The cap refuses
+ * the new pin rather than silently dropping an older one out of a folder
+ * someone organised.
  */
 export function togglePinned(
   nodes: FavoriteNode[],
-  username: string,
+  link: FavoriteLink,
 ): FavoriteNode[] {
-  if (isPinned(nodes, username)) {
-    return removeNode(nodes, `u:${username}`);
-  }
-  if (listUsers(nodes).length >= MAX_PINNED_USERS) return nodes;
-  return [linkFor(username), ...nodes];
+  if (isPinned(nodes, link.id)) return removeNode(nodes, link.id);
+  if (listIds(nodes).length >= MAX_PINNED_USERS) return nodes;
+  return [link, ...nodes];
 }
 
 export function addFolder(
@@ -244,7 +333,7 @@ function detach(
 }
 
 /**
- * Move a favorite to ``target`` — reordering the bar, filing an author into a
+ * Move a favorite to ``target`` - reordering the bar, filing an author into a
  * folder, or taking one back out.
  *
  * Dropping a node on itself, or a folder into a folder, is a no-op: folders do

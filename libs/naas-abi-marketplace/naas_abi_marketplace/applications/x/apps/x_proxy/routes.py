@@ -53,7 +53,7 @@ _SNAPSHOT_RE = re.compile(
     r"^(globals|count_recent_tweets|search_recents_tweets|search_users)"
     r"(/[A-Za-z0-9_-]+)?/[A-Za-z0-9_.-]+\.json$"
 )
-# Legacy data/*.json paths (older hub publishes) — keep serving if present.
+# Legacy data/*.json paths (older hub publishes) - keep serving if present.
 _LEGACY_DATA_RE = re.compile(r"^data/[A-Za-z0-9_.-]+\.json$")
 # Next.js static export assets (hashed JS/CSS under _next/static/...).
 _ASSET_RE = re.compile(
@@ -178,7 +178,7 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
         """The exported HTML for one page of the app.
 
         A page the current publish does not carry falls back to the app root,
-        which boots the client app and forwards from there — an old bookmark
+        which boots the client app and forwards from there - an old bookmark
         lands on the dashboard rather than on a 404. Raises 404 only when even
         the root is missing, i.e. nothing has been published yet.
         """
@@ -213,7 +213,7 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                 return self._index(request)
             except HTTPException as exc:
                 if exc.status_code == 404:
-                    # Nothing published yet — let the Nexus catch-all answer.
+                    # Nothing published yet - let the Nexus catch-all answer.
                     return await call_next(request)
                 raise
 
@@ -242,7 +242,7 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
             except HTTPException as exc:
                 # An older publish carries no payloads. Falling through leaves
                 # the catch-all to answer, and the client router falls back to
-                # a full page load — raising here would surface as a 500,
+                # a full page load - raising here would surface as a 500,
                 # because exception handlers do not wrap middleware.
                 if exc.status_code == 404:
                     return await call_next(request)
@@ -259,7 +259,7 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
         if _ASSET_RE.fullmatch(rel):
             return _serve_relative(self._object_storage, rel, request)
 
-        # `…/users/search` — serve the page without bouncing to the slashed
+        # `…/users/search` - serve the page without bouncing to the slashed
         # form, so the URL can be ``search?user=`` rather than ``search/?user=``.
         if _ROUTE_UNSLASHED_RE.fullmatch(rel):
             try:

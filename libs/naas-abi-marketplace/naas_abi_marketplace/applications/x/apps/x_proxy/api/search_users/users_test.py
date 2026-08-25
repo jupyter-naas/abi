@@ -187,7 +187,7 @@ def test_republish_with_no_change_queries_nothing_and_writes_nothing():
 
 def test_only_the_changed_authors_shard_is_requeried():
     # Precondition: the two authors must live in different shards for "only one
-    # shard was requeried" to mean anything (sha1 of the name — deterministic).
+    # shard was requeried" to mean anything (sha1 of the name - deterministic).
     assert user_shard("alice") != user_shard("bob")
 
     storage = _FakeObjectStorage()
@@ -330,7 +330,7 @@ def test_full_bypasses_the_unchanged_graph_gate():
 
 
 def test_a_probe_that_returned_nothing_never_skips():
-    """No signal is not the same as no change — rebuild rather than guess."""
+    """No signal is not the same as no change - rebuild rather than guess."""
     storage = _FakeObjectStorage()
     users.publish(_RecordingContext(storage, [_A, _B]))
 

@@ -100,6 +100,11 @@ export type TweetRow = {
    * reply parent or retweeted original). Omitted on search matches.
    */
   referenced?: boolean;
+  /**
+   * Slugs of the followed queries this post answered - what makes it a match.
+   * Omitted on referenced context, which answered none.
+   */
+  queries?: string[];
 };
 
 export type TableEntry = {
@@ -110,7 +115,7 @@ export type TableEntry = {
   rows: Record<string, unknown>[];
 };
 
-/** Public metrics of an X account (all optional — stubs carry none). */
+/** Public metrics of an X account (all optional - stubs carry none). */
 export type UserMetrics = {
   followers_count: number | null;
   following_count: number | null;
@@ -153,7 +158,7 @@ export type UserRow = {
 /**
  * An author's published record: totals + account fields + every post.
  *
- * Everything but the username is optional — the publisher drops empty fields
+ * Everything but the username is optional - the publisher drops empty fields
  * rather than writing placeholders, since most authors are ingested as
  * tweet-author stubs and at ~60k of them the placeholders dominate the file.
  */
@@ -182,8 +187,17 @@ export type FacetEntry = {
   truncated?: boolean;
 };
 
+/** How much the tweet graph holds, whatever query or window is selected. */
+export type GraphTotals = {
+  posts: number;
+  matched: number;
+  referenced: number;
+};
+
 export type Snapshots = {
   updatedAt: string | null;
+  /** `null` on a publish older than `globals/graph.json`. */
+  graph: GraphTotals | null;
   scenarios: Scenario[];
   queries: QueryEntry[];
   timezones: TimezoneEntry[];

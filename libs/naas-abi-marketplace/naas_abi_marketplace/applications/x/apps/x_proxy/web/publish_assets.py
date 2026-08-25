@@ -25,7 +25,7 @@ _MANIFEST_NAME = "manifest.json"
 WEB_DIR = Path(__file__).resolve().parent
 # Next.js basePath only rewrites asset URLs; export files land in out/ directly.
 EXPORT_DIR = WEB_DIR / "out"
-# The deploy image builds the export in a Node stage and copies it here — under
+# The deploy image builds the export in a Node stage and copies it here - under
 # /opt, because compose bind-mounts the repo over /app and would hide a baked
 # copy living inside it. Overridable with X_APP_WEB_EXPORT_DIR.
 BAKED_EXPORT_DIR = Path("/opt/x-app-web/out")
@@ -99,14 +99,14 @@ def upload_web_export(
     The deploy image builds it in a Node stage (see
     ``.deploy/docker/images/Dockerfile``) and exposes it through
     ``X_APP_WEB_EXPORT_DIR``. With *required* false a missing export is
-    therefore not an error — the JSON snapshots (which need no build step) are
+    therefore not an error - the JSON snapshots (which need no build step) are
     still published and whatever web assets object storage already holds stay
     in place. Only a caller that just ran ``pnpm build`` should demand it.
     """
     if not required and not web_export_exists():
         looked = ", ".join(str(c) for c in export_candidates())
         logger.warning(
-            f"X app publish: no web export (looked in: {looked}) — snapshots "
+            f"X app publish: no web export (looked in: {looked}) - snapshots "
             "published, web assets left as-is. Rebuild the deploy image, or run "
             "`pnpm build` in apps/x_proxy/web on a host with Node."
         )
@@ -138,7 +138,7 @@ def upload_web_export(
         digest = content_digest(content)
         manifest[rel] = digest
         # Most of the export is ``_next/static/**``, whose file names are already
-        # content-hashed — those bytes are identical on every publish.
+        # content-hashed - those bytes are identical on every publish.
         if previous.get(rel) == digest:
             unchanged += 1
             continue
@@ -161,7 +161,7 @@ def upload_web_export(
         "unchanged": unchanged,
         "index_file": f"{prefix}/index.html",
     }
-    logger.info(f"X web upload_web_export: done — {summary}")
+    logger.info(f"X web upload_web_export: done - {summary}")
     return summary
 
 
@@ -169,11 +169,11 @@ def _read_manifest(object_storage: ObjectStorageService, prefix: str) -> dict[st
     """Digests from the previous upload, ``{}`` when absent or unreadable.
 
     Failing to an empty manifest re-uploads everything, which is exactly the
-    pre-existing behaviour — never a reason to fail the publish.
+    pre-existing behaviour - never a reason to fail the publish.
     """
     try:
         raw = object_storage.get_object(f"{prefix}/{_MANIFEST_DIR}", _MANIFEST_NAME)
-    except Exception:  # noqa: BLE001 — absent on a first publish
+    except Exception:  # noqa: BLE001 - absent on a first publish
         return {}
     try:
         decoded = json.loads(raw.decode("utf-8"))

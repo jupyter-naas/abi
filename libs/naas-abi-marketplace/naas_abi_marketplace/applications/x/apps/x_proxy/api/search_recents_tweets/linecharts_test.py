@@ -58,7 +58,7 @@ def test_search_linechart_is_hourly_counts_not_cumulative():
 
     assert len(current) == 24
     assert len(previous) == 24
-    # 10:00, 11:00, 12:00, 13:00, 14:00 — counts, not a running total.
+    # 10:00, 11:00, 12:00, 13:00, 14:00 - counts, not a running total.
     assert [p["value"] for p in current[:5]] == [0, 0, 3, 0, 2]
     assert sum(p["value"] for p in current) == 5
     # Previous window is the 24h before 13T10:00, so 12T12:00 lines up by index.

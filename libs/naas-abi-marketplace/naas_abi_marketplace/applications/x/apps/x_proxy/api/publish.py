@@ -45,7 +45,7 @@ def _attach_cache(object_storage: ObjectStorageService):
     A projection written by an older ``SCHEMA_VERSION`` is refused rather than
     read. Its part files are missing columns this reader selects by name, so
     attaching one trades a clean fallback for a ``KeyError`` mid-publish. The
-    next ``refresh`` rebuilds it at the current version — until then, SPARQL.
+    next ``refresh`` rebuilds it at the current version - until then, SPARQL.
     """
     try:
         from naas_abi_marketplace.applications.x.apps.x_proxy.cache.reader import (
@@ -55,17 +55,17 @@ def _attach_cache(object_storage: ObjectStorageService):
             SCHEMA_VERSION,
         )
     except ImportError as exc:
-        logger.info(f"X app publish: projection unavailable ({exc}) — using SPARQL")
+        logger.info(f"X app publish: projection unavailable ({exc}) - using SPARQL")
         return None
     reader = CacheReader(object_storage)
     state = reader.projection_state()
     if not state or not state.get("watermark"):
-        logger.info("X app publish: no projection published yet — using SPARQL")
+        logger.info("X app publish: no projection published yet - using SPARQL")
         return None
     if state.get("schema_version") != SCHEMA_VERSION:
         logger.info(
             f"X app publish: projection is schema {state.get('schema_version')}, "
-            f"this build reads {SCHEMA_VERSION} — using SPARQL until it is rebuilt"
+            f"this build reads {SCHEMA_VERSION} - using SPARQL until it is rebuilt"
         )
         return None
     logger.info(f"X app publish: using the Parquet projection ({state})")
@@ -85,7 +85,7 @@ def publish_app(
 ) -> dict[str, Any]:
     """Run every page/element script and publish the web static export.
 
-    *require_web* false lets the run proceed when ``web/out/`` is absent — the
+    *require_web* false lets the run proceed when ``web/out/`` is absent - the
     orchestration path, where the image has no Node to build it. The CLI keeps
     it true so a forgotten ``pnpm build`` fails loudly instead of silently
     publishing snapshots against stale assets.
@@ -141,5 +141,5 @@ def publish_app(
         "web": web,
         "index_file": f"{ctx.app_prefix}/index.html",
     }
-    logger.info(f"X app publish_app: done — {summary}")
+    logger.info(f"X app publish_app: done - {summary}")
     return summary

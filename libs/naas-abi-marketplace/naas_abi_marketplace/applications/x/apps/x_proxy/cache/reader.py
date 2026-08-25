@@ -1,4 +1,4 @@
-"""Read side of the X projection — the questions the snapshots actually ask.
+"""Read side of the X projection - the questions the snapshots actually ask.
 
 Every method here answers something the publish previously asked SPARQL for, and
 answers it by scanning columnar data instead of the whole graph. The cost of a
@@ -63,7 +63,7 @@ class CacheReader:
         """Cheap staleness signal: the projection's watermark and schema version.
 
         A consumer that only needs to know *whether* anything changed reads this
-        instead of loading any Parquet — the watermark moves exactly when new
+        instead of loading any Parquet - the watermark moves exactly when new
         envelopes have been projected.
         """
         import json
@@ -71,7 +71,7 @@ class CacheReader:
         try:
             raw = self.object_storage.get_object(CACHE_PREFIX, MANIFEST_KEY)
             doc = json.loads(raw.decode("utf-8"))
-        except Exception:  # noqa: BLE001 — no projection yet
+        except Exception:  # noqa: BLE001 - no projection yet
             return {}
         if not isinstance(doc, dict):
             return {}
@@ -92,10 +92,10 @@ class CacheReader:
         group, so "last" has to mean "most recently projected". Part names carry
         the projection stamp (``part-<YYYYmmddTHHMMSSffffff>.parquet``) and live
         under a ``ym=`` prefix a row's ``created_at`` fully determines, so sorting
-        the keys orders each partition chronologically. Sorting is not optional —
+        the keys orders each partition chronologically. Sorting is not optional -
         ``list_objects`` is ``os.listdir`` order on the filesystem adapter.
 
-        *columns* loads only those fields — ``_all_matched_ids`` needs
+        *columns* loads only those fields - ``_all_matched_ids`` needs
         ``tweet_id`` / ``kind``, not the full row, so a windowed read does not
         hold a second copy of every post in RAM.
         """
@@ -120,7 +120,7 @@ class CacheReader:
             try:
                 raw = self.object_storage.get_object(CACHE_PREFIX, AUTHORS_KEY)
                 self._authors = pl.read_parquet(io.BytesIO(raw))
-            except Exception as exc:  # noqa: BLE001 — no projection yet
+            except Exception as exc:  # noqa: BLE001 - no projection yet
                 logger.warning(f"X cache reader: no authors table ({exc})")
                 self._authors = pl.DataFrame([], schema=author_schema())
         return self._authors
@@ -129,8 +129,8 @@ class CacheReader:
         """Posts joined to their author, for *months* (all of history if ``None``).
 
         One row per ``(tweet_id, kind, query_slug)``, newest projection winning.
-        The write side can only enforce that within a single refresh batch — an
-        incremental run appends a part file rather than rewriting the month — so
+        The write side can only enforce that within a single refresh batch - an
+        incremental run appends a part file rather than rewriting the month - so
         a post carried by envelopes from two different refreshes lands in two
         parts and has to be collapsed here. Newest wins because the mutable
         columns (the engagement metrics) are a snapshot at ingest time, and the
@@ -139,7 +139,7 @@ class CacheReader:
         Referenced rows whose id appears as matched anywhere are dropped, because
         that is what the graph shows: ``XSearchRecentTweetsPipeline`` lets match
         typing win, so a post that ever answered the query is never context. The
-        exclusion has to be global rather than per-envelope — a post can be
+        exclusion has to be global rather than per-envelope - a post can be
         referenced on one tick and matched on the next.
         """
         import polars as pl
@@ -195,13 +195,11 @@ class CacheReader:
         return df
 
     def _all_matched_ids(self):
-        """Ids that matched in *any* month — one narrow column over history."""
+        """Ids that matched in *any* month - one narrow column over history."""
         import polars as pl
 
         if self._matched_ids is None:
-            frames = self._read_parquet_objects(
-                POSTS_DIR, columns=["tweet_id", "kind"]
-            )
+            frames = self._read_parquet_objects(POSTS_DIR, columns=["tweet_id", "kind"])
             if not frames:
                 return None
             ids = (
@@ -237,7 +235,7 @@ class CacheReader:
 
         *query_slug* scopes the read the way the SPARQL path scopes on the
         ``SearchQuery`` it came from. Leaving it ``None`` spans every followed
-        query, which is only right for genuinely cross-query questions — the
+        query, which is only right for genuinely cross-query questions - the
         per-query snapshots must always pass it.
         """
         import polars as pl
@@ -317,8 +315,8 @@ class CacheReader:
         """Distinct values of *column* with post counts, most frequent first.
 
         Values are keyed on their displayed (stripped) form so whitespace
-        variants of one place — ``"USA"`` and ``"USA "`` both live in
-        ``user_location`` — become a single entry rather than duplicate
+        variants of one place - ``"USA"`` and ``"USA "`` both live in
+        ``user_location`` - become a single entry rather than duplicate
         checkboxes splitting a count.
         """
         import polars as pl
@@ -349,7 +347,7 @@ class CacheReader:
         """The newest *limit* posts in the window, shaped like the table rows.
 
         Key-for-key what ``SnapshotContext._search_tweets`` returns, so either
-        source can feed the tables / barcharts unchanged — including
+        source can feed the tables / barcharts unchanged - including
         ``text`` preferring ``full_text``, which is how the SPARQL path resolves
         a long post's untruncated content.
         """
@@ -378,7 +376,7 @@ class CacheReader:
         return out
 
     def author_index(self) -> list[dict[str, Any]]:
-        """Every author with all-time post totals — the Users search index.
+        """Every author with all-time post totals - the Users search index.
 
         Counts unique tweet ids across matches *and* referenced context (a
         quoted/replied-to/retweeted original this account wrote). ``posts()``
@@ -456,6 +454,12 @@ class CacheReader:
         post is a match for one query and context for another, the match
         wins. Context-only rows are flagged ``referenced=True`` so the
         author page can tell them apart; matches omit the key.
+
+        A post carries the ``queries`` it matched - the projection holds one row
+        per (tweet, kind, query), so a post that answered two followed queries
+        names both, and the author page can say *which* query pulled it in.
+        Referenced-only rows name none: they answered no query, which is what
+        being context means.
         """
         import polars as pl
 
@@ -463,11 +467,21 @@ class CacheReader:
         posts = self.posts()
         if posts.is_empty() or not wanted:
             return {}
-        rows = (
-            posts.filter(
-                (pl.col("username") != "") & pl.col("username").is_in(list(wanted))
+        mine = posts.filter(
+            (pl.col("username") != "") & pl.col("username").is_in(list(wanted))
+        )
+        # Collected before the de-duplication below throws the other rows away.
+        matched_queries = {
+            (r["username"], r["tweet_id"]): [q for q in r["queries"] if q]
+            for r in (
+                mine.filter(pl.col("kind") == KIND_MATCHED)
+                .group_by(["username", "tweet_id"])
+                .agg(pl.col("query_slug").unique().sort().alias("queries"))
+                .iter_rows(named=True)
             )
-            .with_columns((pl.col("kind") == KIND_MATCHED).alias("_is_match"))
+        }
+        rows = (
+            mine.with_columns((pl.col("kind") == KIND_MATCHED).alias("_is_match"))
             .sort(["_is_match", "created_at"], descending=[True, True])
             .unique(subset=["username", "tweet_id"], keep="first")
             .sort("created_at", descending=True)
@@ -477,7 +491,7 @@ class CacheReader:
             username = r["username"]
             post: dict[str, Any] = {
                 "created_at": r["created_at"].isoformat(),
-                # ``full_text`` first, matching ``posts_for_usernames`` — a long
+                # ``full_text`` first, matching ``posts_for_usernames`` - a long
                 # post is truncated in ``text`` and whole only in ``full_text``.
                 "text": r["full_text"] or r["text"] or "",
                 "url": f"https://x.com/{username}/status/{r['tweet_id']}",
@@ -487,6 +501,9 @@ class CacheReader:
                 post["media_url"] = r["media_urls"]
             if r["kind"] == KIND_REFERENCED:
                 post["referenced"] = True
+            queries = matched_queries.get((username, r["tweet_id"]))
+            if queries:
+                post["queries"] = queries
             out.setdefault(username, []).append(post)
         return out
 

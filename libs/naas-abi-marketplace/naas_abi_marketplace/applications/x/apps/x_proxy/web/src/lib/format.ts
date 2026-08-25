@@ -1,5 +1,5 @@
 export function fmt(n: number | null | undefined): string {
-  if (n == null || Number.isNaN(n)) return "—";
+  if (n == null || Number.isNaN(n)) return "-";
   return Number(n).toLocaleString();
 }
 

@@ -1,6 +1,6 @@
 """Turn one ingest envelope into post and author rows.
 
-Pure functions over the envelope dict — no services, no I/O — so the mapping that
+Pure functions over the envelope dict - no services, no I/O - so the mapping that
 has to stay faithful to :class:`XSearchRecentTweetsPipeline` is directly testable.
 
 An envelope is what ``XSearchRecentTweetsWorkflow`` persisted for a single tick::
@@ -9,7 +9,7 @@ An envelope is what ``XSearchRecentTweetsWorkflow`` persisted for a single tick:
      started_at, ended_at, file_path, batch}
 
 ``results.data`` are the posts that answered the query; ``results.includes.tweets``
-is a *superset* of it — X hydrates every id referenced by a match, and a post that
+is a *superset* of it - X hydrates every id referenced by a match, and a post that
 both matched and is referenced by another match appears in both arrays.
 """
 

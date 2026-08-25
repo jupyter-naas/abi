@@ -1,7 +1,7 @@
 """The app's navigation configuration: `config.yaml` in, typed objects out.
 
 `config.yaml` names the sections, their pages, the order of both, and what is
-visible — everything the chrome used to hardcode. The web app is a static
+visible - everything the chrome used to hardcode. The web app is a static
 export, so nothing fetches this at runtime: `emit_ts` compiles it into
 `web/src/lib/appConfig.generated.ts`, which the components import, and
 `pnpm build` / `pnpm dev` regenerate that file first.
@@ -40,6 +40,10 @@ ICONS = ("posts", "users", "gear")
 Place = Literal["main", "bottom"]
 PLACES = ("main", "bottom")
 
+#: Which favorites bar a section or page carries. The two bars never mix: each
+#: has its own chips and its own storage.
+FAVORITES = ("none", "users", "posts")
+
 
 class ConfigError(ValueError):
     """`config.yaml` says something the app cannot honour."""
@@ -55,6 +59,12 @@ class PageConfig:
     visible: bool
     #: Whether the Scenario / Query dropdowns show on this page.
     filters: bool
+    #: Whether the page has a search box, whose needle lives in ``?q=``.
+    search_box: bool
+    #: Overrides the section's favorites bar for this page. ``None`` inherits.
+    favorites: str | None
+    #: Tab to light up while this page is open, when it is not a tab itself.
+    tab: str | None
 
 
 @dataclass(frozen=True)
@@ -68,8 +78,8 @@ class SectionConfig:
     place: str
     #: False hides the "X Proxy - <section>" bar while in this section.
     top_nav: bool
-    #: Whether the favorites bar shows in this section.
-    favorites: bool
+    #: Which favorites bar this section carries - see :data:`FAVORITES`.
+    favorites: str
     pages: tuple[PageConfig, ...]
 
 
@@ -81,9 +91,29 @@ class FavoritesLimits:
 
 
 @dataclass(frozen=True)
+class ResultsConfig:
+    #: Results per page, shared by both search pages.
+    per_page: int
+
+
+#: The feed's tabs. Keys are the split the data carries, values are the words.
+FEED_TABS = ("all", "matched", "referenced")
+
+
+@dataclass(frozen=True)
+class ChartsConfig:
+    """Shapes the *publisher* honours, unlike everything else here."""
+
+    top_authors_bars: int
+    top_locations_bars: int
+
+
+@dataclass(frozen=True)
 class FeedConfig:
-    #: Posts per batch in the author feed — the first page, and each "show more".
+    #: Posts per batch in the author feed - the first page, and each "show more".
     batch: int
+    #: Label per tab key, in :data:`FEED_TABS` order.
+    tabs: tuple[tuple[str, str], ...]
 
 
 @dataclass(frozen=True)
@@ -93,6 +123,8 @@ class AppConfig:
     title: str
     default_page: str
     favorites: FavoritesLimits
+    results: ResultsConfig
+    charts: ChartsConfig
     feed: FeedConfig
     sections: tuple[SectionConfig, ...]
 
@@ -111,6 +143,17 @@ class AppConfig:
             if any(page.key == page_key for page in section.pages):
                 return section
         raise KeyError(page_key)
+
+    def favorites_on(self, page_key: str) -> str:
+        """Which favorites bar *page_key* carries - its own, else its section's."""
+        page = self.page(page_key)
+        if page.favorites is not None:
+            return page.favorites
+        return self.section_of(page_key).favorites
+
+    def tab_for(self, page_key: str) -> str:
+        """The tab to light up while *page_key* is open - itself by default."""
+        return self.page(page_key).tab or page_key
 
     def title_for(self, section_key: str) -> str:
         section = next(s for s in self.sections if s.key == section_key)
@@ -143,6 +186,15 @@ def _positive_int(mapping: dict, key: str, where: str) -> int:
     return value
 
 
+def _favorites(mapping: dict, where: str) -> str:
+    value = mapping.get("favorites", "none")
+    if value not in FAVORITES:
+        raise ConfigError(
+            f"{where}.favorites: expected one of {FAVORITES}, got {value!r}"
+        )
+    return value
+
+
 def _parse_page(raw: Any, where: str) -> PageConfig:
     if not isinstance(raw, dict):
         raise ConfigError(f"{where}: expected a mapping, got {raw!r}")
@@ -150,12 +202,23 @@ def _parse_page(raw: Any, where: str) -> PageConfig:
     path = _text(_require(raw, "path", where), f"{where}.path")
     if not path.startswith("/"):
         raise ConfigError(f"{where}.path: must start with '/', got {path!r}")
+    favorites = raw.get("favorites")
+    if favorites is not None and favorites not in FAVORITES:
+        raise ConfigError(
+            f"{where}.favorites: expected one of {FAVORITES}, got {favorites!r}"
+        )
+    tab = raw.get("tab")
+    if tab is not None and not isinstance(tab, str):
+        raise ConfigError(f"{where}.tab: expected a page key, got {tab!r}")
     return PageConfig(
         key=key,
         label=_text(_require(raw, "label", where), f"{where}.label"),
         path=path,
         visible=_flag(raw, "visible", where, True),
         filters=_flag(raw, "filters", where, False),
+        search_box=_flag(raw, "search_box", where, False),
+        favorites=favorites,
+        tab=tab,
     )
 
 
@@ -184,7 +247,7 @@ def _parse_section(raw: Any, where: str) -> SectionConfig:
         visible=_flag(raw, "visible", where, True),
         place=place,
         top_nav=_flag(raw, "top_nav", where, True),
-        favorites=_flag(raw, "favorites", where, False),
+        favorites=_favorites(raw, where),
         pages=pages,
     )
 
@@ -222,6 +285,14 @@ def parse_config(raw: Any) -> AppConfig:
                 raise ConfigError(f"sections: duplicate page key {page.key!r}")
             seen_pages.add(page.key)
 
+    for section in sections:
+        for page in section.pages:
+            if page.tab is not None and page.tab not in seen_pages:
+                raise ConfigError(
+                    f"sections: page {page.key!r} points its tab at unknown "
+                    f"page {page.tab!r}"
+                )
+
     favorites_raw = _require(raw, "favorites", "config.yaml")
     favorites = FavoritesLimits(
         max_users=_positive_int(favorites_raw, "max_users", "favorites"),
@@ -229,8 +300,27 @@ def parse_config(raw: Any) -> AppConfig:
         max_folder_name=_positive_int(favorites_raw, "max_folder_name", "favorites"),
     )
 
+    results_raw = _require(raw, "results", "config.yaml")
+    results = ResultsConfig(
+        per_page=_positive_int(results_raw, "per_page", "results"),
+    )
+
+    charts_raw = _require(raw, "charts", "config.yaml")
+    charts = ChartsConfig(
+        top_authors_bars=_positive_int(charts_raw, "top_authors_bars", "charts"),
+        top_locations_bars=_positive_int(charts_raw, "top_locations_bars", "charts"),
+    )
+
     feed_raw = _require(raw, "feed", "config.yaml")
-    feed = FeedConfig(batch=_positive_int(feed_raw, "batch", "feed"))
+    tabs_raw = _require(feed_raw, "tabs", "feed")
+    if not isinstance(tabs_raw, dict) or set(tabs_raw) != set(FEED_TABS):
+        raise ConfigError(f"feed.tabs: expected exactly the keys {FEED_TABS}")
+    feed = FeedConfig(
+        batch=_positive_int(feed_raw, "batch", "feed"),
+        tabs=tuple(
+            (key, _text(tabs_raw[key], f"feed.tabs.{key}")) for key in FEED_TABS
+        ),
+    )
 
     default_page = _text(_require(raw, "default_page", "config.yaml"), "default_page")
     config = AppConfig(
@@ -238,6 +328,8 @@ def parse_config(raw: Any) -> AppConfig:
         title=title,
         default_page=default_page,
         favorites=favorites,
+        results=results,
+        charts=charts,
         feed=feed,
         sections=sections,
     )
@@ -282,6 +374,9 @@ def emit_ts(config: AppConfig) -> str:
                     "path": page.path,
                     "visible": page.visible,
                     "filters": page.filters,
+                    "searchBox": page.search_box,
+                    "favorites": page.favorites,
+                    "tab": page.tab,
                 }
                 for page in section.pages
             ],
@@ -289,11 +384,15 @@ def emit_ts(config: AppConfig) -> str:
         for section in config.sections
     ]
     body = json.dumps(sections, indent=2, ensure_ascii=False)
+    feed_tabs = json.dumps(
+        [{"key": key, "label": label} for key, label in config.feed.tabs],
+        ensure_ascii=False,
+    )
     page_keys = tuple(page.key for page in config.pages)
     section_keys = tuple(section.key for section in config.sections)
     return f"""\
 /**
- * Generated from `config.yaml` — do not edit.
+ * Generated from `config.yaml` - do not edit.
  *
  * Regenerate with:
  *   uv run python -m naas_abi_marketplace.applications.x.apps.x_proxy.app_config --write
@@ -302,13 +401,16 @@ def emit_ts(config: AppConfig) -> str:
  * This is data only. The lookups the components use are in `lib/appConfig.ts`.
  */
 
-/** Every configured page, visible or not — what the components switch on. */
+/** Every configured page, visible or not - what the components switch on. */
 export type PageKey = {_ts_union(page_keys)};
 
 export type SectionKey = {_ts_union(section_keys)};
 
 /** Rail icons drawn by `Shell.tsx`. */
 export type IconName = {_ts_union(ICONS)};
+
+/** Which favorites bar a section or page carries - pinned authors, or posts. */
+export type FavoritesBar = {_ts_union(FAVORITES)};
 
 export type PageConfig = {{
   key: PageKey;
@@ -317,6 +419,12 @@ export type PageConfig = {{
   visible: boolean;
   /** Whether the Scenario / Query dropdowns show on this page. */
   filters: boolean;
+  /** Whether the page has a search box, whose needle lives in `?q=`. */
+  searchBox: boolean;
+  /** Overrides the section's favorites bar for this page. `null` inherits. */
+  favorites: FavoritesBar | null;
+  /** Tab to light up while this page is open. `null` means the page itself. */
+  tab: PageKey | null;
 }};
 
 export type SectionConfig = {{
@@ -328,7 +436,8 @@ export type SectionConfig = {{
   place: "main" | "bottom";
   /** False hides the "<app> - <section>" bar while in this section. */
   topNav: boolean;
-  favorites: boolean;
+  /** Which favorites bar this section carries. The two never mix. */
+  favorites: FavoritesBar;
   pages: PageConfig[];
 }};
 
@@ -346,10 +455,20 @@ export const FAVORITES_LIMITS = {{
   maxFolderName: {config.favorites.max_folder_name},
 }};
 
+/* `charts:` is deliberately absent: it shapes what the publisher writes, and
+ * the browser never needs it. */
+
+/** Results per page on the search pages - both page the same way. */
+export const RESULTS = {{
+  perPage: {config.results.per_page},
+}};
+
 /** The author feed on the Users page. */
 export const FEED = {{
   /** Posts the feed opens with, and each "show more" adds. */
   batch: {config.feed.batch},
+  /** The feed's tabs, in the order they are shown. */
+  tabs: {feed_tabs},
 }};
 
 export const SECTIONS: SectionConfig[] = {body};
@@ -389,7 +508,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.check:
         current = out.read_text(encoding="utf-8") if out.exists() else ""
         if current != emit_ts(config):
-            print(f"{out} is stale — run app_config --write", file=sys.stderr)
+            print(f"{out} is stale - run app_config --write", file=sys.stderr)
             return 1
         print(f"{out} is up to date")
         return 0
@@ -408,7 +527,7 @@ def main(argv: list[str] | None = None) -> int:
             flags += ", no top bar"
         if section.favorites:
             flags += ", favorites"
-        print(f"{section.key} ({flags}) — {config.title_for(section.key)}")
+        print(f"{section.key} ({flags}) - {config.title_for(section.key)}")
         for page in section.pages:
             mark = " " if page.visible else "×"
             print(f"  {mark} {page.key:<12} {page.path}")

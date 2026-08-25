@@ -1,7 +1,7 @@
 /**
  * The app's URLs.
  *
- * Every page is a real path — `/users/search`, `/posts/search-posts-recent` —
+ * Every page is a real path - `/users/search`, `/posts/search-posts-recent` -
  * exported as its own HTML file, so a link opens on that page without the
  * browser having to boot the app first and then move. Only the state that
  * cannot be a path stays in the query string: the selected author, the scenario
@@ -16,7 +16,7 @@ import type { PageKey } from "@/lib/types";
 /**
  * Paths and the landing page are configured, not written here.
  *
- * The Posts paths are named after the X endpoints they visualise —
+ * The Posts paths are named after the X endpoints they visualise -
  * `GET /2/tweets/search/recent` and `GET /2/tweets/counts/recent`. A trailing
  * slash matches `trailingSlash: true`, so a link never bounces through a
  * redirect; Users is the exception, its URL being ``/users/search?user=`` with
@@ -28,6 +28,10 @@ export { DEFAULT_PAGE, PAGE_PATHS } from "@/lib/appConfig";
 const USER_PARAM = "user";
 const NEEDLE_PARAM = "q";
 const POST_PARAM = "post";
+/** Where the reader came from, so a detail page's back link is exact. */
+const FROM_PARAM = "from";
+/** ``expand=1`` - the post alone, with none of the app's chrome around it. */
+const EXPAND_PARAM = "expand";
 const TOKEN_PARAM = "token";
 const SCENARIO_PARAM = "scenario";
 const QUERY_PARAM = "query";
@@ -36,16 +40,26 @@ const LEGACY_PAGE_PARAM = "page";
 
 /** The query-string state, as carried by a URL. */
 export type PageParams = {
-  /** Selected author; only meaningful on the Users page. */
+  /** Selected author: the Users page's subject, and the Post page's shortcut. */
   user: string | null;
   /** What the Users search box is looking for; kept so closing an author's
    * page returns to the results it was opened from. */
   q: string | null;
-  /** Tweet id of the post pinned to the top of an author's page. */
+  /** Tweet id of the post the Post page shows. Required there, ignored elsewhere. */
   post: string | null;
   /** Scenario id and query slug; only meaningful on Count / Search. */
   scenario: string | null;
   query: string | null;
+  /**
+   * Which page a detail page was opened from - `tweets` or `users`. Only the
+   * Post page reads it, to know whether back means the search or the author.
+   */
+  from: string | null;
+  /**
+   * ``expand=1``: render the detail full-view, without the rail, the tabs or
+   * the title bar - a post's page, or an author's.
+   */
+  expand: boolean;
 };
 
 export const NO_PARAMS: PageParams = {
@@ -54,6 +68,8 @@ export const NO_PARAMS: PageParams = {
   post: null,
   scenario: null,
   query: null,
+  from: null,
+  expand: false,
 };
 
 /** Strip the decoration a pasted handle may carry (`@grok`, trailing space). */
@@ -76,10 +92,15 @@ function parse(search: string): PageParams {
     post: clean(params.get(POST_PARAM)),
     scenario: clean(params.get(SCENARIO_PARAM)),
     query: clean(params.get(QUERY_PARAM)),
+    from: clean(params.get(FROM_PARAM)),
+    // Any truthy spelling reads as on; only "1" is ever written.
+    expand: ["1", "true", "yes"].includes(
+      (params.get(EXPAND_PARAM) || "").toLowerCase(),
+    ),
   };
 }
 
-/** ``?token=`` that authorises ``/app-html/`` — must ride on every in-app URL. */
+/** ``?token=`` that authorises ``/app-html/`` - must ride on every in-app URL. */
 export function readAccessToken(): string | null {
   if (typeof window === "undefined") return null;
   return clean(new URLSearchParams(window.location.search).get(TOKEN_PARAM));
@@ -105,24 +126,39 @@ export function readParams(): PageParams {
 
 /** Whether a URL carried any param at all, i.e. is a link into a view. */
 export function hasParams(params: PageParams): boolean {
-  return Object.values(params).some((value) => value !== null);
+  return Object.values(params).some((value) =>
+    typeof value === "boolean" ? value : value !== null,
+  );
 }
 
 /**
  * The query string a page publishes.
  *
- * Only the params that page honours are written — the Users page hides the
- * Scenario / Query filters, the other pages have no author — so a shared URL
+ * Only the params that page honours are written - the Users page hides the
+ * Scenario / Query filters, the other pages have no author - so a shared URL
  * never advertises state the page is not showing.
  */
 export function searchFor(page: PageKey, params: Partial<PageParams>): string {
   const search = new URLSearchParams();
+  const config = pageConfig(page);
+  // The needle comes first: what a page opened from a result was searching for
+  // is the context of everything else in the URL.
+  if (config.searchBox && params.q) search.set(NEEDLE_PARAM, params.q);
   if (page === "users") {
-    // The needle comes first: an author's page is a result opened from it.
-    if (params.q) search.set(NEEDLE_PARAM, params.q);
     if (params.user) search.set(USER_PARAM, params.user);
-    if (params.user && params.post) search.set(POST_PARAM, params.post);
-  } else if (pageConfig(page).filters) {
+    // An author's page can be read on its own too, without the app around it.
+    if (params.user && params.expand) search.set(EXPAND_PARAM, "1");
+  } else if (page === "post") {
+    // The post is the page. The author only says which shard to read, so a link
+    // may carry it or not; `from` (and the needle it was found with) say where
+    // back goes.
+    if (params.post) search.set(POST_PARAM, params.post);
+    if (params.user) search.set(USER_PARAM, params.user);
+    if (params.from) search.set(FROM_PARAM, params.from);
+    if (params.from === "tweets" && params.q) search.set(NEEDLE_PARAM, params.q);
+    if (params.expand) search.set(EXPAND_PARAM, "1");
+  }
+  if (config.filters) {
     // Only a page showing the Scenario / Query dropdowns advertises them.
     if (params.scenario) search.set(SCENARIO_PARAM, params.scenario);
     if (params.query) search.set(QUERY_PARAM, params.query);
@@ -140,7 +176,7 @@ export function hrefFor(page: PageKey, params: Partial<PageParams>): string {
 /**
  * Rewrite the query string of the page already on screen.
  *
- * The path is left exactly as it is, so this never crosses a route — Next stays
+ * The path is left exactly as it is, so this never crosses a route - Next stays
  * on the component it rendered, and only the params change. The existing
  * `history.state` is carried over: it holds the router's own tree, and dropping
  * it would make the next Back a full page load.

@@ -23,7 +23,12 @@ MINIMAL = {
     "app": {"name": "X Proxy", "title": "{app} - {section}"},
     "default_page": "count",
     "favorites": {"max_users": 60, "max_folders": 12, "max_folder_name": 32},
-    "feed": {"batch": 10},
+    "results": {"per_page": 100},
+    "charts": {"top_authors_bars": 20, "top_locations_bars": 10},
+    "feed": {
+        "batch": 10,
+        "tabs": {"all": "All", "matched": "Matched Query", "referenced": "Referenced"},
+    },
     "sections": [
         {
             "key": "posts",
@@ -68,6 +73,14 @@ def test_shipped_paths_are_real_exported_routes():
         assert (route / "page.tsx").is_file(), f"{page.key}: no route at {page.path}"
 
 
+def test_landing_page_is_the_first_visible_tab_of_the_first_section():
+    # `/` should open where the app's own navigation would take you.
+    config = load_config()
+    first = next(s for s in config.sections if s.visible)
+    assert config.default_page == next(p.key for p in first.pages if p.visible)
+    assert config.default_page == "tweets"
+
+
 def test_shipped_config_titles_read_as_app_dash_section():
     config = load_config()
     assert config.title_for("users") == "X Proxy - Users"
@@ -97,8 +110,9 @@ def test_flags_default_to_a_visible_section_with_a_top_bar():
     section = parse_config(MINIMAL).sections[0]
     assert (section.visible, section.top_nav, section.place) == (True, True, "main")
     # Favorites and filters are opt-in: most pages want neither.
-    assert section.favorites is False
+    assert section.favorites == "none"
     assert section.pages[0].filters is False
+    assert section.pages[0].search_box is False
     assert section.pages[0].visible is True
 
 
@@ -165,17 +179,77 @@ def test_rejects_a_non_boolean_flag():
 # --------------------------------------------------------------------------
 
 
-def test_feed_batch_reaches_the_module():
-    assert "batch: 10," in emit_ts(load_config())
-    raw = _with(feed={"batch": 0})
+def test_feed_batch_and_tabs_reach_the_module():
+    ts = emit_ts(load_config())
+    assert "batch: 10," in ts
+    # The keys are the data's split; only the words are configurable.
+    assert '{"key": "matched", "label": "Matched Query"}' in ts
+    raw = _with()
+    raw["feed"]["tabs"].pop("referenced")
+    with pytest.raises(ConfigError, match="feed.tabs"):
+        parse_config(raw)
+    raw = _with()
+    raw["feed"]["batch"] = 0
     with pytest.raises(ConfigError, match="positive integer"):
         parse_config(raw)
 
 
-def test_posts_tabs_lead_with_search():
+def test_the_two_favorites_bars_never_mix():
+    config = load_config()
+    # Posts carries no bar at section level, but Search Tweets and the post
+    # page carry the posts bar - and the authors bar belongs to Users alone.
+    assert config.section_of("post").favorites == "none"
+    assert config.favorites_on("post") == "posts"
+    assert config.favorites_on("tweets") == "posts"
+    assert config.favorites_on("search") == "none"
+    assert config.favorites_on("users") == "users"
+    # Users inherits: the value is the section's.
+    assert config.page("users").favorites is None
+
+
+def test_a_hidden_page_can_light_another_tab():
+    config = load_config()
+    # The post page is not a tab; it keeps Search Tweets lit, the way an
+    # author's page keeps Search Users lit.
+    assert config.tab_for("post") == "tweets"
+    assert config.tab_for("users") == "users"
+    raw = _with()
+    raw["sections"][0]["pages"][0]["tab"] = "ghost"
+    with pytest.raises(ConfigError, match="unknown page"):
+        parse_config(raw)
+
+
+def test_charts_are_publish_side_only():
+    # The bar counts shape what the publisher writes; the browser never reads
+    # them, so they must not reach the generated module.
+    config = load_config()
+    assert config.charts.top_authors_bars == 20
+    assert "top_authors_bars" not in emit_ts(config)
+    assert "topAuthorsBars" not in emit_ts(config)
+
+
+def test_posts_tabs_lead_with_search_tweets():
     # The tab strip follows config order, so this is the config's assertion.
     pages = [page.key for page in load_config().section_of("search").pages]
-    assert pages == ["search", "count"]
+    assert pages == ["tweets", "search", "post", "count"]
+    # `post` is a destination, not a tab: it keeps its route and leaves the strip.
+    assert [
+        page.key for page in load_config().section_of("search").pages if page.visible
+    ] == [
+        "tweets",
+        "search",
+        "count",
+    ]
+
+
+def test_only_the_search_pages_carry_a_search_box():
+    config = load_config()
+    boxed = {page.key for page in config.pages if page.search_box}
+    assert boxed == {"users", "tweets"}
+    # Neither search page is scoped by the Scenario / Query filters: both list a
+    # whole published dataset, and page it the same way.
+    assert {page.key for page in config.pages if page.filters} == {"search", "count"}
+    assert "perPage: 100," in emit_ts(config)
 
 
 def test_emitted_module_carries_the_union_types_and_the_data():

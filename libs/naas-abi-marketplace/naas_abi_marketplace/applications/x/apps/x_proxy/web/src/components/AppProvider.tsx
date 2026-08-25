@@ -12,7 +12,7 @@ import { loadSnapshots } from "@/lib/loadSnapshots";
 import {
   addFolder,
   folders,
-  listUsers,
+  listIds,
   makeFolder,
   moveNode,
   readFavorites,
@@ -22,9 +22,20 @@ import {
   writeFavorites,
   MAX_FOLDERS,
 } from "@/lib/pins";
-import type { DropTarget, FavoriteNode } from "@/lib/pins";
+import type {
+  DropTarget,
+  FavoriteLink,
+  FavoriteNode,
+  FavoritesScope,
+} from "@/lib/pins";
+
+const SCOPES: FavoritesScope[] = ["users", "posts"];
+
+type ScopedFavorites = Record<FavoritesScope, FavoriteNode[]>;
+
+const EMPTY_FAVORITES: ScopedFavorites = { users: [], posts: [] };
 import { readSessionTimezone, writeSessionTimezone } from "@/lib/session";
-import { landingPages, sectionOf } from "@/lib/appConfig";
+import { landingPages, sectionLandingPage, sectionOf } from "@/lib/appConfig";
 import type { SectionKey } from "@/lib/appConfig";
 import type { PageKey, Snapshots } from "@/lib/types";
 
@@ -33,7 +44,7 @@ import type { PageKey, Snapshots } from "@/lib/types";
  *
  * Each page of the app is its own route, so its component tree is thrown away
  * and rebuilt on every click. This provider is mounted by the root layout,
- * which Next keeps across client-side navigation — so the snapshots are fetched
+ * which Next keeps across client-side navigation - so the snapshots are fetched
  * once per session rather than once per page, and the filters, timezone and
  * sidebar survive moving between pages.
  */
@@ -46,25 +57,38 @@ type AppState = {
   setQuerySlug: (slug: string) => void;
   timezone: string;
   setTimezone: (id: string) => void;
-  /** Last page visited in each section — where its rail link points back to.
+  /** Last page visited in each section - where its rail link points back to.
    * Seeded from `config.yaml` with each section's first visible page. */
   sectionPages: Record<SectionKey, PageKey>;
   setSectionPage: (page: PageKey) => void;
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
-  /** The favorites bar: pinned authors and the folders filing them. */
-  favorites: FavoriteNode[];
-  /** Every pinned author, flat — what the pin buttons check themselves against. */
-  pinnedUsers: string[];
-  togglePinnedUser: (username: string) => void;
-  /** Adds an empty folder at the end of the bar and returns its id, so the
+  /**
+   * The favorites bars - one of pinned authors, one of pinned posts, each with
+   * its own folders. They never mix; `favorites:` in `config.yaml` says which
+   * bar a page shows.
+   */
+  favorites: ScopedFavorites;
+  /** Ids pinned in each bar - what the pin buttons check themselves against. */
+  pinnedIds: Record<FavoritesScope, string[]>;
+  /** Pins or unpins one link in its bar. */
+  togglePinned: (scope: FavoritesScope, link: FavoriteLink) => void;
+  /** Adds an empty folder at the end of a bar and returns its id, so the
    * caller can open it for naming right away. `null` when the cap is reached. */
-  createFolder: () => string | null;
-  renameFavoriteFolder: (id: string, name: string) => void;
-  /** Drops a favorite or a whole folder from the bar. */
-  removeFavorite: (id: string) => void;
-  /** Reorders the bar, files an author into a folder, or takes one back out. */
-  moveFavorite: (id: string, target: DropTarget) => void;
+  createFolder: (scope: FavoritesScope) => string | null;
+  renameFavoriteFolder: (
+    scope: FavoritesScope,
+    id: string,
+    name: string,
+  ) => void;
+  /** Drops a favorite or a whole folder from a bar. */
+  removeFavorite: (scope: FavoritesScope, id: string) => void;
+  /** Reorders a bar, files a favorite into a folder, or takes one back out. */
+  moveFavorite: (
+    scope: FavoritesScope,
+    id: string,
+    target: DropTarget,
+  ) => void;
 };
 
 const AppStateContext = createContext<AppState | null>(null);
@@ -78,12 +102,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [sectionPages, setSectionPages] =
     useState<Record<SectionKey, PageKey>>(landingPages);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [favorites, setFavorites] = useState<FavoriteNode[]>([]);
+  const [favorites, setFavorites] = useState<ScopedFavorites>(EMPTY_FAVORITES);
 
   // Read after mount, never during render: the prerendered HTML knows nothing
   // about this browser's storage.
   useEffect(() => {
-    setFavorites(readFavorites());
+    setFavorites({ users: readFavorites("users"), posts: readFavorites("posts") });
   }, []);
 
   useEffect(() => {
@@ -119,11 +143,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Remembers the page inside its own section, so each rail link comes back to
-  // where it was left.
+  // where it was left. Detail pages that are not tabs (a post, an author) map
+  // to the tab they belong under, so Posts never reopens a post when a tab was
+  // meant.
   const setSectionPage = useCallback((page: PageKey) => {
     const section = sectionOf(page).key;
+    const landing = sectionLandingPage(page);
     setSectionPages((current) =>
-      current[section] === page ? current : { ...current, [section]: page },
+      current[section] === landing ? current : { ...current, [section]: landing },
     );
   }, []);
 
@@ -131,58 +158,70 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSidebarCollapsed((value) => !value);
   }, []);
 
-  // Every favorites edit is the same move: rewrite the bar with a pure
-  // function from `lib/pins`, then persist exactly what is now on screen.
+  // Every favorites edit is the same move: rewrite one bar with a pure function
+  // from `lib/pins`, then persist exactly what is now on screen.
   const editFavorites = useCallback(
-    (edit: (current: FavoriteNode[]) => FavoriteNode[]) => {
+    (
+      scope: FavoritesScope,
+      edit: (current: FavoriteNode[]) => FavoriteNode[],
+    ) => {
       setFavorites((current) => {
-        const next = edit(current);
-        if (next === current) return current;
-        writeFavorites(next);
-        return next;
+        const next = edit(current[scope]);
+        if (next === current[scope]) return current;
+        writeFavorites(scope, next);
+        return { ...current, [scope]: next };
       });
     },
     [],
   );
 
-  const togglePinnedUser = useCallback(
-    (username: string) => {
-      editFavorites((current) => togglePinned(current, username));
+  const togglePinnedLink = useCallback(
+    (scope: FavoritesScope, link: FavoriteLink) => {
+      editFavorites(scope, (current) => togglePinned(current, link));
     },
     [editFavorites],
   );
 
   // The id is handed back so the bar can open the new folder for naming, which
   // is why this reads the cap here instead of leaving it to `addFolder` alone.
-  const createFolder = useCallback(() => {
-    if (folders(favorites).length >= MAX_FOLDERS) return null;
-    const folder = makeFolder();
-    editFavorites((current) => addFolder(current, folder));
-    return folder.id;
-  }, [favorites, editFavorites]);
+  const createFolder = useCallback(
+    (scope: FavoritesScope) => {
+      if (folders(favorites[scope]).length >= MAX_FOLDERS) return null;
+      const folder = makeFolder();
+      editFavorites(scope, (current) => addFolder(current, folder));
+      return folder.id;
+    },
+    [favorites, editFavorites],
+  );
 
   const renameFavoriteFolder = useCallback(
-    (id: string, name: string) => {
-      editFavorites((current) => renameFolder(current, id, name));
+    (scope: FavoritesScope, id: string, name: string) => {
+      editFavorites(scope, (current) => renameFolder(current, id, name));
     },
     [editFavorites],
   );
 
   const removeFavorite = useCallback(
-    (id: string) => {
-      editFavorites((current) => removeNode(current, id));
+    (scope: FavoritesScope, id: string) => {
+      editFavorites(scope, (current) => removeNode(current, id));
     },
     [editFavorites],
   );
 
   const moveFavorite = useCallback(
-    (id: string, target: DropTarget) => {
-      editFavorites((current) => moveNode(current, id, target));
+    (scope: FavoritesScope, id: string, target: DropTarget) => {
+      editFavorites(scope, (current) => moveNode(current, id, target));
     },
     [editFavorites],
   );
 
-  const pinnedUsers = useMemo(() => listUsers(favorites), [favorites]);
+  const pinnedIds = useMemo(
+    () =>
+      Object.fromEntries(
+        SCOPES.map((scope) => [scope, listIds(favorites[scope])]),
+      ) as Record<FavoritesScope, string[]>,
+    [favorites],
+  );
 
   const value = useMemo<AppState>(
     () => ({
@@ -199,8 +238,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       sidebarCollapsed,
       toggleSidebar,
       favorites,
-      pinnedUsers,
-      togglePinnedUser,
+      pinnedIds,
+      togglePinned: togglePinnedLink,
       createFolder,
       renameFavoriteFolder,
       removeFavorite,
@@ -218,8 +257,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       sidebarCollapsed,
       toggleSidebar,
       favorites,
-      pinnedUsers,
-      togglePinnedUser,
+      pinnedIds,
+      togglePinnedLink,
       createFolder,
       renameFavoriteFolder,
       removeFavorite,

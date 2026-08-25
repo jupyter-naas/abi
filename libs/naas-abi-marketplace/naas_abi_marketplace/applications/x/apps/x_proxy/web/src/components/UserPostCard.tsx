@@ -1,7 +1,10 @@
 "use client";
 
+import Link from "next/link";
+import { useAppState } from "@/components/AppProvider";
 import { MediaCarousel } from "@/components/MediaCarousel";
-import { searchFor } from "@/lib/routes";
+import { FEED } from "@/lib/appConfig";
+import { hrefFor } from "@/lib/routes";
 import { postAnchorId, tweetIdOf } from "@/lib/userSearch";
 import type { TweetRow } from "@/lib/types";
 
@@ -12,8 +15,6 @@ type Props = {
   timezone: string;
   /** True while this post is the one open on its own page. */
   selected: boolean;
-  /** Opens the post on its own page. */
-  onSelect: (tweetId: string) => void;
   /**
    * Rendered expanded: the post alone on the page, so nothing is clipped and
    * nothing is a link to itself.
@@ -22,7 +23,7 @@ type Props = {
 };
 
 function formatInstant(iso: string, timezone: string): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     return new Date(iso).toLocaleString(undefined, {
       timeZone: timezone,
@@ -43,36 +44,28 @@ export function UserPostCard({
   needle,
   timezone,
   selected,
-  onSelect,
   expanded = false,
 }: Props) {
+  const { data } = useAppState();
   const tweetId = tweetIdOf(post);
-  const kind = post.referenced ? "Context" : "Matched";
-  const href = tweetId
-    ? searchFor("users", { q: needle, user: username, post: tweetId })
-    : post.url;
+  // The post's own page: the tweet id is the address, the author a shortcut.
+  const postHref = tweetId
+    ? hrefFor("post", {
+        post: tweetId,
+        user: post.username || username,
+        from: "users",
+      })
+    : null;
+  // The card wears the same word as the tab that holds it (`feed.tabs`).
+  const label = (key: string) =>
+    FEED.tabs.find((tab) => tab.key === key)?.label || key;
+  const kind = post.referenced ? label("referenced") : label("matched");
+  // Which followed queries pulled this post in, named as the filters name them.
+  const queries = (post.queries || []).map((slug) => {
+    const entry = (data?.queries || []).find((q) => q.slug === slug);
+    return entry?.label || entry?.query || slug;
+  });
   const media = (post.media_url || "").trim();
-
-  /**
-   * True for the plain left-click that means "bring this post to the top".
-   *
-   * Modified clicks are the browser's — they open the deep link in a tab of
-   * its own, which is what the `href` is there for.
-   */
-  const isPlainClick = (e: React.MouseEvent) =>
-    Boolean(tweetId) &&
-    !e.defaultPrevented &&
-    e.button === 0 &&
-    !e.metaKey &&
-    !e.ctrlKey &&
-    !e.shiftKey &&
-    !e.altKey;
-
-  const select = (e: React.MouseEvent) => {
-    if (expanded || !isPlainClick(e) || !tweetId) return;
-    e.preventDefault();
-    onSelect(tweetId);
-  };
 
   return (
     <article
@@ -91,41 +84,54 @@ export function UserPostCard({
         <span className={post.referenced ? "kind-context" : "kind-matched"}>
           {kind}
         </span>
-        {expanded ? null : (
-          <button
-            type="button"
+        {queries.length ? (
+          <>
+            <span className="user-post-sep">·</span>
+            <span className="user-post-queries">{queries.join(", ")}</span>
+          </>
+        ) : null}
+        {/* A real link to a real page: ⌘-click opens the post in its own tab,
+            and the address is shareable as it stands. */}
+        {expanded || !postHref ? null : (
+          <Link
             className="user-post-expand"
-            onClick={(e) => select(e)}
-            disabled={!tweetId}
+            href={postHref}
             title="Open this post on its own page"
+            aria-label="Open this post on its own page"
           >
-            ⤢ Expand
-          </button>
+            ⤢
+          </Link>
         )}
       </p>
       {post.url ? (
-        // Expanded, the URL is the way out to x.com; in the feed a plain click
-        // opens the post here instead, and a modified one follows the deep link.
-        <a
-          className="user-post-url"
-          href={expanded ? post.url : href}
-          target={expanded ? "_blank" : undefined}
-          rel={expanded ? "noreferrer" : undefined}
-          onClick={select}
-        >
-          {post.url}
-        </a>
+        // Expanded, the URL is the way out to x.com; in the feed it opens the
+        // post's own page, like everything else on the card.
+        expanded || !postHref ? (
+          <a
+            className="user-post-url"
+            href={post.url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {post.url}
+          </a>
+        ) : (
+          <Link className="user-post-url" href={postHref}>
+            {post.url}
+          </Link>
+        )
       ) : (
         <span className="user-post-url muted">no url</span>
       )}
-      {/* In the feed the body is a second click target for the same thing:
-          readers reach for the post, not for its URL. */}
-      <p
-        className={`user-post-text${tweetId && !expanded ? " clickable" : ""}`}
-        onClick={select}
-      >
-        {post.text || "—"}
-      </p>
+      {/* In the feed the body is a second way in: readers reach for the post,
+          not for its URL. */}
+      {expanded || !postHref ? (
+        <p className="user-post-text">{post.text || "-"}</p>
+      ) : (
+        <Link className="user-post-text clickable" href={postHref}>
+          {post.text || "-"}
+        </Link>
+      )}
       {media ? <MediaCarousel value={media} /> : null}
     </article>
   );

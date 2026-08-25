@@ -1,4 +1,4 @@
-"""Publish ``search_recents_tweets/facets.json`` — column filter value lists.
+"""Publish ``search_recents_tweets/facets.json`` - column filter value lists.
 
 The tweet table publishes the newest :data:`DEFAULT_TWEET_LIMIT` rows per query
 and scenario, but the column-filter checkboxes should offer the values that
@@ -11,7 +11,7 @@ One entry per ``query_slug`` × ``scenario_id`` × faceted column, capped at
 
 The value lists come from :meth:`SnapshotContext.facet_values_for_window`, which
 aggregates each column once across the scenario bands and sums the per-scenario
-totals in Python — one scan per column rather than one per column per scenario.
+totals in Python - one scan per column rather than one per column per scenario.
 """
 
 from __future__ import annotations

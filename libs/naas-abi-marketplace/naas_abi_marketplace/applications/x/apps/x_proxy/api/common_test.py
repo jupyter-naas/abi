@@ -60,7 +60,7 @@ def test_current_windows_stay_aligned_without_the_previous_period_edges():
 
 
 def test_an_unaligned_window_is_rejected_rather_than_mis_summed():
-    """The caller falls back to a direct query — better than a silent undercount."""
+    """The caller falls back to a direct query - better than a silent undercount."""
     bands = scenario_bands(SCENARIOS)
     assert bands_for_window(bands, _at(30), END) is None
     assert bands_for_window(bands, _at(24), _at(3)) is None
@@ -114,7 +114,7 @@ def test_banded_counts_match_a_direct_count_for_every_window():
                 == expected
             )
 
-    # 8 windows, one scan — and it is memoized, so a second pass adds nothing.
+    # 8 windows, one scan - and it is memoized, so a second pass adds nothing.
     assert ctx.queries_run == 1
 
 
@@ -168,7 +168,7 @@ def test_facet_values_differing_only_in_whitespace_are_merged():
     """`user_location` really does hold both "USA" and "USA " in the graph.
 
     They render as two identical checkboxes splitting one place's count, so the
-    rollup folds them together — and the cap is applied after the merge, not
+    rollup folds them together - and the cap is applied after the merge, not
     before, so a variant ranked below it is still counted.
     """
 
@@ -292,7 +292,7 @@ def test_one_scan_serves_every_current_window_when_the_page_stays_recent():
 
 
 def test_a_page_that_reaches_its_own_edge_does_not_serve_wider_windows():
-    """Fewer posts than `cap` in 24 h — the wider windows hold strictly more."""
+    """Fewer posts than `cap` in 24 h - the wider windows hold strictly more."""
     created = [_at(2), _at(5), _at(30), _at(100), _at(500)]
     ctx = _PagingContext(created, tweet_limit=50)
 
@@ -315,7 +315,7 @@ def test_a_full_page_ending_at_the_window_edge_is_not_reused():
     """Guard the boundary: `cap` posts whose oldest sits exactly on the start.
 
     Widening could legitimately pull in older posts, so reusing the page here
-    would be a guess — the wider window must be queried.
+    would be a guess - the wider window must be queried.
     """
     start_24h = SCENARIOS[0]["start_time"]
     created = [start_24h, _at(2), _at(1), _at(100)]
@@ -381,7 +381,7 @@ def test_filtered_reads_are_never_served_from_an_unfiltered_page():
 #
 # Same shape as above: the projection is the cheap path and the graph is the
 # expensive one, so each test asserts both what came back and that the graph was
-# left alone — or, for the fallback cases, that it was not.
+# left alone - or, for the fallback cases, that it was not.
 
 
 QUERY = "(drone OR drones) lang:en"
