@@ -120,6 +120,11 @@ Query behavior
 - Results are mapped to RDFLib-compatible structures:
   - JSON SPARQL results -> iterable of ``ResultRow`` (or ``ASK`` result)
   - RDF payloads (N-Triples/Turtle) -> ``rdflib.Graph``
+- ``list_graphs()`` lists IRI named graphs from the catalog
+  (``GRAPH ?g { } FILTER(isIRI(?g))``) so a dangling null graph node in TDB2
+  cannot NPE Jena mid-response.
+- Truncated SPARQL JSON (HTTP 200 + Java exception appended) is recovered
+  when complete bindings were already streamed.
 """
 
 import hashlib
@@ -147,6 +152,84 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
 from rdflib import BNode, Graph, URIRef
 
 logger = logging.getLogger(__name__)
+
+
+def _recover_truncated_sparql_results_json(text: str) -> dict[str, Any] | None:
+    """Best-effort parse of SPARQL JSON that Jena truncated mid-stream.
+
+    Fuseki can return HTTP 200 and start streaming ``application/sparql-results+json``,
+    then abort with a Java exception (for example ``Node.hashCode()`` on a null
+    graph node) appended to the body. ``json.loads`` fails; complete bindings
+    already written are still usable.
+    """
+    decoder = json.JSONDecoder()
+    stripped = text.lstrip()
+    if stripped.startswith("{"):
+        try:
+            obj, _end = decoder.raw_decode(stripped)
+            if isinstance(obj, dict) and ("boolean" in obj or "results" in obj):
+                return obj
+        except json.JSONDecodeError:
+            pass
+
+    vars_: list[str] = []
+    vars_match = re.search(r'"vars"\s*:\s*(\[[^\]]*\])', text)
+    if vars_match:
+        try:
+            parsed_vars = json.loads(vars_match.group(1))
+        except json.JSONDecodeError:
+            parsed_vars = None
+        if isinstance(parsed_vars, list):
+            vars_ = [v for v in parsed_vars if isinstance(v, str)]
+
+    boolean_match = re.search(r'"boolean"\s*:\s*(true|false)', text)
+    if boolean_match:
+        return {"head": {"vars": vars_}, "boolean": boolean_match.group(1) == "true"}
+
+    bindings_idx = text.find('"bindings"')
+    if bindings_idx == -1:
+        return None
+    bracket = text.find("[", bindings_idx)
+    if bracket == -1:
+        return None
+
+    bindings: list[dict[str, Any]] = []
+    pos = bracket + 1
+    while pos < len(text):
+        while pos < len(text) and text[pos] in " \t\r\n,":
+            pos += 1
+        if pos >= len(text) or text[pos] == "]":
+            break
+        try:
+            obj, end = decoder.raw_decode(text, pos)
+        except json.JSONDecodeError:
+            break
+        if isinstance(obj, dict):
+            bindings.append(obj)
+        pos = end
+
+    if not bindings:
+        return None
+    return {"head": {"vars": vars_}, "results": {"bindings": bindings}}
+
+
+def _parse_sparql_results_json(text: str) -> dict[str, Any]:
+    """Parse SPARQL JSON, recovering complete bindings from a truncated body."""
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        recovered = _recover_truncated_sparql_results_json(text)
+        if recovered is not None:
+            n_bindings = len(recovered.get("results", {}).get("bindings", []))
+            logger.warning(
+                "Recovered %d SPARQL JSON binding(s) from truncated Fuseki response",
+                n_bindings,
+            )
+            return recovered
+        raise
+    if not isinstance(parsed, dict):
+        raise json.JSONDecodeError("SPARQL JSON root must be an object", text, 0)
+    return parsed
 
 
 class ApacheJenaTDB2(ITripleStorePort):
@@ -543,7 +626,7 @@ class ApacheJenaTDB2(ITripleStorePort):
 
             if "sparql-results" in content_type:
                 try:
-                    result_data = json.loads(response.text)
+                    result_data = _parse_sparql_results_json(response.text)
                     break
                 except json.JSONDecodeError as exc:
                     if attempt >= self.max_retries:
@@ -662,7 +745,14 @@ class ApacheJenaTDB2(ITripleStorePort):
         self.query(f"DROP GRAPH <{graph_name!s}>")
 
     def list_graphs(self) -> list[URIRef]:
-        result = self.query("SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } }")
+        # GRAPH ?g { } reads the named-graph catalog (cheap) rather than scanning
+        # every triple. FILTER(isIRI(?g)) skips blank/null graph names: Jena TDB2
+        # can keep a dangling null graph node after compact or a crashed write,
+        # and DISTINCT then NPEs in Node.hashCode() while streaming SPARQL JSON
+        # (HTTP 200 + truncated body), which used to crash ABI on boot.
+        result = self.query(
+            "SELECT DISTINCT ?g WHERE { GRAPH ?g { } FILTER(isIRI(?g)) }"
+        )
         graphs: list[URIRef] = []
         for row in result:
             graph = getattr(row, "g", None)
