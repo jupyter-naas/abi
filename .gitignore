@@ -114,6 +114,9 @@ storage/vectorstore/*
 
 # `abi dev` runtime artefacts (per-worktree instance/pid/log files)
 .abi/
+# Same artefacts when this repo is the consumer's `.abi` checkout.
+# `{consumer}/.abi/dev` is `{this-repo}/dev`.
+/dev/
 # Dagster local home dir created by `abi dev up`
 .dagster/
 # Local Docker stack snapshots (abi stack snapshot create)

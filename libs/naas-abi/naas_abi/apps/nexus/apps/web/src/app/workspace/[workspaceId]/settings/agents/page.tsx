@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Bot, User, Cpu, Plus, Pencil, Trash2, Brain, Sparkles, Zap, Target, Search, X, CheckCircle, XCircle, Server, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getApiUrl } from '@/lib/config';
+import { getLogoUrl } from '@/lib/logo-url';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore, RESERVED_AGENT_TYPES, type Agent } from '@/stores/agents';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
@@ -256,14 +256,6 @@ function AgentTypeSelect({
     </div>
   );
 }
-
-const getApiBase = () => getApiUrl();
-
-const getLogoUrl = (url: string | null): string | undefined => {
-  if (!url) return undefined;
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  return `${getApiBase()}${url}`;
-};
 
 const iconMap = {
   bot: Bot,
