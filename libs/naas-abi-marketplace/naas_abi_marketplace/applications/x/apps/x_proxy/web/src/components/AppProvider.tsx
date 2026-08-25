@@ -24,6 +24,8 @@ import {
 } from "@/lib/pins";
 import type { DropTarget, FavoriteNode } from "@/lib/pins";
 import { readSessionTimezone, writeSessionTimezone } from "@/lib/session";
+import { landingPages, sectionOf } from "@/lib/appConfig";
+import type { SectionKey } from "@/lib/appConfig";
 import type { PageKey, Snapshots } from "@/lib/types";
 
 /**
@@ -44,9 +46,10 @@ type AppState = {
   setQuerySlug: (slug: string) => void;
   timezone: string;
   setTimezone: (id: string) => void;
-  /** Last Posts subpage visited — where the Posts section link points back to. */
-  postsPage: PageKey;
-  setPostsPage: (page: PageKey) => void;
+  /** Last page visited in each section — where its rail link points back to.
+   * Seeded from `config.yaml` with each section's first visible page. */
+  sectionPages: Record<SectionKey, PageKey>;
+  setSectionPage: (page: PageKey) => void;
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
   /** The favorites bar: pinned authors and the folders filing them. */
@@ -72,7 +75,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [scenarioId, setScenarioId] = useState("");
   const [querySlug, setQuerySlug] = useState("");
   const [timezone, setTimezoneState] = useState("UTC");
-  const [postsPage, setPostsPage] = useState<PageKey>("count");
+  const [sectionPages, setSectionPages] =
+    useState<Record<SectionKey, PageKey>>(landingPages);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [favorites, setFavorites] = useState<FavoriteNode[]>([]);
 
@@ -112,6 +116,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const setTimezone = useCallback((id: string) => {
     setTimezoneState(id);
     writeSessionTimezone(id);
+  }, []);
+
+  // Remembers the page inside its own section, so each rail link comes back to
+  // where it was left.
+  const setSectionPage = useCallback((page: PageKey) => {
+    const section = sectionOf(page).key;
+    setSectionPages((current) =>
+      current[section] === page ? current : { ...current, [section]: page },
+    );
   }, []);
 
   const toggleSidebar = useCallback(() => {
@@ -181,8 +194,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setQuerySlug,
       timezone,
       setTimezone,
-      postsPage,
-      setPostsPage,
+      sectionPages,
+      setSectionPage,
       sidebarCollapsed,
       toggleSidebar,
       favorites,
@@ -200,7 +213,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       querySlug,
       timezone,
       setTimezone,
-      postsPage,
+      sectionPages,
+      setSectionPage,
       sidebarCollapsed,
       toggleSidebar,
       favorites,

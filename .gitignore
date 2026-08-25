@@ -17,6 +17,9 @@ config.*.yaml
 !config.local.yaml
 !config.dev.yaml
 !config.remote.yaml
+# App-level configs are source, not environment: the rules above exist for the
+# engine's own config at the repo root, and would otherwise swallow these.
+!libs/naas-abi-marketplace/naas_abi_marketplace/applications/x/apps/*/config.yaml
 
 # Python
 __pycache__/

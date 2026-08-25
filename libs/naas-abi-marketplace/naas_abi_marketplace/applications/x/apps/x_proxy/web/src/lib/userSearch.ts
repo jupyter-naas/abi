@@ -12,13 +12,20 @@
  * Index and shards are fetched once and memoised: both are immutable between
  * publishes, and the index is a few MB.
  */
+import { FEED } from "@/lib/appConfig";
 import type { TweetRow, UserBundle, UserProfile, UserRow } from "@/lib/types";
 import { withAccessToken } from "@/lib/routes";
 
 const BASE = "/app-html/x/apps/x_proxy";
 
-/** Posts per page in the table. Pagination is client-side over the shard. */
-export const USER_POSTS_PAGE_SIZE = 100;
+/**
+ * Posts the author feed shows per batch — `feed.batch` in `config.yaml`.
+ *
+ * The whole shard is already in memory, so a batch is a slice, not a fetch: the
+ * feed opens with one and grows by one whenever the end comes into view or the
+ * button is pressed.
+ */
+export const USER_FEED_BATCH = FEED.batch;
 
 /** Search results per page. Empty query lists the busiest 100 first. */
 export const USER_RESULTS_PAGE_SIZE = 100;
@@ -57,11 +64,18 @@ export type UserIndex = {
   shardOf: Map<string, string>;
 };
 
-export type UserPostsPage = {
+/** Which posts of an author the feed is showing. */
+export type FeedTab = "all" | "matched" | "context";
+
+export type UserFeed = {
+  /** The batch on screen. */
   rows: TweetRow[];
+  /** Posts in the selected tab, however many are shown. */
   total: number;
-  offset: number;
+  /** Still to come in this tab. */
+  remaining: number;
   profile: UserProfile | null;
+  counts: Record<FeedTab, number>;
 };
 
 let indexPromise: Promise<UserIndex> | null = null;
@@ -189,34 +203,51 @@ export function postAnchorId(tweetId: string): string {
 }
 
 /**
- * Offset of the page holding *tweetId*, or ``null`` when the bundle has no
- * such post.
+ * Posts of one tab.
  *
- * A `?post=` deep link names a post anywhere in the author's history, which is
- * rarely the page the feed opens on; this is what tells the feed which page to
- * show so the post is there to scroll to.
+ * ``matched`` are the posts that answered the search query; ``context`` are the
+ * reply parents, quoted tweets and retweeted originals ingested only to explain
+ * them — the same split the "Posts retrieved" KPI shows.
  */
-export function pageOffsetOfPost(
-  bundle: UserBundle | null,
-  tweetId: string,
-): number | null {
-  const posts = bundle?.posts || [];
-  const index = posts.findIndex((post) => tweetIdOf(post) === tweetId);
-  if (index < 0) return null;
-  return Math.floor(index / USER_POSTS_PAGE_SIZE) * USER_POSTS_PAGE_SIZE;
+export function postsInTab(posts: TweetRow[], tab: FeedTab): TweetRow[] {
+  if (tab === "matched") return posts.filter((post) => !post.referenced);
+  if (tab === "context") return posts.filter((post) => Boolean(post.referenced));
+  return posts;
 }
 
-/** One page of an author's posts, sliced from an already-loaded bundle. */
-export function pageOf(
+/** The post *tweetId* names, from anywhere in the author's history. */
+export function findPost(
   bundle: UserBundle | null,
-  offset: number,
-): UserPostsPage {
+  tweetId: string | null,
+): TweetRow | null {
+  if (!tweetId) return null;
+  return (bundle?.posts || []).find((post) => tweetIdOf(post) === tweetId) || null;
+}
+
+/**
+ * What the feed renders: the first ``shown`` posts of ``tab``, plus the counts
+ * the tabs label themselves with.
+ *
+ * Everything is a slice of the bundle already in memory, so growing the feed
+ * costs nothing but a render.
+ */
+export function feedOf(
+  bundle: UserBundle | null,
+  tab: FeedTab,
+  shown: number,
+): UserFeed {
   const posts = bundle?.posts || [];
-  const start = Math.max(0, Math.min(offset, posts.length));
+  const inTab = postsInTab(posts, tab);
+  const matched = posts.filter((post) => !post.referenced).length;
   return {
-    rows: posts.slice(start, start + USER_POSTS_PAGE_SIZE),
-    total: posts.length,
-    offset: start,
+    rows: inTab.slice(0, Math.max(0, shown)),
+    total: inTab.length,
+    remaining: Math.max(0, inTab.length - Math.max(0, shown)),
     profile: bundle?.profile || null,
+    counts: {
+      all: posts.length,
+      matched,
+      context: posts.length - matched,
+    },
   };
 }

@@ -11,6 +11,8 @@
  * favorites that simply do not survive a reload.
  */
 
+import { FAVORITES_LIMITS } from "@/lib/appConfig";
+
 const PINS_KEY = "x.apps.x_proxy.pinnedUsers";
 
 /** One pinned author. */
@@ -32,12 +34,13 @@ export type FavoriteFolder = {
 export type FavoriteNode = FavoriteLink | FavoriteFolder;
 
 /**
- * Caps. Folders make room for more authors than a single rail could list, but
- * the bar is still quick access rather than a second search page.
+ * Caps, from `favorites:` in `config.yaml`. Folders make room for more authors
+ * than a single rail could list, but the bar is still quick access rather than
+ * a second search page.
  */
-export const MAX_PINNED_USERS = 60;
-export const MAX_FOLDERS = 12;
-export const MAX_FOLDER_NAME = 32;
+export const MAX_PINNED_USERS = FAVORITES_LIMITS.maxUsers;
+export const MAX_FOLDERS = FAVORITES_LIMITS.maxFolders;
+export const MAX_FOLDER_NAME = FAVORITES_LIMITS.maxFolderName;
 
 export const DEFAULT_FOLDER_NAME = "New folder";
 

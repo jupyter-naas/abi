@@ -10,6 +10,8 @@ most 2 000 rows.
 
 ```
 apps/x_proxy/
+├── config.yaml                   # sections / pages / visibility (see Navigation)
+├── app_config.py                 # loads it, compiles it into the web app
 ├── api/                          # Python snapshot publishers (SPARQL → JSON)
 │   ├── common.py
 │   ├── publish.py
@@ -33,7 +35,8 @@ apps/x_proxy/
 │       ├── components/           # AppProvider, AppView, Shell, FavoritesBar,
 │       │                         #   UserResults, UserDetail, MediaCarousel,
 │       │                         #   charts, tables
-│       └── lib/                  # types, routes, loadSnapshots
+│       └── lib/                  # appConfig(.generated), types, routes,
+│                                 #   loadSnapshots, userSearch
 ├── hub.py                        # thin facade (orchestrations / tests)
 ├── build.py                      # CLI publisher
 ├── routes.py                     # /app-html/x/apps/x_proxy/… middleware
@@ -88,7 +91,8 @@ ticking a username still offers every author in the window.
 
 ## Navigation
 
-The chrome is shaped like a browser window. The rail on the left holds
+All of it comes from **`config.yaml`** at the app root — see *Configuration*
+below. The chrome is shaped like a browser window: the rail on the left holds
 **sections**; the header stacks the app and section name, then that section's
 pages as **tabs**, then — on Users — the **favorites bar**:
 
@@ -110,18 +114,23 @@ pages as **tabs**, then — on Users — the **favorites bar**:
 
 | Section | Title | Tabs |
 |---|---|---|
-| Posts | `X Proxy - Posts` | Count Recent Tweets · Search Recent Tweets |
+| Posts | `X Proxy - Posts` | Search Recent Tweets · Count Recent Tweets |
 | Users | `X Proxy - Users` | Search Users |
 | Parameters | `X Proxy - Parameters` | Parameters |
 
-Every section has at least one tab, so the strip never disappears under the
-title. The **publish stamp** (`Snapshot · <date> UTC`) sits at the foot of the
-rail, above the rule that separates Parameters — it describes the whole app, not
-one page, and it is the thing to read when a number looks stale. It is hidden
-when the rail is collapsed and on phones, where the rail is a row. The favorites bar shows on **Users only** for now: its chips are jumps
-into that section, so it sits where that section's own pages are. The whole
-header is sticky: switching tab or favorite never means scrolling back up
-first.
+Order is config order — the rail, and the tabs inside a section. A section link
+goes to the page **last visited** in it, so coming back to Posts lands where it
+was left; before any visit it goes to that section's first visible page. Every
+section has at least one tab, so the strip never disappears under the title.
+
+The **publish stamp** (`Snapshot · <date> UTC`) sits at the foot of the rail,
+above the rule that separates Parameters — it describes the whole app, not one
+page, and it is the thing to read when a number looks stale. It is hidden when
+the rail is collapsed, and on phones where the rail is a row.
+
+The **favorites bar** shows where `favorites: true` says so — today Users alone,
+its chips being jumps into that section. The whole header is sticky: switching
+tab or favorite never means scrolling back up first.
 
 Under 760px the rail lies down as a horizontal, scrollable strip above the
 header, and the page takes the full width. Only the header stays sticky there —
@@ -130,6 +139,43 @@ gear without its label, which is what makes the three sections fit a 390px
 phone. Collapsing the rail is a desktop affordance and has no effect at that
 width. Tabs and the favorites bar already scroll sideways, so they only lose
 padding; the *New folder* button keeps its icon and drops its label.
+
+### Configuration
+
+`config.yaml` at the app root is the single source of truth for the navigation:
+sections, their pages, the order of both, what is visible, which section shows a
+title bar or the favorites bar, plus the favorites caps and the feed's batch
+size. All of it used to be hardcoded in `Shell.tsx` and `lib/`.
+
+The web app is a **static export**, so nothing fetches the YAML at runtime:
+`app_config.py` compiles it into `web/src/lib/appConfig.generated.ts`, which the
+components import through `lib/appConfig.ts` (the lookups — `tabsOf`,
+`railSections`, `titleOf`, `PAGE_PATHS`). `pnpm build`, `pnpm dev` and
+`pnpm typecheck` all regenerate it first, so editing the YAML and rebuilding is
+the whole loop.
+
+```bash
+uv run python -m …x.apps.x_proxy.app_config           # print what it says
+uv run python -m …x.apps.x_proxy.app_config --write   # regenerate the module
+uv run python -m …x.apps.x_proxy.app_config --check   # CI: fail if it is stale
+```
+
+Per section: `label`, `icon` (`posts` | `users` | `gear`, drawn in `Shell.tsx`),
+`visible`, `place` (`main` rail group or `bottom`, under the rule), `top_nav`
+(false hides the "X Proxy - <section>" bar, for a section whose page carries its
+own heading) and `favorites`. Per page: `label`, `path`, `visible`, and
+`filters` (whether the Scenario / Query dropdowns show).
+
+Hiding is **chrome only**: a hidden section keeps its pages, a hidden page keeps
+its route, and both stay reachable by URL — the export publishes every
+configured route either way.
+
+Keys and paths are the code boundary, not free text: page keys are the union
+`PageKey` the components switch on, and paths are real directories under
+`web/src/app/`. `app_config.py` rejects a duplicate key, an unknown icon or
+place, a relative path, a non-boolean flag, a `default_page` that is unknown or
+hidden, and a `title` naming a placeholder other than `{app}` / `{section}`;
+`app_config_test.py` also asserts every configured path has a `page.tsx`.
 
 ### Deep links
 
@@ -198,22 +244,47 @@ on each, then a location match, with the busiest author first inside each band
 — so searching "grok" answers with @grok, not with whichever louder account
 happens to contain those letters. The box is submitted with Enter (Google
 style); typing does not re-filter. An empty query lists everyone, busiest
-first, **100 per page**, with a count of `N results in the X graph`. A submitted
+first, **100 per page** (`USER_RESULTS_PAGE_SIZE`), with a count of
+`N results in the X graph`. A submitted
 query updates that line to `N results for “…”`. The × in the box clears the
 query and returns to the full-graph listing.
 
 **One author** (`/users/search?q=grok&user=grok`) replaces the results with
-that account's page: profile metadata, KPIs of what was ingested, then the
-posts as a feed (URL, date | kind, then the text and media). Clicking a post's
-URL **or its text** sets `?post=<tweet id>` and scrolls that post to the top of
-the page, under the sticky header — the feed keeps its order, so the post
-clicked is the one being read, and the one before it is still one scroll up.
-A `?post=` deep link naming a post on a later page of the feed moves the pager
-to that page first. Closing the author — the ✕ or *Back
-to search* — drops `user` (and `post`) and lands back on the results it was opened from,
-needle intact, which is why `q` rides along in the URL. A handle absent from the
-published dataset renders as "not in the published X graph" rather than as an
-empty page.
+that account's page: profile metadata, KPIs of what was ingested, then the posts
+as a feed. Closing the author — the ✕ or *Back to search* — drops `user` (and
+`post`) and lands back on the results it was opened from, needle intact, which
+is why `q` rides along in the URL. A handle absent from the published dataset
+renders as "not in the published X graph" rather than as an empty page.
+
+### The feed
+
+Each card is three rows: **the date and the kind** first, so the feed reads as a
+timeline; then the post's URL; then its text and media.
+
+Over the feed sit three tabs, labelled with their counts — the same split the
+*Posts retrieved* KPI names:
+
+| Tab | Holds |
+|---|---|
+| All | everything ingested from this author |
+| Matched | the posts that answered the search query |
+| Context | reply parents, quoted tweets and retweeted originals, ingested only to explain a match |
+
+The feed opens with `feed.batch` posts (**10**, from `config.yaml`) and grows by
+another batch whenever its end comes into view — an `IntersectionObserver` with
+300px of lead, so the next batch is there before the reader is — or when *Show
+more* is pressed. The whole shard is already in memory, so a batch is a slice,
+not a fetch; the count under the button says `N of M shown`, and the end of a
+grown feed says so. Switching tab starts again at the first batch.
+
+**One post** (`?post=<tweet id>`) opens that post **on its own page**: the
+profile, the KPIs and the feed step aside, and the card is set to be read — full
+width, larger text, media uncropped, its URL now a plain link out to x.com. Any
+card's *⤢ Expand*, its URL, or its text opens it; the ✕ or *Back to @handle*
+closes it and returns to that card in the feed, scrolled back under the sticky
+header. It is a URL, so it is shareable and Back / Forward walk in and out of
+posts; a deep link naming a post further down than the feed has grown makes sure
+that much of the feed is rendered before returning to it.
 
 Result rows are real links, so ⌘/ctrl-click opens an author in a new tab while a
 plain click opens it in place without a reload, and Back / Forward walk the
@@ -241,9 +312,9 @@ Organising it (`components/FavoritesBar.tsx`, over the pure operations in
   drag is a control keyboard users do not have.
 
 Folders never nest: the bar is one row and a menu, not a tree. State lives in
-`localStorage` under `x.apps.x_proxy.pinnedUsers` — at most
-`MAX_PINNED_USERS` (60) authors and `MAX_FOLDERS` (12) folders, with folder
-names cut at `MAX_FOLDER_NAME` (32). The reader still accepts the plain
+`localStorage` under `x.apps.x_proxy.pinnedUsers`, and the caps come from
+`favorites:` in `config.yaml` — at most 60 authors and 12 folders, with folder
+names cut at 32 characters. The reader still accepts the plain
 `["grok", …]` written before the bar had folders, so an existing browser keeps
 its pins; anything unparseable is dropped rather than thrown, and blocked
 storage (private mode, embedded frames) degrades to favorites that do not

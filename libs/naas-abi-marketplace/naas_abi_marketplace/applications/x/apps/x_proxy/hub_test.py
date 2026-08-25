@@ -437,18 +437,26 @@ def test_web_loader_references_snapshot_paths():
 
 
 def test_every_page_has_a_route():
-    """The paths in ``lib/routes.ts`` must each have a route to export."""
+    """Every page ``config.yaml`` names must have a route to export.
+
+    The paths live in the config now (`app_config.py` compiles them into
+    `lib/appConfig.generated.ts`), so this asserts the app the config describes
+    is the app on disk. Users is unslashed so its URL is ``search?user=``, not
+    ``search/?user=``.
+    """
+    from naas_abi_marketplace.applications.x.apps.x_proxy.app_config import (
+        load_config,
+    )
+
     web = Path(__file__).resolve().parent / "web"
-    routes = (web / "src" / "lib" / "routes.ts").read_text(encoding="utf-8")
-    # Users is unslashed so the URL is ``search?user=``, not ``search/?user=``.
-    expected = {
-        "count": "/posts/get-posts-counts-recent/",
+    paths = {page.key: page.path for page in load_config().pages}
+    assert paths == {
         "search": "/posts/search-posts-recent/",
+        "count": "/posts/get-posts-counts-recent/",
         "users": "/users/search",
         "parameters": "/parameters/",
     }
-    for page, path in expected.items():
-        assert f'{page}: "{path}"' in routes, page
+    for path in paths.values():
         assert (web / "src" / "app" / path.strip("/") / "page.tsx").is_file(), path
 
 

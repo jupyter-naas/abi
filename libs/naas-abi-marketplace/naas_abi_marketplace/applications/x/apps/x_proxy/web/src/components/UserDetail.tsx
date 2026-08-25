@@ -1,19 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppState } from "@/components/AppProvider";
 import { KpiGrid } from "@/components/KpiGrid";
 import { UserPostCard } from "@/components/UserPostCard";
 import { UserProfileCard } from "@/components/UserProfileCard";
 import {
+  feedOf,
+  findPost,
   loadUserBundle,
-  pageOf,
-  pageOffsetOfPost,
   postAnchorId,
-  USER_POSTS_PAGE_SIZE,
+  USER_FEED_BATCH,
   tweetIdOf,
 } from "@/lib/userSearch";
+import type { FeedTab } from "@/lib/userSearch";
 import type { KpiItem, UserBundle, UserRow } from "@/lib/types";
+
+/** The feed's tabs, in the order they are shown. */
+const TABS: { key: FeedTab; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "matched", label: "Matched" },
+  { key: "context", label: "Context" },
+];
 
 type Props = {
   username: string;
@@ -83,13 +91,18 @@ export function UserDetail({
 }: Props) {
   const { pinnedUsers, togglePinnedUser } = useAppState();
   const [bundle, setBundle] = useState<UserBundle | null>(null);
-  const [offset, setOffset] = useState(0);
+  const [tab, setTab] = useState<FeedTab>("all");
+  const [shown, setShown] = useState(USER_FEED_BATCH);
   const [loading, setLoading] = useState(true);
+  // Sentinel at the end of the feed: once it scrolls into view, the next batch
+  // is already rendered by the time the reader gets there.
+  const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let live = true;
     setLoading(true);
-    setOffset(0);
+    setShown(USER_FEED_BATCH);
+    setTab("all");
     loadUserBundle(username)
       .then((res) => {
         if (live) setBundle(res);
@@ -102,38 +115,70 @@ export function UserDetail({
     };
   }, [username]);
 
-  // A `?post=` deep link names a post anywhere in the author's history, which
-  // is rarely the page the feed opens on. Show the page holding it first.
+  // A new tab starts again at the first batch.
   useEffect(() => {
-    if (!selectedPost || !bundle) return;
-    const target = pageOffsetOfPost(bundle, selectedPost);
-    if (target !== null) setOffset(target);
-  }, [selectedPost, bundle]);
+    setShown(USER_FEED_BATCH);
+  }, [tab]);
 
-  // Then align it to the top of the page, under the sticky header. Depends on
-  // ``offset`` so it runs once the page holding the post is actually rendered.
+  // What the feed renders, and the post open on its own page (if any). Both
+  // are slices of the bundle already in memory.
+  const feed = feedOf(bundle, tab, shown);
+  const openPost = findPost(bundle, selectedPost);
+
+  // Growing the feed by scroll. The observer is rebuilt whenever the batch
+  // changes, so it always watches the sentinel at the current end.
   useEffect(() => {
-    if (!selectedPost || loading) return;
-    const card = document.getElementById(postAnchorId(selectedPost));
-    if (!card) return;
-    const top =
-      card.getBoundingClientRect().top + window.scrollY - headerOffset() - 8;
-    window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-  }, [selectedPost, offset, loading]);
+    const node = endRef.current;
+    if (!node || loading || !feed.remaining) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShown((count) => count + USER_FEED_BATCH);
+        }
+      },
+      // A little early, so the next batch lands before the end is reached.
+      { rootMargin: "300px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  });
 
-  const page = pageOf(bundle, offset);
-  const profile = page.profile || known;
-  const total = page.total || known?.posts || 0;
-  const rows = page.rows;
+
+  // Closing an expanded post comes back to its card in the feed, which is
+  // where the reader left off — and a `?post=` deep link may name a post
+  // further down than the feed has grown, so make sure it is rendered.
+  const closePost = () => {
+    const target = selectedPost;
+    if (target && bundle) {
+      const index = bundle.posts.findIndex(
+        (post) => tweetIdOf(post) === target,
+      );
+      if (index >= 0) {
+        setTab("all");
+        setShown((count) => Math.max(count, index + 1));
+      }
+    }
+    onSelectPost(null);
+    if (!target) return;
+    // After the feed has rendered the batch holding it.
+    window.requestAnimationFrame(() => {
+      const card = document.getElementById(postAnchorId(target));
+      if (!card) return;
+      const top =
+        card.getBoundingClientRect().top + window.scrollY - headerOffset() - 8;
+      window.scrollTo({ top: Math.max(0, top) });
+    });
+  };
+
+  const profile = feed.profile || known;
+  const total = feed.counts.all || known?.posts || 0;
+  const rows = feed.rows;
   const lastPostAt = profile?.last_post_at || rows[0]?.created_at || "";
-  const firstPostAt = page.profile?.first_post_at || "";
+  const firstPostAt = feed.profile?.first_post_at || "";
   const pinned = pinnedUsers.includes(username);
   const unknown = !indexLoading && !loading && !profile && !rows.length;
-  const allPosts = bundle?.posts || [];
-  const referencedCount = allPosts.filter((p) => p.referenced).length;
-  const matchedCount = allPosts.length
-    ? allPosts.length - referencedCount
-    : 0;
+  const referencedCount = feed.counts.context;
+  const matchedCount = feed.counts.matched;
   const postsLoaded = Boolean(bundle) && !loading;
 
   const kpis: KpiItem[] = [
@@ -163,11 +208,41 @@ export function UserDetail({
     },
   ];
 
-  const pageEnd = offset + rows.length;
+  const openPostId = openPost ? tweetIdOf(openPost) : null;
 
-  const togglePost = (tweetId: string) => {
-    onSelectPost(tweetId === selectedPost ? null : tweetId);
-  };
+  // One post, alone on the page. Everything else — the profile, the KPIs, the
+  // feed — steps aside; ✕ or the back link brings them back.
+  if (openPost) {
+    return (
+      <div className="detail">
+        <div className="detail-head">
+          <button type="button" className="detail-back" onClick={closePost}>
+            ◂ Back to @{username}
+          </button>
+          <div className="detail-actions">
+            <button
+              type="button"
+              className="detail-close"
+              onClick={closePost}
+              title="Close this post"
+              aria-label="Close this post"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+        <UserPostCard
+          post={openPost}
+          username={username}
+          needle={needle}
+          timezone={timezone}
+          selected
+          expanded
+          onSelect={() => {}}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="detail">
@@ -217,6 +292,25 @@ export function UserDetail({
         <p className="user-empty">No post found for this user.</p>
       ) : null}
 
+      {/* The split the "Posts retrieved" KPI names, as tabs over the feed. */}
+      {postsLoaded && total ? (
+        <div className="feed-tabs" role="tablist" aria-label="Posts">
+          {TABS.map((entry) => (
+            <button
+              key={entry.key}
+              type="button"
+              role="tab"
+              aria-selected={tab === entry.key}
+              className={`feed-tab${tab === entry.key ? " active" : ""}`}
+              onClick={() => setTab(entry.key)}
+            >
+              {entry.label}
+              <span className="feed-tab-count">{feed.counts[entry.key]}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       <div className="user-posts">
         {rows.map((post) => {
           const id = tweetIdOf(post);
@@ -227,38 +321,34 @@ export function UserDetail({
               username={username}
               needle={needle}
               timezone={timezone}
-              selected={Boolean(id) && id === selectedPost}
-              onSelect={togglePost}
+              selected={Boolean(id) && id === openPostId}
+              onSelect={onSelectPost}
             />
           );
         })}
       </div>
 
-      {total > USER_POSTS_PAGE_SIZE ? (
-        <div className="pager">
+      {postsLoaded && !rows.length && total ? (
+        <p className="user-empty">No post in this tab.</p>
+      ) : null}
+
+      {/* The sentinel that grows the feed on scroll, and the button for anyone
+          who would rather ask than scroll. */}
+      {feed.remaining ? (
+        <div className="feed-more" ref={endRef}>
           <button
             type="button"
-            className="pager-btn"
-            disabled={offset === 0 || loading}
-            onClick={() =>
-              setOffset((o) => Math.max(0, o - USER_POSTS_PAGE_SIZE))
-            }
+            className="feed-more-btn"
+            onClick={() => setShown((count) => count + USER_FEED_BATCH)}
           >
-            ◂ Previous
+            Show {Math.min(USER_FEED_BATCH, feed.remaining)} more
           </button>
-          <span className="pager-label">
-            Page {Math.floor(offset / USER_POSTS_PAGE_SIZE) + 1} of{" "}
-            {Math.max(1, Math.ceil(total / USER_POSTS_PAGE_SIZE))}
+          <span className="feed-more-label">
+            {rows.length} of {feed.total} shown
           </span>
-          <button
-            type="button"
-            className="pager-btn"
-            disabled={pageEnd >= total || loading}
-            onClick={() => setOffset((o) => o + USER_POSTS_PAGE_SIZE)}
-          >
-            Next ▸
-          </button>
         </div>
+      ) : rows.length > USER_FEED_BATCH ? (
+        <p className="feed-end">All {feed.total} posts shown.</p>
       ) : null}
     </div>
   );

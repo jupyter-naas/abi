@@ -10,8 +10,15 @@ type Props = {
   username: string;
   needle: string;
   timezone: string;
+  /** True while this post is the one open on its own page. */
   selected: boolean;
+  /** Opens the post on its own page. */
   onSelect: (tweetId: string) => void;
+  /**
+   * Rendered expanded: the post alone on the page, so nothing is clipped and
+   * nothing is a link to itself.
+   */
+  expanded?: boolean;
 };
 
 function formatInstant(iso: string, timezone: string): string {
@@ -37,6 +44,7 @@ export function UserPostCard({
   timezone,
   selected,
   onSelect,
+  expanded = false,
 }: Props) {
   const tweetId = tweetIdOf(post);
   const kind = post.referenced ? "Context" : "Matched";
@@ -61,34 +69,59 @@ export function UserPostCard({
     !e.altKey;
 
   const select = (e: React.MouseEvent) => {
-    if (!isPlainClick(e) || !tweetId) return;
+    if (expanded || !isPlainClick(e) || !tweetId) return;
     e.preventDefault();
     onSelect(tweetId);
   };
 
   return (
     <article
-      // The scroll target: selecting a post aligns this element to the top of
-      // the page, so it needs an id the page can find it by.
+      // The scroll target: closing the expanded post comes back to this card,
+      // so it needs an id the feed can find it by.
       id={tweetId ? postAnchorId(tweetId) : undefined}
-      className={`user-post${selected ? " selected" : ""}`}
+      className={`user-post${selected ? " selected" : ""}${
+        expanded ? " expanded" : ""
+      }`}
     >
+      {/* Date first, then the URL: the feed reads as a timeline, and the link
+          is the detail under it. */}
+      <p className="user-post-meta">
+        <span>{formatInstant(post.created_at, timezone)}</span>
+        <span className="user-post-sep">|</span>
+        <span className={post.referenced ? "kind-context" : "kind-matched"}>
+          {kind}
+        </span>
+        {expanded ? null : (
+          <button
+            type="button"
+            className="user-post-expand"
+            onClick={(e) => select(e)}
+            disabled={!tweetId}
+            title="Open this post on its own page"
+          >
+            ⤢ Expand
+          </button>
+        )}
+      </p>
       {post.url ? (
-        <a className="user-post-url" href={href} onClick={select}>
+        // Expanded, the URL is the way out to x.com; in the feed a plain click
+        // opens the post here instead, and a modified one follows the deep link.
+        <a
+          className="user-post-url"
+          href={expanded ? post.url : href}
+          target={expanded ? "_blank" : undefined}
+          rel={expanded ? "noreferrer" : undefined}
+          onClick={select}
+        >
           {post.url}
         </a>
       ) : (
         <span className="user-post-url muted">no url</span>
       )}
-      <p className="user-post-meta">
-        <span>{formatInstant(post.created_at, timezone)}</span>
-        <span className="user-post-sep">|</span>
-        <span>{kind}</span>
-      </p>
-      {/* The body is a second click target for the same thing: readers reach
-          for the post, not for its URL. */}
+      {/* In the feed the body is a second click target for the same thing:
+          readers reach for the post, not for its URL. */}
       <p
-        className={`user-post-text${tweetId ? " clickable" : ""}`}
+        className={`user-post-text${tweetId && !expanded ? " clickable" : ""}`}
         onClick={select}
       >
         {post.text || "—"}

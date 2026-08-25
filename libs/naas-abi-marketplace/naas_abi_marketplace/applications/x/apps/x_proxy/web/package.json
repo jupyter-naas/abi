@@ -3,10 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "config": "python3 ../app_config.py --write",
+    "predev": "python3 ../app_config.py --write",
     "dev": "next dev --port 3045",
+    "prebuild": "python3 ../app_config.py --write",
     "build": "next build",
     "start": "next start --port 3045",
     "lint": "next lint",
+    "pretypecheck": "python3 ../app_config.py --write",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

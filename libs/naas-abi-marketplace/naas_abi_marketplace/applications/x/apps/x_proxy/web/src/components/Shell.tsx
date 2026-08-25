@@ -3,34 +3,43 @@
 import Link from "next/link";
 import { useAppState } from "@/components/AppProvider";
 import { FavoritesBar } from "@/components/FavoritesBar";
+import {
+  APP_NAME,
+  railSections,
+  sectionOf,
+  tabsOf,
+  titleOf,
+} from "@/lib/appConfig";
+import type { IconName, SectionConfig } from "@/lib/appConfig";
 import type { PageKey } from "@/lib/types";
 
-type Section = "posts" | "users" | "parameters";
-
-const SECTION_OF: Record<PageKey, Section> = {
-  count: "posts",
-  search: "posts",
-  users: "users",
-  parameters: "parameters",
+/**
+ * The rail icons a section may ask for by name in `config.yaml`.
+ *
+ * The drawing stays here — a config file is no place for path data — so adding
+ * an icon means adding it to this map and to `ICONS` in `app_config.py`.
+ */
+const ICONS: Record<IconName, React.ReactNode> = {
+  posts: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M7 9h10M7 13h10M7 17h5" />
+    </>
+  ),
+  users: (
+    <>
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+      <path d="M16 5.2a3.5 3.5 0 0 1 0 5.6M17.5 14.2A6.5 6.5 0 0 1 21.5 20" />
+    </>
+  ),
+  gear: (
+    <>
+      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
+      <path d="M19.4 13a7.8 7.8 0 0 0 .1-2l2-1.5-2-3.5-2.4 1a7.6 7.6 0 0 0-1.7-1l-.3-2.5H9.9l-.3 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7.8 7.8 0 0 0 .1 2l-2 1.5 2 3.5 2.4-1a7.6 7.6 0 0 0 1.7 1l.3 2.5h4.2l.3-2.5a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5z" />
+    </>
+  ),
 };
-
-/** Tabs of the active section, in the strip under the top bar. */
-const TABS: Record<Section, { key: PageKey; label: string }[]> = {
-  posts: [
-    { key: "count", label: "Count Recent Tweets" },
-    { key: "search", label: "Search Recent Tweets" },
-  ],
-  users: [{ key: "users", label: "Search Users" }],
-  parameters: [{ key: "parameters", label: "Parameters" }],
-};
-
-const SECTION_LABELS: Record<Section, string> = {
-  posts: "Posts",
-  users: "Users",
-  parameters: "Parameters",
-};
-
-const APP_NAME = "X Proxy";
 
 type Props = {
   page: PageKey;
@@ -56,6 +65,10 @@ type Props = {
 /**
  * The app chrome: section rail, then a browser-shaped header.
  *
+ * What it lists — sections, their pages, their order, what is visible, which
+ * section shows a title bar or the favorites bar — all comes from `config.yaml`
+ * at the app root, by way of `lib/appConfig`.
+ *
  * The header stacks the way a browser window does — the app and section name on
  * top, the section's pages as tabs under it, then the favorites bar on Users —
  * so the only rail left is the one that switches sections. Everything in it is
@@ -73,12 +86,33 @@ export function Shell({
   // Collapse, last-subpage and favorites all outlive a page change, so they
   // live in the provider the layout keeps mounted rather than in this component.
   const {
-    postsPage,
+    sectionPages,
     sidebarCollapsed: collapsed,
     toggleSidebar,
   } = useAppState();
-  const section = SECTION_OF[page];
-  const tabs = TABS[section];
+  const section = sectionOf(page);
+  const tabs = tabsOf(section.key);
+
+  /**
+   * One rail entry.
+   *
+   * A section link goes to the page last visited in it, so coming back to Posts
+   * lands where it was left. Users is intercepted while the Users page is
+   * already open (see `openUser`), since that is a param change, not a route.
+   */
+  const railLink = (entry: SectionConfig) => (
+    <Link
+      key={entry.key}
+      className={`nav-item${section.key === entry.key ? " active" : ""}`}
+      href={hrefOf(sectionPages[entry.key])}
+      onClick={entry.key === "users" ? openUser(null) : undefined}
+    >
+      <svg className="nav-ico" viewBox="0 0 24 24" aria-hidden>
+        {ICONS[entry.icon]}
+      </svg>
+      <span className="nav-label">{entry.label}</span>
+    </Link>
+  );
 
   /**
    * Handles a Users link while the Users page is already open.
@@ -122,30 +156,7 @@ export function Shell({
           <span className="brand-name">{APP_NAME}</span>
           <span className="brand-toggle">{collapsed ? "▸" : "◂"}</span>
         </div>
-        <nav className="nav nav-main">
-          <Link
-            className={`nav-item${section === "posts" ? " active" : ""}`}
-            href={hrefOf(postsPage)}
-          >
-            <svg className="nav-ico" viewBox="0 0 24 24" aria-hidden>
-              <rect x="3" y="4" width="18" height="16" rx="2" />
-              <path d="M7 9h10M7 13h10M7 17h5" />
-            </svg>
-            <span className="nav-label">Posts</span>
-          </Link>
-          <Link
-            className={`nav-item${section === "users" ? " active" : ""}`}
-            href={hrefOf("users")}
-            onClick={openUser(null)}
-          >
-            <svg className="nav-ico" viewBox="0 0 24 24" aria-hidden>
-              <circle cx="9" cy="8" r="3.5" />
-              <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
-              <path d="M16 5.2a3.5 3.5 0 0 1 0 5.6M17.5 14.2A6.5 6.5 0 0 1 21.5 20" />
-            </svg>
-            <span className="nav-label">Users</span>
-          </Link>
-        </nav>
+        <nav className="nav nav-main">{railSections("main").map(railLink)}</nav>
         {/* Pinned to the foot of the rail: the snapshot the whole app is
             reading, then the rule, then Parameters. */}
         <div className="sidebar-foot">
@@ -154,26 +165,23 @@ export function Shell({
               Snapshot · {builtAt}
             </div>
           ) : null}
-          <nav className="nav nav-bottom">
-            <Link
-              className={`nav-item${page === "parameters" ? " active" : ""}`}
-              href={hrefOf("parameters")}
-            >
-              <svg className="nav-ico" viewBox="0 0 24 24" aria-hidden>
-                <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
-                <path d="M19.4 13a7.8 7.8 0 0 0 .1-2l2-1.5-2-3.5-2.4 1a7.6 7.6 0 0 0-1.7-1l-.3-2.5H9.9l-.3 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7.8 7.8 0 0 0 .1 2l-2 1.5 2 3.5 2.4-1a7.6 7.6 0 0 0 1.7 1l.3 2.5h4.2l.3-2.5a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5z" />
-              </svg>
-              <span className="nav-label">Parameters</span>
-            </Link>
-          </nav>
+          {railSections("bottom").length ? (
+            <nav className="nav nav-bottom">
+              {railSections("bottom").map(railLink)}
+            </nav>
+          ) : null}
         </div>
       </aside>
       <div className="main">
         <div className="main-head">
-          <div className="topnav">
-            <h1>{`${APP_NAME} - ${SECTION_LABELS[section]}`}</h1>
-          </div>
-          <nav className="tabstrip" aria-label={`${SECTION_LABELS[section]} pages`}>
+          {/* A section can drop the title bar (`top_nav: false`) when its page
+              carries a heading of its own. */}
+          {section.topNav ? (
+            <div className="topnav">
+              <h1>{titleOf(section.key)}</h1>
+            </div>
+          ) : null}
+          <nav className="tabstrip" aria-label={`${section.label} pages`}>
             {tabs.map((tab) => (
               <Link
                 key={tab.key}
@@ -185,9 +193,9 @@ export function Shell({
               </Link>
             ))}
           </nav>
-          {/* Favorites are shortcuts into the Users section, so for now they
-              show where that section's own pages are. */}
-          {section === "users" ? (
+          {/* Which sections carry the favorites bar is configured; today only
+              Users does, its chips being jumps into that section. */}
+          {section.favorites ? (
             <FavoritesBar activeUser={activeUser} openUser={openUser} />
           ) : null}
           {filters}

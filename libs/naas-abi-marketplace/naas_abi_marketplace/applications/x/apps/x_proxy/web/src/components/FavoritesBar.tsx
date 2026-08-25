@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useAppState } from "@/components/AppProvider";
-import { folders as foldersOf, MAX_FOLDERS, parentOf } from "@/lib/pins";
+import {
+  folders as foldersOf,
+  MAX_FOLDER_NAME,
+  MAX_FOLDERS,
+  parentOf,
+} from "@/lib/pins";
 import type {
   DropTarget,
   FavoriteFolder,
@@ -211,7 +216,7 @@ export function FavoritesBar({ activeUser, openUser }: Props) {
           className="fav-name-input"
           autoFocus
           defaultValue={folder.name}
-          maxLength={32}
+          maxLength={MAX_FOLDER_NAME}
           aria-label="Folder name"
           onFocus={(event) => event.currentTarget.select()}
           onBlur={(event) => commitName(folder.id, event.currentTarget.value)}

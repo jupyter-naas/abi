@@ -8,6 +8,7 @@ import { CountPage } from "@/components/pages/CountPage";
 import { ParametersPage } from "@/components/pages/ParametersPage";
 import { SearchPage } from "@/components/pages/SearchPage";
 import { UsersPage } from "@/components/pages/UsersPage";
+import { pageConfig } from "@/lib/appConfig";
 import {
   hasParams,
   hrefFor,
@@ -51,7 +52,7 @@ export function AppView({ page }: Props) {
     setQuerySlug,
     timezone,
     setTimezone,
-    setPostsPage,
+    setSectionPage,
   } = useAppState();
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedPost, setSelectedPost] = useState<string | null>(null);
@@ -72,10 +73,10 @@ export function AppView({ page }: Props) {
     setNeedle(params.q || "");
   }, []);
 
-  // Coming back to Posts lands on the subpage last visited.
+  // Coming back to a section lands on the page last visited in it.
   useEffect(() => {
-    if (page === "count" || page === "search") setPostsPage(page);
-  }, [page, setPostsPage]);
+    setSectionPage(page);
+  }, [page, setSectionPage]);
 
   // Filters named by the URL win over the ones already in session; filters it
   // does not mention are left alone, so moving to a page that carries none
@@ -196,8 +197,9 @@ export function AppView({ page }: Props) {
     return <div className="status">Loading snapshots…</div>;
   }
 
-  // The Users page searches the whole graph, so scenario / query do not apply.
-  const showDataFilters = page === "count" || page === "search";
+  // Which pages carry the Scenario / Query dropdowns is configured: the Users
+  // page searches the whole graph, so they do not apply there.
+  const showDataFilters = pageConfig(page).filters;
 
   return (
     <Shell

@@ -10,24 +10,20 @@
  * Paths here are app-relative; Next prepends `basePath` for `<Link>` hrefs, and
  * the same-page writers below never touch the path, so neither needs to know it.
  */
+import { DEFAULT_PAGE, PAGE_PATHS, pageConfig } from "@/lib/appConfig";
 import type { PageKey } from "@/lib/types";
 
-/** Path of each page, relative to the app root.
+/**
+ * Paths and the landing page are configured, not written here.
  *
  * The Posts paths are named after the X endpoints they visualise —
- * `GET /2/tweets/search/recent` and `GET /2/tweets/counts/recent`. Trailing
+ * `GET /2/tweets/search/recent` and `GET /2/tweets/counts/recent`. A trailing
  * slash matches `trailingSlash: true`, so a link never bounces through a
- * redirect. Users is the exception: the URL is ``/users/search?user=`` with
- * no slash before the query string. */
-export const PAGE_PATHS: Record<PageKey, string> = {
-  count: "/posts/get-posts-counts-recent/",
-  search: "/posts/search-posts-recent/",
-  users: "/users/search",
-  parameters: "/parameters/",
-};
-
-/** Where `/` sends visitors. */
-export const DEFAULT_PAGE: PageKey = "count";
+ * redirect; Users is the exception, its URL being ``/users/search?user=`` with
+ * no slash before the query string. Both facts live in `config.yaml` now, and
+ * the writers below read the shape off the configured path.
+ */
+export { DEFAULT_PAGE, PAGE_PATHS } from "@/lib/appConfig";
 
 const USER_PARAM = "user";
 const NEEDLE_PARAM = "q";
@@ -126,7 +122,8 @@ export function searchFor(page: PageKey, params: Partial<PageParams>): string {
     if (params.q) search.set(NEEDLE_PARAM, params.q);
     if (params.user) search.set(USER_PARAM, params.user);
     if (params.user && params.post) search.set(POST_PARAM, params.post);
-  } else if (page === "count" || page === "search") {
+  } else if (pageConfig(page).filters) {
+    // Only a page showing the Scenario / Query dropdowns advertises them.
     if (params.scenario) search.set(SCENARIO_PARAM, params.scenario);
     if (params.query) search.set(QUERY_PARAM, params.query);
   }
@@ -159,11 +156,11 @@ export function writeParams(
 ): void {
   if (typeof window === "undefined") return;
   const { pathname, hash, search } = window.location;
-  // Keep Users as ``/users/search?…`` — no slash between path and query.
-  const path =
-    page === "users"
-      ? pathname.replace(/\/users\/search\/?$/, "/users/search")
-      : pathname;
+  // Match the configured shape: a page whose path carries no trailing slash
+  // keeps none before the query string (Users is ``/users/search?…``).
+  const path = PAGE_PATHS[page].endsWith("/")
+    ? pathname
+    : pathname.replace(/\/+$/, "");
   const next = `${path}${searchFor(page, params)}${hash}`;
   if (next === `${pathname}${search}${hash}`) return;
   const state = window.history.state;

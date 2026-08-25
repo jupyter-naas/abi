@@ -203,4 +203,6 @@ export type Snapshots = {
   };
 };
 
-export type PageKey = "count" | "search" | "users" | "parameters";
+/** Re-exported so the many `@/lib/types` importers need not know where it is
+ * defined: the page keys are generated from `config.yaml`. */
+export type { PageKey } from "@/lib/appConfig";
