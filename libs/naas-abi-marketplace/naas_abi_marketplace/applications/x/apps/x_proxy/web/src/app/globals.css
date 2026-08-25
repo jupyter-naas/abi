@@ -83,7 +83,8 @@ a {
 
 .sidebar.collapsed .brand-name,
 .sidebar.collapsed .brand-toggle,
-.sidebar.collapsed .nav-label {
+.sidebar.collapsed .nav-label,
+.sidebar.collapsed .sidebar-built {
   display: none;
 }
 
@@ -98,9 +99,26 @@ a {
   flex: 1 1 auto;
 }
 
-.nav-bottom {
+/* Holds the snapshot stamp and Parameters together at the foot of the rail, so
+   the stamp sits above the rule rather than below it. */
+.sidebar-foot {
+  display: flex;
+  flex-direction: column;
   flex: 0 0 auto;
   margin-top: auto;
+}
+
+.sidebar-built {
+  padding: 0 18px 12px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-bottom {
+  flex: 0 0 auto;
   border-top: 1px solid var(--border);
   padding-top: 12px;
   padding-bottom: 16px;
@@ -140,65 +158,362 @@ a {
   flex: 0 0 auto;
 }
 
-/* ---- Second bar: subpages of the active section ------------------------- */
+/* ---- Tab strip: pages of the active section ----------------------------- */
 
-.subsidebar {
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  flex: 0 0 auto;
-  width: 216px;
-  background: var(--bg);
-  border-right: 1px solid var(--border);
+/* Browser-shaped: the strip is the darker chrome, the active tab is cut out of
+   it in the page's own background so it reads as joined to what is below. */
+.tabstrip {
   display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
-.subsidebar-head {
+.tabstrip::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
   display: flex;
   align-items: center;
-  min-height: 63px;
-  padding: 0 18px;
-  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+  max-width: 260px;
+  padding: 11px 18px;
   color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 0.85rem;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  /* Sits on the strip's own bottom border, the way a browser tab does. */
+  margin-bottom: -1px;
+}
+
+.tab:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.tab.active {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
+  font-weight: 700;
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+/* ---- Favorites bar: pinned authors and their folders -------------------- */
+
+.favbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.favbar-items {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  /* Room for the drop caret at either end — it sits 2px outside a chip, and
+     this bar clips whatever leaves its content box. */
+  padding: 0 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.favbar-items::-webkit-scrollbar {
+  display: none;
+}
+
+.favbar-empty {
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
   white-space: nowrap;
 }
 
-.subnav {
+.favbar-add {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 14px 10px;
-}
-
-.subnav-item {
-  display: block;
-  width: 100%;
-  padding: 10px 12px;
-  color: var(--label);
-  cursor: pointer;
-  border: 1px solid transparent;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
   background: transparent;
+  color: var(--muted);
   font: inherit;
-  font-size: 0.9rem;
-  text-align: left;
-  text-decoration: none;
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
-.subnav-item:hover,
-.subnav-item.active {
+.favbar-add:hover:not(:disabled) {
   background: var(--panel-2);
   color: var(--text);
 }
 
-.subnav-item.active {
+.favbar-add:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* One chip, plus the ⋮ that opens its menu. Relative so the drop caret can be
+   drawn on its edge. */
+.fav-slot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 30px;
+}
+
+.fav-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 190px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--label);
+  font: inherit;
+  font-size: 0.8rem;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.fav-chip:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.fav-chip.active {
+  background: var(--panel-2);
   border-color: var(--border);
-  font-weight: 700;
+  color: var(--text);
+}
+
+.fav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fav-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--label);
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+
+.fav-chip.active .fav-avatar,
+.fav-pop-item.active .fav-avatar {
+  background: var(--accent);
+  color: #fff;
+}
+
+.fav-folder-ico {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+}
+
+.fav-count {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Dimmed rather than hidden until hover: a control you cannot tab to is a
+   control keyboard users do not have. */
+.fav-more {
+  flex: 0 0 auto;
+  padding: 4px 3px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.3;
+  transition: opacity 0.12s ease;
+}
+
+.fav-slot:hover .fav-more,
+.fav-more:focus-visible {
+  opacity: 1;
+}
+
+.fav-more:hover {
+  color: var(--text);
+  opacity: 1;
+}
+
+.fav-chip-editing {
+  cursor: default;
+}
+
+.fav-name-input {
+  width: 130px;
+  height: 30px;
+  padding: 3px 6px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+/* Where a dragged favorite would land: a caret on the bar, an outline on the
+   folder that would swallow it. */
+.fav-drop-before::before,
+.fav-drop-after::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  background: var(--accent);
+}
+
+.fav-drop-before::before {
+  left: -2px;
+}
+
+.fav-drop-after::after {
+  right: -2px;
+}
+
+.fav-drop-into .fav-chip {
+  background: var(--panel-2);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* Folder contents and chip menus share one popover, fixed-positioned against
+   the viewport like the column filters. */
+.fav-pop {
+  position: fixed;
+  z-index: 60;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+}
+
+.fav-pop-head {
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fav-pop-action {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--label);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fav-pop-action:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.fav-pop-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+
+.fav-pop-row {
+  display: flex;
+  align-items: center;
+}
+
+.fav-pop-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 7px 10px;
+  color: var(--label);
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+
+.fav-pop-item:hover,
+.fav-pop-item.active {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.fav-pop-out {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.12s ease;
+}
+
+.fav-pop-row:hover .fav-pop-out,
+.fav-pop-out:focus-visible {
+  opacity: 1;
+}
+
+.fav-pop-out:hover {
+  color: var(--text);
+  opacity: 1;
+}
+
+.fav-pop-empty {
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 /* ---- Users page: search results ----------------------------------------- */
@@ -479,83 +794,6 @@ a {
 .user-post .media-carousel {
   max-width: 640px;
   margin-top: 12px;
-}
-
-/* ---- Second bar: pinned authors ----------------------------------------- */
-
-.subnav-pinned {
-  flex: 0 1 auto;
-  overflow-y: auto;
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
-}
-
-.subnav-head {
-  padding: 0 12px 6px;
-  color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.pin-row {
-  display: flex;
-  align-items: center;
-}
-
-.pin-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 8px 12px;
-}
-
-.pin-avatar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: var(--panel-2);
-  color: var(--label);
-  font-size: 0.7rem;
-  font-weight: 800;
-}
-
-.pin-handle {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Dimmed rather than hidden until hover: a control you cannot tab to is a
-   control keyboard users do not have. */
-.pin-remove {
-  flex: 0 0 auto;
-  margin-right: 4px;
-  padding: 4px 6px;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.75rem;
-  cursor: pointer;
-  opacity: 0.35;
-  transition: opacity 0.12s ease;
-}
-
-.pin-row:hover .pin-remove,
-.pin-remove:focus-visible {
-  opacity: 1;
-}
-
-.pin-remove:hover {
-  color: var(--text);
-  opacity: 1;
 }
 
 /* ---- Users page: account profile card ----------------------------------- */
@@ -858,19 +1096,13 @@ a {
   border-bottom: 1px solid var(--border);
 }
 
+/* Reads as the window title it is — "X Proxy - Users" — so it keeps its own
+   casing rather than the uppercase the section labels elsewhere wear. */
 .topnav h1 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 1.02rem;
   font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.topnav .built {
-  position: absolute;
-  right: 24px;
-  color: var(--muted);
-  font-size: 0.78rem;
+  letter-spacing: 0.01em;
 }
 
 .controls {
@@ -1397,21 +1629,18 @@ table.dt td.empty {
     min-width: 240px;
   }
 
-  .subsidebar {
-    width: 168px;
-  }
-
-  .topnav .built {
-    display: none;
+  .tab {
+    max-width: 200px;
+    padding: 10px 14px;
   }
 }
 
 /* ---- Phones ------------------------------------------------------------- */
 
-/* Two fixed rails and a page beside them do not fit a phone, so the rails lie
-   down as scrollable bars above the page and the page takes the full width.
-   Only `.main-head` stays sticky: three stacked sticky bars would leave no
-   room to read. */
+/* A fixed rail and a page beside it do not fit a phone, so the rail lies down
+   as a scrollable bar above the header and the page takes the full width. Only
+   `.main-head` stays sticky: the rail on top of it would leave no room to
+   read. */
 @media (max-width: 760px) {
   .app {
     flex-direction: column;
@@ -1462,9 +1691,19 @@ table.dt td.empty {
     flex: 0 0 auto;
   }
 
-  .nav-bottom {
+  .sidebar-foot {
+    flex-direction: row;
+    align-items: center;
     margin-top: 0;
     margin-left: auto;
+  }
+
+  /* No room for it beside three sections; Parameters names the publish. */
+  .sidebar-built {
+    display: none;
+  }
+
+  .nav-bottom {
     border-top: 0;
     padding-top: 8px;
     padding-bottom: 8px;
@@ -1485,45 +1724,29 @@ table.dt td.empty {
     white-space: nowrap;
   }
 
-  .subsidebar {
-    position: static;
-    width: 100%;
-    height: auto;
-    flex-direction: row;
-    align-items: center;
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-    overflow-x: auto;
+  /* Both strips already scroll sideways; they only need less room per item. */
+  .tabstrip {
+    padding: 0 10px;
   }
 
-  /* The section name is already the page heading. */
-  .subsidebar-head,
-  .subnav-head {
+  .tab {
+    max-width: 170px;
+    padding: 10px 12px;
+    font-size: 0.8rem;
+  }
+
+  .favbar {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
+  /* The label would cost a favorite's worth of width; the icon says it. */
+  .favbar-add span {
     display: none;
   }
 
-  .subnav {
-    flex-direction: row;
-    align-items: center;
-    padding: 8px 10px;
-  }
-
-  .subnav-item {
-    flex: 0 0 auto;
-    width: auto;
-    white-space: nowrap;
-  }
-
-  .subnav-pinned {
-    flex: 0 0 auto;
-    overflow-y: visible;
-    border-top: 0;
-    border-left: 1px solid var(--border);
-    padding-top: 8px;
-  }
-
-  .pin-row {
-    flex: 0 0 auto;
+  .fav-chip {
+    max-width: 150px;
   }
 
   .topnav {

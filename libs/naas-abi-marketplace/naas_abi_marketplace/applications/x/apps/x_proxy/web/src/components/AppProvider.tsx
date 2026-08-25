@@ -9,7 +9,20 @@ import {
   useState,
 } from "react";
 import { loadSnapshots } from "@/lib/loadSnapshots";
-import { readPinnedUsers, togglePinned, writePinnedUsers } from "@/lib/pins";
+import {
+  addFolder,
+  folders,
+  listUsers,
+  makeFolder,
+  moveNode,
+  readFavorites,
+  removeNode,
+  renameFolder,
+  togglePinned,
+  writeFavorites,
+  MAX_FOLDERS,
+} from "@/lib/pins";
+import type { DropTarget, FavoriteNode } from "@/lib/pins";
 import { readSessionTimezone, writeSessionTimezone } from "@/lib/session";
 import type { PageKey, Snapshots } from "@/lib/types";
 
@@ -36,9 +49,19 @@ type AppState = {
   setPostsPage: (page: PageKey) => void;
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
-  /** Authors pinned to the sidebar, most recently pinned first. */
+  /** The favorites bar: pinned authors and the folders filing them. */
+  favorites: FavoriteNode[];
+  /** Every pinned author, flat — what the pin buttons check themselves against. */
   pinnedUsers: string[];
   togglePinnedUser: (username: string) => void;
+  /** Adds an empty folder at the end of the bar and returns its id, so the
+   * caller can open it for naming right away. `null` when the cap is reached. */
+  createFolder: () => string | null;
+  renameFavoriteFolder: (id: string, name: string) => void;
+  /** Drops a favorite or a whole folder from the bar. */
+  removeFavorite: (id: string) => void;
+  /** Reorders the bar, files an author into a folder, or takes one back out. */
+  moveFavorite: (id: string, target: DropTarget) => void;
 };
 
 const AppStateContext = createContext<AppState | null>(null);
@@ -51,12 +74,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [timezone, setTimezoneState] = useState("UTC");
   const [postsPage, setPostsPage] = useState<PageKey>("count");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [pinnedUsers, setPinnedUsers] = useState<string[]>([]);
+  const [favorites, setFavorites] = useState<FavoriteNode[]>([]);
 
   // Read after mount, never during render: the prerendered HTML knows nothing
   // about this browser's storage.
   useEffect(() => {
-    setPinnedUsers(readPinnedUsers());
+    setFavorites(readFavorites());
   }, []);
 
   useEffect(() => {
@@ -95,13 +118,58 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSidebarCollapsed((value) => !value);
   }, []);
 
-  const togglePinnedUser = useCallback((username: string) => {
-    setPinnedUsers((current) => {
-      const next = togglePinned(current, username);
-      writePinnedUsers(next);
-      return next;
-    });
-  }, []);
+  // Every favorites edit is the same move: rewrite the bar with a pure
+  // function from `lib/pins`, then persist exactly what is now on screen.
+  const editFavorites = useCallback(
+    (edit: (current: FavoriteNode[]) => FavoriteNode[]) => {
+      setFavorites((current) => {
+        const next = edit(current);
+        if (next === current) return current;
+        writeFavorites(next);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const togglePinnedUser = useCallback(
+    (username: string) => {
+      editFavorites((current) => togglePinned(current, username));
+    },
+    [editFavorites],
+  );
+
+  // The id is handed back so the bar can open the new folder for naming, which
+  // is why this reads the cap here instead of leaving it to `addFolder` alone.
+  const createFolder = useCallback(() => {
+    if (folders(favorites).length >= MAX_FOLDERS) return null;
+    const folder = makeFolder();
+    editFavorites((current) => addFolder(current, folder));
+    return folder.id;
+  }, [favorites, editFavorites]);
+
+  const renameFavoriteFolder = useCallback(
+    (id: string, name: string) => {
+      editFavorites((current) => renameFolder(current, id, name));
+    },
+    [editFavorites],
+  );
+
+  const removeFavorite = useCallback(
+    (id: string) => {
+      editFavorites((current) => removeNode(current, id));
+    },
+    [editFavorites],
+  );
+
+  const moveFavorite = useCallback(
+    (id: string, target: DropTarget) => {
+      editFavorites((current) => moveNode(current, id, target));
+    },
+    [editFavorites],
+  );
+
+  const pinnedUsers = useMemo(() => listUsers(favorites), [favorites]);
 
   const value = useMemo<AppState>(
     () => ({
@@ -117,8 +185,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPostsPage,
       sidebarCollapsed,
       toggleSidebar,
+      favorites,
       pinnedUsers,
       togglePinnedUser,
+      createFolder,
+      renameFavoriteFolder,
+      removeFavorite,
+      moveFavorite,
     }),
     [
       data,
@@ -130,8 +203,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       postsPage,
       sidebarCollapsed,
       toggleSidebar,
+      favorites,
       pinnedUsers,
       togglePinnedUser,
+      createFolder,
+      renameFavoriteFolder,
+      removeFavorite,
+      moveFavorite,
     ],
   );
 

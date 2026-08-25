@@ -30,8 +30,9 @@ apps/x_proxy/
 │       │   ├── posts/search-posts-recent/{layout,page}.tsx
 │       │   ├── users/search/{layout,page}.tsx
 │       │   └── parameters/{layout,page}.tsx
-│       ├── components/           # AppProvider, AppView, Shell, UserResults,
-│       │                         #   UserDetail, MediaCarousel, charts, tables
+│       ├── components/           # AppProvider, AppView, Shell, FavoritesBar,
+│       │                         #   UserResults, UserDetail, MediaCarousel,
+│       │                         #   charts, tables
 │       └── lib/                  # types, routes, loadSnapshots
 ├── hub.py                        # thin facade (orchestrations / tests)
 ├── build.py                      # CLI publisher
@@ -87,21 +88,48 @@ ticking a username still offers every author in the window.
 
 ## Navigation
 
-The sidebar holds **sections**; a second bar lists the active section's
-subpages:
+The chrome is shaped like a browser window. The rail on the left holds
+**sections**; the header stacks the app and section name, then that section's
+pages as **tabs**, then — on Users — the **favorites bar**:
 
-| Section | Subpages |
-|---|---|
-| Posts | Count Recent Tweets · Search Recent Tweets |
-| Users | Search Users |
-| Parameters | — (no second bar) |
+```
+┌────────┬──────────────────────────────────────────────┐
+│        │ X Proxy - Users                              │  top bar
+│        ├──────────────────────────────────────────────┤
+│ Posts  │ ⟨Search Users⟩                               │  tabs
+│        ├──────────────────────────────────────────────┤
+│ Users  │ @grok  ▸ AI labs 3  @xai       ⊞ New folder  │  favorites (Users only)
+│        │                                              │
+│        │ page                                         │
+│        │                                              │
+│ Snap…  │                                              │  publish stamp
+├────────┤                                              │
+│ Params │                                              │
+└────────┴──────────────────────────────────────────────┘
+```
 
-Under 760px both bars lie down: they become horizontal, scrollable strips above
-the page, and the page itself takes the full width. Only the page header stays
-sticky there — three stacked sticky bars would leave nothing to read — and
-Parameters keeps its gear without its label, which is what makes the three
-sections fit a 390px phone. Collapsing the sidebar is a desktop affordance and
-has no effect at that width.
+| Section | Title | Tabs |
+|---|---|---|
+| Posts | `X Proxy - Posts` | Count Recent Tweets · Search Recent Tweets |
+| Users | `X Proxy - Users` | Search Users |
+| Parameters | `X Proxy - Parameters` | Parameters |
+
+Every section has at least one tab, so the strip never disappears under the
+title. The **publish stamp** (`Snapshot · <date> UTC`) sits at the foot of the
+rail, above the rule that separates Parameters — it describes the whole app, not
+one page, and it is the thing to read when a number looks stale. It is hidden
+when the rail is collapsed and on phones, where the rail is a row. The favorites bar shows on **Users only** for now: its chips are jumps
+into that section, so it sits where that section's own pages are. The whole
+header is sticky: switching tab or favorite never means scrolling back up
+first.
+
+Under 760px the rail lies down as a horizontal, scrollable strip above the
+header, and the page takes the full width. Only the header stays sticky there —
+the rail on top of it would leave nothing to read — and Parameters keeps its
+gear without its label, which is what makes the three sections fit a 390px
+phone. Collapsing the rail is a desktop affordance and has no effect at that
+width. Tabs and the favorites bar already scroll sideways, so they only lose
+padding; the *New folder* button keeps its icon and drops its label.
 
 ### Deep links
 
@@ -191,14 +219,35 @@ Result rows are real links, so ⌘/ctrl-click opens an author in a new tab while
 plain click opens it in place without a reload, and Back / Forward walk the
 authors visited.
 
-### Pinned authors
+### Pinned authors — the favorites bar
 
-Either view can pin an author to a **Pinned** group in the second sidebar, under
-*Search Users* — quick access to the accounts someone keeps coming back to,
-listed where the Users section's own navigation lives (and only there). Pins live
-in `localStorage` (`lib/pins.ts`), newest first, capped at `MAX_PINNED_USERS`
-(12); blocked storage degrades to pins that do not survive a reload. The links
-carry no needle: a pin is a jump to an author, not a search.
+Either view can pin an author to the **favorites bar** under the Users tabs. It
+is a browser bookmarks bar: chips where a chip is either an author or a folder
+of authors, shown on the Users section only. New pins land at the front. The links carry no
+needle — a favorite is a jump to an author, not a search — and the chip of the
+author currently open is marked active.
+
+Organising it (`components/FavoritesBar.tsx`, over the pure operations in
+`lib/pins.ts`):
+
+- **Drag** a chip along the bar to reorder it, onto the middle of a folder to
+  file it there, or out of an open folder to bring it back to the bar. A caret
+  shows where it would land; a folder about to swallow it is outlined.
+- **New folder** appends one and opens its name for typing straight away —
+  Enter or clicking away commits it, Escape leaves the default name.
+- Every chip's **⋮ menu** (also its right-click menu) does the same without a
+  pointer drag: move a favorite to the bar or to any folder, remove it, rename a
+  folder, or delete a folder and its contents. A control that only answers to a
+  drag is a control keyboard users do not have.
+
+Folders never nest: the bar is one row and a menu, not a tree. State lives in
+`localStorage` under `x.apps.x_proxy.pinnedUsers` — at most
+`MAX_PINNED_USERS` (60) authors and `MAX_FOLDERS` (12) folders, with folder
+names cut at `MAX_FOLDER_NAME` (32). The reader still accepts the plain
+`["grok", …]` written before the bar had folders, so an existing browser keeps
+its pins; anything unparseable is dropped rather than thrown, and blocked
+storage (private mode, embedded frames) degrades to favorites that do not
+survive a reload.
 
 The whole page is one published dataset:
 
