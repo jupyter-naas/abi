@@ -567,6 +567,10 @@ class ABIModule(BaseModule):
         ontology_engineer_model: str = "claude-sonnet-5"
         ontology_engineer_provider: str | None = None
 
+        # When False, skip NexusPlatformPipeline on API boot and DROP the
+        # leftover named graph so a reload does not keep stale catalog triples.
+        run_nexus_platform_pipeline: bool = True
+
         # Canonical nexus runtime settings (passed to app.core.config.Settings).
         nexus_config: NexusConfig = Field(default_factory=NexusConfig)
 
@@ -638,19 +642,13 @@ class ABIModule(BaseModule):
         # Initialize Nexus platform (graphs + agent metadata in the triple
         # store). Deferred from on_initialized so non-API entry points
         # (Dagster run workers, CLI commands, tests) don't pay this cost.
-        from naas_abi.pipelines.NexusPlatformPipeline import (
-            NexusPlatformPipeline,
-            NexusPlatformPipelineConfiguration,
-            NexusPlatformPipelineParameters,
-        )
+        from naas_abi.apply_nexus_platform_pipeline import apply_nexus_platform_pipeline
 
-        pipeline = NexusPlatformPipeline(
-            NexusPlatformPipelineConfiguration(
-                triple_store=self.engine.services.triple_store,
-                object_storage=self.engine.services.object_storage,
-            )
+        apply_nexus_platform_pipeline(
+            enabled=self.configuration.run_nexus_platform_pipeline,
+            triple_store=self.engine.services.triple_store,
+            object_storage=self.engine.services.object_storage,
         )
-        pipeline.run(NexusPlatformPipelineParameters())
 
         # Keep API and Nexus CORS aligned from a single source of truth.
         app.state.abi_cors_origins = self.engine.api_configuration.cors_origins
