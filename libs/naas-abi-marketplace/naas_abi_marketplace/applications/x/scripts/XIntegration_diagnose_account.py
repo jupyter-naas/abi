@@ -22,7 +22,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 import requests
-
 from naas_abi_marketplace.applications.x.scripts._common import (
     DEFAULT_BASE_URL,
     get_bearer_token,
@@ -253,14 +252,8 @@ def run_diagnosis(*, base_url: str = DEFAULT_BASE_URL, usage_days: int = 30) -> 
         path="usage/tweets",
         params={
             "days": usage_days,
-            "usage.fields": ",".join(
-                [
-                    "cap_reset_day",
-                    "daily_project_usage",
-                    "project_cap",
-                    "project_id",
-                    "project_usage",
-                ]
+            "usage.fields": (
+                "cap_reset_day,daily_project_usage,project_cap,project_id,project_usage"
             ),
         },
     )
@@ -498,7 +491,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         report["file_paths"] = _persist_report(report)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — persistence is best-effort for CLI output
         print(
             f"Warning: could not save diagnostic to object storage: {exc}",
             file=sys.stderr,

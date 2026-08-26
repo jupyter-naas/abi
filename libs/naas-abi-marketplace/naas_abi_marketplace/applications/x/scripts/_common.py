@@ -99,7 +99,6 @@ def save_diagnostic_report(*, markdown: str, report: dict) -> dict[str, str]:
     Returns:
         dict[str, str]: ``markdown`` and ``json`` object-storage paths.
     """
-    import json
     from datetime import UTC, datetime
 
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")

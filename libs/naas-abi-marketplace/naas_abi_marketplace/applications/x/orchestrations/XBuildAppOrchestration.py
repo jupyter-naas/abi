@@ -1,6 +1,6 @@
 """Scheduled dashboard-rebuild orchestration for the X application.
 
-A single Dagster job (``x_build_app``) that rebuilds the Recent Tweets app from
+A single Dagster job (``signals_x_build_pipeline_hub``) that rebuilds the Recent Tweets app from
 the current graph — no X API calls, no re-ingest, no re-map. On every tick it
 calls :func:`publish_x_app`, which:
 
@@ -14,7 +14,7 @@ map, this one guarantees a periodic rebuild even on a quiet ingestion tick.
 
 The schedule is created RUNNING when module ``app.publish`` is true (the
 default) and STOPPED otherwise; either way you can toggle it from the Dagster UI
-and launch ``x_build_app`` manually from the launchpad to rebuild on demand.
+and launch ``signals_x_build_pipeline_hub`` manually from the launchpad to rebuild on demand.
 """
 
 from __future__ import annotations
@@ -24,9 +24,9 @@ from naas_abi_core import logger
 from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestration
 from naas_abi_marketplace.applications.x import ABIModule
 
-_JOB_NAME = "x_build_app"
-_OP_NAME = "x_build_app_op"
-_SCHEDULE_NAME = "x_build_app_hourly"
+_JOB_NAME = "signals_x_build_pipeline_hub"
+_OP_NAME = "signals_x_build_pipeline_hub_op"
+_SCHEDULE_NAME = "signals_x_build_pipeline_hub_hourly"
 
 
 _BUILD_APP_OP_CONFIG_SCHEMA = {
@@ -80,11 +80,11 @@ def _run_build_cycle(
 class XBuildAppOrchestration(DagsterOrchestration):
     """Scheduled job that rebuilds the X app dashboard from the graph.
 
-    Launchpad: run ``x_build_app`` to re-render the ``x/apps/x_proxy/`` snapshots +
+    Launchpad: run ``signals_x_build_pipeline_hub`` to re-render the ``x/apps/x_proxy/`` snapshots +
     web export from the current triple-store state on demand::
 
         ops:
-          x_build_app_op:
+          signals_x_build_pipeline_hub_op:
             config:
               full_users: true
               rebuild_projection: true
