@@ -65,16 +65,14 @@ def _clamp_end_time(end_time: str) -> str:
     try:
         parsed = datetime.fromisoformat(end_time)
     except ValueError:
-        logger.warning("Could not parse X end_time %r; leaving it unchanged", end_time)
+        logger.warning(f'Could not parse X end_time {end_time!r}; leaving it unchanged')
         return end_time
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     latest_allowed = datetime.now(UTC) - timedelta(seconds=_END_TIME_SAFETY_SECONDS)
     if parsed > latest_allowed:
         clamped = latest_allowed.strftime("%Y-%m-%dT%H:%M:%SZ")
-        logger.info(
-            "Clamped X end_time %r to %r to satisfy the 10s rule", end_time, clamped
-        )
+        logger.info(f'Clamped X end_time {end_time!r} to {clamped!r} to satisfy the 10s rule')
         return clamped
     return end_time
 
@@ -179,14 +177,7 @@ class XIntegration(Integration):
             # `sleep_seconds is None` marks the final attempt — no retries left.
             if sleep_seconds is None:
                 break
-            logger.warning(
-                "X API request to %s failed (attempt %d/%d); retrying in %ds — %s",
-                url,
-                attempt + 1,
-                len(_FIBONACCI_BACKOFF_SECONDS) + 1,
-                sleep_seconds,
-                last_error,
-            )
+            logger.warning(f'X API request to {url} failed (attempt {attempt + 1}/{len(_FIBONACCI_BACKOFF_SECONDS) + 1}); retrying in {sleep_seconds}s — {last_error}')
             time.sleep(sleep_seconds)
 
         raise last_error  # type: ignore[misc]
