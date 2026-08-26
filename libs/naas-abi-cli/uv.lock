@@ -2384,7 +2384,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "2.54.0"
+version = "2.54.3"
 source = { editable = "../naas-abi" }
 dependencies = [
     { name = "aiosqlite" },
@@ -2466,7 +2466,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-cli"
-version = "2.17.1"
+version = "2.18.1"
 source = { editable = "." }
 dependencies = [
     { name = "naas-abi" },
@@ -2499,7 +2499,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "2.26.1"
+version = "2.27.2"
 source = { editable = "../naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -2615,11 +2615,12 @@ dev = [
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "3.36.0"
+version = "3.36.4"
 source = { editable = "../naas-abi-marketplace" }
 dependencies = [
     { name = "ijson" },
     { name = "naas-abi-core" },
+    { name = "pyyaml" },
 ]
 
 [package.optional-dependencies]
@@ -2659,6 +2660,7 @@ requires-dist = [
     { name = "pymupdf4llm", marker = "extra == 'domains-document'", specifier = ">=1.27.2.2" },
     { name = "pynacl", marker = "extra == 'applications-github'", specifier = ">=1.5.0,<2" },
     { name = "python-pptx", marker = "extra == 'applications-powerpoint'", specifier = ">=1.0.2,<2" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "ratelimit", marker = "extra == 'applications-pubmed'", specifier = ">=2.2.1" },
     { name = "ratelimit-types", marker = "extra == 'applications-pubmed'", specifier = "==0.0.3" },
     { name = "thefuzz", marker = "extra == 'domains-ontology-engineer'", specifier = "==0.22.1" },
@@ -4552,8 +4554,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "jeepney", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "cryptography" },
+    { name = "jeepney" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [

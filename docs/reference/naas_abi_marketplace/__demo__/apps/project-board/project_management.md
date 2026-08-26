@@ -1,49 +1,53 @@
 # Project Management Board (`project_management.py`)
 
 ## What it is
-- A **Streamlit** app that renders a **Project Management Board** with multiple views:
+- A **Streamlit** dashboard script for **multi-team project tracking** with multiple views:
   - Kanban board
   - Timeline (Gantt-like) view
   - Resource allocation view
   - Sprint planning view
-- Includes an SOP page renderer that loads a local `SOP.md`.
+- Includes a sidebar action to render a local **`SOP.md`** page.
 
 ## Public API
-This module is a **Streamlit script** (UI executed at import/run time). It does not expose a reusable library API.
+This module is a **Streamlit app script** (UI runs at import/execution). It is not structured as a reusable library.
 
 - `load_project_data() -> pandas.DataFrame`
-  - Cached via `@st.cache_data`
-  - Generates **sample project data** (15 projects) with random `Status`, `Priority`, `Team`, `Assignee`, `Progress`, `Story_Points`, and computed `Days_Remaining`.
+  - Streamlit-cached via `@st.cache_data`.
+  - Generates mock data for 15 projects with fields:
+    - `Project_ID`, `Title`, `Status`, `Priority`, `Team`, `Assignee`
+    - `Start_Date`, `Due_Date`, `Progress`, `Story_Points`
+    - computed `Days_Remaining`
 
 ## Configuration/Dependencies
-- **Python packages**
+- **Dependencies**
   - `streamlit`
   - `pandas`
   - `numpy`
-  - `plotly` (`plotly.express`, `plotly.graph_objects`)
-- **Runtime configuration**
-  - Calls `st.set_page_config(page_title="Project Board", page_icon="📋", layout="wide")`.
-  - When executed as `__main__`, sets:
-    - `os.environ["STREAMLIT_SERVER_PORT"] = "8503"`
-- **Local files**
-  - `SOP.md` is expected in the **same directory** as this script for the SOP page.
+  - `plotly.express`, `plotly.graph_objects`
+- **Streamlit page config**
+  - `st.set_page_config(page_title="Project Board", page_icon="📋", layout="wide")`
+- **Environment**
+  - When executed as `__main__`, sets `STREAMLIT_SERVER_PORT=8503`.
+- **Local file**
+  - Expects `SOP.md` in the same directory as `project_management.py` for the SOP page.
 
 ## Usage
 Run with Streamlit:
-
 ```bash
 streamlit run libs/naas-abi-marketplace/naas_abi_marketplace/__demo__/apps/project-board/project_management.py
 ```
 
-In the app:
-- Use sidebar controls:
-  - **Project Filter** (currently not applied to data in code)
-  - **Team Filter** (filters the dataset)
-  - **View Mode** (switches between Kanban/Timeline/Resource/Sprint views)
-- Click **📖 View SOP** to load and display `SOP.md`.
+In the UI:
+- Sidebar controls:
+  - **Project Filter** (selectbox)
+  - **Team Filter** (multiselect; used to filter data)
+  - **View Mode** (Kanban / Timeline / Resource / Sprint)
+  - **📖 View SOP** button loads `SOP.md` into a separate page state
+- Main area includes summary metrics, selected view, project actions, details table, risk analysis, blocked list, and activity feed.
 
 ## Caveats
-- Data is **mock/random** on generation; it is not connected to external systems (buttons display success/info messages only).
-- `Project Filter` selection is defined but **not used** to filter `filtered_projects`.
-- SOP page requires `SOP.md`; missing file triggers an in-app error message.
-- The script executes UI code at module load; it is not designed to be imported as a library.
+- Data is **random/mock** on generation; no external integrations are performed (e.g., “Sync with Jira” only shows a message).
+- `Project Filter` is defined but **not applied** to the dataset; only `Team Filter` affects `filtered_projects`.
+- SOP rendering requires `SOP.md`; missing file displays an in-app error.
+- Sprint metrics:
+  - Completion rate divides by `total_points`; if `total_points` is `0` (possible after filtering), it can raise a division error.

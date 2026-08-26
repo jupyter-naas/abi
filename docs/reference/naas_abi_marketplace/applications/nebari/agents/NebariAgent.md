@@ -1,40 +1,47 @@
 # NebariAgent
 
 ## What it is
-A thin wrapper around `naas_abi_core.services.agent.IntentAgent.IntentAgent` that builds an intent-driven agent preconfigured to answer Nebari platform questions using a predefined system prompt and a fixed set of raw Q&A intents.
+An `IntentAgent` specialization that builds a Nebari-focused agent preconfigured with a Nebari system prompt and a fixed set of RAW Q&A intents.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Creates and returns a configured `NebariAgent` instance.
-  - Sets defaults when arguments are not provided:
-    - `AgentConfiguration(system_prompt=SYSTEM_PROMPT)`
-    - `AgentSharedState(thread_id="0")`
-  - Loads the chat model from `naas_abi_marketplace.applications.nebari.models.default`.
-  - Attaches:
-    - `intents`: a list of `Intent` entries (mostly `IntentType.RAW`) covering Nebari architecture, deployment, features, security, scaling, and community.
-    - `tools`: empty list
-    - `agents`: empty list
-    - `memory`: `None`
-
 - `class NebariAgent(IntentAgent)`
-  - No additional methods or overrides; inherits all behavior from `IntentAgent`.
+  - Purpose: Provide a ready-to-use intent-driven agent for answering questions about the Nebari open-source data science platform.
+  - Class attributes:
+    - `name`: `"Nebari"`
+    - `description`: expert agent description
+    - `avatar_url`: static image URL
+    - `system_prompt`: Nebari-focused system prompt
+    - `suggestions`: empty list
+  - `@classmethod New(cls, agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> NebariAgent`
+    - Creates and returns a configured `NebariAgent`.
+    - Loads models from `ABIModule.get_instance().engine.services.model_registry`:
+      - `chat_model = registry.get_default_chat_model()`
+      - `embedding_model = registry.get_default_embedding_model().model`
+    - Configures:
+      - `tools = []`
+      - `agents = []`
+      - `intents`: a static list of `Intent(..., intent_type=IntentType.RAW, intent_target=...)` covering Nebari overview, architecture, deployment, features, workflows, ecosystem, scaling/cost, security, and community.
+      - `memory = None`
+    - Defaults:
+      - `agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)` if not provided
+      - `agent_shared_state = AgentSharedState(thread_id="0")` if not provided
 
 ## Configuration/Dependencies
 - Depends on `naas_abi_core.services.agent.IntentAgent` for:
   - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
-- Requires an application-provided model:
-  - `from naas_abi_marketplace.applications.nebari.models.default import model`
-- Built-in constants:
-  - `NAME`, `DESCRIPTION`, `AVATAR_URL`, `SYSTEM_PROMPT`, `SUGGESTIONS` (currently empty)
+- Requires Nebari application module:
+  - `from naas_abi_marketplace.applications.nebari import ABIModule`
+- Requires `ModelRegistryService` to be initialized:
+  - `registry` is asserted non-`None` (`"ModelRegistryService not initialized"`)
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.nebari.agents.NebariAgent import create_agent
+from naas_abi_marketplace.applications.nebari.agents.NebariAgent import NebariAgent
 
-agent = create_agent()
-# Use `agent` via the IntentAgent interface provided by naas_abi_core.
+agent = NebariAgent.New()
+# Interact with `agent` using the IntentAgent interface from naas_abi_core.
 ```
 
 ## Caveats
 - No tools, sub-agents, or memory are configured (`tools=[]`, `agents=[]`, `memory=None`).
-- The agent behavior is driven primarily by the imported chat model and the static RAW intents defined in this module.
+- Instantiation requires a configured Nebari `ABIModule` engine with an initialized `model_registry`; otherwise an assertion error is raised.

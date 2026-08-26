@@ -1,37 +1,34 @@
 # gemma3_4b
 
 ## What it is
-- A module that defines a preconfigured `ChatModel` instance for the **Gemma3 4B** model served via **Ollama** (LangChain `ChatOllama` backend).
+- A small module that exposes a preconfigured `ChatModel` for the **Gemma3 4B** model via **Ollama** using LangChain’s `ChatOllama`.
 
 ## Public API
 - `model: ChatModel`
-  - Ready-to-use chat model configuration:
+  - Prebuilt chat model configuration:
     - `model_id`: `"gemma3:4b"`
     - `name`: `"Gemma3 4B"`
     - `description`: `"Google's open-source Gemma3 4B model for local deployment. Fast, lightweight alternative to cloud Gemini."`
+    - `image`: `"https://naasai-public.s3.eu-west-3.amazonaws.com/logos/ollama_100x100.png"`
     - `provider`: `"ollama"`
-    - `image`: Ollama logo URL
     - `context_window`: `8192`
     - Underlying LangChain model: `ChatOllama(model="gemma3:4b", temperature=0.4)`
 
 ## Configuration/Dependencies
-- Dependencies:
+- Python dependencies:
   - `langchain_ollama.ChatOllama`
   - `naas_abi_core.models.Model.ChatModel`
-- Runtime requirement:
-  - An Ollama setup capable of serving the model id `"gemma3:4b"`.
+- Runtime:
+  - Ollama available and able to serve the model id `"gemma3:4b"`.
 
 ## Usage
 ```python
 from naas_abi_marketplace.ai.gemma.models.gemma3_4b import model
 
-# Access underlying LangChain chat model
-llm = model.model
-
-# Example call (LangChain interface)
-response = llm.invoke("Hello! Give me a one-sentence summary of Gemma.")
-print(response)
+llm = model.model  # underlying ChatOllama instance
+resp = llm.invoke("Hello! Give me a one-sentence summary of Gemma.")
+print(resp)
 ```
 
 ## Caveats
-- The module only exports a configured `ChatModel` instance; it does not include Ollama installation, model pulling, or server lifecycle management.
+- This module only provides a configured `ChatModel` instance; it does not manage Ollama installation, model pulling, or server lifecycle.

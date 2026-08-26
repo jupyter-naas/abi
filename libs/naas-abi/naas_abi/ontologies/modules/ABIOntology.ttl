@@ -21,7 +21,7 @@ abi:Ontology a owl:Ontology ;
   abi:pythonPackage "naas_abi" ;
   abi:ontologyResource "ontologies/modules/ABIOntology.ttl" ;
   abi:pythonResource "ontologies/modules/ABIOntology.py" ;
-  dc11:contributor "Florent Ravenel", "Jeremy Ravenel", "Maxime Jublou" ;
+  dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
   dc11:date "2026-06-26"^^xsd:date .
 
 #################################################################

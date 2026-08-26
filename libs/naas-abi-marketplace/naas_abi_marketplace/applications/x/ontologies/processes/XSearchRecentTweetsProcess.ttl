@@ -25,7 +25,7 @@ x:SearchRecentTweetsProcess a owl:Ontology ;
   dc:description "Process ontology for the X v2 GET /2/tweets/search/recent endpoint. Models the SearchRecentTweets process, the SearchQuery it executes, the SearchResultSet it produces and the SearchInterval it occupies. The response separates two populations that this ontology keeps apart: the tweets that matched the query (`data`, linked to the result set by x:containsTweet) and the ReferencedTweet individuals pulled in by the `referenced_tweets.id` expansion (`includes.tweets`, linked by x:containsReferencedTweet). Only the former are search results; conflating them overstates matched volume."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Process ontology for searching recent X tweets, separating matched tweets from referenced context tweets."@en ;
-  dc11:contributor "Florent Ravenel" ;
+  dc11:contributor "Alice Dupont" ;
   dc11:date "2026-08-07"^^xsd:date .
 
 #################################################################

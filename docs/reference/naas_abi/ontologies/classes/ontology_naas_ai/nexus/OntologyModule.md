@@ -16,7 +16,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.OntologyModule import OntologyModule
+from naas_abi.ontologies.classes.ontology_demo.nexus.OntologyModule import OntologyModule
 
 module = OntologyModule()
 module.actions()  # no-op by default

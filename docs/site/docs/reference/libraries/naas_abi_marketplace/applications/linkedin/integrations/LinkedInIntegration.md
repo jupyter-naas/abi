@@ -127,13 +127,13 @@ from naas_abi_marketplace.applications.linkedin.integrations.LinkedInIntegration
 cfg = LinkedInIntegrationConfiguration(
     li_at="YOUR_LI_AT",
     JSESSIONID='"YOUR_JSESSIONID"',  # quotes are stripped automatically
-    linkedin_url="https://www.linkedin.com/in/someone/",
+    linkedin_url="https://demo.example/profiles/demo",
 )
 
 li = LinkedInIntegration(cfg)
 
-org = li.get_organization_info("https://www.linkedin.com/company/naas-ai/", return_cleaned_json=True)
-profile = li.get_profile_top_card("https://www.linkedin.com/in/someone/", return_cleaned_json=True)
+org = li.get_organization_info("https://www.linkedin.com/company/demo/", return_cleaned_json=True)
+profile = li.get_profile_top_card("https://demo.example/profiles/demo", return_cleaned_json=True)
 print(org.keys(), profile.keys())
 ```
 
@@ -147,7 +147,7 @@ from naas_abi_marketplace.applications.linkedin.integrations.LinkedInIntegration
 cfg = LinkedInIntegrationConfiguration(
     li_at="YOUR_LI_AT",
     JSESSIONID="YOUR_JSESSIONID",
-    linkedin_url="https://www.linkedin.com/in/someone/",
+    linkedin_url="https://demo.example/profiles/demo",
 )
 
 tools = as_tools(cfg)

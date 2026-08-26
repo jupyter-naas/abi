@@ -13,6 +13,7 @@ CRUD + SPARQL facade over RDF named graphs. Publishes domain events on every mut
 | `TripleStorePorts.py` | `ITripleStorePort`, `ITripleStoreService`, exceptions |
 | `TripleStoreService.py` | Public service: SPARQL + graph ops + event emission + subscribe + schema loading |
 | `TripleStoreFactory.py` | Pre-wired service builders |
+| `resolve.py` | Resolve local `abi dev` HTTP service URLs for standalone scripts |
 | `oxigraph_server.py` | Minimal HTTP SPARQL server wrapping `pyoxigraph.Store` for `abi dev` no-docker runtime |
 | `adaptors/secondary/` | Concrete adapters |
 | `adaptors/secondary/base/` | Filesystem/ObjectStorage shared helper (`TripleStoreService__SecondaryAdaptor__FileBase`) |
@@ -74,7 +75,7 @@ get_schema_graph() -> Graph
 TripleStoreFactory.TripleStoreServiceNaas(naas_api_key, workspace_id, storage_name, base_prefix="ontologies")
 TripleStoreFactory.TripleStoreServiceFilesystem(path)
 TripleStoreFactory.TripleStoreServiceAWSNeptuneSSHTunnel(...)   # all args optional, reads env if None
-TripleStoreFactory.TripleStoreServiceOxigraph(oxigraph_url=None)        # OXIGRAPH_URL or http://localhost:7878
+TripleStoreFactory.TripleStoreServiceOxigraph(oxigraph_url=None)        # local abi dev oxigraph URL
 TripleStoreFactory.TripleStoreServiceApacheJenaTDB2(jena_tdb2_url=None) # JENA_TDB2_URL or http://localhost:3030/ds
 TripleStoreFactory.TripleStoreServiceOxigraphEmbedded(store_path, graph_base_iri="http://ontology.naas.ai/graph/default")
 ```

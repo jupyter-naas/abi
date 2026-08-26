@@ -1,36 +1,33 @@
 # sonar_deep_research
 
 ## What it is
-- A preconfigured Perplexity chat model definition for the **`sonar-deep-research`** model.
-- Exposes a module-level `ChatModel` instance wired to `langchain_perplexity.ChatPerplexity`.
+- A preconfigured Perplexity chat model definition for the `sonar-deep-research` model.
+- Exposes a module-level `ChatModel` instance that wraps `langchain_perplexity.ChatPerplexity`.
 
 ## Public API
 - **Constants**
-  - `MODEL_ID`: `"sonar-deep-research"` — the Perplexity model name.
+  - `MODEL_ID`: `"sonar-deep-research"` — Perplexity model name.
   - `PROVIDER`: `"perplexity"` — provider identifier.
 - **Objects**
-  - `model: ChatModel` — a ready-to-use `naas_abi_core.models.Model.ChatModel` wrapping `ChatPerplexity` with:
-    - `temperature=0`
-    - `timeout=120`
-    - `api_key` sourced from `ABIModule.get_instance().configuration.perplexity_api_key`
+  - `model: ChatModel` — ready-to-use `naas_abi_core.models.Model.ChatModel` configured with:
+    - underlying model: `ChatPerplexity(model=MODEL_ID, temperature=0, timeout=120, api_key=SecretStr(...))`
 
 ## Configuration/Dependencies
 - **Dependencies**
   - `langchain_perplexity.ChatPerplexity`
-  - `naas_abi_marketplace.ai.perplexity.ABIModule`
   - `naas_abi_core.models.Model.ChatModel`
+  - `naas_abi_marketplace.ai.perplexity.ABIModule`
   - `pydantic.SecretStr`
-- **Configuration required**
-  - `ABIModule.get_instance().configuration.perplexity_api_key` must be set and accessible.
+- **Required configuration**
+  - `ABIModule.get_instance().configuration.perplexity_api_key` must be available; it is wrapped in `SecretStr` and passed to `ChatPerplexity`.
 
 ## Usage
 ```python
-from naas_abi_marketplace.ai.perplexity.models import sonar_deep_research
+from naas_abi_marketplace.ai.perplexity.models.sonar_deep_research import model
 
-chat_model = sonar_deep_research.model
-# `chat_model.model` is the underlying ChatPerplexity instance.
+# `model` is a ChatModel wrapper; the underlying LangChain model is at `model.model`
+chat = model.model
 ```
 
 ## Caveats
-- Importing this module will access `ABIModule.get_instance().configuration.perplexity_api_key`; missing/invalid configuration may raise errors during import.
-- The API key is wrapped as `SecretStr`, but you are still responsible for secure configuration management.
+- Importing this module reads `ABIModule.get_instance().configuration.perplexity_api_key`; missing/invalid configuration can fail at import time.

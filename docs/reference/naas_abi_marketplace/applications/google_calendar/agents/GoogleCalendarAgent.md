@@ -1,39 +1,44 @@
 # GoogleCalendarAgent
 
 ## What it is
-A minimal `IntentAgent` implementation configured to provide general guidance about Google Calendar (features, scheduling, event management) **without** any connected Google Calendar tools or API access.
+An `IntentAgent` implementation that provides **general guidance** about Google Calendar (features, scheduling, event management). It has **no tools/integrations configured**, so it cannot access or modify any real calendar data.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Factory that builds and returns a configured `GoogleCalendarAgent`.
-  - Sets:
-    - `system_prompt` (if not provided) to `SYSTEM_PROMPT`
-    - empty `tools` list (no integrations)
-    - two RAW `Intent` entries for informational responses
-    - `chat_model` from `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1`
-    - `memory=None`
 - `class GoogleCalendarAgent(IntentAgent)`
-  - No additional methods/overrides; inherits behavior from `IntentAgent`.
+  - Agent class with preset metadata:
+    - `name = "Google_Calendar"`
+    - `description = "Helps you interact with Google Calendar for scheduling and event management."`
+    - `system_prompt` describing guidance-only behavior (no tool access)
+    - `suggestions = []`
+- `GoogleCalendarAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> GoogleCalendarAgent`
+  - Factory constructor that:
+    - Gets default chat and embedding models via the application `ABIModule` model registry.
+    - Configures:
+      - `tools = []`
+      - two `IntentType.RAW` intents for informational responses
+      - `memory = None`
+    - Defaults if not provided:
+      - `agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)`
+      - `agent_shared_state = AgentSharedState(thread_id="0")`
 
 ## Configuration/Dependencies
-- Depends on `naas_abi_core.services.agent.IntentAgent`:
+- Imports from `naas_abi_core.services.agent.IntentAgent`:
   - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
-- Chat model dependency:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1` (imports `model` and uses `model.model`)
-- Key module constants:
-  - `NAME = "Google_Calendar"`
-  - `DESCRIPTION = "Helps you interact with Google Calendar for scheduling and event management."`
-  - `SYSTEM_PROMPT` describes no-tool constraints and guidance-only behavior
-  - `SUGGESTIONS: list = []`
+- Depends on application module singleton:
+  - `from naas_abi_marketplace.applications.google_calendar import ABIModule`
+  - Requires `ABIModule.get_instance().engine.services.model_registry` to be initialized.
+- Model dependencies (resolved via registry):
+  - `registry.get_default_chat_model()`
+  - `registry.get_default_embedding_model().model`
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.google_calendar.agents.GoogleCalendarAgent import create_agent
+from naas_abi_marketplace.applications.google_calendar.agents.GoogleCalendarAgent import GoogleCalendarAgent
 
-agent = create_agent()
-# Interactions depend on the underlying IntentAgent interface.
+agent = GoogleCalendarAgent.New()
+# Interact with `agent` using the interfaces provided by IntentAgent in naas_abi_core.
 ```
 
 ## Caveats
-- No tools are configured (`tools = []`), so the agent cannot access calendars or perform actions; it can only provide general information and guidance.
-- The concrete runtime interaction methods come from `IntentAgent` (not defined in this file).
+- No tools are configured (`tools = []`): the agent cannot read/write calendars or perform operations, only explain concepts and best practices.
+- `New()` asserts that the model registry is initialized; it will raise an assertion error if not.

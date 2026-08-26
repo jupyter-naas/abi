@@ -452,7 +452,7 @@ class LinkedInIntegration(Integration):
         Handles company, school and showcase pages.
 
         Args:
-            url (str): LinkedIn organization URL (e.g., "https://www.linkedin.com/company/naas-ai/")
+            url (str): LinkedIn organization URL (e.g., "https://www.linkedin.com/company/demo/")
 
         Returns:
             str: Organization ID
@@ -489,7 +489,7 @@ class LinkedInIntegration(Integration):
         """Get detailed information about a LinkedIn organization using LinkedIn's native API.
 
         Args:
-            url (str): LinkedIn organization URL (e.g., "https://www.linkedin.com/company/naas-ai/")
+            url (str): LinkedIn organization URL (e.g., "https://www.linkedin.com/company/demo/")
 
         Returns:
             Dict: Raw organization data from LinkedIn API
@@ -525,7 +525,7 @@ class LinkedInIntegration(Integration):
         Handles profile URLs with or without the /in/ prefix.
 
         Args:
-            url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            url (str): LinkedIn profile URL (e.g., "https://demo.example/profiles/demo")
 
         Returns:
             Dict: Profile ID
@@ -540,7 +540,7 @@ class LinkedInIntegration(Integration):
         """Get profile public ID / public identifier from LinkedIn profile data.
 
         Args:
-            url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            url (str): LinkedIn profile URL (e.g., "https://demo.example/profiles/demo")
 
         Returns:
             str: Profile public ID / public identifier
@@ -596,7 +596,7 @@ class LinkedInIntegration(Integration):
         """Get profile ID from LinkedIn profile data.
 
         Args:
-            url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            url (str): LinkedIn profile URL (e.g., "https://demo.example/profiles/demo")
 
         Returns:
             str: Profile ID starting with AcoAA
@@ -617,7 +617,7 @@ class LinkedInIntegration(Integration):
         """Get profile top card information for a LinkedIn profil url.
 
         Args:
-            url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            url (str): LinkedIn profile URL (e.g., "https://demo.example/profiles/demo")
 
         Returns:
             Dict: Raw profile top card data from LinkedIn API
@@ -654,7 +654,7 @@ class LinkedInIntegration(Integration):
         """Get profile skills for a LinkedIn profile.
 
         Args:
-            url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            url (str): LinkedIn profile URL (e.g., "https://demo.example/profiles/demo")
 
         Returns:
             Dict: Raw profile skills data from LinkedIn API
@@ -686,7 +686,7 @@ class LinkedInIntegration(Integration):
         """Get profile skills for a LinkedIn profile.
 
         Args:
-            url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            url (str): LinkedIn profile URL (e.g., "https://demo.example/profiles/demo")
 
         Returns:
             Dict: Raw profile skills data from LinkedIn API
@@ -701,7 +701,7 @@ class LinkedInIntegration(Integration):
         """Get profile experience for a LinkedIn profile.
 
         Args:
-            url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            url (str): LinkedIn profile URL (e.g., "https://demo.example/profiles/demo")
 
         Returns:
             Dict: Raw profile experience data from LinkedIn API
@@ -718,7 +718,7 @@ class LinkedInIntegration(Integration):
         """Get profile experience for a LinkedIn profile.
 
         Args:
-            url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            url (str): LinkedIn profile URL (e.g., "https://demo.example/profiles/demo")
 
         Returns:
             Dict: Raw profile experience data from LinkedIn API

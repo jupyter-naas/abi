@@ -2917,17 +2917,22 @@ if __name__ == "__main__":
     """
     import argparse
 
-    # Default TTL file
-    default_ttl_file = "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/ontologies/modules/ActOfConnectionsOnLinkedIn.ttl"
-
-    parser = argparse.ArgumentParser(description="Send a message via Twilio")
+    parser = argparse.ArgumentParser(
+        description="Convert an ontology TTL file to Python RDFEntity classes."
+    )
     parser.add_argument(
         "ttl_file",
-        nargs="?",
-        default=default_ttl_file,
-        help="Path to the TTL file to convert to Python code",
+        nargs="+",
+        help="Path(s) to the TTL file(s) to convert to Python code",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite existing per-class action files",
     )
     args = parser.parse_args()
-    ttl_file = args.ttl_file
 
-    python_code = onto2py(ttl_file)
+    # onto2py() writes the .py next to the TTL itself, cache marker included —
+    # the return value is for callers that want the source, not a second write.
+    for path in args.ttl_file:
+        onto2py(path, overwrite=args.overwrite)

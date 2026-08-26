@@ -51,7 +51,22 @@ modules:
         - "perplexity/sonar-pro-search"
         - "x-ai/grok-4.1-fast"
 
-  - module: naas_abi_marketplace.domains.support
+  - module: naas_abi_marketplace.domains.operations.modules.document
+    enabled: true
+    config:
+      document_agent:
+        model_id: "text-embedding-3-small"
+        dimension: 1536
+        api_key: "{{ secret.OPENAI_API_KEY }}"
+      markdowntovector_pipelines:
+        - api_key: "{{ secret.OPENAI_API_KEY }}"
+
+  - module: naas_abi_marketplace.domains.operations.modules.ontology_engineer
+    enabled: true
+    config:
+      datastore_path: "ontology-engineer"
+
+  - module: naas_abi_marketplace.domains.operations.modules.support
     enabled: true
     config:
         default_repository: "jupyter-naas/abi"

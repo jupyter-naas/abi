@@ -1,20 +1,20 @@
 # `streamlit.py`
 
 ## What it is
-- A Streamlit application script intended for a “network-vizualization” demo under `naas_abi_marketplace`.
-- The provided source file is empty, so it contains no executable code, UI, or logic.
+- Placeholder module for a Streamlit demo app under `__demo__/apps/network-vizualization`.
+- The file is empty and contains no executable code.
 
 ## Public API
 - None.
-  - No public classes, functions, or variables are defined.
+  - No functions, classes, constants, or CLI entrypoints are defined.
 
 ## Configuration/Dependencies
-- No dependencies can be determined from the file (no imports present).
-- By location/name, it is likely intended to be run with **Streamlit**, but this is not expressed in the file contents.
+- None declared (no imports).
+- Despite the filename/location suggesting Streamlit usage, no Streamlit dependency is expressed in code.
 
 ## Usage
-- There is no runnable example for this module because it contains no code.
-- If this is meant to be a Streamlit app, it must be implemented first (e.g., add Streamlit imports and UI code).
+- No runnable usage: the module contains no code.
+- To make it a Streamlit app, you would need to add Streamlit UI code and then run it with `streamlit run ...`.
 
 ## Caveats
-- The module is currently a no-op: running it will do nothing and define nothing.
+- No-op module: importing or running it performs no actions and exposes no API.

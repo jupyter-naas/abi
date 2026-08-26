@@ -2,6 +2,40 @@
 
 <!-- version list -->
 
+## v2.18.1 (2026-08-25)
+
+### Bug Fixes
+
+- **nexus**: Point module asset URLs at the live API port
+  ([`e47fc0d`](https://github.com/jupyter-naas/abi/commit/e47fc0d7a2543950a9b985bd40b1ea422c95254e))
+
+- **nexus**: Resolve module asset URLs from the live API port
+  ([`d3b02f2`](https://github.com/jupyter-naas/abi/commit/d3b02f2f5555907a482555a2df3e54c9191cf131))
+
+
+## v2.18.0 (2026-08-20)
+
+### Bug Fixes
+
+- **api**: Satisfy mypy on process API mounts
+  ([#1203](https://github.com/jupyter-naas/abi/pull/1203),
+  [`19d538d`](https://github.com/jupyter-naas/abi/commit/19d538d7fec8b24d262c5f90b1416a6963c0a234))
+
+### Features
+
+- **api**: Mount module workflows, pipelines, and Expose tools
+  ([#1203](https://github.com/jupyter-naas/abi/pull/1203),
+  [`19d538d`](https://github.com/jupyter-naas/abi/commit/19d538d7fec8b24d262c5f90b1416a6963c0a234))
+
+
+## v2.17.2 (2026-08-18)
+
+### Bug Fixes
+
+- Bump uv.lock libs
+  ([`ef92f2c`](https://github.com/jupyter-naas/abi/commit/ef92f2c380878e8525ad7edb2f6009abd71dbd6f))
+
+
 ## v2.17.1 (2026-08-14)
 
 

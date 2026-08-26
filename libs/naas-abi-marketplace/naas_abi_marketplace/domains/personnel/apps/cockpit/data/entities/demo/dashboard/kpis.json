@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-08-19 19:05",
+  "entity_id": "demo",
+  "source": "graphs/demo/personnel.ttl",
+  "records": [],
+  "kpis": {
+    "active_headcount": {
+      "value": 5
+    },
+    "org_time_in_year": {
+      "value": 3.4,
+      "unit": "years"
+    },
+    "avg_seniority": {
+      "value": 8.4,
+      "unit": "years"
+    },
+    "avg_scolarity": {
+      "value": 0.0,
+      "unit": "years"
+    }
+  }
+}

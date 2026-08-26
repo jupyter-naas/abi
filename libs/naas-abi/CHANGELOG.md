@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v2.54.3 (2026-08-25)
+
+### Bug Fixes
+
+- **nexus**: Point module asset URLs at the live API port
+  ([`e47fc0d`](https://github.com/jupyter-naas/abi/commit/e47fc0d7a2543950a9b985bd40b1ea422c95254e))
+
+- **nexus**: Resolve module asset URLs from the live API port
+  ([`d3b02f2`](https://github.com/jupyter-naas/abi/commit/d3b02f2f5555907a482555a2df3e54c9191cf131))
+
+
+## v2.54.2 (2026-08-20)
+
+### Bug Fixes
+
+- Error loading app html
+  ([`4f84087`](https://github.com/jupyter-naas/abi/commit/4f8408731bbb30711d0512ea8f907f65130975aa))
+
+
+## v2.54.1 (2026-08-18)
+
+### Bug Fixes
+
+- **nexus**: Show letter when workspace logo fails to load
+  ([`e731463`](https://github.com/jupyter-naas/abi/commit/e731463e84443a838be80a8886a4ac5c95f85210))
+
+
 ## v2.54.0 (2026-08-17)
 
 ### Features

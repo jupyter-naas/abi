@@ -15,7 +15,7 @@ A thin subclass of `naas_abi.ontologies.modules.NexusPlatformOntology.Ontology` 
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.Ontology import Ontology
+from naas_abi.ontologies.classes.ontology_demo.nexus.Ontology import Ontology
 
 onto = Ontology()
 onto.actions()  # no-op

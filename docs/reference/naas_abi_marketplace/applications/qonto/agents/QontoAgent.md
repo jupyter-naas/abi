@@ -1,37 +1,46 @@
 # QontoAgent
 
 ## What it is
-A minimal `IntentAgent` configuration for a Qonto-focused assistant that **only provides general guidance** about Qonto, business banking, and account management (no tools are configured).
+An `IntentAgent` implementation for Qonto-focused assistance. It is configured to provide **general guidance only** (no Qonto tools are wired), with a predefined system prompt and a couple of RAW intents.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Factory that builds and returns a `QontoAgent` with:
-    - Name/description constants
-    - A GPT-4.1 chat model
-    - No tools (`tools = []`)
-    - Two predefined RAW intents (informational responses)
-    - Optional shared state and configuration (defaults created if not provided)
 - `class QontoAgent(IntentAgent)`
-  - Concrete agent type (no additional behavior beyond `IntentAgent`).
+  - Agent definition with class attributes:
+    - `name = "Qonto"`
+    - `description = "Helps you interact with Qonto for business banking and financial management."`
+    - `system_prompt`: guidance-only prompt (explicitly states no tool access)
+    - `suggestions: list = []`
+- `QontoAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> QontoAgent` (classmethod)
+  - Factory that:
+    - Retrieves default chat and embedding models from the application’s `ModelRegistryService`.
+    - Configures:
+      - `tools = []`
+      - `agents = []`
+      - `intents`: two `IntentType.RAW` entries for informational responses.
+    - Defaults if not provided:
+      - `agent_configuration = AgentConfiguration(system_prompt=QontoAgent.system_prompt)`
+      - `agent_shared_state = AgentSharedState(thread_id="0")`
+    - Returns a constructed `QontoAgent`.
 
 ## Configuration/Dependencies
-- Depends on `naas_abi_core.services.agent.IntentAgent` for:
+- Depends on `naas_abi_core.services.agent.IntentAgent`:
   - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
-- Loads the chat model from:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1`
-- Key constants:
-  - `SYSTEM_PROMPT`: explicitly states no access to Qonto tools/data; guidance-only behavior.
-  - `SUGGESTIONS`: empty list.
+- Requires the Qonto application module:
+  - `from naas_abi_marketplace.applications.qonto import ABIModule`
+  - Uses `ABIModule.get_instance().engine.services.model_registry`
+  - Asserts model registry is initialized: `assert registry is not None`
+- Models are pulled from the registry:
+  - `chat_model = registry.get_default_chat_model()`
+  - `embedding_model = registry.get_default_embedding_model().model`
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.qonto.agents.QontoAgent import create_agent
+from naas_abi_marketplace.applications.qonto.agents.QontoAgent import QontoAgent
 
-agent = create_agent()
-# Use `agent` according to the IntentAgent interface provided by naas_abi_core.
+agent = QontoAgent.New()
+# Interact with `agent` via the IntentAgent interface from naas_abi_core.
 ```
 
 ## Caveats
-- No Qonto tools are configured (`tools = []`), so the agent cannot:
-  - Access accounts, balances, transactions, or perform any banking actions.
-- Intended output is informational guidance based on the system prompt and RAW intents.
+- No tools are configured (`tools = []`), so the agent cannot access Qonto accounts, balances, transactions, or perform banking operations.
+- Requires a properly initialized `ABIModule` engine with `model_registry` available; otherwise the factory asserts and fails.

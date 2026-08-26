@@ -368,9 +368,9 @@ def _configure_middleware(app: FastAPI) -> None:
 
 
 async def serve_app_html(path: str) -> FileResponse:
-    """Serve an HTML asset from any loaded module's apps directory.
+    """Serve a browser asset from any loaded module's apps directory.
 
-    Resolution uses the pre-built html-path map from the apps catalog scan
+    Resolution uses the pre-built asset-path map from the apps catalog scan
     so no module lookup is needed at request time.
     """
     from naas_abi.apps.nexus.apps.api.app.services.apps.adapters.primary.apps__primary_adapter__FastAPI import (
@@ -419,11 +419,36 @@ def _register_routes(app: FastAPI) -> None:
     app.add_api_route("/provider-logos/{provider_id}", serve_provider_logo, methods=["GET"])
 
 
+def _first_existing_file(relative: str, *roots: Path) -> Path | None:
+    """Return the first existing file under ``roots`` for a relative path."""
+    rel = Path(relative)
+    if rel.is_absolute() or ".." in rel.parts:
+        return None
+    for root in roots:
+        if not root.is_dir():
+            continue
+        candidate = (root / rel).resolve()
+        try:
+            candidate.relative_to(root.resolve())
+        except ValueError:
+            continue
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def _mount_static_assets(app: FastAPI) -> None:
-    # Serve static assets (logos, avatars)
-    logos_path = Path(__file__).parent.parent / "public" / "logos"
-    if logos_path.exists():
-        app.mount("/logos", StaticFiles(directory=str(logos_path)), name="logos")
+    # Serve static assets (logos, avatars). ``storage/logos`` in the project
+    # root overlays the engine package defaults.
+    abi_logos_path = Path(__file__).parent.parent / "public" / "logos"
+    project_logos_path = Path.cwd() / "storage" / "logos"
+
+    @app.get("/logos/{path:path}")
+    async def serve_logo(path: str) -> FileResponse:
+        found = _first_existing_file(path, project_logos_path, abi_logos_path)
+        if found is None:
+            raise HTTPException(status_code=404, detail="Logo not found")
+        return FileResponse(found)
 
     avatars_path = Path(__file__).parent.parent / "public" / "avatars"
     if avatars_path.exists():

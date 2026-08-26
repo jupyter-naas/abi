@@ -1,51 +1,57 @@
 # ArXivAgent
 
 ## What it is
-- A thin wrapper around the core `Agent` that configures an ArXiv-focused assistant.
-- Bundles ArXiv search/metadata tools, a paper ingestion pipeline (knowledge graph + PDF download), and a query workflow for stored papers.
+- A specialized `Agent` configured to search, retrieve metadata, ingest, and query ArXiv papers.
+- Wires together ArXiv integration tools, a paper ingestion pipeline (triple store + PDF storage), and a query workflow over stored data.
 
 ## Public API
-- `create_agent(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> Agent`
-  - Creates and returns a configured `ArXivAgent` instance with:
-    - Chat model: `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini.model`
-    - Tools from:
-      - `ArXivIntegration.as_tools(...)`
-      - `ArXivPaperPipeline(...).as_tools()`
-      - `ArXivQueryWorkflow(...).as_tools()`
-    - Default `AgentConfiguration(system_prompt=SYSTEM_PROMPT)` if none provided
-    - Default `AgentSharedState()` if none provided
-
 - `class ArXivAgent(Agent)`
-  - Specialized agent class for ArXiv usage (no additional behavior beyond `Agent`).
+  - Agent metadata:
+    - `name = "ArXivAgent"`
+    - `description = "Search and analyze research papers from ArXiv"`
+    - `avatar_url = ".../ArXiv_web.svg.png"`
+    - `system_prompt`: instructions describing tool usage (search first, fetch details, optionally ingest, then query knowledge graph).
+  - `@classmethod New(cls, agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> ArXivAgent`
+    - Creates a fully configured `ArXivAgent` instance with:
+      - Default chat model from `ABIModule`’s `model_registry.get_default_chat_model()`
+      - Tools from:
+        - `ArXivIntegration.as_tools(ArXivIntegrationConfiguration())`
+        - `ArXivPaperPipeline(...).as_tools()` using:
+          - `triple_store` from `ABIModule.get_instance().engine.services.triple_store`
+          - `storage_base_path="storage/triplestore/application-level/arxiv"`
+          - `pdf_storage_path="datastore/application-level/arxiv"`
+        - `ArXivQueryWorkflow(...).as_tools()` using:
+          - `storage_path="storage/triplestore/application-level/arxiv"`
+      - Defaults when not provided:
+        - `AgentConfiguration(system_prompt=cls.system_prompt)`
+        - `AgentSharedState(thread_id="0")`
 
 ## Configuration/Dependencies
-- Depends on `naas_abi_core.services.agent.Agent`:
-  - `Agent`, `AgentConfiguration`, `AgentSharedState`
-- Initializes the ArXiv application module:
-  - `from naas_abi_marketplace.applications.arxiv import ABIModule`
-  - Uses `module.engine.services.triple_store`
-- Tooling components:
-  - `ArXivIntegration` + `ArXivIntegrationConfiguration`
-  - `ArXivPaperPipeline` + `ArXivPaperPipelineConfiguration`
-    - `storage_base_path="storage/triplestore/application-level/arxiv"`
-    - `pdf_storage_path="datastore/application-level/arxiv"`
-  - `ArXivQueryWorkflow` + `ArXivQueryWorkflowConfiguration`
-    - `storage_path="storage/triplestore/application-level/arxiv"`
-- Built-in prompt:
-  - `SYSTEM_PROMPT` describes expected tool usage (search first, then fetch details, optionally ingest to KG, then query KG).
+- Core agent framework:
+  - `naas_abi_core.services.agent.Agent`: `Agent`, `AgentConfiguration`, `AgentSharedState`
+- ArXiv application module/services:
+  - `naas_abi_marketplace.applications.arxiv.ABIModule`
+  - Requires `ABIModule.get_instance().engine.services.model_registry` (asserted non-`None`)
+  - Uses `ABIModule.get_instance().engine.services.triple_store`
+- Tool providers:
+  - `ArXivIntegration`, `ArXivIntegrationConfiguration`
+  - `ArXivPaperPipeline`, `ArXivPaperPipelineConfiguration`
+  - `ArXivQueryWorkflow`, `ArXivQueryWorkflowConfiguration`
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.arxiv.agents.ArXivAgent import create_agent
+from naas_abi_marketplace.applications.arxiv.agents.ArXivAgent import ArXivAgent
 
-agent = create_agent()
+agent = ArXivAgent.New()
 
-# Interact using the base Agent interface (method names depend on Agent implementation).
+# Use the base Agent interface to run prompts (exact method depends on Agent implementation).
 # Example (pseudo):
-# response = agent.run("Find recent papers about retrieval-augmented generation and summarize trends.")
-# print(response)
+# result = agent.run("Find recent papers on graph neural networks and summarize key themes.")
+# print(result)
 ```
 
 ## Caveats
-- Requires the ArXiv `ABIModule` engine and its `triple_store` service to be available at runtime.
-- Tool availability and how to invoke the agent depend on the underlying `Agent` implementation (this file only wires configuration and tools).
+- Requires `ABIModule` to be initialized with:
+  - a working `model_registry` (otherwise an assertion error is raised)
+  - a `triple_store` service for the ingestion pipeline
+- The file only configures the agent and tools; how to execute conversations depends on the underlying `Agent` API.

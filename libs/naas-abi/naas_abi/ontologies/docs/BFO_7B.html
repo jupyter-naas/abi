@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BFO 7 Buckets — Ontology Summer School (Slide 29)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@600&amp;family=Lora:wght@400;600&amp;family=Roboto:wght@400;500;700&amp;display=swap" rel="stylesheet">
+  <script src="https://code.iconify.design/iconify-icon/3.0.0/iconify-icon.min.js"></script>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --text: #f8fafc;
+      --muted: #9ca3af;
+      --accent: #34d399;
+      --slide-w: 1280px;
+      --slide-h: 720px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Roboto, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 24px 16px 48px;
+      gap: 8px;
+    }
+
+    .stage {
+      width: min(100%, var(--slide-w));
+    }
+
+    .slide-frame {
+      width: 100%;
+      aspect-ratio: 1280 / 720;
+      position: relative;
+      overflow: hidden;
+      background: #000;
+    }
+
+    .slide-frame > figure {
+      position: absolute;
+      inset: 0;
+      width: var(--slide-w);
+      height: var(--slide-h);
+      margin: 0;
+      padding: 0;
+      background: #000;
+      overflow: hidden;
+      transform-origin: top left;
+    }
+
+    .ly {
+      position: absolute;
+      margin: 0;
+      padding: 4.8px 9.6px;
+      line-height: 1.2;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      font-weight: 400;
+      font-synthesis: none;
+      text-rendering: geometricPrecision;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .ly.f-lora { font-family: "Lora", Georgia, serif; }
+    .ly.f-roboto {
+      font-family: Roboto, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+    }
+
+    .naas-logo {
+      position: absolute;
+      top: 28px;
+      right: 40px;
+      font-family: Comfortaa, cursive, sans-serif;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      color: #f8fafc;
+      line-height: 1;
+      pointer-events: none;
+      user-select: none;
+      z-index: 1;
+    }
+
+    figure svg.slide-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    figcaption {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    figcaption iconify-icon {
+      font-size: 14px;
+      opacity: 0.7;
+    }
+
+    .speaker-notes {
+      width: min(100%, var(--slide-w));
+      margin-top: 0.75rem;
+      padding: 1rem 1.1rem;
+      border: 1px solid #242424;
+      background: #111;
+      color: #d1d5db;
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+
+    .speaker-notes-label {
+      margin: 0 0 0.4rem;
+      color: var(--accent);
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .speaker-notes p { margin: 0; }
+
+    @media print {
+      figcaption, .speaker-notes { display: none !important; }
+      html, body { margin: 0 !important; padding: 0 !important; background: #000 !important; }
+      .slide-frame { width: var(--slide-w); height: var(--slide-h); aspect-ratio: auto; }
+      .slide-frame > figure { transform: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="slide-frame" id="slide-frame">
+      <figure style="transform-origin: left top;">
+      <p class="ly kicker f-roboto" style="left:40px;top:16px;width:720px;height:18px;font-size:12px;color:#34d399;text-align:left;letter-spacing:0.08em;text-transform:uppercase">Target Situation · BFO 7 Buckets</p>
+      <h2 id="slide-29-h" class="ly f-lora" style="left:40px;top:48px;width:1160px;height:56px;font-size:32px;color:#f8fafc;text-align:left">BFO 7 Buckets: a minimal operational method</h2>
+      <p class="ly f-roboto" style="left:40px;top:104px;width:1160px;height:28px;font-size:16px;color:#6b7280;text-align:left">Seven categories, two realms. Every event you model touches at least one occurrent and several continuants.</p>
+        <!--
+          Slide 20: BFO 7 Buckets relational diagram (hand-authored SVG).
+          Top band = Occurrents (Process, Temporal Region).
+          Bottom band = Continuants (Material Entity, Site, Generically
+          Dependent Continuant, Qualities, Realizable Entities). Twelve
+          labeled arrows carry the BFO relational verbs (has participant x2,
+          occurs in, occupies temporal region, realizes, concretizes x3,
+          located in, is carrier of, bearer of, material basis of).
+        -->
+        <svg class="slide-canvas" viewBox="0 0 1280 720" width="1280" height="720" role="img" aria-label="BFO 7 Buckets: Process and Temporal Region as occurrents; Material Entity, Site, Generically Dependent Continuant, Qualities, and Realizable Entities as continuants, connected by twelve labeled relational arrows" font-family="Roboto, ui-sans-serif, system-ui, sans-serif">
+          <title>BFO 7 Buckets: a minimal operational method for modelling events and processes</title>
+          <defs>
+            <marker id="arrow-bfo" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8 Z" fill="#34d399"></path></marker>
+            <marker id="arrow-bfo-muted" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8 Z" fill="#6b7280"></path></marker>
+          </defs>
+
+          <rect id="slide-bg" width="1280" height="720" fill="#000000"></rect>
+
+          <!-- Realm bands -->
+          <g id="realms">
+            <rect x="0" y="130" width="1280" height="170" fill="#0d0d0d"></rect>
+            <rect x="0" y="300" width="1280" height="360" fill="#0a0a0a"></rect>
+            <line x1="0" y1="300" x2="1280" y2="300" stroke="#242424" stroke-width="1"></line>
+            <text x="40" y="152" font-size="12" fill="#4b5563" font-weight="600" letter-spacing="2">OCCURRENTS</text>
+            <text x="40" y="322" font-size="12" fill="#4b5563" font-weight="600" letter-spacing="2">CONTINUANTS</text>
+          </g>
+
+          <!-- Arrows (drawn before nodes so circles sit on top of line ends) -->
+          <g id="arrows" fill="none" stroke-width="1.5">
+            <!-- 1. WHAT -> WHEN  (occupies temporal region) -->
+            <path d="M652,215 H1094" stroke="#34d399" marker-end="url(#arrow-bfo)"></path>
+            <!-- 2. WHAT -> WHO  (has participant) -->
+            <path d="M553,237 L189,407" stroke="#34d399" marker-end="url(#arrow-bfo)"></path>
+            <!-- 3. WHAT -> WHERE  (occurs in) -->
+            <path d="M572,259 L490,385" stroke="#34d399" marker-end="url(#arrow-bfo)"></path>
+            <!-- 4. WHAT -> HOW-TO-KNOW  (concretizes, near-vertical) -->
+            <path d="M610,266 L630,376" stroke="#34d399" marker-end="url(#arrow-bfo)"></path>
+            <!-- 5. WHAT -> HOW-IT-IS  (has participant) -->
+            <path d="M642,246 L851,398" stroke="#34d399" marker-end="url(#arrow-bfo)"></path>
+            <!-- 6. WHAT -> WHY  (realizes) -->
+            <path d="M648,234 L1100,410" stroke="#34d399" marker-end="url(#arrow-bfo)"></path>
+
+            <!-- 7. WHO -> WHERE  (located in) -->
+            <path d="M192,430 H404" stroke="#6b7280" marker-end="url(#arrow-bfo-muted)"></path>
+            <!-- 8. HOW-IT-IS -> HOW-TO-KNOW  (concretizes, points left) -->
+            <path d="M843,430 H695" stroke="#6b7280" marker-end="url(#arrow-bfo-muted)"></path>
+
+            <!-- 9. WHO -> HOW-TO-KNOW  (is carrier of)  lane y=560 -->
+            <path d="M124,478 V560 H620 V481" stroke="#6b7280" marker-end="url(#arrow-bfo-muted)"></path>
+            <!-- 10. WHO -> HOW-IT-IS  (bearer of)  lane y=590 -->
+            <path d="M140,482 V590 H880 V483" stroke="#6b7280" marker-end="url(#arrow-bfo-muted)"></path>
+            <!-- 11. WHO -> WHY  (material basis of*)  lane y=620 -->
+            <path d="M156,478 V620 H1150 V485" stroke="#6b7280" marker-end="url(#arrow-bfo-muted)"></path>
+            <!-- 12. WHY -> HOW-TO-KNOW  (concretizes)  lane y=545 -->
+            <path d="M1122,474 V545 H660 V481" stroke="#6b7280" marker-end="url(#arrow-bfo-muted)"></path>
+          </g>
+
+          <!-- Arrow labels (lane labels get band-color knockout rects) -->
+          <g id="arrow-labels" font-size="12" fill="#9ca3af" font-weight="500">
+            <text x="873" y="207" text-anchor="middle">occupies temporal region</text>
+            <text x="330" y="305" text-anchor="middle">has participant</text>
+            <text x="478" y="346" text-anchor="middle">occurs in</text>
+            <text x="644" y="328" text-anchor="start">concretizes</text>
+            <text x="795" y="350" text-anchor="start">has participant</text>
+            <text x="910" y="318" text-anchor="middle">realizes</text>
+
+            <text x="296" y="422" text-anchor="middle">located in</text>
+            <text x="770" y="422" text-anchor="middle">concretizes</text>
+
+            <rect x="344" y="551" width="92" height="16" fill="#0a0a0a"></rect>
+            <text x="390" y="564" text-anchor="middle">is carrier of</text>
+            <rect x="464" y="581" width="72" height="16" fill="#0a0a0a"></rect>
+            <text x="500" y="594" text-anchor="middle">bearer of</text>
+            <rect x="836" y="611" width="128" height="16" fill="#0a0a0a"></rect>
+            <text x="900" y="624" text-anchor="middle">material basis of*</text>
+            <rect x="947" y="537" width="86" height="16" fill="#0a0a0a"></rect>
+            <text x="990" y="550" text-anchor="middle">concretizes</text>
+          </g>
+
+          <!-- Nodes: bucket word inside the circle, BFO term once above it -->
+          <g id="nodes" text-anchor="middle">
+            <!-- WHAT (Process) - top, center-left -->
+            <g id="node-what">
+              <text x="600" y="153" fill="#f8fafc" font-size="13" font-weight="500">Process</text>
+              <circle cx="600" cy="215" r="52" fill="#10291f" stroke="#34d399" stroke-width="1.8"></circle>
+              <text x="600" y="220" fill="#34d399" font-size="15" font-weight="700" letter-spacing="1">WHAT</text>
+            </g>
+            <!-- WHEN (Temporal Region) - top right -->
+            <g id="node-when">
+              <text x="1150" y="153" fill="#f8fafc" font-size="13" font-weight="500">Temporal Region</text>
+              <circle cx="1150" cy="215" r="52" fill="#141414" stroke="#3a3a3a" stroke-width="1.8"></circle>
+              <text x="1150" y="220" fill="#f8fafc" font-size="15" font-weight="700" letter-spacing="1">WHEN</text>
+            </g>
+
+            <!-- WHO (Material Entity) - bottom far left -->
+            <g id="node-who">
+              <text x="140" y="368" fill="#f8fafc" font-size="13" font-weight="500">Material Entity</text>
+              <circle cx="140" cy="430" r="52" fill="#141414" stroke="#3a3a3a" stroke-width="1.8"></circle>
+              <text x="140" y="435" fill="#f8fafc" font-size="15" font-weight="700" letter-spacing="1">WHO</text>
+            </g>
+            <!-- WHERE (Site) - underlined like the source diagram -->
+            <g id="node-where">
+              <text x="460" y="368" fill="#f8fafc" font-size="13" font-weight="500">Site</text>
+              <circle cx="460" cy="430" r="52" fill="#141414" stroke="#3a3a3a" stroke-width="1.8"></circle>
+              <text x="460" y="435" fill="#f8fafc" font-size="15" font-weight="700" letter-spacing="1">WHERE</text>
+              <line x1="431" y1="441" x2="489" y2="441" stroke="#f8fafc" stroke-width="1.2"></line>
+            </g>
+            <!-- HOW-TO-KNOW (Generically dependent continuant) -->
+            <g id="node-how-to-know">
+              <text x="576" y="336" fill="#f8fafc" font-size="12" font-weight="500">Generically</text>
+              <text x="576" y="350" fill="#f8fafc" font-size="12" font-weight="500">dependent</text>
+              <text x="576" y="364" fill="#f8fafc" font-size="12" font-weight="500">continuant</text>
+              <circle cx="640" cy="430" r="52" fill="#141414" stroke="#3a3a3a" stroke-width="1.8"></circle>
+              <text x="640" y="428" fill="#f8fafc" font-size="14" font-weight="700" letter-spacing="0.5">HOW-TO-</text>
+              <text x="640" y="446" fill="#f8fafc" font-size="14" font-weight="700" letter-spacing="0.5">KNOW</text>
+            </g>
+            <!-- HOW-IT-IS (Qualities) -->
+            <g id="node-how-it-is">
+              <text x="895" y="368" fill="#f8fafc" font-size="13" font-weight="500">Qualities</text>
+              <circle cx="895" cy="430" r="52" fill="#141414" stroke="#3a3a3a" stroke-width="1.8"></circle>
+              <text x="895" y="435" fill="#f8fafc" font-size="14" font-weight="700" letter-spacing="0.5">HOW-IT-IS</text>
+            </g>
+            <!-- WHY (Realizable Entities) - bottom far right -->
+            <g id="node-why">
+              <text x="1150" y="368" fill="#f8fafc" font-size="13" font-weight="500">Realizable Entities</text>
+              <circle cx="1150" cy="430" r="52" fill="#141414" stroke="#3a3a3a" stroke-width="1.8"></circle>
+              <text x="1150" y="435" fill="#f8fafc" font-size="15" font-weight="700" letter-spacing="1">WHY</text>
+            </g>
+          </g>
+
+          <g id="footer" font-size="13" fill="#4b5563">
+            <text x="40" y="692">Ontology Summer School</text>
+            <text x="1240" y="692" text-anchor="end">29</text>
+          </g>
+        </svg>
+        <span class="naas-logo" aria-hidden="true">naas</span>
+      </figure>
+    </div>
+    <figcaption><iconify-icon icon="material-symbols-light:hub-outline" aria-hidden="true"></iconify-icon>Slide 29 / 88</figcaption>
+  </div>
+  <aside class="speaker-notes" aria-label="Speaker notes">
+      <p class="speaker-notes-label">Speaker notes</p>
+      <p>BFO 7 Buckets: a minimal operational method. Seven categories, two realms. Continuants and occurrents. Every event you model touches at least one occurrent and several continuants. This is how we keep modeling disciplined when the world is messy.</p>
+    </aside>
+  <script>
+    (function () {
+      var frame = document.getElementById('slide-frame');
+      var figure = frame.querySelector('figure');
+      function scale() {
+        var s = frame.clientWidth / 1280;
+        figure.style.transform = 'scale(' + s + ')';
+      }
+      scale();
+      window.addEventListener('resize', scale);
+    })();
+  </script>
+</body>
+</html>

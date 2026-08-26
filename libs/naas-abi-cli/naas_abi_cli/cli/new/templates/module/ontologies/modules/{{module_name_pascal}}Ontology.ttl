@@ -1,0 +1,100 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix {{module_name_snake}}: <http://ontology.naas.ai/{{module_name_snake}}/> .
+
+{{module_name_snake}}:{{module_name_pascal}}Ontology a owl:Ontology ;
+  # Write one owl:imports statement per IRI, never a comma-separated object
+  # list: onto2py's codegen pre-scan only matches an IRI directly after the
+  # `owl:imports` keyword, so a continuation IRI is silently dropped and the
+  # classes behind it degrade to bare URIRef ranges.
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+
+  # Locator annotations. Other modules importing this ontology's IRI resolve it
+  # to a Python module through these three, so keep them accurate.
+  # Set pythonPackage to the module's full dotted import path — e.g.
+  # "naas_abi_marketplace.applications.{{module_name_snake}}".
+  abi:pythonPackage "{{module_name_snake}}" ;
+  abi:ontologyResource "ontologies/modules/{{module_name_pascal}}Ontology.ttl" ;
+  abi:pythonResource "ontologies/modules/{{module_name_pascal}}Ontology.py" ;
+
+  dc:title "{{module_name_pascal}} Ontology"@en ;
+  dc:description "Ontology for the {{module_name}} domain. Replace this with a description of what the module reasons over, and of any distinction the model deliberately keeps apart."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Ontology for the {{module_name}} domain."@en ;
+  dc11:contributor "TODO: your name" ;
+  dc11:date "2026-01-01"^^xsd:date .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+# Pair every relation with its inverse, and subclass an abi: relation so the
+# BFO semantics carry over. Available: abi:isCarrierOf / abi:genericallyDependsOn,
+# abi:bearerOf / abi:inheresIn, abi:concretizes / abi:isConcretizedBy,
+# abi:hasParticipant / abi:participatesIn, abi:occursIn, abi:locatedIn.
+{{module_name_snake}}:hasRecord a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf {{module_name_snake}}:isRecordOf ;
+    rdfs:label "has record"@en ;
+    skos:definition "Relates a person to a record that generically depends on them."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range {{module_name_snake}}:{{module_name_pascal}}Record .
+
+{{module_name_snake}}:isRecordOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf {{module_name_snake}}:hasRecord ;
+    rdfs:label "is record of"@en ;
+    skos:definition "Relates a record to the person on which it generically depends."@en ;
+    rdfs:domain {{module_name_snake}}:{{module_name_pascal}}Record ;
+    rdfs:range abi:Person .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+{{module_name_snake}}:record_id a owl:DatatypeProperty ;
+    rdfs:label "record id"@en ;
+    skos:definition "Identifier of the record in the source system."@en ;
+    rdfs:domain {{module_name_snake}}:{{module_name_pascal}}Record ;
+    rdfs:range xsd:string .
+
+#################################################################
+#    Classes
+#################################################################
+
+# Every class must trace to a BFO seven-buckets root, or onto2py refuses to
+# generate. Subclass an abi: class to inherit that trace:
+#   WHAT         abi:Process                        (BFO_0000015)
+#   WHEN         abi:TemporalRegion                 (BFO_0000008)
+#   WHO          abi:MaterialEntity / abi:Person    (BFO_0000040)
+#   WHERE        abi:Site                           (BFO_0000029)
+#   HOW WE KNOW  abi:GenericallyDependentContinuant (BFO_0000031)
+#   HOW IT IS    abi:Quality                        (BFO_0000019)
+#   WHY          abi:Role / abi:Disposition         (BFO_0000023 / BFO_0000016)
+
+# HOW WE KNOW — a record about something
+{{module_name_snake}}:{{module_name_pascal}}Record a owl:Class ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+      [ a owl:Restriction ; owl:onProperty {{module_name_snake}}:isRecordOf ; owl:someValuesFrom abi:Person ] ;
+    rdfs:label "{{module_name_pascal}} Record"@en ;
+    skos:definition "An information content entity that documents something about a person in the {{module_name}} domain."@en ;
+    skos:example "TODO: a concrete instance a reader would recognise."@en .
+
+# HOW IT IS — a quality. Qualities, roles and dispositions MUST carry an
+# inheres-in restriction naming their bearer; the validator rejects them
+# otherwise. If you cannot name a bearer, the thing is probably not a quality —
+# reconsider the bucket rather than inventing one.
+{{module_name_snake}}:{{module_name_pascal}}Status a owl:Class ;
+    rdfs:subClassOf abi:Quality ,
+      [ a owl:Restriction ; owl:onProperty abi:inheresIn ; owl:someValuesFrom abi:Person ] ;
+    rdfs:label "{{module_name_pascal}} Status"@en ;
+    skos:definition "A quality that inheres in a person and holds their status in the {{module_name}} domain at a point in time."@en ;
+    skos:example "TODO: a concrete status value."@en .

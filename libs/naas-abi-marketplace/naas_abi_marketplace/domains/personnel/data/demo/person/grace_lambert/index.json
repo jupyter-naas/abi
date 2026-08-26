@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-08-19 17:25",
+  "person": {
+    "first_name": "Grace",
+    "last_name": "Lambert",
+    "full_name": "Grace Lambert",
+    "linkedin_profile_url": "https://demo.example/profiles/grace_lambert"
+  },
+  "records": [
+    {
+      "process_type": "ActOfWorking",
+      "organization": "Demo",
+      "title": "Board Advisor",
+      "contract_type": null,
+      "site": "Paris",
+      "start": "2022-01-01",
+      "end": null,
+      "duration": "4 yrs",
+      "mission_label": "Advise Demo leadership on product partnerships.",
+      "mission": "Advise Demo leadership on product partnerships.",
+      "skills": [
+        "Partnerships"
+      ],
+      "source": "https://demo.example/profiles/grace_lambert"
+    },
+    {
+      "process_type": "ActOfWorking",
+      "organization": "StreamCorp",
+      "title": "Head of Partner Experiences",
+      "contract_type": null,
+      "site": "California",
+      "start": "2015-02-01",
+      "end": "2023-09-30",
+      "duration": "8 yrs",
+      "mission_label": "Led partner enablement for a global streaming platform.",
+      "mission": "Led partner enablement for a global streaming platform.",
+      "skills": [
+        "Partnerships",
+        "Product"
+      ],
+      "source": "https://demo.example/profiles/grace_lambert"
+    },
+    {
+      "process_type": "ActOfWorking",
+      "organization": "DeviceWorks",
+      "title": "CTO",
+      "contract_type": null,
+      "site": "Toronto",
+      "start": "2011-10-01",
+      "end": "2015-01-31",
+      "duration": "3 yrs",
+      "mission_label": "Built smart-TV software partnerships and joint ventures.",
+      "mission": "Built smart-TV software partnerships and joint ventures.",
+      "skills": [
+        "Engineering",
+        "Strategy"
+      ],
+      "source": "https://demo.example/profiles/grace_lambert"
+    }
+  ]
+}

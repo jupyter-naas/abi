@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v3.36.4 (2026-08-20)
+
+
+## v3.36.3 (2026-08-19)
+
+
+## v3.36.2 (2026-08-19)
+
+### Bug Fixes
+
+- **sanax**: Restore LinkedIn profile URL construction after lint cleanup.
+  ([`00cd7ca`](https://github.com/jupyter-naas/abi/commit/00cd7cab03ae51af4fc2a73fbb322f83367942c2))
+
+
+## v3.36.1 (2026-08-18)
+
+### Bug Fixes
+
+- Bump uv.lock libs
+  ([`ef92f2c`](https://github.com/jupyter-naas/abi/commit/ef92f2c380878e8525ad7edb2f6009abd71dbd6f))
+
+
 ## v3.36.0 (2026-08-17)
 
 ### Features
