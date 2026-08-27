@@ -252,6 +252,7 @@ _APP_ASSET_SUFFIXES = {
     ".jpeg",
     ".jpg",
     ".js",
+    ".json",
     ".mjs",
     ".png",
     ".svg",
@@ -265,9 +266,10 @@ _APP_ASSET_SUFFIXES = {
 def _scan_apps_html_paths() -> dict[str, str]:
     """Build a URL map for safe browser assets under app directories.
 
-    HTML entry points commonly import colocated scripts, styles, fonts, and
-    images. Serve those assets from the same authenticated ``/app-html/``
-    namespace while excluding source, configuration, and dataset files.
+    HTML entry points commonly import colocated scripts, styles, fonts,
+    images, and JSON (for example ``graph.json``). Serve those assets from
+    the same authenticated ``/app-html/`` namespace while excluding source
+    and other non-browser files.
     """
     html_map: dict[str, str] = {}
     for module in _iter_loaded_modules():
