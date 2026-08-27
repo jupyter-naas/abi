@@ -120,7 +120,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         """
         try:
             result = self.__triple_store_adapter.query(_SCHEMA_BOOTSTRAP_ASK)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.debug(
                 "TripleStoreService: schema bootstrap probe failed (%s) — "
                 "will attempt insert",
