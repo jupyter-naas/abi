@@ -289,6 +289,9 @@ class WorkspaceSeedConfig(BaseModel):
     background_color: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    default_agent: str | None = None
+    agents: list[str] | None = None
+    apps: list[str] | None = None
 
 
 class OrganizationSeedConfig(BaseModel):

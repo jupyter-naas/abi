@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
+import { appsPath, nextAppsRestoreUrl, shouldSkipAppsRestore } from './lib/apps-route';
 import {
   AppWindow, ExternalLink, RefreshCw, AlertTriangle, Info, PanelLeft, X,
 } from 'lucide-react';
@@ -224,7 +225,7 @@ function EmbedView({ record, onBack }: { record: AppRecord; onBack: () => void }
             title={record.name}
             onLoad={handleLoad}
             className="h-full w-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads"
             allow="fullscreen"
           />
         )}
@@ -264,6 +265,8 @@ function EmptyState({ filtered }: { filtered: boolean }) {
 
 export default function AppsPage() {
   const tenant = useTenant();
+  const params = useParams();
+  const urlWorkspaceId = params.workspaceId as string;
   const { currentWorkspaceId, setOpenAppModule, setAppDetailOpen } = useWorkspaceStore();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -274,7 +277,7 @@ export default function AppsPage() {
   const [activeApp, setActiveApp] = useState<AppRecord | null>(null);
   const [search, setSearch] = useState('');
 
-  const views = useAppViews(currentWorkspaceId);
+  const views = useAppViews(urlWorkspaceId);
 
   useEffect(() => {
     return () => {
@@ -284,26 +287,31 @@ export default function AppsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Restore last opened app when navigating back to the section without ?open=
+  // Restore last opened app when landing on the section without ?open=.
+  // Keyed on the URL workspace, not the store: the store lags a workspace
+  // switch and used to rewrite Valeo back to the previous workspace.
   useEffect(() => {
-    if (!currentWorkspaceId) return;
-    if (searchParams?.get('open')) return;
+    if (!urlWorkspaceId) return;
     try {
-      const saved = sessionStorage.getItem(`nexus.apps.last_open.${currentWorkspaceId}`);
-      if (saved) {
-        router.replace(`/workspace/${currentWorkspaceId}/apps?open=${encodeURIComponent(saved)}`);
-      }
+      const saved = sessionStorage.getItem(`nexus.apps.last_open.${urlWorkspaceId}`);
+      const next = nextAppsRestoreUrl({
+        urlWorkspaceId,
+        storeWorkspaceId: currentWorkspaceId,
+        searchOpen: searchParams?.get('open'),
+        savedOpen: saved,
+        skipRestore: shouldSkipAppsRestore(),
+      });
+      if (next) router.replace(next);
     } catch {
       // sessionStorage unavailable (e.g. private mode restrictions) — ignore
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentWorkspaceId]);
+  }, [urlWorkspaceId, currentWorkspaceId, searchParams, router]);
 
   useEffect(() => {
     const apiBase = getApiUrl();
-    if (!currentWorkspaceId) return;
+    if (!urlWorkspaceId) return;
     setLoading(true);
-    authFetch(`${apiBase}/api/apps/?workspace_id=${encodeURIComponent(currentWorkspaceId)}`)
+    authFetch(`${apiBase}/api/apps/?workspace_id=${encodeURIComponent(urlWorkspaceId)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(r.statusText)))
       .then((data: AppsResponse) => {
         setApps(
@@ -312,8 +320,7 @@ export default function AppsPage() {
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentWorkspaceId]);
+  }, [urlWorkspaceId]);
 
   // Module apps and tenant-level external apps are one database. "Source" is a
   // property you can filter or group by — not a separate section.
@@ -341,14 +348,14 @@ export default function AppsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, records]);
 
-  const lastOpenKey = currentWorkspaceId ? `nexus.apps.last_open.${currentWorkspaceId}` : null;
+  const lastOpenKey = urlWorkspaceId ? `nexus.apps.last_open.${urlWorkspaceId}` : null;
 
   const handleClose = () => {
     setActiveApp(null);
     setOpenAppModule(null);
     setAppDetailOpen(false);
     if (lastOpenKey) sessionStorage.removeItem(lastOpenKey);
-    router.replace(`/workspace/${currentWorkspaceId}/apps`);
+    router.replace(appsPath(urlWorkspaceId));
   };
 
   // Opening an app never forces the metadata panel open — that stays opt-in.
@@ -356,9 +363,7 @@ export default function AppsPage() {
     setActiveApp(record);
     setOpenAppModule(record.source === 'module' ? recordToOpenModule(record) : null);
     if (lastOpenKey) sessionStorage.setItem(lastOpenKey, record.id);
-    router.replace(
-      `/workspace/${currentWorkspaceId}/apps?open=${encodeURIComponent(record.id)}`,
-    );
+    router.replace(appsPath(urlWorkspaceId, record.id));
   };
 
   const view = views.activeView;
