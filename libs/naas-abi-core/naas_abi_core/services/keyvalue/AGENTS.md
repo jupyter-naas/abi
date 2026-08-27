@@ -10,7 +10,7 @@ Bytes-in / bytes-out key-value store with optional TTL and atomic compare-and-se
 
 | File | Role |
 |---|---|
-| `KeyValuePorts.py` | `IKeyValueAdapter`, `KVNotFoundError` |
+| `KeyValuePorts.py` | `IKeyValueAdapter`, `KVNotFoundError`, `KVLockTimeoutError` |
 | `KeyValueService.py` | Public service (inherits `ServiceBase`) |
 | `adapters/secondary/PythonAdapter.py` | In-memory dict, optional SQLite persistence |
 | `adapters/secondary/RedisAdapter.py` | Redis backend (requires `redis` package) |
@@ -29,7 +29,7 @@ class IKeyValueAdapter:
     def exists(key: str) -> bool
 ```
 
-Exception: `KVNotFoundError`.
+Exceptions: `KVNotFoundError`, `KVLockTimeoutError` (from `KeyValueService.lock`).
 
 ## Service API (`KeyValueService.py`)
 
@@ -40,7 +40,21 @@ set_if_not_exists(key, value, ttl=None) -> bool                # atomic; event o
 delete(key)                                                    # → KeyValueDeleted; raises KVNotFoundError
 delete_if_value_matches(key, value) -> bool                    # atomic; event only if matched
 exists(key) -> bool
+lock(key, ttl=30, timeout=10.0, retry_delay=0.05)              # context manager; SET NX + CAD
 ```
+
+`lock` is a service-level composition of the adapter primitives, not a new adapter method:
+
+```python
+with kv.lock("lock:object:finance/billing/graph.ttl", ttl=60, timeout=30):
+    ...
+```
+
+- Acquire: `set_if_not_exists(key, random_token, ttl=ttl)`
+- Release: `delete_if_value_matches(key, token)` so only the holder can unlock
+- `ttl` must outlast the critical section (crash recovery)
+- Cross-process only if the adapter is shared (Redis, or PythonAdapter with the same SQLite `persistence_path`)
+- The Jena TDB2 adapter currently inlines the same SET NX / CAD loop; new callers should use `lock()` instead.
 
 ## Available Adapters
 
@@ -67,6 +81,7 @@ kv = KeyValueService(RedisAdapter(redis_url="redis://localhost:6379/0"))
 ```bash
 uv run pytest libs/naas-abi-core/naas_abi_core/services/keyvalue/tests/
 uv run pytest libs/naas-abi-core/naas_abi_core/services/keyvalue/tests/KeyValueService_events_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/keyvalue/tests/KeyValueService_lock_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/keyvalue/tests/kv__secondary_adapter__generic_test.py
 ```
 

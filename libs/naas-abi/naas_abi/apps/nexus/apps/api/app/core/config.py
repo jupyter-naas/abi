@@ -170,6 +170,7 @@ FeatureKey = Literal[
     "search",
     "ontology",
     "graph",
+    "datasets",
     "settings",
     "code",
     "slides",
@@ -193,6 +194,7 @@ class FeatureFlagsConfig(BaseModel):
             "search",
             "ontology",
             "graph",
+            "datasets",
             "settings",
             "slides",
         ]
@@ -210,6 +212,7 @@ class FeatureFlagsConfig(BaseModel):
                 "search",
                 "ontology",
                 "graph",
+                "datasets",
                 "settings",
                 "slides",
             ],
@@ -224,11 +227,12 @@ class FeatureFlagsConfig(BaseModel):
                 "search",
                 "ontology",
                 "graph",
+                "datasets",
                 "settings",
                 "slides",
             ],
-            "member": ["maps", "chat", "files", "skills", "slides"],
-            "viewer": ["maps", "chat", "files", "skills", "slides"],
+            "member": ["maps", "chat", "files", "datasets", "skills", "slides"],
+            "viewer": ["maps", "chat", "files", "datasets", "skills", "slides"],
         }
     )
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)

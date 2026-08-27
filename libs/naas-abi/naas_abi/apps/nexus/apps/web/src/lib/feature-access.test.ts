@@ -17,6 +17,7 @@ describe('mergeFeatureFlags', () => {
     expect(flags.maps).toBe(true);
     expect(flags.chat).toBe(true);
     expect(flags.files).toBe(true);
+    expect(flags.datasets).toBe(true);
     expect(flags.slides).toBe(true);
     expect(flags.agents).toBe(false);
     expect(flags.apps).toBe(false);
@@ -52,6 +53,10 @@ describe('getFeatureForWorkspacePath', () => {
     expect(getFeatureForWorkspacePath('/workspace/ws1/search')).toBe('search');
     expect(getFeatureForWorkspacePath('/workspace/ws1/ontology')).toBe('ontology');
     expect(getFeatureForWorkspacePath('/workspace/ws1/graph')).toBe('graph');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/datasets')).toBe('datasets');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/datasets/clockify/hours')).toBe(
+      'datasets',
+    );
     expect(getFeatureForWorkspacePath('/workspace/ws1/settings/agents')).toBe('agents');
     expect(getFeatureForWorkspacePath('/workspace/ws1/settings/theme')).toBe('settings.workspace');
     expect(getFeatureForWorkspacePath('/workspace/ws1/organization')).toBe('settings.organization');

@@ -1,5 +1,14 @@
+import os
+import random
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 from naas_abi_core import logger
-from naas_abi_core.services.keyvalue.KeyValuePorts import IKeyValueAdapter
+from naas_abi_core.services.keyvalue.KeyValuePorts import (
+    IKeyValueAdapter,
+    KVLockTimeoutError,
+)
 from naas_abi_core.services.keyvalue.ontologies.modules.KeyValueEventOntology import (
     KeyValueDeleted,
     KeyValueError,
@@ -92,3 +101,51 @@ class KeyValueService(ServiceBase):
 
     def exists(self, key: str) -> bool:
         return self.__adapter.exists(key)
+
+    @contextmanager
+    def lock(
+        self,
+        key: str,
+        *,
+        ttl: int = 30,
+        timeout: float = 10.0,
+        retry_delay: float = 0.05,
+    ) -> Iterator[None]:
+        """Hold an exclusive lock on ``key`` for the duration of the ``with`` block.
+
+        Acquire is ``set_if_not_exists`` with a unique token; release is
+        ``delete_if_value_matches`` so only the holder can unlock. ``ttl``
+        (seconds) must outlast the critical section so a crashed holder cannot
+        block writers forever. Across processes this is only as atomic as the
+        adapter (Redis, or PythonAdapter with a shared SQLite file).
+        """
+        if ttl <= 0:
+            raise ValueError("lock ttl must be positive")
+        if timeout < 0:
+            raise ValueError("lock timeout must be >= 0")
+        if retry_delay < 0:
+            raise ValueError("lock retry_delay must be >= 0")
+
+        token = os.urandom(16)
+        deadline = time.monotonic() + timeout
+        acquired = False
+        attempts = 0
+        while True:
+            attempts += 1
+            if self.set_if_not_exists(key, token, ttl=ttl):
+                acquired = True
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            delay = min(retry_delay * (2 ** (attempts - 1)), remaining, 1.0)
+            jitter = random.uniform(0, min(0.05, remaining))
+            time.sleep(delay + jitter)
+
+        if not acquired:
+            raise KVLockTimeoutError(key=key, attempts=attempts, timeout=timeout)
+
+        try:
+            yield
+        finally:
+            self.delete_if_value_matches(key, token)

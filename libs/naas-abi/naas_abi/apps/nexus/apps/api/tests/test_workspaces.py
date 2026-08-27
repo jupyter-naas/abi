@@ -149,6 +149,7 @@ class TestWorkspaceFeatureFlags:
             "search": True,
             "ontology": True,
             "graph": True,
+            "datasets": True,
             "settings": True,
             "code": False,
         }

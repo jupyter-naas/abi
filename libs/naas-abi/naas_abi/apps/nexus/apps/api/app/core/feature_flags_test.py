@@ -24,6 +24,7 @@ class TestBuildFeatureFlags:
             "search": False,
             "ontology": False,
             "graph": False,
+            "datasets": True,
             "settings": False,
             "code": False,
             "slides": True,

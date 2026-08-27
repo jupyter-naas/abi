@@ -9,6 +9,7 @@ from naas_abi_core.module.Module import (
 from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
+from naas_abi_core.services.dataset.DatasetService import DatasetService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.model_registry.ModelRegistryService import (
@@ -188,6 +189,7 @@ FeatureKey = Literal[
     "search",
     "ontology",
     "graph",
+    "datasets",
     "settings",
     # Opt-in: only when listed in enabled_features + role_baseline.
     "code",
@@ -207,6 +209,7 @@ _ALL_FEATURES: list[FeatureKey] = [
     "search",
     "ontology",
     "graph",
+    "datasets",
     "settings",
     "slides",
 ]
@@ -220,8 +223,8 @@ def _default_role_baseline() -> dict[str, list[FeatureKey]]:
     return {
         "owner": list(_ALL_FEATURES),
         "admin": list(_ALL_FEATURES),
-        "member": ["maps", "chat", "files", "skills", "slides"],
-        "viewer": ["maps", "chat", "files", "skills", "slides"],
+        "member": ["maps", "chat", "files", "datasets", "skills", "slides"],
+        "viewer": ["maps", "chat", "files", "datasets", "skills", "slides"],
     }
 
 
@@ -512,6 +515,7 @@ class ABIModule(BaseModule):
             Secret,
             TripleStoreService,
             ObjectStorageService,
+            DatasetService,
             VectorStoreService,
             BusService,
             CacheService,
