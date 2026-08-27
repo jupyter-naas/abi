@@ -8,6 +8,8 @@ configuration over HTTP.
 Routes
 ------
 * ``GET    /api/apps/?workspace_id=…``         — catalog (with enable state)
+* ``POST   /api/apps/access-token``            — scoped JWT for ``/app-html/``
+* ``POST   /api/apps/sso-token``               — HMAC handshake for a Pages portal
 * ``GET    /api/apps/{ws}``                    — list configs for workspace
 * ``POST   /api/apps/{ws}``                    — create config
 * ``GET    /api/apps/{ws}/{app_id:path}``      — get one config
@@ -38,12 +40,16 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
     require_workspace_access,
 )
+from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
 from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
     resolve_app_enabled,
     workspace_seed_for_slug,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
     mint_app_html_access_token,
+)
+from naas_abi.apps.nexus.apps.api.app.services.apps.pages_sso import (
+    mint_pages_sso_token,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.port import (
     AppConfigCreate,
@@ -75,6 +81,12 @@ router = APIRouter(dependencies=[Depends(get_current_user_required)])
 # ---------------------------------------------------------------------------
 # Catalog discovery (driven by loaded engine modules)
 # ---------------------------------------------------------------------------
+
+
+def _live_settings():
+    # ``on_initialized`` replaces ``nexus_config.settings``. Do not bind the
+    # module-level ``settings = get_settings()`` snapshot from import time.
+    return nexus_config.settings
 
 
 async def _workspace_slug(workspace_id: str) -> str | None:
@@ -378,6 +390,45 @@ async def create_app_html_access_token(
         expires_in=expires_in,
         path_prefix=body.path_prefix,
     )
+
+
+class PagesSsoTokenRequest(BaseModel):
+    """Mint a short-lived HMAC token for a Cloudflare Pages portal."""
+
+    audience: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Portal hostname, e.g. portal.example.com",
+    )
+
+
+class PagesSsoTokenResponse(BaseModel):
+    token: str
+    token_type: str = "bearer"
+    expires_in: int
+    audience: str
+
+
+@router.post("/sso-token", response_model=PagesSsoTokenResponse)
+async def create_pages_sso_token(
+    body: PagesSsoTokenRequest,
+    current_user: User = Depends(get_current_user_required),
+) -> PagesSsoTokenResponse:
+    """Issue a handshake token so a Pages portal can skip a second login."""
+    live = _live_settings()
+    if not live.pages_sso_secret:
+        raise HTTPException(status_code=503, detail="Pages SSO is not configured")
+    try:
+        token, expires_in = mint_pages_sso_token(
+            email=str(current_user.email),
+            audience=body.audience,
+            secret=live.pages_sso_secret,
+            expires_seconds=live.pages_sso_expire_seconds,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return PagesSsoTokenResponse(token=token, expires_in=expires_in, audience=body.audience.lower())
 
 
 @router.get("/", response_model=AppsResponse)

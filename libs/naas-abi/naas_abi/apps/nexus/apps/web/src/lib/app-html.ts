@@ -81,3 +81,24 @@ export function resolveAppExternalUrl(url: string): string {
   }
   return url;
 }
+
+/** Hostname used as the Pages SSO audience (must match the portal host). */
+export function pagesSsoAudience(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.hostname.toLowerCase() || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Attach ``?sso=`` for a Cloudflare Pages portal handshake. */
+export function withPagesSsoToken(url: string, token: string): string {
+  if (!url || !token) return url;
+  const hashIndex = url.indexOf('#');
+  const withoutHash = hashIndex >= 0 ? url.slice(0, hashIndex) : url;
+  const hash = hashIndex >= 0 ? url.slice(hashIndex) : '';
+  const join = withoutHash.includes('?') ? '&' : '?';
+  return `${withoutHash}${join}sso=${encodeURIComponent(token)}${hash}`;
+}
