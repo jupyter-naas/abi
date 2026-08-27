@@ -79,10 +79,9 @@ export interface Agent {
 const AGENTS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 // Workspaces reconciled with the backend code class registry this session.
-// The backend `GET /agents` is read-only; reconciliation (create newly
-// discovered agents, prune stale ones) happens via `POST /agents/sync`. We run
-// sync at most once per workspace per session — module-level so it resets on a
-// full page reload — and use the cheap GET listing for every later refresh.
+// GET /agents is read-only. POST /agents/sync is only sent when fetchAgents
+// is called with force=true (chat, lab, agent settings). Module-level so it
+// resets on a full page reload; we still guard against parallel POSTs.
 const syncedWorkspaces = new Set<string>();
 
 // Reserved type names that always appear in the type selector.
@@ -151,13 +150,11 @@ export const useAgentsStore = create<AgentsState>()(
           const { getApiUrl } = await import('@/lib/config');
           const API_BASE = getApiUrl();
 
-          // Reconcile the DB with the code class registry (POST /sync) on the
-          // first fetch of this workspace this session, and on any forced
-          // refresh; other refreshes just list (GET).
-          // Mark the workspace as syncing *before* awaiting so concurrent
-          // fetchAgents calls in the same tab do not fire parallel POSTs
-          // (check-then-insert races used to create duplicate Abi rows).
-          const shouldSync = force || !syncedWorkspaces.has(workspaceId);
+          // Reconcile the DB with the code class registry (POST /sync) only when
+          // the caller asks (`force`). A workspace switch used to POST /sync on
+          // the first GET, which blocks the API (Python agent imports + DB
+          // writes) while Apps is still loading. Chat/lab/settings pass force.
+          const shouldSync = force;
           if (shouldSync) syncedWorkspaces.add(workspaceId);
           let response: Response;
           try {
