@@ -71,6 +71,16 @@ internal:content a owl:DatatypeProperty ;
     rdfs:comment "Base64 encoded content of the schema file" .
 """
 GRAPH_CLASS = URIRef("http://ontology.naas.ai/abi/Graph")
+_SCHEMA_GRAPH = URIRef("http://ontology.naas.ai/graph/schema")
+_SCHEMA_CLASS = URIRef("http://triple-store.internal#Schema")
+_OWL_CLASS = URIRef("http://www.w3.org/2002/07/owl#Class")
+_SCHEMA_BOOTSTRAP_ASK = f"""
+ASK WHERE {{
+  GRAPH <{_SCHEMA_GRAPH}> {{
+    <{_SCHEMA_CLASS}> a <{_OWL_CLASS}>
+  }}
+}}
+"""
 
 
 class TripleStoreService(ServiceBase, ITripleStoreService):
@@ -98,9 +108,47 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
     ):
         super().__init__()
         self.__triple_store_adapter = triple_store_adapter
-        self.__schema_graph = URIRef("http://ontology.naas.ai/graph/schema")
+        self.__schema_graph = _SCHEMA_GRAPH
 
-        # Load SCHEMA_TTL in IOBuffer
+        self._bootstrap_schema_graph()
+
+    def _schema_graph_bootstrapped(self) -> bool:
+        """Return True when the built-in schema vocabulary is already in the store.
+
+        Read-only ASK — no distributed write lock — so Dagster run workers that
+        only need to check boot state do not contend with active writers.
+        """
+        try:
+            result = self.__triple_store_adapter.query(_SCHEMA_BOOTSTRAP_ASK)
+        except Exception as exc:
+            logger.debug(
+                "TripleStoreService: schema bootstrap probe failed (%s) — "
+                "will attempt insert",
+                exc,
+            )
+            return False
+
+        ask_answer = getattr(result, "askAnswer", None)
+        if ask_answer is not None:
+            return bool(ask_answer)
+
+        if isinstance(result, rdflib.query.Result) and result.type == "ASK":
+            return bool(result.askAnswer)
+
+        logger.debug(
+            "TripleStoreService: schema bootstrap probe returned unexpected "
+            "%r — will attempt insert",
+            type(result),
+        )
+        return False
+
+    def _bootstrap_schema_graph(self) -> None:
+        if self._schema_graph_bootstrapped():
+            logger.debug(
+                "TripleStoreService: schema graph already present — skip bootstrap insert"
+            )
+            return
+
         schema_ttl_buffer = io.StringIO(SCHEMA_TTL)
         self.insert(
             Graph().parse(schema_ttl_buffer, format="turtle"),
