@@ -363,6 +363,8 @@ class NexusConfig(BaseModel):
 
     secret_key: str = "change-me-in-production"
     auth_password_enabled: bool = False
+    pages_sso_secret: str = ""
+    pages_sso_expire_seconds: int = 300
     magic_link_allow_signup: bool = False
     access_token_expire_minutes: int = 1440
     refresh_token_expire_days: int = 30
