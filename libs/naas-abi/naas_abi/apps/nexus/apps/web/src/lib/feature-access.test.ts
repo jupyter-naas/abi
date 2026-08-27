@@ -1,125 +1,217 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
+import { describe, expect, it } from 'vitest';
 
 import {
   getFeatureForWorkspacePath,
   getFirstAllowedWorkspacePath,
+  getWorkspaceSwitchPath,
   isWorkspacePathAllowed,
   mergeFeatureFlags,
+  pathNeedsAgentCatalog,
+  pathNeedsGraphExport,
 } from './feature-access';
 
-test('mergeFeatureFlags keeps member defaults', () => {
-  const flags = mergeFeatureFlags('member');
+describe('mergeFeatureFlags', () => {
+  it('keeps member defaults', () => {
+    const flags = mergeFeatureFlags('member');
 
-  assert.equal(flags.maps, true);
-  assert.equal(flags.chat, true);
-  assert.equal(flags.files, true);
-  assert.equal(flags.datasets, true);
-  assert.equal(flags.slides, true);
-  assert.equal(flags.agents, false);
-  assert.equal(flags.apps, false);
-  assert.equal(flags.marketplace, false);
-  assert.equal(flags.search, false);
-  assert.equal(flags.ontology, false);
-  assert.equal(flags.graph, false);
-  assert.equal(flags.settings, false);
-});
-
-test('mergeFeatureFlags can enable apps and marketplace independently', () => {
-  const flags = mergeFeatureFlags('member', { apps: true, marketplace: true });
-
-  assert.equal(flags.apps, true);
-  assert.equal(flags.marketplace, true);
-  assert.equal(flags.agents, false);
-});
-
-test('mergeFeatureFlags applies workspace overrides', () => {
-  const flags = mergeFeatureFlags('member', { search: true, chat: false });
-
-  assert.equal(flags.chat, false);
-  assert.equal(flags.files, true);
-  assert.equal(flags.search, true);
-});
-
-test('guard maps workspace paths to features', () => {
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/maps'), 'maps');
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/maps/presence'), 'maps');
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/chat'), 'chat');
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/search'), 'search');
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/ontology'), 'ontology');
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/graph'), 'graph');
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/datasets'), 'datasets');
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/datasets/clockify/hours'), 'datasets');
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/settings/agents'), 'agents');
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/settings/theme'), 'settings.workspace');
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/organization'), 'settings.organization');
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/organization/billing'), 'settings.organization');
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/apps'), 'apps');
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/marketplace'), 'marketplace');
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/help'), 'settings');
-});
-
-test('guard supports org-scoped rewritten routes', () => {
-  assert.equal(getFeatureForWorkspacePath('/org/acme/workspace/ws1/chat'), 'chat');
-  assert.equal(getFeatureForWorkspacePath('/org/acme/workspace/ws1/lab'), 'agents');
-});
-
-test('guard maps code and ide paths to the code feature', () => {
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/code'), 'code');
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/code/workspaces'), 'code');
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/ide'), 'code');
-});
-
-test('guard maps slides paths to the slides feature', () => {
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/slides'), 'slides');
-  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/slides/new'), 'slides');
-  assert.equal(mergeFeatureFlags('owner').slides, true);
-  assert.equal(
-    isWorkspacePathAllowed({ pathname: '/workspace/ws1/slides', role: 'member' }),
-    true,
-  );
-});
-
-test('code feature is off by default and opt-in via flags', () => {
-  // Opt-in: even an owner does not get code from the default baseline.
-  assert.equal(mergeFeatureFlags('owner').code, false);
-  assert.equal(mergeFeatureFlags('member').code, false);
-  // Enabling it via the workspace flags (from nexus_config.feature_flags) turns
-  // it on and unblocks the routes.
-  assert.equal(mergeFeatureFlags('owner', { code: true }).code, true);
-  assert.equal(
-    isWorkspacePathAllowed({ pathname: '/workspace/ws1/code', role: 'owner' }),
-    false,
-  );
-  assert.equal(
-    isWorkspacePathAllowed({
-      pathname: '/workspace/ws1/code',
-      role: 'owner',
-      workspaceFlags: { code: true },
-    }),
-    true,
-  );
-});
-
-test('isWorkspacePathAllowed blocks disabled routes', () => {
-  const allowedChat = isWorkspacePathAllowed({
-    pathname: '/workspace/ws1/chat',
-    role: 'member',
-  });
-  const blockedGraph = isWorkspacePathAllowed({
-    pathname: '/workspace/ws1/graph',
-    role: 'member',
+    expect(flags.maps).toBe(true);
+    expect(flags.chat).toBe(true);
+    expect(flags.files).toBe(true);
+    expect(flags.datasets).toBe(true);
+    expect(flags.slides).toBe(true);
+    expect(flags.agents).toBe(false);
+    expect(flags.apps).toBe(false);
+    expect(flags.marketplace).toBe(false);
+    expect(flags.search).toBe(false);
+    expect(flags.ontology).toBe(false);
+    expect(flags.graph).toBe(false);
+    expect(flags.settings).toBe(false);
   });
 
-  assert.equal(allowedChat, true);
-  assert.equal(blockedGraph, false);
-});
+  it('can enable apps and marketplace independently', () => {
+    const flags = mergeFeatureFlags('member', { apps: true, marketplace: true });
 
-test('getFirstAllowedWorkspacePath returns first enabled route', () => {
-  const path = getFirstAllowedWorkspacePath({
-    workspaceId: 'ws1',
-    role: 'member',
+    expect(flags.apps).toBe(true);
+    expect(flags.marketplace).toBe(true);
+    expect(flags.agents).toBe(false);
   });
 
-  assert.equal(path, '/workspace/ws1/chat');
+  it('applies workspace overrides', () => {
+    const flags = mergeFeatureFlags('member', { search: true, chat: false });
+
+    expect(flags.chat).toBe(false);
+    expect(flags.files).toBe(true);
+    expect(flags.search).toBe(true);
+  });
+});
+
+describe('getFeatureForWorkspacePath', () => {
+  it('maps workspace paths to features', () => {
+    expect(getFeatureForWorkspacePath('/workspace/ws1/maps')).toBe('maps');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/maps/presence')).toBe('maps');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/chat')).toBe('chat');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/search')).toBe('search');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/ontology')).toBe('ontology');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/graph')).toBe('graph');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/datasets')).toBe('datasets');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/datasets/clockify/hours')).toBe(
+      'datasets',
+    );
+    expect(getFeatureForWorkspacePath('/workspace/ws1/settings/agents')).toBe('agents');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/settings/theme')).toBe('settings.workspace');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/organization')).toBe('settings.organization');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/organization/billing')).toBe('settings.organization');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/apps')).toBe('apps');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/marketplace')).toBe('marketplace');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/help')).toBe('settings');
+  });
+
+  it('supports org-scoped rewritten routes', () => {
+    expect(getFeatureForWorkspacePath('/org/acme/workspace/ws1/chat')).toBe('chat');
+    expect(getFeatureForWorkspacePath('/org/acme/workspace/ws1/lab')).toBe('agents');
+  });
+
+  it('maps code and ide paths to the code feature', () => {
+    expect(getFeatureForWorkspacePath('/workspace/ws1/code')).toBe('code');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/code/workspaces')).toBe('code');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/ide')).toBe('code');
+  });
+
+  it('maps slides paths to the slides feature', () => {
+    expect(getFeatureForWorkspacePath('/workspace/ws1/slides')).toBe('slides');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/slides/new')).toBe('slides');
+    expect(mergeFeatureFlags('owner').slides).toBe(true);
+    expect(
+      isWorkspacePathAllowed({ pathname: '/workspace/ws1/slides', role: 'member' }),
+    ).toBe(true);
+  });
+});
+
+describe('feature guards', () => {
+  it('keeps code off by default and opt-in via flags', () => {
+    expect(mergeFeatureFlags('owner').code).toBe(false);
+    expect(mergeFeatureFlags('member').code).toBe(false);
+    expect(mergeFeatureFlags('owner', { code: true }).code).toBe(true);
+    expect(
+      isWorkspacePathAllowed({ pathname: '/workspace/ws1/code', role: 'owner' }),
+    ).toBe(false);
+    expect(
+      isWorkspacePathAllowed({
+        pathname: '/workspace/ws1/code',
+        role: 'owner',
+        workspaceFlags: { code: true },
+      }),
+    ).toBe(true);
+  });
+
+  it('blocks disabled routes', () => {
+    expect(
+      isWorkspacePathAllowed({
+        pathname: '/workspace/ws1/chat',
+        role: 'member',
+      }),
+    ).toBe(true);
+    expect(
+      isWorkspacePathAllowed({
+        pathname: '/workspace/ws1/graph',
+        role: 'member',
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('getFirstAllowedWorkspacePath', () => {
+  it('returns first enabled route', () => {
+    expect(
+      getFirstAllowedWorkspacePath({
+        workspaceId: 'ws1',
+        role: 'member',
+      }),
+    ).toBe('/workspace/ws1/chat');
+  });
+});
+
+describe('getWorkspaceSwitchPath', () => {
+  it('stays on the same section', () => {
+    expect(
+      getWorkspaceSwitchPath({
+        pathname: '/workspace/ws-next-gen/apps',
+        targetWorkspaceId: 'ws-other',
+        role: 'owner',
+      }),
+    ).toBe('/workspace/ws-other/apps');
+    expect(
+      getWorkspaceSwitchPath({
+        pathname: '/workspace/ws-next-gen/apps?open=fm-slides',
+        targetWorkspaceId: 'ws-other',
+        role: 'owner',
+      }),
+    ).toBe('/workspace/ws-other/apps');
+    expect(
+      getWorkspaceSwitchPath({
+        pathname: '/workspace/ws-next-gen/chat/conv-42',
+        targetWorkspaceId: 'ws-other',
+        role: 'owner',
+      }),
+    ).toBe('/workspace/ws-other/chat');
+    expect(
+      getWorkspaceSwitchPath({
+        pathname: '/workspace/ws-next-gen/maps/presence',
+        targetWorkspaceId: 'ws-other',
+        role: 'owner',
+      }),
+    ).toBe('/workspace/ws-other/maps/presence');
+  });
+
+  it('falls back when the target workspace lacks the section', () => {
+    expect(
+      getWorkspaceSwitchPath({
+        pathname: '/workspace/ws-next-gen/apps',
+        targetWorkspaceId: 'ws-member',
+        role: 'member',
+      }),
+    ).toBe('/workspace/ws-member/chat');
+  });
+
+  it('preserves admin routes that are not feature-gated', () => {
+    expect(
+      getWorkspaceSwitchPath({
+        pathname: '/workspace/ws-next-gen/admin/events',
+        targetWorkspaceId: 'ws-other',
+        role: 'owner',
+      }),
+    ).toBe('/workspace/ws-other/admin/events');
+  });
+
+  it('works with org-scoped rewritten paths', () => {
+    expect(
+      getWorkspaceSwitchPath({
+        pathname: '/org/acme/workspace/ws-next-gen/apps',
+        targetWorkspaceId: 'ws-other',
+        role: 'owner',
+      }),
+    ).toBe('/workspace/ws-other/apps');
+  });
+});
+
+describe('pathNeedsAgentCatalog', () => {
+  it('is true on chat, lab, and agent settings', () => {
+    expect(pathNeedsAgentCatalog('/workspace/ws1/chat')).toBe(true);
+    expect(pathNeedsAgentCatalog('/workspace/ws1/chat/conv-1')).toBe(true);
+    expect(pathNeedsAgentCatalog('/workspace/ws1/lab')).toBe(true);
+    expect(pathNeedsAgentCatalog('/workspace/ws1/settings/agents')).toBe(true);
+  });
+
+  it('is false on apps and other sections', () => {
+    expect(pathNeedsAgentCatalog('/workspace/ws1/apps')).toBe(false);
+    expect(pathNeedsAgentCatalog('/workspace/ws1/files')).toBe(false);
+    expect(pathNeedsAgentCatalog('/workspace/ws1/settings/theme')).toBe(false);
+  });
+});
+
+describe('pathNeedsGraphExport', () => {
+  it('is true only on graph routes', () => {
+    expect(pathNeedsGraphExport('/workspace/ws1/graph/network')).toBe(true);
+    expect(pathNeedsGraphExport('/workspace/ws1/apps')).toBe(false);
+  });
 });

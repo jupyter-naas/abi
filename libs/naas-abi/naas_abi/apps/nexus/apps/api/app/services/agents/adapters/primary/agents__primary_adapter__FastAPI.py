@@ -13,6 +13,11 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
     require_workspace_access,
 )
+from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
+    resolve_agent_ref,
+    resolve_agent_refs,
+    workspace_seed_for_slug,
+)
 from naas_abi.apps.nexus.apps.api.app.services.agents import (
     AgentCreateInput,
     AgentRecord,
@@ -27,6 +32,7 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import (
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import public_modules_url
 from naas_abi_core import logger
 from naas_abi_core.services.agent.Agent import Agent
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -137,6 +143,17 @@ def request_context(current_user: User) -> RequestContext:
     return RequestContext(
         token_data=TokenData(user_id=current_user.id, scopes={"*"}, is_authenticated=True)
     )
+
+
+async def _workspace_slug(workspace_id: str) -> str | None:
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(WorkspaceModel.slug).where(WorkspaceModel.id == workspace_id)
+        )
+        return result.scalar_one_or_none()
 
 
 def _get_engine_default_agent_class_name() -> str | None:
@@ -547,7 +564,18 @@ async def _reconcile_workspace_agents(
         stale_ids = {agent.id for agent in stale_agents}
         agent_list = [agent for agent in agent_list if agent.id not in stale_ids]
 
-    default_class_name = _get_engine_default_agent_class_name()
+    seed = workspace_seed_for_slug(await _workspace_slug(workspace_id))
+    seeded_class_names: set[str] | None = None
+    if seed is not None and seed.agents is not None:
+        seeded_class_names = resolve_agent_refs(seed.agents, class_name_to_agent_class)
+
+    default_class_name: str | None = None
+    if seed is not None and seed.default_agent:
+        default_class_name = resolve_agent_ref(
+            seed.default_agent, class_name_to_agent_class
+        )
+    if default_class_name is None:
+        default_class_name = _get_engine_default_agent_class_name()
 
     # Persist any newly discovered agent classes to the database.
     for class_name, agent_cls in class_name_to_agent_class.items():
@@ -556,15 +584,17 @@ async def _reconcile_workspace_agents(
 
         name = _get_agent_class_name(agent_cls)
         description = _get_agent_class_description(agent_cls)
-        # Enable engine default (or Abi fallback) plus agents that opt in via
-        # ENABLED_BY_DEFAULT / enabled_by_default. The chat/pane pickers only
-        # list enabled agents, so product agents must opt in or stay invisible.
-        enabled = _agent_enabled_by_default(
-            agent_cls,
-            name=name,
-            class_name=class_name,
-            default_class_name=default_class_name,
-        )
+        # A workspace ``agents:`` list is the roster. Otherwise enable the
+        # engine default (or Abi fallback) plus class ``ENABLED_BY_DEFAULT``.
+        if seeded_class_names is not None:
+            enabled = class_name in seeded_class_names
+        else:
+            enabled = _agent_enabled_by_default(
+                agent_cls,
+                name=name,
+                class_name=class_name,
+                default_class_name=default_class_name,
+            )
 
         logger.debug("Creating agent in nexus backend: {}", name)
         system_prompt = _get_agent_system_prompt(agent_cls)
@@ -632,7 +662,25 @@ async def _reconcile_workspace_agents(
                     continue
         reconciled.append(agent)
 
-    # Ensure the engine default agent is enabled and marked as workspace default.
+    if seeded_class_names is not None:
+        aligned: list[AgentRecord] = []
+        for agent in reconciled:
+            if not agent.class_name:
+                aligned.append(agent)
+                continue
+            should_enable = agent.class_name in seeded_class_names
+            if agent.enabled == should_enable:
+                aligned.append(agent)
+                continue
+            updated = await agent_service.update_agent(
+                context=context,
+                agent_id=agent.id,
+                updates=AgentUpdateInput(enabled=should_enable),
+            )
+            aligned.append(updated if updated is not None else agent)
+        reconciled = aligned
+
+    # Ensure the workspace (or engine) default agent is enabled and marked.
     if default_class_name:
         default_agent = next(
             (agent for agent in reconciled if agent.class_name == default_class_name),

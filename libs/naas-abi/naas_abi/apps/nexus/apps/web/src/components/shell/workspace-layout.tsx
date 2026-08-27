@@ -28,6 +28,7 @@ import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { PresenceIndicator } from '@/components/presence-indicator';
 import { getWorkspacePath } from './sidebar/utils';
+import { pathNeedsAgentCatalog } from '@/lib/feature-access';
 
 interface WorkspaceLayoutProps {
   children: React.ReactNode;
@@ -68,6 +69,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   const fetchWorkspaces = useWorkspaceStore((state) => state.fetchWorkspaces);
   const mobilePendingChatSlug = useWorkspaceStore((state) => state.mobilePendingChatSlug);
   const setMobilePendingChatSlug = useWorkspaceStore((state) => state.setMobilePendingChatSlug);
+  const contextPanelOpen = useWorkspaceStore((state) => state.contextPanelOpen);
   const { setTheme } = useTheme();
   const [orgBorderRadius, setOrgBorderRadius] = useState('0');
   const [moreOpen, setMoreOpen] = useState(false);
@@ -149,23 +151,25 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkspaceId]);
 
-  // Fetch agents and skills when workspace loads
+  // Agents/skills belong to chat, lab, agent settings, and the open AI pane.
+  // Fetching them on every workspace switch (including Apps) POSTed
+  // /agents/sync and starved GET /api/apps.
   useEffect(() => {
+    const needsAgents = Boolean(
+      currentWorkspaceId && (contextPanelOpen || pathNeedsAgentCatalog(pathname)),
+    );
+    if (!needsAgents || !currentWorkspaceId) return;
     const loadAgents = async () => {
-      if (currentWorkspaceId) {
-        const { useAgentsStore } = await import('@/stores/agents');
-        await useAgentsStore.getState().fetchAgents(currentWorkspaceId);
-      }
+      const { useAgentsStore } = await import('@/stores/agents');
+      await useAgentsStore.getState().fetchAgents(currentWorkspaceId);
     };
     const loadSkills = async () => {
-      if (currentWorkspaceId) {
-        const { useSkillsStore } = await import('@/stores/skills');
-        await useSkillsStore.getState().fetchSkills(currentWorkspaceId);
-      }
+      const { useSkillsStore } = await import('@/stores/skills');
+      await useSkillsStore.getState().fetchSkills(currentWorkspaceId);
     };
     loadAgents();
     loadSkills();
-  }, [currentWorkspaceId]);
+  }, [currentWorkspaceId, contextPanelOpen, pathname]);
 
   // Keyboard shortcut: Cmd+K to toggle the side chat pane (desktop only).
   // Capture phase so Monaco / editors do not swallow ⌘K as a chord starter.

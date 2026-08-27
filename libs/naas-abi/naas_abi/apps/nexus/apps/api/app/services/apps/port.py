@@ -61,8 +61,8 @@ class AppInfo(BaseModel):
 
     # Runtime
     installed: bool = False
-    # Per-workspace enable state. Defaults to True (apps enabled by default).
-    enabled: bool = True
+    # Per-workspace enable state. Missing config rows default to off.
+    enabled: bool = False
 
 
 class AppsResponse(BaseModel):

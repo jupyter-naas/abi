@@ -293,6 +293,14 @@ class WorkspaceSeedConfig(BaseModel):
     background_color: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    # Same syntax as engine ``default_agent``: ``module AgentClass``.
+    default_agent: str | None = None
+    # Registry refs to enable in this workspace. ``None`` keeps class flags
+    # (``ENABLED_BY_DEFAULT``). A list is the roster: listed on, others off.
+    agents: list[str] | None = None
+    # Catalog ``app_id`` values (``module.path:folder``) to enable at boot.
+    # ``None`` means no seed; missing app-config rows default to off.
+    apps: list[str] | None = None
 
 
 class OrganizationSeedConfig(BaseModel):
@@ -358,6 +366,8 @@ class NexusConfig(BaseModel):
 
     secret_key: str = "change-me-in-production"
     auth_password_enabled: bool = False
+    pages_sso_secret: str = ""
+    pages_sso_expire_seconds: int = 300
     magic_link_allow_signup: bool = False
     access_token_expire_minutes: int = 1440
     refresh_token_expire_days: int = 30
@@ -557,6 +567,11 @@ class ABIModule(BaseModule):
                         - name: "Ops Workspace"
                           slug: "ops-workspace"
                           owner_email: "owner@example.com"
+                          default_agent: "naas_abi AbiAgent"
+                          agents:
+                            - "naas_abi AbiAgent"
+                          apps:
+                            - example.module:dashboard
                           members:
                             - email: "admin@example.com"
                               role: "member"
