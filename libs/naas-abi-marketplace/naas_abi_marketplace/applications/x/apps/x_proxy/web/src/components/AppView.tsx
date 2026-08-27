@@ -223,13 +223,13 @@ export function AppView({ page }: Props) {
     }
   }, [data]);
 
-  if (error) {
-    return <div className="status">{error}</div>;
-  }
-
   if (!data) {
     return <div className="status">Loading snapshots…</div>;
   }
+
+  const snapshotWarning = error ? (
+    <div className="status snapshot-warning">{error}</div>
+  ) : null;
 
   const usersPage = (
     <UsersPage
@@ -301,6 +301,7 @@ export function AppView({ page }: Props) {
         ) : null
       }
     >
+      {snapshotWarning}
       <div className="page-wrap">
         {page === "count" ? (
           <CountPage

@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { loadSnapshots } from "@/lib/loadSnapshots";
+import { loadSnapshots, emptySnapshots } from "@/lib/loadSnapshots";
 import {
   addFolder,
   folders,
@@ -128,8 +128,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       })
       .catch((err: Error) => {
         if (cancelled) return;
+        setData(emptySnapshots());
+        setTimezoneState("UTC");
         setError(
-          `Failed to load snapshots: ${err.message}. Run the X app build to publish JSON under x/apps/x_proxy/.`,
+          `Snapshots unavailable (${err.message}). Showing empty data — run the X app build to publish JSON under x/apps/x_proxy/.`,
         );
       });
     return () => {

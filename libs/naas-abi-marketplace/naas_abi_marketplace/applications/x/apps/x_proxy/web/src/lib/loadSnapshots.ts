@@ -1,6 +1,20 @@
 import type { GraphTotals, Snapshots } from "@/lib/types";
 import { withAccessToken } from "@/lib/routes";
 
+/** Minimal snapshot shape so the shell renders when JSON is missing or fetch fails. */
+export function emptySnapshots(): Snapshots {
+  return {
+    updatedAt: null,
+    graph: null,
+    scenarios: [],
+    queries: [],
+    timezones: [{ id: "UTC", label: "UTC" }],
+    defaultTimezone: "UTC",
+    count: { kpis: [], barcharts: [], linecharts: [] },
+    search: { kpis: [], barcharts: [], linecharts: [], tables: [], facets: [] },
+  };
+}
+
 /** Snapshot JSON lives next to the exported index under /app-html/x/apps/x_proxy/. */
 const BASE = "/app-html/x/apps/x_proxy";
 

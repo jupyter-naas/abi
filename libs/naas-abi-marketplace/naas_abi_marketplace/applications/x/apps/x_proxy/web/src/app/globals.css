@@ -1829,6 +1829,15 @@ table.dt td.empty {
   text-align: center;
 }
 
+.status.snapshot-warning {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  text-align: left;
+  background: #fff8e6;
+  border: 1px solid #f0d78c;
+  color: #5c4a1a;
+}
+
 .params {
   max-width: 560px;
 }
