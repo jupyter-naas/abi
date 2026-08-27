@@ -14,6 +14,8 @@ import { useFilesStore } from '@/stores/files';
 import { useOntologyStore } from '@/stores/ontology';
 import { getWorkspacePath } from './utils';
 import { WorkspaceMark } from '../workspace-mark';
+import { getWorkspaceSwitchPath } from '@/lib/feature-access';
+import { markAppsSkipRestore, clearAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
 
 type SectionDef = {
   id: SidebarSection;
@@ -58,6 +60,7 @@ export function Sidebar() {
     currentWorkspaceId,
     activePanelSection,
     setActivePanelSection,
+    setCurrentWorkspace,
   } = useWorkspaceStore();
 
   const { fetchFiles, fetchLabFiles, setActiveSource } = useFilesStore();
@@ -79,9 +82,7 @@ export function Sidebar() {
 
   useEffect(() => {
     setMounted(true);
-    if (canFiles) { fetchFiles(); fetchLabFiles(); }
-    if (canOntology) { fetchOntology(); }
-  }, [canFiles, canOntology, fetchFiles, fetchLabFiles, fetchOntology]);
+  }, []);
 
   // Resolve the section that owns the current URL — single source of truth
   // for the highlighted icon, the sub-panel, and the browser tab title.
@@ -96,6 +97,11 @@ export function Sidebar() {
       return false;
     }) ?? null;
   }, [pathname, currentWorkspaceId]);
+
+  useEffect(() => {
+    if (urlSection?.id === 'files' && canFiles) { fetchFiles(); fetchLabFiles(); }
+    if (urlSection?.id === 'ontology' && canOntology) { fetchOntology(); }
+  }, [urlSection?.id, currentWorkspaceId, canFiles, canOntology, fetchFiles, fetchLabFiles, fetchOntology]);
 
   // Reconcile activePanelSection with the URL whenever the URL changes
   // (incl. initial mount after rehydration). Without this, a persisted
@@ -170,6 +176,7 @@ export function Sidebar() {
   };
 
   const handleSectionClick = (section: SectionDef) => {
+    clearAppsSkipRestore();
     if (activePanelSection === section.id) {
       setActivePanelSection(null);
       return;
@@ -327,7 +334,17 @@ export function Sidebar() {
                 key={workspace.id}
                 onClick={() => {
                   setWorkspaceMenuOpen(false);
-                  router.push(`/workspace/${workspace.id}/chat`);
+                  if (workspace.id === currentWorkspaceId) return;
+                  markAppsSkipRestore();
+                  setCurrentWorkspace(workspace.id);
+                  router.push(
+                    getWorkspaceSwitchPath({
+                      pathname,
+                      targetWorkspaceId: workspace.id,
+                      role: workspace.currentUserRole,
+                      workspaceFlags: workspace.featureFlags,
+                    }),
+                  );
                 }}
                 className={cn(
                   'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors',

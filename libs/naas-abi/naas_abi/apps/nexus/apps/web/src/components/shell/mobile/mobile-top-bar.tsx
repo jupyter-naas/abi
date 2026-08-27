@@ -14,6 +14,8 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { isMobileChatThreadOpen, parseChatRoute } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { getWorkspacePath } from '../sidebar/utils';
 import { WorkspaceMark } from '../workspace-mark';
+import { getWorkspaceSwitchPath } from '@/lib/feature-access';
+import { markAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
 import { useShellTitle } from '../shell-title';
 import { resolveMobileTopBarTitle } from './mobile-top-bar-title';
 
@@ -52,6 +54,7 @@ export function MobileTopBar({
   const mobilePendingChatSlug = useWorkspaceStore((s) => s.mobilePendingChatSlug);
   const conversations = useWorkspaceStore((s) => s.conversations);
   const setActiveConversation = useWorkspaceStore((s) => s.setActiveConversation);
+  const setCurrentWorkspace = useWorkspaceStore((s) => s.setCurrentWorkspace);
   const setMobilePendingChatSlug = useWorkspaceStore((s) => s.setMobilePendingChatSlug);
 
   const { logout, user } = useAuthStore();
@@ -186,8 +189,18 @@ export function MobileTopBar({
                 type="button"
                 onClick={() => {
                   setWorkspaceOpen(false);
+                  if (workspace.id === currentWorkspaceId) return;
                   setActiveConversation(null);
-                  router.push(`/workspace/${workspace.id}/maps/presence`);
+                  markAppsSkipRestore();
+                  setCurrentWorkspace(workspace.id);
+                  router.push(
+                    getWorkspaceSwitchPath({
+                      pathname,
+                      targetWorkspaceId: workspace.id,
+                      role: workspace.currentUserRole,
+                      workspaceFlags: workspace.featureFlags,
+                    }),
+                  );
                 }}
                 className={cn(
                   'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors',

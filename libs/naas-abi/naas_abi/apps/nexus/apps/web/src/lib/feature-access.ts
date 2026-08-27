@@ -95,8 +95,12 @@ export function isFeatureEnabled(params: {
   return resolved[params.feature] === true;
 }
 
+function pathWithoutQuery(pathname: string): string {
+  return pathname.split(/[?#]/)[0];
+}
+
 export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null {
-  const parts = pathname.split('/').filter(Boolean);
+  const parts = pathWithoutQuery(pathname).split('/').filter(Boolean);
   const workspaceIndex = parts.indexOf('workspace');
   if (workspaceIndex < 0 || parts.length <= workspaceIndex + 2) {
     return null;
@@ -155,6 +159,17 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   return null;
 }
 
+/** Surfaces that need the agent catalog (chat, lab, agent settings). Apps does not. */
+export function pathNeedsAgentCatalog(pathname: string | null | undefined): boolean {
+  const feature = getFeatureForWorkspacePath(pathname || '');
+  return feature === 'chat' || feature === 'agents';
+}
+
+/** Graph export toasts are only meaningful on graph routes. */
+export function pathNeedsGraphExport(pathname: string | null | undefined): boolean {
+  return getFeatureForWorkspacePath(pathname || '') === 'graph';
+}
+
 export function isWorkspacePathAllowed(params: {
   pathname: string;
   role?: string;
@@ -186,4 +201,57 @@ export function getFirstAllowedWorkspacePath(params: {
   }
 
   return `/workspace/${params.workspaceId}/chat`;
+}
+
+/**
+ * Destination when switching workspaces from the current URL.
+ *
+ * Stays on the same product surface (apps stays apps) and drops resource ids
+ * (a chat thread, an opened app) that belong to the previous workspace.
+ * If the target workspace does not enable that surface, falls back to its
+ * first allowed route.
+ */
+export function getWorkspaceSwitchPath(params: {
+  pathname: string;
+  targetWorkspaceId: string;
+  role?: string;
+  workspaceFlags?: WorkspaceFeatureFlags;
+}): string {
+  const feature = getFeatureForWorkspacePath(params.pathname);
+  if (feature) {
+    if (
+      isFeatureEnabled({
+        feature,
+        role: params.role,
+        workspaceFlags: params.workspaceFlags,
+      })
+    ) {
+      return `/workspace/${params.targetWorkspaceId}${FEATURE_FALLBACK_ROUTE[feature]}`;
+    }
+    return getFirstAllowedWorkspacePath({
+      workspaceId: params.targetWorkspaceId,
+      role: params.role,
+      workspaceFlags: params.workspaceFlags,
+    });
+  }
+
+  const suffix = workspacePathSuffix(params.pathname);
+  if (suffix) {
+    return `/workspace/${params.targetWorkspaceId}${suffix}`;
+  }
+
+  return getFirstAllowedWorkspacePath({
+    workspaceId: params.targetWorkspaceId,
+    role: params.role,
+    workspaceFlags: params.workspaceFlags,
+  });
+}
+
+function workspacePathSuffix(pathname: string): string | null {
+  const parts = pathWithoutQuery(pathname).split('/').filter(Boolean);
+  const workspaceIndex = parts.indexOf('workspace');
+  if (workspaceIndex < 0 || parts.length <= workspaceIndex + 2) {
+    return null;
+  }
+  return `/${parts.slice(workspaceIndex + 2).join('/')}`;
 }
