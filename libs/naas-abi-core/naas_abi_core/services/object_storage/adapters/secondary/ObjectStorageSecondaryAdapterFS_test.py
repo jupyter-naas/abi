@@ -6,6 +6,12 @@ from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecon
 )
 
 
+def test_put_object_creates_nested_key_directories(tmp_path):
+    adapter = ObjectStorageSecondaryAdapterFS(base_path=str(tmp_path / "storage"))
+    adapter.put_object("signals/github/data", "jupyter-naas/repos/stamp.json", b"{}")
+    assert adapter.get_object("signals/github/data", "jupyter-naas/repos/stamp.json") == b"{}"
+
+
 def test_put_object_stream_writes_from_a_stream(tmp_path):
     adapter = ObjectStorageSecondaryAdapterFS(base_path=str(tmp_path / "storage"))
     payload = b"x" * (3 * 1024 * 1024)

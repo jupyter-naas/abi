@@ -57,6 +57,7 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
         with self._lock:
             self.__create_path(prefix)
             target_path = os.path.join(self.base_path, prefix, key)
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
             with tempfile.NamedTemporaryFile(
                 mode="wb",
                 dir=os.path.join(self.base_path, prefix),
@@ -71,6 +72,7 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
         with self._lock:
             self.__create_path(prefix)
             target_path = os.path.join(self.base_path, prefix, key)
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
             with tempfile.NamedTemporaryFile(
                 mode="wb",
                 dir=os.path.join(self.base_path, prefix),

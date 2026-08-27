@@ -9,6 +9,7 @@ export type FeatureKey =
   | 'search'
   | 'ontology'
   | 'graph'
+  | 'datasets'
   | 'code'
   | 'slides'
   | 'settings'
@@ -28,6 +29,7 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'search',
   'ontology',
   'graph',
+  'datasets',
   'code',
   'slides',
   'settings',
@@ -43,8 +45,8 @@ const OPT_IN_FEATURES: FeatureKey[] = ['code'];
 const DEFAULT_ROLE_BASELINE: Record<string, FeatureKey[]> = {
   owner: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
   admin: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
-  member: ['maps', 'chat', 'files', 'skills', 'slides'],
-  viewer: ['maps', 'chat', 'files', 'skills', 'slides'],
+  member: ['maps', 'chat', 'files', 'datasets', 'skills', 'slides'],
+  viewer: ['maps', 'chat', 'files', 'datasets', 'skills', 'slides'],
 };
 
 const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
@@ -58,6 +60,7 @@ const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
   search: '/search',
   ontology: '/ontology',
   graph: '/graph',
+  datasets: '/datasets',
   code: '/code',
   slides: '/slides',
   settings: '/settings',
@@ -121,6 +124,9 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   if (firstSegment === 'graph') {
     return 'graph';
   }
+  if (firstSegment === 'datasets') {
+    return 'datasets';
+  }
   if (firstSegment === 'code' || firstSegment === 'ide') {
     return 'code';
   }
@@ -177,7 +183,7 @@ export function getFirstAllowedWorkspacePath(params: {
   workspaceFlags?: WorkspaceFeatureFlags;
 }): string {
   const resolved = mergeFeatureFlags(params.role, params.workspaceFlags);
-  const priority: FeatureKey[] = ['chat', 'maps', 'files', 'search', 'ontology', 'graph', 'agents', 'apps', 'marketplace', 'settings.workspace', 'settings.organization', 'settings'];
+  const priority: FeatureKey[] = ['chat', 'maps', 'files', 'datasets', 'search', 'ontology', 'graph', 'agents', 'apps', 'marketplace', 'settings.workspace', 'settings.organization', 'settings'];
 
   for (const feature of priority) {
     if (resolved[feature]) {

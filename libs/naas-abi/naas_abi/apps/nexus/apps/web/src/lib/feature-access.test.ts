@@ -14,6 +14,7 @@ test('mergeFeatureFlags keeps member defaults', () => {
   assert.equal(flags.maps, true);
   assert.equal(flags.chat, true);
   assert.equal(flags.files, true);
+  assert.equal(flags.datasets, true);
   assert.equal(flags.slides, true);
   assert.equal(flags.agents, false);
   assert.equal(flags.apps, false);
@@ -47,6 +48,8 @@ test('guard maps workspace paths to features', () => {
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/search'), 'search');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/ontology'), 'ontology');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/graph'), 'graph');
+  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/datasets'), 'datasets');
+  assert.equal(getFeatureForWorkspacePath('/workspace/ws1/datasets/clockify/hours'), 'datasets');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/settings/agents'), 'agents');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/settings/theme'), 'settings.workspace');
   assert.equal(getFeatureForWorkspacePath('/workspace/ws1/organization'), 'settings.organization');

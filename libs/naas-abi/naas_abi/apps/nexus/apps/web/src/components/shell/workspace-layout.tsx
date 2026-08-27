@@ -20,8 +20,10 @@ import {
 } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { parseFilesRoute } from '@/app/workspace/[workspaceId]/files/lib/files-route';
 import { parseMapsRoute } from '@/app/workspace/[workspaceId]/maps/lib/maps-route';
+import { parseDatasetsRoute } from '@/app/workspace/[workspaceId]/datasets/lib/datasets-route';
 import { FilesSection } from './sidebar/files-section';
 import { MapsSection } from './sidebar/maps-section';
+import { DatasetsSection } from './sidebar/datasets-section';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { PresenceIndicator } from '@/components/presence-indicator';
@@ -224,6 +226,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   const { isChatRoute, isThread } = chatRoute;
   const { isFilesRoute, isBrowse: isFilesBrowse } = parseFilesRoute(pathname);
   const { isMapsRoute, isDataset: isMapsDataset } = parseMapsRoute(pathname);
+  const { isDatasetsRoute, isTable: isDatasetsTable } = parseDatasetsRoute(pathname);
   const showMobileChatThread = isMobile && isMobileChatThreadOpen(chatRoute, mobilePendingChatSlug);
   const showMobileChatList = isMobile && isChatRoute && !showMobileChatThread;
   const mobileThreadConversationId = resolveMobileThreadConversationId(
@@ -234,7 +237,9 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   const showMobileFilesDetail = isMobile && isFilesRoute && isFilesBrowse;
   const showMobileMapsList = isMobile && isMapsRoute && !isMapsDataset;
   const showMobileMapsDetail = isMobile && isMapsRoute && isMapsDataset;
-  const showMobileDetail = showMobileChatThread || showMobileFilesDetail || showMobileMapsDetail;
+  const showMobileDatasetsList = isMobile && isDatasetsRoute && !isDatasetsTable;
+  const showMobileDatasetsDetail = isMobile && isDatasetsRoute && isDatasetsTable;
+  const showMobileDetail = showMobileChatThread || showMobileFilesDetail || showMobileMapsDetail || showMobileDatasetsDetail;
 
   useEffect(() => {
     if (mobilePendingChatSlug && isThread) {
@@ -248,6 +253,10 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
 
   const handleMapsListBack = () => {
     router.replace(getWorkspacePath(currentWorkspaceId, '/maps'));
+  };
+
+  const handleDatasetsListBack = () => {
+    router.replace(getWorkspacePath(currentWorkspaceId, '/datasets'));
   };
 
   // Detail views are immersive: dismiss More if it was open.
@@ -270,7 +279,8 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
             showMobileChatList ? 'Chat'
               : showMobileFilesList ? 'Files'
                 : showMobileMapsList ? 'Maps'
-                  : undefined
+                  : showMobileDatasetsList ? 'Datasets'
+                    : undefined
           }
           // The page passes its actions to the desktop Header, but mobile chrome
           // is shell-owned, so the route decides what the bar carries.
@@ -280,14 +290,18 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
               ? handleFilesListBack
               : showMobileMapsDetail
                 ? handleMapsListBack
-                : undefined
+                : showMobileDatasetsDetail
+                  ? handleDatasetsListBack
+                  : undefined
           }
           detailBackLabel={
             showMobileFilesDetail
               ? 'Back to files'
               : showMobileMapsDetail
                 ? 'Back to maps'
-                : undefined
+                : showMobileDatasetsDetail
+                  ? 'Back to datasets'
+                  : undefined
           }
         />
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -304,6 +318,10 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
             ) : showMobileMapsList ? (
               <nav className="min-h-0 flex-1 overflow-y-auto p-2">
                 <MapsSection collapsed={false} detailOnly />
+              </nav>
+            ) : showMobileDatasetsList ? (
+              <nav className="min-h-0 flex-1 overflow-y-auto p-2">
+                <DatasetsSection collapsed={false} detailOnly />
               </nav>
             ) : showMobileChatThread ? (
               // Flex column so ChatInterface flex-1/h-full fills the shell and the

@@ -5,6 +5,19 @@ class KVNotFoundError(Exception):
     pass
 
 
+class KVLockTimeoutError(Exception):
+    """Raised when ``KeyValueService.lock`` cannot acquire the key in time."""
+
+    def __init__(self, key: str, attempts: int, timeout: float) -> None:
+        self.key = key
+        self.attempts = attempts
+        self.timeout = timeout
+        super().__init__(
+            f"Could not acquire lock for {key!r} after {timeout:g}s "
+            f"({attempts} attempt{'s' if attempts != 1 else ''})"
+        )
+
+
 class IKeyValueAdapter(ABC):
     @abstractmethod
     def get(self, key: str) -> bytes:

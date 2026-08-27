@@ -224,7 +224,7 @@ function EmbedView({ record, onBack }: { record: AppRecord; onBack: () => void }
             title={record.name}
             onLoad={handleLoad}
             className="h-full w-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads"
             allow="fullscreen"
           />
         )}

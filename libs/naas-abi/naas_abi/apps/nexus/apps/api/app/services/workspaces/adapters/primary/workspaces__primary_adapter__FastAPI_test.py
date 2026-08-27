@@ -42,6 +42,7 @@ def test_to_schema_includes_role_and_feature_flags_for_member() -> None:
             "search": True,
             "ontology": True,
             "graph": True,
+            "datasets": True,
             "settings": False,
             "code": False,
             "slides": True,
