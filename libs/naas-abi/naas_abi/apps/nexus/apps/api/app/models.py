@@ -728,7 +728,7 @@ class AppConfigModel(Base):
     # Marketplace app identifier: "<module_path>:<app_name>" (e.g.
     # "naas_abi_marketplace.applications.openrouter:dashboard").
     app_id = Column(String(512), nullable=False, index=True)
-    enabled = Column(Boolean, nullable=False, default=True)
+    enabled = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 

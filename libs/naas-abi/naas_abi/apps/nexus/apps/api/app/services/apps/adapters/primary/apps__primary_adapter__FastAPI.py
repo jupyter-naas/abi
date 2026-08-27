@@ -38,6 +38,10 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
     require_workspace_access,
 )
+from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
+    resolve_app_enabled,
+    workspace_seed_for_slug,
+)
 from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
     mint_app_html_access_token,
 )
@@ -61,6 +65,7 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import (
 )
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import public_modules_url
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 _log = logging.getLogger(__name__)
 
@@ -70,6 +75,17 @@ router = APIRouter(dependencies=[Depends(get_current_user_required)])
 # ---------------------------------------------------------------------------
 # Catalog discovery (driven by loaded engine modules)
 # ---------------------------------------------------------------------------
+
+
+async def _workspace_slug(workspace_id: str) -> str | None:
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(WorkspaceModel.slug).where(WorkspaceModel.id == workspace_id)
+        )
+        return result.scalar_one_or_none()
 
 
 def _fallback_name(dir_name: str) -> str:
@@ -372,7 +388,7 @@ async def list_apps(
     """Return every app discovered from loaded-module manifests.
 
     When ``workspace_id`` is provided, results carry the workspace's enable
-    state. Apps without a stored record default to ``enabled=True``.
+    state. Apps without a stored record default to ``enabled=False``.
     """
     if workspace_id:
         await require_workspace_access(current_user.id, workspace_id)
@@ -385,14 +401,26 @@ async def list_apps(
         loaded_modules = {}
 
     catalog = _scan_apps_catalog()
+    workspace_slug: str | None = None
+    if workspace_id:
+        workspace_slug = await _workspace_slug(workspace_id)
 
     enabled_by_app_id: dict[str, bool] = (
         await apps_service.get_enabled_states(workspace_id) if workspace_id else {}
     )
+    seed_apps: set[str] = set()
+    if workspace_id:
+        seed = workspace_seed_for_slug(workspace_slug)
+        if seed is not None and seed.apps:
+            seed_apps = {
+                str(app_id).strip() for app_id in seed.apps if str(app_id).strip()
+            }
 
     results: list[AppInfo] = []
     for app in catalog:
-        update: dict = {"enabled": enabled_by_app_id.get(app.app_id, True)}
+        update: dict = {
+            "enabled": resolve_app_enabled(app.app_id, enabled_by_app_id, seed_apps)
+        }
 
         # Manifest values take precedence; only fall back to runtime config
         # when the manifest omits the credential.
@@ -488,9 +516,9 @@ async def update_app_config(
         updates=AppConfigUpdateInput(enabled=updates.enabled),
     )
     if record is None:
-        # No existing row — create one. Missing fields fall back to defaults
-        # (enabled=True), then we apply the requested update on top.
-        enabled = True if updates.enabled is None else updates.enabled
+        # No existing row: create one. Missing fields fall back to defaults
+        # (enabled=False), then we apply the requested update on top.
+        enabled = False if updates.enabled is None else updates.enabled
         record = await apps_service.create_app_config(
             AppConfigCreateInput(
                 workspace_id=workspace_id,
@@ -508,7 +536,7 @@ async def delete_app_config(
     current_user: User = Depends(get_current_user_required),
     apps_service: AppsService = Depends(get_apps_service),
 ) -> dict[str, str]:
-    """Delete the app config (reverts to the default ``enabled=True``)."""
+    """Delete the app config (reverts to the default ``enabled=False``)."""
     await require_workspace_access(current_user.id, workspace_id)
     _ensure_app_exists(app_id)
     deleted = await apps_service.delete_app_config(workspace_id, app_id)
