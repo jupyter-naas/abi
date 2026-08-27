@@ -1,4 +1,51 @@
-from naas_abi.apps.nexus.apps.api.app.utils.public_urls import resolve_public_api_host
+from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
+    resolve_module_public_asset_path,
+    resolve_public_api_host,
+)
+
+
+def test_resolve_module_public_asset_path_rewrites_legacy_flat_module_name() -> None:
+    assert (
+        resolve_module_public_asset_path(
+            "report/assets/public/avatar.png",
+            abi_module_path="operations.report",
+        )
+        == "operations/report/assets/public/avatar.png"
+    )
+
+
+def test_resolve_module_public_asset_path_rewrites_modules_prefix() -> None:
+    assert (
+        resolve_module_public_asset_path(
+            "/modules/report/assets/public/avatar.png",
+            abi_module_path="operations.report",
+        )
+        == "operations/report/assets/public/avatar.png"
+    )
+
+
+def test_resolve_module_public_asset_path_keeps_full_nested_path() -> None:
+    assert (
+        resolve_module_public_asset_path(
+            "operations/report/assets/public/avatar.png",
+            abi_module_path="operations.report",
+        )
+        == "operations/report/assets/public/avatar.png"
+    )
+
+
+def test_resolve_module_public_asset_path_keeps_marketplace_full_path() -> None:
+    path = (
+        "naas_abi_marketplace/domains/operations/assets/public/"
+        "project-manager.png"
+    )
+    assert (
+        resolve_module_public_asset_path(
+            path,
+            abi_module_path="naas_abi_marketplace.domains.operations",
+        )
+        == path
+    )
 
 
 def test_explicit_public_hostname_is_kept() -> None:
