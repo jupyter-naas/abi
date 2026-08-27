@@ -7,6 +7,9 @@ port already talks in snapshot ids.
 
 from __future__ import annotations
 
+# ``list`` is a port method name, so it shadows the builtin for annotations
+# evaluated in the class bodies below; use ``builtins.list`` there.
+import builtins
 import json
 import shutil
 import threading
@@ -92,7 +95,7 @@ class DatasetSecondaryAdapterDuckDB(IDatasetPort):
     def write(
         self,
         name: str,
-        rows: list[dict[str, Any]],
+        rows: builtins.list[dict[str, Any]],
         *,
         namespace: str = "default",
         mode: WriteMode = "append",
@@ -146,7 +149,7 @@ class DatasetSecondaryAdapterDuckDB(IDatasetPort):
     def _dataset_root(self, namespace: str, name: str) -> Path:
         return self._base / namespace / name
 
-    def _namespaces(self) -> list[str]:
+    def _namespaces(self) -> builtins.list[str]:
         if not self._base.is_dir():
             return []
         return sorted(
@@ -196,7 +199,7 @@ class DatasetSecondaryAdapterDuckDB(IDatasetPort):
         raise DatasetSnapshotNotFoundError(snapshot_id)
 
     def _copy_rows(
-        self, info: DatasetInfo, rows: list[dict[str, Any]], data_dir: Path
+        self, info: DatasetInfo, rows: builtins.list[dict[str, Any]], data_dir: Path
     ) -> None:
         import duckdb
 
@@ -214,7 +217,8 @@ class DatasetSecondaryAdapterDuckDB(IDatasetPort):
             con.execute(self._create_incoming_sql(info))
             for row in rows:
                 con.execute(
-                    f'INSERT INTO "incoming" VALUES ({", ".join("?" for _ in info.columns)})',
+                    # Only "?" placeholders are interpolated; values are bound.
+                    f'INSERT INTO "incoming" VALUES ({", ".join("?" for _ in info.columns)})',  # nosec B608
                     [row.get(col.name) for col in info.columns],
                 )
             select_sql, partition_by = self._select_and_partitions(info)
@@ -262,7 +266,9 @@ class DatasetSecondaryAdapterDuckDB(IDatasetPort):
         has_files = any(Path(info.location).joinpath(DATA_DIR).rglob("*.parquet"))
         if has_files:
             con.execute(
-                "CREATE VIEW "
+                # DDL cannot bind identifiers: the name is IDENTIFIER_PATTERN-validated
+                # and quoted by _ident, the glob escaped by _sql_string.
+                "CREATE VIEW "  # nosec B608
                 f"{self._ident(info.name)} AS SELECT * FROM read_parquet("
                 f"{self._sql_string(glob)}, hive_partitioning=true)"
             )
@@ -276,7 +282,9 @@ class DatasetSecondaryAdapterDuckDB(IDatasetPort):
             if hive not in {col.name for col in info.columns}:
                 nulls += f", NULL::VARCHAR AS {self._ident(hive)}"
         con.execute(
-            f"CREATE VIEW {self._ident(info.name)} AS SELECT * FROM (SELECT {nulls}) WHERE 1=0"
+            # DDL cannot bind identifiers: names are IDENTIFIER_PATTERN-validated and
+            # quoted by _ident, types come from the DUCKDB_TYPES map.
+            f"CREATE VIEW {self._ident(info.name)} AS SELECT * FROM (SELECT {nulls}) WHERE 1=0"  # nosec B608
         )
 
     @staticmethod

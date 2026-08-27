@@ -7,6 +7,9 @@ can fill them in without changing callers.
 
 from __future__ import annotations
 
+# ``list`` is a port method name, so it shadows the builtin for annotations
+# evaluated in the class bodies below; use ``builtins.list`` there.
+import builtins
 from abc import ABC, abstractmethod
 from typing import Any, Literal
 
@@ -127,7 +130,7 @@ class IDatasetPort(ABC):
     def write(
         self,
         name: str,
-        rows: list[dict[str, Any]],
+        rows: builtins.list[dict[str, Any]],
         *,
         namespace: str = "default",
         mode: WriteMode = "append",

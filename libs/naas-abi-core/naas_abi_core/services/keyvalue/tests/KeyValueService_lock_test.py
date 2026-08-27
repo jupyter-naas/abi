@@ -28,9 +28,8 @@ def test_lock_acquire_and_release() -> None:
 def test_lock_released_on_exception() -> None:
     kv = _kv()
     key = f"lock:kv:{uuid4()}"
-    with pytest.raises(RuntimeError, match="boom"):
-        with kv.lock(key, ttl=5, timeout=1):
-            raise RuntimeError("boom")
+    with pytest.raises(RuntimeError, match="boom"), kv.lock(key, ttl=5, timeout=1):
+        raise RuntimeError("boom")
     assert kv.exists(key) is False
     with kv.lock(key, ttl=5, timeout=0):
         pass
@@ -40,9 +39,11 @@ def test_lock_times_out_while_held() -> None:
     kv = _kv()
     key = f"lock:kv:{uuid4()}"
     with kv.lock(key, ttl=5, timeout=1):
-        with pytest.raises(KVLockTimeoutError) as exc:
-            with kv.lock(key, ttl=5, timeout=0.15, retry_delay=0.02):
-                raise AssertionError("second holder should not enter")
+        with (
+            pytest.raises(KVLockTimeoutError) as exc,
+            kv.lock(key, ttl=5, timeout=0.15, retry_delay=0.02),
+        ):
+            raise AssertionError("second holder should not enter")
         assert exc.value.key == key
         assert exc.value.attempts >= 1
 
@@ -106,6 +107,5 @@ def test_lock_serializes_two_sqlite_connections(tmp_path) -> None:
 
 def test_lock_rejects_non_positive_ttl() -> None:
     kv = _kv()
-    with pytest.raises(ValueError, match="ttl"):
-        with kv.lock("k", ttl=0):
-            pass
+    with pytest.raises(ValueError, match="ttl"), kv.lock("k", ttl=0):
+        pass

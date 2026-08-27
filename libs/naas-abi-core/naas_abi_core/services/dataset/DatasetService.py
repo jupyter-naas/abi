@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+# ``list`` is a port method name, so it shadows the builtin for annotations
+# evaluated in the class bodies below; use ``builtins.list`` there.
+import builtins
 from typing import Any
 
 from naas_abi_core.services.dataset.DatasetPort import (
@@ -37,7 +40,7 @@ class DatasetService(ServiceBase, IDatasetPort):
     def write(
         self,
         name: str,
-        rows: list[dict[str, Any]],
+        rows: builtins.list[dict[str, Any]],
         *,
         namespace: str = "default",
         mode: WriteMode = "append",
