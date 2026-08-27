@@ -8,7 +8,7 @@ import {
   AppWindow, ExternalLink, RefreshCw, AlertTriangle, Info, PanelLeft, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { isBundledAppHtmlUrl, resolveAppEmbedUrl, resolveAppExternalUrl, appHtmlPathPrefix, pagesSsoAudience, withAppHtmlAccessToken, withPagesSsoToken } from '@/lib/app-html';
+import { isBundledAppHtmlUrl, resolveAppEmbedUrl, resolveAppExternalUrl, appHtmlPathPrefix, withAppHtmlAccessToken } from '@/lib/app-html';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
@@ -43,34 +43,7 @@ function EmbedView({ record, onBack }: { record: AppRecord; onBack: () => void }
     setEmbedError(null);
 
     if (!isBundledAppHtmlUrl(url)) {
-      const audience = pagesSsoAudience(baseEmbedUrl);
-      if (!audience) {
-        setEmbedUrl(baseEmbedUrl);
-        return () => {
-          cancelled = true;
-        };
-      }
-      setEmbedUrl(null);
-      (async () => {
-        try {
-          const res = await authFetch('/api/apps/sso-token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ audience }),
-          });
-          if (!res.ok) {
-            if (!cancelled) setEmbedUrl(baseEmbedUrl);
-            return;
-          }
-          const data = (await res.json()) as { token?: string };
-          const token = String(data.token || '').trim();
-          if (!cancelled) {
-            setEmbedUrl(token ? withPagesSsoToken(baseEmbedUrl, token) : baseEmbedUrl);
-          }
-        } catch {
-          if (!cancelled) setEmbedUrl(baseEmbedUrl);
-        }
-      })();
+      setEmbedUrl(baseEmbedUrl);
       return () => {
         cancelled = true;
       };
