@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.37.2 (2026-08-28)
+
+### Bug Fixes
+
+- Rename orchestations x
+  ([`16ed753`](https://github.com/jupyter-naas/abi/commit/16ed7535b0052740a62896e952a2c77846b6fabe))
+
+
 ## v3.37.1 (2026-08-28)
 
 ### Chores

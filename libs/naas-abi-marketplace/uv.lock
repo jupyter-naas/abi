@@ -3456,7 +3456,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "3.37.1"
+version = "3.37.2"
 source = { virtual = "." }
 dependencies = [
     { name = "ijson" },
