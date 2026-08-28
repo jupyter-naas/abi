@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { WorkspaceFeatureFlags } from '@/lib/feature-access';
+import { DEFAULT_NAV_ORDER, mergeNavOrder } from '@/lib/sidebar-nav';
 import { useAuthStore } from './auth';
 import { getApiUrl } from '@/lib/config';
 
@@ -223,12 +224,15 @@ interface WorkspaceState {
   activePanelSection: SidebarSection | null;
   setActivePanelSection: (section: SidebarSection | null) => void;
   lastActivePanelSection: SidebarSection | null;
+  /** Icon order for the workspace nav. Settings stays pinned and is omitted. */
+  sidebarNavOrder: SidebarSection[];
+  setSidebarNavOrder: (order: SidebarSection[]) => void;
 
   // Currently open app (for Apps section panel detail view)
   openAppModule: OpenAppModule | null;
   setOpenAppModule: (mod: OpenAppModule | null) => void;
   /** True when the Apps panel shows app metadata instead of the app list.
-   *  Opt-in only — opening an app never sets it. Not persisted. */
+   *  Opt-in only: opening an app never sets it. Not persisted. */
   appDetailOpen: boolean;
   setAppDetailOpen: (open: boolean) => void;
 
@@ -514,6 +518,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     lastActivePanelSection: section ?? state.lastActivePanelSection,
   })),
   lastActivePanelSection: null,
+  sidebarNavOrder: [...DEFAULT_NAV_ORDER],
+  setSidebarNavOrder: (order) => set({ sidebarNavOrder: mergeNavOrder(order) }),
 
   openAppModule: null,
   // Clearing the open app also drops the detail view: there is nothing to show.
@@ -1623,6 +1629,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         activePanelSection: state.activePanelSection,
         sectionPanelWidth: state.sectionPanelWidth,
         aiPaneWidth: state.aiPaneWidth,
+        sidebarNavOrder: state.sidebarNavOrder,
       }),
       onRehydrateStorage: () => (state) => {
         // After hydration completes, fetch workspaces from API
@@ -1630,6 +1637,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           // Drop legacy persisted paneAgentExplicitlySelected so hard refresh
           // re-defaults the right pane to Abi (agents sync), matching main chat.
           state.paneAgentExplicitlySelected = false;
+          state.sidebarNavOrder = mergeNavOrder(state.sidebarNavOrder);
           // Drop pane tabs that belong to another workspace (or missing rows).
           const ws = state.currentWorkspaceId;
           const known = new Set(

@@ -2,7 +2,7 @@
 
 import { createPortal } from 'react-dom';
 import {
-  Search, BrainCircuit, Waypoints, Database, FlaskConical, Code, Store, Settings, Activity, Boxes, X,
+  Search, BrainCircuit, Waypoints, Database, Map, Code, Store, Settings, Activity, Boxes, X,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -19,16 +19,16 @@ type MoreItem = {
   icon: React.ReactNode;
   href: string;
   section?: SidebarSection | null;
-  feature?: 'search' | 'ontology' | 'graph' | 'datasets' | 'agents' | 'code' | 'marketplace' | 'settings.workspace';
+  feature?: 'maps' | 'search' | 'ontology' | 'graph' | 'datasets' | 'code' | 'marketplace' | 'settings.workspace';
   superadmin?: boolean;
 };
 
 const MORE_ITEMS: MoreItem[] = [
+  { id: 'maps', label: 'Maps', icon: <Map size={18} />, href: '/maps', section: 'maps', feature: 'maps' },
   { id: 'search', label: 'Search', icon: <Search size={18} />, href: '/search', section: 'search', feature: 'search' },
   { id: 'ontology', label: 'Ontology', icon: <BrainCircuit size={18} />, href: '/ontology', section: 'ontology', feature: 'ontology' },
   { id: 'graph', label: 'Knowledge Graph', icon: <Waypoints size={18} />, href: '/graph/network', section: 'graph', feature: 'graph' },
   { id: 'datasets', label: 'Datasets', icon: <Database size={18} />, href: '/datasets', section: 'datasets', feature: 'datasets' },
-  { id: 'lab', label: 'Lab', icon: <FlaskConical size={18} />, href: '/lab', section: 'lab', feature: 'agents' },
   { id: 'code', label: 'Code', icon: <Code size={18} />, href: '/code/workspaces', section: 'code', feature: 'code' },
   { id: 'marketplace', label: 'Marketplace', icon: <Store size={18} />, href: '/marketplace', section: 'marketplace', feature: 'marketplace' },
   { id: 'settings', label: 'Settings', icon: <Settings size={18} />, href: '/settings', section: 'settings', feature: 'settings.workspace' },
@@ -48,11 +48,11 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
   const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
   const isSuperadmin = useAuthStore((s) => !!s.user?.is_superadmin);
 
+  const canMaps = useFeature('maps');
   const canSearch = useFeature('search');
   const canOntology = useFeature('ontology');
   const canGraph = useFeature('graph');
   const canDatasets = useFeature('datasets');
-  const canAgents = useFeature('agents');
   const canCode = useFeature('code');
   const canMarketplace = useFeature('marketplace');
   const canSettings = useFeature('settings.workspace');
@@ -73,11 +73,11 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
   const enabled = (item: MoreItem) => {
     if (item.superadmin) return isSuperadmin;
     if (!item.feature) return true;
+    if (item.feature === 'maps') return !!canMaps;
     if (item.feature === 'search') return !!canSearch;
     if (item.feature === 'ontology') return !!canOntology;
     if (item.feature === 'graph') return !!canGraph;
     if (item.feature === 'datasets') return !!canDatasets;
-    if (item.feature === 'agents') return !!canAgents;
     if (item.feature === 'code') return !!canCode;
     if (item.feature === 'marketplace') return !!canMarketplace;
     if (item.feature === 'settings.workspace') return !!canSettings;
