@@ -27,6 +27,7 @@ jobs:
       naas_abi_marketplace_dir: libs/naas-abi-marketplace
       naas_abi_dir: libs/naas-abi
       naas_abi_cli_dir: libs/naas-abi-cli
+      GH_TOKEN: ${{ secrets.M_ACCESS_TOKEN }}
 
     steps:
 
@@ -34,10 +35,25 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.ref_name }}
+          token: ${{ secrets.M_ACCESS_TOKEN }}
+          fetch-depth: 0
 
       - name: Setup | Force release branch to be at workflow sha
         run: |
           git reset --hard ${{ github.sha }}
+
+      - name: Setup | Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup | python-semantic-release
+        run: |
+          python -m pip install --upgrade pip
+          # The PSR Docker action rebuilds from PyPI on each run. GitPython 3.1.60
+          # (2026-08-25) removed Actor.name_email_regex, which PSR 10.5.2 still
+          # uses while loading commit_author. Pin GitPython until PSR is updated.
+          python -m pip install "python-semantic-release==10.5.2" "GitPython>=3.1.43,<3.1.60"
 
       # ------------------------------------------------------------------- #
       # Note the use of different IDs to distinguish which submodule was    #
@@ -47,63 +63,43 @@ jobs:
 
       - name: Release naas-abi-core
         id: release-naas-abi-core
-        uses: python-semantic-release/python-semantic-release@v10.5.2
-        with:
-          directory: ${{ env.naas_abi_core_dir }}
-          github_token: ${{ secrets.M_ACCESS_TOKEN }}
+        working-directory: ${{ env.naas_abi_core_dir }}
+        run: semantic-release -v version
 
       - name: Release naas-abi-marketplace
         id: release-naas-abi-marketplace
-        uses: python-semantic-release/python-semantic-release@v10.5.2
-        with:
-          directory: ${{ env.naas_abi_marketplace_dir }}
-          github_token: ${{ secrets.M_ACCESS_TOKEN }}
+        working-directory: ${{ env.naas_abi_marketplace_dir }}
+        run: semantic-release -v version
 
       - name: Release naas-abi
         id: release-naas-abi
-        uses: python-semantic-release/python-semantic-release@v10.5.2
-        with:
-          directory: ${{ env.naas_abi_dir }}
-          github_token: ${{ secrets.M_ACCESS_TOKEN }}
+        working-directory: ${{ env.naas_abi_dir }}
+        run: semantic-release -v version
 
       - name: Release naas-abi-cli
         id: release-naas-abi-cli
-        uses: python-semantic-release/python-semantic-release@v10.5.2
-        with:
-          directory: ${{ env.naas_abi_cli_dir }}
-          github_token: ${{ secrets.M_ACCESS_TOKEN }}
+        working-directory: ${{ env.naas_abi_cli_dir }}
+        run: semantic-release -v version
 
       - name: Publish | Upload naas-abi-core to GitHub Release Assets
-        uses: python-semantic-release/publish-action@v10.5.2
         if: steps.release-naas-abi-core.outputs.released == 'true'
-        with:
-          directory: ${{ env.naas_abi_core_dir }}
-          github_token: ${{ secrets.M_ACCESS_TOKEN }}
-          tag: ${{ steps.release-naas-abi-core.outputs.tag }}
+        working-directory: ${{ env.naas_abi_core_dir }}
+        run: semantic-release publish --tag "${{ steps.release-naas-abi-core.outputs.tag }}"
 
       - name: Publish | Upload naas-abi-marketplace to GitHub Release Assets
-        uses: python-semantic-release/publish-action@v10.5.2
         if: steps.release-naas-abi-marketplace.outputs.released == 'true'
-        with:
-          directory: ${{ env.naas_abi_marketplace_dir }}
-          github_token: ${{ secrets.M_ACCESS_TOKEN }}
-          tag: ${{ steps.release-naas-abi-marketplace.outputs.tag }}
+        working-directory: ${{ env.naas_abi_marketplace_dir }}
+        run: semantic-release publish --tag "${{ steps.release-naas-abi-marketplace.outputs.tag }}"
 
       - name: Publish | Upload naas-abi to GitHub Release Assets
-        uses: python-semantic-release/publish-action@v10.5.2
         if: steps.release-naas-abi.outputs.released == 'true'
-        with:
-          directory: ${{ env.naas_abi_dir }}
-          github_token: ${{ secrets.M_ACCESS_TOKEN }}
-          tag: ${{ steps.release-naas-abi.outputs.tag }}
+        working-directory: ${{ env.naas_abi_dir }}
+        run: semantic-release publish --tag "${{ steps.release-naas-abi.outputs.tag }}"
 
       - name: Publish | Upload naas-abi-cli to GitHub Release Assets
-        uses: python-semantic-release/publish-action@v10.5.2
         if: steps.release-naas-abi-cli.outputs.released == 'true'
-        with:
-          directory: ${{ env.naas_abi_cli_dir }}
-          github_token: ${{ secrets.M_ACCESS_TOKEN }}
-          tag: ${{ steps.release-naas-abi-cli.outputs.tag }}
+        working-directory: ${{ env.naas_abi_cli_dir }}
+        run: semantic-release publish --tag "${{ steps.release-naas-abi-cli.outputs.tag }}"
 
       # ------------------------------------------------------------------- #
       # Python Semantic Release is not responsible for publishing your      #
