@@ -18,6 +18,7 @@ export function CountPage({ data, querySlug, scenarioId }: Props) {
     line?.series?.find((s) => s.id === "current")?.points || [];
   const previous =
     line?.series?.find((s) => s.id === "previous")?.points || [];
+  const allTime = scenarioId === "all";
 
   return (
     <div>
@@ -26,8 +27,8 @@ export function CountPage({ data, querySlug, scenarioId }: Props) {
         <div className="section-head">
           <h2>Posts over time</h2>
           <p className="sub">
-            {line?.granularity === "day" ? "Per day" : "Per hour"} · current vs
-            previous period
+            {line?.granularity === "day" ? "Per day" : "Per hour"}
+            {allTime ? "" : " · current vs previous period"}
           </p>
         </div>
         <div className="card">

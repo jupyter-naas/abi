@@ -446,6 +446,13 @@ def test_window_counts_split_matched_from_referenced():
     assert reader.count_in_window(start, end, referenced=True) == 1
 
 
+def test_earliest_matched_created_at_ignores_older_referenced_posts():
+    reader = _seeded_reader()
+    earliest = reader.earliest_matched_created_at()
+    assert earliest is not None
+    assert earliest.isoformat().startswith("2026-08-12T04:00:00")
+
+
 def test_a_post_matched_in_a_later_tick_stops_counting_as_context():
     """Match typing wins globally, not just inside one envelope."""
     storage, kv = _Storage(), _KV()

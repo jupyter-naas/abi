@@ -48,11 +48,15 @@ USER_SHARD_COUNT = 16**USER_SHARD_HEX
 
 # Rolling windows shown in the Scenario filter (id / label / hours).
 # start_time / end_time are filled at publish time, floored to the clock hour.
+# ``all`` has no ``hours``: its start is the earliest ingested data (or the
+# longest rolling window when that is unknown).
+ALL_TIME_ID = "all"
 SCENARIO_SPECS: list[dict[str, Any]] = [
     {"id": "24h", "label": "Last 24 hours", "hours": 24},
     {"id": "48h", "label": "Last 48 hours", "hours": 48},
     {"id": "7d", "label": "Last 7 days", "hours": 168},
     {"id": "30d", "label": "Last 30 days", "hours": 720},
+    {"id": ALL_TIME_ID, "label": "All time"},
 ]
 
 
@@ -94,24 +98,40 @@ def batched(values: list[str], size: int) -> Iterator[list[str]]:
         yield values[start : start + step]
 
 
-def build_scenarios(now: datetime | None = None) -> list[dict[str, str]]:
-    """Four scenario filters with ``id``, ``label``, ``start_time``, ``end_time``.
+def is_all_time(scenario: dict[str, Any]) -> bool:
+    """True for the open-ended "All time" scenario (no previous period)."""
+    return str(scenario.get("id") or "") == ALL_TIME_ID
 
-    Both edges are floored to the clock hour. The count workflow only ever
-    ingests *complete* clock hours, and :meth:`SnapshotContext.aggregate_buckets`
-    keeps a bucket only when its ``start`` falls inside the window - so an
-    unaligned window silently dropped the partially-overlapped first bucket
-    (a publish at 13:02 lost the whole 13:00–14:00 hour). Flooring also makes a
-    window reproducible: two publishes in the same hour describe the same range.
+
+def build_scenarios(
+    now: datetime | None = None, *, data_start: datetime | None = None
+) -> list[dict[str, str]]:
+    """Scenario filters with ``id``, ``label``, ``start_time``, ``end_time``.
+
+    Rolling windows (24h / 48h / 7d / 30d) plus an ``all`` window that starts
+    at *data_start* when that is earlier than "now". Both edges are floored to
+    the clock hour. The count workflow only ever ingests *complete* clock hours,
+    and :meth:`SnapshotContext.aggregate_buckets` keeps a bucket only when its
+    ``start`` falls inside the window - so an unaligned window silently dropped
+    the partially-overlapped first bucket (a publish at 13:02 lost the whole
+    13:00–14:00 hour). Flooring also makes a window reproducible: two publishes
+    in the same hour describe the same range.
 
     The trade-off is that the in-progress hour is excluded, which is what the
     bucket data supports anyway.
+
+    *data_start* missing or not earlier than the longest rolling window makes
+    All time coincide with Last 30 days rather than inventing an empty prefix.
     """
     now = now or datetime.now(UTC)
     end = now.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
     scenarios: list[dict[str, str]] = []
+    rolling_start = end
     for spec in SCENARIO_SPECS:
+        if "hours" not in spec:
+            continue
         start = end - timedelta(hours=int(spec["hours"]))
+        rolling_start = start
         scenarios.append(
             {
                 "id": str(spec["id"]),
@@ -120,6 +140,21 @@ def build_scenarios(now: datetime | None = None) -> list[dict[str, str]]:
                 "end_time": end.isoformat(),
             }
         )
+    all_start = rolling_start
+    if data_start is not None:
+        ds = data_start.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+        if ds < end:
+            all_start = ds
+    if all_start >= end:
+        all_start = end - timedelta(hours=1)
+    scenarios.append(
+        {
+            "id": ALL_TIME_ID,
+            "label": "All time",
+            "start_time": all_start.isoformat(),
+            "end_time": end.isoformat(),
+        }
+    )
     return scenarios
 
 
@@ -139,10 +174,11 @@ def scenario_bands(
     """Consecutive ``[start, end)`` bands that tile every scenario window.
 
     :func:`build_scenarios` gives every scenario the *same* ``end_time``, so the
-    windows are strictly nested and each one - plus each :func:`previous_window`
-    - is exactly a union of consecutive bands. Splitting the graph once at every
-    window boundary lets a single banded aggregate answer all of them, instead of
-    one full scan per window.
+    rolling windows are nested and each one - plus each :func:`previous_window`
+    - is exactly a union of consecutive bands. All time has no previous period
+    (there is nothing before the start of the data). Splitting the graph once
+    at every window boundary lets a single banded aggregate answer all of them,
+    instead of one full scan per window.
 
     Bands are returned newest first, so band 0 is the most recent slice. Pass
     ``include_previous=False`` for the current windows only, which is all the
@@ -154,7 +190,7 @@ def scenario_bands(
         start, end = scenario["start_time"], scenario["end_time"]
         edges.add(start)
         edges.add(end)
-        if include_previous:
+        if include_previous and not is_all_time(scenario):
             prev_start, prev_end = previous_window(start, end)
             edges.add(prev_start)
             edges.add(prev_end)
@@ -1243,7 +1279,7 @@ class SnapshotContext:
         Unfiltered reads are additionally resolved against pages already fetched
         for the same ``end_time`` - see :meth:`_derive_tweets`. Since every
         scenario shares an ``end_time`` and the scenarios are visited
-        narrowest-first, one 24 h scan typically answers all four.
+        narrowest-first, one 24 h scan typically answers all of them.
         """
         cap = self.tweet_limit if limit is None else int(limit)
         active = normalize_tweet_filters(filters)

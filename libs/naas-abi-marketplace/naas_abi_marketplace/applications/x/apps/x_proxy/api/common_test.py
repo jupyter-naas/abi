@@ -14,13 +14,14 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import (
     SnapshotContext,
     bands_for_window,
     build_scenarios,
+    is_all_time,
     previous_window,
     scenario_bands,
     slugify,
 )
 
 NOW = datetime(2026, 8, 12, 7, 0, tzinfo=UTC)
-SCENARIOS = build_scenarios(NOW)
+SCENARIOS = build_scenarios(NOW, data_start=NOW - timedelta(days=90))
 END = SCENARIOS[0]["end_time"]
 
 
@@ -46,6 +47,8 @@ def test_every_scenario_window_and_its_previous_period_is_band_aligned():
     for scenario in SCENARIOS:
         start, end = scenario["start_time"], scenario["end_time"]
         assert bands_for_window(bands, start, end) is not None
+        if is_all_time(scenario):
+            continue
         assert bands_for_window(bands, *previous_window(start, end)) is not None
 
 
@@ -98,10 +101,12 @@ def test_banded_counts_match_a_direct_count_for_every_window():
     ctx = _BandedCountContext(created)
 
     for scenario in SCENARIOS:
-        for start, end in (
-            (scenario["start_time"], scenario["end_time"]),
-            previous_window(scenario["start_time"], scenario["end_time"]),
-        ):
+        windows = [(scenario["start_time"], scenario["end_time"])]
+        if not is_all_time(scenario):
+            windows.append(
+                previous_window(scenario["start_time"], scenario["end_time"])
+            )
+        for start, end in windows:
             expected = sum(
                 1
                 for moment in created
@@ -114,7 +119,7 @@ def test_banded_counts_match_a_direct_count_for_every_window():
                 == expected
             )
 
-    # 8 windows, one scan - and it is memoized, so a second pass adds nothing.
+    # Every aligned window, one scan - and it is memoized, so a second pass adds nothing.
     assert ctx.queries_run == 1
 
 
@@ -342,7 +347,7 @@ def test_a_wider_page_is_filtered_down_to_a_narrower_window():
         result = ctx.tweets_in_window("q", scenario["start_time"], scenario["end_time"])
         assert result == _direct(ctx, scenario["start_time"], scenario["end_time"], 50)
 
-    assert ctx.windows_queried == [(SCENARIOS[3]["start_time"], END)]
+    assert ctx.windows_queried == [(SCENARIOS[-1]["start_time"], END)]
 
 
 def test_previous_windows_are_not_derived_from_current_ones():

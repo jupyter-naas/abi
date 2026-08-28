@@ -99,8 +99,14 @@ def publish_app(
     the SPARQL path in place.
     """
     built_at = datetime.now(UTC)
-    scenarios = build_scenarios(built_at)
     cache = _attach_cache(object_storage) if use_cache else None
+    data_start = None
+    if cache is not None:
+        try:
+            data_start = cache.earliest_matched_created_at()
+        except Exception as exc:  # noqa: BLE001 - All time then equals 30d
+            logger.warning(f"X app publish: could not resolve All time start ({exc})")
+    scenarios = build_scenarios(built_at, data_start=data_start)
     ctx = SnapshotContext(
         object_storage,
         triple_store,

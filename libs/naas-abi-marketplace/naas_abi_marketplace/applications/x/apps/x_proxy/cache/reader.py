@@ -13,7 +13,7 @@ must not pay for the load each time.
 from __future__ import annotations
 
 import io
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from naas_abi_core import logger
@@ -210,6 +210,33 @@ class CacheReader:
             )
             self._matched_ids = ids.get_column("tweet_id").implode()
         return self._matched_ids
+
+    def earliest_matched_created_at(self) -> datetime | None:
+        """Oldest matched post's ``created_at``, or ``None`` when empty.
+
+        Only ``created_at`` and ``kind`` are loaded, so discovering All time's
+        start does not pull the full post table into RAM.
+        """
+        import polars as pl
+
+        frames = self._read_parquet_objects(POSTS_DIR, columns=["created_at", "kind"])
+        if not frames:
+            return None
+        matched = pl.concat(frames, how="vertical_relaxed").filter(
+            pl.col("kind") == KIND_MATCHED
+        )
+        if matched.is_empty():
+            return None
+        value = matched.get_column("created_at").min()
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value if value.tzinfo else value.replace(tzinfo=UTC)
+        try:
+            parsed = datetime.fromisoformat(str(value))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
     def known_query_slugs(self) -> set[str]:
         """Every ``query_slug`` the projection holds rows for.

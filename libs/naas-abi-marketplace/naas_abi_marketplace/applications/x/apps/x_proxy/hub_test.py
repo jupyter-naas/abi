@@ -186,10 +186,27 @@ def test_slugify_is_stable_and_filesystem_safe():
 
 def test_build_scenarios_has_id_label_start_end():
     scenarios = build_scenarios(datetime(2026, 7, 7, 14, 0, tzinfo=UTC))
-    assert len(scenarios) == 4
+    assert len(scenarios) == 5
     for s in scenarios:
         assert set(s) == {"id", "label", "start_time", "end_time"}
-    assert [s["id"] for s in scenarios] == ["24h", "48h", "7d", "30d"]
+    assert [s["id"] for s in scenarios] == ["24h", "48h", "7d", "30d", "all"]
+    # Without a data start, All time coincides with Last 30 days.
+    month = next(s for s in scenarios if s["id"] == "30d")
+    all_time = next(s for s in scenarios if s["id"] == "all")
+    assert all_time["start_time"] == month["start_time"]
+    assert all_time["end_time"] == month["end_time"]
+    assert all_time["label"] == "All time"
+
+
+def test_build_scenarios_all_time_starts_at_the_earliest_data():
+    now = datetime(2026, 7, 7, 14, 0, tzinfo=UTC)
+    data_start = datetime(2026, 4, 1, 9, 17, tzinfo=UTC)
+    scenarios = build_scenarios(now, data_start=data_start)
+    all_time = next(s for s in scenarios if s["id"] == "all")
+    assert all_time["end_time"] == "2026-07-07T14:00:00+00:00"
+    assert all_time["start_time"] == "2026-04-01T09:00:00+00:00"
+    month = next(s for s in scenarios if s["id"] == "30d")
+    assert all_time["start_time"] < month["start_time"]
 
 
 def test_build_scenarios_floors_both_edges_to_the_clock_hour():

@@ -45,6 +45,7 @@ export function SearchPage({
   const previous =
     line?.series?.find((s) => s.id === "previous")?.points || [];
   const scenario = scenarios.find((s) => s.id === scenarioId);
+  const allTime = scenarioId === "all";
   const kpiItems = (kpis?.items || []).map((it) => {
     if (it.id !== "tweets_ingested" || !scenario) return it;
     return {
@@ -59,8 +60,8 @@ export function SearchPage({
         <div className="section-head">
           <h2>Posts ingested over time</h2>
           <p className="sub">
-            {line?.granularity === "day" ? "Per day" : "Per hour"} · current vs
-            previous period
+            {line?.granularity === "day" ? "Per day" : "Per hour"}
+            {allTime ? "" : " · current vs previous period"}
           </p>
         </div>
         <div className="card">
@@ -72,7 +73,7 @@ export function SearchPage({
           <h2>Top authors</h2>
           <p className="sub">
             {authors?.bars?.length
-              ? `${authors.bars.length} author(s) in range · by posts ingested`
+              ? `${authors.bars.length} author(s)${scenario ? ` · ${scenario.label}` : ""} · by posts ingested`
               : ""}
           </p>
         </div>

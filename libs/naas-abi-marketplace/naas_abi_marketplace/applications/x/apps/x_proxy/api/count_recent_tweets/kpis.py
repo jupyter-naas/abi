@@ -6,6 +6,7 @@ from datetime import datetime
 
 from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import (
     SnapshotContext,
+    is_all_time,
     previous_window,
     slugify,
 )
@@ -23,7 +24,7 @@ def publish(ctx: SnapshotContext) -> dict:
         for scenario in ctx.scenarios:
             sid = scenario["id"]
             start, end = scenario["start_time"], scenario["end_time"]
-            prev_start, prev_end = previous_window(start, end)
+            all_time = is_all_time(scenario)
             hours = int(
                 (
                     datetime.fromisoformat(end) - datetime.fromisoformat(start)
@@ -32,7 +33,13 @@ def publish(ctx: SnapshotContext) -> dict:
             )
             daily = hours > 48
             cur_pts = ctx.aggregate_buckets(buckets, start, end, daily=daily)
-            prev_pts = ctx.aggregate_buckets(buckets, prev_start, prev_end, daily=daily)
+            if all_time:
+                prev_pts: list[dict] = []
+            else:
+                prev_start, prev_end = previous_window(start, end)
+                prev_pts = ctx.aggregate_buckets(
+                    buckets, prev_start, prev_end, daily=daily
+                )
             cur_total = sum(p["value"] for p in cur_pts)
             prev_total = sum(p["value"] for p in prev_pts)
             cur_mean = cur_total / len(cur_pts) if cur_pts else 0.0
@@ -49,24 +56,34 @@ def publish(ctx: SnapshotContext) -> dict:
                             "id": "total",
                             "label": "Total Tweets",
                             "value": cur_total,
-                            "prev_value": prev_total,
-                            "delta": cur_total - prev_total,
+                            "prev_value": None if all_time else prev_total,
+                            "delta": None if all_time else cur_total - prev_total,
                             "hint": (
-                                f"{prev_total} prev. period"
-                                if prev_pts
-                                else "no prior period"
+                                "all ingested counts"
+                                if all_time
+                                else (
+                                    f"{prev_total} prev. period"
+                                    if prev_pts
+                                    else "no prior period"
+                                )
                             ),
                         },
                         {
                             "id": "mean",
                             "label": f"Mean / {unit}",
                             "value": round(cur_mean, 1),
-                            "prev_value": round(prev_mean, 1),
-                            "delta": round(cur_mean - prev_mean, 1),
+                            "prev_value": None if all_time else round(prev_mean, 1),
+                            "delta": (
+                                None if all_time else round(cur_mean - prev_mean, 1)
+                            ),
                             "hint": (
-                                f"{round(prev_mean, 1)} prev. period"
-                                if prev_pts
-                                else "no prior period"
+                                "all ingested counts"
+                                if all_time
+                                else (
+                                    f"{round(prev_mean, 1)} prev. period"
+                                    if prev_pts
+                                    else "no prior period"
+                                )
                             ),
                         },
                         {

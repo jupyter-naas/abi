@@ -16,6 +16,7 @@ from datetime import datetime
 from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import (
     SnapshotContext,
     complete_hourly_buckets,
+    is_all_time,
     previous_window,
     slugify,
 )
@@ -23,10 +24,14 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import (
 
 def publish(ctx: SnapshotContext) -> dict:
     charts: list[dict] = []
-    if ctx.scenarios:
+    rolling = [s for s in ctx.scenarios if not is_all_time(s)]
+    if rolling:
         span_start = min(
-            previous_window(s["start_time"], s["end_time"])[0] for s in ctx.scenarios
+            previous_window(s["start_time"], s["end_time"])[0] for s in rolling
         )
+        span_end = max(s["end_time"] for s in rolling)
+    elif ctx.scenarios:
+        span_start = min(s["start_time"] for s in ctx.scenarios)
         span_end = max(s["end_time"] for s in ctx.scenarios)
     else:
         span_start = span_end = ""
@@ -37,14 +42,15 @@ def publish(ctx: SnapshotContext) -> dict:
         slug = slugify(entry.get("name") or query_string)
         if not ctx.scenarios:
             continue
-        buckets = complete_hourly_buckets(
-            ctx.ingested_timeseries(query_string, span_start, span_end),
-            span_start,
-            span_end,
-        )
+        buckets: list[dict] = []
+        if rolling and span_start and span_end:
+            buckets = complete_hourly_buckets(
+                ctx.ingested_timeseries(query_string, span_start, span_end),
+                span_start,
+                span_end,
+            )
         for scenario in ctx.scenarios:
             start, end = scenario["start_time"], scenario["end_time"]
-            prev_start, prev_end = previous_window(start, end)
             hours = int(
                 (
                     datetime.fromisoformat(end) - datetime.fromisoformat(start)
@@ -52,6 +58,18 @@ def publish(ctx: SnapshotContext) -> dict:
                 // 3600
             )
             daily = hours > 48
+            if is_all_time(scenario):
+                # Don't pad years of zero hours: All time is a daily (or sparse
+                # hourly) series of the hours that actually have posts.
+                raw = ctx.ingested_timeseries(query_string, start, end)
+                current_points = ctx.aggregate_buckets(raw, start, end, daily=daily)
+                previous_points: list[dict] = []
+            else:
+                current_points = ctx.aggregate_buckets(buckets, start, end, daily=daily)
+                prev_start, prev_end = previous_window(start, end)
+                previous_points = ctx.aggregate_buckets(
+                    buckets, prev_start, prev_end, daily=daily
+                )
             charts.append(
                 {
                     "query_slug": slug,
@@ -61,16 +79,12 @@ def publish(ctx: SnapshotContext) -> dict:
                         {
                             "id": "current",
                             "label": "Current",
-                            "points": ctx.aggregate_buckets(
-                                buckets, start, end, daily=daily
-                            ),
+                            "points": current_points,
                         },
                         {
                             "id": "previous",
                             "label": "Previous period",
-                            "points": ctx.aggregate_buckets(
-                                buckets, prev_start, prev_end, daily=daily
-                            ),
+                            "points": previous_points,
                         },
                     ],
                 }
