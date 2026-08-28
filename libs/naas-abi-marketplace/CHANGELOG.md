@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.37.1 (2026-08-28)
+
+### Chores
+
+- Update GitAgent tools and bump versions in uv.lock
+  ([`4dfc106`](https://github.com/jupyter-naas/abi/commit/4dfc1065591e4c40b72bbd2b0eb7592dd60f6af3))
+
+
 ## v3.37.0 (2026-08-28)
 
 ### Bug Fixes
