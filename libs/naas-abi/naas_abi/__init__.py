@@ -603,6 +603,9 @@ class ABIModule(BaseModule):
         from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
 
         settings_kwargs = self.configuration.nexus_config.model_dump(exclude_none=True)
+        # Empty yaml (``pages_sso_secret: ""``) would override ``PAGES_SSO_SECRET``.
+        if not str(settings_kwargs.get("pages_sso_secret") or "").strip():
+            settings_kwargs.pop("pages_sso_secret", None)
 
         nexus_config.settings = nexus_config.Settings(**settings_kwargs)
 
