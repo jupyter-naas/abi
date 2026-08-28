@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Check, Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Folder, Database, FlaskConical, Code, Presentation, LayoutGrid, Store, Settings, Activity, Boxes,
+  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Folder, Database, FlaskConical, Code, Presentation, LayoutGrid, Store, Settings, Activity, Boxes, Home,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -22,9 +22,11 @@ import {
   shiftForReorder,
 } from '@/lib/sidebar-nav';
 import { getWorkspacePath } from './utils';
-import { WorkspaceMark } from '../workspace-mark';
-import { getWorkspaceSwitchPath } from '@/lib/feature-access';
-import { markAppsSkipRestore, clearAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
+import { WorkspaceMark, WorkspaceMarkFrame } from '../workspace-mark';
+import { clearAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
+import { dockShowsLabels } from '@/lib/shell-columns';
+import { ColumnResizeHandle, useColumnResize } from '../column-resize-handle';
+import { DockProfile } from './dock-profile';
 
 type SectionDef = {
   id: SidebarSection;
@@ -36,6 +38,7 @@ type SectionDef = {
 };
 
 const SECTIONS: SectionDef[] = [
+  { id: 'home',        icon: <Home size={18} />,          label: 'Home',        href: '/home' },
   { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        href: '/apps',        feature: 'apps' },
   { id: 'lab',         icon: <FlaskConical size={18} />,  label: 'Lab',         href: '/lab',         feature: 'agents' },
   { id: 'files',       icon: <Folder size={18} />,        label: 'Files',       href: '/files',       feature: 'files' },
@@ -58,13 +61,9 @@ const ALL_SECTIONS: SectionDef[] = [...SECTIONS, ...BOTTOM_SECTIONS];
 
 export function Sidebar() {
   const [mounted, setMounted] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
   const [draggingId, setDraggingId] = useState<SidebarSection | null>(null);
   const [pressedId, setPressedId] = useState<SidebarSection | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
-  const workspaceBtnRef = useRef<HTMLButtonElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -95,9 +94,10 @@ export function Sidebar() {
     currentWorkspaceId,
     activePanelSection,
     setActivePanelSection,
-    setCurrentWorkspace,
     sidebarNavOrder,
     setSidebarNavOrder,
+    dockWidth,
+    setDockWidth,
   } = useWorkspaceStore();
 
   const { fetchFiles, fetchLabFiles, setActiveSource } = useFilesStore();
@@ -153,12 +153,18 @@ export function Sidebar() {
       if (pathname.includes('/admin/')) setActivePanelSection(null);
       return;
     }
+    // Home is a desk, not a column. Only a mark-opened Workspaces panel may stay open.
+    if (urlSection.id === 'home') {
+      if (useWorkspaceStore.getState().activePanelSection !== 'workspaces') {
+        setActivePanelSection(null);
+      }
+      return;
+    }
     setActivePanelSection(urlSection.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, urlSection]);
 
   const currentWorkspace = mounted ? workspaces.find((w) => w.id === currentWorkspaceId) || null : null;
-  const displayWorkspaces = mounted ? workspaces : [];
 
   const isFeatureEnabled = (feature?: SectionDef['feature']) => {
     if (!feature) return true;
@@ -199,6 +205,7 @@ export function Sidebar() {
 
   const getDefaultPath = (sectionId: SidebarSection): string => {
     switch (sectionId) {
+      case 'home':     return getWorkspacePath(currentWorkspaceId, '/home');
       case 'maps':     return getWorkspacePath(currentWorkspaceId, '/maps/presence');
       case 'search':   return getWorkspacePath(currentWorkspaceId, '/search');
       case 'chat':     return getWorkspacePath(currentWorkspaceId, '/chat');
@@ -218,11 +225,17 @@ export function Sidebar() {
       case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
       case 'settings':     return getWorkspacePath(currentWorkspaceId, '/settings');
+      case 'workspaces':   return getWorkspacePath(currentWorkspaceId, '/home');
     }
   };
 
   const handleSectionClick = (section: SectionDef) => {
     clearAppsSkipRestore();
+    if (section.id === 'home') {
+      setActivePanelSection(null);
+      router.push(getDefaultPath(section.id));
+      return;
+    }
     if (activePanelSection === section.id) {
       setActivePanelSection(null);
       return;
@@ -381,16 +394,12 @@ export function Sidebar() {
     endDragChrome();
   };
 
-  const openWorkspaceMenu = () => {
-    if (!workspaceBtnRef.current) return;
-    const rect = workspaceBtnRef.current.getBoundingClientRect();
-    setDropdownPos({ top: rect.top, left: rect.right + 8 });
-    setWorkspaceMenuOpen(true);
+  const toggleWorkspacesPanel = () => {
+    setActivePanelSection(activePanelSection === 'workspaces' ? null : 'workspaces');
   };
 
-  const handleAsideClick = (e: React.MouseEvent<HTMLElement>) => {
-    if (e.target === e.currentTarget) setExpanded((v) => !v);
-  };
+  const labeled = dockShowsLabels(dockWidth);
+  const { isDragging: isResizing, handleDragStart } = useColumnResize(dockWidth, setDockWidth);
 
   const draggingSection = draggingId
     ? orderedSections.find((s) => s.id === draggingId)
@@ -398,50 +407,58 @@ export function Sidebar() {
   const dragMetrics = draggingId ? itemDragRef.current : null;
 
   return (
-    <aside
-      onClick={handleAsideClick}
-      className={cn(
-        'glass flex h-full flex-col border-r border-border/50 flex-shrink-0 select-none transition-all duration-300',
-        expanded ? 'w-48' : 'w-14'
-      )}
-    >
-      <div
-        data-workspace-menu
+    <>
+      {isResizing && <div className="fixed inset-0 z-50 cursor-col-resize" />}
+      <aside
         className={cn(
-          'flex h-14 flex-shrink-0 items-center border-b border-border/50',
-          expanded ? 'px-3 gap-3' : 'justify-center'
+          'glass flex h-full flex-col border-r border-border/50 flex-shrink-0 select-none',
+          !isResizing && 'transition-[width] duration-300',
         )}
+        style={{ width: dockWidth }}
+        aria-label="Dock"
       >
+      <div className="flex h-14 flex-shrink-0 items-center justify-center border-b border-border/50">
         <button
-          ref={workspaceBtnRef}
-          onClick={openWorkspaceMenu}
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg transition-all hover:ring-2 hover:ring-workspace-accent/50"
-          style={{ backgroundColor: currentWorkspace?.theme?.primaryColor || '#22c55e' }}
-          title={currentWorkspace?.name || 'NEXUS'}
+          type="button"
+          onClick={toggleWorkspacesPanel}
+          aria-label="Workspaces"
+          aria-expanded={activePanelSection === 'workspaces'}
+          title="Workspaces"
+          className={cn(
+            'flex h-full w-full items-center outline-none focus-visible:ring-0',
+            labeled ? 'gap-3 px-3' : 'justify-center',
+          )}
         >
-          <WorkspaceMark
-            name={currentWorkspace?.name}
-            icon={currentWorkspace?.icon}
-            logoUrl={currentWorkspace?.theme?.logoUrl}
-            logoEmoji={currentWorkspace?.theme?.logoEmoji}
-            letterClassName="text-sm font-bold text-white"
-          />
+          <WorkspaceMarkFrame
+            backgroundColor={
+              currentWorkspace?.theme?.logoUrl
+                ? undefined
+                : (currentWorkspace?.theme?.primaryColor || '#22c55e')
+            }
+            className="h-10 w-10"
+          >
+            <WorkspaceMark
+              name={currentWorkspace?.name}
+              icon={currentWorkspace?.icon}
+              logoUrl={currentWorkspace?.theme?.logoUrl}
+              logoEmoji={currentWorkspace?.theme?.logoEmoji}
+              letterClassName="text-sm font-bold text-white"
+            />
+          </WorkspaceMarkFrame>
+          {labeled && (
+            <span className="truncate text-sm font-medium text-foreground">
+              {currentWorkspace?.name || 'NEXUS'}
+            </span>
+          )}
         </button>
-
-        {expanded && (
-          <span className="truncate text-sm font-medium text-foreground">
-            {currentWorkspace?.name || 'NEXUS'}
-          </span>
-        )}
       </div>
 
       <nav
         ref={navRef}
-        onClick={handleAsideClick}
         className={cn(
           'flex flex-1 flex-col gap-1 py-3',
           draggingId ? 'overflow-visible' : 'overflow-y-auto',
-          expanded ? 'px-2' : 'items-center px-2'
+          labeled ? 'px-2' : 'items-center px-2'
         )}
       >
         {orderedSections.map((section, index) => {
@@ -469,12 +486,12 @@ export function Sidebar() {
                   didDragRef.current = false;
                 }
               }}
-              title={!expanded ? section.label : undefined}
+              title={!labeled ? section.label : undefined}
               className={cn(
-                'flex items-center rounded-lg touch-none',
+                'flex items-center rounded-lg touch-none outline-none focus-visible:ring-0',
                 'hover:bg-workspace-accent-10 hover:text-workspace-accent',
                 active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-muted-foreground',
-                expanded ? 'w-full gap-3 px-3 py-2' : 'h-10 w-10 justify-center',
+                labeled ? 'w-full gap-3 px-3 py-2' : 'h-10 w-10 justify-center',
                 isDragging ? 'cursor-grabbing' : 'cursor-grab',
               )}
               style={{
@@ -491,17 +508,16 @@ export function Sidebar() {
               }}
             >
               <span className="flex-shrink-0 pointer-events-none">{section.icon}</span>
-              {expanded && <span className="truncate text-sm font-medium pointer-events-none">{section.label}</span>}
+              {labeled && <span className="truncate text-sm font-medium pointer-events-none">{section.label}</span>}
             </button>
           );
         })}
       </nav>
 
       <nav
-        onClick={handleAsideClick}
         className={cn(
           'flex flex-shrink-0 flex-col gap-1 border-t border-border/50 py-3',
-          expanded ? 'px-2' : 'items-center px-2'
+          labeled ? 'px-2' : 'items-center px-2'
         )}
       >
         {isSuperadmin && [
@@ -514,16 +530,16 @@ export function Sidebar() {
             <button
               key={item.key}
               onClick={() => { setActivePanelSection(null); router.push(base); }}
-              title={!expanded ? item.label : undefined}
+              title={!labeled ? item.label : undefined}
               className={cn(
-                'flex items-center rounded-lg transition-all',
+                'flex items-center rounded-lg transition-all outline-none focus-visible:ring-0',
                 'hover:bg-workspace-accent-10 hover:text-workspace-accent',
                 active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-muted-foreground',
-                expanded ? 'w-full gap-3 px-3 py-2' : 'h-10 w-10 justify-center'
+                labeled ? 'w-full gap-3 px-3 py-2' : 'h-10 w-10 justify-center'
               )}
             >
               <span className="flex-shrink-0">{item.icon}</span>
-              {expanded && <span className="truncate text-sm font-medium">{item.label}</span>}
+              {labeled && <span className="truncate text-sm font-medium">{item.label}</span>}
             </button>
           );
         })}
@@ -533,79 +549,29 @@ export function Sidebar() {
             <button
               key={section.id}
               onClick={() => handleSectionClick(section)}
-              title={!expanded ? section.label : undefined}
+              title={!labeled ? section.label : undefined}
               className={cn(
-                'flex items-center rounded-lg transition-all',
+                'flex items-center rounded-lg transition-all outline-none focus-visible:ring-0',
                 'hover:bg-workspace-accent-10 hover:text-workspace-accent',
                 active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-muted-foreground',
-                expanded ? 'w-full gap-3 px-3 py-2' : 'h-10 w-10 justify-center'
+                labeled ? 'w-full gap-3 px-3 py-2' : 'h-10 w-10 justify-center'
               )}
             >
               <span className="flex-shrink-0">{section.icon}</span>
-              {expanded && <span className="truncate text-sm font-medium">{section.label}</span>}
+              {labeled && <span className="truncate text-sm font-medium">{section.label}</span>}
             </button>
           );
         })}
       </nav>
 
-      {workspaceMenuOpen && mounted && createPortal(
-        <>
-          <div className="fixed inset-0 z-[199]" onClick={() => setWorkspaceMenuOpen(false)} />
-          <div
-            className="glass-card fixed z-[200] w-60 py-1 shadow-lg"
-            style={{ top: dropdownPos.top, left: dropdownPos.left }}
-          >
-            <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Workspaces
-            </p>
-            {displayWorkspaces.map((workspace) => (
-              <button
-                key={workspace.id}
-                onClick={() => {
-                  setWorkspaceMenuOpen(false);
-                  if (workspace.id === currentWorkspaceId) return;
-                  markAppsSkipRestore();
-                  setCurrentWorkspace(workspace.id);
-                  router.push(
-                    getWorkspaceSwitchPath({
-                      pathname,
-                      targetWorkspaceId: workspace.id,
-                      role: workspace.currentUserRole,
-                      workspaceFlags: workspace.featureFlags,
-                    }),
-                  );
-                }}
-                className={cn(
-                  'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors',
-                  'hover:bg-workspace-accent-10',
-                  currentWorkspaceId === workspace.id && 'bg-workspace-accent-5'
-                )}
-              >
-                <div
-                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center overflow-hidden"
-                  style={{
-                    backgroundColor: workspace.theme?.primaryColor || '#22c55e',
-                    borderRadius: 0,
-                  }}
-                >
-                  <WorkspaceMark
-                    name={workspace.name}
-                    icon={workspace.icon}
-                    logoUrl={workspace.theme?.logoUrl}
-                    logoEmoji={workspace.theme?.logoEmoji}
-                    letterClassName="text-xs text-white"
-                  />
-                </div>
-                <span className="flex-1 text-left font-medium">{workspace.name}</span>
-                {currentWorkspaceId === workspace.id && (
-                  <Check size={14} className="text-workspace-accent" />
-                )}
-              </button>
-            ))}
-          </div>
-        </>,
-        document.body
-      )}
+      <div
+        className={cn(
+          'flex flex-shrink-0 flex-col border-t border-border/50 py-2',
+          labeled ? 'px-2' : 'items-center px-2',
+        )}
+      >
+        <DockProfile labeled={labeled} />
+      </div>
 
       {draggingSection && dragMetrics && mounted && createPortal(
         <div
@@ -613,8 +579,8 @@ export function Sidebar() {
           className={cn(
             'pointer-events-none fixed left-0 top-0 z-[500] flex items-center rounded-none',
             'bg-background text-workspace-accent',
-            'shadow-[0_16px_40px_rgba(0,0,0,0.28)] ring-1 ring-border',
-            expanded ? 'gap-3 px-3' : 'justify-center',
+            'shadow-[0_16px_40px_rgba(0,0,0,0.28)] ring-0',
+            labeled ? 'gap-3 px-3' : 'justify-center',
           )}
           style={{
             width: dragMetrics.width,
@@ -625,10 +591,12 @@ export function Sidebar() {
           }}
         >
           <span className="flex-shrink-0">{draggingSection.icon}</span>
-          {expanded && <span className="truncate text-sm font-medium">{draggingSection.label}</span>}
+          {labeled && <span className="truncate text-sm font-medium">{draggingSection.label}</span>}
         </div>,
         document.body,
       )}
     </aside>
+      <ColumnResizeHandle onMouseDown={handleDragStart} label="Drag to resize dock" />
+    </>
   );
 }

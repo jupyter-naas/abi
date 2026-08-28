@@ -17,6 +17,7 @@ class WorkspaceRecord:
     primary_color: str | None = "#22c55e"
     accent_color: str | None = None
     background_color: str | None = None
+    background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
     platform_drive_enabled: bool = False
@@ -38,6 +39,7 @@ class WorkspaceCreateInput:
     primary_color: str | None = "#22c55e"
     accent_color: str | None = None
     background_color: str | None = None
+    background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
 
@@ -50,6 +52,7 @@ class WorkspaceUpdateInput:
     primary_color: str | None = None
     accent_color: str | None = None
     background_color: str | None = None
+    background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
     platform_drive_enabled: bool | None = None

@@ -34,6 +34,30 @@ def test_resolve_module_public_asset_path_keeps_full_nested_path() -> None:
     )
 
 
+def test_resolve_module_public_asset_path_strips_src_prefix() -> None:
+    assert (
+        resolve_module_public_asset_path(
+            "src/external/acme/assets/public/cover.jpg",
+            abi_module_path=None,
+        )
+        == "external/acme/assets/public/cover.jpg"
+    )
+    assert (
+        resolve_module_public_asset_path(
+            "src/external/acme/assets/public/cover.jpg",
+            abi_module_path="external.acme",
+        )
+        == "external/acme/assets/public/cover.jpg"
+    )
+    assert (
+        resolve_module_public_asset_path(
+            "src/external/demo/assets/public/hero.webp",
+            abi_module_path="external.demo",
+        )
+        == "external/demo/assets/public/hero.webp"
+    )
+
+
 def test_resolve_module_public_asset_path_keeps_marketplace_full_path() -> None:
     path = (
         "naas_abi_marketplace/domains/operations/assets/public/"

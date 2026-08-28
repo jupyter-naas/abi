@@ -361,10 +361,10 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
       style={themeStyles}
       data-org-branded="true"
     >
-      {/* Primary icon sidebar */}
+      {/* Dock: workspace mark, nav, profile. Width matches the feature column by default and is resizable. */}
       <Sidebar />
 
-      {/* Secondary detail panel — pushes main content */}
+      {/* Feature column: Chat, Files, Workspaces, ... */}
       <SectionPanel />
 
       {/* Main content + platform status footer (User / Business workspace / Repo / Branch / Code workspace) */}

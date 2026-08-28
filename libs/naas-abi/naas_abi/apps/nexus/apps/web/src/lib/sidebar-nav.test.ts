@@ -14,10 +14,11 @@ describe('mergeNavOrder', () => {
     expect(mergeNavOrder(undefined)).toEqual([...DEFAULT_NAV_ORDER]);
   });
 
-  it('keeps a custom order and appends new catalog ids', () => {
+  it('keeps a custom order and inserts new catalog ids at catalog position', () => {
     const persisted: NavSectionId[] = ['files', 'apps', 'lab', 'chat'];
     const merged = mergeNavOrder(persisted);
-    expect(merged.slice(0, 4)).toEqual(['files', 'apps', 'lab', 'chat']);
+    expect(merged[0]).toBe('home');
+    expect(merged.slice(1, 5)).toEqual(['files', 'apps', 'lab', 'chat']);
     expect(merged).toContain('marketplace');
     expect(new Set(merged)).toEqual(new Set(DEFAULT_NAV_ORDER));
   });
@@ -26,8 +27,9 @@ describe('mergeNavOrder', () => {
     const persisted = ['apps', 'apps', 'not-a-section', 'lab'];
     const merged = mergeNavOrder(persisted);
     expect(merged.filter((id) => id === 'apps')).toHaveLength(1);
-    expect(merged[0]).toBe('apps');
-    expect(merged[1]).toBe('lab');
+    expect(merged[0]).toBe('home');
+    expect(merged[1]).toBe('apps');
+    expect(merged[2]).toBe('lab');
   });
 });
 

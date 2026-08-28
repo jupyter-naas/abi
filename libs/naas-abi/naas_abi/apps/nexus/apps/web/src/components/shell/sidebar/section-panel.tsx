@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFeature } from '@/hooks/use-feature';
+import { ColumnResizeHandle, useColumnResize } from '../column-resize-handle';
 
 import { ChatSection } from '@/app/workspace/[workspaceId]/chat/components/chat-section';
 import { MapsSection } from './maps-section';
@@ -18,8 +18,11 @@ import { SlidesSection } from './slides-section';
 import { MarketplaceSection } from './marketplace-section';
 import { AppsSection } from './apps-section';
 import { SettingsSection } from './settings-section';
+import { WorkspacesSection } from './workspaces-section';
 
 const SECTION_LABELS: Record<SidebarSection, string> = {
+  home: 'Home',
+  workspaces: 'Workspaces',
   maps: 'Maps',
   search: 'Search',
   chat: 'Chat',
@@ -61,6 +64,7 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'apps' && canApps) return <AppsSection collapsed={false} detailOnly />;
   if (section === 'marketplace' && canMarketplace) return <MarketplaceSection collapsed={false} detailOnly />;
   if (section === 'settings') return <SettingsSection collapsed={false} detailOnly />;
+  if (section === 'workspaces') return <WorkspacesSection />;
   return null;
 }
 
@@ -70,47 +74,7 @@ export function SectionPanel() {
   const setSectionPanelWidth = useWorkspaceStore((s) => s.setSectionPanelWidth);
   const isOpen = activePanelSection !== null;
   const panelTitle = activePanelSection ? SECTION_LABELS[activePanelSection] : '';
-
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartX = useRef(0);
-  const dragStartWidth = useRef(0);
-  const isDraggingRef = useRef(false);
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!isDraggingRef.current) return;
-      const delta = e.clientX - dragStartX.current;
-      setSectionPanelWidth(dragStartWidth.current + delta);
-    };
-    const onUp = () => {
-      if (!isDraggingRef.current) return;
-      isDraggingRef.current = false;
-      setIsDragging(false);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [setSectionPanelWidth]);
-
-  const handleDragStart = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      isDraggingRef.current = true;
-      setIsDragging(true);
-      dragStartX.current = e.clientX;
-      dragStartWidth.current = sectionPanelWidth;
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    },
-    [sectionPanelWidth]
-  );
+  const { isDragging, handleDragStart } = useColumnResize(sectionPanelWidth, setSectionPanelWidth);
 
   return (
     <>
@@ -118,7 +82,6 @@ export function SectionPanel() {
       <div
         className={cn(
           'glass flex flex-col border-r border-border/50 overflow-hidden flex-shrink-0',
-          // Disable width transition while dragging so resize stays 1:1 with the pointer
           !isDragging && 'transition-[width] duration-300',
           !isOpen && 'w-0 border-r-0'
         )}
@@ -126,7 +89,7 @@ export function SectionPanel() {
       >
         {isOpen && activePanelSection && (
           <>
-            <div className="flex h-14 flex-shrink-0 items-center border-b border-border/50 px-4">
+            <div className="flex h-14 flex-shrink-0 items-center border-b border-border/50 pl-8 pr-4">
               <span className="text-sm font-semibold">{panelTitle}</span>
             </div>
             <nav className="flex-1 overflow-y-auto p-2">
@@ -136,24 +99,7 @@ export function SectionPanel() {
         )}
       </div>
       {isOpen && (
-        <div
-          className="group relative flex w-2 shrink-0 cursor-col-resize items-center justify-center"
-          onMouseDown={handleDragStart}
-          title="Drag to resize sidebar"
-          aria-label="Resize sidebar"
-          role="separator"
-          aria-orientation="vertical"
-        >
-          <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors group-hover:bg-workspace-accent" />
-          <div className="relative z-10 flex flex-col gap-[5px]">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="h-[3px] w-[3px] rounded-full bg-muted-foreground/40 transition-colors group-hover:bg-workspace-accent"
-              />
-            ))}
-          </div>
-        </div>
+        <ColumnResizeHandle onMouseDown={handleDragStart} label="Drag to resize column" />
       )}
     </>
   );

@@ -2,22 +2,20 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import Link from 'next/link';
 import {
-  ArrowLeft, Check, User, LogOut, HelpCircle, Building2,
+  ArrowLeft, X,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
-import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { isMobileChatThreadOpen, parseChatRoute } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { getWorkspacePath } from '../sidebar/utils';
-import { WorkspaceMark } from '../workspace-mark';
-import { getWorkspaceSwitchPath } from '@/lib/feature-access';
-import { markAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
+import { WorkspaceMark, WorkspaceMarkFrame } from '../workspace-mark';
+import { WorkspacesSection } from '../sidebar/workspaces-section';
 import { useShellTitle } from '../shell-title';
 import { resolveMobileTopBarTitle } from './mobile-top-bar-title';
+import { AccountMenuPanel, UserAvatar } from '../account-menu';
 
 type MobileTopBarProps = {
   /** Top-level tab chrome, or an immersive detail view (chat thread, file browser). */
@@ -43,9 +41,7 @@ export function MobileTopBar({
   const [mounted, setMounted] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [workspacePos, setWorkspacePos] = useState({ top: 0, left: 0 });
   const [profilePos, setProfilePos] = useState({ top: 0, right: 0 });
-  const workspaceBtnRef = useRef<HTMLButtonElement>(null);
   const profileBtnRef = useRef<HTMLButtonElement>(null);
 
   const workspaces = useWorkspaceStore((s) => s.workspaces);
@@ -54,14 +50,21 @@ export function MobileTopBar({
   const mobilePendingChatSlug = useWorkspaceStore((s) => s.mobilePendingChatSlug);
   const conversations = useWorkspaceStore((s) => s.conversations);
   const setActiveConversation = useWorkspaceStore((s) => s.setActiveConversation);
-  const setCurrentWorkspace = useWorkspaceStore((s) => s.setCurrentWorkspace);
   const setMobilePendingChatSlug = useWorkspaceStore((s) => s.setMobilePendingChatSlug);
 
-  const { logout, user } = useAuthStore();
-  const canOrganizationSettings = useFeature('settings.organization');
+  const user = useAuthStore((s) => s.user);
   const { title: pageTitle } = useShellTitle();
 
   useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!workspaceOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setWorkspaceOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [workspaceOpen]);
 
   const currentWorkspace = mounted
     ? workspaces.find((w) => w.id === currentWorkspaceId) || null
@@ -90,10 +93,7 @@ export function MobileTopBar({
     router.replace(getWorkspacePath(currentWorkspaceId, '/chat'));
   });
 
-  const openWorkspaceMenu = () => {
-    if (!workspaceBtnRef.current) return;
-    const rect = workspaceBtnRef.current.getBoundingClientRect();
-    setWorkspacePos({ top: rect.bottom + 6, left: Math.max(8, rect.left) });
+  const openWorkspaceSheet = () => {
     setProfileOpen(false);
     setWorkspaceOpen(true);
   };
@@ -125,22 +125,30 @@ export function MobileTopBar({
           </button>
         ) : (
           <button
-            ref={workspaceBtnRef}
             type="button"
-            onClick={openWorkspaceMenu}
-            className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden transition-all hover:ring-2 hover:ring-workspace-accent/50"
-            style={{ backgroundColor: currentWorkspace?.theme?.primaryColor || '#22c55e' }}
+            onClick={openWorkspaceSheet}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center"
             title={currentWorkspace?.name || 'Workspace'}
-            aria-label="Switch workspace"
+            aria-label="Workspaces"
+            aria-expanded={workspaceOpen}
           >
-            <WorkspaceMark
-              name={currentWorkspace?.name}
-              icon={currentWorkspace?.icon}
-              logoUrl={currentWorkspace?.theme?.logoUrl}
-              logoEmoji={currentWorkspace?.theme?.logoEmoji}
-              fallbackLetter="Z"
-              letterClassName="text-sm font-bold text-white"
-            />
+            <WorkspaceMarkFrame
+              backgroundColor={
+                currentWorkspace?.theme?.logoUrl
+                  ? undefined
+                  : (currentWorkspace?.theme?.primaryColor || '#22c55e')
+              }
+              className="h-9 w-9"
+            >
+              <WorkspaceMark
+                name={currentWorkspace?.name}
+                icon={currentWorkspace?.icon}
+                logoUrl={currentWorkspace?.theme?.logoUrl}
+                logoEmoji={currentWorkspace?.theme?.logoEmoji}
+                fallbackLetter="Z"
+                letterClassName="text-sm font-bold text-white"
+              />
+            </WorkspaceMarkFrame>
           </button>
         )}
 
@@ -154,140 +162,65 @@ export function MobileTopBar({
             ref={profileBtnRef}
             type="button"
             onClick={openProfileMenu}
-            className={cn(
-              // Profile stays circular (same as desktop). Other mobile chrome stays sharp.
-              'flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full',
-              user?.avatar ? 'bg-transparent' : 'bg-primary text-primary-foreground'
-            )}
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full"
             aria-label="Account menu"
+            aria-haspopup="menu"
+            aria-expanded={profileOpen}
           >
-            {user?.avatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={user.avatar} alt={user.name || 'User'} className="h-full w-full object-cover" />
-            ) : (
-              <span className="text-xs font-medium">{user?.name?.charAt(0) || 'U'}</span>
-            )}
+            <UserAvatar user={user} className="h-8 w-8" alt="" />
           </button>
         )}
       </header>
 
       {workspaceOpen && mounted && createPortal(
-        // Portals land outside the shell, so re-declare org branding to keep
-        // the radius token applying to menu chrome.
-        <div data-org-branded="true">
-          <div className="fixed inset-0 z-[299]" onClick={() => setWorkspaceOpen(false)} />
+        <div
+          className="fixed inset-0 z-[300]"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Workspaces"
+          data-org-branded="true"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Close"
+            onClick={() => setWorkspaceOpen(false)}
+          />
           <div
-            className="glass-card fixed z-[300] w-64 py-1 shadow-lg"
-            style={{ top: workspacePos.top, left: workspacePos.left }}
+            className={cn(
+              'absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col border border-border/60 bg-background shadow-xl',
+              'animate-in slide-in-from-bottom duration-200',
+            )}
+            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
           >
-            <p className="px-3 py-1.5 text-micro font-semibold uppercase tracking-wider text-muted-foreground">
-              Workspaces
-            </p>
-            {workspaces.map((workspace) => (
+            <div className="flex items-center justify-between px-4 pt-3 pb-2">
+              <span className="text-sm font-semibold">Workspaces</span>
               <button
-                key={workspace.id}
                 type="button"
-                onClick={() => {
-                  setWorkspaceOpen(false);
-                  if (workspace.id === currentWorkspaceId) return;
-                  setActiveConversation(null);
-                  markAppsSkipRestore();
-                  setCurrentWorkspace(workspace.id);
-                  router.push(
-                    getWorkspaceSwitchPath({
-                      pathname,
-                      targetWorkspaceId: workspace.id,
-                      role: workspace.currentUserRole,
-                      workspaceFlags: workspace.featureFlags,
-                    }),
-                  );
-                }}
-                className={cn(
-                  'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors',
-                  'hover:bg-workspace-accent-10',
-                  currentWorkspaceId === workspace.id && 'bg-workspace-accent-5'
-                )}
+                onClick={() => setWorkspaceOpen(false)}
+                className="p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Close workspaces"
               >
-                <div
-                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center overflow-hidden"
-                  style={{
-                    backgroundColor: workspace.theme?.primaryColor || '#22c55e',
-                    borderRadius: 0,
-                  }}
-                >
-                  <WorkspaceMark
-                    name={workspace.name}
-                    icon={workspace.icon}
-                    logoUrl={workspace.theme?.logoUrl}
-                    logoEmoji={workspace.theme?.logoEmoji}
-                    letterClassName="text-xs text-white"
-                  />
-                </div>
-                <span className="flex-1 text-left font-medium">{workspace.name}</span>
-                {currentWorkspaceId === workspace.id && (
-                  <Check size={14} className="text-workspace-accent" />
-                )}
+                <X size={18} />
               </button>
-            ))}
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
+              <WorkspacesSection onPicked={() => setWorkspaceOpen(false)} />
+            </div>
           </div>
         </div>,
         document.body
       )}
 
       {profileOpen && mounted && createPortal(
-        <div data-org-branded="true">
+        <div>
           <div className="fixed inset-0 z-[299]" onClick={() => setProfileOpen(false)} />
-          <div
-            className="fixed z-[300] w-64 border bg-card p-2 shadow-lg"
+          <AccountMenuPanel
+            user={user}
+            onClose={() => setProfileOpen(false)}
+            className="fixed"
             style={{ top: profilePos.top, right: profilePos.right }}
-          >
-            <div className="border-b border-border/50 px-4 py-3">
-              <p className="truncate font-medium">{user?.name || 'User'}</p>
-              <p className="truncate text-xs text-muted-foreground">{user?.email || ''}</p>
-            </div>
-            <div className="py-2">
-              <Link
-                href="/account/profile"
-                onClick={() => setProfileOpen(false)}
-                className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted"
-              >
-                <User size={16} className="shrink-0 text-muted-foreground" />
-                Account Settings
-              </Link>
-              {canOrganizationSettings && (
-                <Link
-                  href="/organizations"
-                  onClick={() => setProfileOpen(false)}
-                  className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted"
-                >
-                  <Building2 size={16} className="shrink-0 text-muted-foreground" />
-                  Organization Settings
-                </Link>
-              )}
-              <Link
-                href={getWorkspacePath(currentWorkspaceId, '/help')}
-                onClick={() => setProfileOpen(false)}
-                className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted"
-              >
-                <HelpCircle size={16} className="shrink-0 text-muted-foreground" />
-                Help
-              </Link>
-            </div>
-            <div className="border-t border-border/50 py-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setProfileOpen(false);
-                  logout();
-                  router.push('/auth/login');
-                }}
-                className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10"
-              >
-                <LogOut size={16} className="shrink-0" />
-                Log Out
-              </button>
-            </div>
-          </div>
+          />
         </div>,
         document.body
       )}

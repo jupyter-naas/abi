@@ -2,7 +2,7 @@
 
 import { createPortal } from 'react-dom';
 import {
-  Search, BrainCircuit, Waypoints, Database, Map, Code, Store, Settings, Activity, Boxes, X,
+  Search, BrainCircuit, Waypoints, Database, Map, Code, Store, Settings, Activity, Boxes, X, Home,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -24,6 +24,7 @@ type MoreItem = {
 };
 
 const MORE_ITEMS: MoreItem[] = [
+  { id: 'home', label: 'Home', icon: <Home size={18} />, href: '/home', section: 'home' },
   { id: 'maps', label: 'Maps', icon: <Map size={18} />, href: '/maps', section: 'maps', feature: 'maps' },
   { id: 'search', label: 'Search', icon: <Search size={18} />, href: '/search', section: 'search', feature: 'search' },
   { id: 'ontology', label: 'Ontology', icon: <BrainCircuit size={18} />, href: '/ontology', section: 'ontology', feature: 'ontology' },
@@ -85,7 +86,7 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
   };
 
   const handleItem = (item: MoreItem) => {
-    setActivePanelSection(item.section ?? null);
+    setActivePanelSection(item.id === 'home' ? null : item.section ?? null);
     router.push(getWorkspacePath(currentWorkspaceId, item.href));
     onClose();
   };

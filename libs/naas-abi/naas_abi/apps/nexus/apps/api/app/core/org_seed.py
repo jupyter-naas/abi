@@ -73,6 +73,7 @@ _WORKSPACE_FIELDS = (
     "primary_color",
     "accent_color",
     "background_color",
+    "background_image_url",
     "sidebar_color",
     "font_family",
 )

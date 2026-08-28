@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { WorkspaceFeatureFlags } from '@/lib/feature-access';
 import { DEFAULT_NAV_ORDER, mergeNavOrder } from '@/lib/sidebar-nav';
+import { clampDockWidth, clampFeatureColumnWidth, DOCK_WIDTH_DEFAULT } from '@/lib/shell-columns';
+import { pushRecentWorkspaceId } from '@/lib/workspace-picker';
 import { useAuthStore } from './auth';
 import { getApiUrl } from '@/lib/config';
 
@@ -140,6 +142,7 @@ export interface WorkspaceTheme {
   primaryColor: string;
   accentColor?: string;
   backgroundColor?: string;
+  backgroundImageUrl?: string;
   sidebarColor?: string;
   fontFamily?: string;
 }
@@ -190,7 +193,12 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'maps' | 'chat' | 'search' | 'files' | 'datasets' | 'lab' | 'code' | 'slides' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings';
+export type SidebarSection = 'home' | 'workspaces' | 'maps' | 'chat' | 'search' | 'files' | 'datasets' | 'lab' | 'code' | 'slides' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings';
+
+/** Home is a full-bleed desk. Workspaces is a mark-owned directory. Neither is a last-panel restore target. */
+export function isTransientPanelSection(section: SidebarSection | null): boolean {
+  return section === 'home' || section === 'workspaces';
+}
 
 export interface OpenAppModule {
   module_path: string;
@@ -239,7 +247,10 @@ interface WorkspaceState {
   // Context panel (right AI / compare surface)
   contextPanelOpen: boolean;
   toggleContextPanel: () => void;
-  /** Width of the secondary left section panel (px). Persisted. */
+  /** Width of the dock (icon nav). Persisted. Same default as the feature column. */
+  dockWidth: number;
+  setDockWidth: (width: number) => void;
+  /** Width of the feature column (Chat, Files, ...). Persisted. */
   sectionPanelWidth: number;
   setSectionPanelWidth: (width: number) => void;
   /** Width of the right AI / compare pane (px). Persisted. */
@@ -328,6 +339,8 @@ interface WorkspaceState {
   // ============================================
   workspaces: Workspace[];
   currentWorkspaceId: string | null;
+  /** Previous workspace ids, newest first. Used by the Workspaces column Recents group. */
+  recentWorkspaceIds: string[];
   recentCommits: GitCommit[];
 
   // Workspace actions
@@ -515,7 +528,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   activePanelSection: null,
   setActivePanelSection: (section) => set((state) => ({
     activePanelSection: section,
-    lastActivePanelSection: section ?? state.lastActivePanelSection,
+    lastActivePanelSection:
+      section && !isTransientPanelSection(section)
+        ? section
+        : state.lastActivePanelSection,
   })),
   lastActivePanelSection: null,
   sidebarNavOrder: [...DEFAULT_NAV_ORDER],
@@ -530,9 +546,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   // Context panel (right AI / compare surface)
   contextPanelOpen: false,
   toggleContextPanel: () => set((state) => ({ contextPanelOpen: !state.contextPanelOpen })),
+  dockWidth: DOCK_WIDTH_DEFAULT,
+  setDockWidth: (width) => set({ dockWidth: clampDockWidth(width) }),
   sectionPanelWidth: 256,
   setSectionPanelWidth: (width) =>
-    set({ sectionPanelWidth: Math.max(200, Math.min(480, Math.round(width))) }),
+    set({ sectionPanelWidth: clampFeatureColumnWidth(width) }),
   aiPaneWidth: 440,
   setAiPaneWidth: (width) =>
     set({ aiPaneWidth: Math.max(320, Math.min(720, Math.round(width))) }),
@@ -894,6 +912,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   setCurrentWorkspace: (id) => {
     set((state) => ({
       currentWorkspaceId: id,
+      recentWorkspaceIds: pushRecentWorkspaceId(
+        state.recentWorkspaceIds,
+        state.currentWorkspaceId,
+        id,
+      ),
       activeConversationId: null,
       // Pane tabs are workspace-scoped. Leaving paneConversationId on a thread
       // from the previous workspace made send update a hidden conversation while
@@ -1046,6 +1069,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   // ============================================
   workspaces: [],
   currentWorkspaceId: null,
+  recentWorkspaceIds: [],
   recentCommits: [],
 
   // Workspace actions
@@ -1076,6 +1100,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     set((state) => ({
       workspaces: [...state.workspaces, workspace],
       currentWorkspaceId: workspace.id,
+      recentWorkspaceIds: pushRecentWorkspaceId(
+        state.recentWorkspaceIds,
+        state.currentWorkspaceId,
+        workspace.id,
+      ),
     }));
 
     return workspace;
@@ -1085,11 +1114,19 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     set((state) => ({
       workspaces: state.workspaces.filter((w) => w.id !== id),
       currentWorkspaceId: state.currentWorkspaceId === id ? null : state.currentWorkspaceId,
+      recentWorkspaceIds: state.recentWorkspaceIds.filter((recentId) => recentId !== id),
     }));
   },
 
   selectWorkspace: (id) => {
-    set({ currentWorkspaceId: id });
+    set((state) => ({
+      currentWorkspaceId: id,
+      recentWorkspaceIds: pushRecentWorkspaceId(
+        state.recentWorkspaceIds,
+        state.currentWorkspaceId,
+        id,
+      ),
+    }));
   },
 
   updateWorkspace: (id, updates) => {
@@ -1125,6 +1162,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           primary_color: updates.primaryColor,
           accent_color: updates.accentColor,
           background_color: updates.backgroundColor,
+          background_image_url: updates.backgroundImageUrl,
           sidebar_color: updates.sidebarColor,
           font_family: updates.fontFamily,
         }),
@@ -1191,6 +1229,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           primaryColor: ws.primary_color || DEFAULT_THEME.primaryColor,
           accentColor: ws.accent_color || DEFAULT_THEME.accentColor,
           backgroundColor: ws.background_color || DEFAULT_THEME.backgroundColor,
+          backgroundImageUrl: normalize(ws.background_image_url),
           sidebarColor: ws.sidebar_color || DEFAULT_THEME.sidebarColor,
           fontFamily: ws.font_family,
         },
@@ -1613,6 +1652,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         // Persist these parts of state
         workspaces: state.workspaces,
         currentWorkspaceId: state.currentWorkspaceId,
+        recentWorkspaceIds: state.recentWorkspaceIds,
         conversations: state.conversations,
         activeConversationId: state.activeConversationId,
         projects: state.projects,
@@ -1627,6 +1667,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         paneConversationId: state.paneConversationId,
         paneOpenTabIds: state.paneOpenTabIds,
         activePanelSection: state.activePanelSection,
+        dockWidth: state.dockWidth,
         sectionPanelWidth: state.sectionPanelWidth,
         aiPaneWidth: state.aiPaneWidth,
         sidebarNavOrder: state.sidebarNavOrder,
@@ -1638,6 +1679,19 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           // re-defaults the right pane to Abi (agents sync), matching main chat.
           state.paneAgentExplicitlySelected = false;
           state.sidebarNavOrder = mergeNavOrder(state.sidebarNavOrder);
+          if (isTransientPanelSection(state.activePanelSection)) {
+            state.activePanelSection = null;
+          }
+          if (isTransientPanelSection(state.lastActivePanelSection)) {
+            state.lastActivePanelSection = null;
+          }
+          state.recentWorkspaceIds = Array.isArray(state.recentWorkspaceIds)
+            ? state.recentWorkspaceIds.filter((id) => typeof id === 'string')
+            : [];
+          state.dockWidth = clampDockWidth(
+            typeof state.dockWidth === 'number' ? state.dockWidth : DOCK_WIDTH_DEFAULT,
+          );
+          state.sectionPanelWidth = clampFeatureColumnWidth(state.sectionPanelWidth);
           // Drop pane tabs that belong to another workspace (or missing rows).
           const ws = state.currentWorkspaceId;
           const known = new Set(

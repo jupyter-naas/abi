@@ -28,13 +28,20 @@ export function AppIcon({
 
   if (record.avatarUrl && !failed) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={record.avatarUrl}
-        alt={record.name}
-        className={cn(ICON_DIMS[size], 'flex-shrink-0 rounded-lg object-cover')}
-        onError={() => setFailed(true)}
-      />
+      <span
+        className={cn(
+          ICON_DIMS[size],
+          'relative flex-shrink-0 overflow-hidden p-0 ring-2 ring-workspace-accent',
+        )}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={record.avatarUrl}
+          alt={record.name}
+          className="absolute inset-0 h-full w-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      </span>
     );
   }
   return (

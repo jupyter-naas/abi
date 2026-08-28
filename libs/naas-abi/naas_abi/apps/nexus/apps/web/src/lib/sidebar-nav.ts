@@ -1,4 +1,5 @@
 export const DEFAULT_NAV_ORDER = [
+  'home',
   'apps',
   'lab',
   'files',
@@ -51,7 +52,9 @@ export function mergeNavOrder(
   }
   for (const id of catalog) {
     if (seen.has(id)) continue;
-    next.push(id);
+    const catalogIndex = catalog.indexOf(id);
+    next.splice(Math.min(catalogIndex, next.length), 0, id);
+    seen.add(id);
   }
   return next;
 }
