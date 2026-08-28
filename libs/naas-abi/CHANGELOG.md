@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.55.2 (2026-08-28)
+
+### Bug Fixes
+
+- **nexus**: Let env PAGES_SSO_SECRET win over empty yaml
+  ([`8ff064e`](https://github.com/jupyter-naas/abi/commit/8ff064e6bf522294eb058d1361cbdf5404df4d94))
+
+
 ## v2.55.1 (2026-08-28)
 
 
