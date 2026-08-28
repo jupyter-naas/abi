@@ -140,3 +140,30 @@ def test_nothing_published_falls_through_to_the_catch_all() -> None:
 def test_paths_outside_the_app_are_left_alone() -> None:
     response = _client(_published()).get("/app-html/other/app/")
     assert response.json() == {"detail": "App HTML not found"}
+
+
+def test_legacy_prefix_objects_serve_at_x_proxy_urls() -> None:
+    """Catalog moved to x_proxy before objects were re-uploaded."""
+    from naas_abi_marketplace.applications.x.apps.x_proxy.routes import (
+        LEGACY_APP_PREFIX,
+    )
+
+    storage = _FakeObjectStorage(
+        {
+            f"{LEGACY_APP_PREFIX}/index.html": b"<html>legacy-root</html>",
+            f"{LEGACY_APP_PREFIX}/posts/get-posts-counts-recent/index.html": (
+                b"<html>legacy-count</html>"
+            ),
+            f"{LEGACY_APP_PREFIX}/_next/static/chunks/main.js": b"console.log(0)",
+        }
+    )
+    client = _client(storage)
+    page = client.get(f"{BASE}/posts/get-posts-counts-recent/")
+    assert page.status_code == 200
+    assert b"legacy-count" in page.content
+    root = client.get(f"{BASE}/")
+    assert root.status_code == 200
+    assert b"legacy-root" in root.content
+    asset = client.get("/app-html/x/apps/x/_next/static/chunks/main.js")
+    assert asset.status_code == 200
+    assert b"console.log(0)" in asset.content

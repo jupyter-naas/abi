@@ -47,6 +47,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 APP_HTML_INDEX_PATH = "/app-html/x/apps/x_proxy/index.html"
 APP_HTML_INDEX_DIR = "/app-html/x/apps/x_proxy/"
 APP_HTML_PREFIX = "/app-html/x/apps/x_proxy/"
+# Pre-rename publish lived here. Catalog URLs moved to x_proxy before the
+# objects were re-uploaded, so look here when the new prefix is empty.
+LEGACY_APP_PREFIX = "x/apps/x"
+LEGACY_APP_HTML_INDEX_PATH = "/app-html/x/apps/x/index.html"
+LEGACY_APP_HTML_INDEX_DIR = "/app-html/x/apps/x/"
+LEGACY_APP_HTML_PREFIX = "/app-html/x/apps/x/"
 # Dataset JSON. ``search_users/posts/<shard>.json`` is one level deeper than the
 # page snapshots, hence the optional second segment.
 _SNAPSHOT_RE = re.compile(
@@ -109,22 +115,41 @@ def _media_type(name: str, default: str = "application/octet-stream") -> str:
     return default
 
 
+def _storage_prefixes(app_prefix: str, subdir: str | None = None) -> tuple[str, ...]:
+    """Preferred object-storage prefix, then the other app root (rename fallback)."""
+    primary = app_prefix.rstrip("/")
+    alt = (
+        LEGACY_APP_PREFIX
+        if primary == DEFAULT_APP_PREFIX
+        else DEFAULT_APP_PREFIX
+    )
+    if subdir:
+        return (f"{primary}/{subdir}", f"{alt}/{subdir}")
+    return (primary, alt)
+
+
 def _serve_object(
     object_storage_service: ObjectStorageService,
-    prefix: str,
+    prefixes: tuple[str, ...] | str,
     name: str,
     media_type: str,
     request: Request,
 ) -> Response:
-    try:
-        content = object_storage_service.get_object(prefix, name)
-    except Exceptions.ObjectNotFound as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return Response(
-        content=content,
-        media_type=media_type,
-        headers=_frame_ancestor_headers(request),
-    )
+    if isinstance(prefixes, str):
+        prefixes = (prefixes,)
+    last_exc: Exceptions.ObjectNotFound | None = None
+    for prefix in prefixes:
+        try:
+            content = object_storage_service.get_object(prefix, name)
+        except Exceptions.ObjectNotFound as exc:
+            last_exc = exc
+            continue
+        return Response(
+            content=content,
+            media_type=media_type,
+            headers=_frame_ancestor_headers(request),
+        )
+    raise HTTPException(status_code=404, detail=str(last_exc)) from last_exc
 
 
 def _serve_relative(
@@ -132,11 +157,13 @@ def _serve_relative(
     rel: str,
     request: Request,
     media_type: str | None = None,
+    *,
+    app_prefix: str = DEFAULT_APP_PREFIX,
 ) -> Response:
     if "/" not in rel:
         return _serve_object(
             object_storage_service,
-            DEFAULT_APP_PREFIX,
+            _storage_prefixes(app_prefix),
             rel,
             media_type or _media_type(rel, "text/html; charset=utf-8"),
             request,
@@ -144,11 +171,24 @@ def _serve_relative(
     subdir, name = rel.rsplit("/", 1)
     return _serve_object(
         object_storage_service,
-        f"{DEFAULT_APP_PREFIX}/{subdir}",
+        _storage_prefixes(app_prefix, subdir),
         name,
         media_type or _media_type(name),
         request,
     )
+
+
+def _html_rel(path: str) -> tuple[str, str] | None:
+    """Return ``(object-storage app prefix, relative path)`` for a catalog URL."""
+    if path in (APP_HTML_INDEX_PATH, APP_HTML_INDEX_DIR):
+        return DEFAULT_APP_PREFIX, ""
+    if path.startswith(APP_HTML_PREFIX):
+        return DEFAULT_APP_PREFIX, path[len(APP_HTML_PREFIX) :]
+    if path in (LEGACY_APP_HTML_INDEX_PATH, LEGACY_APP_HTML_INDEX_DIR):
+        return LEGACY_APP_PREFIX, ""
+    if path.startswith(LEGACY_APP_HTML_PREFIX):
+        return LEGACY_APP_PREFIX, path[len(LEGACY_APP_HTML_PREFIX) :]
+    return None
 
 
 class XCountAppMiddleware(BaseHTTPMiddleware):
@@ -165,16 +205,16 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._object_storage = object_storage_service
 
-    def _index(self, request: Request):
+    def _index(self, request: Request, *, app_prefix: str = DEFAULT_APP_PREFIX):
         return _serve_object(
             self._object_storage,
-            DEFAULT_APP_PREFIX,
+            _storage_prefixes(app_prefix),
             "index.html",
             "text/html; charset=utf-8",
             request,
         )
 
-    def _page(self, rel: str, request: Request):
+    def _page(self, rel: str, request: Request, *, app_prefix: str = DEFAULT_APP_PREFIX):
         """The exported HTML for one page of the app.
 
         A page the current publish does not carry falls back to the app root,
@@ -188,29 +228,25 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                 f"{rel}index.html",
                 request,
                 "text/html; charset=utf-8",
+                app_prefix=app_prefix,
             )
         except HTTPException as exc:
             if exc.status_code != 404:
                 raise
-        return self._index(request)
+        return self._index(request, app_prefix=app_prefix)
 
     async def dispatch(self, request: Request, call_next):
         if request.method != "GET":
             return await call_next(request)
 
-        path = request.url.path
-        # trailingSlash:true export may request /app-html/x/apps/x_proxy/
-        rel: str | None = None
-        if path in (APP_HTML_INDEX_PATH, APP_HTML_INDEX_DIR):
-            rel = ""
-        elif path.startswith(APP_HTML_PREFIX):
-            rel = path[len(APP_HTML_PREFIX) :]
-        if rel is None:
+        matched = _html_rel(request.url.path)
+        if matched is None:
             return await call_next(request)
+        app_prefix, rel = matched
 
         if not rel or rel == "index.html":
             try:
-                return self._index(request)
+                return self._index(request, app_prefix=app_prefix)
             except HTTPException as exc:
                 if exc.status_code == 404:
                     # Nothing published yet - let the Nexus catch-all answer.
@@ -219,7 +255,7 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
 
         if _ROUTE_DIR_RE.fullmatch(rel):
             try:
-                return self._page(rel, request)
+                return self._page(rel, request, app_prefix=app_prefix)
             except HTTPException as exc:
                 if exc.status_code == 404:
                     return await call_next(request)
@@ -238,6 +274,7 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                     payload,
                     request,
                     "text/plain; charset=utf-8",
+                    app_prefix=app_prefix,
                 )
             except HTTPException as exc:
                 # An older publish carries no payloads. Falling through leaves
@@ -254,16 +291,19 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                 rel,
                 request,
                 "application/json; charset=utf-8",
+                app_prefix=app_prefix,
             )
 
         if _ASSET_RE.fullmatch(rel):
-            return _serve_relative(self._object_storage, rel, request)
+            return _serve_relative(
+                self._object_storage, rel, request, app_prefix=app_prefix
+            )
 
         # `…/users/search` - serve the page without bouncing to the slashed
         # form, so the URL can be ``search?user=`` rather than ``search/?user=``.
         if _ROUTE_UNSLASHED_RE.fullmatch(rel):
             try:
-                return self._page(f"{rel}/", request)
+                return self._page(f"{rel}/", request, app_prefix=app_prefix)
             except HTTPException as exc:
                 if exc.status_code != 404:
                     raise

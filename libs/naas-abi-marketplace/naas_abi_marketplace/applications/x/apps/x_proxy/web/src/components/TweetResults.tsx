@@ -73,19 +73,22 @@ export function TweetResults({
 
   const submitted = needle.trim();
   const matches = useMemo(() => rankTweets(hits, submitted), [hits, submitted]);
-  const browsable = matches.length;
   const graphTotal = graph?.posts ?? null;
-  const publishIsPartial =
-    !submitted &&
-    graphTotal != null &&
-    graphTotal > browsable;
 
   const goToPage = (next: number) => {
     onPageChange(next);
     window.scrollTo({ top: 0 });
   };
 
-  const pages = Math.max(1, Math.ceil(matches.length / TWEET_RESULTS_PAGE_SIZE));
+  const browsablePages = Math.max(
+    1,
+    Math.ceil(matches.length / TWEET_RESULTS_PAGE_SIZE),
+  );
+  const graphPages =
+    graphTotal != null
+      ? Math.max(1, Math.ceil(graphTotal / TWEET_RESULTS_PAGE_SIZE))
+      : browsablePages;
+  const pages = submitted ? browsablePages : graphPages;
   const current = Math.min(page, pages - 1);
   const start = current * TWEET_RESULTS_PAGE_SIZE;
   const listed = matches.slice(start, start + TWEET_RESULTS_PAGE_SIZE);
@@ -129,25 +132,21 @@ export function TweetResults({
         ) : null}
       </form>
 
-      {/* Unsearched, quote the graph size when we have it - but paging always
-          follows the rows this publish actually carries (newest 1 000 per query
-          + window), so say both when they differ. */}
+      {/* Unsearched, quote the graph size from globals/graph.json; paging
+          labels against that total even though browsing is capped to the rows
+          this publish carries. A submitted needle pages its own matches. */}
       <p className="results-count">
         {submitted
-          ? `${browsable.toLocaleString()} result${
-              browsable === 1 ? "" : "s"
+          ? `${matches.length.toLocaleString()} result${
+              matches.length === 1 ? "" : "s"
             } for “${submitted}”`
-          : publishIsPartial
-            ? `${browsable.toLocaleString()} newest post${
-                browsable === 1 ? "" : "s"
-              } in this publish (${graphTotal.toLocaleString()} in the X graph)`
-            : graphTotal != null
-              ? `${graphTotal.toLocaleString()} post${
-                  graphTotal === 1 ? "" : "s"
-                } in the X graph`
-              : `${browsable.toLocaleString()} published post${
-                  browsable === 1 ? "" : "s"
-                }`}
+          : graphTotal != null
+            ? `${graphTotal.toLocaleString()} result${
+                graphTotal === 1 ? "" : "s"
+              } in the X graph`
+            : `${matches.length.toLocaleString()} published post${
+                matches.length === 1 ? "" : "s"
+              }`}
         {pages > 1 ? ` · page ${current + 1}/${pages.toLocaleString()}` : ""}
       </p>
 
@@ -228,7 +227,7 @@ export function TweetResults({
         })}
       </ol>
 
-      {matches.length > TWEET_RESULTS_PAGE_SIZE ? (
+      {pages > 1 ? (
         <div className="pager">
           <button
             type="button"
