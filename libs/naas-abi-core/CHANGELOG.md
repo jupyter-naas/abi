@@ -235,7 +235,7 @@
 
 - **agent**: Coerce non-object tool call args to `{}` before Bedrock Converse
   re-sends history (fixes ValidationException on `toolUse.input` for models
-  like `gpt-oss-120b` that emit `[]`/`""` for zero-arg tools)
+  like `gpt-oss-120b` that emit `[]`/`""`/`{"": {}}` for zero-arg tools)
 
 
 ## v2.19.2 (2026-07-21)

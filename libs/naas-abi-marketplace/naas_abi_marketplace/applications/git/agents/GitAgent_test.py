@@ -126,6 +126,41 @@ def test_git_add_skips_untracked_files(agent, tmp_path, monkeypatch):
     assert "_KICKSTART.md" not in staged, staged
 
 
+def test_git_diff_staged_empty_is_explicit(agent, tmp_path, monkeypatch):
+    _init_git_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    _commit_file(tmp_path, "uv.lock", "locked\n")
+
+    result = agent._tools_by_name["git_diff_staged"].invoke({})
+    assert "STAGED DIFF: empty" in result, result
+    assert "Nothing is staged" in result, result
+
+
+def test_git_diff_staged_lists_staged_files(agent, tmp_path, monkeypatch):
+    _init_git_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    _commit_file(tmp_path, "uv.lock", "locked\n")
+    (tmp_path / "uv.lock").write_text("locked v2\n")
+    agent._tools_by_name["git_add"].invoke({"paths": ["uv.lock"]})
+
+    result = agent._tools_by_name["git_diff_staged"].invoke({})
+    assert "STAGED DIFF: empty" not in result, result
+    assert "ARE staged" in result, result
+    assert "uv.lock" in result, result
+
+
+def test_git_status_summarizes_staged_files(agent, tmp_path, monkeypatch):
+    _init_git_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    _commit_file(tmp_path, "uv.lock", "locked\n")
+    (tmp_path / "uv.lock").write_text("locked v2\n")
+    agent._tools_by_name["git_add"].invoke({"paths": ["uv.lock"]})
+
+    result = agent._tools_by_name["git_status"].invoke({})
+    assert "staged_count=1" in result, result
+    assert "uv.lock" in result, result
+
+
 def test_git_add_skips_unchanged_files(agent, tmp_path, monkeypatch):
     _init_git_repo(tmp_path)
     monkeypatch.chdir(tmp_path)

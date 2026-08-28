@@ -44,7 +44,7 @@ Standard workflow — pick the path that matches the user request:
 4) `gh_pr_find_for_branch` → if a PR exists: `gh_pr_edit` with a sensible title/body; if not: check `git_remote_branch_exists` — if false, call `git_push` to push the branch to origin first — then `gh_pr_create` → `gh_pr_view`.
 
 **Path commit** (user asked to commit):
-1) Call `git_status` and `git_diff_staged`. If nothing is staged, stop and tell the user to stage the files they want committed (do NOT call `git_add`).
+1) Call `git_status` and `git_diff_staged`. Treat files as staged when `git_diff_staged` lists them or when porcelain shows a non-space/`?` in the first column (`M `, `A `, `MM`, …). If the staged diff is empty, stop and tell the user to stage the files they want committed (do NOT call `git_add`).
 2) Draft a Conventional Commit message (type/scope/subject) based on the staged diff only.
 3) Call `git_commit` with that message — this commits only what is already staged.
 4) Call `git_status` again. If lockfiles or other files were modified by hooks/tooling and remain unstaged, report them to the user; do NOT stage or commit them unless the user explicitly asks.
@@ -94,15 +94,50 @@ Constraints:
             output = (proc.stdout or "") + (proc.stderr or "")
             return proc.returncode, output.strip()
 
+        def _staged_paths_from_porcelain(status: str) -> list[str]:
+            paths: list[str] = []
+            for line in status.splitlines():
+                if len(line) < 4 or line.startswith("##"):
+                    continue
+                # Porcelain v1: XY<space>PATH — X is the index (staged) column.
+                if line[0] in " ?":
+                    continue
+                path = line[3:]
+                if " -> " in path:
+                    path = path.split(" -> ", 1)[1]
+                paths.append(path)
+            return paths
+
         @tool(description="Get current branch and porcelain git status")
         def git_status() -> str:
             branch = _run(["git", "branch", "--show-current"])
             status = _run(["git", "status", "--porcelain=v1", "-b"])
-            return f"{status}\n\nbranch={branch}"
+            staged = _staged_paths_from_porcelain(status)
+            staged_summary = f"staged_count={len(staged)}"
+            if staged:
+                staged_summary += f"\nstaged_files={', '.join(staged)}"
+            return f"{status}\n\nbranch={branch}\n{staged_summary}"
 
         @tool(description="Get staged git diff (what will be committed)")
         def git_diff_staged() -> str:
-            return _run(["git", "diff", "--staged"])
+            _code, names = _run_allow_fail(
+                ["git", "--no-pager", "diff", "--staged", "--name-only"]
+            )
+            staged_files = [n for n in names.splitlines() if n.strip()]
+            if not staged_files:
+                return (
+                    "STAGED DIFF: empty. Nothing is staged. "
+                    "Do not commit. Tell the user to stage files first."
+                )
+            _code, stat = _run_allow_fail(
+                ["git", "--no-pager", "diff", "--staged", "--stat"]
+            )
+            _code, diff = _run_allow_fail(["git", "--no-pager", "diff", "--staged"])
+            listed = "\n".join(f"- {path}" for path in staged_files)
+            return (
+                f"STAGED DIFF: {len(staged_files)} file(s) ARE staged "
+                f"and will be committed:\n{listed}\n\n{stat}\n\n{diff}"
+            )
 
         @tool(
             description=(

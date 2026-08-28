@@ -1044,19 +1044,35 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             return response
 
     @staticmethod
+    def _drop_empty_tool_arg_keys(args: dict[str, Any]) -> dict[str, Any]:
+        """Drop empty-string keys that Amazon Bedrock Document types reject.
+
+        ``gpt-oss`` models on Bedrock emit ``{"": {}}`` for zero-argument tools.
+        That is still a JSON object, so a type-only check lets it through, but
+        Converse then raises ValidationException on ``toolUse.input``. Return the
+        same dict when nothing is dropped so callers can detect no-op by identity.
+        """
+        if "" not in args:
+            return args
+        logger.warning(
+            "Dropping empty-string key(s) from tool-call args; Bedrock rejects them"
+        )
+        return {k: v for k, v in args.items() if k != ""}
+
+    @staticmethod
     def _coerce_tool_args_to_object(args: Any) -> dict[str, Any]:
         """Ensure tool-call args are a JSON object (``dict``).
 
         Providers such as Amazon Bedrock Converse reject ``toolUse.input`` unless
         it is a JSON object. Some models (notably OpenAI OSS models on Bedrock)
-        emit empty lists, empty strings, ``None``, or JSON-encoded strings for
-        zero-argument tools. Coerce those shapes so any default chat model can
-        safely continue a tool-calling turn.
+        emit empty lists, empty strings, ``None``, JSON-encoded strings, or
+        ``{"": {}}`` for zero-argument tools. Coerce those shapes so any default
+        chat model can safely continue a tool-calling turn.
         """
         if args is None:
             return {}
         if isinstance(args, dict):
-            return args
+            return Agent._drop_empty_tool_arg_keys(args)
         if isinstance(args, str):
             text = args.strip()
             if not text:
@@ -1069,7 +1085,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 )
                 return {}
             if isinstance(parsed, dict):
-                return parsed
+                return Agent._drop_empty_tool_arg_keys(parsed)
             logger.warning(
                 "Tool-call args JSON is not an object (%s); coercing to {}",
                 type(parsed).__name__,
@@ -1080,7 +1096,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             if len(args) == 0:
                 return {}
             if len(args) == 1 and isinstance(args[0], dict):
-                return args[0]
+                return Agent._drop_empty_tool_arg_keys(args[0])
             # A multi-element list (or a single non-dict element) cannot be a JSON
             # object; there is no lossless coercion, so surface the drop.
             logger.warning(
@@ -1180,15 +1196,41 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 function = call.get("function")
                 if isinstance(function, dict) and "arguments" in function:
                     arguments = function["arguments"]
-                    # Leave anything that already represents an object untouched: a
-                    # dict, or a string encoding one. Re-encoding a valid object
-                    # would only reformat it and spuriously flag the message as
-                    # changed on every turn.
-                    if isinstance(arguments, dict) or (
-                        isinstance(arguments, str)
-                        and cls._is_json_object_string(arguments)
+                    # Leave a valid object untouched: a dict, or a string
+                    # encoding one. Re-encoding a valid object would only
+                    # reformat it and spuriously flag the message as changed.
+                    # Still rewrite objects that contain empty-string keys —
+                    # Bedrock Document types reject those.
+                    if isinstance(arguments, dict):
+                        coerced = cls._coerce_tool_args_to_object(arguments)
+                        if coerced is arguments:
+                            new_raw.append(call)
+                        else:
+                            kwargs_changed = True
+                            new_raw.append(
+                                {
+                                    **call,
+                                    "function": {**function, "arguments": coerced},
+                                }
+                            )
+                    elif isinstance(arguments, str) and cls._is_json_object_string(
+                        arguments
                     ):
-                        new_raw.append(call)
+                        parsed = json.loads(arguments)
+                        coerced = cls._coerce_tool_args_to_object(parsed)
+                        if coerced is parsed:
+                            new_raw.append(call)
+                        else:
+                            kwargs_changed = True
+                            new_raw.append(
+                                {
+                                    **call,
+                                    "function": {
+                                        **function,
+                                        "arguments": json.dumps(coerced),
+                                    },
+                                }
+                            )
                     else:
                         kwargs_changed = True
                         new_raw.append(
