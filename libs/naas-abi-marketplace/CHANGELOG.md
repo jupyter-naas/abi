@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.39.0 (2026-08-28)
+
+### Features
+
+- **proxy-app**: Add 'all time' scenario window and adjust aggregations accordingly
+  ([`a34c437`](https://github.com/jupyter-naas/abi/commit/a34c4376ee593f9f91bc85d6f97541eb19d36eea))
+
+
 ## v3.38.0 (2026-08-28)
 
 ### Bug Fixes
