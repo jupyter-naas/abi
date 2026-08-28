@@ -7,7 +7,7 @@ the last hour.
 
 The watermark is also written into ``manifest.json``. Redis is the fast path;
 if it is empty (restart, OOM) the manifest value is used rather than re-reading
-the whole archive into RAM - that is what SIGKILL'd ``x_build_app``.
+the whole archive into RAM - that is what SIGKILL'd ``x_build_app_x_proxy``.
 
 Everything lives in the platform's services - envelopes and Parquet in
 ``object_storage``, the watermark in ``kv``. Nothing is written to local disk, so
