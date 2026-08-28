@@ -9,6 +9,7 @@ import { ChatSection } from '@/app/workspace/[workspaceId]/chat/components/chat-
 import { MapsSection } from './maps-section';
 import { SearchSection } from './search-section';
 import { FilesSection } from './files-section';
+import { DatasetsSection } from './datasets-section';
 import { LabSection } from './lab-section';
 import { OntologySection } from './ontology-section';
 import { KnowledgeGraphSection } from './knowledge-graph-section';
@@ -25,6 +26,7 @@ const SECTION_LABELS: Record<SidebarSection, string> = {
   ontology: 'Ontology',
   graph: 'Knowledge Graph',
   files: 'Files',
+  datasets: 'Datasets',
   lab: 'Lab',
   code: 'Code',
   slides: 'Slides',
@@ -37,6 +39,7 @@ function SectionContent({ section }: { section: SidebarSection }) {
   const canMaps = useFeature('maps');
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
+  const canDatasets = useFeature('datasets');
   const canAgents = useFeature('agents');
   const canApps = useFeature('apps');
   const canMarketplace = useFeature('marketplace');
@@ -51,6 +54,7 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'ontology' && canOntology) return <OntologySection collapsed={false} detailOnly />;
   if (section === 'graph' && canGraph) return <KnowledgeGraphSection collapsed={false} detailOnly />;
   if (section === 'files' && canFiles) return <FilesSection collapsed={false} detailOnly />;
+  if (section === 'datasets' && canDatasets) return <DatasetsSection collapsed={false} detailOnly />;
   if (section === 'lab' && canAgents) return <LabSection collapsed={false} detailOnly />;
   if (section === 'code') return <CodeSection collapsed={false} detailOnly />;
   if (section === 'slides' && canSlides) return <SlidesSection collapsed={false} detailOnly />;

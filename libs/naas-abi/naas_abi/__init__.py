@@ -9,6 +9,7 @@ from naas_abi_core.module.Module import (
 from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
+from naas_abi_core.services.dataset.DatasetService import DatasetService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.model_registry.ModelRegistryService import (
@@ -188,6 +189,7 @@ FeatureKey = Literal[
     "search",
     "ontology",
     "graph",
+    "datasets",
     "settings",
     # Opt-in: only when listed in enabled_features + role_baseline.
     "code",
@@ -207,6 +209,7 @@ _ALL_FEATURES: list[FeatureKey] = [
     "search",
     "ontology",
     "graph",
+    "datasets",
     "settings",
     "slides",
 ]
@@ -220,8 +223,8 @@ def _default_role_baseline() -> dict[str, list[FeatureKey]]:
     return {
         "owner": list(_ALL_FEATURES),
         "admin": list(_ALL_FEATURES),
-        "member": ["maps", "chat", "files", "skills", "slides"],
-        "viewer": ["maps", "chat", "files", "skills", "slides"],
+        "member": ["maps", "chat", "files", "datasets", "skills", "slides"],
+        "viewer": ["maps", "chat", "files", "datasets", "skills", "slides"],
     }
 
 
@@ -290,6 +293,14 @@ class WorkspaceSeedConfig(BaseModel):
     background_color: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    # Same syntax as engine ``default_agent``: ``module AgentClass``.
+    default_agent: str | None = None
+    # Registry refs to enable in this workspace. ``None`` keeps class flags
+    # (``ENABLED_BY_DEFAULT``). A list is the roster: listed on, others off.
+    agents: list[str] | None = None
+    # Catalog ``app_id`` values (``module.path:folder``) to enable at boot.
+    # ``None`` means no seed; missing app-config rows default to off.
+    apps: list[str] | None = None
 
 
 class OrganizationSeedConfig(BaseModel):
@@ -355,6 +366,8 @@ class NexusConfig(BaseModel):
 
     secret_key: str = "change-me-in-production"
     auth_password_enabled: bool = False
+    pages_sso_secret: str = ""
+    pages_sso_expire_seconds: int = 300
     magic_link_allow_signup: bool = False
     access_token_expire_minutes: int = 1440
     refresh_token_expire_days: int = 30
@@ -502,6 +515,7 @@ class ABIModule(BaseModule):
             Secret,
             TripleStoreService,
             ObjectStorageService,
+            DatasetService,
             VectorStoreService,
             BusService,
             CacheService,
@@ -553,6 +567,11 @@ class ABIModule(BaseModule):
                         - name: "Ops Workspace"
                           slug: "ops-workspace"
                           owner_email: "owner@example.com"
+                          default_agent: "naas_abi AbiAgent"
+                          agents:
+                            - "naas_abi AbiAgent"
+                          apps:
+                            - example.module:dashboard
                           members:
                             - email: "admin@example.com"
                               role: "member"

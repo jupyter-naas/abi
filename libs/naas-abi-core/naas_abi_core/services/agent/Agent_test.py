@@ -356,6 +356,51 @@ def test_coerce_tool_args_to_object_handles_common_invalid_shapes():
     assert Agent._coerce_tool_args_to_object({"path": "a.py"}) == {"path": "a.py"}
     assert Agent._coerce_tool_args_to_object("not-json") == {}
     assert Agent._coerce_tool_args_to_object([1, 2]) == {}
+    # gpt-oss on Bedrock emits {"": {}} for zero-arg tools; Converse rejects
+    # empty-string Document keys even though the value is still a JSON object.
+    assert Agent._coerce_tool_args_to_object({"": {}}) == {}
+    assert Agent._coerce_tool_args_to_object({"": {}, "path": "a.py"}) == {
+        "path": "a.py"
+    }
+    assert Agent._coerce_tool_args_to_object('{"": {}}') == {}
+    assert Agent._coerce_tool_args_to_object([{"": {}}]) == {}
+
+    valid = {"path": "a.py"}
+    assert Agent._coerce_tool_args_to_object(valid) is valid
+
+
+def test_normalize_ai_message_tool_inputs_drops_empty_string_keys():
+    """Regression: gpt-oss-120b on Bedrock called git_push with input {"": {}}.
+    Re-sending that history makes Converse raise ValidationException on
+    toolUse.input even though the value is a JSON object."""
+    from langchain_core.messages import AIMessage
+    from naas_abi_core.services.agent.Agent import Agent
+
+    message = AIMessage(
+        content=[
+            {
+                "type": "tool_use",
+                "id": "call-1",
+                "name": "git_push",
+                "input": {"": {}},
+            }
+        ],
+        tool_calls=[
+            {
+                "name": "git_push",
+                "args": {"": {}},
+                "id": "call-1",
+                "type": "tool_call",
+            }
+        ],
+        id="ai1",
+    )
+
+    normalized = Agent._normalize_ai_message_tool_inputs(message)
+
+    assert normalized is not message
+    assert normalized.tool_calls[0]["args"] == {}
+    assert normalized.content[0]["input"] == {}
 
 
 def test_normalize_ai_message_tool_inputs_fixes_empty_list_in_content_blocks():
@@ -483,6 +528,32 @@ def test_normalize_leaves_valid_openai_arguments_string_untouched():
     assert (
         normalized.additional_kwargs["tool_calls"][0]["function"]["arguments"]
         == compact
+    )
+
+
+def test_normalize_rewrites_openai_arguments_with_empty_string_key():
+    from langchain_core.messages import AIMessage
+    from naas_abi_core.services.agent.Agent import Agent
+
+    message = AIMessage(
+        content="",
+        additional_kwargs={
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {"name": "git_push", "arguments": '{"":{}}'},
+                }
+            ]
+        },
+        id="ai1",
+    )
+
+    normalized = Agent._normalize_ai_message_tool_inputs(message)
+
+    assert normalized is not message
+    assert (
+        normalized.additional_kwargs["tool_calls"][0]["function"]["arguments"] == "{}"
     )
 
 

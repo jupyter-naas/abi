@@ -39,6 +39,7 @@ const FEATURE_LABELS: Record<string, string> = {
   search: 'Search',
   ontology: 'Ontology',
   graph: 'Graph',
+  datasets: 'Datasets',
   settings: 'Settings',
   code: 'Code',
   slides: 'Slides',

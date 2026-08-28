@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   appHtmlPathPrefix,
   isBundledAppHtmlUrl,
+  pagesSsoAudience,
   withAppHtmlAccessToken,
+  withPagesSsoToken,
 } from './app-html';
 
 describe('app-html helpers', () => {
@@ -37,5 +39,24 @@ describe('app-html helpers', () => {
     expect(
       withAppHtmlAccessToken('/app-html/report/counter_uas/dashboard/', 'tok'),
     ).toBe('/app-html/report/counter_uas/dashboard/?token=tok');
+  });
+
+  it('derives Pages SSO audience from an absolute portal URL', () => {
+    expect(pagesSsoAudience('https://portal.example.com/login')).toBe(
+      'portal.example.com',
+    );
+    expect(pagesSsoAudience('/app-html/example/web/')).toBe(null);
+  });
+
+  it('appends sso without dropping existing query params', () => {
+    expect(
+      withPagesSsoToken('https://portal.example.com/login', 'abc.def'),
+    ).toBe('https://portal.example.com/login?sso=abc.def');
+    expect(
+      withPagesSsoToken(
+        'https://portal.example.com/login?next=/',
+        'tok',
+      ),
+    ).toBe('https://portal.example.com/login?next=/&sso=tok');
   });
 });

@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v2.28.0 (2026-08-28)
+
+### Bug Fixes
+
+- **agent**: Coerce empty-string keys from tool call args to avoid Bedrock validation errors
+  ([`8cc30a6`](https://github.com/jupyter-naas/abi/commit/8cc30a6de4339706ef5b0e4f7d618c45e5526ea2))
+
+- **triple_store**: Add noqa to exception handling
+  ([`d7b7f07`](https://github.com/jupyter-naas/abi/commit/d7b7f07a9f770a22d16da39ee9e53641713426ac))
+
+### Chores
+
+- **deps**: Bump naas-abi and related packages versions
+  ([`d7b7f07`](https://github.com/jupyter-naas/abi/commit/d7b7f07a9f770a22d16da39ee9e53641713426ac))
+
+### Features
+
+- Add DatasetService and Nexus Datasets UI ([#1213](https://github.com/jupyter-naas/abi/pull/1213),
+  [`ab82d5c`](https://github.com/jupyter-naas/abi/commit/ab82d5c7feff1cb90ef6572f0da226d86bbdd5b8))
+
+- **triple-store**: Add schema graph bootstrap check and insert
+  ([`16d9dd9`](https://github.com/jupyter-naas/abi/commit/16d9dd95e8e32d62ae0b26e18e0496ca4e48c4e1))
+
+
 ## v2.27.2 (2026-08-20)
 
 ### Bug Fixes
@@ -235,7 +259,7 @@
 
 - **agent**: Coerce non-object tool call args to `{}` before Bedrock Converse
   re-sends history (fixes ValidationException on `toolUse.input` for models
-  like `gpt-oss-120b` that emit `[]`/`""` for zero-arg tools)
+  like `gpt-oss-120b` that emit `[]`/`""`/`{"": {}}` for zero-arg tools)
 
 
 ## v2.19.2 (2026-07-21)

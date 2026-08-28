@@ -170,6 +170,7 @@ FeatureKey = Literal[
     "search",
     "ontology",
     "graph",
+    "datasets",
     "settings",
     "code",
     "slides",
@@ -193,6 +194,7 @@ class FeatureFlagsConfig(BaseModel):
             "search",
             "ontology",
             "graph",
+            "datasets",
             "settings",
             "slides",
         ]
@@ -210,6 +212,7 @@ class FeatureFlagsConfig(BaseModel):
                 "search",
                 "ontology",
                 "graph",
+                "datasets",
                 "settings",
                 "slides",
             ],
@@ -224,11 +227,12 @@ class FeatureFlagsConfig(BaseModel):
                 "search",
                 "ontology",
                 "graph",
+                "datasets",
                 "settings",
                 "slides",
             ],
-            "member": ["maps", "chat", "files", "skills", "slides"],
-            "viewer": ["maps", "chat", "files", "skills", "slides"],
+            "member": ["maps", "chat", "files", "datasets", "skills", "slides"],
+            "viewer": ["maps", "chat", "files", "datasets", "skills", "slides"],
         }
     )
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
@@ -289,6 +293,9 @@ class WorkspaceSeedConfig(BaseModel):
     background_color: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    default_agent: str | None = None
+    agents: list[str] | None = None
+    apps: list[str] | None = None
 
 
 class OrganizationSeedConfig(BaseModel):
@@ -396,6 +403,9 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 30  # 30 days (long-lived)
     # Short-lived JWT for opening /app-html apps (Bearer or ?token=).
     app_html_access_token_expire_minutes: int = Field(default=60, ge=1, le=24 * 60)
+    # HMAC secret for opening Cloudflare Pages portals from Nexus (empty = off).
+    pages_sso_secret: str = ""
+    pages_sso_expire_seconds: int = Field(default=300, ge=30, le=15 * 60)
     magic_link_expire_minutes: int = 15
     magic_link_max_active: int = 5
     magic_link_path: str = "/auth/magic-link"

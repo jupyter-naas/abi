@@ -1,0 +1,105 @@
+.datasets-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--background-hex);
+  color: var(--foreground-hex);
+}
+
+.datasets-header-gap {
+  flex-shrink: 0;
+}
+
+.datasets-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--space-6);
+  overflow: auto;
+  padding: var(--space-4) var(--space-6) var(--space-8);
+}
+
+.datasets-banner {
+  margin: 0;
+  padding: var(--space-3);
+  font-size: var(--font-size-sm, 14px);
+  border-radius: var(--org-border-radius, 0px);
+}
+
+.datasets-banner--error {
+  background: var(--color-destructive-bg-subtle);
+  color: var(--destructive-hex);
+}
+
+.datasets-empty {
+  display: flex;
+  max-width: 420px;
+  flex-direction: column;
+  gap: var(--space-2);
+  color: var(--muted-foreground-hex);
+}
+
+.datasets-empty h3 {
+  margin: 0;
+  font-size: var(--font-size-lg, 18px);
+  font-weight: 600;
+  color: var(--foreground-hex);
+}
+
+.datasets-empty p {
+  margin: 0;
+  font-size: var(--font-size-sm, 14px);
+  line-height: 1.45;
+}
+
+.datasets-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.datasets-group__title {
+  margin: 0;
+  font-size: var(--font-size-sm, 14px);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted-foreground-hex);
+}
+
+.datasets-group__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-3);
+}
+
+.datasets-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background: var(--card-hex);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.datasets-card:hover {
+  border-color: var(--color-primary);
+}
+
+.datasets-card__name {
+  font-size: var(--font-size-sm, 14px);
+  font-weight: 600;
+}
+
+.datasets-card__meta {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--muted-foreground-hex);
+}

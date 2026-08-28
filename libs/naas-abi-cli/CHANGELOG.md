@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.19.0 (2026-08-28)
+
+### Features
+
+- Add DatasetService and Nexus Datasets UI ([#1213](https://github.com/jupyter-naas/abi/pull/1213),
+  [`ab82d5c`](https://github.com/jupyter-naas/abi/commit/ab82d5c7feff1cb90ef6572f0da226d86bbdd5b8))
+
+
 ## v2.18.1 (2026-08-25)
 
 ### Bug Fixes

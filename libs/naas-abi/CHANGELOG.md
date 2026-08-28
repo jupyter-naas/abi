@@ -2,6 +2,40 @@
 
 <!-- version list -->
 
+## v2.55.0 (2026-08-28)
+
+### Bug Fixes
+
+- **nexus**: Serve colocated JSON assets under /app-html
+  ([`045db96`](https://github.com/jupyter-naas/abi/commit/045db9661f5679b1194e1e9b0e804e4df79e7bb4))
+
+- **nexus-web**: Drop accidental Pages SSO handshake from Apps embed
+  ([`6e5b10f`](https://github.com/jupyter-naas/abi/commit/6e5b10f11e2a172e9628c714edf799233f694565))
+
+- **nexus-web**: Keep the current section when switching workspaces
+  ([`9f6191e`](https://github.com/jupyter-naas/abi/commit/9f6191e26db116e4ce1c738d5c0f47096efc5f9f))
+
+- **nexus-web**: Keep the workspace shell mounted across switches
+  ([`129afde`](https://github.com/jupyter-naas/abi/commit/129afdeff67fe0a1290edbcb430e2df2900e9f08))
+
+- **nexus-web**: Skip agent sync and unused catalog fetches on Apps switch
+  ([`4236f0b`](https://github.com/jupyter-naas/abi/commit/4236f0bfa87d2e07f0b531f59c5e7dc149f65c0a))
+
+- **nexus-web**: Stop last-open restore from reverting a workspace switch
+  ([`3c4efa6`](https://github.com/jupyter-naas/abi/commit/3c4efa6d21efee337386f47a84fa9c96657cb42f))
+
+### Features
+
+- Add DatasetService and Nexus Datasets UI ([#1213](https://github.com/jupyter-naas/abi/pull/1213),
+  [`ab82d5c`](https://github.com/jupyter-naas/abi/commit/ab82d5c7feff1cb90ef6572f0da226d86bbdd5b8))
+
+- **nexus**: Default workspace apps off and seed catalog roster
+  ([`0db5a6e`](https://github.com/jupyter-naas/abi/commit/0db5a6e9725fb26695d8a63ecf6ffe7f57871516))
+
+- **nexus**: Mint a Pages SSO handshake token from Apps
+  ([`9fdbd0a`](https://github.com/jupyter-naas/abi/commit/9fdbd0a388138ddd957b694d36fcfffb946dece3))
+
+
 ## v2.54.3 (2026-08-25)
 
 ### Bug Fixes

@@ -9,6 +9,7 @@ export type FeatureKey =
   | 'search'
   | 'ontology'
   | 'graph'
+  | 'datasets'
   | 'code'
   | 'slides'
   | 'settings'
@@ -28,6 +29,7 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'search',
   'ontology',
   'graph',
+  'datasets',
   'code',
   'slides',
   'settings',
@@ -43,8 +45,8 @@ const OPT_IN_FEATURES: FeatureKey[] = ['code'];
 const DEFAULT_ROLE_BASELINE: Record<string, FeatureKey[]> = {
   owner: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
   admin: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
-  member: ['maps', 'chat', 'files', 'skills', 'slides'],
-  viewer: ['maps', 'chat', 'files', 'skills', 'slides'],
+  member: ['maps', 'chat', 'files', 'datasets', 'skills', 'slides'],
+  viewer: ['maps', 'chat', 'files', 'datasets', 'skills', 'slides'],
 };
 
 const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
@@ -58,6 +60,7 @@ const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
   search: '/search',
   ontology: '/ontology',
   graph: '/graph',
+  datasets: '/datasets',
   code: '/code',
   slides: '/slides',
   settings: '/settings',
@@ -95,8 +98,12 @@ export function isFeatureEnabled(params: {
   return resolved[params.feature] === true;
 }
 
+function pathWithoutQuery(pathname: string): string {
+  return pathname.split(/[?#]/)[0];
+}
+
 export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null {
-  const parts = pathname.split('/').filter(Boolean);
+  const parts = pathWithoutQuery(pathname).split('/').filter(Boolean);
   const workspaceIndex = parts.indexOf('workspace');
   if (workspaceIndex < 0 || parts.length <= workspaceIndex + 2) {
     return null;
@@ -120,6 +127,9 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   }
   if (firstSegment === 'graph') {
     return 'graph';
+  }
+  if (firstSegment === 'datasets') {
+    return 'datasets';
   }
   if (firstSegment === 'code' || firstSegment === 'ide') {
     return 'code';
@@ -155,6 +165,17 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   return null;
 }
 
+/** Surfaces that need the agent catalog (chat, lab, agent settings). Apps does not. */
+export function pathNeedsAgentCatalog(pathname: string | null | undefined): boolean {
+  const feature = getFeatureForWorkspacePath(pathname || '');
+  return feature === 'chat' || feature === 'agents';
+}
+
+/** Graph export toasts are only meaningful on graph routes. */
+export function pathNeedsGraphExport(pathname: string | null | undefined): boolean {
+  return getFeatureForWorkspacePath(pathname || '') === 'graph';
+}
+
 export function isWorkspacePathAllowed(params: {
   pathname: string;
   role?: string;
@@ -177,7 +198,7 @@ export function getFirstAllowedWorkspacePath(params: {
   workspaceFlags?: WorkspaceFeatureFlags;
 }): string {
   const resolved = mergeFeatureFlags(params.role, params.workspaceFlags);
-  const priority: FeatureKey[] = ['chat', 'maps', 'files', 'search', 'ontology', 'graph', 'agents', 'apps', 'marketplace', 'settings.workspace', 'settings.organization', 'settings'];
+  const priority: FeatureKey[] = ['chat', 'maps', 'files', 'datasets', 'search', 'ontology', 'graph', 'agents', 'apps', 'marketplace', 'settings.workspace', 'settings.organization', 'settings'];
 
   for (const feature of priority) {
     if (resolved[feature]) {
@@ -186,4 +207,57 @@ export function getFirstAllowedWorkspacePath(params: {
   }
 
   return `/workspace/${params.workspaceId}/chat`;
+}
+
+/**
+ * Destination when switching workspaces from the current URL.
+ *
+ * Stays on the same product surface (apps stays apps) and drops resource ids
+ * (a chat thread, an opened app) that belong to the previous workspace.
+ * If the target workspace does not enable that surface, falls back to its
+ * first allowed route.
+ */
+export function getWorkspaceSwitchPath(params: {
+  pathname: string;
+  targetWorkspaceId: string;
+  role?: string;
+  workspaceFlags?: WorkspaceFeatureFlags;
+}): string {
+  const feature = getFeatureForWorkspacePath(params.pathname);
+  if (feature) {
+    if (
+      isFeatureEnabled({
+        feature,
+        role: params.role,
+        workspaceFlags: params.workspaceFlags,
+      })
+    ) {
+      return `/workspace/${params.targetWorkspaceId}${FEATURE_FALLBACK_ROUTE[feature]}`;
+    }
+    return getFirstAllowedWorkspacePath({
+      workspaceId: params.targetWorkspaceId,
+      role: params.role,
+      workspaceFlags: params.workspaceFlags,
+    });
+  }
+
+  const suffix = workspacePathSuffix(params.pathname);
+  if (suffix) {
+    return `/workspace/${params.targetWorkspaceId}${suffix}`;
+  }
+
+  return getFirstAllowedWorkspacePath({
+    workspaceId: params.targetWorkspaceId,
+    role: params.role,
+    workspaceFlags: params.workspaceFlags,
+  });
+}
+
+function workspacePathSuffix(pathname: string): string | null {
+  const parts = pathWithoutQuery(pathname).split('/').filter(Boolean);
+  const workspaceIndex = parts.indexOf('workspace');
+  if (workspaceIndex < 0 || parts.length <= workspaceIndex + 2) {
+    return null;
+  }
+  return `/${parts.slice(workspaceIndex + 2).join('/')}`;
 }

@@ -468,6 +468,33 @@ Semantic class prefix: `files-browse-*` for route layout and desktop chrome, `fi
 
 Pilot reference for desktop chrome: `files/browse/browse.css` + `browse.tsx`. Mobile chrome: `files/components/` + `files/browse/browse.css`.
 
+## Datasets UI module
+
+Datasets is the tabular warehouse, not Files (blobs) and not Maps (GIS layers). It sits next to Files in the primary nav. The engine `DatasetService` stores named, partitioned SQL tables; Nexus is a read-only primary adapter: list, describe, preview, guarded SQL.
+
+```
+src/app/workspace/[workspaceId]/datasets/
+├── page.tsx                      → export { default } from './datasets';
+├── datasets.tsx                  # Desktop catalog
+├── datasets.css
+├── [namespace]/[name]/
+│   ├── page.tsx                  → export { default } from './table';
+│   ├── table.tsx                 # Schema + preview + SQL
+│   └── table.css
+├── lib/
+│   ├── datasets-route.ts
+│   └── datasets-route.test.ts
+└── components/
+    ├── datasets-section.tsx      # Sidebar + mobile list
+    └── datasets-components.css
+
+apps/api/app/services/datasets/   # Hexagonal domain wrapping DatasetService
+```
+
+HTTP: `GET /api/datasets`, `GET /api/datasets/{namespace}/{name}`, `GET .../preview`, `POST /api/datasets/{namespace}/query`. Feature flag: `datasets` (on for owner/admin/member/viewer). The warehouse is process-global; workspace membership is required but tables are not isolated per workspace. Write/drop is not exposed.
+
+Mobile: `/datasets` = namespace list, `/datasets/{namespace}/{name}` = table detail.
+
 ## Chat UI module
 
 The workspace chat surface is a self-contained module under `apps/web/src/app/workspace/[workspaceId]/chat/`. Phase 1 established route structure and thread detail; Phase 2 colocates conversation list chrome with semantic CSS. Thread UI (`chat-interface.tsx`) semantic migration is Phase 3.

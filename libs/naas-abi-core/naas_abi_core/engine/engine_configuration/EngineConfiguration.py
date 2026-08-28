@@ -28,6 +28,11 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_CodingEnviron
     CodingEnvironmentAdapterConfiguration,
     CodingEnvironmentServiceConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_DatasetService import (
+    DatasetAdapterConfiguration,
+    DatasetAdapterDuckDBConfiguration,
+    DatasetServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
     DeployConfiguration,
 )
@@ -88,6 +93,14 @@ class ServicesConfiguration(BaseModel):
                     base_path="storage/datastore"
                 ),
             )
+        )
+    )
+    dataset: DatasetServiceConfiguration = DatasetServiceConfiguration(
+        dataset_adapter=DatasetAdapterConfiguration(
+            adapter="duckdb",
+            config=DatasetAdapterDuckDBConfiguration(
+                base_path="storage/datastore/datasets",
+            ).model_dump(),
         )
     )
     triple_store: TripleStoreServiceConfiguration = TripleStoreServiceConfiguration(

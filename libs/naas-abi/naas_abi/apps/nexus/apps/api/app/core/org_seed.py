@@ -7,6 +7,7 @@ This provisions:
 - organization members
 - workspaces (upsert by slug)
 - workspace members
+- workspace app enable rows from ``WorkspaceSeedConfig.apps``
 
 It can also mirror configured user credentials into the Secret service.
 """
@@ -27,6 +28,7 @@ from naas_abi.apps.nexus.apps.api.app.core.config import (
 from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.models import (
+    AppConfigModel,
     OrganizationMemberModel,
     OrganizationModel,
     UserModel,
@@ -352,6 +354,47 @@ async def _upsert_workspace(
             continue
         member_role = "owner" if member.id == owner.id else membership.role
         await _ensure_workspace_member(session, workspace.id, member.id, member_role)
+
+    await _seed_workspace_apps(session, workspace.id, workspace_cfg.apps)
+
+
+async def _seed_workspace_apps(
+    session: AsyncSession,
+    workspace_id: str,
+    app_ids: list[str] | None,
+) -> None:
+    """Insert missing enabled rows for seeded catalog apps. Existing rows win."""
+    if not app_ids:
+        return
+    now = datetime.now(UTC).replace(tzinfo=None)
+    for raw in app_ids:
+        app_id = str(raw or "").strip()
+        if not app_id:
+            continue
+        result = await session.execute(
+            select(AppConfigModel).where(
+                (AppConfigModel.workspace_id == workspace_id)
+                & (AppConfigModel.app_id == app_id)
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is not None:
+            continue
+        session.add(
+            AppConfigModel(
+                id=f"app-{uuid4().hex[:12]}",
+                workspace_id=workspace_id,
+                app_id=app_id,
+                enabled=True,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        logger.info(
+            "Seeded app_id=%s enabled on workspace_id=%s",
+            app_id,
+            workspace_id,
+        )
 
 
 async def _upsert_organization(

@@ -15,6 +15,7 @@ KNOWN_FEATURE_KEYS: tuple[str, ...] = (
     "search",
     "ontology",
     "graph",
+    "datasets",
     "settings",
     # In-app coding workspaces (IDE + git/review). Opt-in: off unless a
     # deployment adds "code" to enabled_features + role_baseline in

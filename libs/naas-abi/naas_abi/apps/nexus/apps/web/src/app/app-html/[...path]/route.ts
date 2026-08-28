@@ -92,3 +92,24 @@ export async function POST(
 ) {
   return proxy(request, params);
 }
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { path: string[] } },
+) {
+  return proxy(request, params);
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { path: string[] } },
+) {
+  return proxy(request, params);
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { path: string[] } },
+) {
+  return proxy(request, params);
+}

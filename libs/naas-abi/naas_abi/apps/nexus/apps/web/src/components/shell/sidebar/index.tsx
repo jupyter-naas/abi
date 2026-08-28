@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Check, Map, Search, MessageSquare, BrainCircuit, Waypoints, Folder, FlaskConical, Code, Presentation, LayoutGrid, Store, Settings, Activity, Boxes,
+  Check, Map, Search, MessageSquare, BrainCircuit, Waypoints, Folder, Database, FlaskConical, Code, Presentation, LayoutGrid, Store, Settings, Activity, Boxes,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -14,13 +14,15 @@ import { useFilesStore } from '@/stores/files';
 import { useOntologyStore } from '@/stores/ontology';
 import { getWorkspacePath } from './utils';
 import { WorkspaceMark } from '../workspace-mark';
+import { getWorkspaceSwitchPath } from '@/lib/feature-access';
+import { markAppsSkipRestore, clearAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
 
 type SectionDef = {
   id: SidebarSection;
   icon: React.ReactNode;
   label: string;
   href: string;
-  feature?: 'maps' | 'chat' | 'files' | 'agents' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'settings.workspace';
+  feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'agents' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'settings.workspace';
   extraHref?: string;
 };
 
@@ -31,6 +33,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'ontology', icon: <BrainCircuit size={18} />,  label: 'Ontology',       href: '/ontology', feature: 'ontology' },
   { id: 'graph',    icon: <Waypoints size={18} />,     label: 'Knowledge Graph', href: '/graph',    feature: 'graph' },
   { id: 'files',    icon: <Folder size={18} />,        label: 'Files',          href: '/files',    feature: 'files' },
+  { id: 'datasets', icon: <Database size={18} />,      label: 'Datasets',       href: '/datasets', feature: 'datasets' },
   { id: 'lab',      icon: <FlaskConical size={18} />,  label: 'Lab',            href: '/lab',         feature: 'agents' },
   { id: 'slides',   icon: <Presentation size={18} />,  label: 'Slides',         href: '/slides',   feature: 'slides' },
   { id: 'code',     icon: <Code size={18} />,          label: 'Code',           href: '/code',     feature: 'code' },
@@ -58,6 +61,7 @@ export function Sidebar() {
     currentWorkspaceId,
     activePanelSection,
     setActivePanelSection,
+    setCurrentWorkspace,
   } = useWorkspaceStore();
 
   const { fetchFiles, fetchLabFiles, setActiveSource } = useFilesStore();
@@ -66,6 +70,7 @@ export function Sidebar() {
   const canMaps = useFeature('maps');
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
+  const canDatasets = useFeature('datasets');
   const canAgents = useFeature('agents');
   const canApps = useFeature('apps');
   const canMarketplace = useFeature('marketplace');
@@ -79,9 +84,7 @@ export function Sidebar() {
 
   useEffect(() => {
     setMounted(true);
-    if (canFiles) { fetchFiles(); fetchLabFiles(); }
-    if (canOntology) { fetchOntology(); }
-  }, [canFiles, canOntology, fetchFiles, fetchLabFiles, fetchOntology]);
+  }, []);
 
   // Resolve the section that owns the current URL — single source of truth
   // for the highlighted icon, the sub-panel, and the browser tab title.
@@ -96,6 +99,11 @@ export function Sidebar() {
       return false;
     }) ?? null;
   }, [pathname, currentWorkspaceId]);
+
+  useEffect(() => {
+    if (urlSection?.id === 'files' && canFiles) { fetchFiles(); fetchLabFiles(); }
+    if (urlSection?.id === 'ontology' && canOntology) { fetchOntology(); }
+  }, [urlSection?.id, currentWorkspaceId, canFiles, canOntology, fetchFiles, fetchLabFiles, fetchOntology]);
 
   // Reconcile activePanelSection with the URL whenever the URL changes
   // (incl. initial mount after rehydration). Without this, a persisted
@@ -122,6 +130,7 @@ export function Sidebar() {
     if (feature === 'maps') return !!canMaps;
     if (feature === 'chat') return !!canChat;
     if (feature === 'files') return !!canFiles;
+    if (feature === 'datasets') return !!canDatasets;
     if (feature === 'agents') return !!canAgents;
     if (feature === 'apps') return !!canApps;
     if (feature === 'marketplace') return !!canMarketplace;
@@ -160,6 +169,7 @@ export function Sidebar() {
       }
       case 'graph':    return getWorkspacePath(currentWorkspaceId, '/graph/network');
       case 'files':    return getWorkspacePath(currentWorkspaceId, '/files');
+      case 'datasets': return getWorkspacePath(currentWorkspaceId, '/datasets');
       case 'lab':      return getWorkspacePath(currentWorkspaceId, '/lab');
       case 'code':     return getWorkspacePath(currentWorkspaceId, '/code/workspaces');
       case 'slides':   return getWorkspacePath(currentWorkspaceId, '/slides');
@@ -170,6 +180,7 @@ export function Sidebar() {
   };
 
   const handleSectionClick = (section: SectionDef) => {
+    clearAppsSkipRestore();
     if (activePanelSection === section.id) {
       setActivePanelSection(null);
       return;
@@ -327,7 +338,17 @@ export function Sidebar() {
                 key={workspace.id}
                 onClick={() => {
                   setWorkspaceMenuOpen(false);
-                  router.push(`/workspace/${workspace.id}/chat`);
+                  if (workspace.id === currentWorkspaceId) return;
+                  markAppsSkipRestore();
+                  setCurrentWorkspace(workspace.id);
+                  router.push(
+                    getWorkspaceSwitchPath({
+                      pathname,
+                      targetWorkspaceId: workspace.id,
+                      role: workspace.currentUserRole,
+                      workspaceFlags: workspace.featureFlags,
+                    }),
+                  );
                 }}
                 className={cn(
                   'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors',
