@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.37.0 (2026-08-28)
+
+### Bug Fixes
+
+- **agent**: Coerce empty-string keys from tool call args to avoid Bedrock validation errors
+  ([`8cc30a6`](https://github.com/jupyter-naas/abi/commit/8cc30a6de4339706ef5b0e4f7d618c45e5526ea2))
+
+### Features
+
+- Add DatasetService and Nexus Datasets UI ([#1213](https://github.com/jupyter-naas/abi/pull/1213),
+  [`ab82d5c`](https://github.com/jupyter-naas/abi/commit/ab82d5c7feff1cb90ef6572f0da226d86bbdd5b8))
+
+
 ## v3.36.4 (2026-08-20)
 
 
