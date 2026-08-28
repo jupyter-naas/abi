@@ -7,6 +7,7 @@ from datetime import datetime
 from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import (
     SnapshotContext,
     extrapolate_partial_hour,
+    is_all_time,
     previous_window,
     slugify,
 )
@@ -78,7 +79,6 @@ def publish(ctx: SnapshotContext) -> dict:
         estimate = extrapolate_partial_hour(ctx.partial_bucket(query_string), buckets)
         for scenario in ctx.scenarios:
             start, end = scenario["start_time"], scenario["end_time"]
-            prev_start, prev_end = previous_window(start, end)
             hours = int(
                 (
                     datetime.fromisoformat(end) - datetime.fromisoformat(start)
@@ -87,7 +87,11 @@ def publish(ctx: SnapshotContext) -> dict:
             )
             daily = hours > 48
             cur = ctx.aggregate_buckets(buckets, start, end, daily=daily)
-            prev = ctx.aggregate_buckets(buckets, prev_start, prev_end, daily=daily)
+            if is_all_time(scenario):
+                prev: list[dict] = []
+            else:
+                prev_start, prev_end = previous_window(start, end)
+                prev = ctx.aggregate_buckets(buckets, prev_start, prev_end, daily=daily)
             if estimate:
                 _append_partial_point(cur, estimate, daily=daily, window_end=end)
             charts.append(
