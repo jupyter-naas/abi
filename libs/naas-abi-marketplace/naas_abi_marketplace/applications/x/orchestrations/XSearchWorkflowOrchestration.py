@@ -12,7 +12,7 @@ This orchestration is **fetch-and-save only**: the workflow calls the X v2
 ``search_recent_tweets`` endpoint and persists each ``{query, options, results,
 …}`` envelope to object storage. It does **not** map anything into the graph,
 and it does **not** republish the dashboard unless the filter sets
-``app_publish: true`` — ``signals_x_build_pipeline_hub`` owns that on its own schedule.
+``app_publish: true`` — ``x_build_pipeline_hub`` owns that on its own schedule.
 Saving an envelope publishes an ``ObjectPut`` event, which
 :class:`XSearchRecentTweetsEventOrchestration` consumes to map the file into the
 graph via :class:`XSearchRecentTweetsPipeline`. Keep that event sensor enabled
@@ -28,7 +28,7 @@ ABI config.
 Launchpad example (for a filter named ``ai_llms``)::
 
     ops:
-      signals_x_search_recent_tweets_op_ai_llms:
+      x_search_recent_tweets_op_ai_llms:
         config:
           max_pages: 2
           daily_max_usd: 5.0
@@ -115,7 +115,7 @@ _SEARCH_WORKFLOW_OP_CONFIG_SCHEMA = {
         is_required=False,
         description=(
             "Republish the x/apps/x_proxy/ snapshots after this run. Off by default — "
-            "a publish re-reads the whole graph and the hourly signals_x_build_pipeline_hub "
+            "a publish re-reads the whole graph and the hourly x_build_pipeline_hub "
             "schedule already does it."
         ),
     ),
@@ -156,10 +156,10 @@ def _build_search_workflow_definitions(
     """
 
     safe = safe_name(config.name)
-    job_name = f"signals_x_search_recent_tweets_{safe}"
-    op_name = f"signals_x_search_recent_tweets_op_{safe}"
-    sensor_name = f"signals_x_search_recent_tweets_sensor_{safe}"
-    schedule_name = f"signals_x_search_recent_tweets_schedule_{safe}"
+    job_name = f"x_search_recent_tweets_{safe}"
+    op_name = f"x_search_recent_tweets_op_{safe}"
+    sensor_name = f"x_search_recent_tweets_sensor_{safe}"
+    schedule_name = f"x_search_recent_tweets_schedule_{safe}"
     description = _trigger_description(config)
 
     @dg.op(name=op_name, config_schema=_SEARCH_WORKFLOW_OP_CONFIG_SCHEMA)
@@ -218,7 +218,7 @@ class XSearchWorkflowOrchestration(DagsterOrchestration):
     Launchpad example (replace ``ai_llms`` with your filter name)::
 
         ops:
-          signals_x_search_recent_tweets_op_ai_llms:
+          x_search_recent_tweets_op_ai_llms:
             config:
               query: "(openai OR anthropic) lang:en -is:retweet"
               max_results: 50
