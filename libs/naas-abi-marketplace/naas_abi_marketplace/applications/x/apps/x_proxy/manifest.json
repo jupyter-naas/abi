@@ -10,6 +10,7 @@
     "keywords": ["x", "twitter", "count", "posts", "trend", "osint", "analytics"],
     "tier": "community",
     "maintainer": "naas.ai",
+    "rebuild": "build.sh",
     "pricing": {
         "type": "free",
         "price": 0
