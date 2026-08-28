@@ -491,7 +491,7 @@ export function Sidebar() {
                 'flex items-center rounded-lg touch-none outline-none focus-visible:ring-0',
                 'hover:bg-workspace-accent-10 hover:text-workspace-accent',
                 active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-muted-foreground',
-                labeled ? 'w-full gap-3 px-3 py-2' : 'h-10 w-10 justify-center',
+                labeled ? 'w-full gap-3 py-2 pl-3 pr-4' : 'h-10 w-10 justify-center',
                 isDragging ? 'cursor-grabbing' : 'cursor-grab',
               )}
               style={{
@@ -535,7 +535,7 @@ export function Sidebar() {
                 'flex items-center rounded-lg transition-all outline-none focus-visible:ring-0',
                 'hover:bg-workspace-accent-10 hover:text-workspace-accent',
                 active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-muted-foreground',
-                labeled ? 'w-full gap-3 px-3 py-2' : 'h-10 w-10 justify-center'
+                labeled ? 'w-full gap-3 py-2 pl-3 pr-4' : 'h-10 w-10 justify-center'
               )}
             >
               <span className="flex-shrink-0">{item.icon}</span>
@@ -554,7 +554,7 @@ export function Sidebar() {
                 'flex items-center rounded-lg transition-all outline-none focus-visible:ring-0',
                 'hover:bg-workspace-accent-10 hover:text-workspace-accent',
                 active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-muted-foreground',
-                labeled ? 'w-full gap-3 px-3 py-2' : 'h-10 w-10 justify-center'
+                labeled ? 'w-full gap-3 py-2 pl-3 pr-4' : 'h-10 w-10 justify-center'
               )}
             >
               <span className="flex-shrink-0">{section.icon}</span>

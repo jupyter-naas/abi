@@ -66,7 +66,7 @@ export default function HomePage() {
             onClick={() => openSurface(section)}
             title={section === 'chat' ? 'Chat' : 'Files'}
           >
-            <span className="flex h-14 w-14 items-center justify-center bg-black/35 shadow-lg ring-2 ring-workspace-accent">
+            <span className="flex h-14 w-14 items-center justify-center bg-black/35 shadow-lg">
               {section === 'chat' ? <MessageSquare size={28} /> : <Folder size={28} />}
             </span>
             <span className="w-full truncate text-center text-[11px] font-medium leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
@@ -87,7 +87,7 @@ export default function HomePage() {
           >
             {app.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <span className="relative h-14 w-14 overflow-hidden p-0 shadow-lg ring-2 ring-workspace-accent">
+              <span className="relative h-14 w-14 overflow-hidden p-0 shadow-lg">
                 <img
                   src={app.avatar_url}
                   alt=""
@@ -95,7 +95,7 @@ export default function HomePage() {
                 />
               </span>
             ) : (
-              <span className="flex h-14 w-14 items-center justify-center bg-black/35 text-2xl shadow-lg ring-2 ring-workspace-accent">
+              <span className="flex h-14 w-14 items-center justify-center bg-black/35 text-2xl shadow-lg">
                 {app.icon_emoji || app.name.slice(0, 1)}
               </span>
             )}

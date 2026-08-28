@@ -42,21 +42,25 @@ export const useAppsStore = create<AppsState>()((set, get) => ({
   workspaceId: null,
 
   fetchApps: async (workspaceId: string) => {
-    set({ loading: true, workspaceId });
+    const switched = get().workspaceId !== workspaceId;
+    set({ loading: true, workspaceId, ...(switched ? { apps: [] } : {}) });
     try {
       const response = await authFetch(
         `${apiBase()}/api/apps/?workspace_id=${encodeURIComponent(workspaceId)}`
       );
+      if (get().workspaceId !== workspaceId) return;
       if (!response.ok) {
-        set({ loading: false });
+        set({ apps: [], loading: false });
         return;
       }
       const data = await response.json();
       const apps: AppItem[] = Array.isArray(data?.apps) ? data.apps : [];
+      if (get().workspaceId !== workspaceId) return;
       set({ apps, loading: false });
     } catch (error) {
       console.error('Failed to fetch apps:', error);
-      set({ loading: false });
+      if (get().workspaceId !== workspaceId) return;
+      set({ apps: [], loading: false });
     }
   },
 

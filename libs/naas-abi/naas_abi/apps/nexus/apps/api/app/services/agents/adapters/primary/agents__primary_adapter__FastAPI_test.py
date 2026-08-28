@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
     _canonical_agent_sort_key,
     _class_declared_model_ids,
+    _workspace_agent_roster,
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents.port import AgentRecord
 
@@ -68,3 +69,13 @@ def test_class_declared_model_ids_reads_getter_then_attr_then_single() -> None:
     assert _class_declared_model_ids(AttrOnly) == ["a", "b"]
     assert _class_declared_model_ids(Single) == ["claude-sonnet-5"]
     assert _class_declared_model_ids(object) == []
+
+
+def test_workspace_agent_roster_uses_seed_when_present() -> None:
+    assert _workspace_agent_roster({"mod/Listed"}, "mod/Default") == {"mod/Listed"}
+    assert _workspace_agent_roster(set(), "mod/Default") == set()
+
+
+def test_workspace_agent_roster_unseeded_is_default_only() -> None:
+    assert _workspace_agent_roster(None, "mod/Default") == {"mod/Default"}
+    assert _workspace_agent_roster(None, None) == set()
