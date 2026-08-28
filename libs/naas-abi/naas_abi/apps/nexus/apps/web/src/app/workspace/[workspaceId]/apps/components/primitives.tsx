@@ -31,7 +31,7 @@ export function AppIcon({
       <span
         className={cn(
           ICON_DIMS[size],
-          'relative flex-shrink-0 overflow-hidden p-0 ring-2 ring-workspace-accent',
+          'relative flex-shrink-0 overflow-hidden p-0',
         )}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}

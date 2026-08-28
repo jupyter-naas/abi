@@ -296,8 +296,9 @@ class WorkspaceSeedConfig(BaseModel):
     font_family: str | None = None
     # Same syntax as engine ``default_agent``: ``module AgentClass``.
     default_agent: str | None = None
-    # Registry refs to enable in this workspace. ``None`` keeps class flags
-    # (``ENABLED_BY_DEFAULT``). A list is the roster: listed on, others off.
+    # Registry refs (``module AgentClass``) enabled in this workspace.
+    # ``None`` means the engine default agent only. A list is exclusive:
+    # listed on, others off. An empty list enables none.
     agents: list[str] | None = None
     # Catalog ``app_id`` values (``module.path:folder``) to enable at boot.
     # ``None`` means no seed; missing app-config rows default to off.
