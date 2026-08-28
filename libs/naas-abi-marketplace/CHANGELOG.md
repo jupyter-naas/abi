@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.38.0 (2026-08-28)
+
+### Bug Fixes
+
+- **x_proxy**: Rename x_build_app to x_build_app_x_proxy and update related orchestration and routes
+  ([`703325d`](https://github.com/jupyter-naas/abi/commit/703325d937483dbbfffbc1c415f74762e5f90583))
+
+### Features
+
+- **x_proxy**: Add build.sh and update manifest for rebuild hook
+  ([`c4536f5`](https://github.com/jupyter-naas/abi/commit/c4536f547e31521844a95862c1c44a6928c5b2dc))
+
+
 ## v3.37.2 (2026-08-28)
 
 ### Bug Fixes
