@@ -291,6 +291,7 @@ class WorkspaceSeedConfig(BaseModel):
     primary_color: str | None = "#22c55e"
     accent_color: str | None = None
     background_color: str | None = None
+    background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
     default_agent: str | None = None
