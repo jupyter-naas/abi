@@ -1,4 +1,4 @@
-"""Search-workflow orchestration for the X application.
+"""Search-recent-tweets orchestration for the X application.
 
 One job per ``search_recent_tweets_workflow`` entry, plus the single trigger
 that runs it — a **sensor** when the entry sets ``interval_seconds`` (wakes on
@@ -12,7 +12,7 @@ This orchestration is **fetch-and-save only**: the workflow calls the X v2
 ``search_recent_tweets`` endpoint and persists each ``{query, options, results,
 …}`` envelope to object storage. It does **not** map anything into the graph,
 and it does **not** republish the dashboard unless the filter sets
-``app_publish: true`` — ``x_build_app_x_proxy`` owns that on its own schedule.
+``app_publish: true`` — ``x_build_pipeline_hub`` owns that on its own schedule.
 Saving an envelope publishes an ``ObjectPut`` event, which
 :class:`XSearchRecentTweetsEventOrchestration` consumes to map the file into the
 graph via :class:`XSearchRecentTweetsPipeline`. Keep that event sensor enabled
@@ -28,7 +28,7 @@ ABI config.
 Launchpad example (for a filter named ``ai_llms``)::
 
     ops:
-      x_search_workflow_op_ai_llms:
+      x_search_recent_tweets_op_ai_llms:
         config:
           max_pages: 2
           daily_max_usd: 5.0
@@ -47,7 +47,7 @@ from naas_abi_marketplace.applications.x.orchestrations.utils import (
     safe_name,
 )
 
-_SEARCH_WORKFLOW_OP_CONFIG_SCHEMA = {
+_SEARCH_RECENT_TWEETS_OP_CONFIG_SCHEMA = {
     "query": dg.Field(
         str,
         is_required=False,
@@ -115,7 +115,7 @@ _SEARCH_WORKFLOW_OP_CONFIG_SCHEMA = {
         is_required=False,
         description=(
             "Republish the x/apps/x_proxy/ snapshots after this run. Off by default — "
-            "a publish re-reads the whole graph and the hourly x_build_app_x_proxy "
+            "a publish re-reads the whole graph and the hourly x_build_pipeline_hub "
             "schedule already does it."
         ),
     ),
@@ -137,7 +137,7 @@ def _trigger_description(config: XTweetSearchWorkflowConfiguration) -> str:
     )
 
 
-def _build_search_workflow_definitions(
+def _build_search_recent_tweets_definitions(
     config: XTweetSearchWorkflowConfiguration,
 ) -> tuple[dg.JobDefinition, dg.SensorDefinition | None, dg.ScheduleDefinition | None]:
     """Build the job that fetches tweets matching *config* via
@@ -156,34 +156,34 @@ def _build_search_workflow_definitions(
     """
 
     safe = safe_name(config.name)
-    job_name = f"x_search_workflow_{safe}"
-    op_name = f"x_search_workflow_op_{safe}"
-    sensor_name = f"x_search_workflow_sensor_{safe}"
-    schedule_name = f"x_search_workflow_schedule_{safe}"
+    job_name = f"x_search_recent_tweets_{safe}"
+    op_name = f"x_search_recent_tweets_op_{safe}"
+    sensor_name = f"x_search_recent_tweets_sensor_{safe}"
+    schedule_name = f"x_search_recent_tweets_schedule_{safe}"
     description = _trigger_description(config)
 
-    @dg.op(name=op_name, config_schema=_SEARCH_WORKFLOW_OP_CONFIG_SCHEMA)
-    def search_workflow_op(context) -> list[str]:
+    @dg.op(name=op_name, config_schema=_SEARCH_RECENT_TWEETS_OP_CONFIG_SCHEMA)
+    def search_recent_tweets_op(context) -> list[str]:
         return run_search_workflow_for_filter(config, context.op_config or {})
 
     # In-process executor: share the code-server's warm engine instead of
     # forking a subprocess that has to re-bootstrap and race the api on
     # oxigraph / nexus.db.
     @dg.job(name=job_name, executor_def=dg.in_process_executor)
-    def search_workflow_job():
-        search_workflow_op()
+    def search_recent_tweets_job():
+        search_recent_tweets_op()
 
     if config.cron:
 
         @dg.schedule(
             name=schedule_name,
             description=description,
-            job=search_workflow_job,
+            job=search_recent_tweets_job,
             cron_schedule=config.cron,
             execution_timezone="UTC",
             default_status=dg.DefaultScheduleStatus.STOPPED,
         )
-        def search_workflow_schedule(context: dg.ScheduleEvaluationContext):
+        def search_recent_tweets_schedule(context: dg.ScheduleEvaluationContext):
             # Same guard as the sensor path: a slow run must not stack up with
             # the next tick — the skipped tick is picked up by the following
             # one (since_id makes the fetch incremental either way).
@@ -191,24 +191,24 @@ def _build_search_workflow_definitions(
                 return dg.SkipReason(f"Job '{job_name}' is already running.")
             return [dg.RunRequest(run_key=None)]
 
-        return search_workflow_job, None, search_workflow_schedule
+        return search_recent_tweets_job, None, search_recent_tweets_schedule
 
     @dg.sensor(
         name=sensor_name,
         description=description,
-        job=search_workflow_job,
+        job=search_recent_tweets_job,
         minimum_interval_seconds=config.interval_seconds,
         default_status=dg.DefaultSensorStatus.STOPPED,
     )
-    def search_workflow_sensor(context: dg.SensorEvaluationContext):
+    def search_recent_tweets_sensor(context: dg.SensorEvaluationContext):
         if has_in_progress_run(context, job_name):
             return dg.SkipReason(f"Job '{job_name}' is already running.")
         return [dg.RunRequest(run_key=None)]
 
-    return search_workflow_job, search_workflow_sensor, None
+    return search_recent_tweets_job, search_recent_tweets_sensor, None
 
 
-class XSearchWorkflowOrchestration(DagsterOrchestration):
+class XSearchRecentTweetsOrchestration(DagsterOrchestration):
     """One job per configured ``search_recent_tweets_workflow`` filter — driven
     by a sensor (``interval_seconds``) or a schedule (``cron``) — each running
     :class:`XSearchRecentTweetsWorkflow` to fetch and save tweet envelopes (no
@@ -218,14 +218,14 @@ class XSearchWorkflowOrchestration(DagsterOrchestration):
     Launchpad example (replace ``ai_llms`` with your filter name)::
 
         ops:
-          x_search_workflow_op_ai_llms:
+          x_search_recent_tweets_op_ai_llms:
             config:
               query: "(openai OR anthropic) lang:en -is:retweet"
               max_results: 50
     """
 
     @classmethod
-    def New(cls) -> "XSearchWorkflowOrchestration":
+    def New(cls) -> "XSearchRecentTweetsOrchestration":
         module = ABIModule.get_instance()
 
         jobs: list[dg.JobDefinition] = []
@@ -236,13 +236,15 @@ class XSearchWorkflowOrchestration(DagsterOrchestration):
         for workflow_config in module.configuration.search_recent_tweets_workflow:
             if workflow_config.name in seen_workflow_names:
                 logger.warning(
-                    f"XSearchWorkflowOrchestration: duplicate "
+                    f"XSearchRecentTweetsOrchestration: duplicate "
                     f"search_recent_tweets_workflow name {workflow_config.name!r}; "
                     f"skipping the duplicate"
                 )
                 continue
             seen_workflow_names.add(workflow_config.name)
-            job, sensor, schedule = _build_search_workflow_definitions(workflow_config)
+            job, sensor, schedule = _build_search_recent_tweets_definitions(
+                workflow_config
+            )
             jobs.append(job)
             if sensor is not None:
                 sensors.append(sensor)

@@ -632,13 +632,13 @@ the graph, via `republish_x_app_after_pipeline()`:
 **`app_publish` defaults to `false`** on both config entries, so ingestion does
 not rebuild the app unless you ask it to. A rebuild reads the whole graph
 (~60 s at 110 k posts) regardless of how little changed, and the hourly
-`x_build_app_x_proxy` schedule already republishes from the same graph state - so the
+`x_build_pipeline_hub` schedule already republishes from the same graph state - so the
 dashboard is at most an hour behind with this off. Turn it on per entry when the
 dashboard must follow ingestion, or per run from the launchpad:
 
 ```yaml
 ops:
-  x_search_recent_tweets_files_op_reprocess_envelopes:
+  x_reprocess_recent_tweets_files_op_reprocess_envelopes:
     config:
       app_publish: true
 ```

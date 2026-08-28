@@ -3,7 +3,7 @@
 One (job, sensor) pair per ``search_recent_tweets_event`` config entry. Each
 sensor subscribes to ``ObjectPut`` events on the bus and, for every new envelope
 written under that entry's ``prefix`` (the JSON files
-:class:`XSearchWorkflowOrchestration` saves), feeds the file's path straight to
+:class:`XSearchRecentTweetsOrchestration` saves), feeds the file's path straight to
 :class:`XSearchRecentTweetsPipeline` in ``file_path`` mode to map the full
 SearchQuery / SearchResultSet / SearchRecentTweets structure into the graph.
 This is the event-system pay-off: the search workflow only fetches and saves;
@@ -26,7 +26,7 @@ fall back to that entry's config defaults.
 Launchpad example (filter ``search_envelopes``)::
 
     ops:
-      x_search_recent_tweets_pipeline_op_search_envelopes:
+      x_pipeline_recent_tweets_op_search_envelopes:
         config:
           prefix: x/search_recent_tweets/ai_llms
           key: 2026-06-30T12:00:00_ai_llms.json
@@ -220,9 +220,9 @@ def _build_search_recent_tweets_event_sensor(
     """
 
     safe = safe_name(event_cfg.name)
-    job_name = f"x_search_recent_tweets_events_{safe}"
-    pipeline_op_name = f"x_search_recent_tweets_pipeline_op_{safe}"
-    sensor_name = f"x_search_recent_tweets_put_sensor_{safe}"
+    job_name = f"x_ingest_recent_tweets_events_{safe}"
+    pipeline_op_name = f"x_pipeline_recent_tweets_op_{safe}"
+    sensor_name = f"x_sensor_recent_tweets_put_{safe}"
 
     @dg.op(name=pipeline_op_name, config_schema=_PIPELINE_CONFIG_SCHEMA)
     def search_pipeline_op(context) -> dict:
@@ -385,7 +385,7 @@ class XSearchRecentTweetsEventOrchestration(DagsterOrchestration):
     Launchpad example (manual replay of one envelope, filter ``search_envelopes``)::
 
         ops:
-          x_search_recent_tweets_pipeline_op_search_envelopes:
+          x_pipeline_recent_tweets_op_search_envelopes:
             config:
               prefix: x/search_recent_tweets/my_filter
               key: 2026-06-30T12:00:00_my_filter.json

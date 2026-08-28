@@ -198,7 +198,7 @@ def run_search_workflow_for_filter(
     inline via :func:`run_search_and_map_for_query`). When ``count_recent_tweets``
     is set on the filter (or the launchpad), the recent-post count is followed on
     the same tick; the Recent Tweets dashboard is republished only when
-    ``app_publish`` is set (off by default — ``x_build_app_x_proxy`` owns that).
+    ``app_publish`` is set (off by default — ``x_build_pipeline_hub`` owns that).
 
     Pass ``max_pages`` explicitly (including ``None`` for an unbounded sweep) to
     override the filter/launchpad value — ``launchpad_override`` coerces a ``None``
@@ -311,7 +311,7 @@ def run_search_workflow_for_filter(
 
     # Republishing the app reads the whole graph and re-renders every snapshot,
     # so it dominates the tick and grows with the graph — opt-in per filter, and
-    # off by default. The hourly x_build_app_x_proxy schedule publishes from the same
+    # off by default. The hourly x_build_pipeline_hub schedule publishes from the same
     # state, so leaving this off costs at most an hour of dashboard staleness.
     app_publish = launchpad_override(op_cfg, "app_publish", filter_config.app_publish)
     if app_publish:
@@ -335,7 +335,7 @@ def run_search_workflow_for_filter(
     else:
         logger.debug(
             f"run_search_workflow_for_filter[{filter_config.name}]: app publish "
-            f"skipped (app_publish=false); x_build_app_x_proxy republishes on its schedule"
+            f"skipped (app_publish=false); x_build_pipeline_hub republishes on its schedule"
         )
 
     return file_paths
