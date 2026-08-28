@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.55.3 (2026-08-28)
+
+### Bug Fixes
+
+- **nexus**: Honor source and path query params on Files
+  ([`f87d511`](https://github.com/jupyter-naas/abi/commit/f87d5116e9d8bc0279064abe451839fd5ad6c32a))
+
+
 ## v2.55.2 (2026-08-28)
 
 ### Bug Fixes
