@@ -120,6 +120,11 @@ Query behavior
 - Results are mapped to RDFLib-compatible structures:
   - JSON SPARQL results -> iterable of ``ResultRow`` (or ``ASK`` result)
   - RDF payloads (N-Triples/Turtle) -> ``rdflib.Graph``
+- ``list_graphs()`` lists IRI named graphs from the catalog
+  (``GRAPH ?g { } FILTER(isIRI(?g))``) so a dangling null graph node in TDB2
+  cannot NPE Jena mid-response.
+- Truncated SPARQL JSON (HTTP 200 + Java exception appended) is recovered
+  when complete bindings were already streamed.
 """
 
 import hashlib
@@ -147,6 +152,84 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
 from rdflib import BNode, Graph, URIRef
 
 logger = logging.getLogger(__name__)
+
+
+def _recover_truncated_sparql_results_json(text: str) -> dict[str, Any] | None:
+    """Best-effort parse of SPARQL JSON that Jena truncated mid-stream.
+
+    Fuseki can return HTTP 200 and start streaming ``application/sparql-results+json``,
+    then abort with a Java exception (for example ``Node.hashCode()`` on a null
+    graph node) appended to the body. ``json.loads`` fails; complete bindings
+    already written are still usable.
+    """
+    decoder = json.JSONDecoder()
+    stripped = text.lstrip()
+    if stripped.startswith("{"):
+        try:
+            obj, _end = decoder.raw_decode(stripped)
+            if isinstance(obj, dict) and ("boolean" in obj or "results" in obj):
+                return obj
+        except json.JSONDecodeError:
+            pass
+
+    vars_: list[str] = []
+    vars_match = re.search(r'"vars"\s*:\s*(\[[^\]]*\])', text)
+    if vars_match:
+        try:
+            parsed_vars = json.loads(vars_match.group(1))
+        except json.JSONDecodeError:
+            parsed_vars = None
+        if isinstance(parsed_vars, list):
+            vars_ = [v for v in parsed_vars if isinstance(v, str)]
+
+    boolean_match = re.search(r'"boolean"\s*:\s*(true|false)', text)
+    if boolean_match:
+        return {"head": {"vars": vars_}, "boolean": boolean_match.group(1) == "true"}
+
+    bindings_idx = text.find('"bindings"')
+    if bindings_idx == -1:
+        return None
+    bracket = text.find("[", bindings_idx)
+    if bracket == -1:
+        return None
+
+    bindings: list[dict[str, Any]] = []
+    pos = bracket + 1
+    while pos < len(text):
+        while pos < len(text) and text[pos] in " \t\r\n,":
+            pos += 1
+        if pos >= len(text) or text[pos] == "]":
+            break
+        try:
+            obj, end = decoder.raw_decode(text, pos)
+        except json.JSONDecodeError:
+            break
+        if isinstance(obj, dict):
+            bindings.append(obj)
+        pos = end
+
+    if not bindings:
+        return None
+    return {"head": {"vars": vars_}, "results": {"bindings": bindings}}
+
+
+def _parse_sparql_results_json(text: str) -> dict[str, Any]:
+    """Parse SPARQL JSON, recovering complete bindings from a truncated body."""
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        recovered = _recover_truncated_sparql_results_json(text)
+        if recovered is not None:
+            n_bindings = len(recovered.get("results", {}).get("bindings", []))
+            logger.warning(
+                "Recovered %d SPARQL JSON binding(s) from truncated Fuseki response",
+                n_bindings,
+            )
+            return recovered
+        raise
+    if not isinstance(parsed, dict):
+        raise json.JSONDecodeError("SPARQL JSON root must be an object", text, 0)
+    return parsed
 
 
 class ApacheJenaTDB2(ITripleStorePort):
@@ -532,72 +615,101 @@ class ApacheJenaTDB2(ITripleStorePort):
         is_update = self.__is_update_query(query)
 
         if is_update:
-            response = self._post_update(query)
-        else:
-            response = self._post_query(query)
-
-        if is_update:
+            self._post_update(query)
             return rdflib.query.Result("SELECT")
 
-        content_type = response.headers.get("Content-Type", "")
+        result_data: dict[str, Any] | None = None
+        response: requests.Response | None = None
+        for attempt in range(self.max_retries + 1):
+            response = self._post_query(query)
+            content_type = response.headers.get("Content-Type", "")
 
-        if "sparql-results" in content_type:
-            result_data = json.loads(response.text)
+            if "sparql-results" in content_type:
+                try:
+                    result_data = _parse_sparql_results_json(response.text)
+                    break
+                except json.JSONDecodeError as exc:
+                    if attempt >= self.max_retries:
+                        body = response.text[:500]
+                        raise Exceptions.RequestError(
+                            operation="query",
+                            message=(
+                                "Fuseki returned malformed SPARQL JSON after "
+                                f"{self.max_retries + 1} attempts"
+                            ),
+                            status_code=response.status_code,
+                            response_body=body,
+                            endpoint=self.query_endpoint,
+                            attempts=self.max_retries + 1,
+                        ) from exc
+                    delay = self.retry_delay * (2**attempt) + random.uniform(0, 0.1)
+                    logger.warning(
+                        "Fuseki returned malformed SPARQL JSON (attempt %d/%d); "
+                        "retrying in %.2fs",
+                        attempt + 1,
+                        self.max_retries + 1,
+                        delay,
+                    )
+                    time.sleep(delay)
+                    continue
 
-            if "boolean" in result_data:
-                ask_result = rdflib.query.Result("ASK")
-                ask_result.askAnswer = bool(result_data["boolean"])
-                return ask_result
+            if "n-triples" in content_type or "turtle" in content_type:
+                graph = Graph()
+                format_type = "nt" if "n-triples" in content_type else "turtle"
+                graph.parse(data=response.text, format=format_type)
+                return graph  # type: ignore
 
-            from rdflib.query import ResultRow
-            from rdflib.term import BNode, Literal, URIRef, Variable
+            raise ValueError(f"Unexpected content type: {content_type}")
 
-            vars = result_data.get("head", {}).get("vars", [])
-            bindings = result_data.get("results", {}).get("bindings", [])
+        if result_data is None or response is None:
+            raise AssertionError("unreachable: SPARQL JSON retry loop must return")
 
-            var_objects = [Variable(var) for var in vars]
-            results = []
+        if "boolean" in result_data:
+            ask_result = rdflib.query.Result("ASK")
+            ask_result.askAnswer = bool(result_data["boolean"])
+            return ask_result
 
-            for binding in bindings:
-                row_values = {}
-                for var in vars:
-                    var_obj = Variable(var)
-                    if var in binding:
-                        binding_info = binding[var]
-                        value_str = binding_info["value"]
-                        binding_type = binding_info.get("type", "literal")
+        from rdflib.query import ResultRow
+        from rdflib.term import BNode, Literal, URIRef, Variable
 
-                        value: URIRef | BNode | Literal | None
-                        if binding_type == "uri":
-                            value = URIRef(value_str)
-                        elif binding_type == "bnode":
-                            value = BNode(value_str)
-                        else:
-                            datatype = binding_info.get("datatype")
-                            lang = binding_info.get("xml:lang")
+        vars = result_data.get("head", {}).get("vars", [])
+        bindings = result_data.get("results", {}).get("bindings", [])
 
-                            if datatype:
-                                value = Literal(value_str, datatype=URIRef(datatype))
-                            elif lang:
-                                value = Literal(value_str, lang=lang)
-                            else:
-                                value = Literal(value_str)
+        var_objects = [Variable(var) for var in vars]
+        results = []
 
-                        row_values[var_obj] = value
+        for binding in bindings:
+            row_values = {}
+            for var in vars:
+                var_obj = Variable(var)
+                if var in binding:
+                    binding_info = binding[var]
+                    value_str = binding_info["value"]
+                    binding_type = binding_info.get("type", "literal")
+
+                    value: URIRef | BNode | Literal | None
+                    if binding_type == "uri":
+                        value = URIRef(value_str)
+                    elif binding_type == "bnode":
+                        value = BNode(value_str)
                     else:
-                        row_values[var_obj] = None  # type: ignore
+                        datatype = binding_info.get("datatype")
+                        lang = binding_info.get("xml:lang")
 
-                results.append(ResultRow(row_values, var_objects))
+                        if datatype:
+                            value = Literal(value_str, datatype=URIRef(datatype))
+                        elif lang:
+                            value = Literal(value_str, lang=lang)
+                        else:
+                            value = Literal(value_str)
 
-            return iter(results)  # type: ignore
+                    row_values[var_obj] = value
+                else:
+                    row_values[var_obj] = None  # type: ignore
 
-        if "n-triples" in content_type or "turtle" in content_type:
-            graph = Graph()
-            format_type = "nt" if "n-triples" in content_type else "turtle"
-            graph.parse(data=response.text, format=format_type)
-            return graph  # type: ignore
+            results.append(ResultRow(row_values, var_objects))
 
-        raise ValueError(f"Unexpected content type: {content_type}")
+        return iter(results)  # type: ignore
 
     def query_view(self, view: str, query: str) -> Any:
         return self.query(query)
@@ -633,7 +745,14 @@ class ApacheJenaTDB2(ITripleStorePort):
         self.query(f"DROP GRAPH <{graph_name!s}>")
 
     def list_graphs(self) -> list[URIRef]:
-        result = self.query("SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } }")
+        # GRAPH ?g { } reads the named-graph catalog (cheap) rather than scanning
+        # every triple. FILTER(isIRI(?g)) skips blank/null graph names: Jena TDB2
+        # can keep a dangling null graph node after compact or a crashed write,
+        # and DISTINCT then NPEs in Node.hashCode() while streaming SPARQL JSON
+        # (HTTP 200 + truncated body), which used to crash ABI on boot.
+        result = self.query(
+            "SELECT DISTINCT ?g WHERE { GRAPH ?g { } FILTER(isIRI(?g)) }"
+        )
         graphs: list[URIRef] = []
         for row in result:
             graph = getattr(row, "g", None)

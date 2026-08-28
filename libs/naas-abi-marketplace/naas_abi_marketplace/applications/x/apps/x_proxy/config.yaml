@@ -1,0 +1,162 @@
+# X Proxy - app configuration.
+#
+# The single source of truth for the app's navigation: what sections exist, what
+# pages they hold, in what order, and which of them are visible. Everything here
+# used to be hardcoded in `web/src/components/Shell.tsx` and `web/src/lib/`.
+#
+# The web app is a *static export*, so this file is read at build time rather
+# than fetched by the browser: `app_config.py` compiles it into
+# `web/src/lib/appConfig.generated.ts`, which the components import. `pnpm build`
+# and `pnpm dev` regenerate it first (see the `prebuild` / `predev` scripts), so
+# editing this file and rebuilding is the whole loop - no TSX to touch.
+#
+#     make -C ../../../../.. …    # not wired: regenerate with
+#     uv run python -m naas_abi_marketplace.applications.x.apps.x_proxy.app_config --write
+#
+# Changing a `key` or a `path` is a code change, not a config change: keys are
+# the union `PageKey` the components switch on, and paths are real directories
+# under `web/src/app/`. The generator fails loudly when they drift.
+
+app:
+  # Shown in the rail's brand and in front of every section title.
+  name: "X Proxy"
+  # The top bar's heading. `{app}` and `{section}` are filled in, so this is
+  # what makes it read "X Proxy - Users".
+  title: "{app} - {section}"
+
+# Where `/` sends a visitor who named no page. Must be a visible page - and
+# normally the first tab of the first section, so the app opens where its own
+# navigation would take you.
+default_page: tweets
+
+# The favorites bar's limits. It is quick access, not a second search page.
+favorites:
+  max_users: 60
+  max_folders: 12
+  max_folder_name: 32
+
+# Results per page on the search pages. Both list a whole published dataset -
+# every author, every post - so they page the same way.
+results:
+  per_page: 100
+
+# Published chart shapes. Read at publish time, so a change here needs a
+# snapshot rebuild (a `--web-only` publish carries web assets only).
+charts:
+  # Bars in the Top authors chart on Search Recent Tweets.
+  top_authors_bars: 20
+  # Bars in the Top author locations chart (published, not currently shown).
+  top_locations_bars: 10
+
+# The author feed on the Users page.
+feed:
+  # Posts per batch: what the feed opens with, and what each "Show more" - or
+  # each scroll to the end - adds.
+  batch: 10
+  # The feed's three tabs. The keys are the split the data carries; only the
+  # words are yours. `matched` are the posts that answered a followed query -
+  # the card names which one - and `referenced` are the ones the expansions
+  # pulled in to explain a match (a reply parent, a quoted or retweeted post).
+  tabs:
+    all: All
+    matched: Matched Query
+    referenced: Referenced
+
+# Sections, in the order the rail lists them. Each holds the pages that show as
+# tabs under the top bar, in the order the strip lists them.
+#
+#   key         the section's id - referenced by the code, not renameable freely
+#   label       what the rail shows, and what `{section}` fills in
+#   icon        one of the rail icons in `Shell.tsx`: posts | users | gear
+#   visible     false hides the section from the rail; its pages stay reachable
+#               by URL, and still show their own tabs once opened
+#   place       main (top group) | bottom (under the rule, at the foot)
+#   top_nav     false hides the "X Proxy - <section>" bar for this section -
+#               for a section whose page carries its own heading
+#   favorites   which favorites bar shows here: `users` (pinned authors),
+#               `posts` (pinned posts) or `none`. The two never mix - each is
+#               its own bar, its own storage, its own chips.
+#
+# and per page:
+#
+#   key         the page's id - the `PageKey` the components switch on
+#   label       the tab's text
+#   path        the exported route, relative to the app root
+#   visible     false hides the tab; the page stays reachable by URL
+#   filters     whether the Scenario / Query dropdowns show on this page
+#   search_box  whether the page has a search box, whose needle lives in `?q=`
+#   favorites   overrides the section's bar for this page alone (same values)
+#   tab         which tab to light up while this page is open, when the page is
+#               not a tab itself
+sections:
+  - key: posts
+    label: Posts
+    icon: posts
+    visible: true
+    place: main
+    top_nav: true
+    favorites: none
+    pages:
+      # Not scoped by Scenario / Query: it searches every post the publish
+      # carries, and each result names the query that pulled it in.
+      - key: tweets
+        label: Search Tweets
+        path: /posts/search-tweets/
+        visible: true
+        filters: false
+        search_box: true
+        # Same posts bar as the post page: pinned posts are opened from here.
+        favorites: posts
+      - key: search
+        label: Search Recent Tweets
+        path: /posts/search-posts-recent/
+        visible: true
+        filters: true
+      # One post, on its own page - `?post=<id>` (required) and `?user=<handle>`
+      # (optional, and only a shortcut to the author's shard). Hidden: it is a
+      # destination reached from a result or a feed, not a tab.
+      - key: post
+        label: Post
+        path: /posts/post/
+        visible: false
+        filters: false
+        # Its own bar: posts pinned from here, never the authors pinned on
+        # Users. Opened from Search Tweets, so that is the tab that stays lit.
+        favorites: posts
+        tab: tweets
+      - key: count
+        label: Count Recent Tweets
+        path: /posts/get-posts-counts-recent/
+        visible: true
+        filters: true
+
+  - key: users
+    label: Users
+    icon: users
+    visible: true
+    place: main
+    top_nav: true
+    favorites: users
+    pages:
+      # No trailing slash before the query string: the Users URL is
+      # `/users/search?user=…` (see `web/src/lib/routes.ts`).
+      - key: users
+        label: Search Users
+        path: /users/search
+        visible: true
+        filters: false
+        search_box: true
+
+  - key: parameters
+    label: Parameters
+    icon: gear
+    visible: true
+    place: bottom
+    top_nav: true
+    favorites: none
+    pages:
+      - key: parameters
+        label: Parameters
+        path: /parameters/
+        visible: true
+        filters: false

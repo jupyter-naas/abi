@@ -29,7 +29,11 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
     get_service_registry,
 )
-from naas_abi.apps.nexus.apps.api.app.utils.public_urls import public_modules_url
+from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
+    public_modules_url,
+    resolve_abi_module_path,
+    resolve_module_public_asset_path,
+)
 from naas_abi_core import logger
 from naas_abi_core.services.agent.Agent import Agent
 from sqlalchemy import select
@@ -288,31 +292,6 @@ def _extract_agent_intents(agent_cls: type) -> list[dict[str, str]] | None:
     return output if output else None
 
 
-def _module_name_from_module_path(module_path: str | None) -> str | None:
-    if not module_path:
-        return None
-    # module_path is a Python module path, module "name" is the top-level package
-    # (e.g. naas_abi_marketplace from naas_abi_marketplace.applications.openrouter)
-    return module_path.split(".", 1)[0] or None
-
-
-def _normalize_logo_path_for_module(logo_url: str, module_name: str) -> str:
-    """
-    Convert absolute/container paths like:
-      /app/libs/.../naas_abi_marketplace/.../logo.png
-    into module-relative paths like:
-      naas_abi_marketplace/.../logo.png
-    """
-    if logo_url.startswith(f"{module_name}/"):
-        return logo_url
-    if logo_url.startswith(f"/{module_name}/"):
-        return logo_url.lstrip("/")
-    idx = logo_url.find(f"{module_name}/")
-    if idx >= 0:
-        return logo_url[idx:]
-    return logo_url.lstrip("/")
-
-
 def _default_chat_model_id() -> str | None:
     """Canonical id of the engine's default chat model, or None.
 
@@ -464,13 +443,12 @@ def _enrich_agent(
 
     # Normalize logo_url to be module-relative, then convert to public /modules URL.
     if isinstance(logo_url, str) and logo_url:
-        module_name = _module_name_from_module_path(module_path)
-        if (
-            module_name
-            and module_name in logo_url
-            and not (logo_url.startswith("http://") or logo_url.startswith("https://"))
-        ):
-            normalized_path = _normalize_logo_path_for_module(logo_url, module_name)
+        if not (logo_url.startswith("http://") or logo_url.startswith("https://")):
+            abi_module_path = resolve_abi_module_path(module_path)
+            normalized_path = resolve_module_public_asset_path(
+                logo_url,
+                abi_module_path=abi_module_path,
+            )
             logo_url = public_modules_url(normalized_path)
 
     return replace(

@@ -92,6 +92,92 @@ def public_api_host() -> str | None:
     )
 
 
+def module_url_path(module_path: str) -> str:
+    """Python module path as used in ``/modules/<path>`` mounts (dots → slashes)."""
+    return module_path.replace(".", "/")
+
+
+def resolve_abi_module_path(module_path: str | None) -> str | None:
+    """Map an agent/class ``__module__`` to the loaded ABI module config key.
+
+    Agent classes often live in subpackages (``operations.report.agents``) while
+    public assets mount on the ABI module root (``operations.report``).
+    """
+    if not module_path:
+        return None
+    try:
+        from naas_abi import ABIModule
+
+        engine_modules = ABIModule.get_instance().engine.modules
+        if module_path in engine_modules:
+            return module_path
+        parts = module_path.split(".")
+        for i in range(len(parts) - 1, 0, -1):
+            candidate = ".".join(parts[:i])
+            if candidate in engine_modules:
+                return candidate
+    except Exception:
+        pass
+    return module_path
+
+
+def resolve_module_public_asset_path(
+    asset_path: str,
+    *,
+    abi_module_path: str | None,
+) -> str:
+    """Normalize a module public asset to the path segment after ``/modules/``.
+
+    Mounts use the ABI module's Python path (``operations.report`` →
+    ``operations/report/assets/public/...``). Manifests and agent ``logo_url``
+    fields may still declare legacy flat names (``report/assets/public/...``)
+    after nesting under a parent package.
+    """
+    stripped = asset_path.strip().lstrip("/")
+    if stripped.startswith("modules/"):
+        stripped = stripped[len("modules/") :]
+
+    if not abi_module_path:
+        return stripped
+
+    module_url = module_url_path(abi_module_path)
+    if stripped.startswith(f"{module_url}/") or stripped == module_url:
+        return stripped
+
+    legacy_prefix = abi_module_path.rsplit(".", 1)[-1]
+    if stripped.startswith(f"{legacy_prefix}/"):
+        suffix = stripped[len(legacy_prefix) + 1 :]
+        return f"{module_url}/{suffix}"
+
+    if stripped.startswith("assets/public/"):
+        return f"{module_url}/{stripped}"
+
+    return stripped
+
+
+def resolve_public_module_asset_url(
+    asset_path: str | None,
+    *,
+    abi_module_path: str | None,
+) -> str | None:
+    """Rewrite module asset paths to absolute public API ``/modules/`` URLs."""
+    if not asset_path:
+        return None
+    if asset_path.startswith(("http://", "https://")):
+        return asset_path
+
+    try:
+        normalized = resolve_module_public_asset_path(
+            asset_path,
+            abi_module_path=resolve_abi_module_path(abi_module_path)
+            if abi_module_path
+            else None,
+        )
+        return public_modules_url(normalized)
+    except Exception:
+        return asset_path
+
+
 def public_modules_url(path: str) -> str:
     """Absolute public-API URL for a module asset under ``/modules/<path>``.
 

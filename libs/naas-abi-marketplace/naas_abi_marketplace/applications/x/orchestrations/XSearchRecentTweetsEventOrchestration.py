@@ -9,8 +9,8 @@ SearchQuery / SearchResultSet / SearchRecentTweets structure into the graph.
 This is the event-system pay-off: the search workflow only fetches and saves;
 the put event then drives all graph mapping here, with no polling. Set
 ``app_publish: true`` on an entry to also republish the Recent Tweets app
-(``x/apps/x/``) after each successful map; it is off by default and the hourly
-``x_build_app`` schedule keeps the dashboard fresh instead.
+(``x/apps/x_proxy/``) after each successful map; it is off by default and the hourly
+``signals_x_build_pipeline_hub`` schedule keeps the dashboard fresh instead.
 
 Each entry's sensor, watched prefix and ingestion knobs (persist, events drained
 per tick, evaluation interval) come from the ``search_recent_tweets_event`` list
@@ -26,7 +26,7 @@ fall back to that entry's config defaults.
 Launchpad example (filter ``search_envelopes``)::
 
     ops:
-      x_search_recent_tweets_pipeline_op_search_envelopes:
+      signals_x_pipeline_recent_tweets_op_search_envelopes:
         config:
           prefix: x/search_recent_tweets/ai_llms
           key: 2026-06-30T12:00:00_ai_llms.json
@@ -81,7 +81,7 @@ _PIPELINE_CONFIG_SCHEMA = {
         bool,
         is_required=False,
         description=(
-            "After mapping, republish x/apps/x/ snapshots (+ web export). "
+            "After mapping, republish x/apps/x_proxy/ snapshots (+ web export). "
             "Defaults to the entry's configured app_publish (itself false "
             "unless set) — turn on here to force a rebuild for one run."
         ),
@@ -143,7 +143,7 @@ def _map_search_envelope(
     rebuild reads the whole graph and every envelope would pay for it. The web
     app serves that dataset straight from object storage and runs no queries of
     its own, so with ``app_publish`` off the dashboard follows the hourly
-    ``x_build_app`` schedule instead of each envelope.
+    ``signals_x_build_pipeline_hub`` schedule instead of each envelope.
     """
     from naas_abi_marketplace.applications.x.orchestrations.utils import (
         republish_x_app_after_pipeline,
@@ -220,9 +220,9 @@ def _build_search_recent_tweets_event_sensor(
     """
 
     safe = safe_name(event_cfg.name)
-    job_name = f"x_search_recent_tweets_events_{safe}"
-    pipeline_op_name = f"x_search_recent_tweets_pipeline_op_{safe}"
-    sensor_name = f"x_search_recent_tweets_put_sensor_{safe}"
+    job_name = f"signals_x_ingest_recent_tweets_events_{safe}"
+    pipeline_op_name = f"signals_x_pipeline_recent_tweets_op_{safe}"
+    sensor_name = f"signals_x_sensor_recent_tweets_put_{safe}"
 
     @dg.op(name=pipeline_op_name, config_schema=_PIPELINE_CONFIG_SCHEMA)
     def search_pipeline_op(context) -> dict:
@@ -385,7 +385,7 @@ class XSearchRecentTweetsEventOrchestration(DagsterOrchestration):
     Launchpad example (manual replay of one envelope, filter ``search_envelopes``)::
 
         ops:
-          x_search_recent_tweets_pipeline_op_search_envelopes:
+          signals_x_pipeline_recent_tweets_op_search_envelopes:
             config:
               prefix: x/search_recent_tweets/my_filter
               key: 2026-06-30T12:00:00_my_filter.json

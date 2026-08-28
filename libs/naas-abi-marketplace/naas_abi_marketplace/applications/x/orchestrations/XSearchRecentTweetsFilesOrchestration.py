@@ -33,7 +33,7 @@ enable them from the Dagster UI.
 Launchpad example (for an entry named ``reprocess_envelopes``)::
 
     ops:
-      x_search_recent_tweets_files_op_reprocess_envelopes:
+      signals_x_reprocess_recent_tweets_files_op_reprocess_envelopes:
         config:
           prefix: x/search_recent_tweets/ai_llms
           persist: true
@@ -106,7 +106,7 @@ _FILES_CONFIG_SCHEMA = {
         bool,
         is_required=False,
         description=(
-            "After reprocessing, republish x/apps/x/ snapshots (+ web export). "
+            "After reprocessing, republish x/apps/x_proxy/ snapshots (+ web export). "
             "Defaults to the entry's configured app_publish (itself false "
             "unless set) — turn on here to force a rebuild for one run."
         ),
@@ -402,10 +402,10 @@ def _build_reprocess_files_definitions(
     """
 
     safe = safe_name(config.name)
-    job_name = f"x_search_recent_tweets_files_{safe}"
-    op_name = f"x_search_recent_tweets_files_op_{safe}"
-    sensor_name = f"x_search_recent_tweets_files_sensor_{safe}"
-    schedule_name = f"x_search_recent_tweets_files_schedule_{safe}"
+    job_name = f"signals_x_reprocess_recent_tweets_files_{safe}"
+    op_name = f"signals_x_reprocess_recent_tweets_files_op_{safe}"
+    sensor_name = f"signals_x_reprocess_recent_tweets_files_sensor_{safe}"
+    schedule_name = f"signals_x_reprocess_recent_tweets_files_schedule_{safe}"
     description = _trigger_description(config)
     default_status = (
         dg.DefaultSensorStatus.RUNNING
@@ -471,7 +471,7 @@ class XSearchRecentTweetsFilesOrchestration(DagsterOrchestration):
     Launchpad example (replace ``reprocess_envelopes`` with your entry name)::
 
         ops:
-          x_search_recent_tweets_files_op_reprocess_envelopes:
+          signals_x_reprocess_recent_tweets_files_op_reprocess_envelopes:
             config:
               prefix: x/search_recent_tweets
               skip_existing: true
