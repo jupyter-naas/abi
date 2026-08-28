@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.56.0 (2026-08-28)
+
+### Features
+
+- **nexus**: Give the workspace a dock, Home desk, and mark switcher
+  ([`6e6e65d`](https://github.com/jupyter-naas/abi/commit/6e6e65de5de1d05a03df453098c68f935e56a1f6))
+
+
 ## v2.55.3 (2026-08-28)
 
 ### Bug Fixes
