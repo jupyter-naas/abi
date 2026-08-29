@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v2.56.1 (2026-08-29)
+
+### Bug Fixes
+
+- **nexus**: Drop Apps logo rings and document default-only roster
+  ([`daad6c4`](https://github.com/jupyter-naas/abi/commit/daad6c4d32b06d374655844b924324ac38d5ae10))
+
+- **nexus**: Keep workspace catalogs isolated and drop desk rings
+  ([`ebdbee6`](https://github.com/jupyter-naas/abi/commit/ebdbee6c6ae37ebc448d70e54390a81b08c5871a))
+
+
 ## v2.56.0 (2026-08-28)
 
 ### Features
