@@ -3333,7 +3333,7 @@ function EmptyState({
     <div className="flex h-full flex-col items-center justify-center px-4">
       <EmptyStateLogo src={resolvedLogoUrl} name={selectedAgentName} />
       <p className="mb-6 text-center text-muted-foreground">
-        {greeting} Pick a suggestion or type a message to get started.
+        {greeting} {selectedAgentName} here, how can I help?
       </p>
     </div>
   );
