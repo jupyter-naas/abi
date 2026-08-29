@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v2.56.2 (2026-08-29)
+
+### Bug Fixes
+
+- **nexus**: Keep current workspace in Recents with checkmark
+  ([`52800bb`](https://github.com/jupyter-naas/abi/commit/52800bb6435a0a6d24eb644053ce4ac2f2590d4e))
+
+- **nexus**: Show workspaces as one alphabetical list
+  ([`b858efa`](https://github.com/jupyter-naas/abi/commit/b858efa156d1f53f35e831185f98e39fe2002473))
+
+
 ## v2.56.1 (2026-08-29)
 
 ### Bug Fixes
