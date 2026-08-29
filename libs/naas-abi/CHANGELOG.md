@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.57.0 (2026-08-29)
+
+### Features
+
+- **nexus**: Prefix sign-in email subjects on .dev frontends
+  ([`28ae377`](https://github.com/jupyter-naas/abi/commit/28ae377b0043b452ff2d5d8f7e0665ddec54d6c9))
+
+
 ## v2.56.3 (2026-08-29)
 
 ### Bug Fixes
