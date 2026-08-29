@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Check, Search } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { filterWorkspaces, recentWorkspaces } from '@/lib/workspace-picker';
+import { listWorkspaces } from '@/lib/workspace-picker';
 import { getWorkspaceSwitchPath } from '@/lib/feature-access';
 import { markAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
 import { useWorkspaceStore, type Workspace } from '@/stores/workspace';
@@ -17,22 +17,11 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
   const [query, setQuery] = useState('');
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
-  const recentWorkspaceIds = useWorkspaceStore((s) => s.recentWorkspaceIds);
   const setCurrentWorkspace = useWorkspaceStore((s) => s.setCurrentWorkspace);
   const setActiveConversation = useWorkspaceStore((s) => s.setActiveConversation);
   const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
 
-  const filtered = useMemo(
-    () => filterWorkspaces(workspaces, query).sort((a, b) => a.name.localeCompare(b.name)),
-    [workspaces, query],
-  );
-  const recents = useMemo(
-    () => recentWorkspaces(workspaces, recentWorkspaceIds, currentWorkspaceId),
-    [workspaces, recentWorkspaceIds, currentWorkspaceId],
-  );
-  const searching = query.trim().length > 0;
-  // All is the full catalog (including current). Recents is a shortcut strip above it.
-  const listed = filtered;
+  const listed = useMemo(() => listWorkspaces(workspaces, query), [workspaces, query]);
 
   const pick = (workspace: Workspace) => {
     if (workspace.id === currentWorkspaceId) {
@@ -71,48 +60,18 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
         />
       </label>
 
-      {!searching && recents.length > 0 && (
-        <div>
-          <p className={cn('px-1 py-1', shellTokens.sidebar.sectionLabel)}>Recents</p>
-          {recents.map((workspace) => (
-            <WorkspaceRow
-              key={workspace.id}
-              workspace={workspace}
-              current={workspace.id === currentWorkspaceId}
-              onPick={pick}
-            />
-          ))}
-        </div>
+      {listed.length === 0 ? (
+        <p className="px-2 py-2 text-xs text-muted-foreground">No workspaces match</p>
+      ) : (
+        listed.map((workspace) => (
+          <WorkspaceRow
+            key={workspace.id}
+            workspace={workspace}
+            current={workspace.id === currentWorkspaceId}
+            onPick={pick}
+          />
+        ))
       )}
-
-      {searching ? (
-        listed.length === 0 ? (
-          <p className="px-2 py-2 text-xs text-muted-foreground">No workspaces match</p>
-        ) : (
-          listed.map((workspace) => (
-            <WorkspaceRow
-              key={workspace.id}
-              workspace={workspace}
-              current={workspace.id === currentWorkspaceId}
-              onPick={pick}
-            />
-          ))
-        )
-      ) : listed.length > 0 ? (
-        <div>
-          <p className={cn('px-1 py-1', shellTokens.sidebar.sectionLabel)}>
-            {recents.length > 0 ? 'All' : 'Workspaces'}
-          </p>
-          {listed.map((workspace) => (
-            <WorkspaceRow
-              key={workspace.id}
-              workspace={workspace}
-              current={workspace.id === currentWorkspaceId}
-              onPick={pick}
-            />
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }

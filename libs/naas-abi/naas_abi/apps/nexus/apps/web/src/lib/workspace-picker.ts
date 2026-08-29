@@ -12,31 +12,12 @@ export function filterWorkspaces<T extends NamedWorkspace>(
   return workspaces.filter((w) => w.name.toLowerCase().includes(q));
 }
 
-export function recentWorkspaces<T extends NamedWorkspace>(
+/** One alphabetical catalog. Current is highlighted in the UI; it does not change order. */
+export function listWorkspaces<T extends NamedWorkspace>(
   workspaces: readonly T[],
-  recentIds: readonly string[],
-  currentId: string | null,
+  query: string,
 ): T[] {
-  const byId = new Map(workspaces.map((w) => [w.id, w]));
-  const out: T[] = [];
-  const seen = new Set<string>();
-  // Keep the active workspace at the top of Recents with the checkmark.
-  // pushRecentWorkspaceId stores prior destinations only, so inject current here.
-  if (currentId) {
-    const current = byId.get(currentId);
-    if (current) {
-      out.push(current);
-      seen.add(currentId);
-    }
-  }
-  for (const id of recentIds) {
-    if (!id || seen.has(id)) continue;
-    const hit = byId.get(id);
-    if (!hit) continue;
-    seen.add(id);
-    out.push(hit);
-  }
-  return out;
+  return filterWorkspaces(workspaces, query).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function pushRecentWorkspaceId(

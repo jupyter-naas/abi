@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   filterWorkspaces,
+  listWorkspaces,
   pushRecentWorkspaceId,
-  recentWorkspaces,
 } from './workspace-picker';
 
 const ws = (id: string, name: string) => ({ id, name });
-const list = [ws('a', 'TPO'), ws('b', 'Valeo'), ws('c', 'Core Team')];
+const list = [ws('c', 'Gamma'), ws('a', 'Alpha'), ws('b', 'Beta')];
 
 describe('filterWorkspaces', () => {
   it('returns all when the query is empty', () => {
@@ -15,23 +15,30 @@ describe('filterWorkspaces', () => {
   });
 
   it('matches name case-insensitively', () => {
-    expect(filterWorkspaces(list, 'tpo')).toEqual([ws('a', 'TPO')]);
+    expect(filterWorkspaces(list, 'alpha')).toEqual([ws('a', 'Alpha')]);
   });
 });
 
-describe('recentWorkspaces', () => {
-  it('puts the current workspace first and skips unknown ids', () => {
-    expect(recentWorkspaces(list, ['c', 'a', 'gone'], 'a')).toEqual([
-      ws('a', 'TPO'),
-      ws('c', 'Core Team'),
+describe('listWorkspaces', () => {
+  it('returns one alphabetical list', () => {
+    expect(listWorkspaces(list, '')).toEqual([
+      ws('a', 'Alpha'),
+      ws('b', 'Beta'),
+      ws('c', 'Gamma'),
     ]);
   });
 
-  it('injects current even when it is absent from recent ids', () => {
-    expect(recentWorkspaces(list, ['c'], 'b')).toEqual([
-      ws('b', 'Valeo'),
-      ws('c', 'Core Team'),
-    ]);
+  it('keeps the same order after a different workspace is current', () => {
+    const before = listWorkspaces(list, '');
+    const afterSwitch = listWorkspaces(
+      [ws('b', 'Beta'), ws('c', 'Gamma'), ws('a', 'Alpha')],
+      '',
+    );
+    expect(afterSwitch.map((w) => w.id)).toEqual(before.map((w) => w.id));
+  });
+
+  it('filters the same list without splitting sections', () => {
+    expect(listWorkspaces(list, 'alp')).toEqual([ws('a', 'Alpha')]);
   });
 });
 

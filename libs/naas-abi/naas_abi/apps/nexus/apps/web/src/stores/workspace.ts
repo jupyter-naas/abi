@@ -339,7 +339,7 @@ interface WorkspaceState {
   // ============================================
   workspaces: Workspace[];
   currentWorkspaceId: string | null;
-  /** Previous workspace ids, newest first. Used by the Workspaces column Recents group. */
+  /** Previous workspace ids, newest first. Persisted for a future sort; not shown as a section. */
   recentWorkspaceIds: string[];
   recentCommits: GitCommit[];
 
