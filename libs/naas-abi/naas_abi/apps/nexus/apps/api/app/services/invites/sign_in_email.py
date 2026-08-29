@@ -17,11 +17,47 @@ from naas_abi_core.services.email.EmailService import EmailService
 logger = logging.getLogger(__name__)
 
 SIGN_IN_LOGO_CID = "sign-in-logo"
+DEV_SUBJECT_PREFIX = "[DEV] "
 
 
 class _SafeTemplateValues(dict[str, object]):
     def __missing__(self, key: str) -> str:
         return "{" + key + "}"
+
+
+def frontend_hostname(frontend_url: str) -> str:
+    """Hostname from a frontend URL, or a bare host if no scheme is given."""
+    raw = (frontend_url or "").strip()
+    if not raw:
+        return ""
+    parsed = urlparse(raw if "://" in raw else f"https://{raw}")
+    return (parsed.hostname or "").lower()
+
+
+def is_dev_frontend(
+    frontend_url: str | None = None,
+    nexus_env: str | None = None,
+) -> bool:
+    """True when this deployment is a dedicated .dev frontend.
+
+    Triggers: ``NEXUS_ENV=dev``, or a frontend host that contains ``.dev.``
+    or ends with ``.dev``. Generic on purpose: no product hostnames here.
+    """
+    env = nexus_env if nexus_env is not None else settings.nexus_env
+    if str(env or "").strip().lower() == "dev":
+        return True
+    url = settings.frontend_url if frontend_url is None else frontend_url
+    host = frontend_hostname(str(url or ""))
+    return ".dev." in host or host.endswith(".dev")
+
+
+def apply_dev_subject_prefix(subject: str) -> str:
+    """Prefix ``[DEV] `` on sign-in subjects for .dev frontends. Idempotent."""
+    if not is_dev_frontend():
+        return subject
+    if subject.startswith(DEV_SUBJECT_PREFIX):
+        return subject
+    return f"{DEV_SUBJECT_PREFIX}{subject}"
 
 
 def magic_link_url_for_token(token: str) -> str:
@@ -195,7 +231,9 @@ def render_sign_in_email(
         "tab_title": tenant.tab_title,
     }
     safe = _SafeTemplateValues(template_values)
-    subject = settings.magic_link_email_subject_template.format_map(safe)
+    subject = apply_dev_subject_prefix(
+        settings.magic_link_email_subject_template.format_map(safe)
+    )
     text_body = settings.magic_link_email_text_template.format_map(safe)
     html_body = settings.magic_link_email_html_template.format_map(safe)
     return subject, text_body, html_body, attachments
