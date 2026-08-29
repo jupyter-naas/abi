@@ -1,5 +1,21 @@
 /** Nav state for a single-line suggestion scroller. */
 
+export type ChatSuggestion = {
+  label: string;
+  value: string;
+  description?: string;
+  disabled?: boolean;
+  cta?: string;
+};
+
+/** Active chips only. Drop grayed / coming-soon items so the row stays one line. */
+export function activeSuggestions<T extends { disabled?: boolean }>(
+  suggestions: T[] | undefined | null,
+): T[] {
+  if (!Array.isArray(suggestions)) return [];
+  return suggestions.filter((suggestion) => !suggestion.disabled);
+}
+
 export function suggestionRowNavState(
   scrollLeft: number,
   clientWidth: number,

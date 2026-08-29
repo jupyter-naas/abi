@@ -1,6 +1,26 @@
 import { describe, expect, it } from 'vitest';
 
-import { suggestionRowNavState, suggestionScrollStep } from './suggestion-row';
+import { activeSuggestions, suggestionRowNavState, suggestionScrollStep } from './suggestion-row';
+
+describe('activeSuggestions', () => {
+  it('returns an empty list when the input is missing', () => {
+    expect(activeSuggestions(undefined)).toEqual([]);
+    expect(activeSuggestions(null)).toEqual([]);
+  });
+
+  it('drops disabled chips and keeps the rest', () => {
+    expect(
+      activeSuggestions([
+        { label: 'Ask', value: 'ask' },
+        { label: 'Soon', value: 'soon', disabled: true },
+        { label: 'Apps', value: 'apps', disabled: false },
+      ]),
+    ).toEqual([
+      { label: 'Ask', value: 'ask' },
+      { label: 'Apps', value: 'apps', disabled: false },
+    ]);
+  });
+});
 
 describe('suggestionRowNavState', () => {
   it('hides arrows when the row fits', () => {

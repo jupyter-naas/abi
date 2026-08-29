@@ -27,7 +27,12 @@ import { PdfViewer } from '@/components/files/pdf-viewer';
 
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import { getLogoUrl } from '@/lib/logo-url';
-import { suggestionRowNavState, suggestionScrollStep } from '@/lib/suggestion-row';
+import {
+  activeSuggestions,
+  suggestionRowNavState,
+  suggestionScrollStep,
+  type ChatSuggestion,
+} from '@/lib/suggestion-row';
 
 const getApiBase = () => getApiUrl();
 
@@ -3197,14 +3202,6 @@ function EmptyStateLogo({ src, name }: { src?: string; name: string }) {
   );
 }
 
-type ChatSuggestion = {
-  label: string;
-  value: string;
-  description?: string;
-  disabled?: boolean;
-  cta?: string;
-};
-
 function SuggestionChipsRow({
   suggestions,
   onSuggestionClick,
@@ -3220,6 +3217,7 @@ function SuggestionChipsRow({
   const { setActivePanelSection } = useWorkspaceStore();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [nav, setNav] = useState({ overflow: false, canPrev: false, canNext: false });
+  const chips = useMemo(() => activeSuggestions(suggestions), [suggestions]);
 
   const updateNav = useCallback(() => {
     const el = scrollerRef.current;
@@ -3238,7 +3236,7 @@ function SuggestionChipsRow({
       observer.disconnect();
       el.removeEventListener('scroll', updateNav);
     };
-  }, [updateNav, suggestions]);
+  }, [updateNav, chips]);
 
   const scrollByPage = (direction: -1 | 1) => {
     const el = scrollerRef.current;
@@ -3246,7 +3244,7 @@ function SuggestionChipsRow({
     el.scrollBy({ left: direction * suggestionScrollStep(el.clientWidth), behavior: 'smooth' });
   };
 
-  if (!Array.isArray(suggestions) || suggestions.length === 0) return null;
+  if (chips.length === 0) return null;
 
   return (
     <div className="chat-suggestion-row" onMouseLeave={() => onSuggestionLeave?.()}>
@@ -3261,36 +3259,20 @@ function SuggestionChipsRow({
         <ChevronLeft size={16} />
       </button>
       <div ref={scrollerRef} className="chat-suggestion-scroller" aria-label="Suggested questions">
-        {suggestions.map((suggestion) => {
-          const baseClass = cn(
-            'chat-suggestion-chip glass-card flex min-w-0 items-center justify-between px-4 py-2.5 text-left transition-all',
-            suggestion.disabled
-              ? 'opacity-40 cursor-not-allowed'
-              : 'hover:border-primary/30 hover:glow-primary-sm cursor-pointer'
-          );
+        {chips.map((suggestion) => {
+          const baseClass =
+            'chat-suggestion-chip glass-card flex min-w-0 items-center px-3 py-1.5 text-left transition-all hover:border-primary/30 hover:glow-primary-sm cursor-pointer';
 
           const content = (
             <>
-              <div className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium leading-tight">{suggestion.label}</span>
-                {suggestion.description && (
-                  <span className="block truncate text-xs text-muted-foreground leading-snug">
-                    {suggestion.description}
-                  </span>
-                )}
-                {suggestion.disabled && (
-                  <span className="block text-xs text-muted-foreground/60 italic">
-                    Coming soon
-                  </span>
-                )}
-              </div>
-              {!suggestion.disabled && (
-                <span className="ml-3 shrink-0 text-muted-foreground/40">›</span>
-              )}
+              <span className="min-w-0 flex-1 truncate text-sm font-medium leading-none">
+                {suggestion.label}
+              </span>
+              <span className="ml-2 shrink-0 text-muted-foreground/40">›</span>
             </>
           );
 
-          if (suggestion.cta && !suggestion.disabled) {
+          if (suggestion.cta) {
             const sectionId = (CTA_SECTION_MAP[suggestion.cta] ?? suggestion.cta.replace(/^\//, '')) as SidebarSection;
             return (
               <button
@@ -3312,9 +3294,8 @@ function SuggestionChipsRow({
             <button
               key={`${suggestion.label}:${suggestion.value}`}
               type="button"
-              onMouseEnter={() => !suggestion.disabled && onSuggestionHover?.(suggestion.value)}
-              onClick={() => !suggestion.disabled && onSuggestionClick(suggestion.value)}
-              disabled={suggestion.disabled}
+              onMouseEnter={() => onSuggestionHover?.(suggestion.value)}
+              onClick={() => onSuggestionClick(suggestion.value)}
               className={baseClass}
             >
               {content}

@@ -394,6 +394,8 @@
   flex: 0 0 auto;
   width: auto;
   max-width: min(280px, 80vw);
+  height: 32px;
+  white-space: nowrap;
 }
 
 @media (max-width: 767px) {
