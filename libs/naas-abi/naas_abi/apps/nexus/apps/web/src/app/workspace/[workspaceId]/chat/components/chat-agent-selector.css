@@ -367,6 +367,51 @@
   padding: 8px 12px;
 }
 
+/* One-line suggestion chips immediately above the composer */
+.chat-suggestion-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  padding: 0 0 8px;
+}
+
+.chat-suggestion-scroller {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.chat-suggestion-chip {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: min(280px, 80vw);
+}
+
+@media (max-width: 767px) {
+  .chat-suggestion-nav {
+    display: none !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .chat-suggestion-scroller {
+    scrollbar-width: none;
+  }
+
+  .chat-suggestion-scroller::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 .chat-composer-input {
   /* 16px: prevent iOS Safari focus zoom */
   font-size: 16px;
