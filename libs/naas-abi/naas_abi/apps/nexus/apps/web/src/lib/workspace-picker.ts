@@ -12,22 +12,12 @@ export function filterWorkspaces<T extends NamedWorkspace>(
   return workspaces.filter((w) => w.name.toLowerCase().includes(q));
 }
 
-export function recentWorkspaces<T extends NamedWorkspace>(
+/** One alphabetical catalog. Current is highlighted in the UI; it does not change order. */
+export function listWorkspaces<T extends NamedWorkspace>(
   workspaces: readonly T[],
-  recentIds: readonly string[],
-  currentId: string | null,
+  query: string,
 ): T[] {
-  const byId = new Map(workspaces.map((w) => [w.id, w]));
-  const out: T[] = [];
-  const seen = new Set<string>();
-  for (const id of recentIds) {
-    if (!id || id === currentId || seen.has(id)) continue;
-    const hit = byId.get(id);
-    if (!hit) continue;
-    seen.add(id);
-    out.push(hit);
-  }
-  return out;
+  return filterWorkspaces(workspaces, query).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function pushRecentWorkspaceId(
