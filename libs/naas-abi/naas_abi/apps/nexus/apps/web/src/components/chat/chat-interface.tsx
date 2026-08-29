@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, ChevronLeft, ChevronRight, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
@@ -27,6 +27,12 @@ import { PdfViewer } from '@/components/files/pdf-viewer';
 
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import { getLogoUrl } from '@/lib/logo-url';
+import {
+  activeSuggestions,
+  suggestionRowNavState,
+  suggestionScrollStep,
+  type ChatSuggestion,
+} from '@/lib/suggestion-row';
 
 const getApiBase = () => getApiUrl();
 
@@ -2640,10 +2646,6 @@ export function ChatInterface({
           <EmptyState
             selectedAgentName={selectedAgentData?.name || selectedAgent}
             logoUrl={selectedAgentData?.logoUrl ?? undefined}
-            suggestions={selectedAgentData?.suggestions}
-            onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
-            onSuggestionHover={(value) => setInput(value)}
-            onSuggestionLeave={() => setInput('')}
           />
         ) : (
           <div className="mx-auto max-w-3xl space-y-6">
@@ -2689,6 +2691,14 @@ export function ChatInterface({
       {/* Composer: flex sibling at column bottom (sticky as safety for scroll parents) */}
       <div className="chat-composer-root mt-auto shrink-0 px-4">
         <div className="mx-auto max-w-3xl">
+          {(!activeConversation || activeConversation.messages.length === 0) && (
+            <SuggestionChipsRow
+              suggestions={selectedAgentData?.suggestions}
+              onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
+              onSuggestionHover={(value) => setInput(value)}
+              onSuggestionLeave={() => setInput('')}
+            />
+          )}
           <form onSubmit={handleSubmit}>
             {/* Image previews */}
             {attachedImages.length > 0 && (
@@ -3176,8 +3186,8 @@ function EmptyStateLogo({ src, name }: { src?: string; name: string }) {
   }, [src]);
 
   return (
-    <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-workspace-accent-10 overflow-hidden">
-      {(!src || !imgReady) && <Bot size={24} className="text-workspace-accent" />}
+    <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-xl bg-workspace-accent-10 overflow-hidden">
+      {(!src || !imgReady) && <Bot size={48} className="text-workspace-accent" />}
       {src ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -3192,23 +3202,128 @@ function EmptyStateLogo({ src, name }: { src?: string; name: string }) {
   );
 }
 
-function EmptyState({
-  selectedAgentName,
-  logoUrl,
+function SuggestionChipsRow({
   suggestions,
   onSuggestionClick,
   onSuggestionHover,
   onSuggestionLeave,
 }: {
-  selectedAgentName: string;
-  logoUrl?: string | null;
-  suggestions?: Array<{ label: string; value: string; description?: string; disabled?: boolean; cta?: string }>;
+  suggestions?: ChatSuggestion[];
   onSuggestionClick: (prompt: string) => void;
   onSuggestionHover?: (value: string) => void;
   onSuggestionLeave?: () => void;
 }) {
   const router = useRouter();
   const { setActivePanelSection } = useWorkspaceStore();
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [nav, setNav] = useState({ overflow: false, canPrev: false, canNext: false });
+  const chips = useMemo(() => activeSuggestions(suggestions), [suggestions]);
+
+  const updateNav = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    setNav(suggestionRowNavState(el.scrollLeft, el.clientWidth, el.scrollWidth));
+  }, []);
+
+  useLayoutEffect(() => {
+    updateNav();
+    const el = scrollerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(updateNav);
+    observer.observe(el);
+    el.addEventListener('scroll', updateNav, { passive: true });
+    return () => {
+      observer.disconnect();
+      el.removeEventListener('scroll', updateNav);
+    };
+  }, [updateNav, chips]);
+
+  const scrollByPage = (direction: -1 | 1) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollBy({ left: direction * suggestionScrollStep(el.clientWidth), behavior: 'smooth' });
+  };
+
+  if (chips.length === 0) return null;
+
+  return (
+    <div className="chat-suggestion-row" onMouseLeave={() => onSuggestionLeave?.()}>
+      <button
+        type="button"
+        className="chat-composer-action chat-suggestion-nav"
+        aria-label="Previous suggestions"
+        hidden={!nav.overflow}
+        disabled={!nav.canPrev}
+        onClick={() => scrollByPage(-1)}
+      >
+        <ChevronLeft size={16} />
+      </button>
+      <div ref={scrollerRef} className="chat-suggestion-scroller" aria-label="Suggested questions">
+        {chips.map((suggestion) => {
+          const baseClass =
+            'chat-suggestion-chip glass-card flex min-w-0 items-center px-3 py-1.5 text-left transition-all hover:border-primary/30 hover:glow-primary-sm cursor-pointer';
+
+          const content = (
+            <>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium leading-none">
+                {suggestion.label}
+              </span>
+              <span className="ml-2 shrink-0 text-muted-foreground/40">›</span>
+            </>
+          );
+
+          if (suggestion.cta) {
+            const sectionId = (CTA_SECTION_MAP[suggestion.cta] ?? suggestion.cta.replace(/^\//, '')) as SidebarSection;
+            return (
+              <button
+                key={`${suggestion.label}:${suggestion.value}`}
+                type="button"
+                onMouseEnter={() => onSuggestionHover?.(suggestion.label)}
+                onClick={() => {
+                  setActivePanelSection(sectionId);
+                  router.push(suggestion.cta!);
+                }}
+                className={baseClass}
+              >
+                {content}
+              </button>
+            );
+          }
+
+          return (
+            <button
+              key={`${suggestion.label}:${suggestion.value}`}
+              type="button"
+              onMouseEnter={() => onSuggestionHover?.(suggestion.value)}
+              onClick={() => onSuggestionClick(suggestion.value)}
+              className={baseClass}
+            >
+              {content}
+            </button>
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        className="chat-composer-action chat-suggestion-nav"
+        aria-label="Next suggestions"
+        hidden={!nav.overflow}
+        disabled={!nav.canNext}
+        onClick={() => scrollByPage(1)}
+      >
+        <ChevronRight size={16} />
+      </button>
+    </div>
+  );
+}
+
+function EmptyState({
+  selectedAgentName,
+  logoUrl,
+}: {
+  selectedAgentName: string;
+  logoUrl?: string | null;
+}) {
   const { user } = useAuthStore();
   const resolvedLogoUrl = logoUrl ? getLogoUrl(logoUrl) : undefined;
 
@@ -3218,73 +3333,8 @@ function EmptyState({
     <div className="flex h-full flex-col items-center justify-center px-4">
       <EmptyStateLogo src={resolvedLogoUrl} name={selectedAgentName} />
       <p className="mb-6 text-center text-muted-foreground">
-        {greeting} Pick a suggestion or type a message to get started.
+        {greeting} {selectedAgentName} here, how can I help?
       </p>
-      {Array.isArray(suggestions) && suggestions.length > 0 && (
-        <div
-          className="flex w-full max-w-lg flex-col gap-1.5"
-          onMouseLeave={() => onSuggestionLeave?.()}
-        >
-          {suggestions.map((suggestion) => {
-            const baseClass = cn(
-              'glass-card flex min-w-0 items-center justify-between px-4 py-2.5 text-left transition-all',
-              suggestion.disabled
-                ? 'opacity-40 cursor-not-allowed'
-                : 'hover:border-primary/30 hover:glow-primary-sm cursor-pointer'
-            );
-
-            const content = (
-              <>
-                <div className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium leading-tight">{suggestion.label}</span>
-                  {suggestion.description && (
-                    <span className="block truncate text-xs text-muted-foreground leading-snug">
-                      {suggestion.description}
-                    </span>
-                  )}
-                  {suggestion.disabled && (
-                    <span className="block text-xs text-muted-foreground/60 italic">
-                      Coming soon
-                    </span>
-                  )}
-                </div>
-                {!suggestion.disabled && (
-                  <span className="ml-3 shrink-0 text-muted-foreground/40">›</span>
-                )}
-              </>
-            );
-
-            if (suggestion.cta && !suggestion.disabled) {
-              const sectionId = (CTA_SECTION_MAP[suggestion.cta] ?? suggestion.cta.replace(/^\//, '')) as SidebarSection;
-              return (
-                <button
-                  key={`${suggestion.label}:${suggestion.value}`}
-                  onMouseEnter={() => onSuggestionHover?.(suggestion.label)}
-                  onClick={() => {
-                    setActivePanelSection(sectionId);
-                    router.push(suggestion.cta!);
-                  }}
-                  className={baseClass}
-                >
-                  {content}
-                </button>
-              );
-            }
-
-            return (
-              <button
-                key={`${suggestion.label}:${suggestion.value}`}
-                onMouseEnter={() => !suggestion.disabled && onSuggestionHover?.(suggestion.value)}
-                onClick={() => !suggestion.disabled && onSuggestionClick(suggestion.value)}
-                disabled={suggestion.disabled}
-                className={baseClass}
-              >
-                {content}
-              </button>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
