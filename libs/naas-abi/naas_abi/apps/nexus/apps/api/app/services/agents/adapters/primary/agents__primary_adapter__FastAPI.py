@@ -196,22 +196,18 @@ def _get_engine_default_agent_class_name() -> str | None:
     return None
 
 
-def _agent_enabled_by_default(
-    agent_cls: type[Agent],
-    *,
-    name: str | None,
-    class_name: str,
+def _workspace_agent_roster(
+    seeded_class_names: set[str] | None,
     default_class_name: str | None,
-) -> bool:
-    """Whether a newly discovered agent should be enabled in the workspace picker."""
-    if default_class_name is not None and class_name == default_class_name:
-        return True
-    if default_class_name is None and name == "Abi":
-        return True
-    flag = getattr(agent_cls, "enabled_by_default", None)
-    if flag is None:
-        flag = getattr(agent_cls, "ENABLED_BY_DEFAULT", False)
-    return bool(flag)
+) -> set[str]:
+    """Explicit ``agents:`` list, or the engine default only.
+
+    A missing seed is not a wildcard. Class ``enabled_by_default`` must not
+    enable agents in a workspace that never declared a roster.
+    """
+    if seeded_class_names is not None:
+        return set(seeded_class_names)
+    return {default_class_name} if default_class_name else set()
 
 
 def _extract_agent_suggestions(agent_cls: type) -> list[dict] | None:
@@ -518,6 +514,8 @@ async def _reconcile_workspace_agents(
     * **Create** records for newly discovered agent classes (idempotent under
       the partial unique index on workspace_id + class_name).
     * **Backfill** a missing ``module_path`` on existing records.
+    * **Align** ``enabled`` to the workspace roster on every sync: the
+      ``agents:`` seed when present, otherwise the engine default only.
 
     Returns the reconciled agent list (deleted records removed, created ones
     appended, backfilled ones refreshed).
@@ -555,6 +553,8 @@ async def _reconcile_workspace_agents(
     if default_class_name is None:
         default_class_name = _get_engine_default_agent_class_name()
 
+    roster = _workspace_agent_roster(seeded_class_names, default_class_name)
+
     # Persist any newly discovered agent classes to the database.
     for class_name, agent_cls in class_name_to_agent_class.items():
         if class_name in existing_agents_by_class_name:
@@ -562,17 +562,7 @@ async def _reconcile_workspace_agents(
 
         name = _get_agent_class_name(agent_cls)
         description = _get_agent_class_description(agent_cls)
-        # A workspace ``agents:`` list is the roster. Otherwise enable the
-        # engine default (or Abi fallback) plus class ``ENABLED_BY_DEFAULT``.
-        if seeded_class_names is not None:
-            enabled = class_name in seeded_class_names
-        else:
-            enabled = _agent_enabled_by_default(
-                agent_cls,
-                name=name,
-                class_name=class_name,
-                default_class_name=default_class_name,
-            )
+        enabled = class_name in roster
 
         logger.debug("Creating agent in nexus backend: {}", name)
         system_prompt = _get_agent_system_prompt(agent_cls)
@@ -640,23 +630,22 @@ async def _reconcile_workspace_agents(
                     continue
         reconciled.append(agent)
 
-    if seeded_class_names is not None:
-        aligned: list[AgentRecord] = []
-        for agent in reconciled:
-            if not agent.class_name:
-                aligned.append(agent)
-                continue
-            should_enable = agent.class_name in seeded_class_names
-            if agent.enabled == should_enable:
-                aligned.append(agent)
-                continue
-            updated = await agent_service.update_agent(
-                context=context,
-                agent_id=agent.id,
-                updates=AgentUpdateInput(enabled=should_enable),
-            )
-            aligned.append(updated if updated is not None else agent)
-        reconciled = aligned
+    aligned: list[AgentRecord] = []
+    for agent in reconciled:
+        if not agent.class_name:
+            aligned.append(agent)
+            continue
+        should_enable = agent.class_name in roster
+        if agent.enabled == should_enable:
+            aligned.append(agent)
+            continue
+        updated = await agent_service.update_agent(
+            context=context,
+            agent_id=agent.id,
+            updates=AgentUpdateInput(enabled=should_enable),
+        )
+        aligned.append(updated if updated is not None else agent)
+    reconciled = aligned
 
     # Ensure the workspace (or engine) default agent is enabled and marked.
     if default_class_name:
