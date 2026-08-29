@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core.config import TenantConfig, settings
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import MagicLinkChallenge
 from naas_abi.apps.nexus.apps.api.app.services.invites import sign_in_email
 from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
@@ -126,3 +126,81 @@ def test_render_sign_in_email_embeds_private_host_logo_as_cid(monkeypatch, tmp_p
     assert attachments[0].is_inline is True
     assert attachments[0].content_id == "sign-in-logo"
     assert attachments[0].content.startswith(b"\x89PNG")
+
+
+def test_frontend_hostname_accepts_url_or_bare_host() -> None:
+    assert sign_in_email.frontend_hostname("https://App.Dev.Example.com/path") == (
+        "app.dev.example.com"
+    )
+    assert sign_in_email.frontend_hostname("app.dev.example.com") == "app.dev.example.com"
+    assert sign_in_email.frontend_hostname("") == ""
+
+
+def test_is_dev_frontend_from_hostname(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "nexus_env", "local")
+    monkeypatch.setattr(settings, "frontend_url", "https://app.dev.example.com")
+    assert sign_in_email.is_dev_frontend() is True
+
+    monkeypatch.setattr(settings, "frontend_url", "https://app.example.dev")
+    assert sign_in_email.is_dev_frontend() is True
+
+    monkeypatch.setattr(settings, "frontend_url", "https://app.example.com")
+    assert sign_in_email.is_dev_frontend() is False
+
+
+def test_is_dev_frontend_from_nexus_env(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "frontend_url", "https://app.example.com")
+    monkeypatch.setattr(settings, "nexus_env", "dev")
+    assert sign_in_email.is_dev_frontend() is True
+
+    monkeypatch.setattr(settings, "nexus_env", "local")
+    assert sign_in_email.is_dev_frontend() is False
+
+
+def test_render_sign_in_email_prefixes_dev_subject(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "frontend_url", "https://app.dev.example.com")
+    monkeypatch.setattr(settings, "nexus_env", "local")
+    monkeypatch.setattr(settings, "magic_link_email_app_name", "NEXUS")
+    monkeypatch.setattr(
+        settings, "magic_link_email_subject_template", "Your {app_name} sign-in link"
+    )
+    monkeypatch.setattr(settings, "magic_link_email_text_template", "{magic_link_url}")
+    monkeypatch.setattr(settings, "magic_link_email_html_template", "{magic_link_url}")
+    monkeypatch.setattr(settings, "tenant", TenantConfig())
+
+    subject, text, html, _attachments = sign_in_email.render_sign_in_email(
+        magic_link_url="https://app.dev.example.com/auth/magic-link?token=abc",
+        otp_code="123456",
+    )
+
+    assert subject == "[DEV] Your NEXUS sign-in link"
+    assert "https://app.dev.example.com/auth/magic-link?token=abc" in text
+    assert "https://app.dev.example.com/auth/magic-link?token=abc" in html
+
+
+def test_render_sign_in_email_skips_prefix_on_prod(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "frontend_url", "https://app.example.com")
+    monkeypatch.setattr(settings, "nexus_env", "local")
+    monkeypatch.setattr(settings, "magic_link_email_app_name", "NEXUS")
+    monkeypatch.setattr(
+        settings, "magic_link_email_subject_template", "Your {app_name} sign-in link"
+    )
+    monkeypatch.setattr(settings, "magic_link_email_text_template", "{magic_link_url}")
+    monkeypatch.setattr(settings, "magic_link_email_html_template", "{magic_link_url}")
+    monkeypatch.setattr(settings, "tenant", TenantConfig())
+
+    subject, text, _html, _attachments = sign_in_email.render_sign_in_email(
+        magic_link_url="https://app.example.com/auth/magic-link?token=abc",
+        otp_code="123456",
+    )
+
+    assert subject == "Your NEXUS sign-in link"
+    assert not subject.startswith("[DEV] ")
+    assert "https://app.example.com/auth/magic-link?token=abc" in text
+
+
+def test_apply_dev_subject_prefix_is_idempotent(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "frontend_url", "https://app.dev.example.com")
+    monkeypatch.setattr(settings, "nexus_env", "local")
+    once = sign_in_email.apply_dev_subject_prefix("[DEV] Already marked")
+    assert once == "[DEV] Already marked"
