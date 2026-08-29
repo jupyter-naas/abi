@@ -31,11 +31,8 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
     [workspaces, recentWorkspaceIds, currentWorkspaceId],
   );
   const searching = query.trim().length > 0;
-  const listed = useMemo(() => {
-    if (searching) return filtered;
-    const recentIds = new Set(recents.map((w) => w.id));
-    return filtered.filter((w) => !recentIds.has(w.id));
-  }, [filtered, recents, searching]);
+  // All is the full catalog (including current). Recents is a shortcut strip above it.
+  const listed = filtered;
 
   const pick = (workspace: Workspace) => {
     if (workspace.id === currentWorkspaceId) {

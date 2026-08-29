@@ -20,8 +20,18 @@ describe('filterWorkspaces', () => {
 });
 
 describe('recentWorkspaces', () => {
-  it('skips the current workspace and unknown ids', () => {
-    expect(recentWorkspaces(list, ['c', 'a', 'gone'], 'a')).toEqual([ws('c', 'Core Team')]);
+  it('puts the current workspace first and skips unknown ids', () => {
+    expect(recentWorkspaces(list, ['c', 'a', 'gone'], 'a')).toEqual([
+      ws('a', 'TPO'),
+      ws('c', 'Core Team'),
+    ]);
+  });
+
+  it('injects current even when it is absent from recent ids', () => {
+    expect(recentWorkspaces(list, ['c'], 'b')).toEqual([
+      ws('b', 'Valeo'),
+      ws('c', 'Core Team'),
+    ]);
   });
 });
 
