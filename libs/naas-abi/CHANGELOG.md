@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v2.56.3 (2026-08-29)
+
+### Bug Fixes
+
+- **nexus**: Greet the current agent on empty chat
+  ([`4ecad11`](https://github.com/jupyter-naas/abi/commit/4ecad119bfe188111fe4d1d20d3857e745b9a36b))
+
+- **nexus**: Hide inactive chat suggestion chips
+  ([`7671ee1`](https://github.com/jupyter-naas/abi/commit/7671ee1455f7aacac1a856a642b2a907bcfc4a54))
+
+- **nexus**: Put chat suggestions in one row above the composer
+  ([`49b6bae`](https://github.com/jupyter-naas/abi/commit/49b6baeca3a3eb0ca2967d28d9f2377ed3b01a29))
+
+
 ## v2.56.2 (2026-08-29)
 
 ### Bug Fixes
