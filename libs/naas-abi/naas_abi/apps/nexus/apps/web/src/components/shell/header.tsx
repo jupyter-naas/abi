@@ -8,6 +8,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, isTransientPanelSection } from '@/stores/workspace';
 import { useIsMobile } from '@/hooks/use-is-mobile';
+import { QuickOpen } from './quick-open';
 import { useRegisterShellTitle } from './shell-title';
 
 interface HeaderProps {
@@ -46,6 +47,10 @@ export function Header({ title, subtitle, nav, actions }: HeaderProps = {}) {
   // Use defaults on server to prevent hydration mismatch
   const sidebarOpen = mounted ? !sidebarCollapsed : true;
   const panelOpen = mounted ? contextPanelOpen : false;
+  const sectionToToggle =
+    lastActivePanelSection && !isTransientPanelSection(lastActivePanelSection)
+      ? lastActivePanelSection
+      : 'chat';
 
   // Mobile shell owns chrome (back header + bottom nav). Desktop Header
   // (sidebar toggle, AI pane) is dead weight there. Branch + API live in
@@ -54,9 +59,8 @@ export function Header({ title, subtitle, nav, actions }: HeaderProps = {}) {
   if (isMobile) return null;
 
   return (
-    <header className="glass-nav relative z-[200] flex h-14 items-center justify-between border-b border-border/50 pl-2 pr-4">
-      {/* Left side */}
-      <div className="flex items-center gap-1">
+    <header className="glass-nav relative z-[200] flex h-14 items-center border-b border-border/50 pl-2 pr-4">
+      <div className="relative z-10 flex min-w-0 items-center gap-1">
         {!sidebarOpen && (
           <button
             onClick={toggleSidebar}
@@ -70,16 +74,18 @@ export function Header({ title, subtitle, nav, actions }: HeaderProps = {}) {
           </button>
         )}
 
-        {/* Section panel toggle: visible whenever a panel section has been opened */}
-        {mounted && lastActivePanelSection && !isTransientPanelSection(lastActivePanelSection) && (
+        {mounted && (
           <button
-            onClick={() => setActivePanelSection(activePanelSection ? null : lastActivePanelSection)}
+            type="button"
+            onClick={() => setActivePanelSection(activePanelSection ? null : sectionToToggle)}
             className={cn(
               'flex h-8 w-8 items-center justify-center rounded-md transition-all',
               'hover:bg-muted hover:text-foreground',
               activePanelSection ? 'text-foreground bg-muted' : 'text-muted-foreground'
             )}
             title={activePanelSection ? 'Close panel' : 'Open panel'}
+            aria-label={activePanelSection ? 'Close panel' : 'Open panel'}
+            aria-pressed={Boolean(activePanelSection)}
           >
             <PanelLeft size={16} />
           </button>
@@ -88,11 +94,15 @@ export function Header({ title, subtitle, nav, actions }: HeaderProps = {}) {
         {nav ? <div className="ml-1 flex min-w-0 items-center">{nav}</div> : null}
       </div>
 
-      {/* Right side: page actions + Abi pane. Account menu is on the dock. */}
-      <div className="flex items-center gap-1">
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div className="pointer-events-auto">
+          <QuickOpen />
+        </div>
+      </div>
+
+      <div className="relative z-10 ml-auto flex items-center gap-1">
         {actions}
 
-        {/* Right chat pane toggle: icon-only, mirrors left PanelLeft controls */}
         <button
           type="button"
           onClick={toggleContextPanel}

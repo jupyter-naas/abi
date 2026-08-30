@@ -5,7 +5,7 @@ import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
 import { appsPath, nextAppsRestoreUrl, shouldSkipAppsRestore } from './lib/apps-route';
 import {
-  AppWindow, ExternalLink, RefreshCw, AlertTriangle, Info, PanelLeft, X,
+  AppWindow, ArrowLeft, ExternalLink, RefreshCw, AlertTriangle, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isBundledAppHtmlUrl, resolveAppEmbedUrl, resolveAppExternalUrl, appHtmlPathPrefix, pagesSsoAudience, withAppHtmlAccessToken, withPagesSsoToken } from '@/lib/app-html';
@@ -147,61 +147,60 @@ function EmbedView({ record, onBack }: { record: AppRecord; onBack: () => void }
 
   const externalHref = embedUrl || resolveAppExternalUrl(url);
 
+  const headerBtn = (active: boolean) =>
+    cn(
+      'flex h-8 w-8 items-center justify-center rounded-md transition-all',
+      'hover:bg-muted hover:text-foreground',
+      active ? 'bg-muted text-foreground' : 'text-muted-foreground',
+    );
+
   return (
     <div className="flex h-full flex-col">
-      {/* Top bar */}
-      <div className="flex h-12 flex-shrink-0 items-center gap-2 border-b border-border/50 bg-background px-3">
-        <button
-          onClick={() => setActivePanelSection(activePanelSection === 'apps' ? null : 'apps')}
-          title={activePanelSection === 'apps' ? 'Close panel' : 'Open panel'}
-          className={cn(
-            'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded transition-colors',
-            activePanelSection === 'apps'
-              ? 'bg-muted text-foreground'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-          )}
-        >
-          <PanelLeft size={15} />
-        </button>
-        <span className="flex-1 truncate text-sm font-medium">{record.name}</span>
-        <button
-          onClick={toggleDetail}
-          title={detailShown ? 'Hide details' : 'Show details'}
-          className={cn(
-            'rounded p-1.5 transition-colors',
-            detailShown
-              ? 'bg-muted text-foreground'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-          )}
-        >
-          <Info size={13} />
-        </button>
-        <button
-          onClick={handleReload}
-          title="Reload"
-          className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <RefreshCw size={13} />
-        </button>
-        <a
-          href={externalHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Open in new tab"
-          className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <ExternalLink size={13} />
-        </a>
-        <button
-          onClick={onBack}
-          title="Close app"
-          className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <X size={14} />
-        </button>
-      </div>
+      <Header
+        title={record.name}
+        nav={
+          <button
+            type="button"
+            onClick={onBack}
+            title="Back to apps"
+            className="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-muted-foreground transition-all hover:bg-muted hover:text-foreground"
+          >
+            <ArrowLeft size={16} className="shrink-0" />
+            <span className="truncate font-medium text-foreground">{record.name}</span>
+          </button>
+        }
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={toggleDetail}
+              title={detailShown ? 'Hide details' : 'Show details'}
+              className={headerBtn(detailShown)}
+            >
+              <Info size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={handleReload}
+              title="Reload"
+              className={headerBtn(false)}
+            >
+              <RefreshCw size={16} />
+            </button>
+            <a
+              href={externalHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open in new tab"
+              className={headerBtn(false)}
+            >
+              <ExternalLink size={16} />
+            </a>
+          </>
+        }
+      />
 
-      {/* Body: full-width iframe — detail lives in the left section panel */}
+      {/* Body: full-width iframe. Detail lives in the left section panel. */}
       <div className="relative flex-1 overflow-hidden bg-muted/20">
         {embedError ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
