@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.58.0 (2026-08-31)
+
+### Features
+
+- **nexus**: Unify the workspace Header across Home and app embed
+  ([`7a8aba3`](https://github.com/jupyter-naas/abi/commit/7a8aba3819a4d7f9f2739c7d62e7f08c79ee5a53))
+
+
 ## v2.57.0 (2026-08-29)
 
 ### Features
