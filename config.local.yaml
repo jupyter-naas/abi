@@ -104,7 +104,7 @@ modules:
           login_footer_text: "© ABI AI Platform (Beta) | Naas.ai"
 
         # Q: Who gets an account created automatically on first boot?
-        # A: List seed users here. Password comes from NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD in .env (default: Admin1234!)
+        # A: List seed users here. Password comes from NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD in .env (default: admin)
         users:
           - email: "admin@example.com"
             name: "Local Admin"

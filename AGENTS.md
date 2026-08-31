@@ -224,11 +224,11 @@ Default admin credentials:
 
 | Email | Password |
 |---|---|
-| `admin@example.com` | `Admin1234!` |
+| `admin@example.com` | `admin` |
 
 Password login is enabled via `auth_password_enabled: true` in `config.local.yaml`. Set it to `false` to switch back to magic link.
 
-**How the password is set:** On first boot, the seeder looks for `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` in `.env`. If found, it uses that value. If missing, it generates a random password and writes it back to `.env`. The `.env` in this repo ships with `Admin1234!` pre-set, so all teammates get the same password as long as they don't delete that line.
+**How the password is set:** On first boot, the seeder looks for `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` in `.env`. If found, it uses that value. If missing, it generates a random password and writes it back to `.env`. The `.env` in this repo ships with `admin` pre-set, so all teammates get the same password as long as they don't delete that line.
 
 If you see "Incorrect email or password":
 
@@ -242,10 +242,10 @@ abi stack start
 ```bash
 # 1. Add to .env if missing:
 echo "NEXUS_USER_ADMIN_EXAMPLE_COM_EMAIL=admin@example.com" >> .env
-echo "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=Admin1234!" >> .env
+echo "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=admin" >> .env
 
 # 2. Reset the hash in Postgres directly:
-HASH=$(docker exec abi-abi-1 python3 -c "import bcrypt; print(bcrypt.hashpw(b'Admin1234!', bcrypt.gensalt()).decode())")
+HASH=$(docker exec abi-abi-1 python3 -c "import bcrypt; print(bcrypt.hashpw(b'admin', bcrypt.gensalt()).decode())")
 docker exec abi-postgres-1 psql -U abi -d nexus -c "UPDATE users SET hashed_password='$HASH' WHERE email='admin@example.com';"
 docker compose restart abi
 ```
@@ -393,4 +393,4 @@ Non-obvious gotchas discovered during setup:
 - **For capable cloud models:** set `global_config.ai_mode: "cloud"`, uncomment a cloud provider module in `config.yaml`, replace `SECRET_REF` with a real Jinja secret, and add its key via Cursor Secrets / `.env`.
 - **First API boot is slow (~2-3 min):** the worker loads every module/ontology and runs Nexus SQLite migrations before serving. Watch `abi dev logs api`; it is ready when `/docs` returns 200 (`GET http://localhost:<api-port>/docs`).
 - **Ports are offset per worktree** (see `abi dev ports`), so they are not the config defaults. `abi dev` injects `OXIGRAPH_URL` into each service; the `config.yaml` default `:7878` is not the live port. To run a test that builds its own engine against the live triple store, pass `OXIGRAPH_URL=http://127.0.0.1:<oxigraph-port>`.
-- **Login:** `admin@example.com` / `admin` (the `abi dev` default; the Docker stack uses `Admin1234!`). Web UI is the `nexus-web` port.
+- **Login:** `admin@example.com` / `admin` — the same default for `abi dev up` and the Docker stack. Web UI is the `nexus-web` port.

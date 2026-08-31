@@ -12,7 +12,7 @@ make up         # Start servers
 
 Visit http://localhost:3000
 
-**Login:** admin@example.com / Admin1234!
+**Login:** admin@example.com / admin
 
 ## What Is This?
 

@@ -39,7 +39,9 @@ DEFAULT_ENV_VALUES: dict[str, str] = {
     "NEXUS_WEB_TAG": "latest",
     "NEXUS_WEB_PORT": "3042",
     "NEXUS_USER_ADMIN_EMAIL": "admin@example.com",
-    "NEXUS_USER_ADMIN_PASSWORD": "Admin1234!",
+    # Local-only convenience credential, matching the `abi dev up` default
+    # (see DEFAULT_ADMIN_PASSWORD in cli/dev.py). Overridable via `.env`.
+    "NEXUS_USER_ADMIN_PASSWORD": "admin",  # nosec B105 - local-dev only
     "HEADSCALE_SERVER_URL": "headscale.localhost",
     "HEADSCALE_SERVER_PORT": "8083",
     "HEADSCALE_METRICS_PORT": "9090",

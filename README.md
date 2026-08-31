@@ -51,7 +51,7 @@ abi dev up
 
 ### Web UI
 
-The main interface. Chat with Abi, switch agents, manage your workspace, and access your knowledge graph. Open [http://localhost:3042](http://localhost:3042) and log in with `admin@example.com` / `Admin1234!`.
+The main interface. Chat with Abi, switch agents, manage your workspace, and access your knowledge graph. Open [http://localhost:3042](http://localhost:3042) and log in with `admin@example.com` / `admin`.
 
 <div align="center">
   <img src="docs/site/static/abi/Screenshot_Local_WebUI.png" alt="ABI web UI" width="800">
