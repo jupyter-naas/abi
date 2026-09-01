@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
+    User,
+    get_current_user_required,
+)
+from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__primary_adapter__FastAPI import (
     _assets_dir,
     _assets_gitkeep_path,
@@ -9,6 +16,7 @@ from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__p
     _coder_workspace_name,
     _deck_path,
     _discover_seed_ids,
+    _ensure_coding_repo,
     _friendly_coding_detail,
     _friendly_git_detail,
     _is_git_write_race,
@@ -16,18 +24,32 @@ from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__p
     _legacy_deck_path,
     _list_seed_template_records,
     _load_seed_html,
+    _parse_slide_outline,
+    _parse_template_assets,
     _paths_for,
     _probe_sidecar,
     _project_path,
     _read_deck_via_sidecar,
+    _repo_id,
     _runtime_label,
     _sidecar_tool_call,
     _slugify,
+    _source_control_http_error,
     _wait_for_sidecar,
     _write_deck_via_sidecar,
 )
+from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary import (
+    slides__primary_adapter__FastAPI as slides_api,
+)
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     WorkspaceNameConflictError,
+)
+from naas_abi_core.services.source_control.adapters.secondary.InMemoryAdapter import (
+    InMemoryAdapter,
+)
+from naas_abi_core.services.source_control.SourceControlPorts import RepoNotFoundError
+from naas_abi_core.services.source_control.SourceControlService import (
+    SourceControlService,
 )
 
 
@@ -48,11 +70,40 @@ def test_slugify_and_paths() -> None:
     assert legacy["branch"] == "slides/demo"
 
 
+def test_parse_slide_outline_reads_eyebrow_and_h1() -> None:
+    html = """
+    <main class="deck">
+      <section id="slide-cover" class="slide cover">
+        <div class="eyebrow">Confidential</div>
+        <h1>Presentation Title</h1>
+      </section>
+      <section class="slide section-divider">
+        <div class="divider-eyebrow">Section 01</div>
+        <div class="divider-title">Context</div>
+      </section>
+    </main>
+    """
+    slides = _parse_slide_outline(html)
+    assert len(slides) == 2
+    assert slides[0]["id"] == "slide-cover"
+    assert slides[0]["eyebrow"] == "Confidential"
+    assert slides[0]["title"] == "Presentation Title"
+    assert slides[1]["eyebrow"] == "Section 01"
+    assert slides[1]["title"] == "Context"
+    assets = _parse_template_assets(
+        'const IMG = {\n  hero: "data:image/svg+xml,x",\n  logo: "data:image/svg+xml,y",\n};'
+    )
+    assert [a["name"] for a in assets] == ["hero", "logo"]
+
+
 def test_seed_template_includes_build_pptx() -> None:
     html = _load_seed_html("minimal-light-v1")
     assert "function buildPptx" in html
     assert "PptxGenJS" in html or "pptxgen" in html.lower()
     assert "data:image/" in html
+    assert "NEXUS_SLIDES_PPTX_FROM_DOM_V1" in html
+    assert 'querySelectorAll("main.deck > section.slide' in html
+    assert '[["1","Context"],["2","Approach"]' not in html
 
 
 def test_seed_catalog_lists_all_templates() -> None:
@@ -66,9 +117,16 @@ def test_seed_catalog_lists_all_templates() -> None:
     by_id = {r["id"]: r for r in records}
     assert by_id["minimal-light-v1"]["name"] == "Minimal Light"
     assert by_id["pitch-dark-v1"]["preview_bg"].startswith("#")
+    light_slides = by_id["minimal-light-v1"]["slides"]
+    titles = [s["title"] for s in light_slides]
+    assert "Presentation Title" in titles
+    assert "What we will cover" in titles
+    assert any(s.get("eyebrow") == "Agenda" for s in light_slides)
+    assert by_id["minimal-light-v1"]["assets"]
     for tid in ("pitch-dark-v1", "minimal-light-v1", "executive-v1"):
         html = _load_seed_html(tid)
         assert "function buildPptx" in html
+        assert "NEXUS_SLIDES_PPTX_FROM_DOM_V1" in html
         assert 'class="deck"' in html
         assert 'class="slide' in html
         assert "deck-menubar" in html
@@ -86,6 +144,109 @@ def test_friendly_coding_detail_hides_raw_coder_json() -> None:
     assert _friendly_coding_detail(Exception(raw)) == (
         "Reconnecting to existing runtime…"
     )
+
+
+def test_friendly_git_detail_rewrites_raw_repo_id() -> None:
+    err = RepoNotFoundError("abi/monorepo")
+    detail = _friendly_git_detail(err)
+    assert "abi/monorepo" in detail
+    assert "missing" in detail.lower()
+    http = _source_control_http_error(err)
+    assert http.status_code == 503
+    assert "Forgejo is not configured" in str(http.detail)
+
+
+def test_source_control_http_error_unreachable() -> None:
+    http = _source_control_http_error(OSError("Connection refused"))
+    assert http.status_code == 503
+    assert "not reachable" in str(http.detail).lower()
+
+
+def test_ensure_coding_repo_seeds_empty_in_memory() -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    repo_id = _repo_id()
+    assert repo_id.count("/") == 1
+    try:
+        sc.list_branches(repo_id=repo_id)
+        raise AssertionError("empty in_memory should not have the coding repo")
+    except RepoNotFoundError:
+        pass
+    assert _ensure_coding_repo(sc) == repo_id
+    assert [b.name for b in sc.list_branches(repo_id=repo_id)]
+
+
+def _slides_client(monkeypatch, source_control: SourceControlService) -> TestClient:
+    app = FastAPI()
+    app.state.source_control = source_control
+    app.include_router(slides_api.router, prefix="/slides")
+    app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
+        id="user-1", email="admin@example.com", name="Zen Admin"
+    )
+
+    async def _fake_db():
+        yield None
+
+    app.dependency_overrides[get_db] = _fake_db
+
+    async def _allow(user_id: str, workspace_id: str) -> str:
+        return "owner"
+
+    monkeypatch.setattr(slides_api, "require_workspace_access", _allow)
+    monkeypatch.setattr(slides_api, "_get_coding_environment", lambda _request: None)
+    return TestClient(app)
+
+
+def test_list_and_create_projects_seed_in_memory_repo(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    listed = client.get("/slides/projects", params={"workspace_id": "ws-test"})
+    assert listed.status_code == 200, listed.text
+    assert listed.json() == []
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Untitled presentation",
+            "slug": "untitled-local",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+    body = created.json()
+    assert body["slug"] == "untitled-local"
+    assert body["deck_path"] == "slides/ws-test/untitled-local/deck.html"
+    listed2 = client.get("/slides/projects", params={"workspace_id": "ws-test"})
+    assert listed2.status_code == 200, listed2.text
+    assert "untitled-local" in [p["slug"] for p in listed2.json()]
+    templates = client.get("/slides/templates", params={"workspace_id": "ws-test"})
+    assert templates.status_code == 200, templates.text
+    catalog = templates.json()
+    assert {t["id"] for t in catalog} >= {
+        "minimal-light-v1",
+        "pitch-dark-v1",
+        "executive-v1",
+    }
+    light = next(t for t in catalog if t["id"] == "minimal-light-v1")
+    assert light["name"] == "Minimal Light"
+    assert any(s["title"] == "What we will cover" for s in light["slides"])
+    applied = client.post(
+        "/slides/projects/untitled-local/apply-template",
+        json={"workspace_id": "ws-test", "template_id": "pitch-dark-v1"},
+    )
+    assert applied.status_code == 200, applied.text
+    deck = client.get(
+        "/slides/projects/untitled-local/deck",
+        params={"workspace_id": "ws-test"},
+    )
+    assert deck.status_code == 200, deck.text
+    html = deck.json()["html"]
+    assert 'content="pitch-dark-v1"' in html
+    proj = client.get(
+        "/slides/projects/untitled-local",
+        params={"workspace_id": "ws-test"},
+    )
+    assert proj.status_code == 200, proj.text
+    assert proj.json()["template_id"] == "pitch-dark-v1"
 
 
 def test_friendly_git_detail_hides_pushrejected_dump() -> None:

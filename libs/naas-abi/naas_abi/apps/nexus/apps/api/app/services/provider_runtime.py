@@ -750,7 +750,10 @@ async def complete_with_abi(
             latest_user_message = f"{injection_preamble.strip()}\n\n{latest_user_message}"
 
         # Per-request isolation: never execute against the cached singleton.
+        llm_model = (getattr(config, "llm_model", None) or "").strip() or None
         agent = _duplicate_inprocess_agent(template_agent, thread_id)
+        if llm_model:
+            _retarget_inprocess_chat_model(agent, llm_model)
 
         if hasattr(agent, "ainvoke"):
             return await agent.ainvoke(latest_user_message, thread_id=thread_id)
@@ -1301,10 +1304,46 @@ def _resolve_inprocess_abi_agent(agent_name: str):
         try:
             instance = factory()
         except Exception:
+            from naas_abi_core import logger
+
+            logger.exception("In-process ABI agent factory failed for %s", raw_target)
             return None
 
         _INPROCESS_AGENT_INSTANCES[factory_key] = instance
         return instance
+
+
+def _retarget_inprocess_chat_model(agent: Any, model_id: str) -> None:
+    """Swap the chat model on a duplicated agent without rebuilding intents.
+
+    ``Agent.New(model_id=...)`` reconstructs IntentMapper and re-embeds, which
+    401s when OPENAI_API_KEY is actually an OpenRouter key. Keep the cached
+    mapper; only rebind tools onto the slides model.
+    """
+    from naas_abi.agents.slides_policy import load_slides_chat_model
+    from naas_abi_core.services.agent.tools.utils import can_bind_tools
+
+    chat_model = load_slides_chat_model(model_id)
+    base = getattr(chat_model, "model", chat_model)
+    agent._chat_model = base
+    tools_to_bind: list[Any] = []
+    tools_to_bind.extend(getattr(agent, "_structured_tools", []) or [])
+    tools_to_bind.extend(getattr(agent, "_native_tools", []) or [])
+    if tools_to_bind and can_bind_tools(base):
+        agent._chat_model_with_tools = base.bind_tools(tools_to_bind)
+        requires_ws = getattr(type(agent), "_requires_workspace", None)
+        if callable(requires_ws):
+            gated = [t for t in tools_to_bind if not requires_ws(t)]
+            agent._chat_model_without_workspace_tools = (
+                base.bind_tools(gated)
+                if len(gated) != len(tools_to_bind)
+                else agent._chat_model_with_tools
+            )
+        else:
+            agent._chat_model_without_workspace_tools = agent._chat_model_with_tools
+        return
+    agent._chat_model_with_tools = base
+    agent._chat_model_without_workspace_tools = base
 
 
 def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
@@ -1440,21 +1479,17 @@ async def stream_with_abi_inprocess(
     # (the previous behaviour) caused cross-conversation response leakage when
     # two requests overlapped — see jupyter-naas/abi#991.
     assert thread_id is not None, "thread_id is required"
-    agent = None
+    agent = _duplicate_inprocess_agent(template_agent, thread_id)
     if llm_model:
-        new_fn = getattr(type(template_agent), "New", None)
-        if callable(new_fn):
-            try:
-                from naas_abi_core.services.agent.Agent import AgentSharedState
-
-                agent = new_fn(
-                    agent_shared_state=AgentSharedState(thread_id=str(thread_id)),
-                    model_id=llm_model,
-                )
-            except TypeError:
-                agent = None
-    if agent is None:
-        agent = _duplicate_inprocess_agent(template_agent, thread_id)
+        try:
+            _retarget_inprocess_chat_model(agent, llm_model)
+        except Exception:
+            logger.exception("Failed to retarget in-process agent to %s", llm_model)
+            yield (
+                f"\n\n**Error:** Could not switch slides chat to {llm_model}. "
+                "Check the API logs and retry."
+            )
+            return
 
     logger.debug(
         f"Agent.state.thread_id: {getattr(getattr(agent, 'state', None), 'thread_id', None)}"
@@ -1502,6 +1537,8 @@ async def stream_with_abi_inprocess(
         return
 
     stream_iter = iter(agent.stream_invoke(latest_user_message))
+    emitted = False
+    final_replay: list[str] = []
 
     while True:
         try:
@@ -1521,11 +1558,14 @@ async def stream_with_abi_inprocess(
             if text == "[DONE]" or event_name == "done":
                 break
 
-            # Only forward the real-time ai_message events.
-            # Skip "message" events - those are a post-hoc replay of the final
-            # state and would duplicate the content already streamed via ai_message.
+            # Prefer live ai_message deltas. The closing "message" replay is the
+            # only text when the graph errors before an assistant token (for
+            # example a recursion-limit stop).
             if event_name == "ai_message" and text.strip():
+                emitted = True
                 yield text
+            elif event_name == "message" and text.strip():
+                final_replay.append(text.strip())
             elif event_name == "tool_usage" and text.strip():
                 yield {"event": "tool_usage", "tool": text}
             elif event_name == "tool_response" and text.strip():
@@ -1535,4 +1575,8 @@ async def stream_with_abi_inprocess(
             elif event_name == "agent_routing" and text.strip():
                 yield {"event": "agent_routing", "agent": text}
         elif isinstance(event, str) and event.strip():
+            emitted = True
             yield event
+
+    if not emitted and final_replay:
+        yield "\n".join(final_replay)

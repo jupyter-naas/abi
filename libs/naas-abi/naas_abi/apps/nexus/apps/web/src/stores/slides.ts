@@ -49,6 +49,8 @@ interface SlidesState {
   deckSource: SlidesDeckSource;
   /** Monotonic token; editor listens and reloads deck from server. */
   refreshToken: number;
+  /** True while Abi is running a slides write/replace tool. */
+  agentWriting: boolean;
   setSelectedSlug: (slug: string | null) => void;
   setSelectedTitle: (title: string | null) => void;
   setEditorMode: (mode: SlidesEditorMode) => void;
@@ -62,6 +64,7 @@ interface SlidesState {
   setDeckDirty: (dirty: boolean) => void;
   setDeckSource: (source: SlidesDeckSource) => void;
   requestDeckRefresh: (slug?: string | null) => void;
+  setAgentWriting: (writing: boolean) => void;
 }
 
 export const useSlidesStore = create<SlidesState>()(
@@ -79,6 +82,7 @@ export const useSlidesStore = create<SlidesState>()(
       deckDirty: false,
       deckSource: null,
       refreshToken: 0,
+      agentWriting: false,
       setSelectedSlug: (slug) => set({ selectedSlug: slug }),
       setSelectedTitle: (title) => set({ selectedTitle: title }),
       setEditorMode: (mode) => set({ editorMode: mode }),
@@ -104,6 +108,7 @@ export const useSlidesStore = create<SlidesState>()(
         if (slug && open && slug !== open) return;
         set({ refreshToken: get().refreshToken + 1 });
       },
+      setAgentWriting: (writing) => set({ agentWriting: writing }),
     }),
     {
       name: 'nexus:slides:selected',
@@ -114,6 +119,11 @@ export const useSlidesStore = create<SlidesState>()(
     },
   ),
 );
+
+export function isSlidesWriteTool(rawName: string | null | undefined): boolean {
+  const raw = (rawName || '').toLowerCase();
+  return raw.includes('write_slides') || raw.includes('replace_in_slides');
+}
 
 export function dispatchSlidesDeckUpdated(detail: SlidesDeckUpdatedDetail = {}) {
   if (typeof window === 'undefined') return;

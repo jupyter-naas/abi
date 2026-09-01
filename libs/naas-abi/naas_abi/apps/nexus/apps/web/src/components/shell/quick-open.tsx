@@ -14,6 +14,7 @@ import {
   conversationUpdatedAtMs,
   filterQuickOpenItems,
   groupQuickOpenItems,
+  QUICK_OPEN_EVENT,
   QUICK_OPEN_GROUP_LABEL,
   QUICK_OPEN_SECTIONS,
   type QuickOpenItem,
@@ -113,8 +114,9 @@ export function QuickOpen() {
 
   useEffect(() => {
     if (!open) return;
-    const id = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(id);
+    // Timeout beats the dock button keeping focus after pointerup.
+    const id = window.setTimeout(() => inputRef.current?.focus(), 0);
+    return () => window.clearTimeout(id);
   }, [open]);
 
   useEffect(() => {
@@ -124,7 +126,30 @@ export function QuickOpen() {
   }, [open, currentWorkspaceId, fetchApps, syncWorkspaceConversations]);
 
   useEffect(() => {
+    const onRequest = () => openPalette();
+    window.addEventListener(QUICK_OPEN_EVENT, onRequest);
+    return () => window.removeEventListener(QUICK_OPEN_EVENT, onRequest);
+  }, [openPalette]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (wrapRef.current?.contains(target) || listRef.current?.contains(target)) return;
+      close();
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open, close]);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (open && e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+        return;
+      }
       if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'p') return;
       if (e.shiftKey) return;
       e.preventDefault();
@@ -293,98 +318,97 @@ export function QuickOpen() {
   const shortcut = mounted ? `${modifierGlyph()}P` : '⌘P';
 
   return (
-    <div ref={wrapRef} className="relative w-[min(32rem,calc(100vw-22rem))] max-w-[32rem]">
-      <button
-        type="button"
-        onClick={() => (open ? inputRef.current?.focus() : openPalette())}
-        className={cn(
-          'flex h-8 w-full items-center gap-2 rounded-md border px-2.5 text-left text-sm transition-colors',
-          open
-            ? 'border-workspace-accent/40 bg-background text-foreground shadow-sm'
-            : 'border-border/60 bg-muted/40 text-muted-foreground hover:border-border hover:bg-muted/70 hover:text-foreground',
-        )}
-        aria-label={`Search ${workspaceName}`}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-controls="quick-open-list"
-      >
-        <Search size={14} className="shrink-0 opacity-70" />
-        {open ? (
+    <div ref={wrapRef} className="relative w-full">
+      {open ? (
+        <div
+          className="flex h-8 w-full items-center gap-2 rounded-md border border-workspace-accent/40 bg-background px-2.5 text-sm text-foreground shadow-sm"
+          role="combobox"
+          aria-expanded
+          aria-haspopup="listbox"
+          aria-owns="quick-open-list"
+        >
+          <Search size={14} className="shrink-0 opacity-70" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onInputKeyDown}
-            onClick={(e) => e.stopPropagation()}
             placeholder={workspaceName}
             className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            aria-label={`Search ${workspaceName}`}
             aria-autocomplete="list"
+            aria-controls="quick-open-list"
           />
-        ) : (
-          <>
-            <span className="min-w-0 flex-1 truncate">{workspaceName}</span>
-            <kbd className="hidden shrink-0 rounded border border-border/70 bg-background/80 px-1.5 py-0.5 font-sans text-[10px] text-muted-foreground sm:inline">
-              {shortcut}
-            </kbd>
-          </>
-        )}
-      </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={openPalette}
+          className="flex h-8 w-full items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-2.5 text-left text-sm text-muted-foreground transition-colors hover:border-border hover:bg-muted/70 hover:text-foreground"
+          aria-label={`Search ${workspaceName}`}
+          aria-expanded={false}
+          aria-haspopup="listbox"
+        >
+          <Search size={14} className="shrink-0 opacity-70" />
+          <span className="min-w-0 flex-1 truncate">{workspaceName}</span>
+          <kbd className="hidden shrink-0 rounded border border-border/70 bg-background/80 px-1.5 py-0.5 font-sans text-[10px] text-muted-foreground sm:inline">
+            {shortcut}
+          </kbd>
+        </button>
+      )}
 
       {open && mounted
         ? createPortal(
-            <>
-              <div className="fixed inset-0 z-[250]" onMouseDown={close} />
-              <div
-                id="quick-open-list"
-                ref={listRef}
-                role="listbox"
-                className="fixed z-[260] max-h-[min(28rem,70vh)] overflow-y-auto border border-border bg-background shadow-xl"
-                style={{
-                  top: listBox?.top ?? 56,
-                  left: listBox?.left ?? 0,
-                  width: listBox?.width ?? 480,
-                }}
-              >
-                {groups.length === 0 ? (
-                  <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-                    {query.trim() ? 'No matches' : 'Nothing to jump to yet'}
-                  </p>
-                ) : (
-                  groups.map((entry) => (
-                    <div key={entry.group}>
-                      <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        {QUICK_OPEN_GROUP_LABEL[entry.group]}
-                      </div>
-                      {entry.items.map((item) => {
-                        const index = results.indexOf(item);
-                        const active = index === activeIndex;
-                        return (
-                          <button
-                            key={item.id}
-                            type="button"
-                            role="option"
-                            aria-selected={active}
-                            data-quick-open-index={index}
-                            onMouseEnter={() => setActiveIndex(index)}
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => run(item)}
-                            className={cn(
-                              'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm',
-                              active ? 'bg-muted text-foreground' : 'text-foreground/90 hover:bg-muted/70',
-                            )}
-                          >
-                            <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                            {item.hint ? (
-                              <span className="shrink-0 text-[11px] text-muted-foreground">{item.hint}</span>
-                            ) : null}
-                          </button>
-                        );
-                      })}
+            <div
+              id="quick-open-list"
+              ref={listRef}
+              role="listbox"
+              className="fixed z-[260] max-h-[min(28rem,70vh)] overflow-y-auto border border-border bg-background shadow-xl"
+              style={{
+                top: listBox?.top ?? 56,
+                left: listBox?.left ?? 0,
+                width: listBox?.width ?? 480,
+              }}
+            >
+              {groups.length === 0 ? (
+                <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                  {query.trim() ? 'No matches' : 'Nothing to jump to yet'}
+                </p>
+              ) : (
+                groups.map((entry) => (
+                  <div key={entry.group}>
+                    <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {QUICK_OPEN_GROUP_LABEL[entry.group]}
                     </div>
-                  ))
-                )}
-              </div>
-            </>,
+                    {entry.items.map((item) => {
+                      const index = results.indexOf(item);
+                      const active = index === activeIndex;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          role="option"
+                          aria-selected={active}
+                          data-quick-open-index={index}
+                          onMouseEnter={() => setActiveIndex(index)}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => run(item)}
+                          className={cn(
+                            'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm',
+                            active ? 'bg-muted text-foreground' : 'text-foreground/90 hover:bg-muted/70',
+                          )}
+                        >
+                          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                          {item.hint ? (
+                            <span className="shrink-0 text-[11px] text-muted-foreground">{item.hint}</span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))
+              )}
+            </div>,
             document.body,
           )
         : null}

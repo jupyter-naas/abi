@@ -247,6 +247,7 @@ interface WorkspaceState {
   // Context panel (right AI / compare surface)
   contextPanelOpen: boolean;
   toggleContextPanel: () => void;
+  setContextPanelOpen: (open: boolean) => void;
   /** Width of the dock (icon nav). Persisted. Same default as the feature column. */
   dockWidth: number;
   setDockWidth: (width: number) => void;
@@ -546,6 +547,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   // Context panel (right AI / compare surface)
   contextPanelOpen: false,
   toggleContextPanel: () => set((state) => ({ contextPanelOpen: !state.contextPanelOpen })),
+  setContextPanelOpen: (open) => set({ contextPanelOpen: open }),
   dockWidth: DOCK_WIDTH_DEFAULT,
   setDockWidth: (width) => set({ dockWidth: clampDockWidth(width) }),
   sectionPanelWidth: 256,

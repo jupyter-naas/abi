@@ -69,3 +69,13 @@ coding_active_branch: ContextVar[str | None] = ContextVar(
 coding_harness_base: ContextVar[str | None] = ContextVar(
     "coding_harness_base", default=None
 )
+
+# Research gate for Slides briefs. Set at the chat stream boundary when the
+# open deck needs web_search before HTML writes. web_search appends queries;
+# write tools refuse until at least one query is recorded.
+slides_research_required: ContextVar[bool] = ContextVar(
+    "slides_research_required", default=False
+)
+slides_research_queries: ContextVar[list[str] | None] = ContextVar(
+    "slides_research_queries", default=None
+)
