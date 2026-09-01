@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { History, MessageSquare, MoreHorizontal, Plus, Presentation, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { downloadConversationTranscript } from '@/lib/chat-transcript-export';
+import { pickSlidesAgentId } from '@/lib/create-slides-project';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
 import { useSlidesStore } from '@/stores/slides';
@@ -109,21 +110,23 @@ export function AIPane() {
   const handleNewChat = () => {
     const ws = useWorkspaceStore.getState();
     setPaneConversationId(null);
-    // New blank pane chat: restore Abi unless the user picked another agent
-    // in the selector (history tabs must not count as an explicit pick).
+    // New blank pane chat: bind Slides on /slides, else Abi, unless the user
+    // picked another agent in the selector (history tabs are not an explicit pick).
     if (!ws.paneAgentExplicitlySelected) {
       const agents = useAgentsStore.getState().agents;
-      const abi =
-        agents.find(
-          (a) =>
-            a.enabled &&
-            (a.name === 'Abi' ||
-              (typeof a.class_name === 'string' &&
-                a.class_name.toLowerCase().includes('abiagent')))
-        ) ??
-        agents.find((a) => a.isDefault && a.enabled) ??
-        agents.find((a) => a.enabled);
-      if (abi) ws.setPaneAgent(abi.id);
+      const onSlides = typeof pathname === 'string' && pathname.includes('/slides');
+      const boundId = onSlides
+        ? pickSlidesAgentId(agents)
+        : (agents.find(
+            (a) =>
+              a.enabled &&
+              (a.name === 'Abi' ||
+                (typeof a.class_name === 'string' &&
+                  a.class_name.toLowerCase().includes('abiagent'))),
+          ) ??
+          agents.find((a) => a.isDefault && a.enabled) ??
+          agents.find((a) => a.enabled))?.id;
+      if (boundId) ws.setPaneAgent(boundId);
     }
     setShowHistory(false);
     setShowOverflow(false);

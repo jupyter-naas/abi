@@ -5,10 +5,21 @@ import { useWorkspaceStore } from '@/stores/workspace';
 
 export const DEFAULT_SLIDES_TEMPLATE_ID = 'minimal-light-v1';
 export const DEFAULT_SLIDES_TITLE = 'Untitled presentation';
-export const PREFERRED_SLIDES_CHAT_MODEL = 'gpt-4.1-mini';
-export const PREFERRED_SLIDES_CHAT_MODELS = ['gpt-4.1-mini', 'openai/gpt-4.1-mini'];
+export const PREFERRED_SLIDES_CHAT_MODEL = 'anthropic/claude-sonnet-5';
+export const PREFERRED_SLIDES_CHAT_MODELS = [
+  'anthropic/claude-sonnet-5',
+  'claude-sonnet-5',
+];
 
 const REPO_ID_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+
+export type SlidesAgentPick = {
+  id: string;
+  name: string;
+  class_name?: string | null;
+  enabled?: boolean;
+  isDefault?: boolean;
+};
 
 /** FastAPI `detail` is a string, validation list, or `{msg}` object. */
 export function parseFastApiDetail(detail: unknown): string {
@@ -56,17 +67,31 @@ export type CreatedSlidesProject = {
   title: string;
 };
 
-function pickAbiAgentId(): string | null {
-  const agents = useAgentsStore.getState().agents;
-  const abi =
-    agents.find(
-      (a) =>
-        a.enabled &&
-        (a.name === 'Abi' ||
-          (typeof a.class_name === 'string' && a.class_name.toLowerCase().includes('abiagent'))),
-    ) ??
-    agents.find((a) => a.isDefault && a.enabled) ??
-    agents.find((a) => a.enabled);
+export function isSlidesAgent(agent: SlidesAgentPick): boolean {
+  const className = (agent.class_name || '').toLowerCase();
+  return (
+    agent.name === 'Slides' ||
+    agent.name === 'SlidesAgent' ||
+    className.includes('slidesagent')
+  );
+}
+
+export function isWeakSlidesModelId(id: string | null | undefined): boolean {
+  const raw = (id || '').toLowerCase();
+  if (!raw) return true;
+  return raw.includes('mini') || raw.includes(':free') || raw.includes('nano');
+}
+
+/** Prefer SlidesAgent. Abi is fallback only if Slides is not registered yet. */
+export function pickSlidesAgentId(agents: SlidesAgentPick[]): string | null {
+  const enabled = agents.filter((a) => a.enabled !== false);
+  const slides = enabled.find(isSlidesAgent);
+  if (slides) return slides.id;
+  const abi = enabled.find(
+    (a) =>
+      a.name === 'Abi' ||
+      (typeof a.class_name === 'string' && a.class_name.toLowerCase().includes('abiagent')),
+  );
   return abi?.id ?? null;
 }
 
@@ -81,27 +106,38 @@ function pinSlidesChatModel(agentId: string): void {
   const unique = [...new Set(available)];
   const preferred =
     unique.find((id) => PREFERRED_SLIDES_CHAT_MODELS.includes(id)) ||
-    unique.find((id) => !id.includes(':free')) ||
+    unique.find((id) => !isWeakSlidesModelId(id)) ||
     null;
   if (!preferred) return;
   const current = useWorkspaceStore.getState().selectedChatModels[agentId];
-  if (!current || current.includes(':free')) {
+  if (isWeakSlidesModelId(current)) {
     useWorkspaceStore.getState().setSelectedChatModel(agentId, preferred);
   }
 }
 
-/** Open the Abi pane beside the deck so the next message can edit it. */
+/** Open the Slides pane beside the deck so the next message can edit it. */
 export function openSlidesAgentPane(opts?: { freshChat?: boolean }): void {
   const ws = useWorkspaceStore.getState();
   ws.setContextPanelOpen(true);
   if (opts?.freshChat) {
     ws.setPaneConversationId(null);
   }
-  const abiId = pickAbiAgentId();
-  if (abiId) {
-    if (!ws.paneAgentExplicitlySelected) ws.setPaneAgent(abiId);
-    pinSlidesChatModel(abiId);
+  const slidesId = pickSlidesAgentId(useAgentsStore.getState().agents);
+  if (slidesId) {
+    if (!ws.paneAgentExplicitlySelected) ws.setPaneAgent(slidesId);
+    pinSlidesChatModel(slidesId);
   }
+}
+
+export async function bindSlidesAgentPane(opts?: {
+  freshChat?: boolean;
+  workspaceId?: string;
+}): Promise<void> {
+  const wsId = opts?.workspaceId || useWorkspaceStore.getState().currentWorkspaceId;
+  if (wsId) {
+    await useAgentsStore.getState().fetchAgents(wsId, true);
+  }
+  openSlidesAgentPane(opts);
 }
 
 export async function createUntitledSlidesProject(
@@ -137,7 +173,7 @@ export async function createUntitledSlidesProject(
   throw new Error(lastError);
 }
 
-/** One click: seed a template (default Minimal Light), open the deck, open Abi. */
+/** One click: seed a template (default Minimal Light), open the deck, open Slides. */
 export async function startNewPresentation(
   workspaceId: string,
   navigate: (href: string) => void,
@@ -146,7 +182,7 @@ export async function startNewPresentation(
   const created = await createUntitledSlidesProject(workspaceId, templateId);
   useSlidesStore.getState().setSelectedSlug(created.slug);
   useSlidesStore.getState().setSelectedTitle(created.title);
-  openSlidesAgentPane({ freshChat: true });
+  await bindSlidesAgentPane({ freshChat: true, workspaceId });
   navigate(`/workspace/${workspaceId}/slides/${created.slug}`);
   return created;
 }
@@ -176,6 +212,6 @@ export async function applySlidesTemplate(
   const title = useSlidesStore.getState().selectedTitle || DEFAULT_SLIDES_TITLE;
   dispatchSlidesDeckUpdated({ slug: openSlug, source: 'template' });
   useSlidesStore.getState().requestDeckRefresh(openSlug);
-  openSlidesAgentPane();
+  await bindSlidesAgentPane({ workspaceId });
   return { slug: openSlug, title };
 }

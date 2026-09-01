@@ -4,6 +4,7 @@ from naas_abi.agents.slides_policy import (
     apply_slides_model_override,
     attach_slides_research_note,
     bind_slides_research_policy,
+    is_slides_agent_ref,
     is_weak_slides_model,
     note_slides_web_search,
     openrouter_slides_model_id,
@@ -66,6 +67,16 @@ def test_resolve_slides_llm_model_upgrades_mini() -> None:
     assert resolve_slides_llm_model(None, slides_default=None) == DEFAULT_SLIDES_MODEL
 
 
+def test_is_slides_agent_ref() -> None:
+    assert is_slides_agent_ref("naas_abi.agents.SlidesAgent/SlidesAgent")
+    assert is_slides_agent_ref("SlidesAgent")
+    assert is_slides_agent_ref("Slides")
+    assert is_slides_agent_ref("naas_abi.agents.SlidesAgent/Slides")
+    assert not is_slides_agent_ref("Abi")
+    assert not is_slides_agent_ref("naas_abi.agents.AbiAgent/AbiAgent")
+    assert not is_slides_agent_ref(None)
+
+
 def test_apply_slides_model_override_only_when_deck_open() -> None:
     assert apply_slides_model_override("gpt-4.1-mini", None) == "gpt-4.1-mini"
     assert apply_slides_model_override("gpt-4.1-mini", {"slides": {}}) == "gpt-4.1-mini"
@@ -82,6 +93,20 @@ def test_apply_slides_model_override_only_when_deck_open() -> None:
             {"slides": {"slug": "iran-now"}},
         )
         == "gpt-5.2"
+    )
+
+
+def test_apply_slides_model_override_when_agent_is_slides() -> None:
+    assert (
+        apply_slides_model_override(
+            "gpt-4.1-mini",
+            None,
+            "naas_abi.agents.SlidesAgent/SlidesAgent",
+        )
+        == DEFAULT_SLIDES_MODEL
+    )
+    assert (
+        apply_slides_model_override("gpt-5.2", None, "SlidesAgent") == "gpt-5.2"
     )
 
 

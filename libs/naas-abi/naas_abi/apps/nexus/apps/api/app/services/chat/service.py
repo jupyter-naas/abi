@@ -169,7 +169,7 @@ _SKILLS_CATALOG_HEADER = (
 
 
 def _render_slides_context_block(client_context: dict | None) -> str:
-    """Inject open Slides deck so Abi researches, then edits that file."""
+    """Inject open Slides deck so SlidesAgent researches, then edits that file."""
     if not isinstance(client_context, dict):
         return ""
     slides = client_context.get("slides")
@@ -977,7 +977,9 @@ class ChatService:
                     request.context,
                 )
                 llm_model = apply_slides_model_override(
-                    provider.llm_model, request.context
+                    provider.llm_model,
+                    request.context,
+                    getattr(provider, "model", None),
                 )
 
                 response_content = await complete_with_provider(

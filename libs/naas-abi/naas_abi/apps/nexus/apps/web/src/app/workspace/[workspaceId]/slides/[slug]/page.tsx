@@ -12,7 +12,7 @@ import {
 } from '@/components/slides/slides-preview-frame';
 import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
 import {
-  openSlidesAgentPane,
+  bindSlidesAgentPane,
   slidesApiErrorMessage,
   startNewPresentation,
 } from '@/lib/create-slides-project';
@@ -42,7 +42,7 @@ function friendlyRuntimeDetail(detail: string | null | undefined): string | null
   const trimmed = detail.trim();
   if (!trimmed) return null;
   if (isGitWriteRaceDetail(trimmed)) {
-    return 'Deck branch sync raced; retry open or save. Abi can still edit via Forgejo.';
+    return 'Deck branch sync raced; retry open or save. Slides can still edit via Forgejo.';
   }
   if (trimmed.startsWith('{') || trimmed.includes('"validations"')) {
     return 'Reconnecting to existing runtime…';
@@ -193,8 +193,8 @@ export default function SlidesEditorPage() {
   const refreshRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
-    openSlidesAgentPane();
-  }, []);
+    void bindSlidesAgentPane({ workspaceId: workspaceId || undefined });
+  }, [workspaceId]);
 
   useEffect(() => {
     dirtyRef.current = dirty;
@@ -221,12 +221,12 @@ export default function SlidesEditorPage() {
       } else if (runtime.ensured) {
         setRuntimeStatus(
           'degraded',
-          runtime.detail || 'Runtime up but sidecar not ready; Abi falls back to Forgejo',
+          runtime.detail || 'Runtime up but sidecar not ready; Slides falls back to Forgejo',
         );
       } else {
         setRuntimeStatus(
           'error',
-          runtime.detail || 'Coder runtime unavailable; Abi can still edit via Forgejo',
+          runtime.detail || 'Coder runtime unavailable; Slides can still edit via Forgejo',
         );
       }
     },
@@ -346,7 +346,7 @@ export default function SlidesEditorPage() {
     void loadDeck({ quiet: false, ensureRuntime: true });
   }, [loadDeck]);
 
-  // Auto-refresh when Abi (or store) bumps refreshToken after a slides write tool.
+  // Auto-refresh when Slides (or store) bumps refreshToken after a slides write tool.
   useEffect(() => {
     if (skipTokenEffectRef.current) {
       skipTokenEffectRef.current = false;
@@ -525,7 +525,7 @@ export default function SlidesEditorPage() {
 
       {agentWriting && (
         <div className="border-b border-workspace-accent/20 bg-workspace-accent-10 px-4 py-2 text-xs text-foreground">
-          Abi is updating the deck…
+          Slides is updating the deck…
         </div>
       )}
 
@@ -547,8 +547,8 @@ export default function SlidesEditorPage() {
           {runtimeStatus === 'error'
             ? runtimeDetail && isGitWriteRaceDetail(runtimeDetail)
               ? runtimeDetail
-              : `Coder runtime unavailable: ${runtimeDetail || 'Abi will edit via Forgejo until Coder is back.'}`
-            : `Slides runtime degraded: ${runtimeDetail || 'Sidecar not ready; Abi falls back to Forgejo.'}`}
+              : `Coder runtime unavailable: ${runtimeDetail || 'Slides will edit via Forgejo until Coder is back.'}`
+            : `Slides runtime degraded: ${runtimeDetail || 'Sidecar not ready; Slides falls back to Forgejo.'}`}
         </div>
       )}
 
@@ -576,7 +576,7 @@ export default function SlidesEditorPage() {
                 setDirty(true);
               }}
               onMount={(editor, monaco) => {
-                // Monaco defaults ⌘K to a chord starter; route it to the Abi pane.
+                // Monaco defaults ⌘K to a chord starter; route it to the Slides pane.
                 editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, () => {
                   useWorkspaceStore.getState().toggleContextPanel();
                 });

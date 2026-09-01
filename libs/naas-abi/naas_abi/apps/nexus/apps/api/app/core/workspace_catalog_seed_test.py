@@ -8,6 +8,7 @@ from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
 
 def test_parse_agent_ref() -> None:
     assert parse_agent_ref("naas_abi AbiAgent") == ("naas_abi", "AbiAgent")
+    assert parse_agent_ref("naas_abi SlidesAgent") == ("naas_abi", "SlidesAgent")
     assert parse_agent_ref("example.module ExampleAgent") == (
         "example.module",
         "ExampleAgent",
@@ -19,11 +20,16 @@ def test_parse_agent_ref() -> None:
 def test_resolve_agent_ref_prefers_module_prefix() -> None:
     registry = {
         "naas_abi.agents.AbiAgent/AbiAgent": object(),
+        "naas_abi.agents.SlidesAgent/SlidesAgent": object(),
         "example.module.agents.ExampleAgent/ExampleAgent": object(),
     }
     assert (
         resolve_agent_ref("naas_abi AbiAgent", registry)
         == "naas_abi.agents.AbiAgent/AbiAgent"
+    )
+    assert (
+        resolve_agent_ref("naas_abi SlidesAgent", registry)
+        == "naas_abi.agents.SlidesAgent/SlidesAgent"
     )
     assert (
         resolve_agent_ref("example.module ExampleAgent", registry)

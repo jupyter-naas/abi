@@ -1,11 +1,11 @@
-"""Abi tools for Nexus Slides projects.
+"""SlidesAgent tools for Nexus Slides projects.
 
 Prefer the Coder workspace sidecar filesystem when a slides runtime is bound
 to the request (Continue-parity). Fall back to Forgejo with an explicit note.
 
 Decks live at ``slides/<slug>/deck.html`` on branch ``slides/<slug>``. When the
 user has a deck open in Nexus, ``slides_active_slug`` is set so tools default
-to that deck and Abi must not ask which presentation to edit.
+to that deck and SlidesAgent must not ask which presentation to edit.
 
 Template decks keep slide markup in ``<main>`` (~tens of KB) but also ship
 inline asset ``<script>`` blobs (~1MB with base64 images). PPTX export walks

@@ -1987,8 +1987,11 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         }
         # Default LangGraph limit is 25. A slides research loop (search, then
         # write 6-8 sections) needs more steps than a normal chat turn.
+        class_limit = getattr(type(self), "recursion_limit", None)
         if (slides_active_slug.get() or "").strip():
             stream_config["recursion_limit"] = 80
+        elif isinstance(class_limit, int) and class_limit > 0:
+            stream_config["recursion_limit"] = class_limit
         for chunk in self.graph.stream(
             {"messages": [human_message]},
             config=stream_config,

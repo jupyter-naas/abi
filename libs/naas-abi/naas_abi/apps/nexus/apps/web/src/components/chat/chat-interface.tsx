@@ -25,6 +25,7 @@ import '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector.css';
 import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
+import { pickSlidesAgentId } from '@/lib/create-slides-project';
 import { humanizeChatProviderError } from '@/lib/chat-provider-error';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import { getLogoUrl } from '@/lib/logo-url';
@@ -1757,11 +1758,14 @@ export function ChatInterface({
     if ((!sourceText.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading) return;
     isSubmittingRef.current = true;
     let effectiveAgent = agentOverride ?? selectedAgent;
-    // Pane can hydrate with paneAgent="" before agents sync; resolve Abi/default
-    // so stream has a real agent id (selector label may already show Abi).
+    // Pane can hydrate with paneAgent="" before agents sync; resolve Slides on
+    // /slides (Abi is fallback), else Abi/default, so the stream has a real id.
     if (!effectiveAgent) {
       const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const onSlides = typeof pathname === 'string' && pathname.includes('/slides');
+      const slidesId = isPane && onSlides ? pickSlidesAgentId(agents) : null;
       const resolved =
+        (slidesId ? agents.find((a) => a.id === slidesId) : null) ??
         (isPane
           ? agents.find(
               (a) =>

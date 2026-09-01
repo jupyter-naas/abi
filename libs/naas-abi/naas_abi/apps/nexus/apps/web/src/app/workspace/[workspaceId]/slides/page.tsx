@@ -82,7 +82,7 @@ export default function SlidesIndexPage() {
             <h2 className="text-base font-medium">Create your first deck</h2>
             <p className="text-sm text-muted-foreground">
               Use File → New or New in the Slides column. That opens Minimal Light and
-              Abi. Talk through the deck; the preview updates as tools run. File →
+              Slides. Talk through the deck; the preview updates as tools run. File →
               Export PPTX rebuilds the current HTML at 1280x720 (closest fit, not
               pixel-perfect).
             </p>

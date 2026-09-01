@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_SLIDES_TEMPLATE_ID,
   PREFERRED_SLIDES_CHAT_MODEL,
+  isSlidesAgent,
   parseFastApiDetail,
+  pickSlidesAgentId,
   slidesApiErrorMessage,
   untitledSlidesSlug,
 } from './create-slides-project';
@@ -25,8 +27,45 @@ describe('DEFAULT_SLIDES_TEMPLATE_ID', () => {
 });
 
 describe('PREFERRED_SLIDES_CHAT_MODEL', () => {
-  it('uses the paid OpenRouter model from config', () => {
-    expect(PREFERRED_SLIDES_CHAT_MODEL).toBe('gpt-4.1-mini');
+  it('uses Claude Sonnet 5 via OpenRouter', () => {
+    expect(PREFERRED_SLIDES_CHAT_MODEL).toBe('anthropic/claude-sonnet-5');
+  });
+});
+
+describe('pickSlidesAgentId', () => {
+  it('prefers SlidesAgent over Abi', () => {
+    const agents = [
+      { id: 'abi-1', name: 'Abi', class_name: 'naas_abi.agents.AbiAgent/AbiAgent', enabled: true },
+      {
+        id: 'slides-1',
+        name: 'Slides',
+        class_name: 'naas_abi.agents.SlidesAgent/SlidesAgent',
+        enabled: true,
+      },
+    ];
+    expect(isSlidesAgent(agents[1])).toBe(true);
+    expect(pickSlidesAgentId(agents)).toBe('slides-1');
+  });
+
+  it('falls back to Abi when Slides is missing', () => {
+    const agents = [
+      { id: 'abi-1', name: 'Abi', class_name: 'naas_abi.agents.AbiAgent/AbiAgent', enabled: true },
+      { id: 'zen-1', name: 'Zen', class_name: 'zen.agents.ZenAgent/ZenAgent', enabled: true },
+    ];
+    expect(pickSlidesAgentId(agents)).toBe('abi-1');
+  });
+
+  it('ignores disabled Slides rows', () => {
+    const agents = [
+      {
+        id: 'slides-off',
+        name: 'Slides',
+        class_name: 'naas_abi.agents.SlidesAgent/SlidesAgent',
+        enabled: false,
+      },
+      { id: 'abi-1', name: 'Abi', class_name: 'naas_abi.agents.AbiAgent/AbiAgent', enabled: true },
+    ];
+    expect(pickSlidesAgentId(agents)).toBe('abi-1');
   });
 });
 

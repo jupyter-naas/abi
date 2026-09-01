@@ -594,9 +594,8 @@ class ABIModule(BaseModule):
         # whichever provider registered first.
         abi_agent_provider: str | None = None
 
-        # Slides-only override. Nexus Slides briefs use this instead of
-        # ``abi_agent_model`` so general chat can stay on a cheaper default.
-        # Must be a reasoning-capable registry id, not mini or a free Gemma.
+        # SlidesAgent default (and Abi fallback when a deck is open). Must be a
+        # reasoning-capable registry id, not mini or a free Gemma.
         abi_slides_agent_model: str = "anthropic/claude-sonnet-5"
 
         # Canonical model id used by OntologyEngineerAgent. Same registry

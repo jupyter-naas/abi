@@ -369,7 +369,9 @@ async def stream_chat_response(
         api_key=provider.api_key,
         account_id=provider.account_id,
         model=provider.model,
-        llm_model=apply_slides_model_override(incoming_llm, client_ctx),
+        llm_model=apply_slides_model_override(
+            incoming_llm, client_ctx, getattr(provider, "model", None)
+        ),
     )
 
     assistant_msg_id = ""
