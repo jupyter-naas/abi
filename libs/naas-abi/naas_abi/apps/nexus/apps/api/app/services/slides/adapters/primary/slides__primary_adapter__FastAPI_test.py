@@ -10,10 +10,12 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 )
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__primary_adapter__FastAPI import (
+    TreeEntryResponse,
     _assets_dir,
     _assets_gitkeep_path,
     _branch_for,
     _coder_workspace_name,
+    _curate_project_tree,
     _deck_path,
     _discover_seed_ids,
     _ensure_coding_repo,
@@ -35,6 +37,7 @@ from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__p
     _sidecar_tool_call,
     _slugify,
     _source_control_http_error,
+    _validate_asset_name,
     _wait_for_sidecar,
     _write_deck_via_sidecar,
 )
@@ -333,3 +336,140 @@ def test_sidecar_tool_helpers_require_binding() -> None:
         _sidecar_tool_call("file:///tmp", "s", "read_file", {"path": "x"}).get("error")
         or ""
     ).startswith("invalid sidecar base url")
+
+
+def test_curate_project_tree_hides_inmemory_dump() -> None:
+    root = "slides/ws-test/untitled-local"
+    junk = [
+        TreeEntryResponse(name="README.md", path="README.md", type="file"),
+        TreeEntryResponse(
+            name="slides/ws-test/untitled-local/deck.html",
+            path="slides/ws-test/untitled-local/deck.html",
+            type="file",
+        ),
+        TreeEntryResponse(
+            name="slides/ws-test/untitled-local/project.json",
+            path="slides/ws-test/untitled-local/project.json",
+            type="file",
+        ),
+        TreeEntryResponse(
+            name="slides/ws-test/untitled-local/assets/.gitkeep",
+            path="slides/ws-test/untitled-local/assets/.gitkeep",
+            type="file",
+        ),
+        TreeEntryResponse(
+            name="slides/ws-test/untitled-local/assets/README.md",
+            path="slides/ws-test/untitled-local/assets/README.md",
+            type="file",
+        ),
+        TreeEntryResponse(
+            name="slides/ws-test/untitled-local/assets/hero.svg",
+            path="slides/ws-test/untitled-local/assets/hero.svg",
+            type="file",
+            size=12,
+        ),
+        TreeEntryResponse(
+            name="slides/ws-other/other-deck/deck.html",
+            path="slides/ws-other/other-deck/deck.html",
+            type="file",
+        ),
+        TreeEntryResponse(
+            name="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+            path="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+            type="dir",
+        ),
+        TreeEntryResponse(name=".coder", path=".coder", type="dir"),
+    ]
+    entries, assets = _curate_project_tree(
+        junk,
+        root=root,
+        deck_path=f"{root}/deck.html",
+        project_path=f"{root}/project.json",
+        assets_dir=f"{root}/assets",
+    )
+    names = [e.name for e in entries]
+    assert names == ["assets", "deck.html", "project.json"]
+    assert all("/" not in e.name for e in entries)
+    assert [a.name for a in assets] == ["hero.svg"]
+    assert assets[0].path == f"{root}/assets/hero.svg"
+
+
+def test_validate_asset_name_rejects_paths() -> None:
+    from fastapi import HTTPException
+
+    assert _validate_asset_name("hero.svg") == "hero.svg"
+    try:
+        _validate_asset_name("../secret")
+        raise AssertionError("expected 422")
+    except HTTPException as exc:
+        assert exc.status_code == 422
+    try:
+        _validate_asset_name(".gitkeep")
+        raise AssertionError("expected 422")
+    except HTTPException as exc:
+        assert exc.status_code == 422
+
+
+def test_project_tree_and_asset_roundtrip(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Untitled presentation",
+            "slug": "untitled-local",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+    repo_id = _repo_id()
+    sc.upsert_file(
+        repo_id=repo_id,
+        path="slides/ws-other/other-deck/deck.html",
+        content="<html></html>",
+        message="junk other project",
+        branch="main",
+    )
+    tree = client.get(
+        "/slides/projects/untitled-local/tree",
+        params={"workspace_id": "ws-test"},
+    )
+    assert tree.status_code == 200, tree.text
+    body = tree.json()
+    assert [e["name"] for e in body["entries"]] == ["assets", "deck.html", "project.json"]
+    assert body["assets"] == []
+    saved = client.put(
+        "/slides/projects/untitled-local/assets/hero.svg",
+        json={
+            "workspace_id": "ws-test",
+            "content": "<svg xmlns='http://www.w3.org/2000/svg'></svg>",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["path"] == "slides/ws-test/untitled-local/assets/hero.svg"
+    tree2 = client.get(
+        "/slides/projects/untitled-local/tree",
+        params={"workspace_id": "ws-test"},
+    )
+    assert tree2.status_code == 200, tree2.text
+    assert [a["name"] for a in tree2.json()["assets"]] == ["hero.svg"]
+    got = client.get(
+        "/slides/projects/untitled-local/assets/hero.svg",
+        params={"workspace_id": "ws-test"},
+    )
+    assert got.status_code == 200, got.text
+    assert "<svg" in got.json()["content"]
+    templates = client.get("/slides/templates", params={"workspace_id": "ws-test"})
+    light = next(t for t in templates.json() if t["id"] == "minimal-light-v1")
+    assert any(f["name"] == "deck.html" for f in light["files"])
+    renamed = client.patch(
+        "/slides/projects/untitled-local",
+        json={"workspace_id": "ws-test", "title": "Hormuz brief"},
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["title"] == "Hormuz brief"
+    assert renamed.json()["slug"] == "untitled-local"
+    assert renamed.json()["deck_path"] == "slides/ws-test/untitled-local/deck.html"
+    listed = client.get("/slides/projects", params={"workspace_id": "ws-test"})
+    assert any(p["title"] == "Hormuz brief" for p in listed.json())

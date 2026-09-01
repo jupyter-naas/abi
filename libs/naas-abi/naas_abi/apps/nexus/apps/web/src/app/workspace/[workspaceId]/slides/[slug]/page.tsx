@@ -163,6 +163,7 @@ export default function SlidesEditorPage() {
   const slug = typeof params?.slug === 'string' ? params.slug : '';
   const setSelectedSlug = useSlidesStore((s) => s.setSelectedSlug);
   const setSelectedTitle = useSlidesStore((s) => s.setSelectedTitle);
+  const selectedTitle = useSlidesStore((s) => s.selectedTitle);
   const setEditorMode = useSlidesStore((s) => s.setEditorMode);
   const setRuntimeStatus = useSlidesStore((s) => s.setRuntimeStatus);
   const setRuntimeMeta = useSlidesStore((s) => s.setRuntimeMeta);
@@ -195,6 +196,10 @@ export default function SlidesEditorPage() {
   useEffect(() => {
     void bindSlidesAgentPane({ workspaceId: workspaceId || undefined });
   }, [workspaceId]);
+
+  useEffect(() => {
+    if (selectedTitle) setTitle(selectedTitle);
+  }, [selectedTitle]);
 
   useEffect(() => {
     dirtyRef.current = dirty;

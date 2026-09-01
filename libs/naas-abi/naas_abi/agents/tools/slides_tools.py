@@ -244,6 +244,30 @@ def _legacy_project_path(slug: str) -> str:
     return f"slides/{slug}/project.json"
 
 
+_ASSET_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+_MAX_ASSET_CHARS = 2_000_000
+
+
+def _assets_dir_from_deck(deck_path: str) -> str:
+    if deck_path.endswith("/deck.html"):
+        return f"{deck_path[: -len('/deck.html')]}/assets"
+    return "assets"
+
+
+def _validate_asset_filename(name: str) -> str | dict[str, Any]:
+    cleaned = (name or "").strip()
+    if not cleaned or not _ASSET_NAME_RE.fullmatch(cleaned):
+        return {
+            "error": (
+                "filename must be a single file name (letters, numbers, "
+                "dot, hyphen). Example: hero.svg"
+            )
+        }
+    if cleaned.lower() in {".gitkeep", ".git", ".coder"}:
+        return {"error": "Reserved asset name."}
+    return cleaned
+
+
 def _resolve_paths(slug: str) -> dict[str, str]:
     """Prefer namespaced paths; fall back to legacy when that branch exists."""
     ws = _workspace_id()
@@ -253,14 +277,16 @@ def _resolve_paths(slug: str) -> dict[str, str]:
         names = {b.name for b in sc.list_branches(repo_id=repo_id)}
     except SourceControlError as exc:
         return {"error": _friendly_sc_error(exc)}
-    if ws:
-        ns_branch = _branch(slug, ws)
-        if ns_branch in names:
-            return {
-                "branch": ns_branch,
-                "deck_path": _deck_path(slug, ws),
-                "project_path": _project_path(slug, ws),
-            }
+        if ws:
+            ns_branch = _branch(slug, ws)
+            if ns_branch in names:
+                deck_path = _deck_path(slug, ws)
+                return {
+                    "branch": ns_branch,
+                    "deck_path": deck_path,
+                    "project_path": _project_path(slug, ws),
+                    "assets_dir": _assets_dir_from_deck(deck_path),
+                }
     legacy = _legacy_branch(slug)
     if legacy in names:
         # Fail closed: legacy decks require a verified matching owner.
@@ -276,22 +302,28 @@ def _resolve_paths(slug: str) -> dict[str, str]:
                 return {"error": f"slides project {slug} not in this workspace"}
         except (SourceControlError, json.JSONDecodeError):
             return {"error": f"slides project {slug} not in this workspace"}
+        legacy_deck = _legacy_deck_path(slug)
         return {
             "branch": legacy,
-            "deck_path": _legacy_deck_path(slug),
+            "deck_path": legacy_deck,
             "project_path": _legacy_project_path(slug),
+            "assets_dir": _assets_dir_from_deck(legacy_deck),
         }
     if ws:
         # Default to namespaced location for new writes.
+        deck_path = _deck_path(slug, ws)
         return {
             "branch": _branch(slug, ws),
-            "deck_path": _deck_path(slug, ws),
+            "deck_path": deck_path,
             "project_path": _project_path(slug, ws),
+            "assets_dir": _assets_dir_from_deck(deck_path),
         }
+    legacy_deck = _legacy_deck_path(slug)
     return {
         "branch": legacy,
-        "deck_path": _legacy_deck_path(slug),
+        "deck_path": legacy_deck,
         "project_path": _legacy_project_path(slug),
+        "assets_dir": _assets_dir_from_deck(legacy_deck),
     }
 
 
@@ -346,13 +378,26 @@ def _load_deck_via_sidecar(slug: str) -> str | dict[str, Any]:
     return content
 
 
+def _write_path_via_sidecar(path: str, content: str) -> dict[str, Any]:
+    result = _sidecar_call("write_file", {"path": path, "content": content})
+    if result.get("error") or result.get("ok") is False:
+        return {
+            "error": result.get("error") or "sidecar write failed",
+            "source": "sidecar",
+        }
+    return {
+        "ok": True,
+        "path": path,
+        "source": "sidecar",
+        "bytes": result.get("bytes"),
+    }
+
+
 def _write_deck_via_sidecar(slug: str, html: str) -> dict[str, Any]:
     paths = _resolve_paths(slug)
     if paths.get("error"):
         return {"error": paths["error"], "source": "sidecar"}
-    result = _sidecar_call(
-        "write_file", {"path": paths["deck_path"], "content": html}
-    )
+    result = _write_path_via_sidecar(paths["deck_path"], html)
     if result.get("error") or result.get("ok") is False:
         return {
             "error": result.get("error") or "sidecar write failed",
@@ -484,6 +529,54 @@ def _persist_deck(slug: str, html: str, message: str) -> dict[str, Any]:
                 ),
             }
         return {"error": _friendly_sc_error(exc), "sources": sources}
+
+
+def _persist_asset(slug: str, filename: str, content: str, message: str) -> dict[str, Any]:
+    """Write assets/<filename> to sidecar (when bound) and Forgejo."""
+    paths = _ensure_slides_write_paths(slug)
+    if paths.get("error"):
+        return {"error": paths["error"]}
+    assets_dir = paths.get("assets_dir") or _assets_dir_from_deck(paths["deck_path"])
+    asset_path = f"{assets_dir}/{filename}"
+    sources: list[str] = []
+    sidecar_result: dict[str, Any] | None = None
+    if _sidecar_available():
+        sidecar_result = _write_path_via_sidecar(asset_path, content)
+        if sidecar_result.get("ok"):
+            sources.append("sidecar")
+        else:
+            sources.append("sidecar-failed")
+    sc = _get_source_control()
+    try:
+        commit = sc.upsert_file(
+            repo_id=_repo_id(),
+            path=asset_path,
+            content=content,
+            message=message,
+            branch=paths["branch"],
+        )
+    except SourceControlError as exc:
+        if sidecar_result and sidecar_result.get("ok"):
+            return {
+                **sidecar_result,
+                "slug": slug,
+                "filename": filename,
+                "sources": sources,
+                "forgejo_error": _friendly_sc_error(exc),
+            }
+        return {"error": _friendly_sc_error(exc), "sources": sources}
+    sources.append("forgejo")
+    return {
+        "ok": True,
+        "slug": slug,
+        "filename": filename,
+        "path": asset_path,
+        "branch": paths["branch"],
+        "commit_sha": commit.sha,
+        "source": "forgejo",
+        "sources": sources,
+        "note": "Saved to assets/. It appears in the Slides explorer after refresh.",
+    }
 
 
 def _replace_string_pairs(old: str, new: str) -> list[tuple[str, str]]:
@@ -1249,6 +1342,42 @@ def slides_tools() -> list[BaseTool]:
             return _tool_error(exc)
 
     @tool
+    def save_slides_asset(
+        filename: str,
+        content: str,
+        slug: str = "",
+        message: str = "Save slides asset via SlidesAgent",
+    ) -> dict[str, Any]:
+        """Save a downloaded image or other media into the open deck's assets/ folder.
+
+        Use this after fetching an image so it appears in the Slides explorer.
+        Prefer SVG or a data:image URL as UTF-8 text. Omit slug when a deck is open.
+        """
+        if not agent_user_id.get():
+            return {"error": "No authenticated user on this agent session."}
+        resolved = _resolve_slug(slug)
+        if isinstance(resolved, dict):
+            return resolved
+        checked = _validate_asset_filename(filename)
+        if isinstance(checked, dict):
+            return checked
+        if not content or not str(content).strip():
+            return {"error": "content must be a non-empty UTF-8 string"}
+        if len(content) > _MAX_ASSET_CHARS:
+            return {"error": "Asset is too large."}
+        try:
+            result = _persist_asset(
+                resolved,
+                checked,
+                content,
+                message or "Save slides asset via SlidesAgent",
+            )
+            result.update(_open_deck_note(resolved))
+            return result
+        except Exception as exc:  # noqa: BLE001
+            return _tool_error(exc)
+
+    @tool
     def slides_history(slug: str = "", limit: int = 10) -> dict[str, Any]:
         """List recent commits on a Slides project branch (Forgejo version history)."""
         if not agent_user_id.get():
@@ -1288,5 +1417,6 @@ def slides_tools() -> list[BaseTool]:
         replace_in_slides_deck,
         read_slides_deck,
         write_slides_deck,
+        save_slides_asset,
         slides_history,
     ]

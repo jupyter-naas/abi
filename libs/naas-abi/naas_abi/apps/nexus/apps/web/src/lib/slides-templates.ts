@@ -10,6 +10,11 @@ export type SlidesTemplateAsset = {
   kind: string;
 };
 
+export type SlidesTemplateFile = {
+  name: string;
+  kind: string;
+};
+
 export type SlidesSeedTemplate = {
   id: string;
   name: string;
@@ -20,6 +25,7 @@ export type SlidesSeedTemplate = {
   preview_ink: string;
   slides: SlidesTemplateSlide[];
   assets: SlidesTemplateAsset[];
+  files: SlidesTemplateFile[];
 };
 
 /** Sidebar line: eyebrow plus section title from the seed outline. */

@@ -10,11 +10,13 @@ from naas_abi.agents.tools.slides_tools import (
     _WIPED_DECK_ERROR,
     _apply_replacements,
     _apply_replacements_in_section,
+    _assets_dir_from_deck,
     _cover_h1_text,
     _cover_subtitle_text,
     _deck_path,
     _ensure_coding_repo,
     _friendly_sc_error,
+    _persist_asset,
     _persist_deck,
     _redact_data_urls,
     _replace_string_pairs,
@@ -22,6 +24,7 @@ from naas_abi.agents.tools.slides_tools import (
     _restore_redacted_data_urls,
     _section_meta,
     _split_sections,
+    _validate_asset_filename,
     _view_for_llm,
     slides_tools,
 )
@@ -465,5 +468,61 @@ def test_missing_repo_error_is_wipe_message(monkeypatch):
         )
         assert result.get("error") == _WIPED_DECK_ERROR
         assert result.get("error") != "abi/monorepo"
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_validate_asset_filename() -> None:
+    assert _validate_asset_filename("hero.svg") == "hero.svg"
+    assert _validate_asset_filename("../x")["error"]
+    assert _assets_dir_from_deck("slides/ws-test/untitled-local/deck.html") == (
+        "slides/ws-test/untitled-local/assets"
+    )
+
+
+def test_save_slides_asset_lands_in_assets(monkeypatch) -> None:
+    sc = _bind_in_memory_git(monkeypatch)
+    sc.ensure_repo(owner="abi", name="monorepo")
+    sc.create_branch(
+        repo_id="abi/monorepo",
+        name="slides/ws-test/untitled-local",
+        from_ref="main",
+    )
+    sc.upsert_file(
+        repo_id="abi/monorepo",
+        path="slides/ws-test/untitled-local/deck.html",
+        content="<html></html>",
+        message="Seed deck",
+        branch="slides/ws-test/untitled-local",
+    )
+    sc.upsert_file(
+        repo_id="abi/monorepo",
+        path="slides/ws-test/untitled-local/project.json",
+        content='{"slug":"untitled-local","workspace_id":"ws-test"}\n',
+        message="Seed project",
+        branch="slides/ws-test/untitled-local",
+    )
+    tokens = _slides_context()
+    try:
+        result = _persist_asset(
+            "untitled-local",
+            "hero.svg",
+            "<svg xmlns='http://www.w3.org/2000/svg'></svg>",
+            "Save hero",
+        )
+        assert "error" not in result, result
+        assert result["path"] == "slides/ws-test/untitled-local/assets/hero.svg"
+        saved = sc.get_file(
+            repo_id="abi/monorepo",
+            path="slides/ws-test/untitled-local/assets/hero.svg",
+            ref="slides/ws-test/untitled-local",
+        )
+        assert "<svg" in (saved.text or "")
+        tool = next(t for t in slides_tools() if t.name == "save_slides_asset")
+        written = tool.invoke(
+            {"filename": "logo.svg", "content": "<svg id='logo'></svg>"}
+        )
+        assert "error" not in written, written
+        assert written["filename"] == "logo.svg"
     finally:
         _reset_tokens(tokens)

@@ -122,7 +122,11 @@ export const useSlidesStore = create<SlidesState>()(
 
 export function isSlidesWriteTool(rawName: string | null | undefined): boolean {
   const raw = (rawName || '').toLowerCase();
-  return raw.includes('write_slides') || raw.includes('replace_in_slides');
+  return (
+    raw.includes('write_slides') ||
+    raw.includes('replace_in_slides') ||
+    raw.includes('save_slides_asset')
+  );
 }
 
 export function dispatchSlidesDeckUpdated(detail: SlidesDeckUpdatedDetail = {}) {

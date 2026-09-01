@@ -589,6 +589,7 @@ def _list_seed_template_records() -> list[dict]:
             seed = ""
         meta["slides"] = _parse_slide_outline(seed) if seed else []
         meta["assets"] = _parse_template_assets(seed) if seed else []
+        meta["files"] = [{"name": "deck.html", "kind": "html"}]
         rows.append(meta)
     return rows
 
@@ -663,6 +664,11 @@ class DeckUpdateRequest(BaseModel):
 class ApplyTemplateRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     template_id: str = Field(..., min_length=1, max_length=64)
+
+
+class ProjectRenameRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    title: str = Field(..., min_length=1, max_length=120)
 
 
 class CommitResponse(BaseModel):
@@ -932,6 +938,135 @@ class ProjectTreeResponse(BaseModel):
     assets: list[TreeEntryResponse] = Field(default_factory=list)
     embedded_images: int = 0
     assets_note: str | None = None
+
+
+class AssetWriteRequest(BaseModel):
+    workspace_id: str
+    content: str
+    message: str | None = None
+
+
+class AssetResponse(BaseModel):
+    slug: str
+    name: str
+    path: str
+    content: str
+    commit_sha: str | None = None
+    source: str | None = None
+
+
+_PROJECT_ROOT_FILES = frozenset({"deck.html", "project.json", "readme.md"})
+_TREE_NOISE_NAMES = frozenset(
+    {
+        ".gitkeep",
+        ".git",
+        ".coder",
+        ".vscode",
+        "node_modules",
+        ".ds_store",
+        "coder.yaml",
+    }
+)
+_HASH_NAME_RE = re.compile(r"^[0-9a-f]{7,40}$", re.IGNORECASE)
+_WS_HASH_RE = re.compile(r"^ws-[0-9a-f]{8,}$", re.IGNORECASE)
+_ASSET_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+_MAX_ASSET_CHARS = 2_000_000
+
+
+def _entry_basename(name: str, path: str = "") -> str:
+    raw = (name or path or "").replace("\\", "/").rstrip("/")
+    parts = [p for p in raw.split("/") if p]
+    return parts[-1] if parts else ""
+
+
+def _is_under_root(path: str, root: str) -> bool:
+    p = (path or "").replace("\\", "/").strip("/")
+    r = (root or "").replace("\\", "/").strip("/")
+    if not r or not p:
+        return False
+    return p == r or p.startswith(f"{r}/")
+
+
+def _is_tree_noise_name(name: str) -> bool:
+    low = (name or "").lower()
+    if low in _TREE_NOISE_NAMES:
+        return True
+    return bool(_HASH_NAME_RE.fullmatch(name) or _WS_HASH_RE.fullmatch(name))
+
+
+def _curate_project_tree(
+    entries: list,
+    *,
+    root: str,
+    deck_path: str,
+    project_path: str,
+    assets_dir: str,
+) -> tuple[list[TreeEntryResponse], list[TreeEntryResponse]]:
+    """Keep project-root files only. Hide InMemory dumps and Coder noise."""
+    curated: dict[str, TreeEntryResponse] = {}
+    assets: dict[str, TreeEntryResponse] = {}
+    root_n = root.replace("\\", "/").strip("/")
+    assets_n = assets_dir.replace("\\", "/").strip("/")
+
+    for raw in entries:
+        path = getattr(raw, "path", None) or getattr(raw, "name", "") or ""
+        name = _entry_basename(getattr(raw, "name", "") or "", path)
+        if not name or _is_tree_noise_name(name):
+            continue
+        if not (_is_under_root(path, root_n) or _is_under_root(getattr(raw, "name", ""), root_n)):
+            continue
+        size = int(getattr(raw, "size", 0) or 0)
+        key = name.lower()
+        if _is_under_root(path, assets_n) or _is_under_root(getattr(raw, "name", ""), assets_n):
+            if key == "readme.md" or key == "assets":
+                continue
+            assets[name] = TreeEntryResponse(
+                name=name, path=f"{assets_n}/{name}", type="file", size=size
+            )
+            continue
+        if key == "assets":
+            curated["assets"] = TreeEntryResponse(
+                name="assets", path=assets_dir, type="dir"
+            )
+            continue
+        if key in _PROJECT_ROOT_FILES:
+            file_path = (
+                deck_path
+                if key == "deck.html"
+                else project_path
+                if key == "project.json"
+                else f"{root_n}/{name}"
+            )
+            curated[key] = TreeEntryResponse(
+                name=name, path=file_path, type="file", size=size
+            )
+
+    if "deck.html" not in curated:
+        curated["deck.html"] = TreeEntryResponse(
+            name="deck.html", path=deck_path, type="file"
+        )
+    if "project.json" not in curated:
+        curated["project.json"] = TreeEntryResponse(
+            name="project.json", path=project_path, type="file"
+        )
+    curated["assets"] = TreeEntryResponse(name="assets", path=assets_dir, type="dir")
+    root_entries = sorted(
+        curated.values(), key=lambda e: (0 if e.type == "dir" else 1, e.name.lower())
+    )
+    asset_entries = sorted(assets.values(), key=lambda e: e.name.lower())
+    return root_entries, asset_entries
+
+
+def _validate_asset_name(name: str) -> str:
+    cleaned = (name or "").strip()
+    if not cleaned or not _ASSET_NAME_RE.fullmatch(cleaned):
+        raise HTTPException(
+            status_code=422,
+            detail="Asset name must be a single file (letters, numbers, dot, hyphen).",
+        )
+    if cleaned.lower() in _TREE_NOISE_NAMES:
+        raise HTTPException(status_code=422, detail="Reserved asset name.")
+    return cleaned
 
 
 def _project_from_meta(
@@ -1207,6 +1342,68 @@ async def get_project(
 
     try:
         return await run_in_threadpool(_get)
+    except RepoNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SourceControlError as exc:
+        raise _source_control_http_error(exc) from exc
+
+
+@router.patch("/projects/{slug}", response_model=ProjectResponse)
+async def rename_project(
+    slug: str,
+    body: ProjectRenameRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+) -> ProjectResponse:
+    """Rename the presentation title in project.json. Slug and branch stay put."""
+    await require_workspace_access(current_user.id, body.workspace_id)
+    if not _SLUG_RE.match(slug):
+        raise HTTPException(status_code=422, detail="Invalid slug")
+    title = (body.title or "").strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="Title cannot be empty.")
+    sc, repo_id = _slides_sc(request)
+    username = _forge_username(current_user.name or "", str(current_user.email))
+    author_name = current_user.name or username
+    author_email = str(current_user.email)
+
+    def _rename() -> ProjectResponse:
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=body.workspace_id, slug=slug
+        )
+        if paths is None:
+            raise RepoNotFoundError(f"slides project {slug}")
+        meta = _load_project_meta(
+            sc, repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
+        )
+        if meta is None:
+            raise RepoNotFoundError(f"slides project {slug}")
+        meta["title"] = title
+        sc.ensure_user(
+            external_id=current_user.id,
+            email=author_email,
+            username=username,
+        )
+        sc.upsert_file(
+            repo_id=repo_id,
+            path=paths["project_path"],
+            content=json.dumps(meta, indent=2) + "\n",
+            message=f"Rename slides project {slug}",
+            branch=paths["branch"],
+            author_name=author_name,
+            author_email=author_email,
+        )
+        return _project_from_meta(
+            workspace_id=body.workspace_id,
+            slug=slug,
+            title=title,
+            template_id=str(meta.get("template_id") or _DEFAULT_TEMPLATE),
+            updated_at=meta.get("updated_at"),
+            legacy=paths.get("legacy") == "1",
+        )
+
+    try:
+        return await run_in_threadpool(_rename)
     except RepoNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SourceControlError as exc:
@@ -1942,45 +2139,19 @@ async def get_project_tree(
             entries_raw = sc.list_contents(repo_id=repo_id, path=root, ref=branch)
         except SourceControlError:
             entries_raw = []
-        entries = [
-            TreeEntryResponse(
-                name=e.name, path=e.path, type=e.type, size=getattr(e, "size", 0) or 0
-            )
-            for e in entries_raw
-        ]
-        names = {e.name for e in entries}
-        if "deck.html" not in names:
-            entries.append(
-                TreeEntryResponse(
-                    name="deck.html", path=paths["deck_path"], type="file"
-                )
-            )
-        if "assets" not in names:
-            entries.append(
-                TreeEntryResponse(
-                    name="assets", path=paths["assets_dir"], type="dir"
-                )
-            )
-        entries.sort(key=lambda e: (0 if e.type == "dir" else 1, e.name))
-
-        assets: list[TreeEntryResponse] = []
         try:
             assets_raw = sc.list_contents(
                 repo_id=repo_id, path=paths["assets_dir"], ref=branch
             )
-            assets = [
-                TreeEntryResponse(
-                    name=e.name,
-                    path=e.path,
-                    type=e.type,
-                    size=getattr(e, "size", 0) or 0,
-                )
-                for e in assets_raw
-                if e.name not in {".gitkeep", "README.md"}
-            ]
-            assets.sort(key=lambda e: e.name)
         except SourceControlError:
-            pass
+            assets_raw = []
+        entries, assets = _curate_project_tree(
+            [*entries_raw, *assets_raw],
+            root=root,
+            deck_path=paths["deck_path"],
+            project_path=paths["project_path"],
+            assets_dir=paths["assets_dir"],
+        )
 
         embedded = 0
         assets_note = None
@@ -2036,6 +2207,11 @@ class TemplateAssetItem(BaseModel):
     kind: str = "embedded"
 
 
+class TemplateFileItem(BaseModel):
+    name: str
+    kind: str = "html"
+
+
 class SeedTemplateResponse(BaseModel):
     id: str
     name: str
@@ -2046,6 +2222,7 @@ class SeedTemplateResponse(BaseModel):
     preview_ink: str = "#2d2d2d"
     slides: list[SlideOutlineItem] = Field(default_factory=list)
     assets: list[TemplateAssetItem] = Field(default_factory=list)
+    files: list[TemplateFileItem] = Field(default_factory=list)
 
 
 @router.get("/templates", response_model=list[SeedTemplateResponse])
@@ -2053,6 +2230,140 @@ async def list_seed_templates(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
 ) -> list[SeedTemplateResponse]:
-    """List seed templates with slide outlines for the Slides sidebar."""
+    """List seed templates (deck.html + listed assets) for the Slides explorer."""
     await require_workspace_access(current_user.id, workspace_id)
     return [SeedTemplateResponse(**row) for row in _list_seed_template_records()]
+
+
+@router.get("/projects/{slug}/assets/{name}", response_model=AssetResponse)
+async def get_project_asset(
+    slug: str,
+    name: str,
+    workspace_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> AssetResponse:
+    """Read one file from the presentation assets/ folder."""
+    await require_workspace_access(current_user.id, workspace_id)
+    if not _SLUG_RE.match(slug):
+        raise HTTPException(status_code=422, detail="Invalid slug")
+    filename = _validate_asset_name(name)
+    sc, repo_id = _slides_sc(request)
+
+    sidecar_base, sidecar_secret = await lookup_slides_sidecar(
+        db,
+        workspace_id=workspace_id,
+        user_id=current_user.id,
+        slug=slug,
+    )
+
+    def _get() -> AssetResponse:
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
+        )
+        if paths is None:
+            raise RepoNotFoundError(f"slides project {slug}")
+        asset_path = f"{paths['assets_dir']}/{filename}"
+        sidecar_text = _read_deck_via_sidecar(
+            sidecar_base, sidecar_secret, deck_path=asset_path
+        )
+        if isinstance(sidecar_text, str) and sidecar_text:
+            return AssetResponse(
+                slug=slug,
+                name=filename,
+                path=asset_path,
+                content=sidecar_text,
+                source="sidecar",
+            )
+        file = sc.get_file(repo_id=repo_id, path=asset_path, ref=paths["branch"])
+        if file.is_binary or file.text is None:
+            raise ValidationError("Asset is not UTF-8 text")
+        return AssetResponse(
+            slug=slug,
+            name=filename,
+            path=asset_path,
+            content=file.text,
+            source="forgejo",
+        )
+
+    try:
+        return await run_in_threadpool(_get)
+    except RepoNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except SourceControlError as exc:
+        raise _source_control_http_error(exc) from exc
+
+
+@router.put("/projects/{slug}/assets/{name}", response_model=AssetResponse)
+async def put_project_asset(
+    slug: str,
+    name: str,
+    body: AssetWriteRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> AssetResponse:
+    """Save a UTF-8 asset (SVG, data-URL, or text) into assets/."""
+    await require_workspace_access(current_user.id, body.workspace_id)
+    if not _SLUG_RE.match(slug):
+        raise HTTPException(status_code=422, detail="Invalid slug")
+    filename = _validate_asset_name(name)
+    if len(body.content or "") > _MAX_ASSET_CHARS:
+        raise HTTPException(status_code=422, detail="Asset is too large.")
+    sc, repo_id = _slides_sc(request)
+    username = _forge_username(current_user.name or "", str(current_user.email))
+    author_name = current_user.name or username
+    author_email = str(current_user.email)
+
+    sidecar_base, sidecar_secret = await lookup_slides_sidecar(
+        db,
+        workspace_id=body.workspace_id,
+        user_id=current_user.id,
+        slug=slug,
+    )
+
+    def _put() -> AssetResponse:
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=body.workspace_id, slug=slug
+        )
+        if paths is None:
+            raise RepoNotFoundError(f"slides project {slug}")
+        asset_path = f"{paths['assets_dir']}/{filename}"
+        sc.ensure_user(
+            external_id=current_user.id,
+            email=author_email,
+            username=username,
+        )
+        sidecar_ok = _write_deck_via_sidecar(
+            sidecar_base,
+            sidecar_secret,
+            deck_path=asset_path,
+            html=body.content,
+        )
+        commit = sc.upsert_file(
+            repo_id=repo_id,
+            path=asset_path,
+            content=body.content,
+            message=body.message or f"Save asset {filename}",
+            branch=paths["branch"],
+            author_name=author_name,
+            author_email=author_email,
+        )
+        return AssetResponse(
+            slug=slug,
+            name=filename,
+            path=asset_path,
+            content=body.content,
+            commit_sha=commit.sha or None,
+            source="sidecar" if sidecar_ok else "forgejo",
+        )
+
+    try:
+        return await run_in_threadpool(_put)
+    except RepoNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SourceControlError as exc:
+        raise _source_control_http_error(exc) from exc

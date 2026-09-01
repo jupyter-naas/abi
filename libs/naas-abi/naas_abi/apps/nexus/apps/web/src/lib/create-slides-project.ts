@@ -187,6 +187,37 @@ export async function startNewPresentation(
   return created;
 }
 
+export function sanitizeSlidesTitle(raw: string): string {
+  return raw.replace(/\s+/g, ' ').trim().slice(0, 120);
+}
+
+/** Persist the folder title in project.json. Slug and branch stay the same. */
+export async function renameSlidesProject(
+  workspaceId: string,
+  slug: string,
+  rawTitle: string,
+): Promise<CreatedSlidesProject> {
+  const title = sanitizeSlidesTitle(rawTitle);
+  if (!title) {
+    throw new Error('Title cannot be empty.');
+  }
+  const res = await authFetch(`/api/slides/projects/${encodeURIComponent(slug)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace_id: workspaceId, title }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
+    throw new Error(slidesApiErrorMessage(body.detail, `Failed (${res.status})`));
+  }
+  const updated = (await res.json()) as { slug: string; title?: string };
+  const nextTitle = updated.title || title;
+  if (useSlidesStore.getState().selectedSlug === slug) {
+    useSlidesStore.getState().setSelectedTitle(nextTitle);
+  }
+  return { slug: updated.slug || slug, title: nextTitle };
+}
+
 /** Swap the open deck to a seed, or create a new presentation from that template. */
 export async function applySlidesTemplate(
   workspaceId: string,

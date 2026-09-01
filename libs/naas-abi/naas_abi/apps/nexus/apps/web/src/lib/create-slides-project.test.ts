@@ -6,9 +6,18 @@ import {
   isSlidesAgent,
   parseFastApiDetail,
   pickSlidesAgentId,
+  sanitizeSlidesTitle,
   slidesApiErrorMessage,
   untitledSlidesSlug,
 } from './create-slides-project';
+
+describe('sanitizeSlidesTitle', () => {
+  it('trims and caps the folder title', () => {
+    expect(sanitizeSlidesTitle('  Hormuz brief  ')).toBe('Hormuz brief');
+    expect(sanitizeSlidesTitle('   ')).toBe('');
+    expect(sanitizeSlidesTitle('x'.repeat(200)).length).toBe(120);
+  });
+});
 
 describe('untitledSlidesSlug', () => {
   it('is kebab-case and unique per timestamp', () => {
