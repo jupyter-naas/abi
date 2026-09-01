@@ -7,10 +7,15 @@ from pathlib import Path
 from naas_abi.agents.tools.slides_tools import (
     _DATA_URL_RE,
     _REDACTED_PLACEHOLDER,
+    _WIPED_DECK_ERROR,
     _apply_replacements,
     _apply_replacements_in_section,
     _cover_h1_text,
     _cover_subtitle_text,
+    _deck_path,
+    _ensure_coding_repo,
+    _friendly_sc_error,
+    _persist_deck,
     _redact_data_urls,
     _replace_string_pairs,
     _resolve_slug,
@@ -18,8 +23,22 @@ from naas_abi.agents.tools.slides_tools import (
     _section_meta,
     _split_sections,
     _view_for_llm,
+    slides_tools,
 )
-from naas_abi_core.services.agent.context import slides_active_slug
+from naas_abi_core.services.agent.context import (
+    agent_user_id,
+    agent_workspace_id,
+    slides_active_slug,
+    slides_research_queries,
+    slides_research_required,
+)
+from naas_abi_core.services.source_control.adapters.secondary.InMemoryAdapter import (
+    InMemoryAdapter,
+)
+from naas_abi_core.services.source_control.SourceControlPorts import RepoNotFoundError
+from naas_abi_core.services.source_control.SourceControlService import (
+    SourceControlService,
+)
 
 _SAMPLE = """<!DOCTYPE html>
 <html><head></head><body>
@@ -278,3 +297,173 @@ def test_apply_replacements_real_template_cover_title():
     assert replaced == found
     assert "<h1>Presentation Title test</h1>" in updated
     assert _cover_h1_text(updated) == "Presentation Title test"
+
+
+def _bind_in_memory_git(monkeypatch):
+    sc = SourceControlService(InMemoryAdapter())
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.slides_tools._get_source_control", lambda: sc
+    )
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.slides_tools._repo_id", lambda: "abi/monorepo"
+    )
+    return sc
+
+
+def _slides_context(*, workspace: str = "ws-test", slug: str = "untitled-local"):
+    tokens = [
+        agent_workspace_id.set(workspace),
+        slides_active_slug.set(slug),
+        agent_user_id.set("user-1"),
+        slides_research_required.set(False),
+        slides_research_queries.set(None),
+    ]
+    return tokens
+
+
+def _reset_tokens(tokens) -> None:
+    agent_workspace_id.reset(tokens[0])
+    slides_active_slug.reset(tokens[1])
+    agent_user_id.reset(tokens[2])
+    slides_research_required.reset(tokens[3])
+    slides_research_queries.reset(tokens[4])
+
+
+def test_friendly_sc_error_never_returns_raw_repo_id():
+    assert _friendly_sc_error(RepoNotFoundError("abi/monorepo")) == _WIPED_DECK_ERROR
+    assert (
+        _friendly_sc_error(
+            RepoNotFoundError("abi/monorepo:slides/ws-test/untitled-local/deck.html")
+        )
+        == _WIPED_DECK_ERROR
+    )
+    assert (
+        _friendly_sc_error(RepoNotFoundError("abi/monorepo@slides/ws-test/untitled-local"))
+        == _WIPED_DECK_ERROR
+    )
+    assert _friendly_sc_error(RepoNotFoundError("abi/monorepo")) != "abi/monorepo"
+
+
+def test_ensure_coding_repo_seeds_empty_in_memory_on_write(monkeypatch):
+    sc = _bind_in_memory_git(monkeypatch)
+    try:
+        sc.list_branches(repo_id="abi/monorepo")
+        raise AssertionError("empty in_memory should not have the coding repo")
+    except RepoNotFoundError as exc:
+        assert str(exc) == "abi/monorepo"
+    tokens = _slides_context()
+    try:
+        assert _ensure_coding_repo() == "abi/monorepo"
+        assert [b.name for b in sc.list_branches(repo_id="abi/monorepo")]
+        result = _persist_deck(
+            "untitled-local",
+            "<html><body><main><section class='slide'>"
+            "<h1>Iran now</h1></section></main></body></html>",
+            "Write via Abi",
+        )
+        assert result.get("error") != "abi/monorepo"
+        assert "error" not in result, result
+        assert result["path"] == "slides/ws-test/untitled-local/deck.html"
+        assert result["branch"] == "slides/ws-test/untitled-local"
+        deck = sc.get_file(
+            repo_id="abi/monorepo",
+            path="slides/ws-test/untitled-local/deck.html",
+            ref="slides/ws-test/untitled-local",
+        )
+        assert "Iran now" in (deck.text or "")
+        meta = sc.get_file(
+            repo_id="abi/monorepo",
+            path="slides/ws-test/untitled-local/project.json",
+            ref="slides/ws-test/untitled-local",
+        )
+        assert "ws-test" in (meta.text or "")
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_replace_write_path_matches_ui_create(monkeypatch):
+    """UI create seeds namespaced deck.html; replace must edit that file."""
+    sc = _bind_in_memory_git(monkeypatch)
+    sc.ensure_repo(owner="abi", name="monorepo")
+    sc.create_branch(
+        repo_id="abi/monorepo",
+        name="slides/ws-test/untitled-local",
+        from_ref="main",
+    )
+    seed = (
+        "<!DOCTYPE html><html><body><main>"
+        '<section id="slide-cover" class="slide cover">'
+        "<h1>Presentation Title</h1>"
+        "</section></main></body></html>"
+    )
+    sc.upsert_file(
+        repo_id="abi/monorepo",
+        path="slides/ws-test/untitled-local/deck.html",
+        content=seed,
+        message="Seed deck",
+        branch="slides/ws-test/untitled-local",
+    )
+    sc.upsert_file(
+        repo_id="abi/monorepo",
+        path="slides/ws-test/untitled-local/project.json",
+        content='{"slug":"untitled-local","workspace_id":"ws-test"}\n',
+        message="Seed project",
+        branch="slides/ws-test/untitled-local",
+    )
+    tokens = _slides_context()
+    try:
+        assert _deck_path("untitled-local") == "slides/ws-test/untitled-local/deck.html"
+        replace = next(
+            t for t in slides_tools() if t.name == "replace_in_slides_deck"
+        )
+        result = replace.invoke(
+            {
+                "old": "Presentation Title",
+                "new": "Iran briefing",
+                "section_index": 0,
+                "occurrence": 0,
+            }
+        )
+        assert result.get("error") != "abi/monorepo"
+        assert "error" not in result, result
+        assert result["path"] == "slides/ws-test/untitled-local/deck.html"
+        assert result.get("cover_h1_updated") is True
+        deck = sc.get_file(
+            repo_id="abi/monorepo",
+            path="slides/ws-test/untitled-local/deck.html",
+            ref="slides/ws-test/untitled-local",
+        )
+        assert _cover_h1_text(deck.text or "") == "Iran briefing"
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_missing_repo_error_is_wipe_message(monkeypatch):
+    class _MissingRepo:
+        def ensure_repo(self, **_kwargs):
+            raise RepoNotFoundError("abi/monorepo")
+
+        def list_branches(self, **_kwargs):
+            raise RepoNotFoundError("abi/monorepo")
+
+        def upsert_file(self, **_kwargs):
+            raise RepoNotFoundError("abi/monorepo")
+
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.slides_tools._get_source_control",
+        lambda: _MissingRepo(),
+    )
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.slides_tools._repo_id", lambda: "abi/monorepo"
+    )
+    tokens = _slides_context()
+    try:
+        result = _persist_deck(
+            "untitled-local",
+            "<html><body><main><section><h1>X</h1></section></main></body></html>",
+            "Write via Abi",
+        )
+        assert result.get("error") == _WIPED_DECK_ERROR
+        assert result.get("error") != "abi/monorepo"
+    finally:
+        _reset_tokens(tokens)

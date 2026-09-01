@@ -56,3 +56,13 @@ slides_active_title: ContextVar[str | None] = ContextVar(
 slides_active_mode: ContextVar[str | None] = ContextVar(
     "slides_active_mode", default=None
 )
+
+# Research gate for Slides briefs. Set at the chat stream boundary when the
+# open deck needs web_search before HTML writes. web_search appends queries;
+# write tools refuse until at least one query is recorded.
+slides_research_required: ContextVar[bool] = ContextVar(
+    "slides_research_required", default=False
+)
+slides_research_queries: ContextVar[list[str] | None] = ContextVar(
+    "slides_research_queries", default=None
+)

@@ -231,6 +231,7 @@ async def stream_chat_response(
         return StreamingResponse(unsupported_stream(), media_type="text/event-stream")
 
     now = datetime.now(UTC).replace(tzinfo=None)
+    client_ctx = request.context if isinstance(request.context, dict) else {}
 
     async with AsyncSessionLocal() as db:
         try:
@@ -274,6 +275,19 @@ async def stream_chat_response(
                             slides_active_title.set(title)
                         if mode:
                             slides_active_mode.set(mode)
+                        from naas_abi.agents.slides_policy import (  # noqa: PLC0415
+                            bind_slides_research_policy,
+                        )
+
+                        has_prior_assistant = any(
+                            getattr(m, "role", None) == "assistant"
+                            for m in (request.messages or [])
+                        )
+                        bind_slides_research_policy(
+                            request.message,
+                            has_prior_assistant,
+                            client_ctx,
+                        )
                         if request.workspace_id:
                             try:
                                 from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__primary_adapter__FastAPI import (  # noqa: PLC0415
@@ -343,6 +357,9 @@ async def stream_chat_response(
     #             )
     #             break
 
+    from naas_abi.agents.slides_policy import apply_slides_model_override
+
+    incoming_llm = getattr(provider, "llm_model", None) or request.llm_model
     provider_config = ProviderConfig(
         id=provider.id,
         name=provider.name,
@@ -352,7 +369,7 @@ async def stream_chat_response(
         api_key=provider.api_key,
         account_id=provider.account_id,
         model=provider.model,
-        llm_model=getattr(provider, "llm_model", None) or request.llm_model,
+        llm_model=apply_slides_model_override(incoming_llm, client_ctx),
     )
 
     assistant_msg_id = ""

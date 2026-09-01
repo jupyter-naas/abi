@@ -169,7 +169,7 @@ _SKILLS_CATALOG_HEADER = (
 
 
 def _render_slides_context_block(client_context: dict | None) -> str:
-    """Inject open Slides deck so Abi edits that file and never asks which deck."""
+    """Inject open Slides deck so Abi researches, then edits that file."""
     if not isinstance(client_context, dict):
         return ""
     slides = client_context.get("slides")
@@ -182,10 +182,13 @@ def _render_slides_context_block(client_context: dict | None) -> str:
     branch = str(slides.get("branch") or f"slides/{slug}").strip()
     title = str(slides.get("title") or "").strip()
     mode = str(slides.get("mode") or "").strip()
+    today = datetime.now().date().isoformat()
+    year = today[:4]
     lines = [
         f"- slug: {slug}",
         f"- path: {path}",
         f"- branch: {branch}",
+        f"- today: {today}",
     ]
     if title:
         lines.append(f"- title: {title}")
@@ -196,11 +199,28 @@ def _render_slides_context_block(client_context: dict | None) -> str:
         "The user is editing this presentation in the Slides overlay right now. "
         "You are operating on its Coder workspace files (sidecar) when available; "
         "Forgejo remains the Save/history snapshot. Preview loads from sidecar when "
-        "ready. Do not ask which deck, slug, or file. "
-        "Omit slug on Slides tool calls; tools default to this open deck. "
-        "For a small copy edit (e.g. replace the title), call replace_in_slides_deck "
-        "immediately with section_index=0 and occurrence=0 (matches &amp; on cover "
-        "h1; do not use occurrence=1 for the title).\n"
+        "ready. Do not ask which deck, slug, file, or template. "
+        "Omit slug on Slides tool calls; tools default to this open deck.\n"
+        "Research first, then write. For news, current events, "
+        '"what is going on", country or company briefings, or any factual deck:\n'
+        f"1. Call web_search before any replace_in_slides_deck, write_slides_section, "
+        f"or write_slides_deck. Use 2 to 4 queries (latest developments, context, "
+        f"key actors, dates). Include {year} in the queries. Stop after 4 searches.\n"
+        "2. Optionally one second-pass query to check named sources, still within "
+        "the 4-query budget.\n"
+        "3. Outline 6-8 slides against the open template.\n"
+        "4. Then rewrite the open HTML sections with researched claims, dates, "
+        "actors, and sources. Do not keep searching instead of writing. No lorem. "
+        "No Context / Approach / Plan filler when the user asked for a situation brief.\n"
+        "Keep the seed template CSS and structure. Cite sources in footer or "
+        "source lines if the layout allows. "
+        "A tiny copy edit (title typo, color tweak) may skip search. "
+        "Edit HTML sections only. Preview is the HTML stage. PPTX export "
+        "reconstructs the live .slide DOM at 1280x720; do not edit buildPptx or "
+        "FOOTER_TXT. For a small copy edit after research (or a title-only tweak), "
+        "call replace_in_slides_deck with section_index=0 and "
+        "occurrence=0 (matches &amp; on cover h1; do not use occurrence=1 "
+        "for the title).\n"
         + "\n".join(lines)
         + "\n"
     )
@@ -943,6 +963,23 @@ class ChatService:
                         client_context=request.context,
                     )
 
+                from naas_abi.agents.slides_policy import (
+                    apply_slides_model_override,
+                    bind_slides_research_policy,
+                )
+
+                has_prior_assistant = any(
+                    getattr(m, "role", None) == "assistant" for m in prior_messages
+                )
+                bind_slides_research_policy(
+                    request.message,
+                    has_prior_assistant,
+                    request.context,
+                )
+                llm_model = apply_slides_model_override(
+                    provider.llm_model, request.context
+                )
+
                 response_content = await complete_with_provider(
                     messages=provider_messages,
                     config=ProviderConfig(
@@ -954,6 +991,7 @@ class ChatService:
                         api_key=provider.api_key,
                         account_id=provider.account_id,
                         model=provider.model,
+                        llm_model=llm_model,
                     ),
                     system_prompt=system_prompt,
                     thread_id=conversation_id,

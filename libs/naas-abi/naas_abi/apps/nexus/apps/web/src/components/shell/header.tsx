@@ -94,8 +94,8 @@ export function Header({ title, subtitle, nav, actions }: HeaderProps = {}) {
         {nav ? <div className="ml-1 flex min-w-0 items-center">{nav}</div> : null}
       </div>
 
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <div className="pointer-events-auto">
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-8">
+        <div className="pointer-events-auto w-full max-w-[32rem]">
           <QuickOpen />
         </div>
       </div>

@@ -12,6 +12,7 @@ Coder.
 from __future__ import annotations
 
 import hashlib
+import html as html_lib
 import json
 import logging
 import re
@@ -88,7 +89,7 @@ def _get_source_control(request: Request) -> SourceControlService:
     except Exception as exc:
         raise HTTPException(
             status_code=503,
-            detail="Source control (Forgejo) is not configured. Slides requires git storage.",
+            detail="Forgejo is not configured. Slides needs git storage.",
         ) from exc
 
 
@@ -108,6 +109,77 @@ def _get_coding_environment(request: Request) -> CodingEnvironmentService | None
 
 def _repo_id() -> str:
     return settings.coding_repo_id or "abi/monorepo"
+
+
+_REPO_ID_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+_FORGEJO_NOT_CONFIGURED = "Forgejo is not configured. Slides needs git storage."
+_FORGEJO_UNREACHABLE = "Forgejo is not reachable. Slides needs git storage."
+
+
+def _is_repo_id_message(text: str) -> bool:
+    """True when the exception is just owner/name (InMemory RepoNotFoundError)."""
+    return bool(_REPO_ID_RE.fullmatch((text or "").strip()))
+
+
+def _repo_missing_detail(repo_id: str) -> str:
+    return (
+        f"Git repo '{repo_id}' is missing. Forgejo is not configured, "
+        "or coding-init did not seed it."
+    )
+
+
+def _is_forgejo_unreachable(exc: BaseException | str) -> bool:
+    text = str(exc or "").lower()
+    return any(
+        marker in text
+        for marker in (
+            "connection refused",
+            "failed to establish",
+            "name or service not known",
+            "nodename nor servname",
+            "timed out",
+            "timeout",
+            "connection reset",
+            "max retries",
+            "temporarily unavailable",
+            "network is unreachable",
+            "connectionerror",
+            "connecterror",
+        )
+    )
+
+
+def _source_control_http_error(exc: BaseException) -> HTTPException:
+    """Map forge failures: missing/down git is 503; transient writes stay 502."""
+    text = str(exc or "").strip()
+    repo_hint = text.split(":", 1)[0].strip() if text else ""
+    if isinstance(exc, RepoNotFoundError) and _is_repo_id_message(repo_hint):
+        return HTTPException(status_code=503, detail=_repo_missing_detail(repo_hint))
+    if _is_repo_id_message(text):
+        return HTTPException(status_code=503, detail=_repo_missing_detail(text))
+    if _is_forgejo_unreachable(exc):
+        return HTTPException(status_code=503, detail=_FORGEJO_UNREACHABLE)
+    return HTTPException(status_code=502, detail=_friendly_git_detail(exc))
+
+
+def _ensure_coding_repo(sc: SourceControlService) -> str:
+    """Idempotently seed CODING_REPO_ID (local in_memory starts empty)."""
+    repo_id = _repo_id()
+    owner, sep, name = repo_id.partition("/")
+    if not sep or not owner or not name or "/" in name:
+        raise HTTPException(status_code=503, detail=_FORGEJO_NOT_CONFIGURED)
+    try:
+        sc.ensure_repo(owner=owner, name=name)
+    except SourceControlError as exc:
+        raise _source_control_http_error(exc) from exc
+    except (OSError, TimeoutError) as exc:
+        raise HTTPException(status_code=503, detail=_FORGEJO_UNREACHABLE) from exc
+    return repo_id
+
+
+def _slides_sc(request: Request) -> tuple[SourceControlService, str]:
+    sc = _get_source_control(request)
+    return sc, _ensure_coding_repo(sc)
 
 
 def _forge_username(name: str, email: str) -> str:
@@ -310,6 +382,70 @@ def _count_embedded_images(html: str) -> int:
     return len(re.findall(r"data:image/[^;]+;base64,", html))
 
 
+_SECTION_SLIDE_RE = re.compile(
+    r"<section\b([^>]*)>(.*?)</section>",
+    re.IGNORECASE | re.DOTALL,
+)
+_SLIDE_CLASS_RE = re.compile(r"""\bclass\s*=\s*["'][^"']*\bslide\b""", re.IGNORECASE)
+_SECTION_ID_RE = re.compile(r"""\bid\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
+_EYEBROW_RE = re.compile(
+    r"""<div\b[^>]*class=["'][^"']*\b(?:eyebrow|divider-eyebrow)\b[^"']*["'][^>]*>(.*?)</div>""",
+    re.IGNORECASE | re.DOTALL,
+)
+_H1_RE = re.compile(r"<h1\b[^>]*>(.*?)</h1>", re.IGNORECASE | re.DOTALL)
+_DIVIDER_TITLE_RE = re.compile(
+    r"""<div\b[^>]*class=["'][^"']*\bdivider-title\b[^"']*["'][^>]*>(.*?)</div>""",
+    re.IGNORECASE | re.DOTALL,
+)
+_TAG_RE = re.compile(r"<[^>]+>")
+_IMG_CONST_RE = re.compile(r"const IMG\s*=\s*\{(.*?)\n\s*\};", re.DOTALL)
+_IMG_KEY_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:", re.MULTILINE)
+
+
+def _strip_html_text(raw: str) -> str:
+    return html_lib.unescape(_TAG_RE.sub("", raw or "")).strip()
+
+
+def _parse_slide_outline(html: str) -> list[dict]:
+    """h1 / eyebrow (or divider title) per ``<section class="slide">``."""
+    slides: list[dict] = []
+    index = 0
+    for match in _SECTION_SLIDE_RE.finditer(html or ""):
+        attrs = match.group(1) or ""
+        if not _SLIDE_CLASS_RE.search(attrs):
+            continue
+        body = match.group(2) or ""
+        id_m = _SECTION_ID_RE.search(attrs)
+        eyebrow_m = _EYEBROW_RE.search(body)
+        h1_m = _H1_RE.search(body)
+        divider_m = _DIVIDER_TITLE_RE.search(body)
+        title = (
+            _strip_html_text(h1_m.group(1))
+            if h1_m
+            else (_strip_html_text(divider_m.group(1)) if divider_m else "")
+        )
+        slides.append(
+            {
+                "index": index,
+                "id": id_m.group(1) if id_m else None,
+                "eyebrow": _strip_html_text(eyebrow_m.group(1)) if eyebrow_m else "",
+                "title": title,
+            }
+        )
+        index += 1
+    return slides
+
+
+def _parse_template_assets(html: str) -> list[dict[str, str]]:
+    """Embedded seed assets (``const IMG`` keys, else numbered data-URLs)."""
+    block = _IMG_CONST_RE.search(html or "")
+    if block:
+        keys = _IMG_KEY_RE.findall(block.group(1))
+        return [{"name": key, "kind": "embedded"} for key in keys]
+    count = _count_embedded_images(html or "")
+    return [{"name": f"embedded-{i + 1}", "kind": "embedded"} for i in range(count)]
+
+
 def _slugify(title: str) -> str:
     raw = re.sub(r"[^a-z0-9]+", "-", title.strip().lower()).strip("-")
     return raw[:48] or "deck"
@@ -443,8 +579,18 @@ def _seed_template_meta(template_id: str) -> dict[str, str]:
     }
 
 
-def _list_seed_template_records() -> list[dict[str, str]]:
-    return [_seed_template_meta(tid) for tid in _discover_seed_ids()]
+def _list_seed_template_records() -> list[dict]:
+    rows: list[dict] = []
+    for tid in _discover_seed_ids():
+        meta = _seed_template_meta(tid)
+        try:
+            seed = _load_seed_html(tid)
+        except HTTPException:
+            seed = ""
+        meta["slides"] = _parse_slide_outline(seed) if seed else []
+        meta["assets"] = _parse_template_assets(seed) if seed else []
+        rows.append(meta)
+    return rows
 
 
 def _known_template_ids() -> set[str]:
@@ -511,6 +657,12 @@ class DeckUpdateRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     html: str = Field(..., min_length=1)
     message: str = Field(default="Update slides deck", max_length=200)
+    template_id: str | None = Field(default=None, max_length=64)
+
+
+class ApplyTemplateRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    template_id: str = Field(..., min_length=1, max_length=64)
 
 
 class CommitResponse(BaseModel):
@@ -718,7 +870,14 @@ def _friendly_git_detail(exc: BaseException) -> str:
     """Human detail for Forgejo failures; never dump raw forge JSON."""
     if _is_git_write_race(exc):
         return "Git write raced on the deck branch; retrying is safe"
+    if _is_forgejo_unreachable(exc):
+        return _FORGEJO_UNREACHABLE
     text = str(exc or "").strip()
+    repo_hint = text.split(":", 1)[0].strip() if text else ""
+    if _is_repo_id_message(text) or (
+        isinstance(exc, RepoNotFoundError) and _is_repo_id_message(repo_hint)
+    ):
+        return _repo_missing_detail(repo_hint or _repo_id())
     if (
         len(text) > 180
         or text.startswith("{")
@@ -804,8 +963,7 @@ async def list_projects(
     current_user: User = Depends(get_current_user_required),
 ) -> list[ProjectResponse]:
     await require_workspace_access(current_user.id, workspace_id)
-    sc = _get_source_control(request)
-    repo_id = _repo_id()
+    sc, repo_id = _slides_sc(request)
     ws_seg = _workspace_segment(workspace_id)
     ns_prefix = f"{_BRANCH_PREFIX}{ws_seg}/"
 
@@ -856,7 +1014,7 @@ async def list_projects(
     try:
         return await run_in_threadpool(_list)
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise _source_control_http_error(exc) from exc
 
 
 @router.post("/projects", response_model=ProjectResponse)
@@ -878,8 +1036,7 @@ async def create_project(
             status_code=422,
             detail=f"Unknown template_id '{body.template_id}'.",
         )
-    sc = _get_source_control(request)
-    repo_id = _repo_id()
+    sc, repo_id = _slides_sc(request)
     paths = _paths_for(body.workspace_id, slug, legacy=False)
     branch = paths["branch"]
     username = _forge_username(current_user.name or "", str(current_user.email))
@@ -994,9 +1151,7 @@ async def create_project(
     except BranchNameConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(
-            status_code=502, detail=_friendly_git_detail(exc)
-        ) from exc
+        raise _source_control_http_error(exc) from exc
 
     try:
         runtime = await _ensure_runtime_impl(
@@ -1026,8 +1181,7 @@ async def get_project(
     await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
-    sc = _get_source_control(request)
-    repo_id = _repo_id()
+    sc, repo_id = _slides_sc(request)
 
     def _get() -> ProjectResponse:
         paths = _resolve_project_paths(
@@ -1056,9 +1210,7 @@ async def get_project(
     except RepoNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(
-            status_code=502, detail=_friendly_git_detail(exc)
-        ) from exc
+        raise _source_control_http_error(exc) from exc
 
 
 @router.get("/projects/{slug}/deck", response_model=DeckResponse)
@@ -1077,8 +1229,7 @@ async def get_deck(
     await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
-    sc = _get_source_control(request)
-    repo_id = _repo_id()
+    sc, repo_id = _slides_sc(request)
 
     def _resolve() -> dict[str, str]:
         paths = _resolve_project_paths(
@@ -1095,9 +1246,7 @@ async def get_deck(
     except RepoNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(
-            status_code=502, detail=_friendly_git_detail(exc)
-        ) from exc
+        raise _source_control_http_error(exc) from exc
 
     sidecar_base, sidecar_secret = await lookup_slides_sidecar(
         db,
@@ -1142,9 +1291,7 @@ async def get_deck(
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(
-            status_code=502, detail=_friendly_git_detail(exc)
-        ) from exc
+        raise _source_control_http_error(exc) from exc
 
 
 @router.put("/projects/{slug}/deck", response_model=DeckResponse)
@@ -1159,8 +1306,7 @@ async def put_deck(
     await require_workspace_access(current_user.id, body.workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
-    sc = _get_source_control(request)
-    repo_id = _repo_id()
+    sc, repo_id = _slides_sc(request)
     username = _forge_username(current_user.name or "", str(current_user.email))
     author_name = current_user.name or username
     author_email = str(current_user.email)
@@ -1208,6 +1354,8 @@ async def put_deck(
 
                 data["workspace_id"] = body.workspace_id
                 data["updated_at"] = datetime.now(UTC).isoformat()
+                if body.template_id:
+                    data["template_id"] = body.template_id
                 sc.upsert_file(
                     repo_id=repo_id,
                     path=paths["project_path"],
@@ -1232,9 +1380,36 @@ async def put_deck(
     except RepoNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SourceControlError as exc:
+        raise _source_control_http_error(exc) from exc
+
+
+@router.post("/projects/{slug}/apply-template", response_model=DeckResponse)
+async def apply_template(
+    slug: str,
+    body: ApplyTemplateRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> DeckResponse:
+    """Rewrite the open deck from a seed template (HTML source of truth)."""
+    if body.template_id not in _known_template_ids():
         raise HTTPException(
-            status_code=502, detail=_friendly_git_detail(exc)
-        ) from exc
+            status_code=422,
+            detail=f"Unknown template_id '{body.template_id}'.",
+        )
+    seed = _load_seed_html(body.template_id)
+    return await put_deck(
+        slug,
+        DeckUpdateRequest(
+            workspace_id=body.workspace_id,
+            html=seed,
+            message=f"Apply template {body.template_id}",
+            template_id=body.template_id,
+        ),
+        request,
+        current_user,
+        db,
+    )
 
 
 @router.get("/projects/{slug}/history", response_model=list[CommitResponse])
@@ -1248,8 +1423,7 @@ async def list_history(
     await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
-    sc = _get_source_control(request)
-    repo_id = _repo_id()
+    sc, repo_id = _slides_sc(request)
 
     def _hist() -> list[CommitResponse]:
         paths = _resolve_project_paths(
@@ -1272,7 +1446,7 @@ async def list_history(
     except RepoNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise _source_control_http_error(exc) from exc
 
 
 def _build_sidecar_base(*, coder_username: str | None, name: str) -> str | None:
@@ -1289,7 +1463,7 @@ async def lookup_slides_sidecar(
     slug: str,
 ) -> tuple[str | None, str | None]:
     """Return (sidecar_base, sidecar_secret) for an open Slides deck, if bound."""
-    if not workspace_id or not user_id or not slug or not _SLUG_RE.match(slug):
+    if db is None or not workspace_id or not user_id or not slug or not _SLUG_RE.match(slug):
         return None, None
     labels = _runtime_labels(workspace_id, slug)
     result = await db.execute(
@@ -1318,8 +1492,7 @@ async def _ensure_runtime_impl(
     db: AsyncSession | None,
 ) -> RuntimeResponse:
     # Ownership gate before provisioning compute.
-    sc_gate = _get_source_control(request)
-    repo_gate = _repo_id()
+    sc_gate, repo_gate = _slides_sc(request)
 
     def _owned() -> dict[str, str] | None:
         return _resolve_project_paths(
@@ -1360,8 +1533,8 @@ async def _ensure_runtime_impl(
             coder_workspace=name,
             branch=branch,
         )
-    sc = _get_source_control(request)
-    repo_id = _repo_id()
+    sc = sc_gate
+    repo_id = repo_gate
 
     def _pick_template() -> tuple[str, str] | None:
         templates = coding.list_templates()
@@ -1751,8 +1924,7 @@ async def get_project_tree(
     await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
-    sc = _get_source_control(request)
-    repo_id = _repo_id()
+    sc, repo_id = _slides_sc(request)
 
     def _tree() -> ProjectTreeResponse:
         paths = _resolve_project_paths(
@@ -1849,7 +2021,19 @@ async def get_project_tree(
     except RepoNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise _source_control_http_error(exc) from exc
+
+
+class SlideOutlineItem(BaseModel):
+    index: int
+    id: str | None = None
+    eyebrow: str = ""
+    title: str = ""
+
+
+class TemplateAssetItem(BaseModel):
+    name: str
+    kind: str = "embedded"
 
 
 class SeedTemplateResponse(BaseModel):
@@ -1860,6 +2044,8 @@ class SeedTemplateResponse(BaseModel):
     preview_panel: str = "#ffffff"
     preview_accent: str = "#0072ce"
     preview_ink: str = "#2d2d2d"
+    slides: list[SlideOutlineItem] = Field(default_factory=list)
+    assets: list[TemplateAssetItem] = Field(default_factory=list)
 
 
 @router.get("/templates", response_model=list[SeedTemplateResponse])
@@ -1867,6 +2053,6 @@ async def list_seed_templates(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
 ) -> list[SeedTemplateResponse]:
-    """List Nexus seed templates available for New Presentation."""
+    """List seed templates with slide outlines for the Slides sidebar."""
     await require_workspace_access(current_user.id, workspace_id)
     return [SeedTemplateResponse(**row) for row in _list_seed_template_records()]

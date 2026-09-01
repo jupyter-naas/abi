@@ -16,7 +16,7 @@ import { useAgentsStore } from '@/stores/agents';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
-import { dispatchSlidesDeckUpdated, useSlidesStore } from '@/stores/slides';
+import { dispatchSlidesDeckUpdated, isSlidesWriteTool, useSlidesStore } from '@/stores/slides';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { useTenant } from '@/contexts/tenant-context';
@@ -25,6 +25,7 @@ import '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector.css';
 import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
+import { humanizeChatProviderError } from '@/lib/chat-provider-error';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import { getLogoUrl } from '@/lib/logo-url';
 import {
@@ -2049,6 +2050,9 @@ export function ChatInterface({
           });
           streamActivityLine = prefix === 'Routing to' ? `${prefix} ${name}` : name;
           hasDetailedActivity = true;
+          if (isSlidesWriteTool(rawTool)) {
+            useSlidesStore.getState().setAgentWriting(true);
+          }
         };
 
         const handleToolResponseEvent = (output: string) => {
@@ -2073,18 +2077,20 @@ export function ChatInterface({
 
           // After Abi writes a Slides deck, nudge the open preview to reload.
           const raw = (target.rawName || target.toolName || '').toLowerCase();
-          if (
-            raw.includes('write_slides') ||
-            raw.includes('replace_in_slides')
-          ) {
+          if (isSlidesWriteTool(raw)) {
             let slug: string | undefined;
+            let writeFailed = false;
             try {
-              const parsed = JSON.parse(output) as { slug?: string };
+              const parsed = JSON.parse(output) as { slug?: string; error?: unknown };
               if (typeof parsed?.slug === 'string') slug = parsed.slug;
+              if (parsed && parsed.error) writeFailed = true;
             } catch {
               /* tool output may be plain text */
             }
-            dispatchSlidesDeckUpdated({ slug, source: target.rawName || target.toolName });
+            useSlidesStore.getState().setAgentWriting(false);
+            if (!writeFailed) {
+              dispatchSlidesDeckUpdated({ slug, source: target.rawName || target.toolName });
+            }
           }
 
           const toolUrls = extractUrlsFromContent(output);
@@ -2426,6 +2432,7 @@ export function ChatInterface({
       } finally {
         setIsStreaming(false);
         setStreamingMessageId(null);
+        useSlidesStore.getState().setAgentWriting(false);
         if (connectingTimerRef.current) clearTimeout(connectingTimerRef.current);
         setShowConnecting(false);
         streamControllerRef.current = null;
@@ -2564,6 +2571,7 @@ export function ChatInterface({
       setIsLoading(false);
       setIsStreaming(false);
       isSubmittingRef.current = false;
+      useSlidesStore.getState().setAgentWriting(false);
     }
   };
 
@@ -2646,6 +2654,7 @@ export function ChatInterface({
           <EmptyState
             selectedAgentName={selectedAgentData?.name || selectedAgent}
             logoUrl={selectedAgentData?.logoUrl ?? undefined}
+            slidesOpen={Boolean(slidesChatContext)}
           />
         ) : (
           <div className="mx-auto max-w-3xl space-y-6">
@@ -2958,7 +2967,13 @@ export function ChatInterface({
                     }
                   }}
                   placeholder={
-                    attachedImages.length > 0 ? 'Ask about the image...' : pendingFileAttachments.length > 0 ? 'Ask about the file...' : 'Send a message...'
+                    attachedImages.length > 0
+                      ? 'Ask about the image...'
+                      : pendingFileAttachments.length > 0
+                        ? 'Ask about the file...'
+                        : slidesChatContext
+                          ? 'Describe the deck: topic, audience, how many slides...'
+                          : 'Send a message...'
                   }
                   // placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
                   className="chat-composer-input max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
@@ -3320,9 +3335,11 @@ function SuggestionChipsRow({
 function EmptyState({
   selectedAgentName,
   logoUrl,
+  slidesOpen,
 }: {
   selectedAgentName: string;
   logoUrl?: string | null;
+  slidesOpen?: boolean;
 }) {
   const { user } = useAuthStore();
   const resolvedLogoUrl = logoUrl ? getLogoUrl(logoUrl) : undefined;
@@ -3333,7 +3350,9 @@ function EmptyState({
     <div className="flex h-full flex-col items-center justify-center px-4">
       <EmptyStateLogo src={resolvedLogoUrl} name={selectedAgentName} />
       <p className="mb-6 text-center text-muted-foreground">
-        {greeting} {selectedAgentName} here, how can I help?
+        {slidesOpen
+          ? `${greeting} This is a Minimal Light deck. Tell me the topic and I will write the slides.`
+          : `${greeting} ${selectedAgentName} here, how can I help?`}
       </p>
     </div>
   );
@@ -3927,7 +3946,7 @@ const MessageBubble = React.memo(function MessageBubble({
   // collapsible panel below handles display.
   const responseForRender = useMemo(() => {
     if (isUser || typeof responseForDisplay !== 'string') return responseForDisplay;
-    return stripTrailingSources(responseForDisplay);
+    return humanizeChatProviderError(stripTrailingSources(responseForDisplay));
   }, [isUser, responseForDisplay]);
 
   const handleCopyCode = useCallback(async (code: string, key: string) => {

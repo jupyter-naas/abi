@@ -8,6 +8,7 @@ import {
   SLIDES_STAGE_HEIGHT,
   SLIDES_STAGE_WIDTH,
 } from './slides-preview-fit';
+import { SLIDES_PPTX_FROM_DOM_SCRIPT_ID } from './slides-pptx-from-dom';
 
 describe('computeSlidesPreviewScale', () => {
   it('contains a 16:9 stage in a wide pane (letterbox top/bottom)', () => {
@@ -32,11 +33,25 @@ describe('prepareSlidesPreviewHtml', () => {
     const once = prepareSlidesPreviewHtml(src);
     expect(once).toContain(`id="${SLIDES_PREVIEW_FIT_STYLE_ID}"`);
     expect(once).toContain(`id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}"`);
+    expect(once).toContain(`id="${SLIDES_PPTX_FROM_DOM_SCRIPT_ID}"`);
+    expect(once).toContain('window.buildPptx = buildPptx');
     expect(once).toContain(SLIDES_PREVIEW_MESSAGE_SOURCE);
     expect(once).toContain(`${SLIDES_STAGE_WIDTH}px`);
     expect(once).toContain('deck-menubar');
     const twice = prepareSlidesPreviewHtml(once);
     expect(twice).toBe(once);
+  });
+
+  it('overrides a hardcoded seed buildPptx with the DOM walker', () => {
+    const src =
+      '<!doctype html><html><head></head><body><main class="deck"></main>' +
+      '<script>async function buildPptx(){ /* [["1","Context"],["2","Approach"]] */ }</script>' +
+      '</body></html>';
+    const out = prepareSlidesPreviewHtml(src);
+    const walkerAt = out.lastIndexOf('window.buildPptx = buildPptx');
+    const seedAt = out.indexOf('[["1","Context"],["2","Approach"]]');
+    expect(walkerAt).toBeGreaterThan(seedAt);
+    expect(out).toContain(SLIDES_PPTX_FROM_DOM_SCRIPT_ID);
   });
 
   it('prefixes when head is missing', () => {

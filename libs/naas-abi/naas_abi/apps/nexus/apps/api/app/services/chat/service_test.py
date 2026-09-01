@@ -996,6 +996,12 @@ async def test_build_abi_injection_preamble_includes_open_slides_deck() -> None:
     assert "Open Slides presentation" in preamble
     assert "q3-br" in preamble
     assert "Do not ask which deck" in preamble
+    assert "Edit HTML sections only" in preamble
+    assert "buildPptx" in preamble
+    assert "Research first, then write" in preamble
+    assert "web_search" in preamble
+    assert "start editing immediately" not in preamble
+    assert "today:" in preamble
 
 
 @pytest.mark.asyncio

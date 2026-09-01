@@ -170,3 +170,11 @@ export function buildQuickOpenItems(input: {
 
   return items;
 }
+
+/** Dispatched on `window` so the dock Search icon can open the header palette. */
+export const QUICK_OPEN_EVENT = 'nexus:quick-open';
+
+export function requestQuickOpen(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(QUICK_OPEN_EVENT));
+}

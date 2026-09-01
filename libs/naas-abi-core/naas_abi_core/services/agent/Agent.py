@@ -60,6 +60,7 @@ from naas_abi_core.services.agent.context import (
     agent_user_id,
     agent_workspace_id,
     coder_workspace_base,
+    slides_active_slug,
 )
 from naas_abi_core.services.agent.ontologies.modules.AgentEventOntology import (
     AgentAIMessageEmitted,
@@ -117,6 +118,33 @@ def _reset_shared_checkpointer_for_tests() -> None:
 
 
 atexit.register(_close_shared_checkpointer)
+
+
+def _friendly_model_invoke_error(exc: BaseException) -> str:
+    """One-line human error. Never dump raw provider JSON into the chat bubble."""
+    text = str(exc or "").strip()
+    lowered = text.lower()
+    if "recursion limit" in lowered:
+        return (
+            "The agent hit its step limit before finishing. "
+            "Open the deck and send the brief again."
+        )
+    if (
+        "429" in text
+        or "rate-limited" in lowered
+        or "rate limited" in lowered
+        or "temporarily rate-limited" in lowered
+    ):
+        return (
+            "This model is rate limited. Pick another model in the agent menu and try again."
+        )
+    if (
+        "error code:" in lowered
+        or "provider returned error" in lowered
+        or (len(text) > 160 and ("{" in text or "'error'" in text or '"error"' in text))
+    ):
+        return "The model provider failed. Pick another model and try again."
+    return text or "The model provider failed. Pick another model and try again."
 
 
 def create_checkpointer() -> BaseCheckpointSaver:
@@ -1455,7 +1483,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                     **routing_update,
                     "messages": [
                         AIMessage(
-                            content=f"I'm sorry, I encountered an error while processing your request:\n\n{e}"
+                            content=_friendly_model_invoke_error(e)
                         )
                     ],
                 },
@@ -1954,9 +1982,16 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
         notified = {}
 
+        stream_config: dict[str, Any] = {
+            "configurable": {"thread_id": self._state.thread_id}
+        }
+        # Default LangGraph limit is 25. A slides research loop (search, then
+        # write 6-8 sections) needs more steps than a normal chat turn.
+        if (slides_active_slug.get() or "").strip():
+            stream_config["recursion_limit"] = 80
         for chunk in self.graph.stream(
             {"messages": [human_message]},
-            config={"configurable": {"thread_id": self._state.thread_id}},
+            config=stream_config,
             subgraphs=True,
         ):
             source, payload = chunk
@@ -2238,9 +2273,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 logger.opt(exception=True).error(
                     f"Agent invoke thread error for '{self._name}': {e}"
                 )
-                final_state = (
-                    f"I encountered an error while processing your request: {e}"
-                )
+                final_state = _friendly_model_invoke_error(e)
             self._event_queue.put(FinalStateEvent(payload=final_state))
 
         from threading import Thread

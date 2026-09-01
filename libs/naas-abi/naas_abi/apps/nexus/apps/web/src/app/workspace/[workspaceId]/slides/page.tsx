@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Loader2, Plus, Presentation } from 'lucide-react';
+import { Loader2, Presentation } from 'lucide-react';
 import { Header } from '@/components/shell/header';
 import { SlidesMenuBar } from '@/components/slides/slides-menu-bar';
 import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
+import { slidesApiErrorMessage, startNewPresentation } from '@/lib/create-slides-project';
 import { authFetch } from '@/stores/auth';
 import { useSlidesStore, type SlidesProject } from '@/stores/slides';
 
@@ -16,8 +17,21 @@ export default function SlidesIndexPage() {
   const base = `/workspace/${workspaceId}/slides`;
   const [projects, setProjects] = useState<SlidesProject[]>([]);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const setSelectedSlug = useSlidesStore((s) => s.setSelectedSlug);
+
+  const onNewPresentation = useCallback(async () => {
+    if (!workspaceId || creating) return;
+    setCreating(true);
+    setError(null);
+    try {
+      await startNewPresentation(workspaceId, (href) => router.push(href));
+    } catch (e) {
+      setError(slidesApiErrorMessage((e as Error).message, 'Could not create the deck.'));
+      setCreating(false);
+    }
+  }, [workspaceId, creating, router]);
 
   const load = useCallback(async () => {
     if (!workspaceId) return;
@@ -28,8 +42,8 @@ export default function SlidesIndexPage() {
         `/api/slides/projects?workspace_id=${encodeURIComponent(workspaceId)}`,
       );
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(body.detail || `Failed (${res.status})`);
+        const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
+        throw new Error(slidesApiErrorMessage(body.detail, `Failed (${res.status})`));
       }
       setProjects((await res.json()) as SlidesProject[]);
     } catch (e) {
@@ -47,19 +61,7 @@ export default function SlidesIndexPage() {
     <div className="flex h-full flex-col">
       <Header
         title="Slides"
-        nav={
-          <SlidesMenuBar onNewPresentation={() => router.push(`${base}/new`)} />
-        }
-        actions={
-          <button
-            type="button"
-            onClick={() => router.push(`${base}/new`)}
-            className="inline-flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
-          >
-            <Plus size={14} />
-            New Presentation
-          </button>
-        }
+        nav={<SlidesMenuBar onNewPresentation={() => void onNewPresentation()} />}
       />
 
       {error && (
@@ -79,17 +81,11 @@ export default function SlidesIndexPage() {
             <Presentation size={32} className="mx-auto text-muted-foreground" />
             <h2 className="text-base font-medium">Create your first deck</h2>
             <p className="text-sm text-muted-foreground">
-              New projects seed from the generic default template into git. Edit in the
-              browser, preview live, ask Abi to revise, then export PPTX.
+              Use File → New or New in the Slides column. That opens Minimal Light and
+              Abi. Talk through the deck; the preview updates as tools run. File →
+              Export PPTX rebuilds the current HTML at 1280x720 (closest fit, not
+              pixel-perfect).
             </p>
-            <button
-              type="button"
-              onClick={() => router.push(`${base}/new`)}
-              className="inline-flex items-center gap-1.5 rounded-md bg-workspace-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
-            >
-              <Plus size={14} />
-              New Presentation
-            </button>
           </div>
         ) : (
           <div className="mx-auto grid max-w-3xl gap-2">

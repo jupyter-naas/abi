@@ -14,9 +14,9 @@ Parent applications may mirror these seeds under their own assets tree if needed
 
 Each deck is a self-contained HTML file with:
 
-- `.deck` / `.slide` structure (1280×720)
+- `.deck` / `.slide` structure (1280x720)
 - Fixed `deck-menubar` + Export menu (PDF / PPTX / Print)
-- In-browser `buildPptx()` (pptxgenjs)
+- In-browser `buildPptx()` that walks the live `.slide` DOM (pptxgenjs). HTML is the source; PPTX is a closest-fit reconstruction (same geometry, type, colors). Not pixel-perfect.
 - Decorative bands as SVG `data:` URLs
 
 New Slides projects copy the chosen seed into Forgejo at `slides/<slug>/deck.html` on branch `slides/<slug>`, and also seed `slides/<slug>/assets/` (`.gitkeep` + README).
@@ -30,7 +30,7 @@ New Slides projects copy the chosen seed into Forgejo at `slides/<slug>/deck.htm
 5. Run API tests: `pytest …/slides__primary_adapter__FastAPI_test.py -k seed`.
 6. Optional: progressive style packs can be imported later by dropping more HTML + catalog rows; do not vendor external skill trees as source.
 
-Gallery UI: **File → New Presentation** (`/slides/new`) loads `GET /api/slides/templates` and posts the selected `template_id` to `POST /api/slides/projects`.
+New Presentation seeds Minimal Light (`minimal-light-v1`) and opens Abi. Catalog rows remain for API seed lookup, not a gallery in front of chat.
 
 ## Assets / images
 
