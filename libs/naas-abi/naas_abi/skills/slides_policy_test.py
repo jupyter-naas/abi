@@ -1,4 +1,4 @@
-from naas_abi.agents.slides_policy import (
+from naas_abi.skills.slides_policy import (
     DEFAULT_SLIDES_MODEL,
     MAX_SLIDES_SEARCHES,
     apply_slides_model_override,

@@ -1,4 +1,4 @@
-from naas_abi.agents.skills.office_skills import (
+from naas_abi.skills.office_skills import (
     list_office_skill_records,
     load_office_skill,
     office_skill_tools,

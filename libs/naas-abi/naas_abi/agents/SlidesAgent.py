@@ -1,5 +1,5 @@
 from langchain_core.embeddings import Embeddings
-from naas_abi.agents.slides_policy import (
+from naas_abi.skills.slides_policy import (
     SLIDES_AGENT_SYSTEM_PROMPT,
     configured_slides_model,
     load_slides_chat_model,
@@ -66,7 +66,7 @@ class SlidesAgent(IntentAgent):
         """Explicit office set: deck writes, research, slides skill. Not Abi's sink."""
         tools: list = []
         try:
-            from naas_abi.agents.tools.slides_tools import slides_tools
+            from naas_abi.tools.slides_tools import slides_tools
 
             tools += slides_tools()
         except Exception as exc:  # noqa: BLE001
@@ -74,8 +74,8 @@ class SlidesAgent(IntentAgent):
             logger.debug("slides tools unavailable: %s", exc)
 
         try:
-            from naas_abi.agents.slides_policy import attach_slides_research_note
-            from naas_abi.agents.tools.web_tools import (
+            from naas_abi.skills.slides_policy import attach_slides_research_note
+            from naas_abi.tools.web_tools import (
                 make_web_fetch_tool,
                 make_web_search_tool,
             )
@@ -89,7 +89,7 @@ class SlidesAgent(IntentAgent):
             logger.debug("web search tools unavailable: %s", exc)
 
         try:
-            from naas_abi.agents.skills.office_skills import office_skill_tools
+            from naas_abi.skills.office_skills import office_skill_tools
 
             tools += office_skill_tools()
         except Exception as exc:  # noqa: BLE001
@@ -121,7 +121,7 @@ class SlidesAgent(IntentAgent):
             agent_shared_state = AgentSharedState()
 
         if agent_configuration is None:
-            from naas_abi.agents.skills.office_skills import load_office_skill
+            from naas_abi.skills.office_skills import load_office_skill
 
             tools_section = (
                 "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])

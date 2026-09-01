@@ -1,4 +1,6 @@
-"""SlidesAgent tools for Nexus Slides projects.
+"""Slides tools for Nexus Slides projects.
+
+SlidesAgent and AbiAgent import these. They live in ``naas_abi.tools``.
 
 Prefer the Coder workspace sidecar filesystem when a slides runtime is bound
 to the request (Continue-parity). Fall back to Forgejo with an explicit note.
@@ -24,7 +26,7 @@ import re
 from typing import Any
 
 from langchain_core.tools import BaseTool, tool
-from naas_abi.agents.slides_policy import reject_unresearched_slides_write
+from naas_abi.skills.slides_policy import reject_unresearched_slides_write
 from naas_abi_core.services.agent.context import (
     agent_user_id,
     agent_workspace_id,

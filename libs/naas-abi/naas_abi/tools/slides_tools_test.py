@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from naas_abi.agents.tools.slides_tools import (
+from naas_abi.tools.slides_tools import (
     _DATA_URL_RE,
     _REDACTED_PLACEHOLDER,
     _WIPED_DECK_ERROR,
@@ -305,10 +305,10 @@ def test_apply_replacements_real_template_cover_title():
 def _bind_in_memory_git(monkeypatch):
     sc = SourceControlService(InMemoryAdapter())
     monkeypatch.setattr(
-        "naas_abi.agents.tools.slides_tools._get_source_control", lambda: sc
+        "naas_abi.tools.slides_tools._get_source_control", lambda: sc
     )
     monkeypatch.setattr(
-        "naas_abi.agents.tools.slides_tools._repo_id", lambda: "abi/monorepo"
+        "naas_abi.tools.slides_tools._repo_id", lambda: "abi/monorepo"
     )
     return sc
 
@@ -453,11 +453,11 @@ def test_missing_repo_error_is_wipe_message(monkeypatch):
             raise RepoNotFoundError("abi/monorepo")
 
     monkeypatch.setattr(
-        "naas_abi.agents.tools.slides_tools._get_source_control",
+        "naas_abi.tools.slides_tools._get_source_control",
         lambda: _MissingRepo(),
     )
     monkeypatch.setattr(
-        "naas_abi.agents.tools.slides_tools._repo_id", lambda: "abi/monorepo"
+        "naas_abi.tools.slides_tools._repo_id", lambda: "abi/monorepo"
     )
     tokens = _slides_context()
     try:

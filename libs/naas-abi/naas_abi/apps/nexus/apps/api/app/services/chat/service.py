@@ -963,7 +963,7 @@ class ChatService:
                         client_context=request.context,
                     )
 
-                from naas_abi.agents.slides_policy import (
+                from naas_abi.skills.slides_policy import (
                     apply_slides_model_override,
                     bind_slides_research_policy,
                 )

@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from naas_abi.agents.tools.web_tools import (
+from naas_abi.tools.web_tools import (
     _html_to_text,
     make_web_fetch_tool,
     make_web_search_tool,
@@ -22,7 +22,7 @@ def test_web_search_tool_name_and_numbered_results() -> None:
         {"title": "Trump wins", "href": "https://bbc.com/1", "body": "Donald Trump..."},
         {"title": "White House", "href": "https://whitehouse.gov", "body": "President..."},
     ]
-    with patch("naas_abi.agents.tools.web_tools._ddgs_search", return_value=fake):
+    with patch("naas_abi.tools.web_tools._ddgs_search", return_value=fake):
         result = tool.invoke({"query": "president usa 2026"})
     assert "1." in result
     assert "Trump wins" in result
@@ -31,7 +31,7 @@ def test_web_search_tool_name_and_numbered_results() -> None:
 
 def test_web_search_empty_and_caps() -> None:
     tool = make_web_search_tool()
-    with patch("naas_abi.agents.tools.web_tools._ddgs_search", return_value=[]) as mock:
+    with patch("naas_abi.tools.web_tools._ddgs_search", return_value=[]) as mock:
         empty = tool.invoke({"query": "xyzzy nothing here"})
         assert "No results" in empty
         assert "web_fetch" in empty
@@ -51,7 +51,7 @@ def test_web_fetch_rejects_non_http_and_strips_html() -> None:
     mock_resp.__enter__.return_value = mock_resp
     mock_resp.__exit__.return_value = False
     with patch(
-        "naas_abi.agents.tools.web_tools.urllib.request.urlopen",
+        "naas_abi.tools.web_tools.urllib.request.urlopen",
         return_value=mock_resp,
     ):
         result = tool.invoke({"url": "https://example.com"})

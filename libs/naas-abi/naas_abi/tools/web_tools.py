@@ -1,8 +1,8 @@
 """ABI web_search and web_fetch.
 
 Ported from the zen WebTools wrapper (ddgs, no API key, year hint, HTML to
-text). This is the office-agent search stack. Do not import zen.tools.WebTools
-from ABI agents.
+text). This is the shared search stack. Agents import it from ``naas_abi.tools``.
+Do not import ``zen.tools.WebTools`` from ABI.
 """
 
 from __future__ import annotations

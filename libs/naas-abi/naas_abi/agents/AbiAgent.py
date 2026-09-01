@@ -1,4 +1,4 @@
-from naas_abi.agents.slides_policy import SLIDES_GUIDELINES
+from naas_abi.skills.slides_policy import SLIDES_GUIDELINES
 from naas_abi_core.services.agent.Agent import Agent
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
@@ -129,12 +129,12 @@ The dedicated office agent for Nexus Slides is SlidesAgent. These rules are a fa
         )
         tools += sparql_query_tools_list
 
-        from naas_abi.agents.tools.nexus_admin_tools import nexus_admin_tools
+        from naas_abi.tools.nexus_admin_tools import nexus_admin_tools
 
         tools += nexus_admin_tools()
 
         try:
-            from naas_abi.agents.tools.slides_tools import slides_tools
+            from naas_abi.tools.slides_tools import slides_tools
 
             tools += slides_tools()
         except Exception as exc:  # noqa: BLE001
@@ -142,8 +142,8 @@ The dedicated office agent for Nexus Slides is SlidesAgent. These rules are a fa
             logger.debug("slides tools unavailable: %s", exc)
 
         try:
-            from naas_abi.agents.slides_policy import attach_slides_research_note
-            from naas_abi.agents.tools.web_tools import (
+            from naas_abi.skills.slides_policy import attach_slides_research_note
+            from naas_abi.tools.web_tools import (
                 make_web_fetch_tool,
                 make_web_search_tool,
             )
@@ -285,7 +285,7 @@ The dedicated office agent for Nexus Slides is SlidesAgent. These rules are a fa
         model_id: str | None = None,
     ) -> "AbiAgent":
         from naas_abi import ABIModule
-        from naas_abi.agents.slides_policy import bind_slides_reasoning
+        from naas_abi.skills.slides_policy import bind_slides_reasoning
 
         abi_module = ABIModule.get_instance()
         resolved_model = model_id or abi_module.configuration.abi_agent_model

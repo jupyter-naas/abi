@@ -1,6 +1,7 @@
 """Slides chat policy: research first, then write; stronger model than mini.
 
-Owned by SlidesAgent. AbiAgent plus an open-deck model override is fallback only.
+Slides domain policy, next to the slides skill. SlidesAgent imports it.
+AbiAgent plus an open-deck model override is fallback only.
 Slides tools and Nexus chat share this module so a current-events brief cannot
 skip web_search and dump template filler into deck.html.
 """

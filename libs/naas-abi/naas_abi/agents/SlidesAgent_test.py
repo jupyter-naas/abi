@@ -1,7 +1,7 @@
 import inspect
 
 from naas_abi.agents import SlidesAgent as slides_agent_module
-from naas_abi.agents.slides_policy import DEFAULT_SLIDES_MODEL, SLIDES_GUIDELINES
+from naas_abi.skills.slides_policy import DEFAULT_SLIDES_MODEL, SLIDES_GUIDELINES
 from naas_abi.agents.SlidesAgent import SlidesAgent
 
 
@@ -33,7 +33,10 @@ def test_slides_agent_default_model_is_sonnet_5() -> None:
 def test_slides_agent_tool_names_are_slides_and_web() -> None:
     source = inspect.getsource(SlidesAgent.get_tools)
     assert "slides_tools" in source
-    assert "naas_abi.agents.tools.web_tools" in source
+    assert "naas_abi.tools.slides_tools" in source
+    assert "naas_abi.tools.web_tools" in source
+    assert "naas_abi.skills.office_skills" in source
+    assert "naas_abi.agents.tools" not in source
     assert "make_web_search_tool" in source
     assert "make_web_fetch_tool" in source
     assert "office_skill_tools" in source

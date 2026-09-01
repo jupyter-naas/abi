@@ -1320,7 +1320,7 @@ def _retarget_inprocess_chat_model(agent: Any, model_id: str) -> None:
     401s when OPENAI_API_KEY is actually an OpenRouter key. Keep the cached
     mapper; only rebind tools onto the slides model.
     """
-    from naas_abi.agents.slides_policy import load_slides_chat_model
+    from naas_abi.skills.slides_policy import load_slides_chat_model
     from naas_abi_core.services.agent.tools.utils import can_bind_tools
 
     chat_model = load_slides_chat_model(model_id)

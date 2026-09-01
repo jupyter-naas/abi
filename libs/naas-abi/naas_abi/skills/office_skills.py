@@ -1,8 +1,8 @@
-"""Office-agent skills shipped with ABI (slides now; docs/sheets later).
+"""Office skills shipped with ABI (slides now; docs/sheets later).
 
-Skill files live in this directory as ``<name>/SKILL.md`` with YAML frontmatter,
+Skill files live in this package as ``<name>/SKILL.md`` with YAML frontmatter,
 same layout as Cursor and the zen tenant pointer. Zen keeps config and a
-pointer; ABI is the carrier.
+pointer. Agents import from here; they do not own the files.
 """
 
 from __future__ import annotations

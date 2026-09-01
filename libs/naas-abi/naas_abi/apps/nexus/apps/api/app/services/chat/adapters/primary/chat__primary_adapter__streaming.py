@@ -275,7 +275,7 @@ async def stream_chat_response(
                             slides_active_title.set(title)
                         if mode:
                             slides_active_mode.set(mode)
-                        from naas_abi.agents.slides_policy import (  # noqa: PLC0415
+                        from naas_abi.skills.slides_policy import (  # noqa: PLC0415
                             bind_slides_research_policy,
                         )
 
@@ -357,7 +357,7 @@ async def stream_chat_response(
     #             )
     #             break
 
-    from naas_abi.agents.slides_policy import apply_slides_model_override
+    from naas_abi.skills.slides_policy import apply_slides_model_override
 
     incoming_llm = getattr(provider, "llm_model", None) or request.llm_model
     provider_config = ProviderConfig(
