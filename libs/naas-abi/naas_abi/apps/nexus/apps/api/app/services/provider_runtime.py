@@ -1307,6 +1307,22 @@ def _resolve_inprocess_abi_agent(agent_name: str):
         return instance
 
 
+def _bind_conversation_thread_id(agent: Any, thread_id: str | None) -> Any:
+    """Force the agent's LangGraph thread to the Nexus conversation id.
+
+    Agent.__init__ used to mint a UUID in ENV=dev, and some New() factories
+    still ignore the state Nexus passed. Chat memory is keyed on this id, so
+    the conversation id always wins on the in-process chat path.
+    """
+    if not thread_id:
+        return agent
+    state = getattr(agent, "state", None)
+    setter = getattr(state, "set_thread_id", None)
+    if callable(setter):
+        setter(str(thread_id))
+    return agent
+
+
 def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
     """Return a per-request copy of the cached template agent.
 
@@ -1324,19 +1340,55 @@ def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
     from naas_abi_core.services.agent.Agent import AgentSharedState
 
     if not hasattr(template, "duplicate"):
-        return template
+        return _bind_conversation_thread_id(template, thread_id)
 
     template_state = getattr(template, "state", None)
     supervisor = getattr(template_state, "supervisor_agent", None)
-    # current_active_agent = getattr(template_state, "current_active_agent", None)
 
     fresh_state = AgentSharedState(
         thread_id=str(thread_id) if thread_id else "1",
         supervisor_agent=supervisor,
-        # current_active_agent=current_active_agent,
     )
     fresh_queue: Queue = Queue()
-    return template.duplicate(queue=fresh_queue, agent_shared_state=fresh_state)
+    duplicated = template.duplicate(queue=fresh_queue, agent_shared_state=fresh_state)
+    return _bind_conversation_thread_id(duplicated, thread_id)
+
+
+def _instantiate_inprocess_agent(
+    template: Any, thread_id: str, llm_model: str | None
+) -> Any:
+    """Build a per-request agent keyed on the Nexus conversation id.
+
+    When the user picked a chat model, call ``New(model_id=...)`` so Bob
+    loads that model. Reuse the template checkpointer: ``New()`` otherwise
+    constructs a fresh in-memory saver and history never survives a turn.
+    """
+    from inspect import signature
+
+    from naas_abi_core.services.agent.Agent import AgentSharedState
+
+    if llm_model:
+        new_fn = getattr(type(template), "New", None)
+        if callable(new_fn):
+            kwargs: dict[str, Any] = {
+                "agent_shared_state": AgentSharedState(thread_id=str(thread_id)),
+            }
+            try:
+                params = signature(new_fn).parameters
+            except (TypeError, ValueError):
+                params = {}
+            if "model_id" in params:
+                kwargs["model_id"] = llm_model
+            if "memory" in params:
+                kwargs["memory"] = getattr(template, "_checkpointer", None)
+            try:
+                agent = new_fn(**kwargs)
+            except TypeError:
+                agent = None
+            if agent is not None:
+                return _bind_conversation_thread_id(agent, thread_id)
+
+    return _duplicate_inprocess_agent(template, thread_id)
 
 
 def _extract_opencode_ui_event(event: dict[str, Any]) -> dict[str, Any] | None:
@@ -1440,21 +1492,7 @@ async def stream_with_abi_inprocess(
     # (the previous behaviour) caused cross-conversation response leakage when
     # two requests overlapped — see jupyter-naas/abi#991.
     assert thread_id is not None, "thread_id is required"
-    agent = None
-    if llm_model:
-        new_fn = getattr(type(template_agent), "New", None)
-        if callable(new_fn):
-            try:
-                from naas_abi_core.services.agent.Agent import AgentSharedState
-
-                agent = new_fn(
-                    agent_shared_state=AgentSharedState(thread_id=str(thread_id)),
-                    model_id=llm_model,
-                )
-            except TypeError:
-                agent = None
-    if agent is None:
-        agent = _duplicate_inprocess_agent(template_agent, thread_id)
+    agent = _instantiate_inprocess_agent(template_agent, thread_id, llm_model)
 
     logger.debug(
         f"Agent.state.thread_id: {getattr(getattr(agent, 'state', None), 'thread_id', None)}"

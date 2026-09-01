@@ -119,6 +119,18 @@ def _reset_shared_checkpointer_for_tests() -> None:
 atexit.register(_close_shared_checkpointer)
 
 
+def _maybe_randomize_dev_thread_id(state: "AgentSharedState") -> None:
+    """Isolate default CLI threads in ENV=dev; keep caller-provided ids.
+
+    Historical behavior minted a UUID on every Agent construct when ENV=dev,
+    which broke Nexus chat: each HTTP turn rebuilt the agent tree and lost
+    the conversation id the checkpointer is keyed on. Only the unnamed
+    default ("1") still gets a UUID.
+    """
+    if os.getenv("ENV") == "dev" and state.thread_id == "1":
+        state.set_thread_id(str(uuid.uuid4()))
+
+
 def create_checkpointer() -> BaseCheckpointSaver:
     """Create a checkpointer based on environment configuration.
 
@@ -674,9 +686,10 @@ class Agent(Expose):
         else:
             self._checkpointer = memory
 
-        # Randomize the thread_id to prevent the same thread_id to be used by multiple agents.
-        if os.getenv("ENV") == "dev":
-            self._state.set_thread_id(str(uuid.uuid4()))
+        # Isolate unnamed CLI sessions in ENV=dev (constructor default is "1").
+        # Never overwrite a caller-provided id: Nexus chat keys LangGraph memory
+        # on the conversation id (e.g. conv-7gbvzx7qzj).
+        _maybe_randomize_dev_thread_id(self._state)
 
         # We set the configuration.
         self._configuration = configuration
