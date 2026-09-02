@@ -15,9 +15,8 @@ the put event then drives all graph mapping here, with no polling. Set
 Each entry's sensor, watched prefix and ingestion knobs (persist, events drained
 per tick, evaluation interval) come from the ``search_recent_tweets_event`` list
 in the module config. The config defaults to an empty list (no sensors); add
-entries to create them. Sensors are **disabled by default**
-(``DefaultSensorStatus.STOPPED``); set ``enabled: true`` on an entry to create
-its sensor RUNNING, or enable it from the Dagster UI.
+entries to create them. Triggers start **RUNNING** by default; stop them from
+the Dagster UI when needed.
 
 Launch manually from the Dagster launchpad to replay a single envelope: set
 ``prefix`` and ``key`` on the entry's pipeline op (required). Optional fields
@@ -244,11 +243,7 @@ def _build_search_recent_tweets_event_sensor(
         ),
         job=search_ingestion_job,
         minimum_interval_seconds=event_cfg.interval_seconds,
-        default_status=(
-            dg.DefaultSensorStatus.RUNNING
-            if event_cfg.enabled
-            else dg.DefaultSensorStatus.STOPPED
-        ),
+        default_status=dg.DefaultSensorStatus.RUNNING,
     )
     def search_ingestion_sensor(context: dg.SensorEvaluationContext):
         from naas_abi_core.services.object_storage.ontologies.modules.ObjectStorageEventOntology import (
@@ -379,8 +374,8 @@ class XSearchRecentTweetsEventOrchestration(DagsterOrchestration):
     """One event-driven (job, sensor) pair per configured
     ``search_recent_tweets_event`` entry, each subscribing to ``ObjectPut``
     events and mapping every new envelope written under the entry's ``prefix``
-    into the graph via :class:`XSearchRecentTweetsPipeline`. Sensors disabled by
-    default unless ``enabled: true``.
+    into the graph via :class:`XSearchRecentTweetsPipeline`. Triggers start RUNNING
+    by default.
 
     Launchpad example (manual replay of one envelope, filter ``search_envelopes``)::
 

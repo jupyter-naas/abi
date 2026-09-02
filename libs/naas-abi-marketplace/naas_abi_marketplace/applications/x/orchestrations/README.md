@@ -26,7 +26,7 @@ subclass that the module loader discovers automatically.
    `search_recent_tweets` endpoint, and **persists each `{query, options,
    results, …}` response as a JSON envelope** in object storage. It does **not**
    touch the graph. A per-filter spend guard (daily / monthly tweet or USD caps)
-   can stop fetches without an API call. Triggers are **STOPPED by default**.
+   can stop fetches without an API call. Triggers start **RUNNING by default**.
 
 2. **`XSearchRecentTweetsEventOrchestration`** — *map on file-put.*
    One (job, sensor) pair per `search_recent_tweets_event` config entry. Each
@@ -38,8 +38,7 @@ subclass that the module loader discovers automatically.
    mapping half of the flow — saving an envelope in step 1 publishes the
    `ObjectPut` that triggers it. The watched-prefix filter is pushed down into
    the event query; the sensor also probes object storage and skips events
-   whose file has since been deleted. Sensors are **STOPPED unless
-   `enabled: true`** (the example config enables `search_envelopes`).
+   whose file has since been deleted. Sensors start **RUNNING by default**.
 
 3. **`XSearchRecentTweetsFilesOrchestration`** — *manual bulk reprocess.*
    A single job, **no sensor / no schedule / no X API call**. Launch it from the
@@ -58,6 +57,10 @@ bookkeeping; mapping is purely about the graph and is retried independently per
 file via the durable event cursor. Enable the workflow sensors to collect, keep
 the event sensor enabled to map, and reach for the files orchestration when you
 need a full re-ingest.
+
+4. **`XBuildAppOrchestration`** — *hourly dashboard rebuild.*
+   Re-renders the Recent Tweets app from the current triple-store graph (no X
+   API, no re-ingest). The hourly schedule starts **RUNNING by default**.
 
 ## Shared helpers (`utils/`)
 

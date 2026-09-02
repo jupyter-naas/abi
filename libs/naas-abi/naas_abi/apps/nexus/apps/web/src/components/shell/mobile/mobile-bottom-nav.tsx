@@ -1,27 +1,27 @@
 'use client';
 
-import { Map, MessageSquare, Folder, LayoutGrid, MoreHorizontal } from 'lucide-react';
+import { FlaskConical, Folder, LayoutGrid, MessageSquare, MoreHorizontal } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { getWorkspacePath } from '../sidebar/utils';
 
-type MobileTab = 'maps' | 'chat' | 'files' | 'apps' | 'more';
+type MobileTab = 'apps' | 'lab' | 'files' | 'chat' | 'more';
 
 type TabDef = {
   id: MobileTab;
   label: string;
   icon: React.ReactNode;
   href?: string;
-  feature?: 'maps' | 'chat' | 'files' | 'apps';
+  feature?: 'apps' | 'agents' | 'files' | 'chat';
 };
 
 const TABS: TabDef[] = [
-  { id: 'maps', label: 'Maps', icon: <Map size={20} />, href: '/maps', feature: 'maps' },
-  { id: 'chat', label: 'Chat', icon: <MessageSquare size={20} />, href: '/chat', feature: 'chat' },
-  { id: 'files', label: 'Files', icon: <Folder size={20} />, href: '/files', feature: 'files' },
   { id: 'apps', label: 'Apps', icon: <LayoutGrid size={20} />, href: '/apps', feature: 'apps' },
+  { id: 'lab', label: 'Lab', icon: <FlaskConical size={20} />, href: '/lab', feature: 'agents' },
+  { id: 'files', label: 'Files', icon: <Folder size={20} />, href: '/files', feature: 'files' },
+  { id: 'chat', label: 'Chat', icon: <MessageSquare size={20} />, href: '/chat', feature: 'chat' },
   { id: 'more', label: 'More', icon: <MoreHorizontal size={20} /> },
 ];
 
@@ -38,26 +38,26 @@ export function MobileBottomNav({ moreOpen, onMoreToggle }: MobileBottomNavProps
   const setActiveConversation = useWorkspaceStore((s) => s.setActiveConversation);
   const setMobilePendingChatSlug = useWorkspaceStore((s) => s.setMobilePendingChatSlug);
 
-  const canMaps = useFeature('maps');
-  const canChat = useFeature('chat');
-  const canFiles = useFeature('files');
   const canApps = useFeature('apps');
+  const canAgents = useFeature('agents');
+  const canFiles = useFeature('files');
+  const canChat = useFeature('chat');
 
   const enabled = (feature?: TabDef['feature']) => {
     if (!feature) return true;
-    if (feature === 'maps') return !!canMaps;
-    if (feature === 'chat') return !!canChat;
-    if (feature === 'files') return !!canFiles;
     if (feature === 'apps') return !!canApps;
+    if (feature === 'agents') return !!canAgents;
+    if (feature === 'files') return !!canFiles;
+    if (feature === 'chat') return !!canChat;
     return true;
   };
 
   const isTabActive = (tab: TabDef) => {
     if (tab.id === 'more') return moreOpen;
-    if (tab.id === 'maps') return pathname.includes('/maps');
-    if (tab.id === 'chat') return pathname.includes('/chat');
-    if (tab.id === 'files') return pathname.includes('/files');
     if (tab.id === 'apps') return pathname.includes('/apps');
+    if (tab.id === 'lab') return pathname.includes('/lab');
+    if (tab.id === 'files') return pathname.includes('/files');
+    if (tab.id === 'chat') return pathname.includes('/chat');
     return false;
   };
 
@@ -68,29 +68,26 @@ export function MobileBottomNav({ moreOpen, onMoreToggle }: MobileBottomNavProps
     }
     if (moreOpen) onMoreToggle();
 
-    if (tab.id === 'maps') {
-      setActivePanelSection('maps');
-      router.push(getWorkspacePath(currentWorkspaceId, '/maps'));
+    if (tab.id === 'apps') {
+      setActivePanelSection('apps');
+      router.push(getWorkspacePath(currentWorkspaceId, '/apps'));
       return;
     }
-
-    if (tab.id === 'chat') {
-      // Teams-style: Chat tab always returns to the conversation list.
-      setActiveConversation(null);
-      setMobilePendingChatSlug(null);
-      setActivePanelSection('chat');
-      router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
+    if (tab.id === 'lab') {
+      setActivePanelSection('lab');
+      router.push(getWorkspacePath(currentWorkspaceId, '/lab'));
       return;
     }
-
     if (tab.id === 'files') {
       setActivePanelSection('files');
       router.push(getWorkspacePath(currentWorkspaceId, '/files'));
       return;
     }
-    if (tab.id === 'apps') {
-      setActivePanelSection('apps');
-      router.push(getWorkspacePath(currentWorkspaceId, '/apps'));
+    if (tab.id === 'chat') {
+      setActiveConversation(null);
+      setMobilePendingChatSlug(null);
+      setActivePanelSection('chat');
+      router.push(getWorkspacePath(currentWorkspaceId, '/chat'));
     }
   };
 

@@ -18,8 +18,8 @@ Saving an envelope publishes an ``ObjectPut`` event, which
 graph via :class:`XSearchRecentTweetsPipeline`. Keep that event sensor enabled
 for tweets to reach the triple store.
 
-All triggers are **disabled by default** (``DefaultSensorStatus.STOPPED`` /
-``DefaultScheduleStatus.STOPPED``); enable them explicitly from the Dagster UI.
+All triggers start **RUNNING** by default (``DefaultSensorStatus.RUNNING`` /
+``DefaultScheduleStatus.RUNNING``); stop them from the Dagster UI when needed.
 
 Launch from the Dagster launchpad to override per-run workflow parameters.
 Omitted fields use the matching ``search_recent_tweets_workflow`` entry from the
@@ -181,7 +181,7 @@ def _build_search_recent_tweets_definitions(
             job=search_recent_tweets_job,
             cron_schedule=config.cron,
             execution_timezone="UTC",
-            default_status=dg.DefaultScheduleStatus.STOPPED,
+            default_status=dg.DefaultScheduleStatus.RUNNING,
         )
         def search_recent_tweets_schedule(context: dg.ScheduleEvaluationContext):
             # Same guard as the sensor path: a slow run must not stack up with
@@ -198,7 +198,7 @@ def _build_search_recent_tweets_definitions(
         description=description,
         job=search_recent_tweets_job,
         minimum_interval_seconds=config.interval_seconds,
-        default_status=dg.DefaultSensorStatus.STOPPED,
+        default_status=dg.DefaultSensorStatus.RUNNING,
     )
     def search_recent_tweets_sensor(context: dg.SensorEvaluationContext):
         if has_in_progress_run(context, job_name):
@@ -213,7 +213,7 @@ class XSearchRecentTweetsOrchestration(DagsterOrchestration):
     by a sensor (``interval_seconds``) or a schedule (``cron``) — each running
     :class:`XSearchRecentTweetsWorkflow` to fetch and save tweet envelopes (no
     graph mapping — that is event-driven via
-    :class:`XSearchRecentTweetsEventOrchestration`). Triggers disabled by default.
+    :class:`XSearchRecentTweetsEventOrchestration`). Triggers start RUNNING by default.
 
     Launchpad example (replace ``ai_llms`` with your filter name)::
 

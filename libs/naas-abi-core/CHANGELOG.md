@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.28.2 (2026-09-01)
+
+### Bug Fixes
+
+- **cache**: Handle naive datetime in TTL cache expiry check
+  ([`13bceb0`](https://github.com/jupyter-naas/abi/commit/13bceb07c20fdf06742692e0d36b18c9a373509f))
+
+
 ## v2.28.1 (2026-08-28)
 
 

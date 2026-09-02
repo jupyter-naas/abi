@@ -414,7 +414,7 @@ src/app/workspace/[workspaceId]/maps/
 src/app/api/maps/                 # Maps-owned proxies (gdacs, nws, nhc, flights, gulf-strikes, news, …)
 ```
 
-Sidebar expand state: `stores/maps.ts` (`nexus-maps` persist). Feature flag: `maps` (enabled by default for owner/admin/member/viewer baselines). Mobile: `/maps` = library list, `/maps/{id}` = canvas detail. Maps is first in the workspace sidebar (before Search); app landing (middleware `/`, login, workspace switch) remains Chat (`/chat`).
+Sidebar expand state: `stores/maps.ts` (`nexus-maps` persist). Feature flag: `maps` (enabled by default for owner/admin/member/viewer baselines). Mobile: `/maps` = library list, `/maps/{id}` = canvas detail. Workspace nav default order is Home, Apps, Lab, Files (then Chat, Search, Maps, ...). Icons reorder by drag; Settings stays pinned. The left nav is the dock: default width matches the feature column (256px), drag the dotted handle to resize (down to icon-only). The workspace mark at the top of the dock opens the Workspaces column (search, recents, full list). The profile at the bottom of the dock (below Settings) opens the account menu; it is session chrome, not a feature column. Desktop header does not show a user avatar. Home (`/home`) is the desktop canvas: no column. `background_image_url` on the workspace theme (module public asset, rewritten to `/modules/...`) paints the desk. When that URL is missing, the desk is `#0a0a0a`. White theme color is never the desk. The hero overlay sits on the photo only. Icons: Chat and Files when those features are on, then enabled installed apps and starred files. App landing (middleware `/`, login, workspace switch) remains Chat (`/chat`).
 
 ## Files UI module
 

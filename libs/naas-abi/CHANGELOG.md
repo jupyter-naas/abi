@@ -2,6 +2,74 @@
 
 <!-- version list -->
 
+## v2.58.0 (2026-08-31)
+
+### Features
+
+- **nexus**: Unify the workspace Header across Home and app embed
+  ([`7a8aba3`](https://github.com/jupyter-naas/abi/commit/7a8aba3819a4d7f9f2739c7d62e7f08c79ee5a53))
+
+
+## v2.57.0 (2026-08-29)
+
+### Features
+
+- **nexus**: Prefix sign-in email subjects on .dev frontends
+  ([`28ae377`](https://github.com/jupyter-naas/abi/commit/28ae377b0043b452ff2d5d8f7e0665ddec54d6c9))
+
+
+## v2.56.3 (2026-08-29)
+
+### Bug Fixes
+
+- **nexus**: Greet the current agent on empty chat
+  ([`4ecad11`](https://github.com/jupyter-naas/abi/commit/4ecad119bfe188111fe4d1d20d3857e745b9a36b))
+
+- **nexus**: Hide inactive chat suggestion chips
+  ([`7671ee1`](https://github.com/jupyter-naas/abi/commit/7671ee1455f7aacac1a856a642b2a907bcfc4a54))
+
+- **nexus**: Put chat suggestions in one row above the composer
+  ([`49b6bae`](https://github.com/jupyter-naas/abi/commit/49b6baeca3a3eb0ca2967d28d9f2377ed3b01a29))
+
+
+## v2.56.2 (2026-08-29)
+
+### Bug Fixes
+
+- **nexus**: Keep current workspace in Recents with checkmark
+  ([`52800bb`](https://github.com/jupyter-naas/abi/commit/52800bb6435a0a6d24eb644053ce4ac2f2590d4e))
+
+- **nexus**: Show workspaces as one alphabetical list
+  ([`b858efa`](https://github.com/jupyter-naas/abi/commit/b858efa156d1f53f35e831185f98e39fe2002473))
+
+
+## v2.56.1 (2026-08-29)
+
+### Bug Fixes
+
+- **nexus**: Drop Apps logo rings and document default-only roster
+  ([`daad6c4`](https://github.com/jupyter-naas/abi/commit/daad6c4d32b06d374655844b924324ac38d5ae10))
+
+- **nexus**: Keep workspace catalogs isolated and drop desk rings
+  ([`ebdbee6`](https://github.com/jupyter-naas/abi/commit/ebdbee6c6ae37ebc448d70e54390a81b08c5871a))
+
+
+## v2.56.0 (2026-08-28)
+
+### Features
+
+- **nexus**: Give the workspace a dock, Home desk, and mark switcher
+  ([`6e6e65d`](https://github.com/jupyter-naas/abi/commit/6e6e65de5de1d05a03df453098c68f935e56a1f6))
+
+
+## v2.55.3 (2026-08-28)
+
+### Bug Fixes
+
+- **nexus**: Honor source and path query params on Files
+  ([`f87d511`](https://github.com/jupyter-naas/abi/commit/f87d5116e9d8bc0279064abe451839fd5ad6c32a))
+
+
 ## v2.55.2 (2026-08-28)
 
 ### Bug Fixes
