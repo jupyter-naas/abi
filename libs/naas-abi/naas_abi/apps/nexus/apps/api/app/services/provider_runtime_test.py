@@ -160,3 +160,72 @@ def test_redact_url_for_logs_masks_sensitive_query_params() -> None:
     assert "foo=bar" in redacted
     assert "secret123" not in redacted
     assert "xyz" not in redacted
+
+
+class _FakeState:
+    def __init__(self, thread_id: str = "1") -> None:
+        self.thread_id = thread_id
+        self.supervisor_agent = "Bob"
+
+    def set_thread_id(self, thread_id: str) -> None:
+        self.thread_id = thread_id
+
+
+class _FakeAgent:
+    def __init__(self, thread_id: str = "1") -> None:
+        self.state = _FakeState(thread_id)
+        self._checkpointer = object()
+
+    def duplicate(self, queue=None, agent_shared_state=None):
+        dup = _FakeAgent()
+        if agent_shared_state is not None:
+            dup.state.thread_id = agent_shared_state.thread_id
+            dup.state.supervisor_agent = agent_shared_state.supervisor_agent
+        return dup
+
+
+def test_bind_conversation_thread_id_overrides_minted_uuid() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
+        _bind_conversation_thread_id,
+    )
+
+    agent = _FakeAgent(thread_id="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+    bound = _bind_conversation_thread_id(agent, "conv-7gbvzx7qzj")
+
+    assert bound.state.thread_id == "conv-7gbvzx7qzj"
+
+
+def test_duplicate_inprocess_agent_uses_conversation_id() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
+        _duplicate_inprocess_agent,
+    )
+
+    dup = _duplicate_inprocess_agent(_FakeAgent(), "conv-7gbvzx7qzj")
+
+    assert dup.state.thread_id == "conv-7gbvzx7qzj"
+
+
+def test_instantiate_new_path_passes_conversation_state_and_memory() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
+        _instantiate_inprocess_agent,
+    )
+
+    captured: dict = {}
+
+    class _Factory(_FakeAgent):
+        @classmethod
+        def New(cls, agent_shared_state=None, model_id=None, memory=None):
+            captured["thread_id"] = agent_shared_state.thread_id
+            captured["model_id"] = model_id
+            captured["memory"] = memory
+            agent = cls()
+            agent.state.thread_id = agent_shared_state.thread_id
+            return agent
+
+    template = _Factory()
+    agent = _instantiate_inprocess_agent(template, "conv-7gbvzx7qzj", "qwen-3.6")
+
+    assert captured["thread_id"] == "conv-7gbvzx7qzj"
+    assert captured["model_id"] == "qwen-3.6"
+    assert captured["memory"] is template._checkpointer
+    assert agent.state.thread_id == "conv-7gbvzx7qzj"
