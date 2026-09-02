@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v2.20.0 (2026-09-02)
+
+### Bug Fixes
+
+- Update versions and platform markers in uv.lock and fix datetime usage in CacheService_test.py
+  ([`5a116a2`](https://github.com/jupyter-naas/abi/commit/5a116a2f1b70fcdb65bd7e3fb15332f393a7aa1c))
+
+- **x-orchestrations**: Update versions and import order in orchestration
+  ([`bf70a40`](https://github.com/jupyter-naas/abi/commit/bf70a404e8aad3bd7b45a39e63cba0fd13b4aa41))
+
+### Features
+
+- **x-orchestrations**: Update default trigger status to RUNNING
+  ([`0d88489`](https://github.com/jupyter-naas/abi/commit/0d884891270ebfd8fe52a8d4daf905f349c14d9c))
+
+
 ## v2.19.0 (2026-08-28)
 
 ### Features
