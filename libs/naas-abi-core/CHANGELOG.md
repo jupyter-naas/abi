@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.28.3 (2026-09-02)
+
+### Bug Fixes
+
+- Update versions and platform markers in uv.lock and fix datetime usage in CacheService_test.py
+  ([`5a116a2`](https://github.com/jupyter-naas/abi/commit/5a116a2f1b70fcdb65bd7e3fb15332f393a7aa1c))
+
+
 ## v2.28.2 (2026-09-01)
 
 ### Bug Fixes
