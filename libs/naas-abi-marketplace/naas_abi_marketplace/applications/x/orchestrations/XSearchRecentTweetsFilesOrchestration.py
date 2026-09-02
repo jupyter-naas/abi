@@ -26,9 +26,8 @@ label-based dedupe still makes a re-run a no-op).
 filename timestamp (``<iso-ts>_<slug>.json``) falls within the last N hours.
 Age filtering runs while listing keys, then again as a second filename pass.
 
-All triggers are **disabled by default** (``DefaultSensorStatus.STOPPED`` /
-``DefaultScheduleStatus.STOPPED``) unless ``enabled: true`` on the entry, or
-enable them from the Dagster UI.
+All triggers start **RUNNING** by default; stop them from the Dagster UI when
+needed.
 
 Launchpad example (for an entry named ``reprocess_envelopes``)::
 
@@ -407,16 +406,6 @@ def _build_reprocess_files_definitions(
     sensor_name = f"x_search_recent_tweets_files_sensor_{safe}"
     schedule_name = f"x_search_recent_tweets_files_schedule_{safe}"
     description = _trigger_description(config)
-    default_status = (
-        dg.DefaultSensorStatus.RUNNING
-        if config.enabled
-        else dg.DefaultSensorStatus.STOPPED
-    )
-    schedule_default_status = (
-        dg.DefaultScheduleStatus.RUNNING
-        if config.enabled
-        else dg.DefaultScheduleStatus.STOPPED
-    )
 
     @dg.op(name=op_name, config_schema=_FILES_CONFIG_SCHEMA)
     def reprocess_files_op(context) -> dict:
@@ -434,7 +423,7 @@ def _build_reprocess_files_definitions(
             job=reprocess_files_job,
             cron_schedule=config.cron,
             execution_timezone="UTC",
-            default_status=schedule_default_status,
+            default_status=dg.DefaultScheduleStatus.RUNNING,
         )
         def reprocess_files_schedule(context: dg.ScheduleEvaluationContext):
             if has_in_progress_run(context, job_name):
@@ -448,7 +437,7 @@ def _build_reprocess_files_definitions(
         description=description,
         job=reprocess_files_job,
         minimum_interval_seconds=config.interval_seconds,
-        default_status=default_status,
+        default_status=dg.DefaultSensorStatus.RUNNING,
     )
     def reprocess_files_sensor(context: dg.SensorEvaluationContext):
         # One reprocess run at a time: a sweep can outlast the tick, so skip
@@ -465,8 +454,7 @@ class XSearchRecentTweetsFilesOrchestration(DagsterOrchestration):
     entry — driven by a sensor (``interval_seconds``) or a schedule (``cron``)
     — each sweeping the persisted search envelopes under the entry's ``prefix``
     and reprocessing only the files not yet mapped into the graph via
-    :class:`XSearchRecentTweetsPipeline`. Triggers disabled by default unless
-    ``enabled: true``.
+    :class:`XSearchRecentTweetsPipeline`. Triggers start RUNNING by default.
 
     Launchpad example (replace ``reprocess_envelopes`` with your entry name)::
 
