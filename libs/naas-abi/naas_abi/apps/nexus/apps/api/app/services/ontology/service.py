@@ -9,6 +9,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
+    filter_ontology_catalog,
+)
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import (
     OntologyFileItemData,
     OntologyItemData,
@@ -592,15 +595,25 @@ class OntologyService:
         """Clear all in-memory and filesystem ontology graph caches."""
         clear_graph_caches()
 
-    async def list_items(self) -> list[OntologyItemData]:
+    async def list_items(
+        self, catalog_refs: list[str] | None = None
+    ) -> list[OntologyItemData]:
         """List all ontology items (OWL Classes and Object Properties)."""
-        classes = await self.list_classes(ontology_path=None)
-        relations = await self.list_relations(ontology_path=None)
+        classes = await self.list_classes(
+            ontology_path=None, catalog_refs=catalog_refs
+        )
+        relations = await self.list_relations(
+            ontology_path=None, catalog_refs=catalog_refs
+        )
         return [*classes, *relations]
 
-    async def list_classes(self, ontology_path: str | None) -> list[OntologyItemData]:
+    async def list_classes(
+        self,
+        ontology_path: str | None,
+        catalog_refs: list[str] | None = None,
+    ) -> list[OntologyItemData]:
         """List ontology classes (owl:Class) across registered ontology files."""
-        ontologies = await self.list_ontology_files()
+        ontologies = await self.list_ontology_files(catalog_refs=catalog_refs)
         target_paths = self._resolve_ontology_paths(ontology_path, ontologies)
         by_iri: dict[str, OntologyItemData] = {}
 
@@ -641,9 +654,13 @@ class OntologyService:
                 )
         return sorted(by_iri.values(), key=lambda item: item.name.lower())
 
-    async def list_relations(self, ontology_path: str | None) -> list[OntologyItemData]:
+    async def list_relations(
+        self,
+        ontology_path: str | None,
+        catalog_refs: list[str] | None = None,
+    ) -> list[OntologyItemData]:
         """List ontology object properties (owl:ObjectProperty) across registered ontology files."""
-        ontologies = await self.list_ontology_files()
+        ontologies = await self.list_ontology_files(catalog_refs=catalog_refs)
         target_paths = self._resolve_ontology_paths(ontology_path, ontologies)
         by_iri: dict[str, OntologyItemData] = {}
 
@@ -679,8 +696,10 @@ class OntologyService:
                 )
         return sorted(by_iri.values(), key=lambda item: item.name.lower())
 
-    async def list_ontology_files(self) -> list[OntologyFileItemData]:
-        """List ontology files from all registered modules."""
+    async def list_ontology_files(
+        self, catalog_refs: list[str] | None = None
+    ) -> list[OntologyFileItemData]:
+        """List ontology files from registered modules, optionally seed-filtered."""
         from rdflib import DCTERMS, OWL, RDF, Graph, URIRef
 
         try:
@@ -739,7 +758,7 @@ class OntologyService:
                 )
 
             ontology_files.sort(key=lambda item: (item.module_name.lower(), item.name.lower()))
-            return ontology_files
+            return filter_ontology_catalog(ontology_files, catalog_refs)
         except OntologyServiceUnavailableError:
             raise
         except Exception as exc:
@@ -767,10 +786,12 @@ class OntologyService:
                 "Failed to compute ontology overview stats"
             ) from exc
 
-    async def get_all_overview_stats(self) -> OntologyOverviewAggregateStatsData:
+    async def get_all_overview_stats(
+        self, catalog_refs: list[str] | None = None
+    ) -> OntologyOverviewAggregateStatsData:
         """Return consolidated stats across all registered ontology files."""
         try:
-            ontologies = await self.list_ontology_files()
+            ontologies = await self.list_ontology_files(catalog_refs=catalog_refs)
             totals = [0, 0, 0, 0, 0]  # classes, obj_props, data_props, named_ind, imports
             for item in ontologies:
                 try:
@@ -798,10 +819,14 @@ class OntologyService:
                 "Failed to compute aggregate ontology stats"
             ) from exc
 
-    async def get_type_counts(self, ontology_path: str | None) -> OntologyTypeCountsData:
+    async def get_type_counts(
+        self,
+        ontology_path: str | None,
+        catalog_refs: list[str] | None = None,
+    ) -> OntologyTypeCountsData:
         """Return NamedIndividual and DatatypeProperty counts."""
         try:
-            ontologies = await self.list_ontology_files()
+            ontologies = await self.list_ontology_files(catalog_refs=catalog_refs)
             target_paths = self._resolve_ontology_paths(ontology_path, ontologies)
             named_individuals = 0
             data_properties = 0
@@ -820,11 +845,15 @@ class OntologyService:
         except Exception as exc:
             raise OntologyServiceUnavailableError("Failed to compute ontology type counts") from exc
 
-    async def get_overview_graph(self, ontology_path: str | None) -> OntologyOverviewGraphData:
+    async def get_overview_graph(
+        self,
+        ontology_path: str | None,
+        catalog_refs: list[str] | None = None,
+    ) -> OntologyOverviewGraphData:
         """Return ontology dependency/class graph."""
         store = self._get_triple_store()
         try:
-            ontologies = await self.list_ontology_files()
+            ontologies = await self.list_ontology_files(catalog_refs=catalog_refs)
             _populate_dynamic_uri_map([item.path for item in ontologies])
             target_paths = self._resolve_ontology_paths(ontology_path, ontologies)
 
