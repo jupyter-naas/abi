@@ -350,7 +350,9 @@ def test_ttl_accepts_naive_created_at() -> None:
             key="k",
             data=cached.data,
             data_type=cached.data_type,
-            created_at=datetime.datetime.now().replace(tzinfo=None).isoformat(),
+            created_at=datetime.datetime.now(datetime.UTC)
+            .replace(tzinfo=None)
+            .isoformat(),
         ),
     )
     assert cache.get("k", ttl=datetime.timedelta(days=1)) == "v"
