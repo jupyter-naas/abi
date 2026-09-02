@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { cn } from '@/lib/utils';
 
 type WorkspaceMarkProps = {
   name?: string;
@@ -35,11 +36,36 @@ export function WorkspaceMark({
         <img
           src={logoUrl}
           alt={name || ''}
-          className={imgReady ? 'h-full w-full object-cover' : 'hidden'}
+          className={imgReady ? 'absolute inset-0 h-full w-full object-cover' : 'hidden'}
           onLoad={() => setImgReady(true)}
           onError={() => setImgReady(false)}
         />
       ) : null}
     </>
+  );
+}
+
+type WorkspaceMarkFrameProps = {
+  children: React.ReactNode;
+  className?: string;
+  backgroundColor?: string;
+};
+
+/** Square chrome around a workspace mark. No accent ring. */
+export function WorkspaceMarkFrame({
+  children,
+  className,
+  backgroundColor,
+}: WorkspaceMarkFrameProps) {
+  return (
+    <span
+      className={cn(
+        'relative flex flex-shrink-0 items-center justify-center overflow-hidden p-0',
+        className,
+      )}
+      style={backgroundColor ? { backgroundColor } : undefined}
+    >
+      {children}
+    </span>
   );
 }

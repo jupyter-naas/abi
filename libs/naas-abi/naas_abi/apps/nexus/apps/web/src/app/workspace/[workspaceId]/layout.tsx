@@ -47,19 +47,38 @@ export default function WorkspaceIdLayout({
     if (workspaces.some((w) => w.id === workspaceId)) return;
 
     let cancelled = false;
-    void useWorkspaceStore.getState().fetchWorkspaces().then(() => {
+    void useWorkspaceStore.getState().fetchWorkspaces().then(async () => {
       if (cancelled) return;
       const list = useWorkspaceStore.getState().workspaces;
       if (list.some((w) => w.id === workspaceId)) return;
+      const search = typeof window !== 'undefined' ? window.location.search : '';
+
+      try {
+        const { authFetch } = await import('@/stores/auth');
+        const slugRes = await authFetch(
+          `/api/workspaces/slug/${encodeURIComponent(workspaceId)}`,
+        );
+        if (slugRes.ok) {
+          const row = (await slugRes.json()) as { id?: string };
+          if (row?.id && !cancelled) {
+            const suffix = (pathname || '').replace(`/workspace/${workspaceId}`, '') || '/chat';
+            router.replace(`/workspace/${row.id}${suffix}${search}`);
+            return;
+          }
+        }
+      } catch {
+        // Unknown slug: fall through to the first workspace.
+      }
+
       if (list.length === 0) return;
       const fallback = list[0];
       router.replace(
-        getWorkspaceSwitchPath({
+        `${getWorkspaceSwitchPath({
           pathname: pathname || '',
           targetWorkspaceId: fallback.id,
           role: fallback.currentUserRole,
           workspaceFlags: fallback.featureFlags,
-        }),
+        })}${search}`,
       );
     });
     return () => {

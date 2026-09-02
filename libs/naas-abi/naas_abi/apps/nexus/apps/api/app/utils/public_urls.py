@@ -136,6 +136,9 @@ def resolve_module_public_asset_path(
     stripped = asset_path.strip().lstrip("/")
     if stripped.startswith("modules/"):
         stripped = stripped[len("modules/") :]
+    # Repo-relative module asset paths (``src/external/<module>/assets/public/...``).
+    if stripped.startswith("src/"):
+        stripped = stripped[len("src/") :]
 
     if not abi_module_path:
         return stripped

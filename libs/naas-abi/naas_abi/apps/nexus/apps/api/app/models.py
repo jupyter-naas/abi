@@ -242,6 +242,7 @@ class WorkspaceModel(Base):
     primary_color = Column(String, nullable=True, default="#22c55e")  # Primary brand color (hex)
     accent_color = Column(String, nullable=True)  # Accent/secondary color (hex)
     background_color = Column(String, nullable=True)  # Custom background color (hex)
+    background_image_url = Column(Text, nullable=True)  # Desktop wallpaper URL
     sidebar_color = Column(String, nullable=True)  # Custom sidebar background color (hex)
     font_family = Column(String, nullable=True)  # Custom font family name
 

@@ -1,21 +1,14 @@
 'use client';
 
-import { useState, useEffect, useRef, type ReactNode } from 'react';
-import Link from 'next/link';
+import { useState, useEffect, type ReactNode } from 'react';
 import {
   PanelLeft,
   PanelRight,
-  User,
-  LogOut,
-  HelpCircle,
-  Building2,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { useWorkspaceStore } from '@/stores/workspace';
-import { useAuthStore } from '@/stores/auth';
-import { useFeature } from '@/hooks/use-feature';
+import { useWorkspaceStore, isTransientPanelSection } from '@/stores/workspace';
 import { useIsMobile } from '@/hooks/use-is-mobile';
+import { QuickOpen } from './quick-open';
 import { useRegisterShellTitle } from './shell-title';
 
 interface HeaderProps {
@@ -36,60 +29,38 @@ export function Header({ title, subtitle, nav, actions }: HeaderProps = {}) {
   // of where the user is, so publish it for the mobile top bar.
   useRegisterShellTitle(title, subtitle);
   const [mounted, setMounted] = useState(false);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const userMenuRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
-  const { logout, user: authUser } = useAuthStore();
 
   const {
     sidebarCollapsed,
     toggleSidebar,
     contextPanelOpen,
     toggleContextPanel,
-    currentWorkspaceId,
     activePanelSection,
     setActivePanelSection,
     lastActivePanelSection,
   } = useWorkspaceStore();
 
-  // Use authenticated user from auth store (not the hardcoded workspace store user)
-  const user = authUser;
-
-  const canOrganizationSettings = useFeature('settings.organization');
-
-  // Helper to generate workspace-scoped URLs
-  const getWorkspacePath = (path: string) =>
-    currentWorkspaceId ? `/workspace/${currentWorkspaceId}${path}` : path;
-
   useEffect(() => {
     setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
-        setUserMenuOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Use defaults on server to prevent hydration mismatch
   const sidebarOpen = mounted ? !sidebarCollapsed : true;
   const panelOpen = mounted ? contextPanelOpen : false;
-  const displayUser = mounted ? user : null;
+  const sectionToToggle =
+    lastActivePanelSection && !isTransientPanelSection(lastActivePanelSection)
+      ? lastActivePanelSection
+      : 'chat';
 
   // Mobile shell owns chrome (back header + bottom nav). Desktop Header
   // (sidebar toggle, AI pane) is dead weight there. Branch + API live in
-  // PlatformStatusFooter (shell), not the navbar.
+  // PlatformStatusFooter (shell), not the navbar. Account menu lives on the
+  // dock (desktop) and the mobile top bar.
   if (isMobile) return null;
 
   return (
-    <header className="glass-nav relative z-[200] flex h-14 items-center justify-between border-b border-border/50 pl-2 pr-4">
-      {/* Left side */}
-      <div className="flex items-center gap-1">
+    <header className="glass-nav relative z-[200] flex h-14 items-center border-b border-border/50 pl-2 pr-4">
+      <div className="relative z-10 flex min-w-0 items-center gap-1">
         {!sidebarOpen && (
           <button
             onClick={toggleSidebar}
@@ -97,22 +68,24 @@ export function Header({ title, subtitle, nav, actions }: HeaderProps = {}) {
               'flex h-8 w-8 items-center justify-center rounded-md transition-all',
               'hover:bg-muted hover:text-foreground text-muted-foreground'
             )}
-            title="Expand sidebar"
+            title="Show dock"
           >
             <PanelLeft size={16} />
           </button>
         )}
 
-        {/* Section panel toggle — visible whenever a panel section has been opened */}
-        {mounted && lastActivePanelSection && (
+        {mounted && (
           <button
-            onClick={() => setActivePanelSection(activePanelSection ? null : lastActivePanelSection)}
+            type="button"
+            onClick={() => setActivePanelSection(activePanelSection ? null : sectionToToggle)}
             className={cn(
               'flex h-8 w-8 items-center justify-center rounded-md transition-all',
               'hover:bg-muted hover:text-foreground',
               activePanelSection ? 'text-foreground bg-muted' : 'text-muted-foreground'
             )}
             title={activePanelSection ? 'Close panel' : 'Open panel'}
+            aria-label={activePanelSection ? 'Close panel' : 'Open panel'}
+            aria-pressed={Boolean(activePanelSection)}
           >
             <PanelLeft size={16} />
           </button>
@@ -121,11 +94,15 @@ export function Header({ title, subtitle, nav, actions }: HeaderProps = {}) {
         {nav ? <div className="ml-1 flex min-w-0 items-center">{nav}</div> : null}
       </div>
 
-      {/* Right side: page actions + Abi + user. Branch/API live in PlatformStatusFooter. */}
-      <div className="flex items-center gap-1">
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div className="pointer-events-auto">
+          <QuickOpen />
+        </div>
+      </div>
+
+      <div className="relative z-10 ml-auto flex items-center gap-1">
         {actions}
 
-        {/* Right chat pane toggle — icon-only, mirrors left PanelLeft controls */}
         <button
           type="button"
           onClick={toggleContextPanel}
@@ -140,88 +117,6 @@ export function Header({ title, subtitle, nav, actions }: HeaderProps = {}) {
         >
           <PanelRight size={16} />
         </button>
-
-        {/* User avatar with dropdown */}
-        <div ref={userMenuRef} className="relative ml-1">
-          <button
-            onClick={() => setUserMenuOpen(!userMenuOpen)}
-            className={cn(
-              'flex h-8 w-8 items-center justify-center rounded-full overflow-hidden transition-opacity',
-              'hover:opacity-90',
-              displayUser?.avatar ? 'bg-transparent' : 'bg-primary text-primary-foreground'
-            )}
-          >
-            {displayUser?.avatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={displayUser.avatar}
-                alt={displayUser.name || 'User'}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span className="text-xs font-medium">{displayUser?.name?.charAt(0) || 'U'}</span>
-            )}
-          </button>
-
-          {userMenuOpen && (
-            <div className="absolute right-0 top-full z-[300] mt-2 min-w-56 w-64 rounded-lg border bg-card shadow-lg p-2">
-              {/* User info */}
-              <div className="border-b border-border/50 px-4 py-3">
-                <p className="truncate font-medium" title={displayUser?.name || 'User'}>
-                  {displayUser?.name || 'User'}
-                </p>
-                <p className="min-w-0 truncate text-xs text-muted-foreground" title={displayUser?.email || ''}>
-                  {displayUser?.email || ''}
-                </p>
-              </div>
-
-              {/* Menu items */}
-              <div className="py-2">
-                <Link
-                  href="/account/profile"
-                  onClick={() => setUserMenuOpen(false)}
-                  className="flex items-center gap-3 rounded-md px-4 py-2.5 text-sm transition-colors hover:bg-muted"
-                >
-                  <User size={16} className="shrink-0 text-muted-foreground" />
-                  Account Settings
-                </Link>
-                {canOrganizationSettings && (
-                  <Link
-                    href="/organizations"
-                    onClick={() => setUserMenuOpen(false)}
-                    className="flex items-center gap-3 rounded-md px-4 py-2.5 text-sm transition-colors hover:bg-muted"
-                  >
-                    <Building2 size={16} className="shrink-0 text-muted-foreground" />
-                    Organization Settings
-                  </Link>
-                )}
-                <Link
-                  href={getWorkspacePath('/help')}
-                  onClick={() => setUserMenuOpen(false)}
-                  className="flex items-center gap-3 rounded-md px-4 py-2.5 text-sm transition-colors hover:bg-muted"
-                >
-                  <HelpCircle size={16} className="shrink-0 text-muted-foreground" />
-                  Help
-                </Link>
-              </div>
-
-              {/* Logout */}
-              <div className="border-t border-border/50 py-2">
-                <button
-                  onClick={() => {
-                    setUserMenuOpen(false);
-                    logout();
-                    router.push('/auth/login');
-                  }}
-                  className="flex w-full items-center gap-3 rounded-md px-4 py-2.5 text-sm text-destructive transition-colors hover:bg-destructive/10"
-                >
-                  <LogOut size={16} className="shrink-0" />
-                  Log Out
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
     </header>
   );

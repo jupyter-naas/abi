@@ -24,7 +24,7 @@ function resolveDefaultWorkspace(request: NextRequest): string {
   return request.cookies.get('nexus-last-workspace')?.value || CONFIGURED_DEFAULT;
 }
 
-const legacyRoutes = ['/maps', '/chat', '/search', '/lab', '/ontology', '/graph', '/apps', '/marketplace', '/help', '/files', '/settings'];
+const legacyRoutes = ['/home', '/maps', '/chat', '/search', '/lab', '/ontology', '/graph', '/apps', '/marketplace', '/help', '/files', '/settings'];
 
 const authRoutes = [
   '/auth/login',
