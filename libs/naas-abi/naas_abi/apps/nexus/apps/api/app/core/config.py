@@ -297,6 +297,10 @@ class WorkspaceSeedConfig(BaseModel):
     default_agent: str | None = None
     agents: list[str] | None = None
     apps: list[str] | None = None
+    # Ontology catalog ids (``module:filename.ttl``). Exclusive when a list
+    # is set: listed on, others off. ``None`` keeps the full engine listing.
+    # An empty list shows none. owl:imports are not implied; name every file.
+    ontologies: list[str] | None = None
 
 
 class OrganizationSeedConfig(BaseModel):

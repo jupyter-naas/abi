@@ -303,6 +303,10 @@ class WorkspaceSeedConfig(BaseModel):
     # Catalog ``app_id`` values (``module.path:folder``) to enable at boot.
     # ``None`` means no seed; missing app-config rows default to off.
     apps: list[str] | None = None
+    # Ontology catalog ids (``module:filename.ttl``). Exclusive when a list
+    # is set: listed on, others off. ``None`` keeps the full engine listing.
+    # An empty list shows none. owl:imports are not implied; name every file.
+    ontologies: list[str] | None = None
 
 
 class OrganizationSeedConfig(BaseModel):
