@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import dagster as dg
 from naas_abi_marketplace.applications.x.orchestrations.XBuildAppOrchestration import (
-    XBuildAppOrchestration,
     _SCHEDULE_NAME,
+    XBuildAppOrchestration,
 )
 
 

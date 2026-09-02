@@ -21,6 +21,8 @@ from __future__ import annotations
 import dagster as dg
 from naas_abi_core import logger
 from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestration
+from naas_abi_marketplace.applications.x import ABIModule
+
 _JOB_NAME = "x_build_app_x_proxy"
 _OP_NAME = "x_build_app_x_proxy_op"
 _SCHEDULE_NAME = "x_build_app_x_proxy_hourly"
