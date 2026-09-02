@@ -57,9 +57,8 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
       UTC on weekdays).
 
     Setting both is a configuration error; setting neither falls back to a
-    sensor on ``DEFAULT_SEARCH_INTERVAL_SECONDS``. Either way the trigger is
-    created STOPPED — start it from the Dagster UI — and skips a tick while a
-    previous run for the same filter is still in flight.
+    sensor on ``DEFAULT_SEARCH_INTERVAL_SECONDS``. The trigger starts RUNNING and
+    skips a tick while a previous run for the same filter is still in flight.
     """
 
     name: str = Field(
@@ -226,11 +225,10 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
 class XAppConfiguration(BaseModel):
     """Publishing controls for the Nexus Recent Tweets app (``x/apps/x_proxy/``).
 
-    Independent of ``search_recent_tweets_event.enabled`` / Dagster UI sensor
-    state and of ``count_recent_tweets`` on search filters. When ``publish`` is
-    true, orchestrations that update the graph (event map, files reprocess,
-    count cycle, search tick) call :func:`publish_x_app` to refresh JSON
-    snapshots + the static web export.
+    Independent of Dagster trigger default status and of ``count_recent_tweets``
+    on search filters. When ``publish`` is true, orchestrations that update the
+    graph (event map, files reprocess, count cycle, search tick) call
+    :func:`publish_x_app` to refresh JSON snapshots + the static web export.
     """
 
     publish: bool = Field(
@@ -258,8 +256,7 @@ class XSearchRecentTweetsEventConfiguration(BaseModel):
     graph triples. Set ``app_publish: true`` to also republish the Recent Tweets
     catalog app on every successful map — off by default, since the hourly
     ``x_build_app_x_proxy`` schedule already rebuilds it from the same graph state.
-    Independent of this entry's ``enabled`` flag (``enabled`` only controls
-    whether the Dagster sensor starts RUNNING).
+    The Dagster sensor starts RUNNING when this entry is configured.
     """
 
     name: str = Field(
@@ -271,10 +268,10 @@ class XSearchRecentTweetsEventConfiguration(BaseModel):
         )
     )
     enabled: bool = Field(
-        default=False,
+        default=True,
         description=(
-            "Start the ObjectPut ingestion sensor RUNNING. Defaults to false "
-            "(the sensor is created STOPPED; enable it from the Dagster UI)."
+            "Deprecated legacy flag (ignored). ObjectPut ingestion sensors start "
+            "RUNNING when the entry is listed; stop them from the Dagster UI."
         ),
     )
     interval_seconds: int = Field(
@@ -353,10 +350,10 @@ class XSearchRecentTweetsFilesConfiguration(BaseModel):
         )
     )
     enabled: bool = Field(
-        default=False,
+        default=True,
         description=(
-            "Start the reprocess sensor RUNNING. Defaults to false (the sensor "
-            "is created STOPPED; enable it from the Dagster UI)."
+            "Deprecated legacy flag (ignored). Reprocess triggers start RUNNING "
+            "when the entry is listed; stop them from the Dagster UI."
         ),
     )
     interval_seconds: int | None = Field(
@@ -498,9 +495,9 @@ class ABIModule(BaseModule):
             # Pick ONE cadence per entry — setting both is a config error:
             #   interval_seconds: 3600   -> sensor, every hour of elapsed time
             #   cron: "0 * * * *"        -> schedule, at :00 wall-clock (UTC)
-            # Omit both and the entry falls back to a 60s sensor. Triggers are
-            # created STOPPED — start them from the Dagster UI — and skip a
-            # tick while the previous run for that filter is still in flight.
+            # Omit both and the entry falls back to a 60s sensor. Triggers start
+            # RUNNING and skip a tick while the previous run for that filter is
+            # still in flight.
             #
             # Spend guard (per filter): search_recent_tweets bills
             # `cost_per_tweet_usd` per tweet ('resource') returned. A usage
@@ -550,10 +547,9 @@ class ABIModule(BaseModule):
             # under `prefix` (by the search_recent_tweets_workflow jobs), maps
             # the file into the graph via XSearchRecentTweetsPipeline — no
             # polling of object storage; each put is processed exactly once via
-            # a durable consumer cursor keyed on the sensor's `name`. Created
-            # STOPPED unless `enabled: true`. This is the mapping half of the
-            # flow: the workflow saves envelopes, this sensor turns them into
-            # triples.
+            # a durable consumer cursor keyed on the sensor's `name`. Sensors
+            # start RUNNING. This is the mapping half of the flow: the workflow
+            # saves envelopes, this sensor turns them into triples.
             search_recent_tweets_event:
               - name: search_envelopes
                 enabled: true
@@ -571,9 +567,9 @@ class ABIModule(BaseModule):
             # and feeds it to XSearchRecentTweetsPipeline. With
             # `skip_existing: true` the run first reads the x:file_path of
             # every x:SearchResultSet already in the graph and reprocesses
-            # only the envelopes not yet mapped. Created STOPPED unless
-            # `enabled: true`. Use it to backfill / re-ingest a folder on a
-            # cadence without re-querying the X API.
+            # only the envelopes not yet mapped. Triggers start RUNNING. Use it
+            # to backfill / re-ingest a folder on a cadence without re-querying
+            # the X API.
             search_recent_tweets_files:
               - name: reprocess_envelopes
                 enabled: true
@@ -612,7 +608,7 @@ class ABIModule(BaseModule):
         #         enabled: true
         count_recent_tweets_workflow: list[XCountFollowConfiguration] = []
         # ----- Recent Tweets catalog app (x/apps/x_proxy/) ------------------------
-        # Snapshot republish is independent of sensor ``enabled`` flags and of
+        # Snapshot republish is independent of Dagster trigger default status and of
         # ``count_recent_tweets`` on search filters.
         #
         #     app:

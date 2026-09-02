@@ -12,9 +12,8 @@ Use it to keep the published dashboard fresh on a fixed cadence, independent of
 when new tweets/counts land — the ingestion orchestrations already republish on
 map, this one guarantees a periodic rebuild even on a quiet ingestion tick.
 
-The schedule is created RUNNING when module ``app.publish`` is true (the
-default) and STOPPED otherwise; either way you can toggle it from the Dagster UI
-and launch ``x_build_app_x_proxy`` manually from the launchpad to rebuild on demand.
+The schedule starts **RUNNING** by default; stop it from the Dagster UI when
+needed. You can also launch ``x_build_app_x_proxy`` manually from the launchpad.
 """
 
 from __future__ import annotations
@@ -97,13 +96,6 @@ class XBuildAppOrchestration(DagsterOrchestration):
 
     @classmethod
     def New(cls) -> XBuildAppOrchestration:
-        from naas_abi_marketplace.applications.x.orchestrations.utils import (
-            x_app_publish_enabled,
-        )
-
-        module = ABIModule.get_instance()
-        publish_enabled = x_app_publish_enabled(module)
-
         @dg.op(name=_OP_NAME, config_schema=_BUILD_APP_OP_CONFIG_SCHEMA)
         def build_op(context) -> dict:
             config = context.op_config or {}
@@ -123,11 +115,7 @@ class XBuildAppOrchestration(DagsterOrchestration):
             job=build_job,
             cron_schedule="0 * * * *",  # top of every hour
             execution_timezone="UTC",
-            default_status=(
-                dg.DefaultScheduleStatus.RUNNING
-                if publish_enabled
-                else dg.DefaultScheduleStatus.STOPPED
-            ),
+            default_status=dg.DefaultScheduleStatus.RUNNING,
         )
 
         return cls(
