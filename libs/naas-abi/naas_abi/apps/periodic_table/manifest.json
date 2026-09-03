@@ -1,0 +1,17 @@
+{
+    "name": "Periodic Table of Software",
+    "description": "Interactive graph of the 119-element Periodic Table of Software ontology, grounded in BFO 7 Buckets.",
+    "category": "core",
+    "url": "html:periodic_table_graph.html",
+    "icon_emoji": "🧪",
+    "version": "0.1.0",
+    "author": "naas.ai",
+    "license": "CC-BY-4.0",
+    "keywords": ["ontology", "periodic-table", "bfo", "software-elements"],
+    "tier": "core",
+    "maintainer": "naas.ai",
+    "pricing": {
+        "type": "free",
+        "price": 0
+    }
+}

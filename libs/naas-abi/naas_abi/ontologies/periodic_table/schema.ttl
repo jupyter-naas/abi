@@ -1,0 +1,135 @@
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:   <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:  <http://purl.obolibrary.org/obo/> .
+@prefix cco:  <https://www.commoncoreontologies.org/> .
+@prefix abi:  <http://ontology.naas.ai/abi/> .
+@prefix zen:  <http://ontology.naas.ai/zen/> .
+@prefix pts:  <http://ontology.naas.ai/zen/pts/> .
+
+# Schema fragment only. No owl:Ontology here.
+# Canonical catalog document: ontologies/modules/PeriodicTableOntology.ttl
+# Import chain (resolved at load): BFO core -> BFO 7 Buckets -> ABI -> Periodic Table
+
+# ---------------------------------------------------------------------------
+# BFO class anchors (mirror for offline rdflib loading)
+# ---------------------------------------------------------------------------
+
+bfo:BFO_0000003 a owl:Class ; rdfs:label "occurrent"@en .
+bfo:BFO_0000015 a owl:Class ; rdfs:label "process"@en ; rdfs:subClassOf bfo:BFO_0000003 .
+bfo:BFO_0000040 a owl:Class ; rdfs:label "material entity"@en .
+bfo:BFO_0000031 a owl:Class ; rdfs:label "generically dependent continuant"@en .
+bfo:BFO_0000029 a owl:Class ; rdfs:label "site"@en .
+bfo:BFO_0000008 a owl:Class ; rdfs:label "temporal region"@en ; rdfs:subClassOf bfo:BFO_0000003 .
+bfo:BFO_0000016 a owl:Class ; rdfs:label "disposition"@en .
+bfo:BFO_0000023 a owl:Class ; rdfs:label "role"@en .
+bfo:BFO_0000019 a owl:Class ; rdfs:label "quality"@en .
+
+# ABI anchors (offline stubs mirroring ABIOntology.ttl)
+abi:MaterialEntity a owl:Class ; owl:equivalentClass bfo:BFO_0000040 ; rdfs:label "material entity"@en .
+abi:GenericallyDependentContinuant a owl:Class ; owl:equivalentClass bfo:BFO_0000031 ; rdfs:label "generically dependent continuant"@en .
+abi:Quality a owl:Class ; owl:equivalentClass bfo:BFO_0000019 ; rdfs:label "quality"@en .
+abi:Site a owl:Class ; owl:equivalentClass bfo:BFO_0000029 ; rdfs:label "site"@en .
+abi:Process a owl:Class ; rdfs:subClassOf bfo:BFO_0000015 ; rdfs:label "ABI Process"@en .
+abi:Person a owl:Class ; owl:equivalentClass cco:ont00001262 ; rdfs:label "Person"@en .
+abi:Organization a owl:Class ; owl:equivalentClass cco:ont00001180 ; rdfs:label "Organization"@en .
+abi:Role a owl:Class ; owl:equivalentClass bfo:BFO_0000023 ; rdfs:label "role"@en .
+abi:TemporalRegion a owl:Class ; owl:equivalentClass bfo:BFO_0000008 ; rdfs:label "temporal region"@en .
+abi:DocumentContentEntity a owl:Class ; rdfs:subClassOf abi:GenericallyDependentContinuant ; rdfs:label "Document Content Entity"@en .
+abi:Spreadsheet a owl:Class ; rdfs:subClassOf abi:DocumentContentEntity ; rdfs:label "Spreadsheet"@en .
+
+# ---------------------------------------------------------------------------
+# Root class: all 119 elements are subclasses of SoftwareElement
+# ---------------------------------------------------------------------------
+
+pts:SoftwareElement a owl:Class ;
+    rdfs:label "Software Element"@en ;
+    skos:definition "A primitive building block from the Periodic Table of Software."@en .
+
+pts:SoftwareObject a owl:Class ;
+    rdfs:label "Software Object"@en ;
+    skos:altLabel "Noun"@en ;
+    skos:definition "Entities or data models in a software system."@en ;
+    rdfs:subClassOf pts:SoftwareElement .
+
+pts:SoftwareProperty a owl:Class ;
+    rdfs:label "Software Property"@en ;
+    skos:altLabel "Attribute"@en ;
+    skos:definition "Data types and metadata fields associated with objects."@en ;
+    rdfs:subClassOf pts:SoftwareElement .
+
+pts:SoftwareAction a owl:Class ;
+    rdfs:label "Software Action"@en ;
+    skos:altLabel "Verb"@en ;
+    skos:definition "Operations a user or system can perform."@en ;
+    rdfs:subClassOf pts:SoftwareElement , abi:Process .
+
+pts:SoftwareInterface a owl:Class ;
+    rdfs:label "Software Interface"@en ;
+    skos:altLabel "View"@en ;
+    skos:definition "UI patterns and surfaces for visualizing or editing data."@en ;
+    rdfs:subClassOf pts:SoftwareElement , abi:DocumentContentEntity .
+
+pts:SoftwareIntelligence a owl:Class ;
+    rdfs:label "Software Intelligence"@en ;
+    skos:altLabel "AI"@en ;
+    skos:definition "AI-driven capabilities over software artifacts."@en ;
+    rdfs:subClassOf pts:SoftwareElement , abi:Process .
+
+pts:SoftwareRule a owl:Class ;
+    rdfs:label "Software Rule"@en ;
+    skos:altLabel "Automation"@en ;
+    skos:definition "Logic and governance layers of a system."@en ;
+    rdfs:subClassOf pts:SoftwareElement .
+
+# ---------------------------------------------------------------------------
+# Annotation / object properties
+# ---------------------------------------------------------------------------
+
+pts:elementNumber a owl:AnnotationProperty ;
+    rdfs:label "element number"@en ;
+    rdfs:domain pts:SoftwareElement ;
+    rdfs:range xsd:integer .
+
+pts:section a owl:AnnotationProperty ;
+    rdfs:label "section"@en ;
+    rdfs:domain pts:SoftwareElement ;
+    rdfs:range xsd:string .
+
+pts:bfoBucket a owl:AnnotationProperty ;
+    rdfs:label "BFO 7 bucket"@en ;
+    rdfs:domain pts:SoftwareElement ;
+    rdfs:range xsd:string ;
+    skos:definition "Plain-English BFO 7 bucket name for this element."@en .
+
+zen:mapsToBFOBucket a owl:ObjectProperty ;
+    rdfs:label "maps to BFO 7 bucket"@en ;
+    rdfs:domain pts:SoftwareElement ;
+    rdfs:range owl:Class ;
+    skos:definition "The ABI/BFO7 human-readable bucket class for this element."@en .
+
+zen:mapsToBFOCode a owl:AnnotationProperty ;
+    rdfs:label "maps to BFO code"@en ;
+    rdfs:domain pts:SoftwareElement ;
+    skos:definition "The canonical BFO class IRI (machine id) inherited via the ABI bucket equivalentClass."@en .
+
+pts:bfoBucketLabel a owl:AnnotationProperty ;
+    rdfs:label "BFO 7 bucket label"@en ;
+    rdfs:domain pts:SoftwareElement ;
+    rdfs:range xsd:string .
+
+pts:renders a owl:ObjectProperty ;
+    rdfs:label "renders"@en ;
+    rdfs:domain pts:SoftwareInterface ;
+    rdfs:range pts:SoftwareObject ;
+    skos:definition "An interface specification renders one or more software object types."@en .
+
+# Collaboration interface -> object bindings (Zen extension)
+pts:DocInterface pts:renders pts:Doc .
+pts:SheetInterface pts:renders pts:File .
+pts:SlideInterface pts:renders pts:Doc .
+pts:Portal pts:renders pts:Workflow .

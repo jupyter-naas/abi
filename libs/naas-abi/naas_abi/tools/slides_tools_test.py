@@ -16,6 +16,7 @@ from naas_abi.tools.slides_tools import (
     _deck_path,
     _ensure_coding_repo,
     _friendly_sc_error,
+    _naming_hint_from_html,
     _persist_asset,
     _persist_deck,
     _redact_data_urls,
@@ -26,7 +27,9 @@ from naas_abi.tools.slides_tools import (
     _split_sections,
     _validate_asset_filename,
     _view_for_llm,
+    slides_html_filename,
     slides_tools,
+    snake_case_deck_stem,
 )
 from naas_abi_core.services.agent.context import (
     agent_user_id,
@@ -524,5 +527,117 @@ def test_save_slides_asset_lands_in_assets(monkeypatch) -> None:
         )
         assert "error" not in written, written
         assert written["filename"] == "logo.svg"
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_snake_case_deck_stem_and_filename() -> None:
+    assert snake_case_deck_stem("Forensic Analysis") == "forensic_analysis"
+    assert slides_html_filename("Forensic Analysis") == "forensic_analysis.slides.html"
+    assert snake_case_deck_stem("  ") == "presentation"
+
+
+def test_naming_hint_from_cover_h1() -> None:
+    html = '<main class="deck"><section class="slide cover"><h1>Hormuz Brief</h1></section></main>'
+    hint = _naming_hint_from_html(html)
+    assert hint["suggested_title"] == "Hormuz Brief"
+    assert hint["suggested_filename"] == "hormuz_brief.slides.html"
+    filler = '<main class="deck"><section class="slide cover"><h1>Presentation Title</h1></section></main>'
+    assert _naming_hint_from_html(filler) == {}
+
+
+def test_rename_slides_deck_updates_project_json(monkeypatch) -> None:
+    sc = _bind_in_memory_git(monkeypatch)
+    sc.ensure_repo(owner="abi", name="monorepo")
+    sc.create_branch(
+        repo_id="abi/monorepo",
+        name="slides/ws-test/untitled-local",
+        from_ref="main",
+    )
+    sc.upsert_file(
+        repo_id="abi/monorepo",
+        path="slides/ws-test/untitled-local/deck.html",
+        content="<html></html>",
+        message="Seed deck",
+        branch="slides/ws-test/untitled-local",
+    )
+    sc.upsert_file(
+        repo_id="abi/monorepo",
+        path="slides/ws-test/untitled-local/project.json",
+        content='{"slug":"untitled-local","workspace_id":"ws-test","title":"Untitled"}\n',
+        message="Seed project",
+        branch="slides/ws-test/untitled-local",
+    )
+    tokens = _slides_context()
+    try:
+        tool = next(t for t in slides_tools() if t.name == "rename_slides_deck")
+        result = tool.invoke({"title": "Forensic Analysis"})
+        assert "error" not in result, result
+        assert result["title"] == "Forensic Analysis"
+        assert result["suggested_filename"] == "forensic_analysis.slides.html"
+        meta = sc.get_file(
+            repo_id="abi/monorepo",
+            path="slides/ws-test/untitled-local/project.json",
+            ref="slides/ws-test/untitled-local",
+        )
+        assert '"Forensic Analysis"' in (meta.text or "")
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_save_slides_asset_from_url_svg(monkeypatch) -> None:
+    sc = _bind_in_memory_git(monkeypatch)
+    sc.ensure_repo(owner="abi", name="monorepo")
+    sc.create_branch(
+        repo_id="abi/monorepo",
+        name="slides/ws-test/untitled-local",
+        from_ref="main",
+    )
+    sc.upsert_file(
+        repo_id="abi/monorepo",
+        path="slides/ws-test/untitled-local/deck.html",
+        content="<html></html>",
+        message="Seed deck",
+        branch="slides/ws-test/untitled-local",
+    )
+    sc.upsert_file(
+        repo_id="abi/monorepo",
+        path="slides/ws-test/untitled-local/project.json",
+        content='{"slug":"untitled-local","workspace_id":"ws-test"}\n',
+        message="Seed project",
+        branch="slides/ws-test/untitled-local",
+    )
+
+    class _Resp:
+        headers = {"Content-Type": "image/svg+xml"}
+
+        def read(self, _n: int) -> bytes:
+            return b"<svg xmlns='http://www.w3.org/2000/svg'><circle/></svg>"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(
+        "naas_abi.tools.slides_tools.urllib.request.urlopen",
+        lambda *a, **k: _Resp(),
+    )
+    tokens = _slides_context()
+    try:
+        tool = next(t for t in slides_tools() if t.name == "save_slides_asset_from_url")
+        result = tool.invoke(
+            {"url": "https://example.com/logo.svg", "filename": "logo.svg"}
+        )
+        assert "error" not in result, result
+        assert result["filename"] == "logo.svg"
+        assert result["data_url"].startswith("data:image/svg+xml;base64,")
+        saved = sc.get_file(
+            repo_id="abi/monorepo",
+            path="slides/ws-test/untitled-local/assets/logo.svg",
+            ref="slides/ws-test/untitled-local",
+        )
+        assert "<svg" in (saved.text or "")
     finally:
         _reset_tokens(tokens)

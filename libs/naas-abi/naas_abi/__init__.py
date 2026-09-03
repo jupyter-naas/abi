@@ -668,6 +668,9 @@ class ABIModule(BaseModule):
 
     def on_load(self):
         super().on_load()
+        from naas_abi.ontologies.periodic_table.loader import keep_catalog_ontology_paths
+
+        self.ontologies[:] = keep_catalog_ontology_paths(self.ontologies)
         # from naas_abi_core.services.triple_store.TripleStorePorts import OntologyEvent
         # from rdflib import URIRef
 
@@ -688,6 +691,15 @@ class ABIModule(BaseModule):
             triple_store=self.engine.services.triple_store,
             object_storage=self.engine.services.object_storage,
         )
+
+        try:
+            from naas_abi.ontologies.periodic_table.loader import insert_into_triple_store
+
+            insert_into_triple_store(self.engine.services.triple_store)
+        except Exception as exc:  # noqa: BLE001
+            from naas_abi_core import logger
+
+            logger.warning("Could not load Periodic Table ontology: {}", exc)
 
         # Keep API and Nexus CORS aligned from a single source of truth.
         app.state.abi_cors_origins = self.engine.api_configuration.cors_origins

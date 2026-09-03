@@ -306,6 +306,33 @@ _BFO_BUCKET_ROOTS = " ".join(
 # SPARQL ancestor query misses them without this explicit mapping.
 _ABI_NS = "http://ontology.naas.ai/abi/"
 _BFO_NS = "http://purl.obolibrary.org/obo/"
+_CCO_NS = "https://www.commoncoreontologies.org/"
+
+
+def _is_foundational_iri(iri: str) -> bool:
+    """True for BFO/CCO IRIs that ABI wrappers alias via owl:equivalentClass."""
+    return iri.startswith(_BFO_NS) or iri.startswith(_CCO_NS)
+
+
+def _abi_foundational_equiv_map(graph: Graph) -> dict[str, str]:
+    """Map foundational (BFO/CCO) IRIs to their ABI aliases.
+
+    Domain classes that declare owl:equivalentClass to an ABI stub (e.g.
+    pts:Company ≡ abi:Organization) must NOT be collapsed away: Network
+    should keep the domain label and hierarchy parent.
+    """
+    equiv: dict[str, str] = {}
+    for sg, _, og in graph.triples((None, OWL.equivalentClass, None)):
+        if not isinstance(sg, URIRef) or not isinstance(og, URIRef):
+            continue
+        s_str, o_str = str(sg), str(og)
+        if s_str.startswith(_ABI_NS) and _is_foundational_iri(o_str):
+            equiv[o_str] = s_str
+        elif o_str.startswith(_ABI_NS) and _is_foundational_iri(s_str):
+            equiv[s_str] = o_str
+    return equiv
+
+
 _ABI_TO_BFO_BUCKET_ROOT: dict[str, str] = {
     f"{_ABI_NS}{abi_name}": f"{_BFO_NS}{bfo_id}"
     for abi_name, bfo_id in (
@@ -1066,19 +1093,14 @@ class OntologyService:
                             },
                         )
 
-                # Dedup owl:equivalentClass pairs — both the ABI wrapper and its BFO
-                # counterpart may appear as separate nodes when e.g. abi:Agent has
-                # rdfs:subClassOf bfo:BFO_0000040 while abi:MaterialEntity is the
-                # canonical equivalent. Keep the ABI IRI; remap any edges.
-                equiv_map: dict[str, str] = {}
-                for sg, _, og in graph.triples((None, OWL.equivalentClass, None)):
-                    if not isinstance(sg, URIRef) or not isinstance(og, URIRef):
-                        continue
-                    s_str, o_str = str(sg), str(og)
-                    if s_str not in classes_by_iri or o_str not in classes_by_iri:
-                        continue
-                    non_canon, canon = (o_str, s_str) if s_str.startswith(_ABI_NS) else (s_str, o_str)
-                    equiv_map[non_canon] = canon
+                # Dedup owl:equivalentClass pairs for ABI ↔ BFO/CCO only.
+                # Keep the ABI IRI; drop the foundational duplicate. Do not
+                # collapse domain classes (pts:Company ≡ abi:Organization).
+                equiv_map = {
+                    non_canon: canon
+                    for non_canon, canon in _abi_foundational_equiv_map(graph).items()
+                    if non_canon in classes_by_iri and canon in classes_by_iri
+                }
 
                 for non_canon in list(equiv_map):
                     classes_by_iri.pop(non_canon, None)
@@ -1219,16 +1241,8 @@ class OntologyService:
 
         ancestor_graph = _load_ontology_graph_with_imports_cached(ontology_path)
 
-        # Build equivalence normalisation map: BFO IRI → canonical ABI IRI
-        _cp_equiv: dict[str, str] = {}
-        for sg, _, og in ancestor_graph.triples((None, OWL.equivalentClass, None)):
-            if not isinstance(sg, URIRef) or not isinstance(og, URIRef):
-                continue
-            s_str, o_str = str(sg), str(og)
-            if s_str.startswith(_ABI_NS) and not o_str.startswith(_ABI_NS):
-                _cp_equiv[o_str] = s_str
-            elif o_str.startswith(_ABI_NS) and not s_str.startswith(_ABI_NS):
-                _cp_equiv[s_str] = o_str
+        # Build equivalence normalisation map: BFO/CCO IRI → canonical ABI IRI
+        _cp_equiv = _abi_foundational_equiv_map(ancestor_graph)
 
         def _cp_canon(iri: str) -> str:
             seen: set[str] = set()
@@ -1354,18 +1368,10 @@ class OntologyService:
             node_iris.add(sub_iri)
             node_iris.add(super_iri)
 
-        # Normalise BFO/foreign IRIs to their ABI owl:equivalentClass counterparts
+        # Normalise BFO/CCO IRIs to their ABI owl:equivalentClass counterparts
         # so that e.g. bfo:BFO_0000040 (material entity) and abi:MaterialEntity
-        # don't appear as two separate nodes.
-        _equiv_norm: dict[str, str] = {}
-        for sg, _, og in ancestor_graph.triples((None, OWL.equivalentClass, None)):
-            if not isinstance(sg, URIRef) or not isinstance(og, URIRef):
-                continue
-            s_str, o_str = str(sg), str(og)
-            if s_str.startswith(_ABI_NS) and not o_str.startswith(_ABI_NS):
-                _equiv_norm[o_str] = s_str
-            elif o_str.startswith(_ABI_NS) and not s_str.startswith(_ABI_NS):
-                _equiv_norm[s_str] = o_str
+        # don't appear as two separate nodes. Domain ≡ ABI pairs stay as-is.
+        _equiv_norm = _abi_foundational_equiv_map(ancestor_graph)
 
         def _canon(iri: str) -> str:
             seen: set[str] = set()

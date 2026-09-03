@@ -125,7 +125,8 @@ export function isSlidesWriteTool(rawName: string | null | undefined): boolean {
   return (
     raw.includes('write_slides') ||
     raw.includes('replace_in_slides') ||
-    raw.includes('save_slides_asset')
+    raw.includes('save_slides_asset') ||
+    raw.includes('rename_slides')
   );
 }
 

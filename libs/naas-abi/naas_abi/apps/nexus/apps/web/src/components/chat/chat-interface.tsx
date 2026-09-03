@@ -908,10 +908,10 @@ export function ChatInterface({
   const slidesSlug = useSlidesStore((s) => s.selectedSlug);
   const slidesTitle = useSlidesStore((s) => s.selectedTitle);
   const slidesMode = useSlidesStore((s) => s.editorMode);
+  // Bind whichever deck is selected (persisted), not only when the URL is
+  // /slides/... Central chat and the AI pane must still autosave agent writes.
   const slidesChatContext = useMemo(() => {
-    const onSlides =
-      typeof pathname === 'string' && pathname.includes('/slides') && Boolean(slidesSlug);
-    if (!onSlides || !slidesSlug) return null;
+    if (!slidesSlug) return null;
     return {
       slides: {
         slug: slidesSlug,
@@ -921,7 +921,7 @@ export function ChatInterface({
         path: `slides/${slidesSlug}/deck.html`,
       },
     };
-  }, [pathname, slidesSlug, slidesTitle, slidesMode]);
+  }, [slidesSlug, slidesTitle, slidesMode]);
 
   useEffect(() => {
     if (!mounted || isPane) return;
@@ -2084,15 +2084,31 @@ export function ChatInterface({
           if (isSlidesWriteTool(raw)) {
             let slug: string | undefined;
             let writeFailed = false;
+            let renamedTitle: string | undefined;
             try {
-              const parsed = JSON.parse(output) as { slug?: string; error?: unknown };
+              const parsed = JSON.parse(output) as {
+                slug?: string;
+                error?: unknown;
+                title?: string;
+                ok?: boolean;
+              };
               if (typeof parsed?.slug === 'string') slug = parsed.slug;
               if (parsed && parsed.error) writeFailed = true;
+              if (
+                raw.includes('rename_slides') &&
+                typeof parsed?.title === 'string' &&
+                parsed.title.trim()
+              ) {
+                renamedTitle = parsed.title.trim();
+              }
             } catch {
               /* tool output may be plain text */
             }
             useSlidesStore.getState().setAgentWriting(false);
             if (!writeFailed) {
+              if (renamedTitle) {
+                useSlidesStore.getState().setSelectedTitle(renamedTitle);
+              }
               dispatchSlidesDeckUpdated({ slug, source: target.rawName || target.toolName });
             }
           }

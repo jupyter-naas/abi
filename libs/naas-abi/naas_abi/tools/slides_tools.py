@@ -20,10 +20,15 @@ the live ``.slide`` DOM; tools therefore:
 
 from __future__ import annotations
 
+import base64
 import html as html_lib
 import json
+import mimetypes
 import re
+import urllib.error
+import urllib.request
 from typing import Any
+from urllib.parse import urlparse
 
 from langchain_core.tools import BaseTool, tool
 from naas_abi.skills.slides_policy import reject_unresearched_slides_write
@@ -270,6 +275,94 @@ def _validate_asset_filename(name: str) -> str | dict[str, Any]:
     return cleaned
 
 
+_ASSET_FETCH_UA = (
+    "Mozilla/5.0 (compatible; ABISlides/1.0; +https://github.com/jupyter-naas/abi)"
+)
+_MAX_ASSET_FETCH_BYTES = 1_500_000
+
+
+def _guess_asset_filename(url: str, content_type: str, filename: str) -> str:
+    cleaned = (filename or "").strip()
+    if cleaned and _ASSET_NAME_RE.fullmatch(cleaned):
+        return cleaned
+    path = urlparse(url).path
+    base = (path.rsplit("/", 1)[-1] or "asset").split("?")[0]
+    base = re.sub(r"[^A-Za-z0-9._-]+", "-", base).strip("-._") or "asset"
+    if "." not in base:
+        ext = mimetypes.guess_extension((content_type or "").split(";")[0].strip()) or ""
+        if ext == ".jpe":
+            ext = ".jpg"
+        base = f"{base}{ext}" if ext else f"{base}.bin"
+    if not _ASSET_NAME_RE.fullmatch(base):
+        base = "asset.bin"
+    return base
+
+
+def _fetch_asset_bytes(url: str) -> dict[str, Any]:
+    if not url.startswith(("http://", "https://")):
+        return {"error": "url must start with http:// or https://"}
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": _ASSET_FETCH_UA,
+                "Accept": "image/*,application/octet-stream,*/*",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            content_type = (resp.headers.get("Content-Type") or "").split(";")[0].strip()
+            raw = resp.read(_MAX_ASSET_FETCH_BYTES + 1)
+    except urllib.error.HTTPError as exc:
+        return {"error": f"HTTP {exc.code} fetching asset: {exc.reason}"}
+    except urllib.error.URLError as exc:
+        return {"error": f"Could not reach asset URL: {exc.reason}"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Asset download failed: {exc}"}
+    if len(raw) > _MAX_ASSET_FETCH_BYTES:
+        return {"error": "Asset is too large (max 1.5MB)."}
+    if not raw:
+        return {"error": "Empty asset response."}
+    return {"bytes": raw, "content_type": content_type or "application/octet-stream"}
+
+
+def snake_case_deck_stem(title: str) -> str:
+    """Human title → snake_case stem for ``<stem>.slides.html`` downloads."""
+    raw = (title or "").strip().lower()
+    raw = re.sub(r"[^a-z0-9]+", "_", raw)
+    raw = re.sub(r"_+", "_", raw).strip("_")
+    return (raw[:64] or "presentation").rstrip("_")
+
+
+def slides_html_filename(title: str) -> str:
+    """Export / display name: ``forensic_analysis.slides.html``."""
+    return f"{snake_case_deck_stem(title)}.slides.html"
+
+
+def _naming_hint_from_html(html: str) -> dict[str, Any]:
+    """Suggest a deck title/filename from the cover h1 after a write."""
+    title = _cover_h1_text(html)
+    if not title:
+        return {}
+    lowered = title.strip().lower()
+    if lowered in {
+        "presentation title",
+        "untitled",
+        "untitled presentation",
+        "title",
+    }:
+        return {}
+    stem = snake_case_deck_stem(title)
+    return {
+        "suggested_title": title.strip(),
+        "suggested_stem": stem,
+        "suggested_filename": slides_html_filename(title),
+        "naming_hint": (
+            "Call rename_slides_deck with suggested_title so the rail shows a "
+            "real name. Downloads use suggested_filename."
+        ),
+    }
+
+
 def _resolve_paths(slug: str) -> dict[str, str]:
     """Prefer namespaced paths; fall back to legacy when that branch exists."""
     ws = _workspace_id()
@@ -279,16 +372,16 @@ def _resolve_paths(slug: str) -> dict[str, str]:
         names = {b.name for b in sc.list_branches(repo_id=repo_id)}
     except SourceControlError as exc:
         return {"error": _friendly_sc_error(exc)}
-        if ws:
-            ns_branch = _branch(slug, ws)
-            if ns_branch in names:
-                deck_path = _deck_path(slug, ws)
-                return {
-                    "branch": ns_branch,
-                    "deck_path": deck_path,
-                    "project_path": _project_path(slug, ws),
-                    "assets_dir": _assets_dir_from_deck(deck_path),
-                }
+    if ws:
+        ns_branch = _branch(slug, ws)
+        if ns_branch in names:
+            deck_path = _deck_path(slug, ws)
+            return {
+                "branch": ns_branch,
+                "deck_path": deck_path,
+                "project_path": _project_path(slug, ws),
+                "assets_dir": _assets_dir_from_deck(deck_path),
+            }
     legacy = _legacy_branch(slug)
     if legacy in names:
         # Fail closed: legacy decks require a verified matching owner.
@@ -1137,6 +1230,7 @@ def slides_tools() -> list[BaseTool]:
                 resolved, new_html, message or "Update slides section via Abi"
             )
             result["section_index"] = resolved_idx
+            result.update(_naming_hint_from_html(new_html))
             result.update(_open_deck_note(resolved))
             return result
         except Exception as exc:  # noqa: BLE001
@@ -1246,6 +1340,7 @@ def slides_tools() -> list[BaseTool]:
                 )
             if warnings:
                 result["warning"] = " ".join(warnings)
+            result.update(_naming_hint_from_html(updated))
             result.update(_open_deck_note(resolved))
             return result
         except Exception as exc:  # noqa: BLE001
@@ -1338,8 +1433,70 @@ def slides_tools() -> list[BaseTool]:
             result = _persist_deck(
                 resolved, content, message or "Update slides deck via Abi"
             )
+            result.update(_naming_hint_from_html(content))
             result.update(_open_deck_note(resolved))
             return result
+        except Exception as exc:  # noqa: BLE001
+            return _tool_error(exc)
+
+    @tool
+    def rename_slides_deck(
+        title: str,
+        slug: str = "",
+        message: str = "Rename slides project via SlidesAgent",
+    ) -> dict[str, Any]:
+        """Rename the open presentation (project.json title). Slug/branch stay put.
+
+        Call this after the cover title is set so the rail shows a real name.
+        Downloads use ``<snake_case_stem>.slides.html``. Omit slug when a deck is open.
+        """
+        if not agent_user_id.get():
+            return {"error": "No authenticated user on this agent session."}
+        resolved = _resolve_slug(slug)
+        if isinstance(resolved, dict):
+            return resolved
+        cleaned = (title or "").strip()
+        if not cleaned:
+            return {"error": "title must be a non-empty string"}
+        if len(cleaned) > 120:
+            return {"error": "title is too long (max 120 characters)"}
+        try:
+            paths = _ensure_slides_write_paths(resolved)
+            if paths.get("error"):
+                return {"error": paths["error"]}
+            sc = _get_source_control()
+            try:
+                meta_file = sc.get_file(
+                    repo_id=_repo_id(),
+                    path=paths["project_path"],
+                    ref=paths["branch"],
+                )
+                meta = json.loads(meta_file.text or "{}") if meta_file.text else {}
+            except (SourceControlError, json.JSONDecodeError):
+                meta = {"slug": resolved}
+            meta["title"] = cleaned
+            commit = sc.upsert_file(
+                repo_id=_repo_id(),
+                path=paths["project_path"],
+                content=json.dumps(meta, indent=2) + "\n",
+                message=message or f"Rename slides project {resolved}",
+                branch=paths["branch"],
+            )
+            slides_active_title.set(cleaned)
+            stem = snake_case_deck_stem(cleaned)
+            return {
+                **_open_deck_note(resolved),
+                "ok": True,
+                "slug": resolved,
+                "title": cleaned,
+                "suggested_stem": stem,
+                "suggested_filename": slides_html_filename(cleaned),
+                "commit_sha": commit.sha,
+                "note": (
+                    "Title updated. Slug stays the same. "
+                    f"File → Download HTML uses {slides_html_filename(cleaned)}."
+                ),
+            }
         except Exception as exc:  # noqa: BLE001
             return _tool_error(exc)
 
@@ -1354,6 +1511,7 @@ def slides_tools() -> list[BaseTool]:
 
         Use this after fetching an image so it appears in the Slides explorer.
         Prefer SVG or a data:image URL as UTF-8 text. Omit slug when a deck is open.
+        Prefer save_slides_asset_from_url when you have an http(s) logo URL.
         """
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
@@ -1374,6 +1532,83 @@ def slides_tools() -> list[BaseTool]:
                 content,
                 message or "Save slides asset via SlidesAgent",
             )
+            result.update(_open_deck_note(resolved))
+            return result
+        except Exception as exc:  # noqa: BLE001
+            return _tool_error(exc)
+
+    @tool
+    def save_slides_asset_from_url(
+        url: str,
+        filename: str = "",
+        slug: str = "",
+        message: str = "Download slides asset via SlidesAgent",
+    ) -> dict[str, Any]:
+        """Download a logo or image URL into the open deck's assets/ folder.
+
+        Fetches http(s) bytes, stores UTF-8 (SVG) or a data:image URL (PNG/JPEG/WebP)
+        so Preview can embed it. Returns data_url for use in img src or CSS.
+        Omit slug when a deck is open.
+        """
+        if not agent_user_id.get():
+            return {"error": "No authenticated user on this agent session."}
+        resolved = _resolve_slug(slug)
+        if isinstance(resolved, dict):
+            return resolved
+        fetched = _fetch_asset_bytes(url)
+        if fetched.get("error"):
+            return fetched
+        raw: bytes = fetched["bytes"]
+        content_type = str(fetched.get("content_type") or "application/octet-stream")
+        name = _guess_asset_filename(url, content_type, filename)
+        checked = _validate_asset_filename(name)
+        if isinstance(checked, dict):
+            return checked
+        ctype = content_type.lower()
+        data_url: str | None = None
+        if "svg" in ctype or checked.lower().endswith(".svg"):
+            try:
+                content = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                content = raw.decode("utf-8", errors="replace")
+            data_url = (
+                "data:image/svg+xml;base64,"
+                + base64.b64encode(content.encode("utf-8")).decode("ascii")
+            )
+        elif ctype.startswith("image/") or checked.lower().endswith(
+            (".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif")
+        ):
+            mime = ctype if ctype.startswith("image/") else (
+                mimetypes.guess_type(checked)[0] or "image/png"
+            )
+            data_url = f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
+            content = data_url
+            if not checked.lower().endswith((".svg", ".txt", ".dataurl")):
+                stem = checked.rsplit(".", 1)[0]
+                checked = f"{stem}.dataurl"
+        else:
+            return {
+                "error": (
+                    f"Unsupported asset type {content_type!r}. "
+                    "Use an image URL (svg, png, jpg, webp)."
+                )
+            }
+        if len(content) > _MAX_ASSET_CHARS:
+            return {"error": "Asset is too large after encoding."}
+        try:
+            result = _persist_asset(
+                resolved,
+                checked,
+                content,
+                message or "Download slides asset via SlidesAgent",
+            )
+            result["source_url"] = url
+            result["content_type"] = content_type
+            if data_url:
+                result["data_url"] = data_url
+                result["embed_hint"] = (
+                    "Use data_url as the img src or CSS background-image in the open deck."
+                )
             result.update(_open_deck_note(resolved))
             return result
         except Exception as exc:  # noqa: BLE001
@@ -1419,6 +1654,8 @@ def slides_tools() -> list[BaseTool]:
         replace_in_slides_deck,
         read_slides_deck,
         write_slides_deck,
+        rename_slides_deck,
         save_slides_asset,
+        save_slides_asset_from_url,
         slides_history,
     ]

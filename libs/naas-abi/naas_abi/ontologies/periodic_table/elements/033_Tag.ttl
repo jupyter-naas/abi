@@ -1,0 +1,26 @@
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:   <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:  <http://purl.obolibrary.org/obo/> .
+@prefix cco:  <https://www.commoncoreontologies.org/> .
+@prefix abi:  <http://ontology.naas.ai/abi/> .
+@prefix zen:  <http://ontology.naas.ai/zen/> .
+@prefix pts:  <http://ontology.naas.ai/zen/pts/> .
+
+
+# Periodic Table element 033: Tag
+
+pts:Tag a owl:Class ;
+    rdfs:label "Tag"@en ;
+    rdfs:subClassOf pts:SoftwareObject ;
+    pts:elementNumber "33"^^xsd:integer ;
+    pts:section "object" ;
+    pts:bfoBucket "information_content_entity" ;
+    pts:bfoBucketLabel "Information content entity (WHAT)" ;
+    zen:mapsToBFOBucket abi:GenericallyDependentContinuant ;
+    zen:mapsToBFOCode bfo:BFO_0000031 ;
+    skos:definition "A lightweight label applied to records for classification."@en .

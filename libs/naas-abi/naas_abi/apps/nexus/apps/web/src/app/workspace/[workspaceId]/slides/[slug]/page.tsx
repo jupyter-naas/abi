@@ -12,6 +12,13 @@ import {
 } from '@/components/slides/slides-preview-frame';
 import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
 import {
+  downloadDeckHtml,
+  downloadDeckMarkdown,
+  downloadDeckPlainText,
+  printDeckPdf,
+} from '@/components/slides/slides-deck-export';
+import type { SlidesDownloadItem } from '@/components/slides/slides-menu-bar';
+import {
   bindSlidesAgentPane,
   slidesApiErrorMessage,
   startNewPresentation,
@@ -446,8 +453,6 @@ export default function SlidesEditorPage() {
   }, []);
 
   const exportPptx = async () => {
-    // Preview iframe stays mounted (hidden in Code mode) so export stays available.
-    // Export goes through postMessage; sandbox omits allow-same-origin.
     if (!previewRef.current) {
       setError('Preview is not ready for PPTX export.');
       return;
@@ -458,7 +463,7 @@ export default function SlidesEditorPage() {
     try {
       await previewRef.current.exportPptx();
       setStatus(
-        'PPTX started from live HTML (closest fit; fonts and wrap will differ from preview)',
+        'PPTX download started from live HTML (closest fit; fonts and wrap will differ from preview)',
       );
     } catch (e) {
       setError(`PPTX export failed: ${(e as Error).message}`);
@@ -466,6 +471,74 @@ export default function SlidesEditorPage() {
       setExporting(false);
     }
   };
+
+  const downloadItems: SlidesDownloadItem[] = [
+    {
+      id: 'pptx',
+      label: 'Microsoft PowerPoint (.pptx)',
+      disabled: exporting,
+      onSelect: () => void exportPptx(),
+    },
+    {
+      id: 'pdf',
+      label: 'PDF Document (.pdf)',
+      disabled: exporting || loading,
+      onSelect: () => {
+        setExporting(true);
+        setError(null);
+        setStatus(null);
+        void printDeckPdf(html)
+          .then(() => {
+            setStatus('PDF: use Save as PDF in the print dialog.');
+          })
+          .catch((e) => {
+            setError(`PDF export failed: ${(e as Error).message}`);
+          })
+          .finally(() => {
+            setExporting(false);
+          });
+      },
+    },
+    {
+      id: 'markdown',
+      label: 'Markdown (.md)',
+      disabled: loading || !html,
+      onSelect: () => {
+        try {
+          downloadDeckMarkdown(html, title);
+          setStatus('Markdown download started.');
+        } catch (e) {
+          setError(`Markdown export failed: ${(e as Error).message}`);
+        }
+      },
+    },
+    {
+      id: 'plain-text',
+      label: 'Plain Text (.txt)',
+      disabled: loading || !html,
+      onSelect: () => {
+        try {
+          downloadDeckPlainText(html, title);
+          setStatus('Plain text download started.');
+        } catch (e) {
+          setError(`Plain text export failed: ${(e as Error).message}`);
+        }
+      },
+    },
+    {
+      id: 'html',
+      label: 'HTML Document (.html)',
+      disabled: loading || !html,
+      onSelect: () => {
+        try {
+          downloadDeckHtml(html, title);
+          setStatus('HTML download started.');
+        } catch (e) {
+          setError(`HTML export failed: ${(e as Error).message}`);
+        }
+      },
+    },
+  ];
 
   const menuBar = (
     <SlidesMenuBar
@@ -477,8 +550,8 @@ export default function SlidesEditorPage() {
       }}
       onCommit={() => void save()}
       commitDisabled={saving || !dirty || loading}
-      onExportPptx={() => void exportPptx()}
-      exportDisabled={exporting || loading}
+      downloadItems={downloadItems}
+      downloadDisabled={exporting || loading}
       mode={mode}
       onModeChange={setMode}
       onRefresh={() => void refresh()}

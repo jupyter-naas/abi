@@ -1,0 +1,26 @@
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:   <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:  <http://purl.obolibrary.org/obo/> .
+@prefix cco:  <https://www.commoncoreontologies.org/> .
+@prefix abi:  <http://ontology.naas.ai/abi/> .
+@prefix zen:  <http://ontology.naas.ai/zen/> .
+@prefix pts:  <http://ontology.naas.ai/zen/pts/> .
+
+
+# Periodic Table element 059: Duration
+
+pts:Duration a owl:Class ;
+    rdfs:label "Duration"@en ;
+    rdfs:subClassOf pts:SoftwareProperty ;
+    pts:elementNumber "59"^^xsd:integer ;
+    pts:section "property" ;
+    pts:bfoBucket "temporal_region" ;
+    pts:bfoBucketLabel "Temporal region (WHEN)" ;
+    zen:mapsToBFOBucket abi:TemporalRegion ;
+    zen:mapsToBFOCode bfo:BFO_0000008 ;
+    skos:definition "An elapsed time span."@en .
