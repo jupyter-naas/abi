@@ -38,8 +38,16 @@ class CodingEnvironmentAdapterInMemoryConfiguration(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class CodingEnvironmentAdapterLocalDirectoryConfiguration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspaces_root: str
+    sidecar_port_start: int = 18000
+    sidecar_port_end: int = 18100
+
+
 class CodingEnvironmentAdapterConfiguration(GenericLoader):
-    adapter: Literal["coder", "code_server", "in_memory", "custom"]
+    adapter: Literal["coder", "code_server", "in_memory", "local_directory", "custom"]
     config: dict | None = None
 
     @model_validator(mode="after")
@@ -70,6 +78,13 @@ class CodingEnvironmentAdapterConfiguration(GenericLoader):
                 "Invalid configuration for services.coding_environment."
                 "coding_environment_adapter 'in_memory' adapter",
             )
+        elif self.adapter == "local_directory":
+            pydantic_model_validator(
+                CodingEnvironmentAdapterLocalDirectoryConfiguration,
+                self.config,
+                "Invalid configuration for services.coding_environment."
+                "coding_environment_adapter 'local_directory' adapter",
+            )
 
         return self
 
@@ -94,6 +109,15 @@ class CodingEnvironmentAdapterConfiguration(GenericLoader):
             )
 
             return InMemoryAdapter(**(self.config or {}))
+        elif self.adapter == "local_directory":
+            assert self.config is not None, (
+                "config is required for local_directory adapter"
+            )
+            from naas_abi_core.services.coding_environment.adapters.secondary.LocalDirectoryAdapter import (
+                LocalDirectoryAdapter,
+            )
+
+            return LocalDirectoryAdapter(**self.config)
         elif self.adapter == "custom":
             return super().load()
         else:

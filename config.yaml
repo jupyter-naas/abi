@@ -218,3 +218,13 @@ services:
       adapter: "sqlite"
       config:
         db_path: "storage/events/events.sqlite"
+  source_control:
+    source_control_adapter:
+      adapter: "local_git"
+      config:
+        repos_root: "storage/git"
+  coding_environment:
+    coding_environment_adapter:
+      adapter: "local_directory"
+      config:
+        workspaces_root: "storage/workspaces"

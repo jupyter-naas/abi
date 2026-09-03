@@ -17,6 +17,7 @@ import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
 import { dispatchSlidesDeckUpdated, useSlidesStore } from '@/stores/slides';
+import { dispatchCodeFileUpdated, useCodeStore } from '@/stores/code';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { useTenant } from '@/contexts/tenant-context';
@@ -920,6 +921,31 @@ export function ChatInterface({
       },
     };
   }, [pathname, slidesSlug, slidesTitle, slidesMode]);
+
+  const codeActiveBranch = useCodeStore((s) => s.activeBranch);
+  const codeSelectedRepo = useCodeStore((s) => s.selectedRepoId);
+  const codingChatContext = useMemo(() => {
+    const onCode =
+      typeof pathname === 'string' && pathname.includes('/code/r/');
+    const repoMatch = pathname?.match(/\/code\/r\/([^/]+)\/([^/]+)/);
+    const repoId = repoMatch ? `${repoMatch[1]}/${repoMatch[2]}` : codeSelectedRepo;
+    if (!onCode || !repoId) return null;
+    return {
+      coding: {
+        repo_id: repoId,
+        branch: codeActiveBranch || 'main',
+        path: '.',
+      },
+    };
+  }, [pathname, codeActiveBranch, codeSelectedRepo]);
+
+  const chatRequestContext = useMemo(() => {
+    const merged = {
+      ...(slidesChatContext ?? {}),
+      ...(codingChatContext ?? {}),
+    };
+    return Object.keys(merged).length > 0 ? merged : null;
+  }, [slidesChatContext, codingChatContext]);
 
   useEffect(() => {
     if (!mounted || isPane) return;
@@ -2086,6 +2112,12 @@ export function ChatInterface({
             }
             dispatchSlidesDeckUpdated({ slug, source: target.rawName || target.toolName });
           }
+          if (
+            raw.includes('write_coding') ||
+            raw.includes('run_in_coding')
+          ) {
+            dispatchCodeFileUpdated({ source: target.rawName || target.toolName });
+          }
 
           const toolUrls = extractUrlsFromContent(output);
           if (toolUrls.length > 0) {
@@ -2234,7 +2266,7 @@ export function ChatInterface({
             system_prompt: systemPrompt,
             search_enabled: false,
             regenerate_of: regenerateOf ?? null,
-            ...(slidesChatContext ? { context: slidesChatContext } : {}),
+            ...(chatRequestContext ? { context: chatRequestContext } : {}),
             // search_enabled: searchEnabled,
           }),
         });
@@ -2451,7 +2483,7 @@ export function ChatInterface({
             llm_model: llmModel,
             system_prompt: systemPrompt,
             regenerate_of: regenerateOf ?? null,
-            ...(slidesChatContext ? { context: slidesChatContext } : {}),
+            ...(chatRequestContext ? { context: chatRequestContext } : {}),
           }),
         });
 

@@ -56,3 +56,12 @@ slides_active_title: ContextVar[str | None] = ContextVar(
 slides_active_mode: ContextVar[str | None] = ContextVar(
     "slides_active_mode", default=None
 )
+
+# Open Code repo context in the Nexus UI. Set at the chat stream boundary so Abi
+# tools default to this repo/branch sandbox (Slides-parity for Code).
+coding_active_repo: ContextVar[str | None] = ContextVar(
+    "coding_active_repo", default=None
+)
+coding_active_branch: ContextVar[str | None] = ContextVar(
+    "coding_active_branch", default=None
+)

@@ -32,3 +32,11 @@ class SourceControlFactory:
     @staticmethod
     def SourceControlServiceInMemory() -> SourceControlService:
         return SourceControlService(InMemoryAdapter())
+
+    @staticmethod
+    def SourceControlServiceLocalGit(*, repos_root: str) -> SourceControlService:
+        from naas_abi_core.services.source_control.adapters.secondary.LocalGitAdapter import (
+            LocalGitAdapter,
+        )
+
+        return SourceControlService(LocalGitAdapter(repos_root=repos_root))

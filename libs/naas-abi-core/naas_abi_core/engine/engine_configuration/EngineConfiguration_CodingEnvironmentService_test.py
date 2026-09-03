@@ -12,6 +12,9 @@ from naas_abi_core.services.coding_environment.adapters.secondary.CodeServerComp
 from naas_abi_core.services.coding_environment.adapters.secondary.InMemoryAdapter import (
     InMemoryAdapter,
 )
+from naas_abi_core.services.coding_environment.adapters.secondary.LocalDirectoryAdapter import (
+    LocalDirectoryAdapter,
+)
 from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
@@ -58,6 +61,19 @@ def test_coding_environment_configuration_code_server_adapter():
 
     adapter = configuration.coding_environment_adapter.load()
     assert isinstance(adapter, CodeServerComposeAdapter)
+    assert isinstance(configuration.load(), CodingEnvironmentService)
+
+
+def test_coding_environment_configuration_local_directory_adapter(tmp_path):
+    configuration = CodingEnvironmentServiceConfiguration(
+        coding_environment_adapter=CodingEnvironmentAdapterConfiguration(
+            adapter="local_directory",
+            config={"workspaces_root": str(tmp_path / "workspaces")},
+        )
+    )
+
+    adapter = configuration.coding_environment_adapter.load()
+    assert isinstance(adapter, LocalDirectoryAdapter)
     assert isinstance(configuration.load(), CodingEnvironmentService)
 
 

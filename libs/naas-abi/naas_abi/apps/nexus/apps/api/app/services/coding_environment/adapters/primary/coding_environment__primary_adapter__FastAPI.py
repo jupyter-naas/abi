@@ -16,8 +16,13 @@ to a worker thread via ``run_in_threadpool`` to avoid blocking the event loop.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import secrets
+import time
+import urllib.error
+import urllib.request
 from datetime import timedelta
 from urllib.parse import quote
 
@@ -155,11 +160,16 @@ def _public_clone_url(repo_id: str) -> str:
 
 def _to_repo_item(repo: Repo) -> RepoListItem:
     repo_id = f"{repo.owner}/{repo.name}"
+    clone_url = (
+        repo.clone_url
+        if repo.clone_url.startswith("file:")
+        else _public_clone_url(repo_id)
+    )
     return RepoListItem(
         repo_id=repo_id,
         name=repo.name,
         default_branch=repo.default_branch,
-        clone_url=_public_clone_url(repo_id),
+        clone_url=clone_url,
         description=repo.description,
         private=repo.private,
         empty=repo.empty,
@@ -253,6 +263,11 @@ def _prepare_clone(
         checkout = new_branch
     else:
         checkout = source_branch
+
+    repos = sc.list_repos()
+    repo = next((item for item in repos if f"{item.owner}/{item.name}" == repo_id), None)
+    if repo and repo.clone_url.startswith("file:"):
+        return repo.clone_url, checkout
 
     token = sc.mint_git_token(user_id=username)
     creds = f"{quote(username, safe='')}:{quote(token, safe='')}"
@@ -825,6 +840,16 @@ async def provision_environment(
         )
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
+
+    sidecar_base = ws_base
+    sidecar_secret = ws_secret
+    binding = await run_in_threadpool(service.get_runtime_binding, workspace_id=status.id)
+    if binding:
+        sidecar_base, sidecar_secret = binding
+        params["abi_token"] = _mint_agent_token(
+            current_user.id, ws_base=sidecar_base, ws_secret=sidecar_secret
+        )
+
     # Record which repo this workspace was cloned from so the workspaces list can
     # be scoped per-repo. Best-effort: the workspace already exists in Coder, so a
     # bookkeeping failure must not fail the request.
@@ -835,12 +860,213 @@ async def provision_environment(
                 workspace_id=body.workspace_id,
                 user_id=current_user.id,
                 repo_id=repo_id or None,
+                sidecar_base=sidecar_base,
+                sidecar_secret=sidecar_secret,
             )
         )
         await db.commit()
     except Exception:
         await db.rollback()
     return _to_env(status, repo_id or None)
+
+
+class SandboxRuntimeResponse(BaseModel):
+    ensured: bool
+    sidecar_ready: bool = False
+    environment_id: str | None = None
+    label: str
+    branch: str
+    detail: str | None = None
+
+
+def _code_runtime_label(*, workspace_id: str, repo_id: str, branch: str) -> str:
+    ws = re.sub(r"[^a-zA-Z0-9._-]+", "-", workspace_id.strip()).strip("-._")
+    branch_slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", branch.strip()).strip("-._")
+    return f"code/{ws}/{repo_id}/{branch_slug}"
+
+
+def _sandbox_workspace_name(*, workspace_id: str, repo_id: str, branch: str) -> str:
+    digest = hashlib.sha1(f"{workspace_id}:{repo_id}:{branch}".encode()).hexdigest()[:10]
+    return f"sbox-{digest}"
+
+
+def _wait_for_sidecar(base: str, secret: str, *, timeout_s: float = 15.0) -> bool:
+    req = urllib.request.Request(
+        f"{base.rstrip('/')}/health",
+        headers={"Authorization": f"Bearer {secret}"},
+        method="GET",
+    )
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(req, timeout=1.0) as resp:  # nosec B310
+                payload = json.loads(resp.read().decode("utf-8"))
+                if payload.get("ok"):
+                    return True
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            time.sleep(0.25)
+    return False
+
+
+async def lookup_code_sidecar(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    user_id: str,
+    repo_id: str,
+    branch: str,
+) -> tuple[str | None, str | None]:
+    label = _code_runtime_label(
+        workspace_id=workspace_id, repo_id=repo_id, branch=branch
+    )
+    result = await db.execute(
+        select(CodingEnvironmentModel).where(
+            CodingEnvironmentModel.workspace_id == workspace_id,
+            CodingEnvironmentModel.user_id == user_id,
+            CodingEnvironmentModel.label == label,
+        )
+    )
+    row = result.scalars().first()
+    if row and row.sidecar_base and row.sidecar_secret:
+        return str(row.sidecar_base), str(row.sidecar_secret)
+    return None, None
+
+
+@router.post("/sandbox/runtime", response_model=SandboxRuntimeResponse)
+async def ensure_sandbox_runtime(
+    workspace_id: str,
+    repo_id: str,
+    branch: str = "main",
+    current_user: User = Depends(get_current_user_required),
+    service: CodingEnvironmentService = Depends(_get_coding_environment_service),
+    source_control: SourceControlService | None = Depends(_get_source_control_service),
+    db: AsyncSession = Depends(get_db),
+) -> SandboxRuntimeResponse:
+    """Ensure a local sandbox + sidecar for the open repo (Slides-parity)."""
+    await require_workspace_access(current_user.id, workspace_id)
+    label = _code_runtime_label(workspace_id=workspace_id, repo_id=repo_id, branch=branch)
+    name = _sandbox_workspace_name(
+        workspace_id=workspace_id, repo_id=repo_id, branch=branch
+    )
+
+    existing = await db.execute(
+        select(CodingEnvironmentModel).where(
+            CodingEnvironmentModel.workspace_id == workspace_id,
+            CodingEnvironmentModel.user_id == current_user.id,
+            CodingEnvironmentModel.label == label,
+        )
+    )
+    row = existing.scalars().first()
+    if row and row.sidecar_base and row.sidecar_secret:
+        ready = await run_in_threadpool(
+            _wait_for_sidecar, str(row.sidecar_base), str(row.sidecar_secret)
+        )
+        if not ready:
+            await run_in_threadpool(service.start, workspace_id=row.id)
+            ready = await run_in_threadpool(
+                _wait_for_sidecar, str(row.sidecar_base), str(row.sidecar_secret)
+            )
+        return SandboxRuntimeResponse(
+            ensured=True,
+            sidecar_ready=ready,
+            environment_id=row.id,
+            label=label,
+            branch=branch,
+            detail=None if ready else "Sidecar not reachable",
+        )
+
+    templates = await run_in_threadpool(service.list_templates)
+    template = next((item for item in templates if item.name == "local-directory"), None)
+    if template is None:
+        template = templates[0] if templates else None
+    if template is None:
+        return SandboxRuntimeResponse(
+            ensured=False,
+            label=label,
+            branch=branch,
+            detail="No coding environment template available",
+        )
+
+    ws_secret = secrets.token_hex(16)
+    params: dict[str, str] = {"branch": branch, "sidecar_secret": ws_secret}
+    if source_control is not None:
+        try:
+            repo_url, checkout_branch = await run_in_threadpool(
+                _prepare_clone,
+                source_control,
+                repo_id=repo_id,
+                external_id=current_user.id,
+                email=str(current_user.email),
+                display_name=current_user.name or "",
+                source_branch=branch,
+                new_branch=None,
+            )
+            params["repo_url"] = repo_url
+            params["branch"] = checkout_branch
+        except SourceControlError as exc:
+            return SandboxRuntimeResponse(
+                ensured=False,
+                label=label,
+                branch=branch,
+                detail=str(exc),
+            )
+
+    user_id = await run_in_threadpool(
+        service.ensure_user,
+        external_id=current_user.id,
+        email=str(current_user.email),
+        username=current_user.name,
+    )
+    try:
+        status = await run_in_threadpool(
+            service.provision,
+            user_id=user_id,
+            template_id=template.id,
+            name=name,
+            params=params,
+        )
+    except CodingEnvironmentError as exc:
+        return SandboxRuntimeResponse(
+            ensured=False,
+            label=label,
+            branch=branch,
+            detail=str(exc),
+        )
+
+    sidecar_base = None
+    sidecar_secret = ws_secret
+    binding = await run_in_threadpool(service.get_runtime_binding, workspace_id=status.id)
+    if binding:
+        sidecar_base, sidecar_secret = binding
+
+    ready = bool(
+        sidecar_base
+        and await run_in_threadpool(_wait_for_sidecar, sidecar_base, sidecar_secret)
+    )
+    try:
+        db.add(
+            CodingEnvironmentModel(
+                id=status.id,
+                workspace_id=workspace_id,
+                user_id=current_user.id,
+                repo_id=repo_id,
+                label=label,
+                sidecar_base=sidecar_base,
+                sidecar_secret=sidecar_secret,
+            )
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+
+    return SandboxRuntimeResponse(
+        ensured=True,
+        sidecar_ready=ready,
+        environment_id=status.id,
+        label=label,
+        branch=params.get("branch", branch),
+        detail=None if ready else "Sidecar not reachable",
+    )
 
 
 @router.get("/{environment_id}")
