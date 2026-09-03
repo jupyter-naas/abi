@@ -58,5 +58,10 @@ cross-process SQLite writers and all PostgreSQL writers use the retry policy.
   script. Existing PostgreSQL volumes must run that script explicitly.
 - Moving a catalog from SQLite to PostgreSQL requires migrating metadata; it is
   not a configuration-only DSN change.
+- `data_path` may be a local path or an object store URI. A custom S3 endpoint
+  and its credentials are explicit configuration: DuckDB defaults to AWS and
+  virtual-hosted URLs, so a store such as MinIO is unreachable without them.
+  A misconfigured store does not always fail — a batch small enough to be
+  inlined in the catalog commits without the data ever leaving it.
 - Operators must schedule data flushing, adjacent-file compaction, snapshot
   expiry, and cleanup according to their retention policy.
