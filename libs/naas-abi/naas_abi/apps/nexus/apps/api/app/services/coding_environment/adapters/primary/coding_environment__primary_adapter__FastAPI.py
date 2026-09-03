@@ -873,6 +873,7 @@ async def provision_environment(
 class SandboxRuntimeResponse(BaseModel):
     ensured: bool
     sidecar_ready: bool = False
+    harness_ready: bool = False
     environment_id: str | None = None
     label: str
     branch: str
@@ -908,14 +909,24 @@ def _wait_for_sidecar(base: str, secret: str, *, timeout_s: float = 15.0) -> boo
     return False
 
 
-async def lookup_code_sidecar(
+def _wait_for_harness(base: str, *, timeout_s: float = 15.0) -> bool:
+    from naas_abi_core.services.coding_environment.adapters.secondary.OpencodeHarnessClient import (  # noqa: PLC0415
+        wait_for_healthy,
+    )
+
+    return wait_for_healthy(base, timeout_s=timeout_s)
+
+
+async def lookup_code_bindings(
     db: AsyncSession,
     *,
     workspace_id: str,
     user_id: str,
     repo_id: str,
     branch: str,
-) -> tuple[str | None, str | None]:
+    service: CodingEnvironmentService | None = None,
+) -> tuple[str | None, str | None, str | None, str | None]:
+    """Return sidecar_base, sidecar_secret, harness_base, environment_id."""
     label = _code_runtime_label(
         workspace_id=workspace_id, repo_id=repo_id, branch=branch
     )
@@ -927,9 +938,37 @@ async def lookup_code_sidecar(
         )
     )
     row = result.scalars().first()
-    if row and row.sidecar_base and row.sidecar_secret:
-        return str(row.sidecar_base), str(row.sidecar_secret)
-    return None, None
+    if not row or not row.sidecar_base or not row.sidecar_secret:
+        return None, None, None, None
+    harness_base = None
+    if service is not None and row.id:
+        harness_base = await run_in_threadpool(
+            service.get_harness_binding, workspace_id=row.id
+        )
+    return (
+        str(row.sidecar_base),
+        str(row.sidecar_secret),
+        harness_base,
+        str(row.id),
+    )
+
+
+async def lookup_code_sidecar(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    user_id: str,
+    repo_id: str,
+    branch: str,
+) -> tuple[str | None, str | None]:
+    sidecar_base, sidecar_secret, _, _ = await lookup_code_bindings(
+        db,
+        workspace_id=workspace_id,
+        user_id=user_id,
+        repo_id=repo_id,
+        branch=branch,
+    )
+    return sidecar_base, sidecar_secret
 
 
 @router.post("/sandbox/runtime", response_model=SandboxRuntimeResponse)
@@ -961,18 +1000,41 @@ async def ensure_sandbox_runtime(
         ready = await run_in_threadpool(
             _wait_for_sidecar, str(row.sidecar_base), str(row.sidecar_secret)
         )
+        harness_ready = False
         if not ready:
             await run_in_threadpool(service.start, workspace_id=row.id)
             ready = await run_in_threadpool(
                 _wait_for_sidecar, str(row.sidecar_base), str(row.sidecar_secret)
             )
+        harness_base = await run_in_threadpool(
+            service.get_harness_binding, workspace_id=row.id
+        )
+        if harness_base:
+            harness_ready = await run_in_threadpool(_wait_for_harness, harness_base)
+            if not harness_ready:
+                await run_in_threadpool(service.start, workspace_id=row.id)
+                harness_base = await run_in_threadpool(
+                    service.get_harness_binding, workspace_id=row.id
+                )
+                if harness_base:
+                    harness_ready = await run_in_threadpool(
+                        _wait_for_harness, harness_base
+                    )
+        detail = None
+        if not ready and not harness_ready:
+            detail = "Sidecar and harness not reachable"
+        elif not ready:
+            detail = "Sidecar not reachable"
+        elif harness_base and not harness_ready:
+            detail = "OpenCode harness not reachable"
         return SandboxRuntimeResponse(
             ensured=True,
             sidecar_ready=ready,
+            harness_ready=harness_ready,
             environment_id=row.id,
             label=label,
             branch=branch,
-            detail=None if ready else "Sidecar not reachable",
+            detail=detail,
         )
 
     templates = await run_in_threadpool(service.list_templates)
@@ -1043,6 +1105,12 @@ async def ensure_sandbox_runtime(
         sidecar_base
         and await run_in_threadpool(_wait_for_sidecar, sidecar_base, sidecar_secret)
     )
+    harness_base = await run_in_threadpool(
+        service.get_harness_binding, workspace_id=status.id
+    )
+    harness_ready = bool(
+        harness_base and await run_in_threadpool(_wait_for_harness, harness_base)
+    )
     try:
         db.add(
             CodingEnvironmentModel(
@@ -1059,13 +1127,22 @@ async def ensure_sandbox_runtime(
     except Exception:
         await db.rollback()
 
+    detail = None
+    if not ready and not harness_ready:
+        detail = "Sidecar and harness not reachable"
+    elif not ready:
+        detail = "Sidecar not reachable"
+    elif harness_base and not harness_ready:
+        detail = "OpenCode harness not reachable"
+
     return SandboxRuntimeResponse(
         ensured=True,
         sidecar_ready=ready,
+        harness_ready=harness_ready,
         environment_id=status.id,
         label=label,
         branch=params.get("branch", branch),
-        detail=None if ready else "Sidecar not reachable",
+        detail=detail,
     )
 
 

@@ -65,3 +65,7 @@ coding_active_repo: ContextVar[str | None] = ContextVar(
 coding_active_branch: ContextVar[str | None] = ContextVar(
     "coding_active_branch", default=None
 )
+# Managed coding harness (OpenCode serve) bound to the open sandbox checkout.
+coding_harness_base: ContextVar[str | None] = ContextVar(
+    "coding_harness_base", default=None
+)

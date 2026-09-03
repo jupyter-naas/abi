@@ -228,7 +228,9 @@ def _render_coding_context_block(client_context: dict | None) -> str:
         "The user is browsing this repository in the Code overlay. You are operating "
         "on the live sandbox checkout via coding tools when the sidecar runtime is "
         "ready. Do not ask which repository or branch. Prefer read_coding_file, "
-        "write_coding_file, list_coding_dir, and run_in_coding_sandbox for edits.\n"
+        "write_coding_file, list_coding_dir, and run_in_coding_sandbox for direct "
+        "edits. For larger multi-file refactors, use run_coding_harness_task to "
+        "delegate to the managed OpenCode harness in the same checkout.\n"
         + "\n".join(lines)
         + "\n"
     )

@@ -44,6 +44,12 @@ class CodingEnvironmentAdapterLocalDirectoryConfiguration(BaseModel):
     workspaces_root: str
     sidecar_port_start: int = 18000
     sidecar_port_end: int = 18100
+    harness: Literal["none", "opencode"] = "none"
+    harness_port_start: int = 18200
+    harness_port_end: int = 18300
+    opencode_bin: str = "opencode"
+    opencode_model: str | None = None
+    opencode_startup_timeout: int = 15
 
 
 class CodingEnvironmentAdapterConfiguration(GenericLoader):
