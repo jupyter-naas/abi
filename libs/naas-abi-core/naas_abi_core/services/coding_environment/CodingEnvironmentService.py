@@ -165,6 +165,26 @@ class CodingEnvironmentService(ServiceBase):
         except Exception:  # noqa: BLE001 - optional enrichment; never fail callers
             return None
 
+    def get_runtime_binding(self, *, workspace_id: str) -> tuple[str, str] | None:
+        """Return (sidecar_base, sidecar_secret) when the adapter exposes a runtime."""
+        fn = getattr(self._adapter, "get_runtime_binding", None)
+        if not callable(fn):
+            return None
+        try:
+            return fn(workspace_id=workspace_id)
+        except Exception:  # noqa: BLE001
+            return None
+
+    def get_harness_binding(self, *, workspace_id: str) -> str | None:
+        """Return OpenCode (or other harness) base URL when configured."""
+        fn = getattr(self._adapter, "get_harness_binding", None)
+        if not callable(fn):
+            return None
+        try:
+            return fn(workspace_id=workspace_id)
+        except Exception:  # noqa: BLE001
+            return None
+
     def wait_until_ready(
         self,
         *,

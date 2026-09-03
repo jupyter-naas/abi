@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import {
@@ -526,6 +527,30 @@ export default function IdePage() {
               className="h-full w-full border-0"
               allow="clipboard-read; clipboard-write"
             />
+          ) : env.phase === 'running' && env.agent_ready ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+              <p className="text-sm font-medium">Local sandbox is ready</p>
+              <p className="max-w-md text-xs text-muted-foreground">
+                There is no embedded VS Code in local dev. Browse and edit files under{' '}
+                <strong>Code → Repos</strong>, or ask Abi in chat to change the checkout via
+                the OpenCode harness.
+              </p>
+              {selectedRepoId ? (
+                <Link
+                  href={`/workspace/${workspaceId}/code/r/${selectedRepoId}`}
+                  className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-workspace-accent-10"
+                >
+                  Open repository
+                </Link>
+              ) : (
+                <Link
+                  href={`/workspace/${workspaceId}/code/repos`}
+                  className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-workspace-accent-10"
+                >
+                  Go to repositories
+                </Link>
+              )}
+            </div>
           ) : env.phase === 'error' ? (
             <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
               The workspace failed to start. Try deleting and recreating it.
