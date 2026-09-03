@@ -51,6 +51,16 @@ class DatasetSnapshotNotFoundError(Exception):
         super().__init__(f"Dataset snapshot {snapshot_id!r} not found")
 
 
+class DatasetSnapshotConflictError(Exception):
+    def __init__(self, expected_snapshot_id: int, current_snapshot_id: int) -> None:
+        self.expected_snapshot_id = expected_snapshot_id
+        self.current_snapshot_id = current_snapshot_id
+        super().__init__(
+            "Dataset snapshot conflict: "
+            f"expected {expected_snapshot_id!r}, current {current_snapshot_id!r}"
+        )
+
+
 class ColumnSpec(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -82,7 +92,13 @@ class DatasetSpec(BaseModel):
     namespace: str = "default"
     columns: tuple[ColumnSpec, ...]
     partitions: tuple[PartitionSpec, ...] = ()
-    primary_key: tuple[str, ...] = ()
+    primary_key: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "Advisory columns used to match upserts. Uniqueness is not enforced, "
+            "so append may create duplicate keys."
+        ),
+    )
 
     @field_validator("name")
     @classmethod
@@ -181,7 +197,13 @@ class IDatasetPort(ABC):
         mode: WriteMode = "append",
         snapshot_id: int | None = None,
     ) -> DatasetInfo:
-        """Append, replace, or upsert rows against the current catalog snapshot."""
+        """Append, replace, or upsert rows against the current catalog snapshot.
+
+        ``snapshot_id`` is a catalog-wide optimistic-concurrency token. A write to
+        any dataset in the same catalog can invalidate it, in which case this raises
+        ``DatasetSnapshotConflictError``. Prefer idempotent upserts and adapter
+        retries when unrelated datasets are written concurrently.
+        """
 
     @abstractmethod
     def query(

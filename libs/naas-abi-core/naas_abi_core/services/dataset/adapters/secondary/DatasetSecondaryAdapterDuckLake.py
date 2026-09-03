@@ -18,6 +18,7 @@ from naas_abi_core.services.dataset.DatasetPort import (
     DatasetInfo,
     DatasetNotFoundError,
     DatasetSchemaError,
+    DatasetSnapshotConflictError,
     DatasetSnapshotInfo,
     DatasetSnapshotNotFoundError,
     DatasetSpec,
@@ -29,7 +30,15 @@ from naas_abi_core.services.dataset.DatasetPort import (
 CATALOG_ALIAS = "abi_datasets"
 S3_SECRET_NAME = "abi_datasets_store"
 SPEC_COMMENT_PREFIX = "abi.dataset-spec:"
-OBJECT_STORE_SCHEMES = ("s3://", "s3a://", "gcs://", "gs://", "r2://", "azure://", "abfss://")
+OBJECT_STORE_SCHEMES = (
+    "s3://",
+    "s3a://",
+    "gcs://",
+    "gs://",
+    "r2://",
+    "azure://",
+    "abfss://",
+)
 
 DUCKDB_TYPES = {
     "string": "VARCHAR",
@@ -240,13 +249,18 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         def operation(con: Any) -> DatasetSpec:
             current_snapshot = self._current_snapshot(con)
             if snapshot_id is not None and snapshot_id != current_snapshot:
-                raise DatasetSnapshotNotFoundError(snapshot_id)
+                raise DatasetSnapshotConflictError(snapshot_id, current_snapshot)
 
             spec = self._load_spec(con, namespace, name)
             normalized_rows = self._normalize_rows(spec, rows)
             if mode == "upsert":
                 self._validate_upsert_keys(spec, normalized_rows)
             if not normalized_rows:
+                if mode == "replace":
+                    target = self._qualified_table(namespace, name)
+                    con.execute(f"DELETE FROM {target}")  # nosec B608
+                elif mode not in ("append", "upsert"):
+                    raise ValueError(f"Unknown dataset write mode: {mode}")
                 return spec
 
             self._create_incoming_table(con, spec)
@@ -380,7 +394,11 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
                 con.execute("BEGIN")
                 value = operation(con)
                 con.execute("COMMIT")
-                return value, self._current_snapshot(con)
+                committed_snapshot = self._last_committed_snapshot(con)
+                if committed_snapshot is None:
+                    # Read-only/no-op transactions do not create a DuckLake snapshot.
+                    committed_snapshot = self._current_snapshot(con)
+                return value, committed_snapshot
             except Exception as exc:
                 if con is not None:
                     try:
@@ -434,13 +452,20 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
             raise RuntimeError("DuckLake catalog did not report a current snapshot")
         return int(row[0])
 
+    def _last_committed_snapshot(self, con: Any) -> int | None:
+        row = con.execute(
+            f"FROM {self._ident(CATALOG_ALIAS)}.last_committed_snapshot()"
+        ).fetchone()
+        if row is None or row[0] is None:
+            return None
+        return int(row[0])
+
     def _snapshot_exists(self, snapshot_id: int) -> bool:
         con = self._connect()
         try:
             return (
                 con.execute(
-                    "SELECT 1 FROM abi_datasets.snapshots() "
-                    "WHERE snapshot_id = ?",
+                    "SELECT 1 FROM abi_datasets.snapshots() WHERE snapshot_id = ?",
                     [snapshot_id],
                 ).fetchone()
                 is not None
@@ -591,7 +616,9 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         except duckdb.Error:
             con.execute("INSTALL httpfs")
             con.execute("LOAD httpfs")
-        con.execute(f"CREATE OR REPLACE SECRET {self._ident(S3_SECRET_NAME)} ({self._s3.sql()})")
+        con.execute(
+            f"CREATE OR REPLACE SECRET {self._ident(S3_SECRET_NAME)} ({self._s3.sql()})"
+        )
 
     def _prepare_local_paths(self) -> None:
         if self._catalog.startswith("sqlite:"):

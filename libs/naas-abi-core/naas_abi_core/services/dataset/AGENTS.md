@@ -36,7 +36,9 @@ class IDatasetPort:
     def drop(name, *, namespace="default") -> None
 ```
 
-`DatasetSpec` carries `name`, `namespace`, columns (`string|integer|bigint|double|boolean|date|timestamp|json`), partitions (`column` + `identity|year|month|day`), and `primary_key`. Primary-key columns must exist. DuckLake does not enforce uniqueness; the key defines `MERGE INTO` matching for upsert.
+`DatasetSpec` carries `name`, `namespace`, columns (`string|integer|bigint|double|boolean|date|timestamp|json`), partitions (`column` + `identity|year|month|day`), and `primary_key`. Primary-key columns must exist. DuckLake does not enforce uniqueness; the key only defines `MERGE INTO` matching for upsert, and ordinary appends can create duplicate keys.
+
+The optional write `snapshot_id` is a catalog-wide compare-and-swap token, not a per-dataset version. A write to any dataset advances it and can cause `DatasetSnapshotConflictError`. Successful mutating writes return the exact snapshot committed by that connection; a no-op returns the current observed snapshot.
 
 Partition transforms are physical layout metadata and do not add query columns; use SQL functions such as `month(author_date)` when filtering. Reserved identifiers (`end`, `start`) are valid schema names but must be quoted in caller SQL (`SELECT "end" FROM time_entries`).
 
@@ -82,11 +84,21 @@ URLs; `s3_use_ssl`, `s3_url_style` and `s3_region` override both. Omit all of th
 for AWS with ambient credentials. Setting them alongside a local `data_path` raises,
 because that pairing can only mean a store was intended and would not be used.
 
+A remote `data_path` does not make a SQLite catalog shared. A single-process runtime
+may deliberately pair the two, but every replica in a scaled deployment must use the
+same durable catalog; use PostgreSQL rather than an ephemeral per-container SQLite
+file or the replicas will silently diverge.
+
 Without them, a write to an object store fails with HTTP 403 — or, for a batch small
 enough for DuckLake to inline in the catalog, appears to succeed while never reaching
 the store. Modules that use the service declare `DatasetService` in `ModuleDependencies.services`.
 
 Each write uses a fresh connection and retries the complete transaction up to 10 times for catalog locks/transaction conflicts. Backoff starts at 50 ms, doubles to a 1-second cap, and has +/-25% jitter. SQLite writers sharing one adapter are serialized before the cross-process retry boundary; PostgreSQL writers remain concurrent. PostgreSQL deployment credentials are rendered from the secret service; do not log the catalog DSN.
+
+Ambiguous object-store transport failures are not replayed automatically: a timeout
+may arrive after metadata committed, and replaying an append could duplicate rows.
+Such failures surface to the caller until the port has an idempotency or commit-status
+reconciliation contract.
 
 Every connection attaches with `AUTOMATIC_MIGRATION`, so the adapter initializes a new DuckLake metadata schema or upgrades an older compatible schema. The PostgreSQL database and grants must already exist; those require server-level provisioning outside the catalog connection.
 

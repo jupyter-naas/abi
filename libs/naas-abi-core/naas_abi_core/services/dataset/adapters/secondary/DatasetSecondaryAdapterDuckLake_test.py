@@ -142,6 +142,34 @@ class TestDatasetSecondaryAdapterDuckLake(DatasetSecondaryAdapterContract):
         assert attempts == 3
         assert adapter.query("SELECT * FROM events").rows == [{"id": 1}]
 
+    def test_write_returns_the_snapshot_committed_by_its_connection(
+        self, adapter, monkeypatch
+    ):
+        adapter.create(
+            DatasetSpec(
+                name="events",
+                columns=(ColumnSpec(name="id", type="integer"),),
+            )
+        )
+        monkeypatch.setattr(adapter, "_current_snapshot", lambda con: 999_999)
+
+        written = adapter.write("events", [{"id": 1}])
+
+        assert written.snapshot_id != 999_999
+        assert written.snapshot_id == adapter.list_snapshots()[-1].snapshot_id
+
+    def test_noop_write_returns_the_current_snapshot(self, adapter):
+        created = adapter.create(
+            DatasetSpec(
+                name="events",
+                columns=(ColumnSpec(name="id", type="integer"),),
+            )
+        )
+
+        written = adapter.write("events", [])
+
+        assert written.snapshot_id == created.snapshot_id
+
     def test_connect_owns_ducklake_catalog_migrations(self, adapter, monkeypatch):
         import duckdb
 
@@ -241,9 +269,10 @@ class TestObjectStoreDataPath:
             "TYPE s3, KEY_ID 'k', SECRET 's', ENDPOINT 'minio:9000', "
             "URL_STYLE 'path', USE_SSL false, REGION 'us-east-1'"
         )
-        assert "USE_SSL true" in _S3Settings(
-            endpoint="https://s3.example.com", access_key_id="k"
-        ).sql()
+        assert (
+            "USE_SSL true"
+            in _S3Settings(endpoint="https://s3.example.com", access_key_id="k").sql()
+        )
 
     def test_explicit_settings_win_over_what_the_scheme_implies(self):
         sql = _S3Settings(

@@ -6,6 +6,7 @@ from naas_abi_core.services.dataset.DatasetPort import (
     DatasetAlreadyExistsError,
     DatasetNotFoundError,
     DatasetSchemaError,
+    DatasetSnapshotConflictError,
     DatasetSnapshotNotFoundError,
     DatasetSpec,
     IDatasetPort,
@@ -160,6 +161,55 @@ class DatasetSecondaryAdapterContract(ABC):
             snapshot_id=old_snapshot.snapshot_id,
         )
         assert historical.rows == [{"sha": "old", "additions": 100}]
+
+    def test_replace_with_empty_rows_clears_dataset(self, adapter: IDatasetPort):
+        adapter.create(self._spec())
+        populated = adapter.write(
+            "github_commits",
+            [
+                {
+                    "sha": "old",
+                    "project_id": "p1",
+                    "author_date": "2026-08-01",
+                    "additions": 1,
+                    "deletions": 0,
+                }
+            ],
+            namespace="acme",
+        )
+
+        emptied = adapter.write("github_commits", [], namespace="acme", mode="replace")
+
+        assert emptied.snapshot_id != populated.snapshot_id
+        assert (
+            adapter.query("SELECT * FROM github_commits", namespace="acme").rows == []
+        )
+        assert adapter.query(
+            "SELECT sha FROM github_commits",
+            namespace="acme",
+            snapshot_id=populated.snapshot_id,
+        ).rows == [{"sha": "old"}]
+
+    def test_stale_write_snapshot_raises_conflict(self, adapter: IDatasetPort):
+        stale = adapter.create(self._spec())
+        current = adapter.create(
+            DatasetSpec(
+                name="projects",
+                namespace="acme",
+                columns=(ColumnSpec(name="id", type="string"),),
+            )
+        )
+
+        with pytest.raises(DatasetSnapshotConflictError) as raised:
+            adapter.write(
+                "github_commits",
+                [],
+                namespace="acme",
+                snapshot_id=stale.snapshot_id,
+            )
+
+        assert raised.value.expected_snapshot_id == stale.snapshot_id
+        assert raised.value.current_snapshot_id == current.snapshot_id
 
     def test_json_round_trips_and_is_queryable(self, adapter: IDatasetPort):
         spec = DatasetSpec(

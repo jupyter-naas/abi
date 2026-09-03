@@ -50,6 +50,11 @@ server-level connection and privileges beyond the catalog DSN.
 ## Consequences
 
 - Snapshot IDs change from per-dataset UUID strings to catalog-level integers.
+- Optimistic concurrency is therefore catalog-wide: a write to an unrelated
+  dataset can invalidate a caller's snapshot token. A mismatch raises
+  `DatasetSnapshotConflictError` rather than a lookup error.
+- Mutating writes return the snapshot committed by their connection. A no-op
+  transaction creates no snapshot and returns the current observed snapshot.
 - A historical query attaches the entire catalog at one version, so every
   table referenced by raw SQL observes the same state.
 - Upsert rejects null keys and duplicate keys in an incoming batch. DuckLake
@@ -70,5 +75,12 @@ server-level connection and privileges beyond the catalog DSN.
   virtual-hosted URLs, so a store such as MinIO is unreachable without them.
   A misconfigured store does not always fail — a batch small enough to be
   inlined in the catalog commits without the data ever leaving it.
+- A remote data path may be paired with SQLite for a single-process runtime,
+  but it does not make an ephemeral catalog shared. Replicated deployments
+  must use one durable shared catalog, normally PostgreSQL, or their metadata
+  silently diverges even while they write into the same object store.
+- Object-store timeouts and connection failures are not transaction retries:
+  replay after an ambiguous commit could duplicate an append. Safe transport
+  retries require an idempotency or commit-reconciliation contract.
 - Operators must schedule data flushing, adjacent-file compaction, snapshot
   expiry, and cleanup according to their retention policy.
