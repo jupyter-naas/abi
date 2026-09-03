@@ -30,7 +30,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_CodingEnviron
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_DatasetService import (
     DatasetAdapterConfiguration,
-    DatasetAdapterDuckDBConfiguration,
+    DatasetAdapterDuckLakeConfiguration,
     DatasetServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
@@ -97,9 +97,10 @@ class ServicesConfiguration(BaseModel):
     )
     dataset: DatasetServiceConfiguration = DatasetServiceConfiguration(
         dataset_adapter=DatasetAdapterConfiguration(
-            adapter="duckdb",
-            config=DatasetAdapterDuckDBConfiguration(
-                base_path="storage/datastore/datasets",
+            adapter="ducklake",
+            config=DatasetAdapterDuckLakeConfiguration(
+                catalog="sqlite:storage/datastore/datasets.sqlite",
+                data_path="storage/datastore/datasets/",
             ).model_dump(),
         )
     )

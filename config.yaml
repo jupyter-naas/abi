@@ -173,6 +173,12 @@ services:
       adapter: "fs"
       config:
         base_path: "storage/datastore"
+  dataset:
+    dataset_adapter:
+      adapter: "ducklake"
+      config:
+        catalog: "sqlite:storage/datastore/datasets.sqlite"
+        data_path: "storage/datastore/datasets/"
   triple_store:
     triple_store_adapter:
       # Default to the HTTP-backed oxigraph adapter so multiple processes

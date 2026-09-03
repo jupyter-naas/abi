@@ -1,0 +1,9 @@
+SELECT 'CREATE DATABASE ducklake OWNER "{{ POSTGRES_USER }}"'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ducklake')\gexec
+
+\connect ducklake
+
+CREATE SCHEMA IF NOT EXISTS public;
+
+GRANT ALL PRIVILEGES ON DATABASE ducklake TO "{{ POSTGRES_USER }}";
+GRANT ALL PRIVILEGES ON SCHEMA public TO "{{ POSTGRES_USER }}";

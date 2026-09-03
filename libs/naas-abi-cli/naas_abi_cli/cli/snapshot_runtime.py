@@ -10,8 +10,9 @@ What is captured:
     ``fuseki_data``, ``qdrant_storage``, ``redis_data``, ``rabbitmq_data``,
     ``headscale_data``) -- copied cold as zstd-compressed tarballs so each
     engine's on-disk state is consistent;
-  * the host ``storage/`` directory (the durable SQLite event log + local
-    datastore files).
+  * the host ``storage/`` directory (the durable SQLite event log, the SQLite
+    DuckLake catalog, and DuckLake data files). Because the stack is stopped,
+    this is coherent with a PostgreSQL DuckLake catalog in ``postgres_data``.
 
 Transient volumes (caddy certs, dagster run history, build/model caches, and
 the headscale ``headscale_run`` socket dir) are skipped -- they rebuild

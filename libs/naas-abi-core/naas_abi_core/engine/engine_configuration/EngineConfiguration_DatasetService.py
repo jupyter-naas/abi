@@ -8,25 +8,30 @@ from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator impo
 )
 from naas_abi_core.services.dataset.DatasetPort import IDatasetPort
 from naas_abi_core.services.dataset.DatasetService import DatasetService
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-class DatasetAdapterDuckDBConfiguration(BaseModel):
-    """DuckDB dataset adapter: Hive-partitioned Parquet on a warehouse path.
+class DatasetAdapterDuckLakeConfiguration(BaseModel):
+    """DuckLake dataset adapter: versioned tables backed by a shared catalog.
 
     dataset_adapter:
-      adapter: "duckdb"
+      adapter: "ducklake"
       config:
-        base_path: "storage/datastore/datasets"
+        catalog: "sqlite:storage/datastore/datasets.sqlite"
+        data_path: "storage/datastore/datasets/"
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    base_path: str = "storage/datastore/datasets"
+    catalog: str = "sqlite:storage/datastore/datasets.sqlite"
+    data_path: str = "storage/datastore/datasets/"
+    max_retries: int = Field(default=10, ge=0)
+    retry_base_delay_seconds: float = Field(default=0.05, ge=0)
+    retry_max_delay_seconds: float = Field(default=1.0, ge=0)
 
 
 class DatasetAdapterConfiguration(GenericLoader):
-    adapter: Literal["duckdb", "custom"]
+    adapter: Literal["ducklake", "custom"]
     config: dict | None = None
 
     @model_validator(mode="after")
@@ -36,11 +41,11 @@ class DatasetAdapterConfiguration(GenericLoader):
                 "config is required if adapter is not custom"
             )
 
-        if self.adapter == "duckdb":
+        if self.adapter == "ducklake":
             pydantic_model_validator(
-                DatasetAdapterDuckDBConfiguration,
+                DatasetAdapterDuckLakeConfiguration,
                 self.config,
-                "Invalid configuration for services.dataset.dataset_adapter 'duckdb' adapter",
+                "Invalid configuration for services.dataset.dataset_adapter 'ducklake' adapter",
             )
 
         return self
@@ -50,12 +55,12 @@ class DatasetAdapterConfiguration(GenericLoader):
             assert self.config is not None, (
                 "config is required if adapter is not custom"
             )
-            if self.adapter == "duckdb":
-                from naas_abi_core.services.dataset.adapters.secondary.DatasetSecondaryAdapterDuckDB import (
-                    DatasetSecondaryAdapterDuckDB,
+            if self.adapter == "ducklake":
+                from naas_abi_core.services.dataset.adapters.secondary.DatasetSecondaryAdapterDuckLake import (
+                    DatasetSecondaryAdapterDuckLake,
                 )
 
-                return DatasetSecondaryAdapterDuckDB(**self.config)
+                return DatasetSecondaryAdapterDuckLake(**self.config)
             raise ValueError(f"Unknown adapter: {self.adapter}")
         return super().load()
 

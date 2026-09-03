@@ -16,7 +16,9 @@ from naas_abi_core.services.dataset.DatasetPort import (
 
 
 def _service(tmp_path) -> DatasetsService:
-    warehouse = DatasetFactory.DatasetServiceDuckDB(str(tmp_path / "warehouse"))
+    warehouse = DatasetFactory.DatasetServiceDuckLake(
+        f"sqlite:{tmp_path / 'datasets.sqlite'}", str(tmp_path / "warehouse")
+    )
     warehouse.create(
         DatasetSpec(
             name="hours",
@@ -83,7 +85,11 @@ def test_unavailable_and_bad_identifier(tmp_path) -> None:
     service = DatasetsService(None)
     with pytest.raises(DatasetServiceUnavailableError):
         service.list()
-    empty = DatasetsService(DatasetFactory.DatasetServiceDuckDB(str(tmp_path / "empty")))
+    empty = DatasetsService(
+        DatasetFactory.DatasetServiceDuckLake(
+            f"sqlite:{tmp_path / 'empty.sqlite'}", str(tmp_path / "empty")
+        )
+    )
     with pytest.raises(InvalidDatasetIdentifierError):
         empty.describe("bad-name", namespace="clockify")
 

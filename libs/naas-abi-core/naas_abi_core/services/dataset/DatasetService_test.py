@@ -4,7 +4,9 @@ from naas_abi_core.services.dataset.DatasetService import DatasetService
 
 
 def test_dataset_service_create_write_query(tmp_path):
-    service = DatasetFactory.DatasetServiceDuckDB(str(tmp_path / "warehouse"))
+    service = DatasetFactory.DatasetServiceDuckLake(
+        f"sqlite:{tmp_path / 'datasets.sqlite'}", str(tmp_path / "warehouse")
+    )
     assert isinstance(service, DatasetService)
     service.create(
         DatasetSpec(
@@ -13,6 +15,7 @@ def test_dataset_service_create_write_query(tmp_path):
                 ColumnSpec(name="person", type="string"),
                 ColumnSpec(name="hours", type="double"),
             ),
+            primary_key=("person",),
         )
     )
     service.write(
@@ -21,3 +24,4 @@ def test_dataset_service_create_write_query(tmp_path):
     )
     result = service.query("SELECT SUM(hours) AS total FROM hours")
     assert result.rows[0]["total"] == 3.5
+    assert service.list_snapshots()

@@ -50,6 +50,7 @@ def _to_info(value: DatasetInfoData) -> DatasetInfo:
             DatasetPartition(column=part.column, transform=part.transform)
             for part in value.partitions
         ],
+        primary_key=list(value.primary_key),
         snapshot_id=value.snapshot_id,
         location=value.location,
     )
@@ -114,7 +115,7 @@ async def preview_dataset(
     name: str,
     workspace_id: str = Query(..., min_length=1, max_length=100),
     limit: int | None = Query(default=None, ge=1, le=1000),
-    snapshot_id: str | None = Query(default=None, max_length=128),
+    snapshot_id: int | None = Query(default=None, ge=0),
     current_user: User = Depends(get_current_user_required),
     datasets_service: DatasetsService = Depends(get_datasets_service),
 ):

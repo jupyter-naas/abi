@@ -20,7 +20,8 @@ export interface DatasetInfo {
   namespace: string;
   columns: DatasetColumn[];
   partitions: DatasetPartition[];
-  snapshot_id: string;
+  primary_key: string[];
+  snapshot_id: number;
   location: string;
 }
 

@@ -54,6 +54,21 @@ docker compose -f docker-compose.yml up -d
 docker compose -f docker-compose.yml up fuseki
 ```
 
+### Upgrading an Existing PostgreSQL Volume
+
+PostgreSQL only runs `docker-entrypoint-initdb.d` scripts when it initializes a
+new volume. After upgrading an existing deployment, create the dedicated,
+idempotent DuckLake catalog before starting ABI:
+
+```bash
+docker compose exec -T postgres psql -U "${POSTGRES_USER:-abi}" -d postgres \
+  -f /docker-entrypoint-initdb.d/005-create-ducklake-db.sql
+```
+
+Changing a DuckLake catalog from SQLite to PostgreSQL requires a metadata
+migration. Changing only the catalog DSN loses snapshot history and can leave
+inlined rows behind.
+
 ### Cleanup
 ```bash
 # Run comprehensive cleanup

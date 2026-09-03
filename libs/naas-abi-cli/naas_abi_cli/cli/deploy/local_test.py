@@ -82,6 +82,14 @@ def test_setup_local_deploy_does_not_include_coding_by_default(
     assert "\n  act-runner:" not in compose_content
     assert "forgejo:3000" not in caddy_content
     assert not (initdb / "003-create-coder-db.sql").exists()
+    ducklake_init = initdb / "005-create-ducklake-db.sql"
+    assert ducklake_init.exists()
+    ducklake_sql = ducklake_init.read_text(encoding="utf-8")
+    assert "CREATE DATABASE ducklake" in ducklake_sql
+    assert "\\connect ducklake" in ducklake_sql
+    assert "CREATE SCHEMA IF NOT EXISTS public" in ducklake_sql
+    assert 'GRANT ALL PRIVILEGES ON DATABASE ducklake TO "abi"' in ducklake_sql
+    assert 'GRANT ALL PRIVILEGES ON SCHEMA public TO "abi"' in ducklake_sql
     assert not (tmp_path / ".deploy/docker/act-runner-config.yaml").exists()
 
 
