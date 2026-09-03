@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.59.0 (2026-09-02)
+
+### Features
+
+- **nexus**: Filter Ontology catalog to workspace seed
+  ([`5fe204b`](https://github.com/jupyter-naas/abi/commit/5fe204b30eca3af75f55955c3ba71b330e6ccacf))
+
+
 ## v2.58.0 (2026-08-31)
 
 ### Features
