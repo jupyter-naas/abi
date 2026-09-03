@@ -78,6 +78,17 @@ class _S3Settings:
     url_style: str = ""
     use_ssl: bool | None = None
 
+    def __post_init__(self) -> None:
+        endpoint = self.endpoint.strip().lower()
+        has_http_scheme = endpoint.startswith(("http://", "https://"))
+        if "://" in endpoint and not has_http_scheme:
+            raise ValueError("s3_endpoint scheme must be http:// or https://")
+        if endpoint and not has_http_scheme and self.use_ssl is None:
+            raise ValueError(
+                "s3_endpoint must include an http:// or https:// scheme or set "
+                "s3_use_ssl explicitly"
+            )
+
     @property
     def configured(self) -> bool:
         return bool(self.endpoint or self.access_key_id or self.secret_access_key)
@@ -89,10 +100,10 @@ class _S3Settings:
         if self.secret_access_key:
             parts.append(f"SECRET {_sql_literal(self.secret_access_key)}")
         if self.endpoint:
-            endpoint = self.endpoint
+            endpoint = self.endpoint.strip()
             use_ssl = self.use_ssl
             for scheme, ssl in (("https://", True), ("http://", False)):
-                if endpoint.startswith(scheme):
+                if endpoint.lower().startswith(scheme):
                     endpoint = endpoint[len(scheme) :]
                     use_ssl = ssl if use_ssl is None else use_ssl
                     break

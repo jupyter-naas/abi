@@ -80,9 +80,11 @@ them here:
 ```
 
 The scheme on `s3_endpoint` sets the SSL default and an endpoint implies path-style
-URLs; `s3_use_ssl`, `s3_url_style` and `s3_region` override both. Omit all of them
-for AWS with ambient credentials. Setting them alongside a local `data_path` raises,
-because that pairing can only mean a store was intended and would not be used.
+URLs; `s3_use_ssl`, `s3_url_style` and `s3_region` override both. A scheme-less
+endpoint such as `minio:9000` must set `s3_use_ssl` explicitly so transport security
+is never guessed. Omit all of them for AWS with ambient credentials. Setting them
+alongside a local `data_path` raises, because that pairing can only mean a store was
+intended and would not be used.
 
 A remote `data_path` does not make a SQLite catalog shared. A single-process runtime
 may deliberately pair the two, but every replica in a scaled deployment must use the

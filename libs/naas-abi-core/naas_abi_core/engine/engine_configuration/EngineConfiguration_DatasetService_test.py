@@ -1,3 +1,4 @@
+import pytest
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_DatasetService import (
     DatasetAdapterConfiguration,
     DatasetAdapterDuckLakeConfiguration,
@@ -26,3 +27,20 @@ def test_dataset_service_configuration(tmp_path):
 
     service = configuration.load()
     assert isinstance(service, DatasetService)
+
+
+def test_dataset_configuration_rejects_ambiguous_scheme_less_s3_endpoint():
+    with pytest.raises(ValueError, match="scheme or set s3_use_ssl"):
+        DatasetAdapterDuckLakeConfiguration(
+            catalog="postgres:postgresql://user:password@postgres:5432/ducklake",
+            data_path="s3://abi/datasets/",
+            s3_endpoint="minio:9000",
+        )
+
+    configuration = DatasetAdapterDuckLakeConfiguration(
+        catalog="postgres:postgresql://user:password@postgres:5432/ducklake",
+        data_path="s3://abi/datasets/",
+        s3_endpoint="minio:9000",
+        s3_use_ssl=False,
+    )
+    assert configuration.s3_use_ssl is False

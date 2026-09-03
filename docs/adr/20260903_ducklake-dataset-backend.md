@@ -73,6 +73,8 @@ server-level connection and privileges beyond the catalog DSN.
 - `data_path` may be a local path or an object store URI. A custom S3 endpoint
   and its credentials are explicit configuration: DuckDB defaults to AWS and
   virtual-hosted URLs, so a store such as MinIO is unreachable without them.
+  Endpoint schemes infer TLS; a scheme-less endpoint must explicitly select
+  `s3_use_ssl` so the adapter never guesses transport security.
   A misconfigured store does not always fail — a batch small enough to be
   inlined in the catalog commits without the data ever leaving it.
 - A remote data path may be paired with SQLite for a single-process runtime,

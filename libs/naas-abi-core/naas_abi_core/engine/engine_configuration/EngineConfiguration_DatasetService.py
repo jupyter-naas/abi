@@ -27,6 +27,9 @@ class DatasetAdapterDuckLakeConfiguration(BaseModel):
     fails with HTTP 403 (or, for a batch small enough to be inlined in the
     catalog, silently never reaches the store):
 
+    Include ``http://`` or ``https://`` in the endpoint so TLS is inferred. A
+    scheme-less endpoint must set ``s3_use_ssl`` explicitly.
+
     dataset_adapter:
       adapter: "ducklake"
       config:
@@ -50,6 +53,19 @@ class DatasetAdapterDuckLakeConfiguration(BaseModel):
     s3_region: str = ""
     s3_url_style: str = ""
     s3_use_ssl: bool | None = None
+
+    @model_validator(mode="after")
+    def validate_s3_endpoint_transport(self) -> "DatasetAdapterDuckLakeConfiguration":
+        endpoint = self.s3_endpoint.strip().lower()
+        has_http_scheme = endpoint.startswith(("http://", "https://"))
+        if "://" in endpoint and not has_http_scheme:
+            raise ValueError("s3_endpoint scheme must be http:// or https://")
+        if endpoint and not has_http_scheme and self.s3_use_ssl is None:
+            raise ValueError(
+                "s3_endpoint must include an http:// or https:// scheme or set "
+                "s3_use_ssl explicitly"
+            )
+        return self
 
 
 class DatasetAdapterConfiguration(GenericLoader):

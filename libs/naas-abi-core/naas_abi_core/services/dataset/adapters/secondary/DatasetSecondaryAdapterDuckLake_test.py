@@ -274,6 +274,14 @@ class TestObjectStoreDataPath:
             in _S3Settings(endpoint="https://s3.example.com", access_key_id="k").sql()
         )
 
+    def test_scheme_less_endpoint_requires_an_explicit_ssl_choice(self):
+        with pytest.raises(ValueError, match="scheme or set s3_use_ssl"):
+            _S3Settings(endpoint="minio:9000")
+
+        sql = _S3Settings(endpoint="minio:9000", use_ssl=False).sql()
+        assert "ENDPOINT 'minio:9000'" in sql
+        assert "USE_SSL false" in sql
+
     def test_explicit_settings_win_over_what_the_scheme_implies(self):
         sql = _S3Settings(
             endpoint="http://minio:9000",
