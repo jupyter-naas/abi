@@ -20,7 +20,8 @@ class DatasetInfo(BaseModel):
     namespace: str
     columns: list[DatasetColumn]
     partitions: list[DatasetPartition]
-    snapshot_id: str
+    primary_key: list[str]
+    snapshot_id: int
     location: str
 
 
@@ -32,7 +33,7 @@ class DatasetListResponse(BaseModel):
 class DatasetQueryRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     sql: str = Field(..., min_length=1, max_length=20_000)
-    snapshot_id: str | None = Field(default=None, max_length=128)
+    snapshot_id: int | None = Field(default=None, ge=0)
     limit: int | None = Field(default=None, ge=1, le=5_000)
 
 

@@ -1,0 +1,93 @@
+# DuckLake as the Dataset Service Backend
+
+## Status
+
+Accepted
+
+## Date
+
+2026-09-03
+
+## Context
+
+The dataset service stored Hive-partitioned Parquet through an in-process
+DuckDB adapter. Its UUID snapshot value represented only the latest state of
+one dataset and could not provide historical reads or a coherent snapshot for
+SQL joining multiple datasets. The adapter also lacked native JSON columns and
+upsert. Partitioned append failed on a second write because plain DuckDB `COPY`
+requires explicit append behavior.
+
+Dataset usage is limited enough that changing the port now is preferable to
+preserving snapshot semantics that cannot be implemented honestly.
+
+## Decision
+
+DuckLake is the only built-in dataset adapter. It provides catalog-level,
+monotonically increasing integer snapshots, native JSON, partition metadata,
+and `MERGE INTO` for upsert. `DatasetSpec.primary_key` records the columns used
+to match an upsert because DuckLake does not provide primary-key or unique
+constraints.
+
+The zero-infrastructure runtime uses a SQLite catalog at
+`storage/datasets.sqlite`. CLI-created local Docker deployments use a dedicated
+PostgreSQL database named `ducklake`. Both use `storage/datasets/` for table data,
+outside the `storage/datastore` namespace exposed by the object-storage service.
+
+Every write is retried as a complete transaction on a fresh connection for
+retriable attach, lock, serialization, or commit conflicts. The default budget
+is 10 retries with exponential backoff from 50 ms to 1 second and +/-25%
+jitter. These values favor correctness for shared API/worker catalogs; they are
+configurable because workload-specific reliability policy is not yet settled.
+SQLite writers sharing one adapter are serialized before this retry boundary;
+cross-process SQLite writers and all PostgreSQL writers use the retry policy.
+
+Every adapter connection enables DuckLake `AUTOMATIC_MIGRATION`. DuckLake
+therefore initializes an empty metadata catalog and upgrades compatible older
+catalog schemas at the secondary-adapter boundary. Infrastructure provisioning
+still creates the PostgreSQL database and grants because doing so requires a
+server-level connection and privileges beyond the catalog DSN.
+
+## Consequences
+
+- Snapshot IDs change from per-dataset UUID strings to catalog-level integers.
+- Optimistic concurrency is therefore catalog-wide: a write to an unrelated
+  dataset can invalidate a caller's snapshot token. A mismatch raises
+  `DatasetSnapshotConflictError` rather than a lookup error.
+- Mutating writes return the snapshot committed by their connection. A no-op
+  transaction creates no snapshot and returns the current observed snapshot.
+- A historical query attaches the entire catalog at one version, so every
+  table referenced by raw SQL observes the same state.
+- Upsert rejects null keys and duplicate keys in an incoming batch. DuckLake
+  does not enforce uniqueness for ordinary append operations.
+- The plain DuckDB/Parquet adapter is removed because it cannot provide the new
+  history and coherent-catalog contract.
+- SQLite catalog files may contain inlined table rows. Catalog metadata and the
+  data path are therefore one backup/restore unit.
+- PostgreSQL credentials are interpolated into the DuckLake catalog DSN at
+  runtime. They remain secret configuration and must not be logged.
+- Fresh deployments provision the `ducklake` database through an idempotent
+  init script. Existing PostgreSQL volumes must run that script explicitly;
+  DuckLake metadata table creation and version migration remain adapter-owned.
+- Moving a catalog from SQLite to PostgreSQL requires migrating metadata; it is
+  not a configuration-only DSN change.
+- `data_path` may be a local path or an S3-compatible `s3://`/`s3a://` URI.
+  Other object-store schemes are rejected until their native DuckDB secret
+  types are supported. A custom S3 endpoint and its credentials are explicit
+  configuration: DuckDB defaults to AWS and virtual-hosted URLs, so a store
+  such as MinIO is unreachable without them.
+  Endpoint schemes infer TLS; a scheme-less endpoint must explicitly select
+  `s3_use_ssl` so the adapter never guesses transport security.
+  A misconfigured store does not always fail — a batch small enough to be
+  inlined in the catalog commits without the data ever leaving it.
+- A remote data path may be paired with SQLite for a single-process runtime,
+  but it does not make an ephemeral catalog shared. Replicated deployments
+  must use one durable shared catalog, normally PostgreSQL, or their metadata
+  silently diverges even while they write into the same object store.
+- Dataset defaults are siblings of `storage/datastore`, not descendants, so
+  object-storage listings do not expose the warehouse or SQLite catalog as
+  user objects.
+- Object-store timeouts and connection failures are not transaction retries:
+  replay after an ambiguous commit could duplicate an append. Safe transport
+  retries require an idempotency or commit-reconciliation contract.
+- Operators must schedule data flushing, adjacent-file compaction, snapshot
+  expiry, and cleanup according to their retention policy.

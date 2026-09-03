@@ -56,7 +56,7 @@ class DatasetsService:
         *,
         namespace: str,
         limit: int | None = None,
-        snapshot_id: str | None = None,
+        snapshot_id: int | None = None,
     ) -> DatasetQueryResultData:
         self.describe(name, namespace=namespace)
         capped = clamp_limit(
@@ -76,7 +76,7 @@ class DatasetsService:
         *,
         namespace: str,
         limit: int | None = None,
-        snapshot_id: str | None = None,
+        snapshot_id: int | None = None,
     ) -> DatasetQueryResultData:
         self._require_dataset()
         self._require_identifier("namespace", namespace)
@@ -97,7 +97,7 @@ class DatasetsService:
         sql: str,
         *,
         namespace: str,
-        snapshot_id: str | None,
+        snapshot_id: int | None,
         limit: int,
         wrap: bool,
     ) -> DatasetQueryResultData:
@@ -146,6 +146,7 @@ class DatasetsService:
                 DatasetPartitionData(column=part.column, transform=part.transform)
                 for part in info.partitions
             ),
+            primary_key=info.primary_key,
             snapshot_id=info.snapshot_id,
             location=info.location,
         )

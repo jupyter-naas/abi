@@ -7,6 +7,7 @@ from typing import Any
 
 from naas_abi_core.services.dataset.DatasetPort import (
     DatasetInfo,
+    DatasetSnapshotInfo,
     DatasetSpec,
     IDatasetPort,
     QueryResult,
@@ -44,7 +45,7 @@ class DatasetService(ServiceBase, IDatasetPort):
         *,
         namespace: str = "default",
         mode: WriteMode = "append",
-        snapshot_id: str | None = None,
+        snapshot_id: int | None = None,
     ) -> DatasetInfo:
         return self.__adapter.write(
             name,
@@ -59,11 +60,14 @@ class DatasetService(ServiceBase, IDatasetPort):
         sql: str,
         *,
         namespace: str = "default",
-        snapshot_id: str | None = None,
+        snapshot_id: int | None = None,
     ) -> QueryResult:
         return self.__adapter.query(
             sql, namespace=namespace, snapshot_id=snapshot_id
         )
+
+    def list_snapshots(self) -> builtins.list[DatasetSnapshotInfo]:
+        return self.__adapter.list_snapshots()
 
     def drop(self, name: str, *, namespace: str = "default") -> None:
         self.__adapter.drop(name, namespace=namespace)
