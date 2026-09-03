@@ -25,7 +25,8 @@ import '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector.css';
 import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
-import { pickSlidesAgentId } from '@/lib/create-slides-project';
+import { pickSlidesAgentId, type SlidesAgentPick } from '@/lib/create-slides-project';
+import { emptyChatGreeting, emptyChatPlaceholder } from '@/lib/empty-chat-greeting';
 import { humanizeChatProviderError } from '@/lib/chat-provider-error';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import { getLogoUrl } from '@/lib/logo-url';
@@ -2674,7 +2675,7 @@ export function ChatInterface({
           <EmptyState
             selectedAgentName={selectedAgentData?.name || selectedAgent}
             logoUrl={selectedAgentData?.logoUrl ?? undefined}
-            slidesOpen={Boolean(slidesChatContext)}
+            agent={selectedAgentData}
           />
         ) : (
           <div className="mx-auto max-w-3xl space-y-6">
@@ -2991,9 +2992,7 @@ export function ChatInterface({
                       ? 'Ask about the image...'
                       : pendingFileAttachments.length > 0
                         ? 'Ask about the file...'
-                        : slidesChatContext
-                          ? 'Describe the deck: topic, audience, how many slides...'
-                          : 'Send a message...'
+                        : emptyChatPlaceholder(selectedAgentData)
                   }
                   // placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
                   className="chat-composer-input max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
@@ -3355,24 +3354,21 @@ function SuggestionChipsRow({
 function EmptyState({
   selectedAgentName,
   logoUrl,
-  slidesOpen,
+  agent,
 }: {
   selectedAgentName: string;
   logoUrl?: string | null;
-  slidesOpen?: boolean;
+  agent?: SlidesAgentPick | null;
 }) {
   const { user } = useAuthStore();
   const resolvedLogoUrl = logoUrl ? getLogoUrl(logoUrl) : undefined;
 
   const firstName = user?.name?.split(' ')[0];
-  const greeting = firstName ? `Hello, ${firstName}.` : 'Hello.';
   return (
     <div className="flex h-full flex-col items-center justify-center px-4">
       <EmptyStateLogo src={resolvedLogoUrl} name={selectedAgentName} />
       <p className="mb-6 text-center text-muted-foreground">
-        {slidesOpen
-          ? `${greeting} This is a Minimal Light deck. Tell me the topic and I will write the slides.`
-          : `${greeting} ${selectedAgentName} here, how can I help?`}
+        {emptyChatGreeting(firstName, selectedAgentName, agent)}
       </p>
     </div>
   );
