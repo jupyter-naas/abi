@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-core"
-version = "2.29.0"
+version = "2.30.0"
 description = "Abi framework allowing you to build your AI system."
 authors = [{ name = "Grace Lambert", email = "maxime@naas.ai" },{ name = "Alice Dupont", email = "florent@naas.ai" }, { name = "Emma Petit", email = "jeremy@naas.ai" }]
 requires-python = ">=3.11,<4"
