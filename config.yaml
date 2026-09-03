@@ -35,6 +35,12 @@ modules:
   - module: naas_abi
     enabled: true
     config:
+      # AbiAgent, PlatformServicesAgent, OntologyEngineerAgent, etc. default to
+      # claude-sonnet-5 upstream; pin to an OpenAI model registered by chatgpt.
+      abi_agent_model: "gpt-4.1-mini"
+      abi_agent_provider: "openai"
+      ontology_engineer_model: "gpt-4.1-mini"
+      ontology_engineer_provider: "openai"
       nexus_config:
         database_url: "sqlite+aiosqlite:///./storage/nexus.db"
         # Dev convenience: enable password login so the seeded admin user
@@ -50,6 +56,28 @@ modules:
           og_title: "ABI"
           og_description: "Your AI Operating System - agents, knowledge, and data in one place."
           og_image_url: "https://repository-images.githubusercontent.com/704324955/444d3ad8-befb-446f-9723-6453aad2c336"
+        feature_flags:
+          enabled_features:
+            - maps
+            - chat
+            - files
+            - agents
+            - skills
+            - apps
+            - marketplace
+            - search
+            - ontology
+            - graph
+            - datasets
+            - settings
+            - slides
+            - code
+          role_baseline:
+            owner: [maps, chat, files, agents, skills, apps, marketplace, search, ontology, graph, datasets, settings, slides, code]
+            admin: [maps, chat, files, agents, skills, apps, marketplace, search, ontology, graph, datasets, settings, slides, code]
+            member: [maps, chat, files, datasets, skills, slides, code]
+            viewer: [maps, chat, files, datasets, skills, slides]
+          workspace_overrides: {}
         marketplace:
           pricing:
             maintenance_standard_usd: 499
@@ -103,13 +131,14 @@ modules:
     config:
       openrouter_api_key: "{{ secret.OPENROUTER_API_KEY }}"
 
-  - module: naas_abi_marketplace.alpha.wsr
-    enabled: true
-    config:
-      opensky_client_id: "{{ secret.OPENSKY_CLIENT_ID }}"
-      opensky_client_secret: "{{ secret.OPENSKY_CLIENT_SECRET }}"
-      tfl_app_key: "{{ secret.TFL_APP_KEY }}"
-      openwebcamdb_api_key: "{{ secret.OPENWEBCAMDB_API_KEY }}"
+  # WSR alpha module — not shipped in this checkout (naas_abi_marketplace.alpha)
+  # - module: naas_abi_marketplace.alpha.wsr
+  #   enabled: true
+  #   config:
+  #     opensky_client_id: "{{ secret.OPENSKY_CLIENT_ID }}"
+  #     opensky_client_secret: "{{ secret.OPENSKY_CLIENT_SECRET }}"
+  #     tfl_app_key: "{{ secret.TFL_APP_KEY }}"
+  #     openwebcamdb_api_key: "{{ secret.OPENWEBCAMDB_API_KEY }}"
 
   - module: naas_abi_marketplace.applications.git
     enabled: true
@@ -125,10 +154,11 @@ modules:
       datastore_path: "sec_gov"
       user_agent: "NAAS-ABI-Marketplace/1.0 (abi@naas.ai)"
 
-  - module: naas_abi_marketplace.applications.x
-    enabled: true
-    config:
-      bearer_token: "{{ secret.X_BEARER_TOKEN }}"
+  # X (Twitter) integration — requires X_BEARER_TOKEN in .env
+  # - module: naas_abi_marketplace.applications.x
+  #   enabled: true
+  #   config:
+  #     bearer_token: "{{ secret.X_BEARER_TOKEN }}"
   
   - module: naas_abi_marketplace.domains.operations.modules.document
     enabled: true
@@ -224,3 +254,19 @@ services:
       adapter: "sqlite"
       config:
         db_path: "storage/events/events.sqlite"
+  source_control:
+    source_control_adapter:
+      adapter: "local_git"
+      config:
+        repos_root: "storage/git"
+  coding_environment:
+    coding_environment_adapter:
+      adapter: "local_directory"
+      config:
+        workspaces_root: "storage/workspaces"
+        harness: "opencode"
+        opencode_bin: "opencode"
+        harness_port_start: 18200
+        harness_port_end: 18300
+        opencode_model: "openai/gpt-5.4"
+        opencode_startup_timeout: 30
