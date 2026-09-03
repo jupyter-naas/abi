@@ -104,6 +104,25 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
                     queue.put(obj)
             return objects
 
+    def list_objects_recursive(
+        self, prefix: str, queue: Queue | None = None
+    ) -> list[str]:
+        with self._lock:
+            self.__path_exists(prefix)
+            root = os.path.join(self.base_path, prefix)
+            objects = []
+            for dirpath, _dirnames, filenames in os.walk(root):
+                for filename in filenames:
+                    absolute = os.path.join(dirpath, filename)
+                    objects.append(
+                        os.path.join(prefix, os.path.relpath(absolute, root))
+                    )
+            objects.sort()
+            if queue:
+                for obj in objects:
+                    queue.put(obj)
+            return objects
+
     def get_object_metadata(self, prefix: str, key: str) -> ObjectMetaData:
         self.__path_exists(prefix, key)
 

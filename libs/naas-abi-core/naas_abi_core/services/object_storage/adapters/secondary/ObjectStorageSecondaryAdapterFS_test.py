@@ -1,8 +1,13 @@
 import io
 from concurrent.futures import ThreadPoolExecutor
 
+import pytest
+
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
     ObjectStorageSecondaryAdapterFS,
+)
+from naas_abi_core.services.object_storage.tests.object_storage__secondary_adapter__generic_test import (
+    ObjectStorageSecondaryAdapterContract,
 )
 
 
@@ -39,3 +44,9 @@ def test_atomic_concurrent_put(tmp_path):
 
     data = adapter.get_object("objects", "k.bin")
     assert data.startswith(b"value-")
+
+
+class TestObjectStorageSecondaryAdapterFS(ObjectStorageSecondaryAdapterContract):
+    @pytest.fixture
+    def adapter(self, tmp_path) -> ObjectStorageSecondaryAdapterFS:
+        return ObjectStorageSecondaryAdapterFS(base_path=str(tmp_path / "storage"))
