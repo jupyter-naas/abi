@@ -1,7 +1,10 @@
 from types import SimpleNamespace
 
 from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
+    filter_graph_catalog,
+    filter_graph_packs,
     filter_ontology_catalog,
+    graph_matches_seed,
     ontology_matches_seed,
     parse_agent_ref,
     resolve_agent_ref,
@@ -106,3 +109,72 @@ def test_workspace_seed_config_accepts_ontologies() -> None:
     )
     assert seed.ontologies == ["example:ExampleOntology.ttl", "bfo:bfo-core.ttl"]
     assert WorkspaceSeedConfig(name="Example", slug="example").ontologies is None
+
+
+SCHEMA_URI = "http://ontology.naas.ai/graph/schema"
+NEXUS_URI = "http://ontology.naas.ai/graph/nexus"
+EXAMPLE_URI = "http://ontology.example.com/graph/example"
+
+
+def test_graph_matches_seed_uri_and_slug() -> None:
+    assert graph_matches_seed(EXAMPLE_URI, ["example"]) is True
+    assert graph_matches_seed(EXAMPLE_URI, [EXAMPLE_URI]) is True
+    assert graph_matches_seed(EXAMPLE_URI, ["schema"]) is False
+
+
+def test_graph_matches_seed_does_not_imply_schema_or_nexus() -> None:
+    assert graph_matches_seed(SCHEMA_URI, ["example"]) is False
+    assert graph_matches_seed(NEXUS_URI, ["example"]) is False
+
+
+def test_filter_graph_catalog_none_keeps_all() -> None:
+    items = [
+        SimpleNamespace(uri=EXAMPLE_URI, id="example"),
+        SimpleNamespace(uri=SCHEMA_URI, id="schema"),
+    ]
+    assert filter_graph_catalog(items, None) == items
+
+
+def test_filter_graph_catalog_empty_list_is_none() -> None:
+    items = [SimpleNamespace(uri=EXAMPLE_URI, id="example")]
+    assert filter_graph_catalog(items, []) == []
+
+
+def test_filter_graph_catalog_exclusive_list() -> None:
+    example = SimpleNamespace(uri=EXAMPLE_URI, id="example")
+    schema = SimpleNamespace(uri=SCHEMA_URI, id="schema")
+    nexus = SimpleNamespace(uri=NEXUS_URI, id="nexus")
+    other = SimpleNamespace(
+        uri="http://ontology.example.com/graph/other",
+        id="other",
+    )
+    filtered = filter_graph_catalog(
+        [example, schema, nexus, other],
+        ["example"],
+    )
+    assert filtered == [example]
+
+
+def test_filter_graph_packs_drops_empty_roles() -> None:
+    example = SimpleNamespace(uri=EXAMPLE_URI, id="example")
+    schema = SimpleNamespace(uri=SCHEMA_URI, id="schema")
+    packs = [
+        SimpleNamespace(role_label="admin", graphs=[schema]),
+        SimpleNamespace(role_label="unknown", graphs=[example]),
+    ]
+    filtered = filter_graph_packs(packs, ["example"])
+    assert len(filtered) == 1
+    assert filtered[0].role_label == "unknown"
+    assert filtered[0].graphs == [example]
+
+
+def test_workspace_seed_config_accepts_graphs() -> None:
+    from naas_abi.apps.nexus.apps.api.app.core.config import WorkspaceSeedConfig
+
+    seed = WorkspaceSeedConfig(
+        name="Example",
+        slug="example",
+        graphs=["example", EXAMPLE_URI],
+    )
+    assert seed.graphs == ["example", EXAMPLE_URI]
+    assert WorkspaceSeedConfig(name="Example", slug="example").graphs is None

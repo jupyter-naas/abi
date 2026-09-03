@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from naas_abi import ABIModule
+from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import filter_graph_packs
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     DiscoveryClassData,
     DiscoveryClassMetaData,
@@ -1754,12 +1755,17 @@ class GraphService:
         """Clear all filesystem graph caches (KPIs, network schema, BFO buckets, …)."""
         clear_graph_service_caches()
 
-    async def list_graphs(self, workspace_id: str) -> list[GraphPackData]:
+    async def list_graphs(
+        self,
+        workspace_id: str,
+        catalog_refs: list[str] | None = None,
+    ) -> list[GraphPackData]:
         # Every triple-store call below is blocking I/O. Running it directly in
         # this coroutine froze the whole event loop — and because the sidebar and
         # the graph page both request /api/graph/list on load, that stall was
         # serialising every other request the browser had in flight.
-        return await asyncio.to_thread(self._list_graphs_sync)
+        packs = await asyncio.to_thread(self._list_graphs_sync)
+        return filter_graph_packs(packs, catalog_refs)
 
     def _list_graphs_sync(self) -> list[GraphPackData]:
         store = self._get_triple_store()
@@ -1821,8 +1827,12 @@ class GraphService:
             packed_graphs.append(GraphPackData(role_label=role_label, graphs=graphs))
         return packed_graphs
 
-    async def list_graph_roles(self, workspace_id: str) -> list[str]:
-        packs = await self.list_graphs(workspace_id)
+    async def list_graph_roles(
+        self,
+        workspace_id: str,
+        catalog_refs: list[str] | None = None,
+    ) -> list[str]:
+        packs = await self.list_graphs(workspace_id, catalog_refs=catalog_refs)
         roles = sorted({pack.role_label for pack in packs if pack.role_label})
         if "unknown" not in roles:
             roles.append("unknown")
@@ -2672,9 +2682,13 @@ class GraphService:
             for row in rows
         ]
 
-    async def discover_all_classes(self, workspace_id: str) -> list[DiscoveryClassData]:
+    async def discover_all_classes(
+        self,
+        workspace_id: str,
+        catalog_refs: list[str] | None = None,
+    ) -> list[DiscoveryClassData]:
         store = self._get_triple_store()
-        packs = await self.list_graphs(workspace_id)
+        packs = await self.list_graphs(workspace_id, catalog_refs=catalog_refs)
         merged: dict[str, dict[str, Any]] = {}
         for pack in packs:
             for graph in pack.graphs:
