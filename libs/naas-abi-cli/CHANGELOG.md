@@ -2,6 +2,42 @@
 
 <!-- version list -->
 
+## v2.21.0 (2026-09-03)
+
+### Bug Fixes
+
+- **dataset**: Address DuckLake review feedback
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Isolate storage and supported schemes
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Migrate DuckLake catalog on connect
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Validate S3 endpoint transport
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+### Documentation
+
+- **dataset**: Document the object store data path, and type the factory
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+### Features
+
+- **dataset**: Adopt DuckLake backend ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Let DuckLake write its data to an object store
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+
 ## v2.20.0 (2026-09-02)
 
 ### Bug Fixes
