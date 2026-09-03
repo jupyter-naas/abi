@@ -30,14 +30,9 @@ from naas_abi_core.services.dataset.DatasetPort import (
 CATALOG_ALIAS = "abi_datasets"
 S3_SECRET_NAME = "abi_datasets_store"
 SPEC_COMMENT_PREFIX = "abi.dataset-spec:"
-OBJECT_STORE_SCHEMES = (
+S3_DATA_PATH_SCHEMES = (
     "s3://",
     "s3a://",
-    "gcs://",
-    "gs://",
-    "r2://",
-    "azure://",
-    "abfss://",
 )
 
 DUCKDB_TYPES = {
@@ -55,8 +50,8 @@ _T = TypeVar("_T")
 logger = logging.getLogger(__name__)
 
 
-def _is_object_store(path: str) -> bool:
-    return path.startswith(OBJECT_STORE_SCHEMES)
+def _is_s3_data_path(path: str) -> bool:
+    return path.lower().startswith(S3_DATA_PATH_SCHEMES)
 
 
 def _sql_literal(value: str) -> str:
@@ -152,6 +147,12 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
 
         self._catalog = catalog
         self._data_path = data_path.rstrip("/") + "/"
+        if "://" in self._data_path and not _is_s3_data_path(self._data_path):
+            scheme = self._data_path.split("://", 1)[0]
+            raise ValueError(
+                f"Unsupported dataset data_path scheme {scheme!r}; "
+                "supported object-store schemes are s3:// and s3a://"
+            )
         self._s3 = _S3Settings(
             endpoint=s3_endpoint,
             access_key_id=s3_access_key_id,
@@ -160,7 +161,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
             url_style=s3_url_style,
             use_ssl=s3_use_ssl,
         )
-        if self._s3.configured and not _is_object_store(self._data_path):
+        if self._s3.configured and not _is_s3_data_path(self._data_path):
             raise ValueError(
                 "S3 settings were given for a data_path that is not an object store URI: "
                 f"{self._data_path!r}"
@@ -635,7 +636,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         if self._catalog.startswith("sqlite:"):
             catalog_path = Path(self._catalog.removeprefix("sqlite:"))
             catalog_path.parent.mkdir(parents=True, exist_ok=True)
-        if "://" not in self._data_path:
+        if not _is_s3_data_path(self._data_path):
             Path(self._data_path).mkdir(parents=True, exist_ok=True)
 
     @staticmethod

@@ -29,9 +29,9 @@ to match an upsert because DuckLake does not provide primary-key or unique
 constraints.
 
 The zero-infrastructure runtime uses a SQLite catalog at
-`storage/datastore/datasets.sqlite`. CLI-created local Docker deployments use
-a dedicated PostgreSQL database named `ducklake`. Both use
-`storage/datastore/datasets/` for table data.
+`storage/datasets.sqlite`. CLI-created local Docker deployments use a dedicated
+PostgreSQL database named `ducklake`. Both use `storage/datasets/` for table data,
+outside the `storage/datastore` namespace exposed by the object-storage service.
 
 Every write is retried as a complete transaction on a fresh connection for
 retriable attach, lock, serialization, or commit conflicts. The default budget
@@ -70,9 +70,11 @@ server-level connection and privileges beyond the catalog DSN.
   DuckLake metadata table creation and version migration remain adapter-owned.
 - Moving a catalog from SQLite to PostgreSQL requires migrating metadata; it is
   not a configuration-only DSN change.
-- `data_path` may be a local path or an object store URI. A custom S3 endpoint
-  and its credentials are explicit configuration: DuckDB defaults to AWS and
-  virtual-hosted URLs, so a store such as MinIO is unreachable without them.
+- `data_path` may be a local path or an S3-compatible `s3://`/`s3a://` URI.
+  Other object-store schemes are rejected until their native DuckDB secret
+  types are supported. A custom S3 endpoint and its credentials are explicit
+  configuration: DuckDB defaults to AWS and virtual-hosted URLs, so a store
+  such as MinIO is unreachable without them.
   Endpoint schemes infer TLS; a scheme-less endpoint must explicitly select
   `s3_use_ssl` so the adapter never guesses transport security.
   A misconfigured store does not always fail — a batch small enough to be
@@ -81,6 +83,9 @@ server-level connection and privileges beyond the catalog DSN.
   but it does not make an ephemeral catalog shared. Replicated deployments
   must use one durable shared catalog, normally PostgreSQL, or their metadata
   silently diverges even while they write into the same object store.
+- Dataset defaults are siblings of `storage/datastore`, not descendants, so
+  object-storage listings do not expose the warehouse or SQLite catalog as
+  user objects.
 - Object-store timeouts and connection failures are not transaction retries:
   replay after an ambiguous commit could duplicate an append. Safe transport
   retries require an idempotency or commit-reconciliation contract.

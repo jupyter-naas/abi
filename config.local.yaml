@@ -232,7 +232,7 @@ services:
       adapter: "ducklake"
       config:
         catalog: "postgres:postgresql://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/ducklake"
-        data_path: "storage/datastore/datasets/"
+        data_path: "storage/datasets/"
 
   # Q: Where does the AI store knowledge as a graph of facts and relationships?
   # A: Apache Jena Fuseki (TDB2) persists the RDF graph. Swap to "fs" for no-server local dev.

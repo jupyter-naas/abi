@@ -99,8 +99,8 @@ class ServicesConfiguration(BaseModel):
         dataset_adapter=DatasetAdapterConfiguration(
             adapter="ducklake",
             config=DatasetAdapterDuckLakeConfiguration(
-                catalog="sqlite:storage/datastore/datasets.sqlite",
-                data_path="storage/datastore/datasets/",
+                catalog="sqlite:storage/datasets.sqlite",
+                data_path="storage/datasets/",
             ).model_dump(),
         )
     )

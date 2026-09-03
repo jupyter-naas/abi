@@ -48,7 +48,7 @@ JSON values are parsed and deterministically serialized before DuckDB binds them
 
 | Adapter | Notes |
 |---|---|
-| `ducklake` | DuckLake catalog backed by SQLite or PostgreSQL, with Parquet/inlined data under `data_path`, on a local path or an object store. Supports catalog snapshots, time travel, JSON, and upsert. |
+| `ducklake` | DuckLake catalog backed by SQLite or PostgreSQL, with Parquet/inlined data under `data_path`, on a local path or S3-compatible object storage. Supports catalog snapshots, time travel, JSON, and upsert. |
 
 ## Engine config
 
@@ -58,8 +58,8 @@ services:
     dataset_adapter:
       adapter: "ducklake"
       config:
-        catalog: "sqlite:storage/datastore/datasets.sqlite"
-        data_path: "storage/datastore/datasets/"
+        catalog: "sqlite:storage/datasets.sqlite"
+        data_path: "storage/datasets/"
         max_retries: 10
         retry_base_delay_seconds: 0.05
         retry_max_delay_seconds: 1.0
@@ -67,13 +67,14 @@ services:
 
 Default is that block.
 
-`data_path` may instead be an object store URI, which keeps table data wherever the
-rest of the deployment persists rather than on a container disk. DuckDB cannot guess
-a custom endpoint or its credentials, so an S3-compatible store such as MinIO needs
-them here:
+`data_path` may instead use an `s3://` or `s3a://` URI, which keeps table data
+wherever the deployment persists datasets rather than on a container disk. Other
+schemes are rejected until the adapter can configure their native DuckDB secret
+types. DuckDB cannot guess a custom endpoint or its credentials, so an S3-compatible
+store such as MinIO needs them here:
 
 ```yaml
-        data_path: "s3://abi/abi/datastore/datasets/"
+        data_path: "s3://abi/abi/datasets/"
         s3_endpoint: "http://minio:9000"
         s3_access_key_id: "{{ secret.MINIO_ROOT_USER }}"
         s3_secret_access_key: "{{ secret.MINIO_ROOT_PASSWORD }}"

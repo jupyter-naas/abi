@@ -140,8 +140,8 @@ def test_default_config_uses_sqlite_ducklake() -> None:
     assert dataset == {
         "adapter": "ducklake",
         "config": {
-            "catalog": "sqlite:storage/datastore/datasets.sqlite",
-            "data_path": "storage/datastore/datasets/",
+            "catalog": "sqlite:storage/datasets.sqlite",
+            "data_path": "storage/datasets/",
         },
     }
 
@@ -151,4 +151,4 @@ def test_local_config_uses_dedicated_postgres_ducklake_catalog() -> None:
 
     assert dataset["adapter"] == "ducklake"
     assert dataset["config"]["catalog"].endswith("@postgres:5432/ducklake")
-    assert dataset["config"]["data_path"] == "storage/datastore/datasets/"
+    assert dataset["config"]["data_path"] == "storage/datasets/"

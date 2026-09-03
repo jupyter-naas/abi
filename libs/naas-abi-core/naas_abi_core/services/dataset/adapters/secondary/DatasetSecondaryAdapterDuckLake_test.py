@@ -260,7 +260,31 @@ def test_postgres_catalog_concurrent_writers_preserve_acknowledged_appends(tmp_p
 
 
 class TestObjectStoreDataPath:
-    """``data_path`` may be an object store, which DuckDB cannot reach unconfigured."""
+    """``data_path`` may use S3-compatible storage when explicitly configured."""
+
+    @pytest.mark.parametrize(
+        "data_path",
+        (
+            "gs://bucket/datasets/",
+            "gcs://bucket/datasets/",
+            "r2://bucket/datasets/",
+            "azure://container/datasets/",
+            "abfss://container/datasets/",
+        ),
+    )
+    def test_unsupported_object_store_schemes_are_rejected(self, tmp_path, data_path):
+        with pytest.raises(ValueError, match="Unsupported dataset data_path scheme"):
+            DatasetSecondaryAdapterDuckLake(
+                catalog=f"sqlite:{tmp_path / 'catalog.sqlite'}",
+                data_path=data_path,
+            )
+
+    @pytest.mark.parametrize("scheme", ("s3", "s3a"))
+    def test_s3_compatible_data_path_schemes_are_accepted(self, tmp_path, scheme):
+        DatasetSecondaryAdapterDuckLake(
+            catalog=f"sqlite:{tmp_path / 'catalog.sqlite'}",
+            data_path=f"{scheme}://bucket/datasets/",
+        )
 
     def test_endpoint_implies_path_style_and_derives_ssl_from_the_scheme(self):
         assert _S3Settings(

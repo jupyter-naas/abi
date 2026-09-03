@@ -186,7 +186,7 @@ services:
       adapter: "ducklake"
       config:
         catalog: "postgres:postgresql://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/ducklake"
-        data_path: "storage/datastore/datasets/"
+        data_path: "storage/datasets/"
   triple_store:
     triple_store_adapter:
       adapter: "apache_jena_tdb2"

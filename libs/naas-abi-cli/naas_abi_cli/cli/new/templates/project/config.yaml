@@ -130,8 +130,8 @@ services:
     dataset_adapter:
       adapter: "ducklake"
       config:
-        catalog: "sqlite:storage/datastore/datasets.sqlite"
-        data_path: "storage/datastore/datasets/"
+        catalog: "sqlite:storage/datasets.sqlite"
+        data_path: "storage/datasets/"
   triple_store:
     triple_store_adapter:
       # HTTP-backed adapter so multiple processes (api + dagster + …) can
