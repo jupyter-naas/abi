@@ -19,6 +19,22 @@ class DatasetAdapterDuckLakeConfiguration(BaseModel):
       config:
         catalog: "sqlite:storage/datastore/datasets.sqlite"
         data_path: "storage/datastore/datasets/"
+
+    ``data_path`` may be an object store URI, in which case the table data lives
+    beside everything else the deployment stores rather than on a container disk.
+    S3-compatible stores such as MinIO need the endpoint and credentials given
+    here: DuckDB has no way to guess them, and a write with none of them set
+    fails with HTTP 403 (or, for a batch small enough to be inlined in the
+    catalog, silently never reaches the store):
+
+    dataset_adapter:
+      adapter: "ducklake"
+      config:
+        catalog: "postgres:postgresql://user:password@postgres:5432/ducklake"
+        data_path: "s3://abi/abi/datastore/datasets/"
+        s3_endpoint: "http://minio:9000"
+        s3_access_key_id: "{{ secret.MINIO_ROOT_USER }}"
+        s3_secret_access_key: "{{ secret.MINIO_ROOT_PASSWORD }}"
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -28,6 +44,12 @@ class DatasetAdapterDuckLakeConfiguration(BaseModel):
     max_retries: int = Field(default=10, ge=0)
     retry_base_delay_seconds: float = Field(default=0.05, ge=0)
     retry_max_delay_seconds: float = Field(default=1.0, ge=0)
+    s3_endpoint: str = ""
+    s3_access_key_id: str = ""
+    s3_secret_access_key: str = ""
+    s3_region: str = ""
+    s3_url_style: str = ""
+    s3_use_ssl: bool | None = None
 
 
 class DatasetAdapterConfiguration(GenericLoader):

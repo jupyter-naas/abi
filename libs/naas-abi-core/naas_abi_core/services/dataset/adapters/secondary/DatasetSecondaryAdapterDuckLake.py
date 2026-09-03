@@ -9,6 +9,7 @@ import random
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -26,7 +27,9 @@ from naas_abi_core.services.dataset.DatasetPort import (
 )
 
 CATALOG_ALIAS = "abi_datasets"
+S3_SECRET_NAME = "abi_datasets_store"
 SPEC_COMMENT_PREFIX = "abi.dataset-spec:"
+OBJECT_STORE_SCHEMES = ("s3://", "s3a://", "gcs://", "gs://", "r2://", "azure://", "abfss://")
 
 DUCKDB_TYPES = {
     "string": "VARCHAR",
@@ -41,6 +44,57 @@ DUCKDB_TYPES = {
 
 _T = TypeVar("_T")
 logger = logging.getLogger(__name__)
+
+
+def _is_object_store(path: str) -> bool:
+    return path.startswith(OBJECT_STORE_SCHEMES)
+
+
+def _sql_literal(value: str) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+@dataclass(frozen=True)
+class _S3Settings:
+    """Credentials and endpoint for the object store behind ``data_path``.
+
+    MinIO and other S3-compatible stores need the endpoint, path-style URLs and
+    plain HTTP; none of those are DuckDB defaults, so each is explicit here.
+    """
+
+    endpoint: str = ""
+    access_key_id: str = ""
+    secret_access_key: str = ""
+    region: str = ""
+    url_style: str = ""
+    use_ssl: bool | None = None
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.endpoint or self.access_key_id or self.secret_access_key)
+
+    def sql(self) -> str:
+        parts = ["TYPE s3"]
+        if self.access_key_id:
+            parts.append(f"KEY_ID {_sql_literal(self.access_key_id)}")
+        if self.secret_access_key:
+            parts.append(f"SECRET {_sql_literal(self.secret_access_key)}")
+        if self.endpoint:
+            endpoint = self.endpoint
+            use_ssl = self.use_ssl
+            for scheme, ssl in (("https://", True), ("http://", False)):
+                if endpoint.startswith(scheme):
+                    endpoint = endpoint[len(scheme) :]
+                    use_ssl = ssl if use_ssl is None else use_ssl
+                    break
+            parts.append(f"ENDPOINT {_sql_literal(endpoint.rstrip('/'))}")
+            # A custom endpoint is almost never virtual-hosted; MinIO is not.
+            parts.append(f"URL_STYLE {_sql_literal(self.url_style or 'path')}")
+            parts.append(f"USE_SSL {'true' if (use_ssl is not False) else 'false'}")
+        elif self.url_style:
+            parts.append(f"URL_STYLE {_sql_literal(self.url_style)}")
+        parts.append(f"REGION {_sql_literal(self.region or 'us-east-1')}")
+        return ", ".join(parts)
 
 
 class DatasetSecondaryAdapterDuckLake(IDatasetPort):
@@ -59,6 +113,12 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         max_retries: int = 10,
         retry_base_delay_seconds: float = 0.05,
         retry_max_delay_seconds: float = 1.0,
+        s3_endpoint: str = "",
+        s3_access_key_id: str = "",
+        s3_secret_access_key: str = "",
+        s3_region: str = "",
+        s3_url_style: str = "",
+        s3_use_ssl: bool | None = None,
     ) -> None:
         if max_retries < 0:
             raise ValueError("max_retries must be greater than or equal to zero")
@@ -72,6 +132,19 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
 
         self._catalog = catalog
         self._data_path = data_path.rstrip("/") + "/"
+        self._s3 = _S3Settings(
+            endpoint=s3_endpoint,
+            access_key_id=s3_access_key_id,
+            secret_access_key=s3_secret_access_key,
+            region=s3_region,
+            url_style=s3_url_style,
+            use_ssl=s3_use_ssl,
+        )
+        if self._s3.configured and not _is_object_store(self._data_path):
+            raise ValueError(
+                "S3 settings were given for a data_path that is not an object store URI: "
+                f"{self._data_path!r}"
+            )
         self._max_retries = max_retries
         self._retry_base_delay_seconds = retry_base_delay_seconds
         self._retry_max_delay_seconds = retry_max_delay_seconds
@@ -272,6 +345,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
                 con.execute("INSTALL ducklake")
                 con.execute("LOAD ducklake")
             con.execute("SET ducklake_max_retry_count = 0")
+            self._configure_object_store(con)
             options = [f"DATA_PATH {self._sql_string(self._data_path)}"]
             if snapshot_id is not None:
                 options.append(f"SNAPSHOT_VERSION {int(snapshot_id)}")
@@ -497,6 +571,24 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
 
     def _qualified_table(self, namespace: str, name: str) -> str:
         return f"{self._qualified_schema(namespace)}.{self._ident(name)}"
+
+    def _configure_object_store(self, con: Any) -> None:
+        """Teach the connection to reach the object store holding ``data_path``.
+
+        DuckLake writes Parquet straight to ``data_path``. Without this the write
+        either fails with HTTP 403 or, for a batch small enough to be inlined in
+        the catalog, appears to succeed while never reaching the store at all.
+        """
+        import duckdb
+
+        if not self._s3.configured:
+            return
+        try:
+            con.execute("LOAD httpfs")
+        except duckdb.Error:
+            con.execute("INSTALL httpfs")
+            con.execute("LOAD httpfs")
+        con.execute(f"CREATE OR REPLACE SECRET {self._ident(S3_SECRET_NAME)} ({self._s3.sql()})")
 
     def _prepare_local_paths(self) -> None:
         if self._catalog.startswith("sqlite:"):
