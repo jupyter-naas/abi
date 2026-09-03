@@ -142,6 +142,31 @@ class TestDatasetSecondaryAdapterDuckLake(DatasetSecondaryAdapterContract):
         assert attempts == 3
         assert adapter.query("SELECT * FROM events").rows == [{"id": 1}]
 
+    def test_connect_owns_ducklake_catalog_migrations(self, adapter, monkeypatch):
+        import duckdb
+
+        class RecordingConnection:
+            def __init__(self):
+                self.statements = []
+
+            def execute(self, statement):
+                self.statements.append(statement)
+                return self
+
+            def close(self):
+                return None
+
+        connection = RecordingConnection()
+        monkeypatch.setattr(duckdb, "connect", lambda: connection)
+
+        assert adapter._connect() is connection
+        attach = next(
+            statement
+            for statement in connection.statements
+            if statement.startswith("ATTACH ")
+        )
+        assert "AUTOMATIC_MIGRATION" in attach
+
 
 def test_dataset_spec_validates_primary_key_and_partition_columns():
     with pytest.raises(ValueError, match="Primary key columns"):

@@ -346,7 +346,10 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
                 con.execute("LOAD ducklake")
             con.execute("SET ducklake_max_retry_count = 0")
             self._configure_object_store(con)
-            options = [f"DATA_PATH {self._sql_string(self._data_path)}"]
+            options = [
+                "AUTOMATIC_MIGRATION",
+                f"DATA_PATH {self._sql_string(self._data_path)}",
+            ]
             if snapshot_id is not None:
                 options.append(f"SNAPSHOT_VERSION {int(snapshot_id)}")
             attach_target = "ducklake:" + self._catalog

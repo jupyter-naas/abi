@@ -88,6 +88,8 @@ the store. Modules that use the service declare `DatasetService` in `ModuleDepen
 
 Each write uses a fresh connection and retries the complete transaction up to 10 times for catalog locks/transaction conflicts. Backoff starts at 50 ms, doubles to a 1-second cap, and has +/-25% jitter. SQLite writers sharing one adapter are serialized before the cross-process retry boundary; PostgreSQL writers remain concurrent. PostgreSQL deployment credentials are rendered from the secret service; do not log the catalog DSN.
 
+Every connection attaches with `AUTOMATIC_MIGRATION`, so the adapter initializes a new DuckLake metadata schema or upgrades an older compatible schema. The PostgreSQL database and grants must already exist; those require server-level provisioning outside the catalog connection.
+
 ## Operations
 
 - Treat the catalog and `data_path` as one stateful unit, including when `data_path` is a bucket: a catalog restored to a different point than the store references Parquet files that are not there. The SQLite catalog can contain inlined rows, so copying only Parquet files is not a backup.

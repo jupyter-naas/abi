@@ -65,6 +65,9 @@ docker compose exec -T postgres psql -U "${POSTGRES_USER:-abi}" -d postgres \
   -f /docker-entrypoint-initdb.d/005-create-ducklake-db.sql
 ```
 
+This script only provisions the PostgreSQL database and grants. The dataset
+adapter initializes and migrates DuckLake metadata when it connects.
+
 Changing a DuckLake catalog from SQLite to PostgreSQL requires a metadata
 migration. Changing only the catalog DSN loses snapshot history and can leave
 inlined rows behind.

@@ -41,6 +41,12 @@ configurable because workload-specific reliability policy is not yet settled.
 SQLite writers sharing one adapter are serialized before this retry boundary;
 cross-process SQLite writers and all PostgreSQL writers use the retry policy.
 
+Every adapter connection enables DuckLake `AUTOMATIC_MIGRATION`. DuckLake
+therefore initializes an empty metadata catalog and upgrades compatible older
+catalog schemas at the secondary-adapter boundary. Infrastructure provisioning
+still creates the PostgreSQL database and grants because doing so requires a
+server-level connection and privileges beyond the catalog DSN.
+
 ## Consequences
 
 - Snapshot IDs change from per-dataset UUID strings to catalog-level integers.
@@ -54,8 +60,9 @@ cross-process SQLite writers and all PostgreSQL writers use the retry policy.
   data path are therefore one backup/restore unit.
 - PostgreSQL credentials are interpolated into the DuckLake catalog DSN at
   runtime. They remain secret configuration and must not be logged.
-- Fresh deployments create the `ducklake` database through an idempotent init
-  script. Existing PostgreSQL volumes must run that script explicitly.
+- Fresh deployments provision the `ducklake` database through an idempotent
+  init script. Existing PostgreSQL volumes must run that script explicitly;
+  DuckLake metadata table creation and version migration remain adapter-owned.
 - Moving a catalog from SQLite to PostgreSQL requires migrating metadata; it is
   not a configuration-only DSN change.
 - `data_path` may be a local path or an object store URI. A custom S3 endpoint
