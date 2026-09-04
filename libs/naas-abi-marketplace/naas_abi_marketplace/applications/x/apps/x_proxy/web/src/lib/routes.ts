@@ -19,15 +19,17 @@ import type { PageKey } from "@/lib/types";
  * The Posts paths are named after the X endpoints they visualise -
  * `GET /2/tweets/search/recent` and `GET /2/tweets/counts/recent`. A trailing
  * slash matches `trailingSlash: true`, so a link never bounces through a
- * redirect; Users is the exception, its URL being ``/users/search?user=`` with
+ * redirect; Users is the exception, its URL being ``/users/search?user_id=`` with
  * no slash before the query string. Both facts live in `config.yaml` now, and
  * the writers below read the shape off the configured path.
  */
 export { DEFAULT_PAGE, PAGE_PATHS } from "@/lib/appConfig";
 
-const USER_PARAM = "user";
+const USER_PARAM = "user_id";
+const USER_PARAM_LEGACY = "user";
 const NEEDLE_PARAM = "q";
-const POST_PARAM = "post";
+const POST_PARAM = "post_id";
+const POST_PARAM_LEGACY = "post";
 /** Where the reader came from, so a detail page's back link is exact. */
 const FROM_PARAM = "from";
 /** ``expand=1`` - the post alone, with none of the app's chrome around it. */
@@ -87,9 +89,11 @@ function clean(raw: string | null | undefined): string | null {
 function parse(search: string): PageParams {
   const params = new URLSearchParams(search);
   return {
-    user: normalizeHandle(params.get(USER_PARAM)),
+    user: normalizeHandle(
+      params.get(USER_PARAM) || params.get(USER_PARAM_LEGACY),
+    ),
     q: clean(params.get(NEEDLE_PARAM)),
-    post: clean(params.get(POST_PARAM)),
+    post: clean(params.get(POST_PARAM) || params.get(POST_PARAM_LEGACY)),
     scenario: clean(params.get(SCENARIO_PARAM)),
     query: clean(params.get(QUERY_PARAM)),
     from: clean(params.get(FROM_PARAM)),
