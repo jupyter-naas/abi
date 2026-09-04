@@ -155,7 +155,7 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
             "export) on this filter's tick. Defaults to false — a publish reads "
             "the whole graph and re-renders every snapshot, which costs far more "
             "than the fetch itself and grows with the graph, while the hourly "
-            "``x_build_app_x_proxy`` schedule already rebuilds the app from the same "
+            "``x_build_pipeline_hub`` schedule already rebuilds the app from the same "
             "state. Turn it on only when the dashboard must follow each tick."
         ),
     )
@@ -255,8 +255,9 @@ class XSearchRecentTweetsEventConfiguration(BaseModel):
     only fetches and saves envelopes; this sensor turns each saved envelope into
     graph triples. Set ``app_publish: true`` to also republish the Recent Tweets
     catalog app on every successful map — off by default, since the hourly
-    ``x_build_app_x_proxy`` schedule already rebuilds it from the same graph state.
-    The Dagster sensor starts RUNNING when this entry is configured.
+    ``x_build_pipeline_hub`` schedule already rebuilds it from the same graph state.
+    Independent of this entry's ``enabled`` flag (``enabled`` only controls
+    whether the Dagster sensor starts RUNNING).
     """
 
     name: str = Field(
@@ -314,7 +315,7 @@ class XSearchRecentTweetsEventConfiguration(BaseModel):
         description=(
             "After mapping an envelope into the graph, republish ``x/apps/x_proxy/`` "
             "JSON snapshots (+ web export). Defaults to false — the hourly "
-            "``x_build_app_x_proxy`` schedule already rebuilds the app from the graph, "
+            "``x_build_pipeline_hub`` schedule already rebuilds the app from the graph, "
             "so turn this on only when the dashboard must follow each envelope. "
             "Independent of ``enabled``."
         ),
@@ -407,7 +408,7 @@ class XSearchRecentTweetsFilesConfiguration(BaseModel):
         description=(
             "After reprocessing at least one envelope into the graph, republish "
             "``x/apps/x_proxy/`` JSON snapshots (+ web export). Defaults to false — "
-            "the hourly ``x_build_app_x_proxy`` schedule already rebuilds the app from "
+            "the hourly ``x_build_pipeline_hub`` schedule already rebuilds the app from "
             "the graph. Independent of ``enabled``."
         ),
     )
