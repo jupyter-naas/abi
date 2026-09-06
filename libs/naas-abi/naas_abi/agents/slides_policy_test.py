@@ -66,13 +66,16 @@ def test_resolve_slides_llm_model_upgrades_mini() -> None:
     assert resolve_slides_llm_model(None, slides_default=None) == DEFAULT_SLIDES_MODEL
 
 
-def test_apply_slides_model_override_only_when_deck_open() -> None:
-    assert apply_slides_model_override("gpt-4.1-mini", None) == "gpt-4.1-mini"
-    assert apply_slides_model_override("gpt-4.1-mini", {"slides": {}}) == "gpt-4.1-mini"
+def test_apply_slides_model_override_when_deck_open() -> None:
+    assert apply_slides_model_override("gpt-4.1-mini", None, None) == "gpt-4.1-mini"
+    assert (
+        apply_slides_model_override("gpt-4.1-mini", {"slides": {}}, None) == "gpt-4.1-mini"
+    )
     assert (
         apply_slides_model_override(
             "gpt-4.1-mini",
             {"slides": {"slug": "iran-now"}},
+            None,
         )
         == DEFAULT_SLIDES_MODEL
     )
@@ -80,6 +83,7 @@ def test_apply_slides_model_override_only_when_deck_open() -> None:
         apply_slides_model_override(
             "gpt-5.2",
             {"slides": {"slug": "iran-now"}},
+            None,
         )
         == "gpt-5.2"
     )

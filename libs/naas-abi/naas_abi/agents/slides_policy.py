@@ -128,12 +128,17 @@ def open_slides_slug(client_context: dict | None) -> str:
 def apply_slides_model_override(
     incoming: str | None,
     client_context: dict | None,
-    message: str | None = None,
+    message: str | None,
 ) -> str | None:
     """Force a reasoning model for slides work.
 
     Covers both an open deck and a deck asked for from the main chat, where a
     mini or free model would skip tools and write template filler.
+
+    ``message`` is required rather than defaulting to ``None``. A default let a
+    caller drop the user brief and silently keep the mini model on the
+    create-from-main-chat turn, which is the turn that writes the whole deck.
+    Callers with genuinely no message must pass ``None`` on purpose.
     """
     if open_slides_slug(client_context):
         return resolve_slides_llm_model(incoming)

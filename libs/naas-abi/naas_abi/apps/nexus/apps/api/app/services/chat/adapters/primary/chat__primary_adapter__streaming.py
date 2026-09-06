@@ -425,7 +425,9 @@ async def stream_chat_response(
         api_key=provider.api_key,
         account_id=provider.account_id,
         model=provider.model,
-        llm_model=apply_slides_model_override(incoming_llm, client_ctx),
+        # Pass the brief: with no deck open it is the only signal that this
+        # turn is a deck request, and that turn writes the whole deck.
+        llm_model=apply_slides_model_override(incoming_llm, client_ctx, request.message),
     )
 
     assistant_msg_id = ""
