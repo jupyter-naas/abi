@@ -1545,6 +1545,28 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             update={**routing_update, "messages": [response]},
         )
 
+    @staticmethod
+    def _merge_direct_tool_contents(messages: list[ToolMessage]) -> Any:
+        """Build the reply for a turn whose tools are all ``return_direct``.
+
+        One response is forwarded untouched, so structured content blocks reach
+        the client exactly as the tool produced them.
+
+        Two or more are answers to the same user turn and are joined in call
+        order. A turn yields one assistant message everywhere downstream: the
+        ``invoke`` return value is ``messages[-1].content``, the transcript
+        stores one reply, the UI renders one bubble. Emitting a message per
+        tool would surface all of them on the stream and still lose the earlier
+        ones everywhere else, which moves the bug rather than fixing it.
+        """
+        if len(messages) == 1:
+            return messages[0].content
+        return "\n\n".join(
+            text
+            for text in (Agent._content_to_text(m.content) for m in messages)
+            if text.strip()
+        )
+
     def call_tools(self, state: ABIAgentState) -> list[Command]:
         # Check if messages are present in the state.
         if (
@@ -1708,6 +1730,20 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             results[-1], "update.messages[-1]", None
         )
         logger.debug(f"last_tool_reponse: {last_tool_reponse}")
+
+        # Every tool response this turn produced, in call order. A turn can
+        # carry more than one: the model is free to ask for several tools at
+        # once, and when they are all return_direct every one of those
+        # responses is an answer addressed to the user, not just the last.
+        direct_tool_responses: list[ToolMessage] = [
+            message
+            for message in (
+                pd.get(result, "update.messages[-1]", None) for result in results
+            )
+            if isinstance(message, ToolMessage)
+            and isinstance(getattr(message, "name", None), str)
+            and not message.name.startswith("transfer_to_")
+        ]
         if had_tool_error:
             # A tool call failed — including the case where a sub-agent
             # hallucinated a ``transfer_to_*`` handoff tool it does not own and
@@ -1737,7 +1773,13 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 results.append(
                     Command(
                         update={
-                            "messages": [AIMessage(content=last_tool_reponse.content)]
+                            "messages": [
+                                AIMessage(
+                                    content=self._merge_direct_tool_contents(
+                                        direct_tool_responses
+                                    )
+                                )
+                            ]
                         }
                     )
                 )
