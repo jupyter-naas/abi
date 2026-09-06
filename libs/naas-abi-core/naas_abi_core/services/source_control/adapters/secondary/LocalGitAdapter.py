@@ -247,6 +247,9 @@ class LocalGitAdapter(ISourceControlAdapter):
             ref_name,
             f"-n{limit}",
             "--pretty=format:%H%x09%s%x09%an%x09%ai",
+            # Slides branches (slides/<ws>/<slug>) shadow a real deck directory
+            # of the same name; without this git treats the ref as ambiguous.
+            "--",
             cwd=repo_path,
         )
         commits: list[Commit] = []
