@@ -1,3 +1,5 @@
+import inspect
+
 from naas_abi.agents.slides_policy import (
     DEFAULT_SLIDES_MODEL,
     MAX_SLIDES_SEARCHES,
@@ -5,6 +7,7 @@ from naas_abi.agents.slides_policy import (
     attach_slides_research_note,
     bind_slides_research_policy,
     is_weak_slides_model,
+    load_slides_chat_model,
     note_slides_web_search,
     openrouter_slides_model_id,
     reject_unresearched_slides_write,
@@ -259,6 +262,17 @@ def test_research_policy_stays_off_for_ordinary_main_chat() -> None:
     finally:
         slides_research_required.reset(tokens[0])
         slides_creation_intent.reset(tokens[1])
+
+
+def test_load_slides_chat_model_requires_a_model_id() -> None:
+    """Omitting the model id resolved to the configured slides default, so a
+    caller that forgot to thread the user's choice through built a model for a
+    different model with no error and no log line. There is no safe default
+    here: the caller has to say which model the turn runs on.
+    """
+    model_id = inspect.signature(load_slides_chat_model).parameters["model_id"]
+
+    assert model_id.default is inspect.Parameter.empty
 
 
 def test_model_override_upgrades_a_deck_request_from_main_chat() -> None:

@@ -320,8 +320,14 @@ def slides_reasoning_extra_body(model_id: str) -> dict[str, Any] | None:
     return {"reasoning": {"effort": "high"}}
 
 
-def load_slides_chat_model(model_id: str | None = None) -> Any:
-    """Build the slides chat model via OpenRouter, not api.openai.com."""
+def load_slides_chat_model(model_id: str | None) -> Any:
+    """Build the slides chat model via OpenRouter, not api.openai.com.
+
+    ``model_id`` is required rather than defaulting to ``None``. A default let
+    a caller drop the model the turn was routed to and silently build the
+    configured slides default instead. Callers with genuinely no model in hand
+    must pass ``None`` on purpose.
+    """
     from langchain_openai import ChatOpenAI
     from naas_abi import ABIModule
     from naas_abi_core.models.Model import ChatModel
