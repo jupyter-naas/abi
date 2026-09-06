@@ -1815,6 +1815,19 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 )
             )
 
+    @staticmethod
+    def _tool_response_key(message: Any) -> Any:
+        """Dedupe key for a tool response seen on the stream.
+
+        LangChain leaves ``ToolMessage.id`` unset, so keying on it makes every
+        response after the first in a turn collide on ``None`` and get
+        dropped. ``tool_call_id`` is the identifier the model actually
+        assigned; fall back to object identity when there is none.
+        """
+        if isinstance(message, dict):
+            return message.get("tool_call_id") or id(message)
+        return getattr(message, "tool_call_id", None) or message.id or id(message)
+
     def _notify_tool_response(self, message: AnyMessage):
         self._event_queue.put(ToolResponseEvent(payload=message))
         self._on_tool_response(message)
@@ -2053,12 +2066,13 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                             and isinstance(last_message.name, str)
                             and last_message.name.startswith("transfer_to_")
                         )
+                        response_key = self._tool_response_key(last_message)
                         if (
-                            last_message.id not in notified
+                            response_key not in notified
                             and is_handoff_tool_response is False
                         ):
                             self._notify_tool_response(last_message)
-                            notified[last_message.id] = True
+                            notified[response_key] = True
                     else:
                         if "tool_call_id" in last_message:
                             if last_message["tool_call_id"] not in notified:
