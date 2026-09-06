@@ -69,7 +69,10 @@ _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _BRANCH_PREFIX = "slides/"
 _DEFAULT_TEMPLATE = "minimal-light-v1"
 _SIDECAR_PORT = 8378
-_SLIDES_TEMPLATE_NAMES = ("abi-slides", "abi-code-server")
+# Ordered by preference. "local-directory" is what LocalDirectoryAdapter
+# advertises in the no-Docker runtime; without it the probe finds no template
+# and the deck view shows a permanent "Coder runtime unavailable" banner.
+_SLIDES_TEMPLATE_NAMES = ("abi-slides", "abi-code-server", "local-directory")
 # Cold start: agent connect + startup_script before :8378 listens. Ensure must
 # wait; a single probe races "running" phase and falsely marks degraded.
 _SIDECAR_WAIT_ATTEMPTS = 2

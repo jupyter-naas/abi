@@ -333,3 +333,20 @@ def test_sidecar_tool_helpers_require_binding() -> None:
         _sidecar_tool_call("file:///tmp", "s", "read_file", {"path": "x"}).get("error")
         or ""
     ).startswith("invalid sidecar base url")
+
+
+def test_slides_template_names_match_local_directory_adapter(tmp_path) -> None:
+    """The no-Docker adapter advertises one template; slides must accept it.
+
+    Without this the runtime probe never picks a template and the deck view
+    shows a permanent "Coder runtime unavailable" banner.
+    """
+    from naas_abi_core.services.coding_environment.adapters.secondary.LocalDirectoryAdapter import (  # noqa: E501
+        LocalDirectoryAdapter,
+    )
+
+    adapter = LocalDirectoryAdapter(workspaces_root=str(tmp_path / "ws"))
+    advertised = {t.name for t in adapter.list_templates()}
+    assert advertised & set(slides_api._SLIDES_TEMPLATE_NAMES), (
+        f"none of {slides_api._SLIDES_TEMPLATE_NAMES} match {advertised}"
+    )
