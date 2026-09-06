@@ -161,8 +161,12 @@ class LocalGitAdapter(ISourceControlAdapter):
             raise RepoNotFoundError(repo_id)
         ref_name = self._resolve_ref(repo_id, ref)
         tree_path = path.strip("/")
-        args = ["ls-tree", "-l", ref_name, tree_path or "."]
-        output = self._run(*args, cwd=repo_path)
+        # A directory needs the trailing slash: git ls-tree reads a bare
+        # directory name as the tree entry itself, so the caller gets the
+        # folder back as its own only child instead of what is inside it. The
+        # repo root is the exception, where "." is the way to say the top tree.
+        spec = f"{tree_path}/" if tree_path else "."
+        output = self._run("ls-tree", "-l", ref_name, spec, cwd=repo_path)
         entries: list[ContentEntry] = []
         for line in output.splitlines():
             if not line.strip():
