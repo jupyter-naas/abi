@@ -189,6 +189,24 @@ async def test_open_deck_still_upgrades_the_model(
 
 
 @pytest.mark.asyncio
+async def test_persisted_metadata_reports_the_model_actually_used(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The chat footer renders this field, so it must not echo the request.
+
+    Persisting the incoming selection makes the UI claim GPT-4.1 Mini while the
+    deck is really being written by the slides model, which is how the
+    downgrade stayed invisible.
+    """
+    capture = await _run_turn(
+        monkeypatch,
+        "Fais-moi un deck sur la situation au Sahel",
+    )
+    assert capture.metadata is not None
+    assert capture.metadata["llm_model"] == configured_slides_model()
+
+
+@pytest.mark.asyncio
 async def test_ordinary_question_keeps_the_selected_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

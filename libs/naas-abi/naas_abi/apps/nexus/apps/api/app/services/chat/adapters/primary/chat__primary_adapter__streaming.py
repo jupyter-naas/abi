@@ -518,7 +518,11 @@ async def stream_chat_response(
                 "execution_time": round(loop.time() - stream_started_at, 3),
                 "steps": _strip_internal_step_keys(steps),
                 "sources": _merge_source_urls(list(context_sources), web_source_urls),
-                "llm_model": request.llm_model,
+                # The model handed to the provider, not the one the UI asked
+                # for. Slides upgrade the model mid-request, and echoing the
+                # request here made the footer report a mini model while the
+                # deck was written by the slides model.
+                "llm_model": provider_config.llm_model or request.llm_model,
             }
             try:
                 await persist_stream_metadata(
