@@ -909,6 +909,29 @@ def _friendly_coding_detail(exc: BaseException) -> str:
     return text or "Coder runtime temporarily unavailable"
 
 
+def _git_clone_url(sc: Any, repo_id: str, *, username: str, token: str) -> str:
+    """Clone URL the slides sidecar should use for this repo.
+
+    The default targets Forgejo over HTTP, which does not exist in the
+    no-Docker runtime. When source control keeps repos on disk it advertises a
+    ``file://`` clone URL; use that so provisioning does not try to reach
+    ``forgejo:3000`` and fail.
+    """
+    owner, _, name = repo_id.partition("/")
+    try:
+        repo = sc.ensure_repo(owner=owner, name=name)
+        clone_url = str(getattr(repo, "clone_url", "") or "").strip()
+    except Exception:  # noqa: BLE001
+        clone_url = ""
+    if clone_url.startswith("file://"):
+        return clone_url
+    creds = f"{quote(username, safe='')}:{quote(token, safe='')}"
+    return (
+        f"{settings.coding_git_clone_scheme}://{creds}"
+        f"@{settings.coding_git_clone_host}/{repo_id}.git"
+    )
+
+
 def _adapter_get_parameters(coding: CodingEnvironmentService, workspace_id: str) -> dict[str, str]:
     adapter = getattr(coding, "_adapter", None)
     getter = getattr(adapter, "get_parameters", None)
@@ -1676,11 +1699,7 @@ async def _ensure_runtime_impl(
             username=username,
         )
         token = sc.mint_git_token(user_id=username)
-        creds = f"{quote(username, safe='')}:{quote(token, safe='')}"
-        repo_url = (
-            f"{settings.coding_git_clone_scheme}://{creds}"
-            f"@{settings.coding_git_clone_host}/{repo_id}.git"
-        )
+        repo_url = _git_clone_url(sc, repo_id, username=username, token=token)
         ws_secret = secrets.token_hex(16)
         ws_base = expected_base
         claims: dict[str, str] = {"sub": current_user.id}

@@ -350,3 +350,57 @@ def test_slides_template_names_match_local_directory_adapter(tmp_path) -> None:
     assert advertised & set(slides_api._SLIDES_TEMPLATE_NAMES), (
         f"none of {slides_api._SLIDES_TEMPLATE_NAMES} match {advertised}"
     )
+
+
+class _FakeRepoSC:
+    def __init__(self, clone_url: str) -> None:
+        self._clone_url = clone_url
+
+    def ensure_repo(self, *, owner: str, name: str, **_kwargs):
+        from naas_abi_core.services.source_control.SourceControlPorts import Repo
+
+        return Repo(
+            id=f"{owner}/{name}",
+            name=name,
+            owner=owner,
+            default_branch="main",
+            clone_url=self._clone_url,
+            html_url=self._clone_url,
+            private=True,
+            empty=False,
+        )
+
+
+def test_clone_url_uses_the_local_checkout_when_git_is_on_disk() -> None:
+    """local_git has no Forgejo server, so provisioning must clone file://.
+
+    Otherwise the sidecar clone targets the Docker host forgejo:3000, fails,
+    and the deck view shows "Coder runtime unavailable".
+    """
+    sc = _FakeRepoSC("file:///tmp/git/abi/monorepo")
+    url = slides_api._git_clone_url(
+        sc, "abi/monorepo", username="zen", token="local"
+    )
+    assert url == "file:///tmp/git/abi/monorepo"
+    assert "forgejo" not in url
+    assert "local" not in url.split("/tmp")[0]
+
+
+def test_clone_url_keeps_authenticated_http_for_a_real_forge() -> None:
+    sc = _FakeRepoSC("http://forgejo:3000/abi/monorepo.git")
+    url = slides_api._git_clone_url(
+        sc, "abi/monorepo", username="zen", token="tok en"
+    )
+    assert url.startswith("http://zen:tok%20en@")
+    assert url.endswith("/abi/monorepo.git")
+
+
+def test_clone_url_falls_back_when_the_adapter_cannot_describe_the_repo() -> None:
+    class _Broken:
+        def ensure_repo(self, **_kwargs):
+            raise RuntimeError("nope")
+
+    url = slides_api._git_clone_url(
+        _Broken(), "abi/monorepo", username="zen", token="t"
+    )
+    assert url.startswith("http://zen:t@")
