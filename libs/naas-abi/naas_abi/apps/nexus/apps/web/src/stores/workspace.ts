@@ -322,6 +322,11 @@ interface WorkspaceState {
     oldMessageId: string,
     newMessageId: string,
   ) => void;
+  setMessageModelId: (
+    conversationId: string,
+    messageId: string,
+    modelId: string,
+  ) => void;
   togglePinConversation: (id: string) => void;
   toggleArchiveConversation: (id: string) => void;
   renameConversation: (id: string, newTitle: string) => void;
@@ -766,6 +771,24 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               ...conv,
               messages: conv.messages.map((msg) =>
                 msg.id === oldMessageId ? { ...msg, id: newMessageId } : msg,
+              ),
+            }
+          : conv,
+      ),
+    }));
+  },
+
+  // The model a turn ran on is only known server-side: slides raise it inside
+  // the request. Lets the stream correct the model the composer guessed.
+  setMessageModelId: (conversationId, messageId, modelId) => {
+    if (!messageId || !modelId) return;
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.id === conversationId
+          ? {
+              ...conv,
+              messages: conv.messages.map((msg) =>
+                msg.id === messageId ? { ...msg, modelId } : msg,
               ),
             }
           : conv,

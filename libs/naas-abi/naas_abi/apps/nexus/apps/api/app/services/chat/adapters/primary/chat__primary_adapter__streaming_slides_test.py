@@ -8,6 +8,7 @@ actually reaches the provider, which is the only thing the user experiences.
 
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager, contextmanager
 from types import SimpleNamespace
 from typing import Any
@@ -49,6 +50,7 @@ class _Capture:
     def __init__(self) -> None:
         self.llm_model: str | None = None
         self.metadata: dict[str, Any] | None = None
+        self.frames: list[dict[str, Any]] = []
 
 
 def _install_fakes(monkeypatch: pytest.MonkeyPatch, capture: _Capture) -> None:
@@ -143,8 +145,20 @@ async def _run_turn(
         request=request,
         current_user=SimpleNamespace(id="user-1"),
     )
-    async for _chunk in response.body_iterator:
-        pass
+    async for chunk in response.body_iterator:
+        text = chunk.decode() if isinstance(chunk, bytes) else str(chunk)
+        for line in text.splitlines():
+            if not line.startswith("data: "):
+                continue
+            payload = line[len("data: ") :].strip()
+            if payload == "[DONE]":
+                continue
+            try:
+                parsed = json.loads(payload)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                capture.frames.append(parsed)
     return capture
 
 
@@ -204,6 +218,27 @@ async def test_persisted_metadata_reports_the_model_actually_used(
     )
     assert capture.metadata is not None
     assert capture.metadata["llm_model"] == configured_slides_model()
+
+
+@pytest.mark.asyncio
+async def test_opening_frame_announces_the_model_to_the_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The client cannot know the model was upgraded unless we tell it.
+
+    The chat footer renders the model from client state, and the client also
+    PATCHes it back onto the message. Without the model on the opening frame it
+    reports the mini model it selected and overwrites what the server stored,
+    which is what made a working upgrade still look like a downgrade.
+    """
+    capture = await _run_turn(
+        monkeypatch,
+        "Fais-moi un deck sur la souverainet\u00e9 num\u00e9rique",
+    )
+    assert capture.frames, "expected at least the opening frame"
+    opening = capture.frames[0]
+    assert opening.get("assistant_message_id") == "assistant-msg-1"
+    assert opening.get("llm_model") == configured_slides_model()
 
 
 @pytest.mark.asyncio

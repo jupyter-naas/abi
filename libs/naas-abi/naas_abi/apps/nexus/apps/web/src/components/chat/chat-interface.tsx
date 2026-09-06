@@ -2017,6 +2017,9 @@ export function ChatInterface({
         // async function so it can't rely on the freshly-set state (closures
         // capture stale values).
         let assistantMessageIdRef: string | null = null;
+        // Slides raise the model inside the request, so the composer's choice
+        // is only a guess until the opening stream frame reports the real one.
+        let effectiveModelId = llmModel;
         {
           const convNow = useWorkspaceStore.getState().conversations.find(c => c.id === conversationId);
           const lastMsg = convNow?.messages[convNow.messages.length - 1];
@@ -2343,6 +2346,20 @@ export function ChatInterface({
                   }
                 }
 
+                // The backend reports the model it actually ran this turn on.
+                // Adopt it so the footer and the final metadata PATCH stop
+                // echoing the selection we sent.
+                if (typeof parsed.llm_model === 'string' && parsed.llm_model) {
+                  effectiveModelId = parsed.llm_model as string;
+                  if (conversationId && assistantMessageIdRef) {
+                    useWorkspaceStore.getState().setMessageModelId(
+                      conversationId,
+                      assistantMessageIdRef,
+                      effectiveModelId,
+                    );
+                  }
+                }
+
                 if (parseEvent(parsed as Record<string, unknown>)) {
                   renderStreamingMessage(true);
                 }
@@ -2443,7 +2460,7 @@ export function ChatInterface({
                   output: t.output ?? null,
                 })),
                 sources: streamSources,
-                llm_model: llmModel,
+                llm_model: effectiveModelId,
               }),
             },
           ).catch(() => { /* non-blocking */ });

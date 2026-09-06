@@ -546,6 +546,10 @@ async def stream_chat_response(
                     {
                         "conversation_id": conversation_id,
                         "assistant_message_id": assistant_msg_id,
+                        # Slides raise the model inside the request. Announce
+                        # the model this turn runs on so the footer stops
+                        # reporting the selection the client sent us.
+                        "llm_model": provider_config.llm_model,
                     }
                 )
                 + "\n\n"
