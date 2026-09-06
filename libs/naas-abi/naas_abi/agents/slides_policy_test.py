@@ -183,6 +183,36 @@ def test_slides_creation_requested_detects_a_deck_brief_in_main_chat() -> None:
     assert not slides_creation_requested("")
 
 
+def test_slides_creation_requested_detects_a_french_deck_brief() -> None:
+    """A French brief must arm the slides path, not fall through to plain chat."""
+    from naas_abi.agents.slides_policy import slides_creation_requested
+
+    assert slides_creation_requested(
+        "fais des slides sur les matériaux de construction"
+    )
+    assert slides_creation_requested("crée une présentation sur Saint-Gobain")
+    assert slides_creation_requested("prépare un diaporama sur l'hydrogène vert")
+    # Not a deck request.
+    assert not slides_creation_requested("quelle est la capitale de la France ?")
+    assert not slides_creation_requested("résume ce document")
+
+
+def test_research_policy_records_the_brief_for_naming() -> None:
+    """The deck name comes from the brief, so the turn has to keep it."""
+    from naas_abi_core.services.agent.context import slides_brief
+
+    token = slides_brief.set(None)
+    try:
+        bind_slides_research_policy(
+            "fais des slides sur les matériaux de construction",
+            False,
+            None,
+        )
+        assert slides_brief.get() == "fais des slides sur les matériaux de construction"
+    finally:
+        slides_brief.reset(token)
+
+
 def test_research_policy_arms_from_main_chat_without_an_open_deck() -> None:
     """Capability A: a news deck asked for in the main chat still researches."""
     from naas_abi_core.services.agent.context import (

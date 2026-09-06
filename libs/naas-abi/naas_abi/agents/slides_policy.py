@@ -11,6 +11,7 @@ from typing import Any
 
 from naas_abi_core.services.agent.context import (
     slides_active_slug,
+    slides_brief,
     slides_creation_intent,
     slides_research_queries,
     slides_research_required,
@@ -158,11 +159,17 @@ def slides_brief_requires_research(message: str, has_prior_assistant: bool) -> b
 
 
 _DECK_NOUN_RE = re.compile(
-    r"\b(deck|presentation|slides|slide deck|slideshow|pitch)\b",
+    r"\b(deck|presentation|présentation|slides|slide deck|slideshow|pitch"
+    r"|diaporama|exposé)\b",
     re.IGNORECASE,
 )
+# French verbs matter: a brief written in French must arm the slides path too,
+# otherwise it runs as an ordinary chat turn on whatever model was selected.
 _MAKE_VERB_RE = re.compile(
-    r"\b(create|make|build|draft|generate|prepare|put together|write|need|want)\b",
+    r"\b(create|make|build|draft|generate|prepare|put together|write|need|want"
+    r"|fais|fait|faire|crée|cree|créer|creer|génère|genere|générer|generer"
+    r"|prépare|prepare|préparer|rédige|redige|rédiger|construis|monte"
+    r"|veux|voudrais|souhaite|besoin)\b",
     re.IGNORECASE,
 )
 
@@ -185,6 +192,8 @@ def bind_slides_research_policy(
     client_context: dict | None,
 ) -> bool:
     """Set request-scoped research gates. Returns whether search is required."""
+    # Slides tools name a new (or still untitled) deck after this brief.
+    slides_brief.set((message or "").strip())
     slug = open_slides_slug(client_context) or (slides_active_slug.get() or "").strip()
     if not slug:
         # Main chat: no deck open yet. A deck request still has to research

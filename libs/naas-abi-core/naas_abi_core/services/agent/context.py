@@ -80,6 +80,10 @@ slides_research_queries: ContextVar[list[str] | None] = ContextVar(
     "slides_research_queries", default=None
 )
 
+# The user's message for this turn, kept so a deck can be named after the topic
+# it asks about. Set at the chat stream boundary alongside the research gate.
+slides_brief: ContextVar[str | None] = ContextVar("slides_brief", default=None)
+
 # The user asked for a deck from a surface with no deck open (main chat). Set at
 # the chat stream boundary so the agent budgets a slides-sized run (create,
 # research, then one write per slide) instead of a normal chat turn.
