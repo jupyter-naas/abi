@@ -121,6 +121,17 @@ describe('slidesTreeFileNodes', () => {
     expect(nodes.map((node) => node.name)).toEqual(['deck.html']);
   });
 
+  it('drops the assets folder when the server lists it inside itself', () => {
+    // Live response for a freshly seeded deck: the assets listing is the
+    // assets directory, so the folder appeared to contain a copy of itself.
+    const nodes = slidesTreeFileNodes(
+      tree({
+        assets: [{ name: 'assets', path: 'slides/ws/deck-one/assets', type: 'dir' }],
+      }),
+    );
+    expect(nodes.map((node) => node.name)).toEqual(['deck.html', 'project.json']);
+  });
+
   it('hides the seeded assets folder until it holds something', () => {
     // The server appends `assets` whether or not the deck has one, so an empty
     // one is a placeholder rather than a folder the user put there.

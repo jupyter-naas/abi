@@ -85,8 +85,8 @@ function trimPath(path: string): string {
  *
  *   - `.gitkeep` and the seed README, the way the server already leaves them
  *     out of its own assets listing;
- *   - the deck folder itself, which the source control adapter can return as
- *     its own child because `git ls-tree <ref> <dir>` without a trailing slash
+ *   - a folder listed inside itself, which the source control adapter does at
+ *     both levels because `git ls-tree <ref> <dir>` without a trailing slash
  *     reports the directory entry instead of what is inside it;
  *   - an empty `assets` folder, which the server appends to every deck whether
  *     or not one was ever committed. A folder the user did add stays, even
@@ -99,8 +99,14 @@ export function slidesTreeFileNodes(
   if (!tree) return [];
   const hidden = new Set(['.gitkeep', 'README.md']);
   const root = trimPath(tree.root);
+  // A listing never contains the folder it listed, so an entry sitting at one
+  // of these paths is the container rather than a child.
+  const containers = new Set([root, root ? `${root}/assets` : ''].filter(Boolean));
+  const isContainer = (path: string) => containers.has(trimPath(path));
+
   const assets = [...(tree.assets ?? [])]
     .filter((entry) => entry.name && !hidden.has(entry.name))
+    .filter((entry) => !isContainer(entry.path))
     .sort(compareEntries)
     .map((entry) => ({
       name: entry.name,
@@ -112,7 +118,7 @@ export function slidesTreeFileNodes(
 
   return [...(tree.entries ?? [])]
     .filter((entry) => entry.name && !hidden.has(entry.name))
-    .filter((entry) => !root || trimPath(entry.path) !== root)
+    .filter((entry) => trimPath(entry.path) !== root)
     .filter((entry) => entry.name !== 'assets' || assets.length > 0)
     .sort(compareEntries)
     .map((entry) => ({
