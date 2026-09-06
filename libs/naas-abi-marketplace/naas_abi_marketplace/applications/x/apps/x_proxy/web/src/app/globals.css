@@ -24,6 +24,10 @@ body {
     Arial, sans-serif;
 }
 
+html {
+  scroll-padding-top: calc(env(safe-area-inset-top, 0px) + 72px);
+}
+
 a {
   color: inherit;
 }
@@ -1365,6 +1369,10 @@ select {
 .page-full {
   max-width: 900px;
   min-height: 100vh;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 48px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
 }
 
 /* Top right of a post's header - the toggle in and out of the full view. */
@@ -1886,6 +1894,20 @@ table.dt td.empty {
   .app {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .page-wrap {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 16px);
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+  }
+
+  .page-full {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 64px);
+  }
+
+  .main-head {
+    top: env(safe-area-inset-top, 0px);
   }
 
   .sidebar,
