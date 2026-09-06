@@ -1,26 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
+import { Presentation } from 'lucide-react';
 import {
-  ChevronRight,
-  FileCode2,
-  Folder,
-  Image as ImageIcon,
-  LayoutTemplate,
-  Presentation,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import {
-  applySlidesTemplate,
+  DEFAULT_SLIDES_TEMPLATE_ID,
   slidesApiErrorMessage,
   startNewPresentation,
 } from '@/lib/create-slides-project';
-import {
-  templateAssetLabel,
-  templateSlideLabel,
-  type SlidesSeedTemplate,
-} from '@/lib/slides-templates';
+import type { SlidesSeedTemplate } from '@/lib/slides-templates';
 import { authFetch } from '@/stores/auth';
 import {
   SLIDES_DECK_UPDATED_EVENT,
@@ -28,8 +16,23 @@ import {
   type SlidesProject,
 } from '@/stores/slides';
 import { CollapsibleSection } from './collapsible-section';
+import { SidebarNewItem, type SidebarNewItemMenuOption } from './sidebar-new-item';
+import {
+  buildSlidesTree,
+  initialExpandedSlidesDecks,
+  type SlidesProjectTree,
+} from './slides-tree';
+import { SlidesTreeView } from './slides-tree-view';
 import { getWorkspacePath } from './utils';
 
+/**
+ * Slides sidebar: a create action and a file tree, nothing else.
+ *
+ * Templates used to own a section here, which meant browsing them was a
+ * separate step from making a deck. They now hang off New Slides, so picking
+ * one is part of creating. What is left below is a plain explorer over the
+ * decks that exist in the workspace repo.
+ */
 export function SlidesSection({
   collapsed,
   detailOnly,
@@ -45,17 +48,18 @@ export function SlidesSection({
   const slidesBase = getWorkspacePath(workspaceId, '/slides');
   const [projects, setProjects] = useState<SlidesProject[]>([]);
   const [templates, setTemplates] = useState<SlidesSeedTemplate[]>([]);
-  const [expandedIds, setExpandedIds] = useState<string[]>([]);
+  const [trees, setTrees] = useState<Record<string, SlidesProjectTree>>({});
+  const [rootExpanded, setRootExpanded] = useState(true);
+  const [expandedDecks, setExpandedDecks] = useState<string[]>([]);
+  const [expandedDirs, setExpandedDirs] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
-  const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const selectedSlug = useSlidesStore((s) => s.selectedSlug);
-  const selectedTitle = useSlidesStore((s) => s.selectedTitle);
   const setSelectedSlug = useSlidesStore((s) => s.setSelectedSlug);
-  const deckDirty = useSlidesStore((s) => s.deckDirty);
+  const setSelectedTitle = useSlidesStore((s) => s.setSelectedTitle);
 
   const openSlug = routeSlug || selectedSlug;
-  const openProject = projects.find((p) => p.slug === openSlug) ?? null;
 
   const fetchProjects = useCallback(async () => {
     if (!workspaceId) return;
@@ -89,6 +93,25 @@ export function SlidesSection({
     }
   }, [workspaceId]);
 
+  /** A deck's own files, fetched when its folder opens. */
+  const fetchTree = useCallback(
+    async (slug: string) => {
+      if (!workspaceId || !slug) return;
+      try {
+        const res = await authFetch(
+          `/api/slides/projects/${encodeURIComponent(slug)}/tree` +
+            `?workspace_id=${encodeURIComponent(workspaceId)}`,
+        );
+        if (!res.ok) return;
+        const body = (await res.json()) as SlidesProjectTree;
+        setTrees((current) => ({ ...current, [slug]: body }));
+      } catch {
+        // ignore
+      }
+    },
+    [workspaceId],
+  );
+
   useEffect(() => {
     void fetchProjects();
     void fetchTemplates();
@@ -96,251 +119,115 @@ export function SlidesSection({
 
   // Abi names a still-untitled deck on its first write, so the tree label has
   // to come back from the server instead of waiting for the next navigation.
+  // The same write can add a file, so the open deck's tree is refetched too.
   useEffect(() => {
-    const onUpdated = () => {
+    const onUpdated = (event: Event) => {
       void fetchProjects();
+      const slug =
+        (event as CustomEvent<{ slug?: string }>).detail?.slug || openSlug || '';
+      if (slug) void fetchTree(slug);
     };
     window.addEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
     return () => window.removeEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
-  }, [fetchProjects]);
+  }, [fetchProjects, fetchTree, openSlug]);
 
   useEffect(() => {
     if (routeSlug) setSelectedSlug(routeSlug);
   }, [routeSlug, setSelectedSlug]);
 
-  const folderLabel = openProject?.title || selectedTitle || openSlug || 'Presentation';
-  const appliedTemplateId = openProject?.template_id || null;
-
-  const toggleTemplate = (id: string) => {
-    setExpandedIds((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+  // The deck being edited starts open, the way an editor reveals the file it
+  // has loaded.
+  useEffect(() => {
+    if (!openSlug) return;
+    setExpandedDecks((current) =>
+      current.includes(openSlug) ? current : [...current, ...initialExpandedSlidesDecks(openSlug)],
     );
-  };
+  }, [openSlug]);
 
-  const createNew = () => {
-    if (!workspaceId || creating) return;
-    setCreating(true);
-    setActionError(null);
-    void startNewPresentation(workspaceId, (href) => router.push(href))
-      .catch((e) => {
-        setActionError(
-          slidesApiErrorMessage((e as Error).message, 'Could not create the deck.'),
-        );
-      })
-      .finally(() => {
-        setCreating(false);
-      });
-  };
-
-  const applyTemplate = (template: SlidesSeedTemplate) => {
-    if (!workspaceId || creating || applyingId) return;
-    if (openSlug && deckDirty) {
-      const ok = window.confirm(
-        'Replace the open deck with this template? Unsaved edits will be lost.',
-      );
-      if (!ok) return;
+  useEffect(() => {
+    for (const slug of expandedDecks) {
+      if (!trees[slug]) void fetchTree(slug);
     }
-    setApplyingId(template.id);
-    setActionError(null);
-    void applySlidesTemplate(workspaceId, template.id, openSlug || null, (href) =>
-      router.push(href),
-    )
-      .then(() => {
-        void fetchProjects();
-      })
-      .catch((e) => {
-        setActionError(slidesApiErrorMessage((e as Error).message, 'Could not apply the template.'));
-      })
-      .finally(() => {
-        setApplyingId(null);
-      });
-  };
+  }, [expandedDecks, trees, fetchTree]);
+
+  const decks = useMemo(
+    () => buildSlidesTree(projects, { workspaceId, openSlug, trees }),
+    [projects, workspaceId, openSlug, trees],
+  );
+
+  const createDeck = useCallback(
+    (templateId: string) => {
+      if (!workspaceId || creating) return;
+      setCreating(true);
+      setActionError(null);
+      void startNewPresentation(workspaceId, (href) => router.push(href), templateId)
+        .then(() => {
+          void fetchProjects();
+        })
+        .catch((e) => {
+          setActionError(
+            slidesApiErrorMessage((e as Error).message, 'Could not create the deck.'),
+          );
+        })
+        .finally(() => {
+          setCreating(false);
+        });
+    },
+    [workspaceId, creating, router, fetchProjects],
+  );
+
+  const templateOptions: SidebarNewItemMenuOption[] = templates.map((template) => ({
+    id: template.id,
+    label: template.name,
+    swatch: template.preview_accent || template.preview_bg,
+    onSelect: () => createDeck(template.id),
+  }));
 
   return (
     <CollapsibleSection
       id="slides"
       icon={<Presentation size={18} />}
       label="Slides"
-      description="Templates and open deck"
+      description="Presentations in this workspace"
       href={slidesBase}
       collapsed={collapsed}
       detailOnly={detailOnly}
     >
-      <div className="px-1 pb-1">
-        <button
-          onClick={() => router.push(slidesBase)}
-          className={cn(
-            'flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium hover:bg-workspace-accent-10',
-            pathname === slidesBase && 'text-workspace-accent',
-          )}
-        >
-          All projects
-        </button>
-      </div>
-      {actionError ? <p className="px-3 pb-1 text-xs text-red-600">{actionError}</p> : null}
+      <SidebarNewItem
+        label="New Slides"
+        title="New presentation"
+        onClick={() => createDeck(DEFAULT_SLIDES_TEMPLATE_ID)}
+        disabled={creating}
+        menuLabel="Choose a template"
+        menuOptions={templateOptions}
+        menuOpen={templateMenuOpen}
+        onMenuOpenChange={setTemplateMenuOpen}
+      />
 
-      {openSlug ? (
-        <div className="space-y-0.5 px-1 pb-2">
-          <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Open presentation
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedSlug(openSlug);
-              router.push(`${slidesBase}/${openSlug}`);
-            }}
-            className={cn(
-              'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs font-medium transition-colors hover:bg-workspace-accent-10',
-              pathname.startsWith(`${slidesBase}/${openSlug}`)
-                ? 'bg-workspace-accent-10 text-workspace-accent'
-                : 'text-foreground',
-            )}
-          >
-            <Folder size={12} className="flex-shrink-0 text-muted-foreground" />
-            <span className="truncate">{folderLabel}</span>
-          </button>
-          <div className="ml-3 border-l border-border/60 pl-2">
-            <button
-              type="button"
-              onClick={() => router.push(`${slidesBase}/${openSlug}`)}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs font-medium text-workspace-accent hover:bg-workspace-accent-10"
-            >
-              <FileCode2 size={11} className="flex-shrink-0 text-muted-foreground" />
-              <span className="truncate">deck.html</span>
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {actionError ? <p className="px-2 pb-1 text-xs text-red-600">{actionError}</p> : null}
 
-      <div className="space-y-0.5 px-1">
-        <div className="flex items-center justify-between px-2 py-1">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Templates
-          </div>
-          <button
-            type="button"
-            onClick={createNew}
-            disabled={creating}
-            title="New"
-            aria-label="New"
-            className="rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-workspace-accent-10 hover:text-workspace-accent disabled:opacity-50"
-          >
-            New
-          </button>
-        </div>
-        {templates.length === 0 ? (
-          <p className="px-2 py-1 text-xs text-muted-foreground">No templates loaded</p>
-        ) : (
-          templates.map((template) => {
-            const expanded = expandedIds.includes(template.id);
-            const applying = applyingId === template.id;
-            const active = appliedTemplateId === template.id && Boolean(openSlug);
-            return (
-              <div key={template.id} className="space-y-0.5">
-                <div className="flex items-center gap-0.5">
-                  <button
-                    type="button"
-                    onClick={() => toggleTemplate(template.id)}
-                    aria-expanded={expanded}
-                    aria-label={`Expand ${template.name}`}
-                    className="rounded p-1 text-muted-foreground hover:bg-workspace-accent-10 hover:text-foreground"
-                  >
-                    <ChevronRight
-                      size={11}
-                      className={cn('transition-transform', expanded && 'rotate-90')}
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyTemplate(template)}
-                    disabled={Boolean(applyingId)}
-                    title={`Apply ${template.name}`}
-                    className={cn(
-                      'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors hover:bg-workspace-accent-10 disabled:opacity-50',
-                      active
-                        ? 'bg-workspace-accent-10 font-medium text-workspace-accent'
-                        : 'text-foreground',
-                    )}
-                  >
-                    <span
-                      className="h-2.5 w-2.5 flex-shrink-0 rounded-sm border border-border/70"
-                      style={{ background: template.preview_accent || template.preview_bg }}
-                      aria-hidden
-                    />
-                    <LayoutTemplate size={11} className="flex-shrink-0 text-muted-foreground" />
-                    <span className="truncate">{template.name}</span>
-                    {applying ? (
-                      <span className="ml-auto text-[10px] text-muted-foreground">Applying</span>
-                    ) : null}
-                  </button>
-                </div>
-                {expanded ? (
-                  <div className="ml-6 space-y-1 border-l border-border/60 pl-2">
-                    <div className="px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      Slides
-                    </div>
-                    {template.slides.length === 0 ? (
-                      <p className="px-2 py-0.5 text-[10px] text-muted-foreground">No slides in seed</p>
-                    ) : (
-                      template.slides.map((slide) => (
-                        <div
-                          key={`${template.id}-${slide.index}`}
-                          className="flex items-center gap-2 px-2 py-0.5 text-[11px] text-muted-foreground"
-                        >
-                          <Presentation size={10} className="flex-shrink-0" />
-                          <span className="truncate">{templateSlideLabel(slide)}</span>
-                        </div>
-                      ))
-                    )}
-                    <div className="px-2 pt-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      Assets
-                    </div>
-                    {template.assets.length === 0 ? (
-                      <p className="px-2 py-0.5 text-[10px] text-muted-foreground">
-                        None (images stay inside deck.html)
-                      </p>
-                    ) : (
-                      template.assets.map((asset) => (
-                        <div
-                          key={`${template.id}-${asset.name}`}
-                          className="flex items-center gap-2 px-2 py-0.5 text-[11px] text-muted-foreground"
-                        >
-                          <ImageIcon size={10} className="flex-shrink-0" />
-                          <span className="truncate">{templateAssetLabel(asset)}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {projects.filter((p) => p.slug !== openSlug).length > 0 ? (
-        <div className="mt-2 space-y-0.5 px-1">
-          <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Other projects
-          </div>
-          {projects
-            .filter((p) => p.slug !== openSlug)
-            .map((p) => (
-              <button
-                key={p.slug}
-                onClick={() => {
-                  setSelectedSlug(p.slug);
-                  router.push(`${slidesBase}/${p.slug}`);
-                }}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors hover:bg-workspace-accent-10"
-              >
-                <Presentation size={11} className="flex-shrink-0 text-muted-foreground" />
-                <span className="truncate">{p.title}</span>
-              </button>
-            ))}
-        </div>
-      ) : null}
+      <SlidesTreeView
+        decks={decks}
+        rootHref={slidesBase}
+        rootExpanded={rootExpanded}
+        onToggleRoot={() => setRootExpanded((open) => !open)}
+        expandedDecks={expandedDecks}
+        onToggleDeck={(slug) =>
+          setExpandedDecks((current) =>
+            current.includes(slug) ? current.filter((s) => s !== slug) : [...current, slug],
+          )
+        }
+        expandedDirs={expandedDirs}
+        onToggleDir={(path) =>
+          setExpandedDirs((current) =>
+            current.includes(path) ? current.filter((p) => p !== path) : [...current, path],
+          )
+        }
+        onOpenDeck={(deck) => {
+          setSelectedSlug(deck.slug);
+          setSelectedTitle(deck.label);
+        }}
+      />
     </CollapsibleSection>
   );
 }
