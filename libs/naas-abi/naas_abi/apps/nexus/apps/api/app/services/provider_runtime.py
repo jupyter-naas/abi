@@ -225,7 +225,7 @@ def validated_provider_endpoint(config: ProviderConfig) -> str | None:
 async def complete_with_anthropic(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
 ) -> str:
     """Complete chat using Anthropic Claude API."""
     if not HAS_ANTHROPIC:
@@ -270,7 +270,7 @@ async def complete_with_anthropic(
 async def complete_with_openai(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
 ) -> str:
     """Complete chat using OpenAI API."""
     if not HAS_OPENAI:
@@ -310,7 +310,7 @@ async def complete_with_openai(
 async def complete_with_ollama(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
 ) -> str:
     """Complete chat using Ollama local API (non-streaming). Supports multimodal (images)."""
     # Falls back to the platform-resolved endpoint, which is not necessarily
@@ -349,7 +349,7 @@ async def complete_with_ollama(
 async def stream_with_ollama(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
 ) -> AsyncGenerator[str, None]:
     """Stream chat using Ollama local API. Supports multimodal (images).
 
@@ -410,7 +410,7 @@ async def stream_with_ollama(
 async def stream_with_openai_compatible(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
 ) -> AsyncGenerator[str, None]:
     """Stream chat using OpenAI-compatible API (OpenAI, XAI, Mistral, OpenRouter, etc)."""
     import json
@@ -526,7 +526,7 @@ async def stream_with_openai_compatible(
 async def complete_with_cloudflare(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
 ) -> str:
     """Complete chat using Cloudflare Workers AI API."""
     # Use env vars as fallback
@@ -586,7 +586,7 @@ async def complete_with_cloudflare(
 async def stream_with_cloudflare(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
 ) -> AsyncGenerator[str, None]:
     """Stream chat using Cloudflare Workers AI API with SSE."""
     import json
@@ -653,7 +653,7 @@ async def stream_with_cloudflare(
 async def complete_with_custom(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
 ) -> str:
     """Complete chat using custom OpenAI-compatible endpoint."""
     endpoint = validated_provider_endpoint(config)
@@ -695,7 +695,7 @@ async def complete_with_custom(
 async def complete_chat(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
     thread_id: str | None = None,
     injection_preamble: str | None = None,
 ) -> str:
@@ -730,7 +730,7 @@ async def complete_chat(
 async def complete_with_abi(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
     thread_id: str | None = None,
     injection_preamble: str | None = None,
 ) -> str:
