@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
-import { MessageSquare, ChevronRight, Plus, MoreVertical, Edit2, Trash2, Star, Zap } from 'lucide-react';
+import { MessageSquare, ChevronRight, MoreVertical, Edit2, Trash2, Star, Zap } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -10,6 +10,7 @@ import { useAgentsStore } from '@/stores/agents';
 import { useSkillsStore } from '@/stores/skills';
 import { useAuthStore } from '@/stores/auth';
 import { CollapsibleSection } from '@/components/shell/sidebar/collapsible-section';
+import { SidebarNewItem } from '@/components/shell/sidebar/sidebar-new-item';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
 import { newChatPath, NEW_CHAT_SLUG } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { AgentAvatar } from '@/components/chat/agent-selector';
@@ -198,15 +199,13 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
       detailOnly={detailOnly}
       onNavigate={handleChatHeaderNavigate}
     >
-      <button
-        type="button"
-        onClick={handleNewChat}
+      <SidebarNewItem
+        label="New Chat"
         title="New chat (Ctrl+I)"
-        className={`chat-section-new-chat${isNewChatActive ? ' is-active' : ''}${isMobilePanel ? ' is-mobile-panel' : ''}`}
-      >
-        <Plus size={iconSize} />
-        <span>New Chat</span>
-      </button>
+        onClick={handleNewChat}
+        active={isNewChatActive}
+        mobilePanel={isMobilePanel}
+      />
 
       <div className="chat-section-group">
         {canManageAgents ? (

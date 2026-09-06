@@ -1,0 +1,87 @@
+/*
+ * shell/sidebar — the primary "create" row at the top of a sidebar section.
+ *
+ * These declarations were the New Chat launcher (`.chat-section-new-chat`).
+ * They moved here so New Chat and New Slides render from one rule instead of
+ * two that look alike until somebody edits one of them.
+ */
+
+.sidebar-new-item-group {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 2px;
+}
+
+.sidebar-new-item {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--org-border-radius, var(--radius-md));
+  background: transparent;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--muted-foreground-hex);
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.sidebar-new-item:hover {
+  color: var(--foreground-hex);
+}
+
+.sidebar-new-item.is-active {
+  background: color-mix(in srgb, var(--workspace-accent, #22c55e) 15%, transparent);
+  color: var(--workspace-accent, #22c55e);
+}
+
+.sidebar-new-item.is-mobile-panel {
+  min-height: 44px;
+  padding: 10px var(--space-2);
+}
+
+/* Template picker trigger; sits flush beside the create action. */
+.sidebar-new-item-caret {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--org-border-radius, var(--radius-md));
+  background: transparent;
+  color: var(--muted-foreground-hex);
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.sidebar-new-item-caret:hover,
+.sidebar-new-item-caret.is-open {
+  background: var(--muted-bg-hex);
+  color: var(--foreground-hex);
+}
+
+.sidebar-new-item-caret.is-mobile-panel {
+  width: 44px;
+  height: 44px;
+}
+
+.sidebar-new-item:focus-visible,
+.sidebar-new-item-caret:focus-visible {
+  outline: 2px solid var(--workspace-accent, #22c55e);
+  outline-offset: -2px;
+}
+
+.sidebar-new-item:disabled,
+.sidebar-new-item-caret:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
