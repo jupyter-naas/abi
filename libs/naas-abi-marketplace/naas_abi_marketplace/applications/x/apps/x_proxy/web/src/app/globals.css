@@ -1002,6 +1002,13 @@ a {
 
 .user-post-text.clickable {
   cursor: pointer;
+  color: inherit;
+  text-decoration: none;
+}
+
+.user-post-text.clickable:hover,
+.user-post-text.clickable:focus-visible {
+  text-decoration: none;
 }
 
 .user-post .media-carousel {
