@@ -209,6 +209,7 @@ export function SlidesSection({
       <SlidesTreeView
         decks={decks}
         rootHref={slidesBase}
+        currentPath={pathname}
         rootExpanded={rootExpanded}
         onToggleRoot={() => setRootExpanded((open) => !open)}
         expandedDecks={expandedDecks}

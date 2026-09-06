@@ -148,6 +148,7 @@ function FileRows({
 export function SlidesTreeView({
   decks,
   rootHref,
+  currentPath,
   rootExpanded,
   onToggleRoot,
   expandedDecks,
@@ -160,6 +161,12 @@ export function SlidesTreeView({
   decks: SlidesTreeDeckNode[];
   /** Root row links to the Slides index. */
   rootHref: string;
+  /**
+   * Route the sidebar is on. A deck keeps its selection styling as the last
+   * one opened, but only claims to be the current page when the route is
+   * really on it.
+   */
+  currentPath?: string;
   rootExpanded: boolean;
   onToggleRoot: () => void;
   expandedDecks: string[];
@@ -213,7 +220,7 @@ export function SlidesTreeView({
                         href={deck.href}
                         onClick={() => onOpenDeck(deck)}
                         title={deck.label}
-                        aria-current={deck.active ? 'page' : undefined}
+                        aria-current={deck.href === currentPath ? 'page' : undefined}
                         data-testid="slides-tree-deck"
                         data-slug={deck.slug}
                         className={cn(

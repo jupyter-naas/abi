@@ -53,6 +53,7 @@ function markup(props: Record<string, unknown> = {}): string {
     createElement(SlidesTreeView, {
       decks,
       rootHref: '/workspace/ws-1/slides',
+      currentPath: '/workspace/ws-1/slides/materiaux',
       rootExpanded: true,
       onToggleRoot: () => {},
       expandedDecks: ['materiaux'],
@@ -102,6 +103,14 @@ describe('SlidesTreeView', () => {
     const html = markup();
     expect(html).toMatch(/data-slug="materiaux"[^>]*aria-current="page"|aria-current="page"[^>]*data-slug="materiaux"/);
     expect((html.match(/aria-current="page"/g) ?? []).length).toBe(1);
+  });
+
+  it('does not claim a deck is the current page from the slides index', () => {
+    const html = markup({ currentPath: '/workspace/ws-1/slides' });
+    expect(html).not.toContain('aria-current');
+    // The last deck opened still reads as selected, the way an editor keeps
+    // showing which file you were in.
+    expect(html).toContain('bg-workspace-accent-15');
   });
 
   it('shows selection on the open deck and not on the others', () => {
