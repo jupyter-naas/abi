@@ -1,3 +1,9 @@
+"""Tests for services/agent/context.py.
+
+Named agent_context_test.py, not context_test.py: pytest imports test modules
+by basename here and engine/context_test.py already owns that name.
+"""
+
 from __future__ import annotations
 
 from naas_abi_core.services.agent.context import (

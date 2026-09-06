@@ -909,7 +909,9 @@ def _friendly_coding_detail(exc: BaseException) -> str:
     return text or "Coder runtime temporarily unavailable"
 
 
-def _git_clone_url(sc: Any, repo_id: str, *, username: str, token: str) -> str:
+def _git_clone_url(
+    sc: SourceControlService, repo_id: str, *, username: str, token: str
+) -> str:
     """Clone URL the slides sidecar should use for this repo.
 
     The default targets Forgejo over HTTP, which does not exist in the
