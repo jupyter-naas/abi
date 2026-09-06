@@ -533,7 +533,12 @@ async def test_complete_chat_request_with_provider_uses_completion(monkeypatch) 
         return_value=[ChatInputMessage(role="user", content="hello")]
     )
 
-    async def _fake_complete_chat(messages, config, system_prompt, thread_id=None):
+    captured: dict = {}
+
+    async def _fake_complete_chat(
+        messages, config, system_prompt, thread_id=None, injection_preamble=None
+    ):
+        captured["injection_preamble"] = injection_preamble
         return '{"content":"assistant answer"}'
 
     monkeypatch.setattr(
@@ -554,6 +559,77 @@ async def test_complete_chat_request_with_provider_uses_completion(monkeypatch) 
 
     assert result.provider_used == "OpenAI (gpt-4o-mini)"
     assert result.assistant_content == "assistant answer"
+    # Cloud providers get their context through ``system_prompt``; the preamble
+    # is the ABI-only channel and must stay empty here.
+    assert captured["injection_preamble"] is None
+
+
+@pytest.mark.asyncio
+async def test_complete_chat_request_forwards_injection_preamble_for_abi(monkeypatch) -> None:
+    """The ABI provider must receive the injection preamble at the real call site.
+
+    ABI agents ignore ``system_prompt`` and build their own, so the preamble is
+    the only channel carrying the skills catalog and the user profile. Asserting
+    on ``build_abi_injection_preamble`` alone would keep passing if
+    ``complete_chat_request`` stopped forwarding it.
+    """
+    now = datetime.now()
+    adapter = SimpleNamespace(
+        get_conversation_by_id_for_user=AsyncMock(return_value=_conversation(now)),
+        create_message=AsyncMock(),
+        touch_conversation=AsyncMock(),
+    )
+    auth_adapter = SimpleNamespace(
+        get_user_by_id=AsyncMock(return_value=_user_record(company="Acme Corp"))
+    )
+    service = ChatService(adapter=adapter, auth_adapter=auth_adapter)
+    service.get_or_create_conversation = AsyncMock(return_value="conv-1")
+    service.resolve_provider = AsyncMock(
+        return_value=ResolvedProvider(
+            id="p1",
+            name="Abi",
+            type="abi",
+            enabled=True,
+            endpoint="inprocess://abi",
+            api_key=None,
+            account_id=None,
+            model="Abi",
+        )
+    )
+    service.build_provider_messages_with_agents = AsyncMock(
+        return_value=[ChatInputMessage(role="user", content="hello")]
+    )
+
+    captured: dict = {}
+
+    async def _fake_complete_chat(
+        messages, config, system_prompt, thread_id=None, injection_preamble=None
+    ):
+        captured["injection_preamble"] = injection_preamble
+        return "assistant answer"
+
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.chat.service.complete_with_provider",
+        _fake_complete_chat,
+    )
+
+    result = await service.complete_chat_request(
+        request=CompleteChatInput(
+            message="hello",
+            agent="abi",
+            workspace_id="ws-1",
+            messages=[ChatInputMessage(role="user", content="hello")],
+        ),
+        context=_context(),
+        now=now,
+    )
+
+    assert result.provider_used == "Abi (Abi)"
+    preamble = captured["injection_preamble"]
+    assert preamble is not None
+    assert _CREATE_SKILL_INSTRUCTIONS.strip() in preamble
+    assert "Alice Smith" in preamble
+    assert "Acme Corp" in preamble
 
 
 # ---------------------------------------------------------------------------
