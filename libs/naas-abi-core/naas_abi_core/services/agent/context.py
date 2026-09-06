@@ -79,3 +79,17 @@ slides_research_required: ContextVar[bool] = ContextVar(
 slides_research_queries: ContextVar[list[str] | None] = ContextVar(
     "slides_research_queries", default=None
 )
+
+# The user asked for a deck from a surface with no deck open (main chat). Set at
+# the chat stream boundary so the agent budgets a slides-sized run (create,
+# research, then one write per slide) instead of a normal chat turn.
+slides_creation_intent: ContextVar[bool] = ContextVar(
+    "slides_creation_intent", default=False
+)
+
+
+def slides_turn_active() -> bool:
+    """True when this turn edits an open deck or creates a new one."""
+    if (slides_active_slug.get() or "").strip():
+        return True
+    return bool(slides_creation_intent.get())

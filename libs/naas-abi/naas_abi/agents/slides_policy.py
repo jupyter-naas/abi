@@ -11,6 +11,7 @@ from typing import Any
 
 from naas_abi_core.services.agent.context import (
     slides_active_slug,
+    slides_creation_intent,
     slides_research_queries,
     slides_research_required,
 )
@@ -126,10 +127,18 @@ def open_slides_slug(client_context: dict | None) -> str:
 def apply_slides_model_override(
     incoming: str | None,
     client_context: dict | None,
+    message: str | None = None,
 ) -> str | None:
-    if not open_slides_slug(client_context):
-        return incoming
-    return resolve_slides_llm_model(incoming)
+    """Force a reasoning model for slides work.
+
+    Covers both an open deck and a deck asked for from the main chat, where a
+    mini or free model would skip tools and write template filler.
+    """
+    if open_slides_slug(client_context):
+        return resolve_slides_llm_model(incoming)
+    if message is not None and slides_creation_requested(message):
+        return resolve_slides_llm_model(incoming)
+    return incoming
 
 
 def slides_brief_requires_research(message: str, has_prior_assistant: bool) -> bool:
@@ -148,6 +157,28 @@ def slides_brief_requires_research(message: str, has_prior_assistant: bool) -> b
     return researchy
 
 
+_DECK_NOUN_RE = re.compile(
+    r"\b(deck|presentation|slides|slide deck|slideshow|pitch)\b",
+    re.IGNORECASE,
+)
+_MAKE_VERB_RE = re.compile(
+    r"\b(create|make|build|draft|generate|prepare|put together|write|need|want)\b",
+    re.IGNORECASE,
+)
+
+
+def slides_creation_requested(message: str) -> bool:
+    """True when the user is asking for a new deck on a surface with none open.
+
+    Requires both a making verb and a deck noun so "summarise this document"
+    or a passing mention of a slide does not hijack an ordinary chat turn.
+    """
+    text = (message or "").strip()
+    if not text:
+        return False
+    return bool(_MAKE_VERB_RE.search(text) and _DECK_NOUN_RE.search(text))
+
+
 def bind_slides_research_policy(
     message: str,
     has_prior_assistant: bool,
@@ -156,8 +187,18 @@ def bind_slides_research_policy(
     """Set request-scoped research gates. Returns whether search is required."""
     slug = open_slides_slug(client_context) or (slides_active_slug.get() or "").strip()
     if not slug:
-        slides_research_required.set(False)
-        return False
+        # Main chat: no deck open yet. A deck request still has to research
+        # before writing, and the agent needs a slides-sized step budget.
+        creating = slides_creation_requested(message)
+        slides_creation_intent.set(creating)
+        if not creating:
+            slides_research_required.set(False)
+            return False
+        required = slides_brief_requires_research(message, has_prior_assistant)
+        slides_research_required.set(required)
+        if required:
+            slides_research_queries.set([])
+        return required
     slides_active_slug.set(slug)
     required = slides_brief_requires_research(message, has_prior_assistant)
     slides_research_required.set(required)

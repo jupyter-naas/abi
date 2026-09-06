@@ -169,3 +169,79 @@ def test_search_budget_stops_after_four_queries() -> None:
     assert slides_search_budget_remaining() == 0
     slides_research_required.set(False)
     slides_research_queries.set(None)
+
+
+def test_slides_creation_requested_detects_a_deck_brief_in_main_chat() -> None:
+    from naas_abi.agents.slides_policy import slides_creation_requested
+
+    assert slides_creation_requested("create a deck about the latest news about AI")
+    assert slides_creation_requested("Make me a presentation on Q3 revenue")
+    assert slides_creation_requested("build slides on the Iran situation")
+    # Not a deck request.
+    assert not slides_creation_requested("what is the capital of France?")
+    assert not slides_creation_requested("summarise this document")
+    assert not slides_creation_requested("")
+
+
+def test_research_policy_arms_from_main_chat_without_an_open_deck() -> None:
+    """Capability A: a news deck asked for in the main chat still researches."""
+    from naas_abi_core.services.agent.context import (
+        slides_creation_intent,
+        slides_research_required,
+    )
+
+    tokens = (
+        slides_research_required.set(False),
+        slides_creation_intent.set(False),
+    )
+    try:
+        required = bind_slides_research_policy(
+            "create a deck about the latest news about AI",
+            False,
+            None,
+        )
+        assert required is True
+        assert slides_research_required.get() is True
+        assert slides_creation_intent.get() is True
+    finally:
+        slides_research_required.reset(tokens[0])
+        slides_creation_intent.reset(tokens[1])
+
+
+def test_research_policy_stays_off_for_ordinary_main_chat() -> None:
+    from naas_abi_core.services.agent.context import (
+        slides_creation_intent,
+        slides_research_required,
+    )
+
+    tokens = (
+        slides_research_required.set(False),
+        slides_creation_intent.set(False),
+    )
+    try:
+        assert bind_slides_research_policy("what is 2 + 2?", False, None) is False
+        assert slides_research_required.get() is False
+        assert slides_creation_intent.get() is False
+    finally:
+        slides_research_required.reset(tokens[0])
+        slides_creation_intent.reset(tokens[1])
+
+
+def test_model_override_upgrades_a_deck_request_from_main_chat() -> None:
+    """A weak model invents filler instead of calling tools. Upgrade it even
+    when no deck is open, otherwise chat-created decks are template junk.
+    """
+    # No deck open and no deck asked for: leave the user's choice alone.
+    assert (
+        apply_slides_model_override("gpt-4.1-mini", None, "what is 2 + 2?")
+        == "gpt-4.1-mini"
+    )
+    # No deck open, but the user asked for one.
+    assert (
+        apply_slides_model_override(
+            "gpt-4.1-mini",
+            None,
+            "create a deck about the latest news about AI",
+        )
+        == DEFAULT_SLIDES_MODEL
+    )

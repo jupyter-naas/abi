@@ -25,6 +25,7 @@ from typing import (
 
 import pydash as pd
 from langchain_core.language_models import BaseChatModel
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, StructuredTool, Tool, tool
 from langgraph.prebuilt import InjectedState
 from naas_abi_core.models.Model import ChatModel
@@ -60,7 +61,7 @@ from naas_abi_core.services.agent.context import (
     agent_user_id,
     agent_workspace_id,
     coder_workspace_base,
-    slides_active_slug,
+    slides_turn_active,
 )
 from naas_abi_core.services.agent.ontologies.modules.AgentEventOntology import (
     AgentAIMessageEmitted,
@@ -1982,12 +1983,14 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
         notified = {}
 
-        stream_config: dict[str, Any] = {
+        stream_config: RunnableConfig = {
             "configurable": {"thread_id": self._state.thread_id}
         }
         # Default LangGraph limit is 25. A slides research loop (search, then
-        # write 6-8 sections) needs more steps than a normal chat turn.
-        if (slides_active_slug.get() or "").strip():
+        # write 6-8 sections) needs more steps than a normal chat turn. This
+        # also covers a deck requested from the main chat, where no deck is
+        # open yet at the start of the turn.
+        if slides_turn_active():
             stream_config["recursion_limit"] = 80
         for chunk in self.graph.stream(
             {"messages": [human_message]},

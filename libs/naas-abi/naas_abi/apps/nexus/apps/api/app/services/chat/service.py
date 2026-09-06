@@ -1014,7 +1014,7 @@ class ChatService:
                     request.context,
                 )
                 llm_model = apply_slides_model_override(
-                    provider.llm_model, request.context
+                    provider.llm_model, request.context, request.message
                 )
 
                 response_content = await complete_with_provider(

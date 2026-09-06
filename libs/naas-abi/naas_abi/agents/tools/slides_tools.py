@@ -21,11 +21,13 @@ from __future__ import annotations
 import html as html_lib
 import json
 import re
+from collections import OrderedDict
 from typing import Any
 
 from langchain_core.tools import BaseTool, tool
 from naas_abi.agents.slides_policy import reject_unresearched_slides_write
 from naas_abi_core.services.agent.context import (
+    agent_chat_id,
     agent_user_id,
     agent_workspace_id,
     coder_workspace_base,
@@ -202,6 +204,67 @@ def _ensure_slides_write_paths(slug: str) -> dict[str, str]:
     return paths
 
 
+# LangChain runs each tool in an isolated context, so a ContextVar set inside
+# create_slides_project is invisible to the next tool call. Remember the deck
+# Abi just created per (user, conversation) instead, and let _resolve_slug fall
+# back to it. Bounded so a long-lived API process cannot grow without limit.
+_ACTIVE_SLUG_MEMO: OrderedDict[str, str] = OrderedDict()
+_ACTIVE_SLUG_MEMO_MAX = 256
+
+
+def _memo_key() -> str:
+    user = (agent_user_id.get() or "").strip()
+    if not user:
+        return ""
+    chat = (agent_chat_id.get() or "").strip() or "no-chat"
+    return f"{user}:{chat}"
+
+
+def _remember_active_slug(slug: str) -> None:
+    key = _memo_key()
+    if not key or not slug:
+        return
+    _ACTIVE_SLUG_MEMO[key] = slug
+    _ACTIVE_SLUG_MEMO.move_to_end(key)
+    while len(_ACTIVE_SLUG_MEMO) > _ACTIVE_SLUG_MEMO_MAX:
+        _ACTIVE_SLUG_MEMO.popitem(last=False)
+
+
+def _recalled_active_slug() -> str:
+    key = _memo_key()
+    return _ACTIVE_SLUG_MEMO.get(key, "") if key else ""
+
+
+def _forget_active_slugs() -> None:
+    _ACTIVE_SLUG_MEMO.clear()
+
+
+def _slugify_title(title: str) -> str:
+    """Kebab-case slug from a human title, matching the UI create path."""
+    raw = (title or "").strip().lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", raw).strip("-")
+    return slug[:60].strip("-")
+
+
+def _unique_slug(base: str, taken: set[str]) -> str:
+    """First free ``base``, ``base-2``, ``base-3`` … against existing branches."""
+    if _branch(base) not in taken and _legacy_branch(base) not in taken:
+        return base
+    for suffix in range(2, 1000):
+        candidate = f"{base}-{suffix}"
+        if _branch(candidate) not in taken and _legacy_branch(candidate) not in taken:
+            return candidate
+    raise SourceControlError("Could not find a free slides slug")
+
+
+def _seed_deck_with_title(html: str, title: str) -> str:
+    """Put the requested title on the cover so the deck opens named correctly."""
+    applied = _apply_replacements(html, "Presentation Title", title, 0)
+    if isinstance(applied, dict):
+        return html
+    return applied[0]
+
+
 def _workspace_id() -> str | None:
     value = (agent_workspace_id.get() or "").strip()
     return value or None
@@ -297,7 +360,11 @@ def _resolve_paths(slug: str) -> dict[str, str]:
 
 def _resolve_slug(slug: str | None) -> str | dict[str, Any]:
     """Prefer explicit slug; else the open deck from pane context."""
-    candidate = (slug or "").strip() or (slides_active_slug.get() or "").strip()
+    candidate = (
+        (slug or "").strip()
+        or (slides_active_slug.get() or "").strip()
+        or _recalled_active_slug()
+    )
     if not candidate:
         return {
             "error": (
@@ -850,6 +917,68 @@ def _view_for_llm(html: str) -> dict[str, Any]:
 
 def slides_tools() -> list[BaseTool]:
     @tool
+    def create_slides_project(title: str) -> dict[str, Any]:
+        """Create a new Slides presentation and make it the deck you are editing.
+
+        Use this when the user asks for a deck, presentation, or slides and no
+        deck is open yet (for example from the main chat surface). It seeds the
+        Minimal Light template, then every later slides tool acts on this deck
+        without needing a slug.
+
+        After creating it, research the topic with web_search and then write the
+        slides. Do not ask the user which presentation to edit.
+        """
+        if not agent_user_id.get():
+            return {"error": "No authenticated user on this agent session."}
+        clean_title = (title or "").strip()
+        base = _slugify_title(clean_title)
+        if not base:
+            return {"error": "title must contain letters or digits"}
+        try:
+            sc = _get_source_control()
+            repo_id = _ensure_coding_repo()
+            taken = {b.name for b in sc.list_branches(repo_id=repo_id)}
+            slug = _unique_slug(base, taken)
+
+            # _ensure_project_json reads the title from context.
+            slides_active_title.set(clean_title)
+            paths = _ensure_slides_write_paths(slug)
+            if paths.get("error"):
+                return {"error": paths["error"]}
+
+            seed = _load_seed_deck_html()
+            if not seed:
+                return {"error": "Slides template is missing; cannot seed a deck."}
+            commit = sc.upsert_file(
+                repo_id=repo_id,
+                path=paths["deck_path"],
+                content=_seed_deck_with_title(seed, clean_title),
+                message=f"Create slides project {slug}",
+                branch=paths["branch"],
+            )
+
+            # Become the active deck for the rest of this conversation.
+            slides_active_slug.set(slug)
+            _remember_active_slug(slug)
+            return {
+                "ok": True,
+                "created": True,
+                "slug": slug,
+                "title": clean_title,
+                "branch": paths["branch"],
+                "path": paths["deck_path"],
+                "workspace_id": _workspace_id() or "",
+                "template_id": "minimal-light-v1",
+                "commit_sha": commit.sha,
+                "note": (
+                    f"Created '{clean_title}'. This is now the open deck. "
+                    "Research the topic with web_search, then write the slides."
+                ),
+            }
+        except Exception as exc:  # noqa: BLE001
+            return _tool_error(exc)
+
+    @tool
     def list_slides_projects() -> dict[str, Any]:
         """List Slides projects in the workspace monorepo (branches slides/<slug>).
 
@@ -1281,6 +1410,7 @@ def slides_tools() -> list[BaseTool]:
             return _tool_error(exc)
 
     return [
+        create_slides_project,
         list_slides_projects,
         list_slides_sections,
         read_slides_section,

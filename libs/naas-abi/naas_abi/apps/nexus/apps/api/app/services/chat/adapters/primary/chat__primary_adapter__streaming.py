@@ -265,6 +265,7 @@ async def stream_chat_response(
                 # workspace files (Continue-parity) without asking which deck.
                 client_ctx = request.context if isinstance(request.context, dict) else {}
                 slides_ctx = client_ctx.get("slides") if isinstance(client_ctx, dict) else None
+                open_slug = ""
                 if isinstance(slides_ctx, dict):
                     open_slug = str(slides_ctx.get("slug") or "").strip()
                     if open_slug:
@@ -275,40 +276,45 @@ async def stream_chat_response(
                             slides_active_title.set(title)
                         if mode:
                             slides_active_mode.set(mode)
-                        from naas_abi.agents.slides_policy import (  # noqa: PLC0415
-                            bind_slides_research_policy,
+
+                # Arm the research gate for both surfaces. With no deck open
+                # this also flags a deck requested from the main chat, so the
+                # agent gets a slides-sized step budget.
+                from naas_abi.agents.slides_policy import (  # noqa: PLC0415
+                    bind_slides_research_policy,
+                )
+
+                has_prior_assistant = any(
+                    getattr(m, "role", None) == "assistant"
+                    for m in (request.messages or [])
+                )
+                bind_slides_research_policy(
+                    request.message,
+                    has_prior_assistant,
+                    client_ctx,
+                )
+
+                if open_slug and request.workspace_id:
+                    try:
+                        from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__primary_adapter__FastAPI import (  # noqa: PLC0415
+                            lookup_slides_sidecar,
                         )
 
-                        has_prior_assistant = any(
-                            getattr(m, "role", None) == "assistant"
-                            for m in (request.messages or [])
+                        ws_base, ws_secret = await lookup_slides_sidecar(
+                            db,
+                            workspace_id=str(request.workspace_id),
+                            user_id=str(current_user.id),
+                            slug=open_slug,
                         )
-                        bind_slides_research_policy(
-                            request.message,
-                            has_prior_assistant,
-                            client_ctx,
+                        if ws_base and ws_secret:
+                            coder_workspace_base.set(ws_base)
+                            coder_workspace_secret.set(ws_secret)
+                    except Exception:
+                        logger.warning(
+                            "Failed to bind slides sidecar for %s",
+                            open_slug,
+                            exc_info=True,
                         )
-                        if request.workspace_id:
-                            try:
-                                from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__primary_adapter__FastAPI import (  # noqa: PLC0415
-                                    lookup_slides_sidecar,
-                                )
-
-                                ws_base, ws_secret = await lookup_slides_sidecar(
-                                    db,
-                                    workspace_id=str(request.workspace_id),
-                                    user_id=str(current_user.id),
-                                    slug=open_slug,
-                                )
-                                if ws_base and ws_secret:
-                                    coder_workspace_base.set(ws_base)
-                                    coder_workspace_secret.set(ws_secret)
-                            except Exception:
-                                logger.warning(
-                                    "Failed to bind slides sidecar for %s",
-                                    open_slug,
-                                    exc_info=True,
-                                )
 
                 coding_ctx = (
                     client_ctx.get("coding") if isinstance(client_ctx, dict) else None

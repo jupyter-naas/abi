@@ -14,6 +14,7 @@ from naas_abi.agents.tools.slides_tools import (
     _cover_subtitle_text,
     _deck_path,
     _ensure_coding_repo,
+    _forget_active_slugs,
     _friendly_sc_error,
     _persist_deck,
     _redact_data_urls,
@@ -311,6 +312,7 @@ def _bind_in_memory_git(monkeypatch):
 
 
 def _slides_context(*, workspace: str = "ws-test", slug: str = "untitled-local"):
+    _forget_active_slugs()
     tokens = [
         agent_workspace_id.set(workspace),
         slides_active_slug.set(slug),
@@ -465,5 +467,82 @@ def test_missing_repo_error_is_wipe_message(monkeypatch):
         )
         assert result.get("error") == _WIPED_DECK_ERROR
         assert result.get("error") != "abi/monorepo"
+    finally:
+        _reset_tokens(tokens)
+
+
+def _main_chat_context(*, workspace: str = "ws-test"):
+    """Main chat surface: authenticated, but no deck open."""
+    _forget_active_slugs()
+    return [
+        agent_workspace_id.set(workspace),
+        slides_active_slug.set(None),
+        agent_user_id.set("user-1"),
+        slides_research_required.set(False),
+        slides_research_queries.set(None),
+    ]
+
+
+def test_create_slides_project_from_main_chat_without_an_open_deck(monkeypatch):
+    """Capability A: Abi can create a deck from the ordinary chat surface."""
+    sc = _bind_in_memory_git(monkeypatch)
+    tokens = _main_chat_context()
+    try:
+        create = next(t for t in slides_tools() if t.name == "create_slides_project")
+        result = create.invoke({"title": "Latest News About AI"})
+        assert "error" not in result, result
+        slug = result["slug"]
+        assert slug == "latest-news-about-ai"
+        assert result["branch"] == "slides/ws-test/latest-news-about-ai"
+        assert result["path"] == "slides/ws-test/latest-news-about-ai/deck.html"
+        assert result["title"] == "Latest News About AI"
+
+        deck = sc.get_file(
+            repo_id="abi/monorepo",
+            path=result["path"],
+            ref=result["branch"],
+        )
+        assert deck.text and "<section" in deck.text.lower()
+        project = sc.get_file(
+            repo_id="abi/monorepo",
+            path="slides/ws-test/latest-news-about-ai/project.json",
+            ref=result["branch"],
+        )
+        assert '"workspace_id": "ws-test"' in (project.text or "")
+
+        # The new deck becomes the active one, so a later tool call in the
+        # same turn resolves to it without being passed a slug. Asserted
+        # through the tool boundary because LangChain runs each tool in an
+        # isolated context, where a ContextVar set by create is not visible.
+        sections = next(t for t in slides_tools() if t.name == "list_slides_sections")
+        listed = sections.invoke({})
+        assert "error" not in listed, listed
+        assert listed["slug"] == slug
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_create_slides_project_avoids_colliding_with_an_existing_slug(monkeypatch):
+    sc = _bind_in_memory_git(monkeypatch)
+    tokens = _main_chat_context()
+    try:
+        create = next(t for t in slides_tools() if t.name == "create_slides_project")
+        first = create.invoke({"title": "AI News"})
+        second = create.invoke({"title": "AI News"})
+        assert first["slug"] != second["slug"]
+        assert second["slug"].startswith("ai-news")
+        names = {b.name for b in sc.list_branches(repo_id="abi/monorepo")}
+        assert first["branch"] in names
+        assert second["branch"] in names
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_create_slides_project_rejects_an_empty_title(monkeypatch):
+    _bind_in_memory_git(monkeypatch)
+    tokens = _main_chat_context()
+    try:
+        create = next(t for t in slides_tools() if t.name == "create_slides_project")
+        assert "error" in create.invoke({"title": "   "})
     finally:
         _reset_tokens(tokens)
