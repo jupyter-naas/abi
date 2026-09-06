@@ -21,11 +21,17 @@ from __future__ import annotations
 import html as html_lib
 import json
 import re
+import unicodedata
 from collections import OrderedDict
 from typing import Any
 
 from langchain_core.tools import BaseTool, tool
 from naas_abi.agents.slides_policy import reject_unresearched_slides_write
+from naas_abi.agents.slides_title import (
+    derive_deck_title,
+    is_placeholder_deck_title,
+    resolve_deck_title,
+)
 from naas_abi_core.services.agent.context import (
     agent_chat_id,
     agent_user_id,
@@ -34,6 +40,7 @@ from naas_abi_core.services.agent.context import (
     slides_active_mode,
     slides_active_slug,
     slides_active_title,
+    slides_brief,
 )
 from naas_abi_core.services.agent.tools.workspace_tools import _call as _sidecar_call
 from naas_abi_core.services.source_control.SourceControlPorts import (
@@ -146,36 +153,75 @@ def _looks_like_missing_deck(exc: BaseException, paths: dict[str, str]) -> bool:
     return _is_repo_id_message(text)
 
 
+def _display_title(slug: str, stored_title: str | None) -> str:
+    """Best display title for a deck, naming it after the brief when untitled.
+
+    A deck created by the UI New button is stored as "Untitled presentation".
+    The first agent write is the moment we know what it is about, so adopt the
+    topic of the brief then. A title the user (or an earlier turn) already
+    chose is never overwritten.
+    """
+    for candidate in (stored_title, slides_active_title.get()):
+        text = (candidate or "").strip()
+        if text and not is_placeholder_deck_title(text):
+            return text
+    derived = derive_deck_title(slides_brief.get() or "")
+    if derived:
+        return derived
+    return (
+        (stored_title or "").strip()
+        or (slides_active_title.get() or "").strip()
+        or slug.replace("-", " ").title()
+    )
+
+
 def _ensure_project_json(
     sc: Any, repo_id: str, paths: dict[str, str], slug: str
-) -> None:
-    """Preview GET resolves the project via project.json; writes must seed it."""
+) -> str:
+    """Seed (or retitle) project.json. Returns the deck's display title.
+
+    Preview GET resolves the project via project.json, and the sidebar tree
+    reads its title, so writes must keep it current.
+    """
+    meta: dict[str, Any] = {}
     try:
         existing = sc.get_file(
             repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
         )
         if existing.text:
-            return
-    except SourceControlError:
-        pass
+            meta = json.loads(existing.text)
+    except (SourceControlError, json.JSONDecodeError, TypeError):
+        meta = {}
+    stored = str(meta.get("title") or "").strip() if isinstance(meta, dict) else ""
+    title = _display_title(slug, stored)
+    if isinstance(meta, dict) and meta and stored == title:
+        return title
     ws = _workspace_id()
-    title = (slides_active_title.get() or "").strip() or slug.replace("-", " ").title()
-    meta = {
+    payload = {
+        **(meta if isinstance(meta, dict) else {}),
         "slug": slug,
-        "workspace_id": ws or "",
+        "workspace_id": (meta.get("workspace_id") if isinstance(meta, dict) else "")
+        or ws
+        or "",
         "title": title,
-        "template_id": "minimal-light-v1",
+        "template_id": (
+            (meta.get("template_id") if isinstance(meta, dict) else "")
+            or "minimal-light-v1"
+        ),
     }
     try:
         sc.upsert_file(
             repo_id=repo_id,
             path=paths["project_path"],
-            content=json.dumps(meta, indent=2) + "\n",
-            message=f"Seed slides project {slug}",
+            content=json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+            message=f"Name slides project {slug}",
             branch=paths["branch"],
         )
     except SourceControlError:
-        pass
+        return stored or title
+    # Later tools in this turn (and the open_deck note) report the new name.
+    slides_active_title.set(title)
+    return title
 
 
 def _ensure_slides_write_paths(slug: str) -> dict[str, str]:
@@ -200,7 +246,7 @@ def _ensure_slides_write_paths(slug: str) -> dict[str, str]:
             pass
         except SourceControlError as exc:
             return {"error": _friendly_sc_error(exc)}
-    _ensure_project_json(sc, repo_id, paths, slug)
+    paths["title"] = _ensure_project_json(sc, repo_id, paths, slug)
     return paths
 
 
@@ -240,8 +286,14 @@ def _forget_active_slugs() -> None:
 
 
 def _slugify_title(title: str) -> str:
-    """Kebab-case slug from a human title, matching the UI create path."""
-    raw = (title or "").strip().lower()
+    """Kebab-case slug from a human title, matching the UI create path.
+
+    Accents fold to ASCII so a French title gives a readable URL
+    ("Matériaux de construction" -> ``materiaux-de-construction``) instead of
+    dropping the accented letters.
+    """
+    folded = unicodedata.normalize("NFKD", (title or "").strip().lower())
+    raw = "".join(ch for ch in folded if not unicodedata.combining(ch))
     slug = re.sub(r"[^a-z0-9]+", "-", raw).strip("-")
     return slug[:60].strip("-")
 
@@ -472,6 +524,8 @@ def _commit_deck_forgejo(slug: str, html: str, message: str) -> dict[str, Any]:
         return {"error": _friendly_sc_error(exc), "source": "forgejo"}
     return {
         "slug": slug,
+        # The chat deck card labels itself from this.
+        "title": paths.get("title") or slug.replace("-", " ").title(),
         "path": paths["deck_path"],
         "branch": paths["branch"],
         "commit_sha": commit.sha,
@@ -925,12 +979,17 @@ def slides_tools() -> list[BaseTool]:
         Minimal Light template, then every later slides tool acts on this deck
         without needing a slug.
 
+        Pass a short human title for the topic, in the user's language. Passing
+        the raw request is tolerated: the topic is extracted from it.
+
         After creating it, research the topic with web_search and then write the
         slides. Do not ask the user which presentation to edit.
         """
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
-        clean_title = (title or "").strip()
+        # The deck name shows up in the sidebar tree, the chat card, and the
+        # URL, so never keep template filler or a whole sentence.
+        clean_title = resolve_deck_title(title, slides_brief.get() or "")
         base = _slugify_title(clean_title)
         if not base:
             return {"error": "title must contain letters or digits"}

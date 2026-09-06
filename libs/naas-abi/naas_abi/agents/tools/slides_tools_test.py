@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from naas_abi.agents.tools.slides_tools import (
@@ -30,6 +31,8 @@ from naas_abi_core.services.agent.context import (
     agent_user_id,
     agent_workspace_id,
     slides_active_slug,
+    slides_active_title,
+    slides_brief,
     slides_research_queries,
     slides_research_required,
 )
@@ -535,6 +538,162 @@ def test_create_slides_project_avoids_colliding_with_an_existing_slug(monkeypatc
         assert first["branch"] in names
         assert second["branch"] in names
     finally:
+        _reset_tokens(tokens)
+
+
+_FRENCH_BRIEF = "fais des slides sur les matériaux de construction"
+
+
+def test_create_slides_project_names_the_deck_after_a_french_brief(monkeypatch):
+    """The model often passes the raw request. Name the deck after the topic."""
+    sc = _bind_in_memory_git(monkeypatch)
+    tokens = _main_chat_context()
+    brief = slides_brief.set(_FRENCH_BRIEF)
+    try:
+        create = next(t for t in slides_tools() if t.name == "create_slides_project")
+        result = create.invoke({"title": _FRENCH_BRIEF})
+        assert "error" not in result, result
+        assert result["title"] == "Matériaux de construction"
+        # Slug is derived at creation, so the URL carries the topic too.
+        assert result["slug"] == "materiaux-de-construction"
+        assert result["branch"] == "slides/ws-test/materiaux-de-construction"
+
+        # The sidebar tree reads project.json; the chat card reads the payload.
+        project = sc.get_file(
+            repo_id="abi/monorepo",
+            path="slides/ws-test/materiaux-de-construction/project.json",
+            ref=result["branch"],
+        )
+        assert '"title": "Matériaux de construction"' in (project.text or "")
+
+        # And the deck cover opens named, not as template filler.
+        deck = sc.get_file(
+            repo_id="abi/monorepo",
+            path=result["path"],
+            ref=result["branch"],
+        )
+        assert _cover_h1_text(deck.text or "") == "Matériaux de construction"
+    finally:
+        slides_brief.reset(brief)
+        _reset_tokens(tokens)
+
+
+def test_create_slides_project_falls_back_to_the_turn_brief(monkeypatch):
+    _bind_in_memory_git(monkeypatch)
+    tokens = _main_chat_context()
+    brief = slides_brief.set("Make a deck about the latest news in AI")
+    try:
+        create = next(t for t in slides_tools() if t.name == "create_slides_project")
+        result = create.invoke({"title": "Untitled presentation"})
+        assert "error" not in result, result
+        assert result["title"] == "Latest news in AI"
+        assert result["slug"] == "latest-news-in-ai"
+    finally:
+        slides_brief.reset(brief)
+        _reset_tokens(tokens)
+
+
+def _seed_untitled_deck(sc, *, title: str = "Untitled presentation") -> None:
+    sc.ensure_repo(owner="abi", name="monorepo")
+    sc.create_branch(
+        repo_id="abi/monorepo",
+        name="slides/ws-test/untitled-local",
+        from_ref="main",
+    )
+    sc.upsert_file(
+        repo_id="abi/monorepo",
+        path="slides/ws-test/untitled-local/deck.html",
+        content=(
+            "<!DOCTYPE html><html><body><main>"
+            '<section id="slide-cover" class="slide cover">'
+            "<h1>Presentation Title</h1>"
+            "</section></main></body></html>"
+        ),
+        message="Seed deck",
+        branch="slides/ws-test/untitled-local",
+    )
+    sc.upsert_file(
+        repo_id="abi/monorepo",
+        path="slides/ws-test/untitled-local/project.json",
+        content=(
+            f'{{"slug":"untitled-local","workspace_id":"ws-test","title":"{title}"}}\n'
+        ),
+        message="Seed project",
+        branch="slides/ws-test/untitled-local",
+    )
+
+
+def _stored_title(sc) -> str:
+    meta = sc.get_file(
+        repo_id="abi/monorepo",
+        path="slides/ws-test/untitled-local/project.json",
+        ref="slides/ws-test/untitled-local",
+    )
+    return json.loads(meta.text or "{}").get("title", "")
+
+
+def test_write_names_a_still_untitled_deck_after_the_brief(monkeypatch):
+    """A deck created by the UI New button starts untitled. Name it on write."""
+    sc = _bind_in_memory_git(monkeypatch)
+    _seed_untitled_deck(sc)
+    tokens = _slides_context()
+    brief = slides_brief.set(_FRENCH_BRIEF)
+    title = slides_active_title.set("Untitled presentation")
+    try:
+        result = _persist_deck(
+            "untitled-local",
+            "<html><body><main><section class='slide'>"
+            "<h1>Matériaux</h1></section></main></body></html>",
+            "Write via Abi",
+        )
+        assert "error" not in result, result
+        # Widget payload.
+        assert result["title"] == "Matériaux de construction"
+        # Sidebar tree record.
+        assert _stored_title(sc) == "Matériaux de construction"
+    finally:
+        slides_active_title.reset(title)
+        slides_brief.reset(brief)
+        _reset_tokens(tokens)
+
+
+def test_write_keeps_a_deck_title_the_user_already_has(monkeypatch):
+    sc = _bind_in_memory_git(monkeypatch)
+    _seed_untitled_deck(sc, title="Q3 Revenue Review")
+    tokens = _slides_context()
+    brief = slides_brief.set(_FRENCH_BRIEF)
+    try:
+        result = _persist_deck(
+            "untitled-local",
+            "<html><body><main><section class='slide'>"
+            "<h1>Q3</h1></section></main></body></html>",
+            "Write via Abi",
+        )
+        assert "error" not in result, result
+        assert result["title"] == "Q3 Revenue Review"
+        assert _stored_title(sc) == "Q3 Revenue Review"
+    finally:
+        slides_brief.reset(brief)
+        _reset_tokens(tokens)
+
+
+def test_write_does_not_rename_a_deck_from_an_edit_instruction(monkeypatch):
+    """ "Change the cover title to X" names nothing. Leave the deck alone."""
+    sc = _bind_in_memory_git(monkeypatch)
+    _seed_untitled_deck(sc)
+    tokens = _slides_context()
+    brief = slides_brief.set("change the cover title to REFRESH PROBE ALPHA")
+    try:
+        result = _persist_deck(
+            "untitled-local",
+            "<html><body><main><section class='slide'>"
+            "<h1>REFRESH PROBE ALPHA</h1></section></main></body></html>",
+            "Write via Abi",
+        )
+        assert "error" not in result, result
+        assert _stored_title(sc) == "Untitled presentation"
+    finally:
+        slides_brief.reset(brief)
         _reset_tokens(tokens)
 
 
