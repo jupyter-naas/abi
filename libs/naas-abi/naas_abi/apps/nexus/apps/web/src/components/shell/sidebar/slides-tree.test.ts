@@ -35,7 +35,7 @@ function tree(over: Partial<SlidesProjectTree> = {}): SlidesProjectTree {
       { name: 'project.json', path: 'slides/ws/deck-one/project.json', type: 'file' },
       { name: 'assets', path: 'slides/ws/deck-one/assets', type: 'dir' },
     ],
-    assets: [],
+    assets: [{ name: 'logo.png', path: 'slides/ws/deck-one/assets/logo.png', type: 'file' }],
     ...over,
   };
 }
@@ -104,6 +104,48 @@ describe('slidesTreeFileNodes', () => {
     );
     const assets = nodes.find((node) => node.name === 'assets');
     expect(assets?.children.map((child) => child.name)).toEqual(['cover.jpg', 'logo.png']);
+  });
+
+  it('drops the deck folder when the server lists it instead of its children', () => {
+    // `git ls-tree <ref> <dir>` without a trailing slash reports the directory
+    // entry itself, so the source control adapter can hand back the deck root
+    // as if it were inside itself.
+    const nodes = slidesTreeFileNodes(
+      tree({
+        entries: [
+          { name: 'deck-one', path: 'slides/ws/deck-one', type: 'dir' },
+          { name: 'deck.html', path: 'slides/ws/deck-one/deck.html', type: 'file' },
+        ],
+      }),
+    );
+    expect(nodes.map((node) => node.name)).toEqual(['deck.html']);
+  });
+
+  it('hides the seeded assets folder until it holds something', () => {
+    // The server appends `assets` whether or not the deck has one, so an empty
+    // one is a placeholder rather than a folder the user put there.
+    const nodes = slidesTreeFileNodes(tree({ assets: [] }));
+    expect(nodes.map((node) => node.name)).toEqual(['deck.html', 'project.json']);
+  });
+
+  it('keeps the assets folder once it holds a file', () => {
+    const nodes = slidesTreeFileNodes(
+      tree({ assets: [{ name: 'logo.png', path: 'slides/ws/deck-one/assets/logo.png', type: 'file' }] }),
+    );
+    expect(nodes.map((node) => node.name)).toEqual(['assets', 'deck.html', 'project.json']);
+  });
+
+  it('keeps an empty folder the user added', () => {
+    const nodes = slidesTreeFileNodes(
+      tree({
+        entries: [
+          { name: 'deck.html', path: 'slides/ws/deck-one/deck.html', type: 'file' },
+          { name: 'media', path: 'slides/ws/deck-one/media', type: 'dir' },
+        ],
+        assets: [],
+      }),
+    );
+    expect(nodes.map((node) => node.name)).toEqual(['media', 'deck.html']);
   });
 
   it('leaves scaffolding out of the tree', () => {

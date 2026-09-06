@@ -74,12 +74,23 @@ function compareEntries(a: SlidesTreeEntry, b: SlidesTreeEntry): number {
   return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
 }
 
+function trimPath(path: string): string {
+  return (path || '').replace(/\/+$/, '');
+}
+
 /**
  * One deck's files, with the fetched assets nested under the `assets` folder.
  *
- * `.gitkeep` and the seed README are scaffolding rather than deck content, so
- * they stay out of the tree the way the server already leaves them out of its
- * assets listing.
+ * Three things get dropped, all of them scaffolding rather than deck content:
+ *
+ *   - `.gitkeep` and the seed README, the way the server already leaves them
+ *     out of its own assets listing;
+ *   - the deck folder itself, which the source control adapter can return as
+ *     its own child because `git ls-tree <ref> <dir>` without a trailing slash
+ *     reports the directory entry instead of what is inside it;
+ *   - an empty `assets` folder, which the server appends to every deck whether
+ *     or not one was ever committed. A folder the user did add stays, even
+ *     empty, because only `assets` is synthesised.
  */
 export function slidesTreeFileNodes(
   tree: SlidesProjectTree | null | undefined,
@@ -87,6 +98,7 @@ export function slidesTreeFileNodes(
 ): SlidesTreeFileNode[] {
   if (!tree) return [];
   const hidden = new Set(['.gitkeep', 'README.md']);
+  const root = trimPath(tree.root);
   const assets = [...(tree.assets ?? [])]
     .filter((entry) => entry.name && !hidden.has(entry.name))
     .sort(compareEntries)
@@ -100,6 +112,8 @@ export function slidesTreeFileNodes(
 
   return [...(tree.entries ?? [])]
     .filter((entry) => entry.name && !hidden.has(entry.name))
+    .filter((entry) => !root || trimPath(entry.path) !== root)
+    .filter((entry) => entry.name !== 'assets' || assets.length > 0)
     .sort(compareEntries)
     .map((entry) => ({
       name: entry.name,
