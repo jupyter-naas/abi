@@ -24,6 +24,15 @@ def test_slides_guidelines_cover_creating_a_deck_from_the_main_chat() -> None:
     assert "no deck is open" in lowered
 
 
+def test_slides_guidelines_name_the_deck_after_its_topic() -> None:
+    """The deck name is what shows in the sidebar, the chat card, and the URL."""
+    prompt = AbiAgent.system_prompt
+    lowered = prompt.lower()
+    assert "same language as the brief" in lowered
+    assert "untitled" in lowered
+    assert "cover" in lowered
+
+
 def test_create_slides_project_is_registered_as_a_tool() -> None:
     from naas_abi.agents.tools.slides_tools import slides_tools
 
