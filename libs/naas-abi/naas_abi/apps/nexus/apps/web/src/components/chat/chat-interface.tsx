@@ -17,6 +17,8 @@ import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
 import { dispatchSlidesDeckUpdated, isSlidesWriteTool, useSlidesStore } from '@/stores/slides';
+import { slidesDeckCardFromToolCalls } from '@/components/slides/slides-deck-card';
+import { SlidesDeckCardView } from '@/components/slides/slides-deck-card-view';
 import { dispatchCodeFileUpdated, useCodeStore } from '@/stores/code';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
@@ -3691,6 +3693,12 @@ const MessageBubble = React.memo(function MessageBubble({
   const [copiedCodeKey, setCopiedCodeKey] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  // Deck Abi built during this turn, shown as a card that opens it in Slides.
+  const messageWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const slidesDeckCard = useMemo(
+    () => (isUser ? null : slidesDeckCardFromToolCalls(message.toolCalls)),
+    [isUser, message.toolCalls],
+  );
   // true = iframe-embeddable → open in preview panel
   // false = blocked / unreachable → open new tab
   // undefined = test in progress
@@ -4272,6 +4280,14 @@ const MessageBubble = React.memo(function MessageBubble({
               .join(' · ');
           })()}
         </div>
+
+        {/* Deck built this turn: opens it in the Slides surface */}
+        {slidesDeckCard && (
+          <SlidesDeckCardView
+            card={slidesDeckCard}
+            currentWorkspaceId={messageWorkspaceId ?? ''}
+          />
+        )}
 
         {/* RAG document source pills (filenames only; URLs use the panel below) */}
         {!isUser && message.sources && message.sources.some((src) => !/^https?:\/\//i.test(src)) && (
