@@ -404,3 +404,289 @@ def test_clone_url_falls_back_when_the_adapter_cannot_describe_the_repo() -> Non
         _Broken(), "abi/monorepo", username="zen", token="t"
     )
     assert url.startswith("http://zen:t@")
+
+
+_LOCAL_SIDECAR_BASE = "http://127.0.0.1:18999"
+_LOCAL_SIDECAR_SECRET = "secret-baked-by-the-adapter"
+
+
+class _FakeLocalCoding:
+    """Stands in for CodingEnvironmentService over LocalDirectoryAdapter.
+
+    The local adapter picks its own loopback port and secret at provision
+    time, then reports them through ``get_runtime_binding``. The Coder naming
+    convention (``coder-<user>-<name>:8378``) does not exist here.
+    """
+
+    def __init__(self) -> None:
+        self.provisioned: list[dict] = []
+        self._adapter = object()
+
+    def list_templates(self):
+        from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
+            WorkspaceTemplate,
+        )
+
+        return [
+            WorkspaceTemplate(
+                id="local-directory",
+                name="local-directory",
+                active_version_id="local",
+            )
+        ]
+
+    def ensure_user(self, *, external_id: str, email: str, username) -> str:
+        del email, username
+        return external_id
+
+    def list_environments(self, *, user_id: str):
+        del user_id
+        return []
+
+    def provision(self, *, user_id: str, template_id: str, name: str, params=None):
+        from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
+            WorkspaceStatus,
+        )
+
+        del user_id, template_id
+        self.provisioned.append(dict(params or {}))
+        return WorkspaceStatus(
+            id="env-local-1", name=name, phase="running", agent_ready=True
+        )
+
+    def get_runtime_binding(self, *, workspace_id: str):
+        del workspace_id
+        return _LOCAL_SIDECAR_BASE, _LOCAL_SIDECAR_SECRET
+
+    def get_harness_binding(self, *, workspace_id: str):
+        del workspace_id
+        return "http://127.0.0.1:18202"
+
+    def get_workspace_ui_url(self, *, workspace_id: str):
+        del workspace_id
+        return None
+
+
+def _only_the_local_sidecar_answers(base, secret, *, timeout_s=2.0):  # noqa: ANN001
+    del timeout_s
+    return (base, secret) in {
+        (_LOCAL_SIDECAR_BASE, _LOCAL_SIDECAR_SECRET),
+        (_REBOUND_SIDECAR_BASE, _REBOUND_SIDECAR_SECRET),
+    }
+
+
+def test_runtime_binds_the_sidecar_the_adapter_actually_started(monkeypatch) -> None:
+    """Slides must ask the adapter where the sidecar is, like the Code path.
+
+    ``/coding-environments/sandbox/runtime`` reads ``get_runtime_binding`` and
+    gets ``http://127.0.0.1:<port>``. Slides instead derived a Coder DNS name
+    (``coder-<user>-<workspace>:8378``) that never resolves without Docker, so
+    every probe failed and the deck showed "Coder sidecar not reachable".
+    """
+    sc = SourceControlService(InMemoryAdapter())
+    coding = _FakeLocalCoding()
+    client = _slides_client(monkeypatch, sc)
+    monkeypatch.setattr(slides_api, "_get_coding_environment", lambda _r: coding)
+    monkeypatch.setattr(slides_api, "_probe_sidecar", _only_the_local_sidecar_answers)
+    monkeypatch.setattr(slides_api.time, "sleep", lambda *_: None)
+
+    created = client.post(
+        "/slides/projects",
+        json={"workspace_id": "ws-test", "title": "Runtime deck", "slug": "runtime-deck"},
+    )
+    assert created.status_code == 200, created.text
+
+    runtime = client.post(
+        "/slides/projects/runtime-deck/runtime",
+        params={"workspace_id": "ws-test"},
+    )
+    assert runtime.status_code == 200, runtime.text
+    body = runtime.json()
+    assert body["ensured"] is True
+    assert body["sidecar_ready"] is True, body
+    assert body["detail"] is None, body
+
+
+def test_runtime_reports_the_adapter_binding_for_lookup(monkeypatch) -> None:
+    """The binding Slides persists must be the one Abi can call back on."""
+    sc = SourceControlService(InMemoryAdapter())
+    coding = _FakeLocalCoding()
+    client = _slides_client(monkeypatch, sc)
+    monkeypatch.setattr(slides_api, "_get_coding_environment", lambda _r: coding)
+    monkeypatch.setattr(slides_api, "_probe_sidecar", _only_the_local_sidecar_answers)
+    monkeypatch.setattr(slides_api.time, "sleep", lambda *_: None)
+
+    captured: dict[str, str] = {}
+    real_wait = slides_api._wait_for_sidecar
+
+    def _record(base, secret, **kwargs):  # noqa: ANN001
+        captured["base"] = str(base)
+        captured["secret"] = str(secret)
+        return real_wait(base, secret, **kwargs)
+
+    monkeypatch.setattr(slides_api, "_wait_for_sidecar", _record)
+
+    client.post(
+        "/slides/projects",
+        json={"workspace_id": "ws-test", "title": "Bound deck", "slug": "bound-deck"},
+    )
+    client.post(
+        "/slides/projects/bound-deck/runtime", params={"workspace_id": "ws-test"}
+    )
+    assert captured.get("base") == _LOCAL_SIDECAR_BASE, captured
+    assert captured.get("secret") == _LOCAL_SIDECAR_SECRET, captured
+
+
+_REBOUND_SIDECAR_BASE = "http://127.0.0.1:19001"
+_REBOUND_SIDECAR_SECRET = "secret-after-the-restart"
+
+
+class _StaleThenAdoptCoding(_FakeLocalCoding):
+    """Adapter that lost its in-memory record but still owns the workspace.
+
+    This is what an API restart looks like: the Nexus row still points at
+    environment ``env-local-1``, ``get_status`` no longer knows it, and the
+    re-provision path re-adopts the very same id by name. The restarted
+    sidecar lands on a different loopback port with a different secret, so
+    the stored binding has to be replaced, not kept.
+    """
+
+    def __init__(self, environment_id: str = "env-local-1") -> None:
+        super().__init__()
+        self._environment_id = environment_id
+        self._name = ""
+        self.restarted = False
+
+    def _status(self):
+        from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
+            WorkspaceStatus,
+        )
+
+        return WorkspaceStatus(
+            id=self._environment_id,
+            name=self._name,
+            phase="running",
+            agent_ready=True,
+        )
+
+    def get_runtime_binding(self, *, workspace_id: str):
+        del workspace_id
+        if self.restarted:
+            return _REBOUND_SIDECAR_BASE, _REBOUND_SIDECAR_SECRET
+        return _LOCAL_SIDECAR_BASE, _LOCAL_SIDECAR_SECRET
+
+    def get_status(self, *, workspace_id: str):
+        from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
+            WorkspaceNotFoundError,
+        )
+
+        if not self._name:
+            raise WorkspaceNotFoundError(workspace_id)
+        return self._status()
+
+    def provision(self, *, user_id: str, template_id: str, name: str, params=None):
+        del user_id, template_id
+        self.provisioned.append(dict(params or {}))
+        self._name = name
+        return self._status()
+
+    def list_environments(self, *, user_id: str):
+        del user_id
+        return [self._status()] if self._name else []
+
+    def forget(self) -> None:
+        """Drop the in-memory record the way an API restart would."""
+        self._name = ""
+        self.restarted = True
+
+
+def _sqlite_slides_client(monkeypatch, source_control, session):
+    app = FastAPI()
+    app.state.source_control = source_control
+    app.include_router(slides_api.router, prefix="/slides")
+    app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
+        id="user-1", email="admin@example.com", name="Zen Admin"
+    )
+
+    async def _session():
+        yield session
+
+    app.dependency_overrides[get_db] = _session
+
+    async def _allow(user_id: str, workspace_id: str) -> str:
+        return "owner"
+
+    monkeypatch.setattr(slides_api, "require_workspace_access", _allow)
+    monkeypatch.setattr(slides_api, "_probe_sidecar", _only_the_local_sidecar_answers)
+    monkeypatch.setattr(slides_api.time, "sleep", lambda *_: None)
+    return TestClient(app)
+
+
+def test_runtime_rebinds_when_the_same_environment_is_adopted_twice(
+    monkeypatch, tmp_path
+) -> None:
+    """Re-provisioning the same environment id must update, not collide.
+
+    The persist step only deleted the prior row ``if old.id != status.id``,
+    so the one case it had to handle -- adopting the same environment -- hit
+    ``UNIQUE constraint failed: coding_environments.id``, rolled back, and
+    left Slides with no runtime binding at all.
+    """
+    import anyio
+    from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    db_url = f"sqlite+aiosqlite:///{tmp_path / 'nexus.db'}"
+
+    async def _scenario():
+        engine = create_async_engine(db_url)
+        async with engine.begin() as conn:
+            await conn.run_sync(CodingEnvironmentModel.__table__.create)
+        session = async_sessionmaker(engine, expire_on_commit=False)()
+
+        sc = SourceControlService(InMemoryAdapter())
+        coding = _StaleThenAdoptCoding()
+        client = _sqlite_slides_client(monkeypatch, sc, session)
+        monkeypatch.setattr(slides_api, "_get_coding_environment", lambda _r: coding)
+
+        def _call() -> None:
+            client.post(
+                "/slides/projects",
+                json={
+                    "workspace_id": "ws-test",
+                    "title": "Adopted deck",
+                    "slug": "adopted-deck",
+                },
+            )
+            for _ in range(2):
+                res = client.post(
+                    "/slides/projects/adopted-deck/runtime",
+                    params={"workspace_id": "ws-test"},
+                )
+                assert res.status_code == 200, res.text
+                # Between calls the adapter forgets the workspace, so the next
+                # ensure re-adopts the same environment id on a new port.
+                coding.forget()
+
+        await anyio.to_thread.run_sync(_call)
+
+        rows = (
+            (await session.execute(select(CodingEnvironmentModel)))
+            .scalars()
+            .all()
+        )
+        count = len(rows)
+        base = rows[0].sidecar_base if rows else None
+        secret = rows[0].sidecar_secret if rows else None
+        created = rows[0].created_at if rows else None
+        await session.close()
+        await engine.dispose()
+        return count, base, secret, created
+
+    count, base, secret, created = anyio.run(_scenario)
+    assert count == 1, f"expected one runtime row, found {count}"
+    assert base == _REBOUND_SIDECAR_BASE, base
+    assert secret == _REBOUND_SIDECAR_SECRET, secret
+    # merge() must not blank the insert-only column it was never given.
+    assert created is not None

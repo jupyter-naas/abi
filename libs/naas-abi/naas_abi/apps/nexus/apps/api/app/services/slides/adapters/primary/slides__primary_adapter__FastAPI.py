@@ -1483,6 +1483,33 @@ def _build_sidecar_base(*, coder_username: str | None, name: str) -> str | None:
     return f"http://coder-{coder_username}-{name.lower()}:{_SIDECAR_PORT}"
 
 
+def _adapter_runtime_binding(
+    coding: CodingEnvironmentService, environment_id: str
+) -> tuple[str, str] | None:
+    """Where the adapter actually started the sidecar, if it says.
+
+    Coder resolves the sidecar by container DNS, so ``_build_sidecar_base``
+    can name it before it exists. LocalDirectoryAdapter instead picks a
+    loopback port and a secret at provision time and reports them here. This
+    is the same call the Code path makes in
+    ``/coding-environments/sandbox/runtime``; without it Slides probes a
+    Coder hostname that does not resolve outside Docker.
+    """
+    getter = getattr(coding, "get_runtime_binding", None)
+    if not callable(getter):
+        return None
+    try:
+        binding = getter(workspace_id=environment_id)
+    except Exception:  # noqa: BLE001
+        return None
+    if not binding:
+        return None
+    base, secret = binding
+    if not base or not secret:
+        return None
+    return str(base), str(secret)
+
+
 async def lookup_slides_sidecar(
     db: AsyncSession,
     *,
@@ -1624,8 +1651,17 @@ async def _ensure_runtime_impl(
                         workspace_id=existing.id,
                         params=start_params,
                     )
-                if expected_base and not existing.sidecar_base:
+                # The adapter is authoritative: a local runtime moves ports
+                # across restarts, so a stored base can be stale (or a Coder
+                # hostname written before the runtime was known).
+                bound = await run_in_threadpool(
+                    _adapter_runtime_binding, coding, existing.id
+                )
+                if bound is not None:
+                    existing.sidecar_base, existing.sidecar_secret = bound
+                elif expected_base and not existing.sidecar_base:
                     existing.sidecar_base = expected_base
+                if db.dirty:
                     try:
                         await db.commit()
                     except Exception:  # noqa: BLE001
@@ -1790,6 +1826,9 @@ async def _ensure_runtime_impl(
             if baked and baked != ws_secret:
                 adopted = True
                 ws_secret = baked
+        bound = await run_in_threadpool(_adapter_runtime_binding, coding, status.id)
+        if bound is not None:
+            ws_base, ws_secret = bound
     except WorkspaceNameConflictError as exc:
         # Belt-and-suspenders if list missed the workspace.
         try:
@@ -1825,6 +1864,11 @@ async def _ensure_runtime_impl(
                 baked = (on_ws or {}).get("sidecar_secret") or ""
                 if baked:
                     ws_secret = baked
+            bound = await run_in_threadpool(
+                _adapter_runtime_binding, coding, status.id
+            )
+            if bound is not None:
+                ws_base, ws_secret = bound
         except CodingEnvironmentError as adopt_exc:
             return RuntimeResponse(
                 ensured=False,
@@ -1861,7 +1905,10 @@ async def _ensure_runtime_impl(
         sidecar_ready = await run_in_threadpool(_wait_for_sidecar, ws_base, ws_secret)
     if db is not None:
         try:
-            # Upsert-style: replace any stale row for this label.
+            # Replace any stale row for this label, then upsert on the id.
+            # Re-adopting the same environment keeps status.id, so inserting a
+            # fresh row would collide on the primary key and roll the whole
+            # binding back; merge updates it in place instead.
             prior = await db.execute(
                 select(CodingEnvironmentModel).where(
                     CodingEnvironmentModel.workspace_id == workspace_id,
@@ -1869,10 +1916,10 @@ async def _ensure_runtime_impl(
                     CodingEnvironmentModel.label == label,
                 )
             )
-            old = prior.scalars().first()
-            if old is not None and old.id != status.id:
-                await db.delete(old)
-            db.add(
+            for old in prior.scalars().all():
+                if old.id != status.id:
+                    await db.delete(old)
+            await db.merge(
                 CodingEnvironmentModel(
                     id=status.id,
                     workspace_id=workspace_id,
