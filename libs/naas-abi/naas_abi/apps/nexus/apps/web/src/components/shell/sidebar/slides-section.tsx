@@ -22,7 +22,11 @@ import {
   type SlidesSeedTemplate,
 } from '@/lib/slides-templates';
 import { authFetch } from '@/stores/auth';
-import { useSlidesStore, type SlidesProject } from '@/stores/slides';
+import {
+  SLIDES_DECK_UPDATED_EVENT,
+  useSlidesStore,
+  type SlidesProject,
+} from '@/stores/slides';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
 
@@ -89,6 +93,16 @@ export function SlidesSection({
     void fetchProjects();
     void fetchTemplates();
   }, [fetchProjects, fetchTemplates, pathname]);
+
+  // Abi names a still-untitled deck on its first write, so the tree label has
+  // to come back from the server instead of waiting for the next navigation.
+  useEffect(() => {
+    const onUpdated = () => {
+      void fetchProjects();
+    };
+    window.addEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
+    return () => window.removeEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
+  }, [fetchProjects]);
 
   useEffect(() => {
     if (routeSlug) setSelectedSlug(routeSlug);

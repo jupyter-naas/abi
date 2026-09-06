@@ -77,6 +77,24 @@ export function slidesDeckCardFromToolCalls(
   return { slug, title: title || titleFromSlug(slug), workspaceId };
 }
 
+/**
+ * Title a slides tool result carries, or "" when it has none.
+ *
+ * Slides writes report the deck's display name, which is how the pane header
+ * and the sidebar tree learn that Abi just named a deck after the brief.
+ */
+export function slidesDeckTitleFromToolOutput(output: string | undefined): string {
+  if (!output || !output.trim()) return '';
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(output) as Record<string, unknown>;
+  } catch {
+    return ''; // Tool output can be plain text.
+  }
+  if (!parsed || typeof parsed !== 'object' || parsed.error) return '';
+  return typeof parsed.title === 'string' ? parsed.title.trim() : '';
+}
+
 export function slidesDeckHref(card: SlidesDeckCard, currentWorkspaceId: string): string {
   const ws = card.workspaceId || currentWorkspaceId;
   return `/workspace/${encodeURIComponent(ws)}/slides/${encodeURIComponent(card.slug)}`;

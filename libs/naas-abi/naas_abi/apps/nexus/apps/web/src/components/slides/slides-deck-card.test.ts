@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   slidesDeckCardFromToolCalls,
   slidesDeckHref,
+  slidesDeckTitleFromToolOutput,
 } from './slides-deck-card';
 import type { ToolCall } from '@/stores/workspace';
 
@@ -96,6 +97,26 @@ describe('slidesDeckCardFromToolCalls', () => {
     expect(
       slidesDeckCardFromToolCalls([toolCall({ output: CREATED_OUTPUT }), second])?.slug,
     ).toBe('second-deck');
+  });
+});
+
+describe('slidesDeckTitleFromToolOutput', () => {
+  it('reads the title a slides tool result carries', () => {
+    expect(slidesDeckTitleFromToolOutput(CREATED_OUTPUT)).toBe('Latest News About AI');
+    expect(
+      slidesDeckTitleFromToolOutput(
+        JSON.stringify({ slug: 'materiaux-de-construction', title: 'Matériaux de construction' }),
+      ),
+    ).toBe('Matériaux de construction');
+  });
+
+  it('returns nothing for output with no title', () => {
+    expect(slidesDeckTitleFromToolOutput(undefined)).toBe('');
+    expect(slidesDeckTitleFromToolOutput('wrote the deck')).toBe('');
+    expect(slidesDeckTitleFromToolOutput(JSON.stringify({ slug: 'x' }))).toBe('');
+    expect(
+      slidesDeckTitleFromToolOutput(JSON.stringify({ title: 'X', error: 'nope' })),
+    ).toBe('');
   });
 });
 

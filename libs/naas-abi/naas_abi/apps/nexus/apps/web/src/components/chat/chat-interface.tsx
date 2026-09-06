@@ -17,7 +17,10 @@ import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
 import { dispatchSlidesDeckUpdated, isSlidesWriteTool, useSlidesStore } from '@/stores/slides';
-import { slidesDeckCardFromToolCalls } from '@/components/slides/slides-deck-card';
+import {
+  slidesDeckCardFromToolCalls,
+  slidesDeckTitleFromToolOutput,
+} from '@/components/slides/slides-deck-card';
 import { SlidesDeckCardView } from '@/components/slides/slides-deck-card-view';
 import { dispatchCodeFileUpdated, useCodeStore } from '@/stores/code';
 import { useAuthStore, authFetch } from '@/stores/auth';
@@ -2117,6 +2120,10 @@ export function ChatInterface({
             }
             useSlidesStore.getState().setAgentWriting(false);
             if (!writeFailed) {
+              // Abi names a still-untitled deck after the brief on its first
+              // write, so pick the new name up for the pane and sidebar.
+              const deckTitle = slidesDeckTitleFromToolOutput(output);
+              if (deckTitle) useSlidesStore.getState().setSelectedTitle(deckTitle);
               dispatchSlidesDeckUpdated({ slug, source: target.rawName || target.toolName });
             }
           }
