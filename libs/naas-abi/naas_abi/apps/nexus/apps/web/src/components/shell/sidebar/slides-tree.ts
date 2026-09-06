@@ -74,20 +74,13 @@ function compareEntries(a: SlidesTreeEntry, b: SlidesTreeEntry): number {
   return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
 }
 
-function trimPath(path: string): string {
-  return (path || '').replace(/\/+$/, '');
-}
-
 /**
  * One deck's files, with the fetched assets nested under the `assets` folder.
  *
- * Three things get dropped, all of them scaffolding rather than deck content:
+ * Two things get dropped, both of them scaffolding rather than deck content:
  *
  *   - `.gitkeep` and the seed README, the way the server already leaves them
  *     out of its own assets listing;
- *   - a folder listed inside itself, which the source control adapter does at
- *     both levels because `git ls-tree <ref> <dir>` without a trailing slash
- *     reports the directory entry instead of what is inside it;
  *   - an empty `assets` folder, which the server appends to every deck whether
  *     or not one was ever committed. A folder the user did add stays, even
  *     empty, because only `assets` is synthesised.
@@ -98,15 +91,9 @@ export function slidesTreeFileNodes(
 ): SlidesTreeFileNode[] {
   if (!tree) return [];
   const hidden = new Set(['.gitkeep', 'README.md']);
-  const root = trimPath(tree.root);
-  // A listing never contains the folder it listed, so an entry sitting at one
-  // of these paths is the container rather than a child.
-  const containers = new Set([root, root ? `${root}/assets` : ''].filter(Boolean));
-  const isContainer = (path: string) => containers.has(trimPath(path));
 
   const assets = [...(tree.assets ?? [])]
     .filter((entry) => entry.name && !hidden.has(entry.name))
-    .filter((entry) => !isContainer(entry.path))
     .sort(compareEntries)
     .map((entry) => ({
       name: entry.name,
@@ -118,7 +105,6 @@ export function slidesTreeFileNodes(
 
   return [...(tree.entries ?? [])]
     .filter((entry) => entry.name && !hidden.has(entry.name))
-    .filter((entry) => trimPath(entry.path) !== root)
     .filter((entry) => entry.name !== 'assets' || assets.length > 0)
     .sort(compareEntries)
     .map((entry) => ({

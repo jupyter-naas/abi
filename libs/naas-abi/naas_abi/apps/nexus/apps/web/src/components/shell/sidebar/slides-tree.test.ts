@@ -106,32 +106,6 @@ describe('slidesTreeFileNodes', () => {
     expect(assets?.children.map((child) => child.name)).toEqual(['cover.jpg', 'logo.png']);
   });
 
-  it('drops the deck folder when the server lists it instead of its children', () => {
-    // `git ls-tree <ref> <dir>` without a trailing slash reports the directory
-    // entry itself, so the source control adapter can hand back the deck root
-    // as if it were inside itself.
-    const nodes = slidesTreeFileNodes(
-      tree({
-        entries: [
-          { name: 'deck-one', path: 'slides/ws/deck-one', type: 'dir' },
-          { name: 'deck.html', path: 'slides/ws/deck-one/deck.html', type: 'file' },
-        ],
-      }),
-    );
-    expect(nodes.map((node) => node.name)).toEqual(['deck.html']);
-  });
-
-  it('drops the assets folder when the server lists it inside itself', () => {
-    // Live response for a freshly seeded deck: the assets listing is the
-    // assets directory, so the folder appeared to contain a copy of itself.
-    const nodes = slidesTreeFileNodes(
-      tree({
-        assets: [{ name: 'assets', path: 'slides/ws/deck-one/assets', type: 'dir' }],
-      }),
-    );
-    expect(nodes.map((node) => node.name)).toEqual(['deck.html', 'project.json']);
-  });
-
   it('hides the seeded assets folder until it holds something', () => {
     // The server appends `assets` whether or not the deck has one, so an empty
     // one is a placeholder rather than a folder the user put there.
