@@ -4,8 +4,16 @@ Used by AbiAgent, slides tools, and Nexus chat so a current-events brief cannot
 skip web_search and dump template filler into deck.html.
 
 The server owns the model for a slides turn. Whatever the composer had
-selected, slides run on ``abi_slides_agent_model``, the id is checked at boot,
-and a turn that overrides a selection says so at warning level.
+selected, slides run on ``abi_slides_agent_model`` when it is set and on
+``abi_agent_model`` when it is not, and either way a turn that overrides a
+selection says so at warning level.
+
+``abi_slides_agent_model`` is optional because ABI has no reasoning-capable id
+it can ship: every one of them is registered by a marketplace or downstream
+module that a given install may not enable. Set, it is checked against the
+registry at boot, since it is then the only model any slides turn can run on
+and a typo in it breaks every deck rather than one. Unset, there is nothing to
+check that the engine does not already check for ``abi_agent_model``.
 """
 
 from __future__ import annotations
