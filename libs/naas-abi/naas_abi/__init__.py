@@ -242,6 +242,23 @@ class FeatureFlagsConfig(BaseModel):
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
 
 
+class SlidesTemplateSourceConfig(BaseModel):
+    """An extra tree of Nexus Slides seed decks, declared by the deploy.
+
+    ABI serves the seeds it ships under ``abi/``. Anything else in the picker
+    is named here rather than in ABI, so the module never has to know which
+    application installed it. Validated again by the API's own model.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Prefixed onto every template id from this tree (``<namespace>/<id>``).
+    namespace: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=32)
+
+    # Directory of ``<id>.html`` seeds plus an optional ``catalog.json``.
+    path: str = Field(min_length=1)
+
+
 class UserSeedConfig(BaseModel):
     """User definition applied on startup (create by email if missing)."""
 
@@ -440,6 +457,9 @@ class NexusConfig(BaseModel):
     tenant: TenantConfig = Field(default_factory=TenantConfig)
     feature_flags: FeatureFlagsConfig = Field(default_factory=FeatureFlagsConfig)
     marketplace: MarketplaceConfig = Field(default_factory=MarketplaceConfig)
+    slides_template_sources: list[SlidesTemplateSourceConfig] = Field(
+        default_factory=list
+    )
     users: list[UserSeedConfig] = Field(default_factory=list)
     organizations: list[OrganizationSeedConfig] = Field(default_factory=list)
 
@@ -551,6 +571,11 @@ class ABIModule(BaseModule):
                 tenant:
                     tab_title: "My Portal"
                     favicon_url: "https://example.com/favicon.ico"
+                # Extra Slides seed trees. Additive: ABI's own seeds are
+                # always served, under the reserved "abi" namespace.
+                slides_template_sources:
+                    - namespace: "acme"
+                      path: "src/acme/assets/slides/templates"
                 users:
                     - email: "owner@example.com"
                       name: "Owner User"

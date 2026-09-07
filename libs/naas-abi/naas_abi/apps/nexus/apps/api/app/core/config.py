@@ -6,8 +6,12 @@ import sys
 from functools import lru_cache
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Namespace under which ABI serves the seed decks it ships. Reserved: a
+# configured source claiming it would shadow rows the picker depends on.
+ABI_SLIDES_TEMPLATE_NAMESPACE = "abi"
 
 # Known-insecure secret keys that must be rejected
 _INSECURE_SECRETS = frozenset(
@@ -65,6 +69,37 @@ class ExternalAppConfig(BaseModel):
     url: str
     description: str | None = None
     icon_emoji: str | None = None
+
+
+class SlidesTemplateSourceConfig(BaseModel):
+    """One directory of Nexus Slides seed decks, contributed by config.
+
+    ABI ships its own seeds and serves them under the ``abi`` namespace. Any
+    other tree a deploy wants in the picker is declared here, which is what
+    keeps a consumer's name out of ABI: the deploy says who it is, ABI only
+    reads what it is given.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Prefixed onto every template id from this source (``<namespace>/<id>``)
+    # and shown in the picker when more than one namespace is in play. Kebab
+    # slug so it survives a round trip through a template id. ``abi`` is taken.
+    namespace: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=32)
+
+    # Directory holding ``<id>.html`` seeds and an optional ``catalog.json``.
+    # Absolute, or relative to the API working directory.
+    path: str = Field(min_length=1)
+
+    @field_validator("namespace")
+    @classmethod
+    def _namespace_is_not_reserved(cls, value: str) -> str:
+        if value == ABI_SLIDES_TEMPLATE_NAMESPACE:
+            raise ValueError(
+                f"'{ABI_SLIDES_TEMPLATE_NAMESPACE}' is reserved for the seeds "
+                "ABI ships. Pick another namespace for this source."
+            )
+        return value
 
 
 class ModelPricingEntry(BaseModel):
@@ -356,6 +391,12 @@ class Settings(BaseSettings):
 
     # Marketplace pricing, usage tiers, and model token costs
     marketplace: MarketplaceConfig = Field(default_factory=MarketplaceConfig)
+
+    # Extra Slides seed trees for the template picker. Additive: ABI's own
+    # seeds are always served, so this list holds only what a deploy adds.
+    slides_template_sources: list[SlidesTemplateSourceConfig] = Field(
+        default_factory=list
+    )
 
     # User seed configs (upserted by email on startup)
     users: list[UserSeedConfig] = Field(default_factory=list)
