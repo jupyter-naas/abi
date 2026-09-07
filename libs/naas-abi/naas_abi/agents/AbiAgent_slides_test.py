@@ -1,39 +1,27 @@
 import inspect
 
 from naas_abi.agents.AbiAgent import AbiAgent
+from naas_abi.agents.SlidesAgent import SlidesAgent
 
 
-def test_slides_guidelines_require_research_before_write() -> None:
+def test_abi_prompt_hands_deck_briefs_to_slides() -> None:
     prompt = AbiAgent.system_prompt
-    assert "web_search" in prompt
-    assert "Research loop" in prompt
-    assert "start writing immediately" not in prompt
-    assert "Context / Approach / Plan" in prompt
+    lowered = prompt.lower()
+    assert "hand off to the slides agent" in lowered
+    assert "create_slides_project" not in prompt
+    assert "<slides_guidelines>" not in prompt
 
 
 def test_new_accepts_model_id() -> None:
     assert "model_id" in inspect.signature(AbiAgent.New).parameters
 
 
-def test_slides_guidelines_cover_creating_a_deck_from_the_main_chat() -> None:
-    """Capability A: with no deck open, Abi must create one, not refuse."""
-    prompt = AbiAgent.system_prompt
-    assert "create_slides_project" in prompt
-    # It must not stall asking the user to open Slides first.
-    lowered = prompt.lower()
-    assert "no deck is open" in lowered
+def test_abi_get_tools_does_not_register_slides_writes() -> None:
+    source = inspect.getsource(AbiAgent.get_tools)
+    assert "slides_tools" not in source
+    assert "slides_research_tools" not in source
 
 
-def test_slides_guidelines_name_the_deck_after_its_topic() -> None:
-    """The deck name is what shows in the sidebar, the chat card, and the URL."""
-    prompt = AbiAgent.system_prompt
-    lowered = prompt.lower()
-    assert "same language as the brief" in lowered
-    assert "untitled" in lowered
-    assert "cover" in lowered
-
-
-def test_create_slides_project_is_registered_as_a_tool() -> None:
-    from naas_abi.agents.tools.slides_tools import slides_tools
-
-    assert "create_slides_project" in {t.name for t in slides_tools()}
+def test_create_slides_project_is_registered_on_slides_agent() -> None:
+    names = {tool.name for tool in SlidesAgent.get_tools()}
+    assert "create_slides_project" in names
