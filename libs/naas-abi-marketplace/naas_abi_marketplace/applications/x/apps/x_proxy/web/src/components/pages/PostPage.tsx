@@ -208,11 +208,34 @@ export function PostPage({
           expanded
         />
       ) : loading ? null : (
-        <p className="user-empty">
-          Post {postId} is not in the published dataset. It may be outside every
-          published window - add <code>&amp;user=&lt;handle&gt;</code> to open it
-          from that author&apos;s posts.
-        </p>
+        <div className="user-empty">
+          <p>
+            Post {postId} is not in the published X Proxy dataset
+            {author ? (
+              <>
+                {" "}
+                for @{author}
+              </>
+            ) : null}
+            . It may be outside every published window.
+          </p>
+          {author && postId ? (
+            <p style={{ marginTop: 12 }}>
+              <a
+                href={`https://x.com/${encodeURIComponent(author)}/status/${encodeURIComponent(postId)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open on X
+              </a>
+            </p>
+          ) : (
+            <p>
+              Add <code>&amp;user=&lt;handle&gt;</code> to open it from that
+              author&apos;s posts when they are published.
+            </p>
+          )}
+        </div>
       )}
     </div>
   );

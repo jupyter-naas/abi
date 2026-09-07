@@ -172,16 +172,19 @@ export function rankTweets(hits: TweetHit[], needle: string): TweetHit[] {
   for (const hit of hits) {
     const username = hit.username.toLowerCase();
     const text = hit.text.toLowerCase();
+    const id = (hit.id || "").toLowerCase();
     let score: number;
-    if (username === q) score = 0;
-    else if (username.startsWith(q)) score = 1;
+    if (id && id === q) score = -1;
+    else if (id && id.startsWith(q)) score = 0;
+    else if (username === q) score = 1;
+    else if (username.startsWith(q)) score = 2;
     // A word starting with the needle beats it appearing mid-word, so "ai"
     // finds posts about AI before it finds posts that merely contain "said".
     else if (new RegExp(`\\b${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(text))
-      score = 2;
-    else if (username.includes(q)) score = 3;
-    else if (text.includes(q)) score = 4;
-    else if (hit.location.toLowerCase().includes(q)) score = 5;
+      score = 3;
+    else if (username.includes(q)) score = 4;
+    else if (text.includes(q)) score = 5;
+    else if (hit.location.toLowerCase().includes(q)) score = 6;
     else continue;
     scored.push({ hit, score });
   }

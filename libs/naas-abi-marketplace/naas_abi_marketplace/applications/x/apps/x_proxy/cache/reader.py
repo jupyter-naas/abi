@@ -534,6 +534,53 @@ class CacheReader:
             out.setdefault(username, []).append(post)
         return out
 
+    def tweet_search_index(self) -> list[dict[str, Any]]:
+        """Every post in the projection, shaped for the Search Tweets page index.
+
+        One row per ``tweet_id``, newest first. Match typing wins over
+        referenced context; matched rows carry the ``queries`` slugs that pulled
+        them in.
+        """
+        import polars as pl
+
+        posts = self.posts()
+        if posts.is_empty():
+            return []
+        matched_queries = {
+            r["tweet_id"]: [q for q in r["queries"] if q]
+            for r in (
+                posts.filter(pl.col("kind") == KIND_MATCHED)
+                .group_by("tweet_id")
+                .agg(pl.col("query_slug").unique().sort().alias("queries"))
+                .iter_rows(named=True)
+            )
+        }
+        rows = (
+            posts.with_columns((pl.col("kind") == KIND_MATCHED).alias("_is_match"))
+            .sort(["_is_match", "created_at"], descending=[True, True])
+            .unique(subset=["tweet_id"], keep="first")
+            .sort("created_at", descending=True)
+        )
+        out: list[dict[str, Any]] = []
+        for r in rows.iter_rows(named=True):
+            tweet_id = r["tweet_id"]
+            media = " ".join(str(r["media_urls"] or "").split())
+            post: dict[str, Any] = {
+                "tweet_id": tweet_id,
+                "created_at": r["created_at"].isoformat(),
+                "text": r["full_text"] or r["text"] or "",
+                "username": r["username"] or "",
+                "location": r["location"] or "",
+                "verified_type": r["verified_type"] or "",
+                "referenced": r["kind"] == KIND_REFERENCED,
+                "media_count": len(media.split()) if media else 0,
+            }
+            queries = matched_queries.get(tweet_id)
+            if queries:
+                post["queries"] = queries
+            out.append(post)
+        return out
+
     def accounts_by_username(self) -> dict[str, dict[str, Any]]:
         """Full profile per username, shaped like the published Users payload."""
         authors = self.authors()

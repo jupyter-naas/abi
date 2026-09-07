@@ -10,12 +10,12 @@ subclass that the module loader discovers automatically.
 ```
                  fetch + save                         ObjectPut event
  X v2 API  ───────────────────────►  object storage  ───────────────────►  triple store
-            XSearchWorkflow                  (JSON       XSearchRecentTweets
+            XSearchRecentTweets                 (JSON       XSearchRecentTweets
             Orchestration                  envelopes)    EventOrchestration
                                                          (XSearchRecentTweetsPipeline)
 ```
 
-1. **`XSearchWorkflowOrchestration`** — *fetch + save only.*
+1. **`XSearchRecentTweetsOrchestration`** — *fetch + save only.*
    One job per `search_recent_tweets_workflow` config entry, plus the single
    trigger that runs it: a **sensor** when the entry sets `interval_seconds`
    (every N seconds of elapsed time) or a **schedule** when it sets `cron`

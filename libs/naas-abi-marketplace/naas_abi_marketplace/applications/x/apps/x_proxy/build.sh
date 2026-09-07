@@ -4,7 +4,7 @@
 # Phases:
 #   --web      pnpm build in web/ (skipped with a warning if pnpm is missing)
 #   --publish  upload web/out/ only (--web-only). Snapshot rebuild is owned by
-#              the x_build_app_x_proxy Dagster schedule, like other hub shells.
+#              the x_build_pipeline_hub Dagster schedule, like other hub shells.
 #
 # Usage (from repo root or any cwd):
 #   ./build.sh --web

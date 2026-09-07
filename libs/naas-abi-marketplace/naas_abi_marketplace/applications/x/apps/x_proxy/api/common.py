@@ -1690,6 +1690,90 @@ class SnapshotContext:
             posts.sort(key=lambda p: (p["created_at"], p["url"]), reverse=True)
         return out
 
+    def all_tweets_for_search(self) -> list[dict[str, Any]]:
+        """Every post in the tweet graph, shaped for the Search Tweets page index.
+
+        Uncapped on purpose: that page searches the whole graph, not a rolling
+        window or a single followed query. One aggregate rather than one scan
+        per author.
+        """
+        sparql = f"""
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX x:   <{self.namespace}>
+        SELECT ?tweetId ?created ?fullText ?text ?username ?location ?verifiedType
+               ?isReferenced
+               (GROUP_CONCAT(DISTINCT COALESCE(?mediaAny, "");
+                             separator=" ") AS ?mediaUrls)
+               (GROUP_CONCAT(DISTINCT COALESCE(?qs, "");
+                             separator="\u0001") AS ?queryStrings)
+        WHERE {{
+          GRAPH <{self.tweet_graph_name}> {{
+            ?tweet rdf:type x:Tweet ;
+                   x:tweet_created_at ?created .
+            OPTIONAL {{ ?tweet x:tweet_id ?tweetId . }}
+            BIND(EXISTS {{ ?tweet rdf:type x:ReferencedTweet }} AS ?isReferenced)
+            OPTIONAL {{ ?tweet x:full_text ?fullText . }}
+            OPTIONAL {{ ?tweet x:tweet_text ?text . }}
+            OPTIONAL {{
+              ?tweet x:isAuthoredBy ?author .
+              OPTIONAL {{ ?author x:username ?username . }}
+              OPTIONAL {{ ?author x:user_location ?location . }}
+              OPTIONAL {{ ?author x:verified_type ?verifiedType . }}
+            }}
+            OPTIONAL {{
+              ?tweet x:isContainedInSearchResultSet ?rs .
+              ?proc x:producesSearchResult ?rs ;
+                    x:usesSearchQuery ?sq .
+              ?sq x:query_string ?qs .
+            }}
+            OPTIONAL {{
+              ?tweet x:hasAttachedMedia ?media .
+              OPTIONAL {{ ?media x:media_url ?mediaUrl . }}
+              OPTIONAL {{ ?media x:preview_image_url ?mediaPreview . }}
+              BIND(COALESCE(?mediaUrl, ?mediaPreview) AS ?mediaAny)
+            }}
+          }}
+        }}
+        GROUP BY ?tweet ?tweetId ?created ?fullText ?text ?username ?location
+                 ?verifiedType ?isReferenced
+        """
+        rows = self._query_rows(sparql, "all_tweets_for_search")
+
+        def _s(row: Any, key: str) -> str:
+            value = getattr(row, key, None)
+            return "" if value is None else str(value)
+
+        posts: list[dict[str, Any]] = []
+        for row in rows:
+            created = getattr(row, "created", None)
+            if created is None:
+                continue
+            full = _s(row, "fullText")
+            media = " ".join(_s(row, "mediaUrls").split())
+            post: dict[str, Any] = {
+                "tweet_id": _s(row, "tweetId"),
+                "created_at": str(created),
+                "text": full or _s(row, "text"),
+                "username": _s(row, "username").strip(),
+                "location": _s(row, "location"),
+                "verified_type": _s(row, "verifiedType"),
+                "referenced": _s(row, "isReferenced").lower() in ("true", "1"),
+                "media_count": len(media.split()) if media else 0,
+            }
+            if not post["referenced"]:
+                slugs = sorted(
+                    {
+                        slugify(q)
+                        for q in _s(row, "queryStrings").split("\u0001")
+                        if q.strip()
+                    }
+                )
+                if slugs:
+                    post["queries"] = slugs
+            posts.append(post)
+        posts.sort(key=lambda p: (p["created_at"], p["tweet_id"]), reverse=True)
+        return posts
+
     def accounts_for_usernames(self, usernames: list[str]) -> dict[str, dict[str, Any]]:
         """The ``XUser`` profile fields + public metrics for each of *usernames*.
 
