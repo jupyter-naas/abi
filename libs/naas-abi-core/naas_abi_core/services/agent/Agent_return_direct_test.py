@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -154,3 +155,59 @@ def test_the_same_return_direct_tool_called_twice_surfaces_both_outputs() -> Non
 
     assert "web says revenue" in reply
     assert "web says headcount" in reply
+
+
+_IMAGE = {"type": "image_url", "image_url": {"url": "https://example.com/image.png"}}
+
+
+@pytest.mark.parametrize(
+    ("outputs", "expected"),
+    [
+        (["first", "second"], "first\n\nsecond"),
+        ([[_IMAGE]], [_IMAGE]),
+        ([[_IMAGE], [_IMAGE]], [_IMAGE, _IMAGE]),
+        (["caption", [_IMAGE]], [{"type": "text", "text": "caption"}, _IMAGE]),
+        ([[_IMAGE], "caption"], [_IMAGE, {"type": "text", "text": "caption"}]),
+        (
+            [[{"type": "text", "text": "caption"}, _IMAGE], []],
+            [{"type": "text", "text": "caption"}, _IMAGE],
+        ),
+    ],
+)
+def test_direct_reply_preserves_content_in_graph(
+    outputs: list[Any], expected: Any
+) -> None:
+    """The checkpoint must retain every block without another model pass."""
+
+    @tool(return_direct=True)
+    def produce_content(index: int) -> Any:
+        """Return the requested content."""
+        return outputs[index]
+
+    model = _ScriptedChatModel(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": "produce_content", "args": {"index": i}, "id": f"call-{i}"}
+                    for i in range(len(outputs))
+                ],
+            )
+        ]
+    )
+    agent = Agent(
+        name="content_agent",
+        description="Test structured direct replies",
+        chat_model=model,
+        tools=[produce_content],
+        agents=[],
+        memory=MemorySaver(),
+        state=AgentSharedState(thread_id="content-test"),
+        enable_default_tools=False,
+    )
+    list(agent.stream("Return the content"))
+    state = agent.graph.get_state({"configurable": {"thread_id": "content-test"}})
+    reply = state.values["messages"][-1]
+    assert isinstance(reply, AIMessage)
+    assert reply.content == expected
+    assert model.calls == 1

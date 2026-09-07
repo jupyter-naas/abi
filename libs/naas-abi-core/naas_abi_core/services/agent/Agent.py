@@ -1552,20 +1552,27 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         One response is forwarded untouched, so structured content blocks reach
         the client exactly as the tool produced them.
 
-        Two or more are answers to the same user turn and are joined in call
-        order. A turn yields one assistant message everywhere downstream: the
-        ``invoke`` return value is ``messages[-1].content``, the transcript
-        stores one reply, the UI renders one bubble. Emitting a message per
-        tool would surface all of them on the stream and still lose the earlier
-        ones everywhere else, which moves the bug rather than fixing it.
+        Multiple text responses are joined into one reply. When any response
+        contains structured blocks, concatenate the blocks in call order and
+        wrap plain strings as text blocks. Keep one assistant message without
+        discarding images or other non-text content.
         """
         if len(messages) == 1:
             return messages[0].content
-        return "\n\n".join(
-            text
-            for text in (Agent._content_to_text(m.content) for m in messages)
-            if text.strip()
-        )
+        if all(isinstance(message.content, str) for message in messages):
+            return "\n\n".join(
+                message.content
+                for message in messages
+                if isinstance(message.content, str) and message.content.strip()
+            )
+        blocks: list[str | dict] = []
+        for message in messages:
+            if isinstance(message.content, str):
+                if message.content:
+                    blocks.append({"type": "text", "text": message.content})
+            else:
+                blocks.extend(message.content)
+        return blocks
 
     def call_tools(self, state: ABIAgentState) -> list[Command]:
         # Check if messages are present in the state.
