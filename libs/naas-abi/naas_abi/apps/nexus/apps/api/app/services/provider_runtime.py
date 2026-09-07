@@ -1435,13 +1435,31 @@ async def stream_with_abi_inprocess(
     messages: list[Message],
     config: ProviderConfig,
     thread_id: str,
-    user_context_preamble: str | None = None,
+    *,
+    user_context_preamble: str | None,
 ) -> AsyncGenerator[str | dict[str, Any], None]:
     """Stream chat by invoking ABI agent directly in-process.
 
     ``user_context_preamble`` is prepended to the latest user message (separated
     by a blank line) so skills catalog and first-turn profile context reach
     agents that ignore the Nexus ``system_prompt``.
+
+    Required, and keyword-only, because it defaulted to ``None`` and the
+    OpenAI-compatible gateway then passed three positional arguments and ran
+    every turn with no idea who it was acting for. The omission compiled, the
+    request succeeded, the answer read plausibly, and nothing anywhere recorded
+    that the agent had been told nothing about its caller. An argument whose
+    absence has no symptom has to be one the language refuses to let you leave
+    out. Keyword-only as well, so it cannot be passed by position and then be
+    silently repointed by a parameter inserted ahead of it.
+
+    A caller with genuinely nothing to inject passes ``None`` on purpose. That
+    is a decision in the diff; a default is not.
+
+    This is the streaming spelling of what 013567ec23 did to
+    ``injection_preamble`` on the completion path. That one survived here
+    because the same control has a different name on each path, which is worth
+    knowing the next time one of them is tightened.
     """
     import asyncio
     import json

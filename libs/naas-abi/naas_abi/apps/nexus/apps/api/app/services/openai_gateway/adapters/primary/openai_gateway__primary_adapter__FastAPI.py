@@ -135,7 +135,7 @@ async def _stream_agent_text(
     # Stream the agent's text AND its tool activity (calls + results) as it happens,
     # so the client shows what the agent is doing instead of just the final answer.
     async for chunk in stream_with_abi_inprocess(
-        pr_messages, config, thread_id, user_context_preamble
+        pr_messages, config, thread_id, user_context_preamble=user_context_preamble
     ):
         if isinstance(chunk, str) and chunk:
             yield chunk
