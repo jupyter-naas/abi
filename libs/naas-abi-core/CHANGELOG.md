@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.31.1 (2026-09-07)
+
+### Bug Fixes
+
+- **agent**: Align loguru comment with #1157 to merge cleanly
+  ([#1158](https://github.com/jupyter-naas/abi/pull/1158),
+  [`9ea2efe`](https://github.com/jupyter-naas/abi/commit/9ea2efe52fab7f245aeb991483adb8c671a757ec))
+
+- **agent**: Survive embedding-provider failures instead of hanging the chat
+  ([#1158](https://github.com/jupyter-naas/abi/pull/1158),
+  [`9ea2efe`](https://github.com/jupyter-naas/abi/commit/9ea2efe52fab7f245aeb991483adb8c671a757ec))
+
+
 ## v2.31.0 (2026-09-07)
 
 ### Code Style
