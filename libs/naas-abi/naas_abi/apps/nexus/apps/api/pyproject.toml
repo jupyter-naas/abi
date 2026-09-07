@@ -70,11 +70,25 @@ dev = [
 ]
 
 [tool.ruff]
+# Ruff resolves settings from the nearest pyproject.toml holding a [tool.ruff]
+# table, and that table replaces the one above it rather than adding to it. This
+# subtree therefore ran on its own ruleset and never saw the root config, so the
+# TID251 zen import ban did not apply to the chat service, the streaming adapter
+# or the slides adapter. `extend` makes the root config the base and keeps the
+# selections below as additions on top of it.
+extend = "../../../../../../../pyproject.toml"
+# Both of these have to stay. `extend` does not carry the root target-version
+# across, because this file has its own `requires-python = ">=3.10"` and ruff
+# reads that first, which would quietly retarget the UP rules at 3.10. Dropping
+# line-length would take the subtree from 100 to the default 88 and make the
+# next `make fmt` reformat every file in it.
 target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
-select = [
+# Kept because the root default set does not cover these whole families: they
+# add E7xx comparisons, W29x whitespace, B904/B905, F403/F405 and UP013/UP015.
+extend-select = [
     "E",    # pycodestyle errors
     "W",    # pycodestyle warnings
     "F",    # Pyflakes
@@ -83,9 +97,59 @@ select = [
     "C4",   # flake8-comprehensions
     "UP",   # pyupgrade
 ]
+# A child extend-select is applied after the parent's ignore list, so pulling in
+# the whole B family above switches B008 and B017 back on even though the root
+# config ignores both. They are restated here for the same reasons the root
+# gives, not as new exceptions.
 ignore = [
     "E501",  # line too long (handled by formatter)
-    "B008",  # do not perform function calls in argument defaults
+    "B008",  # FastAPI Depends/Query in argument defaults is the framework idiom
+    "B017",  # tests assert pytest.raises(Exception) for unknown adapters
+]
+
+[tool.ruff.lint.extend-per-file-ignores]
+# Pre-existing debt, not an endorsement. Inheriting the root config turned on
+# 245 rules this subtree had never been linted against, and they found 391
+# violations that were already in the tree. Suppressing them here is what lets
+# the consolidation land in one commit; every code below is a separate cleanup
+# waiting to happen, and the counts are here so the list can be seen shrinking.
+#
+# Four of these are latent bugs rather than style, and are called out so nobody
+# reads the whole block as cosmetic: DTZ* (naive timestamps in a service that
+# persists them), S110/S112 (silently swallowed exceptions, the same failure
+# mode that hid the zen import for weeks), ASYNC220/ASYNC230 (blocking
+# subprocess and file IO on the event loop), PLW1510 (unchecked subprocess.run).
+"**/*.py" = [
+    "BLE001",   # 125  blind `except Exception`
+    "RUF100",   #  74  dead `# noqa: E501`, removable with --fix once E501 stays off
+    "DTZ005",   #  41  datetime.now() without tz
+    "S110",     #  31  try/except/pass
+    "DTZ003",   #  22  datetime.utcnow()
+    "RUF010",   #  19  explicit str() inside f-string
+    "S112",     #  13  try/except/continue
+    "RUF022",   #  12  unsorted __all__
+    "PIE810",   #   9  repeated startswith instead of a tuple
+    "DTZ001",   #   8  datetime() without tzinfo
+    "SIM117",   #   6  nested with statements
+    "PIE790",   #   5  unnecessary pass
+    "ASYNC230", #   3  blocking open() in an async function
+    "FURB188",  #   3  slice instead of removeprefix/removesuffix
+    "G201",     #   2  logging.error(exc_info=True) instead of .exception()
+    "PERF102",  #   2  .items() where only keys or values are used
+    "PYI063",   #   2  pre-PEP570 positional-only marker
+    "RUF019",   #   2  redundant dict key check before access
+    "ASYNC220", #   1  blocking subprocess in an async function
+    "DTZ901",   #   1  datetime.min without tz
+    "EXE001",   #   1  shebang on a non-executable file
+    "FURB192",  #   1  sorted()[0] instead of min()
+    "PLR1711",  #   1  useless trailing return
+    "PLR1730",  #   1  if/assign instead of min()/max()
+    "PLW1510",  #   1  subprocess.run without explicit check
+    "PYI034",   #   1  __enter__ should return Self
+    "RET501",   #   1  explicit `return None` where bare return reads better
+    "RUF023",   #   1  unsorted __slots__
+    "RUF051",   #   1  `if k in d: del d[k]` instead of pop
+    "SIM103",   #   1  return the condition directly
 ]
 
 [tool.ruff.lint.isort]
