@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.42.1 (2026-09-07)
+
+### Bug Fixes
+
+- **x**: Update search queries from 'drone' to 'openai' and 'anthropic'
+  ([`e9c4ffc`](https://github.com/jupyter-naas/abi/commit/e9c4ffc83928601f331a57d21a0fc3f6939c82cb))
+
+
 ## v3.42.0 (2026-09-07)
 
 
