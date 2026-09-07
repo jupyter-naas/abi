@@ -2,6 +2,235 @@
 
 <!-- version list -->
 
+## v2.62.0 (2026-09-07)
+
+### Bug Fixes
+
+- **deps**: Stop naming the tenant in ABI
+  ([`dbc6835`](https://github.com/jupyter-naas/abi/commit/dbc6835ade860dce65c98d3d1755b61a4afe6c5a))
+
+- **gateway**: Tell the agent who the OpenAI-compatible caller is
+  ([`1605404`](https://github.com/jupyter-naas/abi/commit/1605404fe86c9e93a445f0b66405b59494deec60))
+
+- **nexus**: Resolve a model name through a provider routing slug
+  ([`0181f4a`](https://github.com/jupyter-naas/abi/commit/0181f4a59fe100f3c0424e95715c7b886cd1f7a9))
+
+- **slides**: Accept the local-directory coding template
+  ([`20d2710`](https://github.com/jupyter-naas/abi/commit/20d2710a7cc5fc138db97ddd6e5f21c2f540693f))
+
+- **slides**: Bind web search from ABI, not from the zen repo
+  ([`666334e`](https://github.com/jupyter-naas/abi/commit/666334eb8f4f9e0b61ff575956b10c5bc542dbd4))
+
+- **slides**: Clone the local checkout when git is on disk
+  ([`af99c28`](https://github.com/jupyter-naas/abi/commit/af99c28f7ee9cc9e53c507d55dd2d69b63cfdbde))
+
+- **slides**: Copy the chat model instead of writing reasoning onto it
+  ([`2b30039`](https://github.com/jupyter-naas/abi/commit/2b30039216e82d5999b479eabc77a6159eadf695))
+
+- **slides**: Declare ddgs so web_search works on a bare install
+  ([`e680d07`](https://github.com/jupyter-naas/abi/commit/e680d07c84daff027c2af35d9c504db947b72ac7))
+
+- **slides**: Keep phantom rows out of the sidebar tree
+  ([`513c5c1`](https://github.com/jupyter-naas/abi/commit/513c5c1deeac47e93994573dc27baa0b72c21e6e))
+
+- **slides**: Log when the slides fallback supplies reasoning effort
+  ([`552dcad`](https://github.com/jupyter-naas/abi/commit/552dcadeadcf28e62c38663b9e94cc7790ab267f))
+
+- **slides**: Name the deck in project.json and the tool payload
+  ([`b44b9d8`](https://github.com/jupyter-naas/abi/commit/b44b9d8164abe4c3c83d760bfd812a1d3ba7745f))
+
+- **slides**: Only call a deck the current page when the route is on it
+  ([`f7bafa7`](https://github.com/jupyter-naas/abi/commit/f7bafa7d576012fc275a541977632d0094409c64))
+
+- **slides**: Open the research gate when no search tool is bound
+  ([`40ed72c`](https://github.com/jupyter-naas/abi/commit/40ed72c9b43000720286ffd9a41da2b640326537))
+
+- **slides**: Pass the brief to the model override on the streaming path
+  ([`7092440`](https://github.com/jupyter-naas/abi/commit/7092440addbcd228b84ae2f1ef2e50f8627af540))
+
+- **slides**: Persist the model the turn actually ran on
+  ([`44fdb9e`](https://github.com/jupyter-naas/abi/commit/44fdb9e7c593072170590b196eda5b5ebb920729))
+
+- **slides**: Raise when the slides model id is missing
+  ([`ed1c793`](https://github.com/jupyter-naas/abi/commit/ed1c7931303e7db022371f5edb632ab6b6e87e18))
+
+- **slides**: Recognise a French deck request and keep the brief
+  ([`5ca9942`](https://github.com/jupyter-naas/abi/commit/5ca994279f2934ccd095d1078b5c34a5365b37b5))
+
+- **slides**: Ship no slides model default
+  ([`3036810`](https://github.com/jupyter-naas/abi/commit/3036810aaba9bb6a6c5ba94af2b768cfbb8f5d2c))
+
+- **slides**: Show the new deck name in the pane and the sidebar tree
+  ([`4d860ba`](https://github.com/jupyter-naas/abi/commit/4d860bac30e3348242227c4f19d2d75843529fc9))
+
+- **slides**: Skip the boot check when no slides model is named
+  ([`07acb33`](https://github.com/jupyter-naas/abi/commit/07acb33d790533926671ff9104914b8193ebcadd))
+
+- **slides**: Stop asking a model for reasoning it already declares
+  ([`54f2dce`](https://github.com/jupyter-naas/abi/commit/54f2dce1282ff5cf2f82d574ceece3f92822d88a))
+
+- **slides**: Stop the assets folder containing itself
+  ([`d1e22e8`](https://github.com/jupyter-naas/abi/commit/d1e22e8982e8e55f95f097dee009acd75c4206fb))
+
+- **slides**: Tell the client which model the turn ran on
+  ([`0c97685`](https://github.com/jupyter-naas/abi/commit/0c976851252fbd0d1ee071dccf7c0313fa713632))
+
+- **web-tools**: Open only http and https URLs
+  ([`574383f`](https://github.com/jupyter-naas/abi/commit/574383f1c655b26164baf6009761236f90c1db0d))
+
+- **web-tools**: Refuse metadata and private hosts
+  ([`263975d`](https://github.com/jupyter-naas/abi/commit/263975d978f8e46cac731e5e1cbda3c10d4f74f4))
+
+### Build System
+
+- **lint**: Add FURB162 to the recorded Nexus API debt
+  ([`dad7ae1`](https://github.com/jupyter-naas/abi/commit/dad7ae1a43d462a7f0a6f36d9c84ff313c2fd476))
+
+- **lint**: Extend the root ruff config into the Nexus API subtree
+  ([`03e82cb`](https://github.com/jupyter-naas/abi/commit/03e82cbcb2990c2b98c4ccb09570d62392a2354b))
+
+- **lint**: Move the Nexus API ruff table to the lint section
+  ([`db7315b`](https://github.com/jupyter-naas/abi/commit/db7315b269f6329dde824c52682cd0ec851838fe))
+
+- **lint**: Retire RUF100 from the Nexus API debt
+  ([`9fc8a8a`](https://github.com/jupyter-naas/abi/commit/9fc8a8adfeea0f02ffc65cd7ea249227089ea328))
+
+### Chores
+
+- **deps**: Record the markers uv writes for the secretstorage deps
+  ([`6d2f9d2`](https://github.com/jupyter-naas/abi/commit/6d2f9d22658043a1341f07d746cf44388b9f0676))
+
+### Code Style
+
+- **slides**: Match both repo id separators in one startswith
+  ([`ecf869a`](https://github.com/jupyter-naas/abi/commit/ecf869a5ca68b72ef628189561e7af5ef3108ad1))
+
+- **slides**: Sort the slides adapter test imports
+  ([`994e795`](https://github.com/jupyter-naas/abi/commit/994e79538b379fd207bbe669bd132d95a85abef6))
+
+### Documentation
+
+- **abi**: Explain the slides model default without naming the tenant
+  ([`e58d1b2`](https://github.com/jupyter-naas/abi/commit/e58d1b2cdb8ca2ec55107358239aeba326af600f))
+
+- **slides**: Describe template sources as configuration
+  ([`e427615`](https://github.com/jupyter-naas/abi/commit/e4276158da8508ca733c221cb7c3e8e4fe254c4a))
+
+- **slides**: Say the slides model is optional
+  ([`66c42e9`](https://github.com/jupyter-naas/abi/commit/66c42e93af60d2cbdd5fd9e266c3038f97124266))
+
+- **slides**: Tell Abi to name a deck after its topic
+  ([`9270b22`](https://github.com/jupyter-naas/abi/commit/9270b22d6fb736fc2484cdfb5064e384ed9e0db5))
+
+### Features
+
+- **nexus**: Declare slides template sources in config
+  ([`486198f`](https://github.com/jupyter-naas/abi/commit/486198f54c1ad7c1ab3f2670c2e8dbe2b05fc586))
+
+- **nexus**: Research-first Slides agent with a template rail
+  ([`dd20189`](https://github.com/jupyter-naas/abi/commit/dd201892839edd95fba6015eb27eb89873684b7f))
+
+- **slides**: Derive a deck title from the user's brief
+  ([`2240d80`](https://github.com/jupyter-naas/abi/commit/2240d80af43d56c62245e9fc84b19571496a39e4))
+
+- **slides**: Fall back to the general agent model
+  ([`4b644fb`](https://github.com/jupyter-naas/abi/commit/4b644fb512ba0a20bdb061d5b6fd2085ec0309ec))
+
+- **slides**: Give ABI its own web search stack
+  ([`cf95fbf`](https://github.com/jupyter-naas/abi/commit/cf95fbfc65c0f1f52c50c05cf5bc47db31322534))
+
+- **slides**: Let Abi create a deck from the main chat
+  ([`ad90e57`](https://github.com/jupyter-naas/abi/commit/ad90e57f6632e8ec3ba72a03406eb9804bf8f866))
+
+- **slides**: Make the sidebar a create button and a file tree
+  ([`dfc2f13`](https://github.com/jupyter-naas/abi/commit/dfc2f1317068c286e34bb7ffe039e8d3fcdfb438))
+
+- **slides**: Resolve the configured slides model at boot
+  ([`b9cc951`](https://github.com/jupyter-naas/abi/commit/b9cc951ae31040c437b6488bc0239dd5ebc353f7))
+
+- **slides**: Restore SlidesAgent as the office writer
+  ([`f7e99f3`](https://github.com/jupyter-naas/abi/commit/f7e99f39d089fe58c170cbb7011de226c6f93000))
+
+- **slides**: Show a deck card in chat that opens the deck in Slides
+  ([`6912a6f`](https://github.com/jupyter-naas/abi/commit/6912a6fce64e291946cffe3a35364b7c50cfc9fb))
+
+### Refactoring
+
+- **abi**: Hand deck briefs to SlidesAgent
+  ([`3144a6e`](https://github.com/jupyter-naas/abi/commit/3144a6e814a0fc50f4cbbb45a61cd81403ae0d44))
+
+- **chat**: Make the ABI injection preamble impossible to omit
+  ([`013567e`](https://github.com/jupyter-naas/abi/commit/013567ec23518c4a4fba1dbe4dc3840a2b37ad42))
+
+- **chat**: Make the streaming user context preamble impossible to omit
+  ([`896fcf0`](https://github.com/jupyter-naas/abi/commit/896fcf0ca2e7109dc7f681d110f25a1526d05497))
+
+- **chat**: Require system_prompt on the provider entry points
+  ([`97773ae`](https://github.com/jupyter-naas/abi/commit/97773ae072ce50ec6ea64884bc93d76fbbba0656))
+
+- **nexus**: Share one create button between sidebar sections
+  ([`eaacee8`](https://github.com/jupyter-naas/abi/commit/eaacee87825021d1b2a0d92db2600a3d50ff64cd))
+
+- **slides**: Delete the hand-rolled OpenRouter routing
+  ([`ca682ab`](https://github.com/jupyter-naas/abi/commit/ca682ab42f9f0f3a1118f4c78f36c78b90bb5b1f))
+
+- **slides**: Drop the sidebar filters for a fixed adapter
+  ([`645e9c3`](https://github.com/jupyter-naas/abi/commit/645e9c30b58302050004774ad79faf3ab057d1d5))
+
+- **slides**: Let the configured model own every slides turn
+  ([`e05550b`](https://github.com/jupyter-naas/abi/commit/e05550b4492714ed5b88e048943d78d142bced36))
+
+- **slides**: Require the model id when building the slides chat model
+  ([`0bc4e55`](https://github.com/jupyter-naas/abi/commit/0bc4e556190a3be26feaeb781aca056892875e06))
+
+- **slides**: Resolve seed decks through configured sources
+  ([`ad56dfc`](https://github.com/jupyter-naas/abi/commit/ad56dfcc9118f96b091ba2a060873d6b0ac3d021))
+
+- **slides**: Resolve the slides model through the registry
+  ([`c39f0db`](https://github.com/jupyter-naas/abi/commit/c39f0db272f743405e7afa1a332dcf8c1d7ef485))
+
+- **slides**: Stop the composer pinning a model it does not choose
+  ([`2c29b0a`](https://github.com/jupyter-naas/abi/commit/2c29b0a3fbcc9ba26fc3d367049481c6d37f6884))
+
+- **slides**: Validate the model id before importing a provider
+  ([`77fa978`](https://github.com/jupyter-naas/abi/commit/77fa9782cc522856d30edfd4a7179055a597d292))
+
+- **web**: Label a template by its namespace, not by a fixed pair
+  ([`3391e9b`](https://github.com/jupyter-naas/abi/commit/3391e9b774c8e7d1ae2d75bb04b34b2621b4fa00))
+
+### Testing
+
+- **agent**: Rename context_test to agent_context_test
+  ([`931dacd`](https://github.com/jupyter-naas/abi/commit/931dacd2911d3032f670617d52ec5a2be087165a))
+
+- **agents**: Fold the zen web tools cases into ABI's
+  ([`06b9dcf`](https://github.com/jupyter-naas/abi/commit/06b9dcf0b320457aa999573c9fafa8a92984c178))
+
+- **chat**: Pin the ABI injection preamble to its real call site
+  ([`b3567e3`](https://github.com/jupyter-naas/abi/commit/b3567e37f87f435186cfb7aa76946b2c34db221d))
+
+- **chat**: Pin the slides model override to the non-streaming call site
+  ([`a349d52`](https://github.com/jupyter-naas/abi/commit/a349d52f205a5ef843597a29f282ebc534f42099))
+
+- **chat**: Read the ABI preamble off the prompt the agent runs
+  ([`3a3d2f4`](https://github.com/jupyter-naas/abi/commit/3a3d2f4ca449c3533789c27a175807f6a5f6a616))
+
+- **nexus**: Walk a template source from config.yaml to the settings
+  ([`7b5fc6f`](https://github.com/jupyter-naas/abi/commit/7b5fc6f377730918cd53020a438df953ad6051ee))
+
+- **slides**: Assert the file:// authority instead of splitting on /tmp
+  ([`d484949`](https://github.com/jupyter-naas/abi/commit/d484949b672665d5cb67d59a58db79264c152fd6))
+
+- **slides**: Keep the namespace fixture off /tmp
+  ([`08d9c3a`](https://github.com/jupyter-naas/abi/commit/08d9c3a1727ccf3daa1af3ef21000ad388f89e7a))
+
+- **slides**: Lock the deck card to in-app navigation
+  ([`e016286`](https://github.com/jupyter-naas/abi/commit/e016286acf861530fead8657a0ae61a411fc897c))
+
+- **slides**: Take the tenant name out of the fixtures
+  ([`caf72f6`](https://github.com/jupyter-naas/abi/commit/caf72f65c905cf2a1473149a62fbf3eb21828f6e))
+
+
 ## v2.61.1 (2026-09-07)
 
 ### Bug Fixes
