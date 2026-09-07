@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.31.2 (2026-09-07)
+
+### Bug Fixes
+
+- **core,abi,marketplace**: Pass json_schema_extra instead of Field(example=)
+  ([`ec8f6fd`](https://github.com/jupyter-naas/abi/commit/ec8f6fda79fa3e47cddfff0736f6590068a98fac))
+
+
 ## v2.31.1 (2026-09-07)
 
 ### Bug Fixes
