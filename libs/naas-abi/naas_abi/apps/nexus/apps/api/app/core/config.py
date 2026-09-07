@@ -301,6 +301,10 @@ class WorkspaceSeedConfig(BaseModel):
     # is set: listed on, others off. ``None`` keeps the full engine listing.
     # An empty list shows none. owl:imports are not implied; name every file.
     ontologies: list[str] | None = None
+    # Named-graph catalog ids (full URI or last path segment). Exclusive when
+    # a list is set: listed on, others off. ``None`` keeps the full store
+    # listing. An empty list shows none. schema and nexus are not implied.
+    graphs: list[str] | None = None
 
 
 class OrganizationSeedConfig(BaseModel):

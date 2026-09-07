@@ -13,6 +13,10 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
+    graph_matches_seed,
+    workspace_seed_for_slug,
+)
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__dependencies import (  # noqa: E501
     get_graph_service,
 )
@@ -192,6 +196,44 @@ def _edge_to_schema(edge) -> GraphEdge:
     )
 
 
+async def _workspace_slug(workspace_id: str) -> str | None:
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
+    from sqlalchemy import select
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(WorkspaceModel.slug).where(WorkspaceModel.id == workspace_id)
+        )
+        return result.scalar_one_or_none()
+
+
+async def graph_catalog_refs(workspace_id: str) -> list[str] | None:
+    """Seed list for this workspace, or None to keep the full store catalog."""
+    seed = workspace_seed_for_slug(await _workspace_slug(workspace_id))
+    if seed is None or getattr(seed, "graphs", None) is None:
+        return None
+    return list(seed.graphs)
+
+
+def _require_catalog_uri(graph_uri: str, catalog_refs: list[str] | None) -> None:
+    if catalog_refs is None:
+        return
+    graph_id = graph_uri.rstrip("/").split("/")[-1]
+    if not graph_matches_seed(graph_uri, catalog_refs, graph_id):
+        raise HTTPException(status_code=404, detail=f"Graph not found: {graph_uri}")
+
+
+async def require_graph_in_catalog(workspace_id: str, graph_uri: str) -> None:
+    _require_catalog_uri(graph_uri, await graph_catalog_refs(workspace_id))
+
+
+async def require_graphs_in_catalog(workspace_id: str, graph_uris: list[str]) -> None:
+    catalog_refs = await graph_catalog_refs(workspace_id)
+    for uri in graph_uris:
+        _require_catalog_uri(uri, catalog_refs)
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
@@ -201,10 +243,13 @@ async def list_graphs(
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> list[GraphPack]:
-    """List all graphs available in the triple store and nexus ontology graph."""
+    """List named graphs in the workspace catalog."""
     await require_workspace_access(current_user.id, workspace_id)
     try:
-        graphs = await graph_service.list_graphs(workspace_id=workspace_id)
+        graphs = await graph_service.list_graphs(
+            workspace_id=workspace_id,
+            catalog_refs=await graph_catalog_refs(workspace_id),
+        )
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return [
@@ -228,7 +273,10 @@ async def list_graph_roles(
     """List distinct knowledge graph role labels used in the workspace."""
     await require_workspace_access(current_user.id, workspace_id)
     try:
-        roles = await graph_service.list_graph_roles(workspace_id=workspace_id)
+        roles = await graph_service.list_graph_roles(
+            workspace_id=workspace_id,
+            catalog_refs=await graph_catalog_refs(workspace_id),
+        )
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return roles
@@ -271,6 +319,7 @@ async def get_graph_detail(
 ) -> GraphDetail:
     """Full metadata for one graph (label, description, role) — used to pre-fill the edit form."""
     await require_workspace_access(current_user.id, workspace_id)
+    await require_graph_in_catalog(workspace_id, uri)
     try:
         graph = await graph_service.get_graph(workspace_id=workspace_id, graph_uri=uri)
     except ValueError as exc:
@@ -294,6 +343,7 @@ async def update_graph(
 ) -> GraphDetail:
     """Update a graph's label, description and role in place (URI/id is preserved)."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.uri)
     try:
         graph = await graph_service.update_graph(
             workspace_id=payload.workspace_id,
@@ -324,6 +374,7 @@ async def clear_graph(
     graph_service: GraphService = Depends(get_graph_service),
 ) -> dict[str, str]:
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.uri)
     try:
         await graph_service.clear_graph(workspace_id=payload.workspace_id, graph_uri=payload.uri)
     except GraphProtectedError as exc:
@@ -354,6 +405,7 @@ async def delete_graph(
     graph_service: GraphService = Depends(get_graph_service),
 ) -> dict[str, str]:
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.uri)
     try:
         await graph_service.delete_graph(workspace_id=payload.workspace_id, graph_uri=payload.uri)
     except GraphProtectedError as exc:
@@ -371,6 +423,7 @@ async def create_individual(
 ) -> GraphNode:
     """Insert a new individual into the given named graph."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.graph_uri)
     try:
         node = await graph_service.create_individual(
             workspace_id=payload.workspace_id,
@@ -397,6 +450,7 @@ async def delete_individual(
 ) -> dict[str, str]:
     """Delete an individual: remove every triple where it is subject or object in the graph."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.graph_uri)
     try:
         await graph_service.delete_individual(
             workspace_id=payload.workspace_id,
@@ -418,6 +472,7 @@ async def add_data_property(
 ) -> dict[str, str]:
     """Insert a single data property triple on an individual."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.graph_uri)
     try:
         await graph_service.add_data_property(
             workspace_id=payload.workspace_id,
@@ -443,6 +498,7 @@ async def delete_data_property(
 ) -> dict[str, str]:
     """Delete a single data property triple from an individual."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.graph_uri)
     try:
         await graph_service.delete_data_property(
             workspace_id=payload.workspace_id,
@@ -466,6 +522,7 @@ async def update_data_property(
 ) -> dict[str, str]:
     """Replace a data property value for an individual (delete old triple, insert new)."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.graph_uri)
     try:
         await graph_service.update_data_property(
             workspace_id=payload.workspace_id,
@@ -490,6 +547,7 @@ async def add_object_property(
 ) -> dict[str, str]:
     """Insert a single object property triple on an individual."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.graph_uri)
     try:
         await graph_service.add_object_property(
             workspace_id=payload.workspace_id,
@@ -515,6 +573,7 @@ async def delete_object_property(
 ) -> dict[str, str]:
     """Delete a single object property triple from an individual."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.graph_uri)
     try:
         await graph_service.delete_object_property(
             workspace_id=payload.workspace_id,
@@ -538,6 +597,7 @@ async def update_object_property(
 ) -> dict[str, str]:
     """Replace an object property triple for an individual (delete old triple, insert new)."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.graph_uri)
     try:
         await graph_service.update_object_property(
             workspace_id=payload.workspace_id,
@@ -567,6 +627,7 @@ async def get_graph_overview(
 ) -> GraphOverview:
     """Get overview of a given graph."""
     await require_workspace_access(current_user.id, workspace_id)
+    await require_graph_in_catalog(workspace_id, graph_uri)
     try:
         overview = await graph_service.get_graph_overview(
             workspace_id=workspace_id, graph_uri=graph_uri, limit=limit
@@ -593,6 +654,7 @@ async def get_graph_kpis(
     only the first request for a graph ever waits on the count queries.
     """
     await require_workspace_access(current_user.id, workspace_id)
+    await require_graph_in_catalog(workspace_id, graph_uri)
     try:
         kpis = await graph_service.get_graph_kpis(workspace_id=workspace_id, graph_uri=graph_uri)
     except GraphServiceUnavailableError as exc:
@@ -621,6 +683,7 @@ async def get_network_schema(
     multi-million-triple graph takes seconds and must never block a response.
     """
     await require_workspace_access(current_user.id, workspace_id)
+    await require_graph_in_catalog(workspace_id, graph_uri)
     try:
         schema = await graph_service.get_network_schema(
             workspace_id=workspace_id, graph_uri=graph_uri
@@ -661,6 +724,7 @@ async def get_graph_network(
 ) -> GraphData:
     """Get all nodes and edges for a given graph."""
     await require_workspace_access(current_user.id, workspace_id)
+    await require_graph_in_catalog(workspace_id, graph_uri)
     try:
         network = await graph_service.get_graph_network(
             workspace_id=workspace_id, graph_uri=graph_uri, limit=limit
@@ -684,6 +748,7 @@ async def search_graph_network(
 ) -> GraphData:
     """Search nodes by label within a graph. Returns matching individuals and their edges."""
     await require_workspace_access(current_user.id, workspace_id)
+    await require_graph_in_catalog(workspace_id, graph_uri)
     try:
         result = await graph_service.search_network(
             workspace_id=workspace_id,
@@ -721,6 +786,7 @@ async def export_graph(
     Supported formats: ttl (Turtle), owl (RDF/XML), nt (N-Triples).
     """
     await require_workspace_access(current_user.id, workspace_id)
+    await require_graph_in_catalog(workspace_id, graph_uri)
     rdflib_format, media_type, ext = _EXPORT_FORMAT_META.get(format, _EXPORT_FORMAT_META["ttl"])
     try:
         content, triple_count, named_individual_count = await graph_service.export_graph_as_ttl(
@@ -796,6 +862,7 @@ async def import_graph_file(
     Returns ``{"status": "imported", "count": N}`` where N is the number of triples inserted.
     """
     await require_workspace_access(current_user.id, workspace_id)
+    await require_graph_in_catalog(workspace_id, graph_uri)
     content = await file.read()
     fmt = _detect_rdf_format(file.filename or "")
     try:
@@ -824,6 +891,7 @@ async def discovery_classes(
 ) -> list[DiscoveryClass]:
     """List RDF classes that have NamedIndividuals in the given graph."""
     await require_workspace_access(current_user.id, workspace_id)
+    await require_graph_in_catalog(workspace_id, graph_uri)
     try:
         classes = await graph_service.discover_classes(
             workspace_id=workspace_id, graph_uri=graph_uri
@@ -842,7 +910,10 @@ async def discovery_classes_all(
     """List RDF classes aggregated across all workspace graphs."""
     await require_workspace_access(current_user.id, workspace_id)
     try:
-        classes = await graph_service.discover_all_classes(workspace_id=workspace_id)
+        classes = await graph_service.discover_all_classes(
+            workspace_id=workspace_id,
+            catalog_refs=await graph_catalog_refs(workspace_id),
+        )
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return [DiscoveryClass(uri=c.uri, label=c.label, count=c.count) for c in classes]
@@ -924,6 +995,7 @@ async def discovery_relation_targets(
 ) -> list[DiscoveryRelationTarget]:
     """List individuals that can be used as object-property range values."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.graph_uri)
     try:
         targets = await graph_service.discover_relation_targets(
             workspace_id=payload.workspace_id,
@@ -954,6 +1026,7 @@ async def discovery_properties(
 ) -> list[DiscoveryProperty]:
     """List datatype/annotation properties used by instances of the given classes."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.graph_uri)
     try:
         properties = await graph_service.discover_properties(
             workspace_id=payload.workspace_id,
@@ -973,6 +1046,7 @@ async def discovery_instances(
 ) -> list[DiscoveryInstance]:
     """Search instances matching selected classes / properties / global search query."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.graph_uri)
     try:
         instances = await graph_service.discover_instances(
             workspace_id=payload.workspace_id,
@@ -1012,6 +1086,7 @@ async def discovery_instance_detail(
 ) -> DiscoveryInstanceDetail:
     """Fetch full detail for a single instance: all data properties and relations."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graphs_in_catalog(payload.workspace_id, payload.graph_uris)
     try:
         detail = await graph_service.discover_instance_detail(
             workspace_id=payload.workspace_id,
@@ -1054,6 +1129,7 @@ async def discovery_relation_types(
 ) -> list[DiscoveryRelationType]:
     """List object-property relation types found for selected/visible instances."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.graph_uri)
     try:
         relation_types = await graph_service.discover_relation_types(
             workspace_id=payload.workspace_id,
@@ -1074,6 +1150,7 @@ async def discovery_relations(
 ) -> list[DiscoveryRelationRow]:
     """List concrete relation rows (domain → predicate → range) for selected instances."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.graph_uri)
     try:
         relations = await graph_service.discover_relations(
             workspace_id=payload.workspace_id,
@@ -1133,6 +1210,7 @@ async def network_node_properties(
 ) -> list[DiscoveryProperty]:
     """Return all data properties available for instances of a given class in the network view."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.graph_uri)
     try:
         properties = await graph_service.discover_properties(
             workspace_id=payload.workspace_id,
@@ -1152,6 +1230,7 @@ async def network_node_instances(
 ) -> list[DiscoveryInstance]:
     """Return instances of a given class with the selected data properties for the network table view."""
     await require_workspace_access(current_user.id, payload.workspace_id)
+    await require_graph_in_catalog(payload.workspace_id, payload.graph_uri)
     try:
         instances = await graph_service.discover_instances(
             workspace_id=payload.workspace_id,
@@ -1197,6 +1276,7 @@ async def get_network_parents(
     Call once per progressive expansion level.
     """
     await require_workspace_access(current_user.id, workspace_id)
+    await require_graphs_in_catalog(workspace_id, graph_names)
     try:
         result = await graph_service.get_network_parents(
             workspace_id=workspace_id,
@@ -1220,7 +1300,10 @@ def _build_graph_query_service(graph_service: GraphService) -> GraphQueryService
     store = GraphQueryTripleStoreAdapter(triple_store, fts_backend=resolve_fts_backend(triple_store))
 
     async def _owned_graphs(workspace_id: str) -> set[str]:
-        packs = await graph_service.list_graphs(workspace_id)
+        packs = await graph_service.list_graphs(
+            workspace_id,
+            catalog_refs=await graph_catalog_refs(workspace_id),
+        )
         return {g.uri for pack in packs for g in pack.graphs}
 
     # schema/nexus are global system graphs every workspace may read.

@@ -1,4 +1,4 @@
-"""Resolve per-workspace app, agent, and ontology seed lists from Nexus settings."""
+"""Resolve per-workspace app, agent, ontology, and graph seed lists from Nexus settings."""
 
 from __future__ import annotations
 
@@ -133,6 +133,78 @@ def ontology_matches_seed(path: str, module_name: str, seed_refs: Sequence[str])
         if posix.endswith(_posix(ref)) or path.endswith(ref):
             return True
     return False
+
+
+def _graph_slug(uri: str) -> str:
+    text = (uri or "").strip().rstrip("/")
+    if not text:
+        return ""
+    return text.split("/")[-1].split("#")[-1]
+
+
+def graph_catalog_aliases(uri: str, graph_id: str = "") -> set[str]:
+    """Ids that may appear in ``WorkspaceSeedConfig.graphs`` for this named graph."""
+    slug = _graph_slug(uri)
+    aliases = {uri, uri.lower(), slug, slug.lower()}
+    if graph_id:
+        aliases.add(graph_id)
+        aliases.add(graph_id.lower())
+    return aliases
+
+
+def graph_matches_seed(uri: str, seed_refs: Sequence[str], graph_id: str = "") -> bool:
+    """True when ``uri`` is named in the seed. schema and nexus are not implied."""
+    aliases = graph_catalog_aliases(uri, graph_id)
+    for raw in seed_refs:
+        ref = (raw or "").strip()
+        if not ref:
+            continue
+        if ref in aliases or ref.lower() in aliases:
+            return True
+        if uri.rstrip("/") == ref.rstrip("/"):
+            return True
+    return False
+
+
+def filter_graph_catalog(
+    items: Sequence[Any],
+    seed_refs: Sequence[str] | None,
+) -> list[Any]:
+    """Restrict named-graph rows to the seed list.
+
+    ``None`` keeps the full store listing (existing deployments). An empty
+    list returns nothing. A non-empty list is exclusive: listed on, others
+    off. schema and nexus are not added.
+    """
+    if seed_refs is None:
+        return list(items)
+    if not seed_refs:
+        return []
+    return [
+        item
+        for item in items
+        if graph_matches_seed(item.uri, seed_refs, getattr(item, "id", "") or "")
+    ]
+
+
+def filter_graph_packs(
+    packs: Sequence[Any],
+    seed_refs: Sequence[str] | None,
+) -> list[Any]:
+    """Filter packed graph lists and drop empty role groups."""
+    if seed_refs is None:
+        return list(packs)
+    filtered: list[Any] = []
+    for pack in packs:
+        graphs = filter_graph_catalog(getattr(pack, "graphs", []) or [], seed_refs)
+        if not graphs:
+            continue
+        if hasattr(pack, "__dataclass_fields__"):
+            filtered.append(type(pack)(role_label=pack.role_label, graphs=graphs))
+        else:
+            pack.graphs = graphs
+            filtered.append(pack)
+    return filtered
 
 
 def filter_ontology_catalog(
