@@ -3,7 +3,7 @@ import { useAgentsStore } from '@/stores/agents';
 import { dispatchSlidesDeckUpdated, useSlidesStore } from '@/stores/slides';
 import { useWorkspaceStore } from '@/stores/workspace';
 
-export const DEFAULT_SLIDES_TEMPLATE_ID = 'minimal-light-v1';
+export const DEFAULT_SLIDES_TEMPLATE_ID = 'abi/minimal-light-v1';
 export const DEFAULT_SLIDES_TITLE = 'Untitled presentation';
 
 const REPO_ID_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;

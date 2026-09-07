@@ -22,6 +22,8 @@ export type SidebarNewItemMenuOption = {
   id: string;
   label: string;
   description?: string;
+  /** Namespace shown ahead of the label, as ``<prefix>/``. Omit to hide it. */
+  prefix?: string;
   /** Small colour chip, e.g. a template accent. */
   swatch?: string;
   disabled?: boolean;
@@ -144,6 +146,11 @@ export function SidebarNewItem({
                     className="h-2.5 w-2.5 flex-shrink-0 rounded-sm border border-border/70"
                     style={{ background: option.swatch }}
                   />
+                ) : null}
+                {option.prefix ? (
+                  <span className="flex-shrink-0 font-mono text-[10px] text-muted-foreground">
+                    {option.prefix}/
+                  </span>
                 ) : null}
                 <span className="min-w-0 flex-1 truncate">{option.label}</span>
               </button>

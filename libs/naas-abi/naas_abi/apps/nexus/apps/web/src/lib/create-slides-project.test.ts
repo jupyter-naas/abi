@@ -24,7 +24,7 @@ describe('untitledSlidesSlug', () => {
 
 describe('DEFAULT_SLIDES_TEMPLATE_ID', () => {
   it('seeds Minimal Light', () => {
-    expect(DEFAULT_SLIDES_TEMPLATE_ID).toBe('minimal-light-v1');
+    expect(DEFAULT_SLIDES_TEMPLATE_ID).toBe('abi/minimal-light-v1');
   });
 });
 

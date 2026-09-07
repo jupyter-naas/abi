@@ -76,6 +76,29 @@ describe('SidebarNewItem template picker', () => {
     expect(html).toContain('Pitch Dark');
   });
 
+  it('prefixes an option with the namespace it was given', () => {
+    const html = markup({
+      menuOpen: true,
+      menuOptions: [
+        { id: 'one/first-v1', label: 'First', prefix: 'one', onSelect: () => {} },
+        { id: 'two/second-v1', label: 'Second', prefix: 'two', onSelect: () => {} },
+      ],
+    });
+    expect(html).toContain('one/');
+    expect(html).toContain('two/');
+    expect(html).toContain('First');
+    expect(html).toContain('Second');
+  });
+
+  it('renders no prefix when an option carries none', () => {
+    const html = markup({
+      menuOpen: true,
+      menuOptions: [{ id: 'one/first-v1', label: 'First', onSelect: () => {} }],
+    });
+    expect(html).toContain('First');
+    expect(html).not.toContain('one/');
+  });
+
   it('says so when no template came back from the server', () => {
     const html = markup({ menuOpen: true, menuOptions: [] });
     expect(html).toContain('No templates loaded');

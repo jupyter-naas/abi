@@ -8,7 +8,11 @@ import {
   slidesApiErrorMessage,
   startNewPresentation,
 } from '@/lib/create-slides-project';
-import type { SlidesSeedTemplate } from '@/lib/slides-templates';
+import {
+  templateNamespace,
+  templateNamespacesAreAmbiguous,
+  type SlidesSeedTemplate,
+} from '@/lib/slides-templates';
 import { authFetch } from '@/stores/auth';
 import {
   SLIDES_DECK_UPDATED_EVENT,
@@ -176,9 +180,12 @@ export function SlidesSection({
     [workspaceId, creating, router, fetchProjects],
   );
 
+  // Only worth the width when the rows do not all say the same thing.
+  const showNamespace = templateNamespacesAreAmbiguous(templates);
   const templateOptions: SidebarNewItemMenuOption[] = templates.map((template) => ({
     id: template.id,
     label: template.name,
+    prefix: showNamespace ? templateNamespace(template) : undefined,
     swatch: template.preview_accent || template.preview_bg,
     onSelect: () => createDeck(template.id),
   }));
