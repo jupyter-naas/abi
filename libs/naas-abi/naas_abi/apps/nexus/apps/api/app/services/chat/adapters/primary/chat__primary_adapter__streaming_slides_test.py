@@ -1,6 +1,6 @@
 """Call-site coverage for the slides model override in the streaming adapter.
 
-The policy unit tests in ``slides_policy_test.py`` already pass, so they cannot
+The policy unit tests in ``slides/policy_test.py`` already pass, so they cannot
 catch the adapter handing the policy too few arguments. These tests drive
 ``stream_chat_response`` end to end with fakes and assert on the model that
 actually reaches the provider, which is the only thing the user experiences.
@@ -14,7 +14,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from naas_abi.agents.slides_policy import configured_slides_model
+from naas_abi.agents.slides import configured_slides_model
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary import (
     chat__primary_adapter__streaming as streaming,
 )

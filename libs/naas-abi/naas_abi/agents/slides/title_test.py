@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from naas_abi.agents.slides_title import (
+from naas_abi.agents.slides.title import (
     derive_deck_title,
     is_placeholder_deck_title,
     resolve_deck_title,

@@ -261,8 +261,8 @@ async def stream_chat_response(
                 if request.workspace_id is not None:
                     agent_workspace_id.set(str(request.workspace_id))
 
-                # Bind open Slides deck + its Coder sidecar so Abi tools act on
-                # workspace files (Continue-parity) without asking which deck.
+                # Bind open Slides deck + its Coder sidecar so SlidesAgent tools
+                # act on workspace files (Continue-parity) without asking which deck.
                 client_ctx = request.context if isinstance(request.context, dict) else {}
                 slides_ctx = client_ctx.get("slides") if isinstance(client_ctx, dict) else None
                 open_slug = ""
@@ -280,9 +280,7 @@ async def stream_chat_response(
                 # Arm the research gate for both surfaces. With no deck open
                 # this also flags a deck requested from the main chat, so the
                 # agent gets a slides-sized step budget.
-                from naas_abi.agents.slides_policy import (
-                    bind_slides_research_policy,
-                )
+                from naas_abi.agents.slides import bind_slides_research_policy
 
                 has_prior_assistant = any(
                     getattr(m, "role", None) == "assistant"
@@ -413,7 +411,7 @@ async def stream_chat_response(
     #             )
     #             break
 
-    from naas_abi.agents.slides_policy import apply_slides_model_override
+    from naas_abi.agents.slides import apply_slides_model_override
 
     incoming_llm = getattr(provider, "llm_model", None) or request.llm_model
     provider_config = ProviderConfig(

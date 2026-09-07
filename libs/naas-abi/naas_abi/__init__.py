@@ -665,7 +665,7 @@ class ABIModule(BaseModule):
         # It runs before ``super()`` so a bad id is reported as itself instead
         # of as whatever the Nexus bootstrap fails on afterwards.
         if self._engine.services.model_registry_available():
-            from naas_abi.agents.slides_policy import validate_configured_slides_model
+            from naas_abi.agents.slides import validate_configured_slides_model
 
             validate_configured_slides_model(
                 self._engine.services.model_registry,

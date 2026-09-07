@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from naas_abi.agents.slides_policy import (
+from naas_abi.agents.slides.policy import (
     DEFAULT_SLIDES_MODEL,
     MAX_SLIDES_SEARCHES,
     apply_slides_model_override,
@@ -109,7 +109,7 @@ def test_slides_turn_warns_when_the_fallback_overrides_the_selection(
     """
     with (
         _configured(slides_model="", agent_model="claude-sonnet-5"),
-        caplog.at_level(logging.WARNING, logger="naas_abi.agents.slides_policy"),
+        caplog.at_level(logging.WARNING, logger="naas_abi.agents.slides.policy"),
     ):
         effective = resolve_slides_llm_model("gpt-4.1-mini")
 
@@ -152,7 +152,7 @@ def test_resolve_slides_llm_model_warns_when_it_overrides_the_selection(
     anything before, which is why a mini model writing template filler took a
     full session to find.
     """
-    with caplog.at_level(logging.WARNING, logger="naas_abi.agents.slides_policy"):
+    with caplog.at_level(logging.WARNING, logger="naas_abi.agents.slides.policy"):
         effective = resolve_slides_llm_model("gpt-5.2", slides_default="gpt-5")
 
     assert effective == "gpt-5"
@@ -172,7 +172,7 @@ def test_resolve_slides_llm_model_is_quiet_when_nothing_was_overridden(
     the slides model, or there being no selection at all, took nothing away
     from the user.
     """
-    with caplog.at_level(logging.WARNING, logger="naas_abi.agents.slides_policy"):
+    with caplog.at_level(logging.WARNING, logger="naas_abi.agents.slides.policy"):
         assert resolve_slides_llm_model("gpt-5", slides_default="gpt-5") == "gpt-5"
         assert resolve_slides_llm_model(None, slides_default="gpt-5") == "gpt-5"
         assert resolve_slides_llm_model("", slides_default="gpt-5") == "gpt-5"
@@ -380,7 +380,7 @@ def test_search_budget_stops_after_four_queries() -> None:
 
 
 def test_slides_creation_requested_detects_a_deck_brief_in_main_chat() -> None:
-    from naas_abi.agents.slides_policy import slides_creation_requested
+    from naas_abi.agents.slides.policy import slides_creation_requested
 
     assert slides_creation_requested("create a deck about the latest news about AI")
     assert slides_creation_requested("Make me a presentation on Q3 revenue")
@@ -393,7 +393,7 @@ def test_slides_creation_requested_detects_a_deck_brief_in_main_chat() -> None:
 
 def test_slides_creation_requested_detects_a_french_deck_brief() -> None:
     """A French brief must arm the slides path, not fall through to plain chat."""
-    from naas_abi.agents.slides_policy import slides_creation_requested
+    from naas_abi.agents.slides.policy import slides_creation_requested
 
     assert slides_creation_requested(
         "fais des slides sur les matériaux de construction"
@@ -628,7 +628,7 @@ def test_bind_slides_reasoning_says_so_when_it_supplies_the_effort(
 
     token = slides_active_slug.set("iran-now")
     try:
-        with caplog.at_level(logging.WARNING, logger="naas_abi.agents.slides_policy"):
+        with caplog.at_level(logging.WARNING, logger="naas_abi.agents.slides.policy"):
             bound = bind_slides_reasoning(shared, "anthropic/claude-sonnet-5")
     finally:
         slides_active_slug.reset(token)
@@ -637,6 +637,21 @@ def test_bind_slides_reasoning_says_so_when_it_supplies_the_effort(
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert len(warnings) == 1
     assert "anthropic/claude-sonnet-5" in warnings[0].getMessage()
+
+
+def test_bind_slides_reasoning_force_applies_without_an_open_deck() -> None:
+    """SlidesAgent.New has no slug yet; main-chat create still needs reasoning."""
+    registry = _registry_with_slides_model()
+    shared = registry.get_chat_model("claude-sonnet-5", provider="openrouter")
+
+    token = slides_active_slug.set("")
+    try:
+        bound = bind_slides_reasoning(shared, "anthropic/claude-sonnet-5", force=True)
+    finally:
+        slides_active_slug.reset(token)
+
+    assert shared.model.reasoning_effort is None
+    assert bound.model.reasoning_effort == "high"
 
 
 def test_bind_slides_reasoning_leaves_the_shared_registry_model_clean() -> None:

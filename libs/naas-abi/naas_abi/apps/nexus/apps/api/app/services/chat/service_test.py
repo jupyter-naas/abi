@@ -721,7 +721,7 @@ async def test_complete_chat_request_upgrades_the_model_for_a_deck_brief(
     it can stop passing ``request.message`` and stay green while every
     chat-created deck silently runs on a mini model.
     """
-    from naas_abi.agents.slides_policy import configured_slides_model
+    from naas_abi.agents.slides import configured_slides_model
 
     reached = await _complete_and_capture_llm_model(
         monkeypatch, "create a deck on the latest developments in EU chip policy"

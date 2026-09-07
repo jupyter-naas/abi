@@ -1,11 +1,11 @@
-"""Abi tools for Nexus Slides projects.
+"""SlidesAgent tools for Nexus Slides projects.
 
 Prefer the Coder workspace sidecar filesystem when a slides runtime is bound
 to the request (Continue-parity). Fall back to Forgejo with an explicit note.
 
 Decks live at ``slides/<slug>/deck.html`` on branch ``slides/<slug>``. When the
 user has a deck open in Nexus, ``slides_active_slug`` is set so tools default
-to that deck and Abi must not ask which presentation to edit.
+to that deck and the agent must not ask which presentation to edit.
 
 Template decks keep slide markup in ``<main>`` (~tens of KB) but also ship
 inline asset ``<script>`` blobs (~1MB with base64 images). PPTX export walks
@@ -26,10 +26,10 @@ from collections import OrderedDict
 from typing import Any
 
 from langchain_core.tools import BaseTool, tool
-from naas_abi.agents.slides_policy import reject_unresearched_slides_write
-from naas_abi.agents.slides_title import (
+from naas_abi.agents.slides import (
     derive_deck_title,
     is_placeholder_deck_title,
+    reject_unresearched_slides_write,
     resolve_deck_title,
 )
 from naas_abi_core.services.agent.context import (

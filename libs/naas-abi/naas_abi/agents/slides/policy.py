@@ -1,6 +1,6 @@
 """Slides chat policy: research first, then write, on the configured model.
 
-Used by AbiAgent, slides tools, and Nexus chat so a current-events brief cannot
+Used by SlidesAgent, slides tools, and Nexus chat so a current-events brief cannot
 skip web_search and dump template filler into deck.html.
 
 The server owns the model for a slides turn. Whatever the composer had
@@ -402,7 +402,7 @@ def slides_research_tools() -> list[Any]:
 def load_slides_chat_model(model_id: str) -> Any:
     """Return the registered chat model for the model this turn was routed to.
 
-    The same lookup ``AbiAgent.New`` does, because it is the same question. The
+    The same lookup ``SlidesAgent.New`` does, because it is the same question. The
     registration owns the endpoint, the key, the timeout and whatever else the
     model needs; this function's job is to name the model, not to know how to
     reach it.
@@ -461,8 +461,18 @@ def declares_reasoning(langchain_model: Any) -> bool:
     return False
 
 
-def bind_slides_reasoning(chat_model: Any, model_id: str) -> Any:
+def bind_slides_reasoning(
+    chat_model: Any,
+    model_id: str,
+    *,
+    force: bool = False,
+) -> Any:
     """Return a copy with high reasoning effort, leaving the caller's model alone.
+
+    ``force=True`` is for SlidesAgent.New: that agent only does slides work, so
+    it must carry reasoning even when no deck is open yet (main-chat create).
+    Callers that still share a catalog model (the in-process retarget path)
+    keep the default: bind only when a slides turn is already in progress.
 
     A fallback, not the design. The right home for reasoning config is the
     ``ModelDefinition`` that describes the model, next to its context window
@@ -486,15 +496,14 @@ def bind_slides_reasoning(chat_model: Any, model_id: str) -> Any:
     ``model.bind(...)`` returns a RunnableBinding, and Agent asserts
     ``isinstance(chat_model, BaseChatModel | ChatModel)``, so a bound model is
     rejected at construction. Writing the attribute instead is worse:
-    ``AbiAgent.New`` calls this on the ChatModel the ModelRegistry handed it,
-    and the registry hands back the registered entry itself, so the write
+    writing the attribute on the ChatModel the ModelRegistry handed over
     outlives the request and every later caller of that canonical id inherits
     it.
 
     ``model_copy`` keeps the concrete chat class and shares the underlying
     OpenAI client, so the copy costs no connection setup.
     """
-    if not (slides_active_slug.get() or "").strip():
+    if not force and not (slides_active_slug.get() or "").strip():
         return chat_model
     hay = (model_id or "").lower()
     if not any(token in hay for token in ("gpt-5", "o3", "o4", "sonnet", "opus", "gemini")):

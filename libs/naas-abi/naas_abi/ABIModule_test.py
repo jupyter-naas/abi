@@ -156,7 +156,7 @@ def test_boot_keeps_a_configured_and_registered_slides_model(
     from langchain_openai import ChatOpenAI
     from naas_abi_core.models.Model import ChatModel
 
-    from naas_abi.agents.slides_policy import resolve_slides_llm_model
+    from naas_abi.agents.slides import resolve_slides_llm_model
 
     registry = ModelRegistryService()
     registry.register(
