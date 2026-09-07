@@ -1,8 +1,11 @@
 import tomllib
+import urllib.error
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from naas_abi.agents.tools.web_tools import (
+    _ddgs_search,
     _html_to_text,
     make_web_fetch_tool,
     make_web_search_tool,
@@ -17,6 +20,9 @@ def test_html_to_text_strips_tags_and_scripts() -> None:
     assert "alert" not in _html_to_text("<script>alert('xss')</script><p>Safe</p>")
     assert "Safe" in _html_to_text("<script>alert('xss')</script><p>Safe</p>")
     assert "Rock & Roll" in _html_to_text("Rock &amp; Roll")
+    assert "color" not in _html_to_text("<style>.foo{color:red}</style><p>Visible</p>")
+    assert "Visible" in _html_to_text("<style>.foo{color:red}</style><p>Visible</p>")
+    assert "\n" in _html_to_text("<h1>Title</h1><p>Body</p>")
 
 
 def test_web_search_tool_name_and_numbered_results() -> None:
@@ -103,3 +109,82 @@ def test_ddgs_is_a_required_dependency_of_naas_abi() -> None:
 
     assert "ddgs" in names
     assert "ddgs" not in str(project.get("optional-dependencies", {}))
+
+
+def test_ddgs_search_raises_when_no_backend_is_importable() -> None:
+    """A missing backend must raise, not return an empty list.
+
+    An empty list reads as "the web has nothing on this", which is a claim the
+    function is in no position to make, and web_search renders it as a
+    "No results found" the model then reports as fact.
+    """
+    missing = {"ddgs": None, "duckduckgo_search": None}
+    with (
+        patch.dict("sys.modules", missing),
+        pytest.raises(RuntimeError, match="requires the 'ddgs' package"),
+    ):
+        _ddgs_search("anything", max_results=3)
+
+
+def test_ddgs_search_falls_back_when_ddgs_fails() -> None:
+    broken = MagicMock()
+    broken.DDGS.side_effect = Exception("ddgs broken")
+    spare = MagicMock()
+    spare.DDGS.return_value.text.return_value = iter(
+        [{"title": "Fallback", "href": "https://fallback.com", "body": "B"}]
+    )
+
+    with patch.dict("sys.modules", {"ddgs": broken, "duckduckgo_search": spare}):
+        results = _ddgs_search("test", max_results=1)
+
+    assert results[0]["title"] == "Fallback"
+
+
+def test_web_search_floors_max_results_at_one() -> None:
+    tool = make_web_search_tool()
+    with patch("naas_abi.agents.tools.web_tools._ddgs_search", return_value=[]) as mock:
+        tool.invoke({"query": "q", "max_results": 0})
+    mock.assert_called_once_with("q", 1)
+
+
+def test_web_search_truncates_snippets_and_tolerates_other_key_names() -> None:
+    tool = make_web_search_tool()
+    long_body = [{"title": "T", "href": "https://example.com", "body": "X" * 500}]
+    with patch("naas_abi.agents.tools.web_tools._ddgs_search", return_value=long_body):
+        assert "X" * 251 not in tool.invoke({"query": "q"})
+
+    short_keys = [{"t": "Title", "u": "https://x.com", "d": "Desc"}]
+    with patch("naas_abi.agents.tools.web_tools._ddgs_search", return_value=short_keys):
+        assert "Title" in tool.invoke({"query": "q"})
+
+
+def test_web_fetch_marks_truncated_pages() -> None:
+    tool = make_web_fetch_tool()
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = b"A" * 10_000
+    mock_resp.headers.get.return_value = "text/plain"
+    mock_resp.__enter__.return_value = mock_resp
+    mock_resp.__exit__.return_value = False
+
+    with patch(
+        "naas_abi.agents.tools.web_tools.urllib.request.urlopen",
+        return_value=mock_resp,
+    ):
+        result = tool.invoke({"url": "https://x.com", "max_length": 100})
+
+    assert "truncated" in result
+    assert len(result) <= 200
+
+
+def test_web_fetch_reports_transport_failures_as_text() -> None:
+    """Returned, not raised: the caller is a model reading a tool result."""
+    tool = make_web_fetch_tool()
+    http_error = urllib.error.HTTPError(
+        url="https://x.com", code=404, msg="Not Found", hdrs=MagicMock(), fp=None
+    )
+    with patch("urllib.request.urlopen", side_effect=http_error):
+        assert "404" in tool.invoke({"url": "https://x.com/missing"})
+
+    unreachable = urllib.error.URLError("Name not resolved")
+    with patch("urllib.request.urlopen", side_effect=unreachable):
+        assert "Could not reach" in tool.invoke({"url": "https://nonexistent.invalid"})
