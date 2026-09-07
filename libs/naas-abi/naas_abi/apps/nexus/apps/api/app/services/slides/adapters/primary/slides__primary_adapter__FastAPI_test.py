@@ -300,7 +300,7 @@ def _slides_client(monkeypatch, source_control: SourceControlService) -> TestCli
     app.state.source_control = source_control
     app.include_router(slides_api.router, prefix="/slides")
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
-        id="user-1", email="admin@example.com", name="Zen Admin"
+        id="user-1", email="admin@example.com", name="Test Admin"
     )
 
     async def _fake_db():
@@ -511,7 +511,7 @@ def test_clone_url_uses_the_local_checkout_when_git_is_on_disk() -> None:
     """
     sc = _FakeRepoSC("file:///tmp/git/abi/monorepo")
     url = slides_api._git_clone_url(
-        sc, "abi/monorepo", username="zen", token="local"
+        sc, "abi/monorepo", username="git", token="local"
     )
     assert url == "file:///tmp/git/abi/monorepo"
     assert "forgejo" not in url
@@ -524,9 +524,9 @@ def test_clone_url_uses_the_local_checkout_when_git_is_on_disk() -> None:
 def test_clone_url_keeps_authenticated_http_for_a_real_forge() -> None:
     sc = _FakeRepoSC("http://forgejo:3000/abi/monorepo.git")
     url = slides_api._git_clone_url(
-        sc, "abi/monorepo", username="zen", token="tok en"
+        sc, "abi/monorepo", username="git", token="tok en"
     )
-    assert url.startswith("http://zen:tok%20en@")
+    assert url.startswith("http://git:tok%20en@")
     assert url.endswith("/abi/monorepo.git")
 
 
@@ -536,9 +536,9 @@ def test_clone_url_falls_back_when_the_adapter_cannot_describe_the_repo() -> Non
             raise RuntimeError("nope")
 
     url = slides_api._git_clone_url(
-        _Broken(), "abi/monorepo", username="zen", token="t"
+        _Broken(), "abi/monorepo", username="git", token="t"
     )
-    assert url.startswith("http://zen:t@")
+    assert url.startswith("http://git:t@")
 
 
 _LOCAL_SIDECAR_BASE = "http://127.0.0.1:18999"
@@ -740,7 +740,7 @@ def _sqlite_slides_client(monkeypatch, source_control, session):
     app.state.source_control = source_control
     app.include_router(slides_api.router, prefix="/slides")
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
-        id="user-1", email="admin@example.com", name="Zen Admin"
+        id="user-1", email="admin@example.com", name="Test Admin"
     )
 
     async def _session():
