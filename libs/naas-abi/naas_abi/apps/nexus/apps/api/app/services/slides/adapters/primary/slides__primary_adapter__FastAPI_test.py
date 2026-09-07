@@ -383,7 +383,10 @@ def test_clone_url_uses_the_local_checkout_when_git_is_on_disk() -> None:
     )
     assert url == "file:///tmp/git/abi/monorepo"
     assert "forgejo" not in url
-    assert "local" not in url.split("/tmp")[0]
+    # Three slashes and no fourth component: the username and token must not be
+    # spliced into the authority, which for a file:// URL has no server to
+    # authenticate against and makes git reject the clone.
+    assert url.startswith("file:///")
 
 
 def test_clone_url_keeps_authenticated_http_for_a_real_forge() -> None:
