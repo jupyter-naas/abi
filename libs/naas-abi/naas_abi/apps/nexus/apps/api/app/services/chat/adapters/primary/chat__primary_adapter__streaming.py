@@ -296,6 +296,56 @@ async def stream_chat_response(
                                     exc_info=True,
                                 )
 
+                coding_ctx = (
+                    client_ctx.get("coding") if isinstance(client_ctx, dict) else None
+                )
+                if isinstance(coding_ctx, dict):
+                    repo_id = str(coding_ctx.get("repo_id") or "").strip()
+                    branch = str(coding_ctx.get("branch") or "").strip()
+                    if repo_id:
+                        from naas_abi_core.services.agent.context import (  # noqa: PLC0415
+                            coding_active_branch,
+                            coding_active_repo,
+                        )
+
+                        coding_active_repo.set(repo_id)
+                        if branch:
+                            coding_active_branch.set(branch)
+                        if request.workspace_id:
+                            try:
+                                from naas_abi import ABIModule  # noqa: PLC0415
+                                from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.primary.coding_environment__primary_adapter__FastAPI import (  # noqa: PLC0415
+                                    lookup_code_bindings,
+                                )
+                                from naas_abi_core.services.agent.context import (  # noqa: PLC0415
+                                    coding_harness_base,
+                                )
+
+                                coding_service = (
+                                    ABIModule.get_instance().engine.services.coding_environment
+                                )
+                                ws_base, ws_secret, harness_base, _env_id = (
+                                    await lookup_code_bindings(
+                                        db,
+                                        workspace_id=str(request.workspace_id),
+                                        user_id=str(current_user.id),
+                                        repo_id=repo_id,
+                                        branch=branch or "main",
+                                        service=coding_service,
+                                    )
+                                )
+                                if ws_base and ws_secret:
+                                    coder_workspace_base.set(ws_base)
+                                    coder_workspace_secret.set(ws_secret)
+                                if harness_base:
+                                    coding_harness_base.set(harness_base)
+                            except Exception:
+                                logger.warning(
+                                    "Failed to bind coding runtime for %s",
+                                    repo_id,
+                                    exc_info=True,
+                                )
+
                 provider_messages = await build_provider_messages_with_agents(
                     request=request,
                     context=request_context(current_user),

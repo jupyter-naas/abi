@@ -11,8 +11,8 @@ from naas_abi_core.services.agent.Agent import (
 from rdflib import Graph
 
 NAME = "7_Buckets"
-ONTOLOGIES_DIR = "libs/naas-abi-marketplace/naas_abi_marketplace/domains/signals/pipelines/ontology_engineer/ontologies"
-TEMPLATE_ONTOLOGY = Path(ONTOLOGIES_DIR) / "BFO7BucketsProcessOntology.ttl"
+_ONTOLOGIES_DIR = Path(__file__).resolve().parent.parent / "ontologies"
+TEMPLATE_ONTOLOGY = _ONTOLOGIES_DIR / "BFO7BucketsProcessOntology.ttl"
 AVATAR_URL = (
     "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
 )
@@ -404,8 +404,8 @@ def create_agent(
     ) -> str:
         """Validate a Turtle ontology with rdflib and save it into the ontologies folder."""
         safe_name = _safe_ontology_filename(filename)
-        Path(ONTOLOGIES_DIR).mkdir(parents=True, exist_ok=True)
-        filepath = Path(ONTOLOGIES_DIR) / safe_name
+        _ONTOLOGIES_DIR.mkdir(parents=True, exist_ok=True)
+        filepath = _ONTOLOGIES_DIR / safe_name
         if filepath.exists() and not overwrite:
             return (
                 f"File already exists: {safe_name}. Set overwrite=true to replace it."

@@ -28,8 +28,14 @@ class SourceControlAdapterInMemoryConfiguration(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class SourceControlAdapterLocalGitConfiguration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    repos_root: str
+
+
 class SourceControlAdapterConfiguration(GenericLoader):
-    adapter: Literal["forgejo", "in_memory", "custom"]
+    adapter: Literal["forgejo", "in_memory", "local_git", "custom"]
     config: dict | None = None
 
     @model_validator(mode="after")
@@ -53,6 +59,13 @@ class SourceControlAdapterConfiguration(GenericLoader):
                 "Invalid configuration for services.source_control."
                 "source_control_adapter 'in_memory' adapter",
             )
+        elif self.adapter == "local_git":
+            pydantic_model_validator(
+                SourceControlAdapterLocalGitConfiguration,
+                self.config,
+                "Invalid configuration for services.source_control."
+                "source_control_adapter 'local_git' adapter",
+            )
 
         return self
 
@@ -70,6 +83,13 @@ class SourceControlAdapterConfiguration(GenericLoader):
             )
 
             return InMemoryAdapter(**(self.config or {}))
+        elif self.adapter == "local_git":
+            assert self.config is not None, "config is required for local_git adapter"
+            from naas_abi_core.services.source_control.adapters.secondary.LocalGitAdapter import (
+                LocalGitAdapter,
+            )
+
+            return LocalGitAdapter(**self.config)
         elif self.adapter == "custom":
             return super().load()
         else:

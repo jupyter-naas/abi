@@ -132,3 +132,23 @@ def test_tool_binding_agents_are_pinned_to_the_default_chat_model(
 
     assert naas_abi["abi_agent_model"] == _DEFAULT_CHAT_MODEL
     assert naas_abi["ontology_engineer_model"] == _DEFAULT_CHAT_MODEL
+
+
+def test_default_config_uses_sqlite_ducklake() -> None:
+    dataset = _render("config.yaml")["services"]["dataset"]["dataset_adapter"]
+
+    assert dataset == {
+        "adapter": "ducklake",
+        "config": {
+            "catalog": "sqlite:storage/datasets.sqlite",
+            "data_path": "storage/datasets/",
+        },
+    }
+
+
+def test_local_config_uses_dedicated_postgres_ducklake_catalog() -> None:
+    dataset = _render("config.local.yaml")["services"]["dataset"]["dataset_adapter"]
+
+    assert dataset["adapter"] == "ducklake"
+    assert dataset["config"]["catalog"].endswith("@postgres:5432/ducklake")
+    assert dataset["config"]["data_path"] == "storage/datasets/"

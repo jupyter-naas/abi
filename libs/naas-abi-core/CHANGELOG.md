@@ -2,6 +2,91 @@
 
 <!-- version list -->
 
+## v2.31.2 (2026-09-07)
+
+### Bug Fixes
+
+- **core,abi,marketplace**: Pass json_schema_extra instead of Field(example=)
+  ([`ec8f6fd`](https://github.com/jupyter-naas/abi/commit/ec8f6fda79fa3e47cddfff0736f6590068a98fac))
+
+
+## v2.31.1 (2026-09-07)
+
+### Bug Fixes
+
+- **agent**: Align loguru comment with #1157 to merge cleanly
+  ([#1158](https://github.com/jupyter-naas/abi/pull/1158),
+  [`9ea2efe`](https://github.com/jupyter-naas/abi/commit/9ea2efe52fab7f245aeb991483adb8c671a757ec))
+
+- **agent**: Survive embedding-provider failures instead of hanging the chat
+  ([#1158](https://github.com/jupyter-naas/abi/pull/1158),
+  [`9ea2efe`](https://github.com/jupyter-naas/abi/commit/9ea2efe52fab7f245aeb991483adb8c671a757ec))
+
+
+## v2.31.0 (2026-09-07)
+
+### Code Style
+
+- **object-storage**: Sort the new tests' imports as ruff expects
+  ([#1244](https://github.com/jupyter-naas/abi/pull/1244),
+  [`f0675f4`](https://github.com/jupyter-naas/abi/commit/f0675f4dfc8a508a9d8ff2f7b851efaa5f8c5a9f))
+
+### Features
+
+- **object-storage**: Add recursive listing to the port and adapters
+  ([#1244](https://github.com/jupyter-naas/abi/pull/1244),
+  [`f0675f4`](https://github.com/jupyter-naas/abi/commit/f0675f4dfc8a508a9d8ff2f7b851efaa5f8c5a9f))
+
+
+## v2.30.0 (2026-09-03)
+
+### Bug Fixes
+
+- **dataset**: Address DuckLake review feedback
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Isolate storage and supported schemes
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Migrate DuckLake catalog on connect
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Validate S3 endpoint transport
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+### Documentation
+
+- **dataset**: Document the object store data path, and type the factory
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+### Features
+
+- **dataset**: Adopt DuckLake backend ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Let DuckLake write its data to an object store
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+
+## v2.29.0 (2026-09-03)
+
+### Features
+
+- **code**: Add local git and sandbox runtime for Slides-parity dev
+  ([#1242](https://github.com/jupyter-naas/abi/pull/1242),
+  [`c9beaae`](https://github.com/jupyter-naas/abi/commit/c9beaae75563d8ac0e137ec8da81a48d4472bcaa))
+
+- **code**: Local git + sandbox runtime (Slides-parity)
+  ([#1242](https://github.com/jupyter-naas/abi/pull/1242),
+  [`c9beaae`](https://github.com/jupyter-naas/abi/commit/c9beaae75563d8ac0e137ec8da81a48d4472bcaa))
+
+
 ## v2.28.3 (2026-09-02)
 
 ### Bug Fixes

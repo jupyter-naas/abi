@@ -53,7 +53,8 @@ class DatasetInfoData:
     namespace: str
     columns: tuple[DatasetColumnData, ...]
     partitions: tuple[DatasetPartitionData, ...]
-    snapshot_id: str
+    primary_key: tuple[str, ...]
+    snapshot_id: int
     location: str
 
 

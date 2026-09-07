@@ -2,6 +2,32 @@
 
 <!-- version list -->
 
+## v3.41.1 (2026-09-07)
+
+### Bug Fixes
+
+- **core,abi,marketplace**: Pass json_schema_extra instead of Field(example=)
+  ([`ec8f6fd`](https://github.com/jupyter-naas/abi/commit/ec8f6fda79fa3e47cddfff0736f6590068a98fac))
+
+
+## v3.41.0 (2026-09-03)
+
+### Features
+
+- **code**: Add local git and sandbox runtime for Slides-parity dev
+  ([#1242](https://github.com/jupyter-naas/abi/pull/1242),
+  [`c9beaae`](https://github.com/jupyter-naas/abi/commit/c9beaae75563d8ac0e137ec8da81a48d4472bcaa))
+
+- **code**: Local git + sandbox runtime (Slides-parity)
+  ([#1242](https://github.com/jupyter-naas/abi/pull/1242),
+  [`c9beaae`](https://github.com/jupyter-naas/abi/commit/c9beaae75563d8ac0e137ec8da81a48d4472bcaa))
+
+### Testing
+
+- **x_build_app_x_proxy**: Add test for runtime ABIModule resolution in build cycle
+  ([`0509911`](https://github.com/jupyter-naas/abi/commit/050991114d7c90ff64c463fe13d28a7ad9ccddde))
+
+
 ## v3.40.0 (2026-09-02)
 
 ### Bug Fixes

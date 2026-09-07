@@ -32,11 +32,13 @@ class ImageGenerationStorageWorkflowParameters(WorkflowParameters):
         Field(
             ...,
             description="Text prompt to generate the image from",
-            example="A beautiful sunset over mountains with a lake reflection",
+            json_schema_extra={
+                "example": "A beautiful sunset over mountains with a lake reflection"
+            },
         ),
     ]
-    file_name: Annotated[str, Field(description="Name for the generated image file", example="sunset_mountains.png")] | None = "generated_image.png"
-    folder_name: Annotated[str, Field(description="Subfolder name within the timestamped directory", example="images")] | None = "images"
+    file_name: Annotated[str, Field(description="Name for the generated image file", json_schema_extra={"example": "sunset_mountains.png"})] | None = "generated_image.png"
+    folder_name: Annotated[str, Field(description="Subfolder name within the timestamped directory", json_schema_extra={"example": "images"})] | None = "images"
 
 
 class ImageGenerationStorageWorkflow(Workflow):

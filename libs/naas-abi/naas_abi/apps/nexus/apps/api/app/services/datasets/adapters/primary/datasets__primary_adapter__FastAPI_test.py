@@ -20,7 +20,9 @@ from naas_abi_core.services.dataset.DatasetPort import ColumnSpec, DatasetSpec
 
 
 def _client(tmp_path, monkeypatch) -> TestClient:
-    warehouse = DatasetFactory.DatasetServiceDuckDB(str(tmp_path / "warehouse"))
+    warehouse = DatasetFactory.DatasetServiceDuckLake(
+        f"sqlite:{tmp_path / 'datasets.sqlite'}", str(tmp_path / "warehouse")
+    )
     warehouse.create(
         DatasetSpec(
             name="hours",

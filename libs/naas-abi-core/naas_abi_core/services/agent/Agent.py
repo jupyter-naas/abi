@@ -2284,7 +2284,15 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 elif isinstance(message, FinalStateEvent):
                     final_state = message.payload
                     break
-
+            except Empty:
+                # An empty queue is the only state in which a dead worker can be
+                # observed reliably: if `run_invoke` died before queueing a
+                # FinalStateEvent, nothing will ever arrive. This check used to
+                # sit after the `get()` above, so it was unreachable in exactly
+                # that case — `get` raised Empty, we swallowed it, and the loop
+                # spun forever instead of reporting the dead thread.
+                # `empty()` is re-checked to close the race where the worker
+                # queues an event and exits between the timeout and `is_alive()`.
                 if (
                     not thread.is_alive()
                     and self._event_queue.empty()
@@ -2294,8 +2302,6 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                     raise RuntimeError(
                         "Agent thread has died and no final state event was received."
                     )
-            except Empty:
-                pass
 
         response = self._content_to_text(final_state)
         logger.debug(f"Response: {response}")

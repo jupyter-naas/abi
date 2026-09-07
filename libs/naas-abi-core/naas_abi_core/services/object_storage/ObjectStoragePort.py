@@ -67,6 +67,20 @@ class IObjectStorageAdapter(ABC):
         pass
 
     @abstractmethod
+    def list_objects_recursive(
+        self, prefix: str, queue: Queue | None = None
+    ) -> list[str]:
+        """List every object at or beneath *prefix*, at any nesting depth.
+
+        Unlike :meth:`list_objects`, which returns only the direct children of
+        *prefix*, this walks the whole subtree. Returned entries are object keys
+        only: directory and common-prefix placeholders never appear. Raises
+        :class:`Exceptions.ObjectNotFound` for a prefix that does not exist,
+        matching :meth:`list_objects`.
+        """
+        ...  # pragma: no cover - abstract
+
+    @abstractmethod
     def get_object_metadata(self, prefix: str, key: str) -> ObjectMetaData:
         pass
 
@@ -104,6 +118,13 @@ class IObjectStorageDomain(ABC):
     @abstractmethod
     def list_objects(self, prefix: str, queue: Queue | None = None) -> list[str]:
         pass
+
+    @abstractmethod
+    def list_objects_recursive(
+        self, prefix: str, queue: Queue | None = None
+    ) -> list[str]:
+        """List every object at or beneath *prefix*, at any nesting depth."""
+        ...  # pragma: no cover - abstract
 
     @abstractmethod
     def get_object_metadata(self, prefix: str, key: str) -> ObjectMetaData:

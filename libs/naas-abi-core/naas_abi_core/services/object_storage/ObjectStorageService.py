@@ -82,5 +82,14 @@ class ObjectStorageService(ServiceBase, IObjectStorageDomain):
 
         return self.adapter.list_objects(prefix, queue)
 
+    def list_objects_recursive(
+        self, prefix: str = "", queue: Queue | None = None
+    ) -> list[str]:
+        prefix = self.__remove_storage_prefix(prefix)
+        if prefix == "/":
+            prefix = ""
+
+        return self.adapter.list_objects_recursive(prefix, queue)
+
     def get_object_metadata(self, prefix: str, key: str) -> ObjectMetaData:
         return self.adapter.get_object_metadata(prefix, key)

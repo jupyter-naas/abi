@@ -39,14 +39,17 @@ class AddIndividualPipelineParameters(PipelineParameters):
     individual_label: Annotated[
         str,
         Field(
-            description="Individual label to add to the ontology.", example="Naas.ai"
+            description="Individual label to add to the ontology.",
+            json_schema_extra={"example": "Naas.ai"},
         ),
     ]
     class_uri: Annotated[
         str,
         Field(
             description="Class URI to add the individual to. Use tool `search_class` to search for a class URI in the ontology.",
-            example="https://www.commoncoreontologies.org/ont00000443",
+            json_schema_extra={
+                "example": "https://www.commoncoreontologies.org/ont00000443"
+            },
         ),
     ]
     threshold: Annotated[
