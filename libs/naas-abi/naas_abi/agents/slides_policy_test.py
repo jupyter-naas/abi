@@ -23,6 +23,7 @@ from naas_abi.agents.slides_policy import (
     slides_research_tools,
     slides_search_budget_remaining,
     slides_search_tool_bound,
+    validate_configured_slides_model,
 )
 from naas_abi_core.services.agent.context import (
     slides_active_slug,
@@ -74,7 +75,6 @@ def test_resolve_slides_llm_model_always_returns_the_configured_model() -> None:
     assert resolve_slides_llm_model(None, slides_default=None) == DEFAULT_SLIDES_MODEL
 
 
-def test_apply_slides_model_override_when_deck_open() -> None:
 def test_resolve_slides_llm_model_warns_when_it_overrides_the_selection(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -114,7 +114,7 @@ def test_resolve_slides_llm_model_is_quiet_when_nothing_was_overridden(
     assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
 
 
-    assert apply_slides_model_override("gpt-4.1-mini", None, None) == "gpt-4.1-mini"
+def test_apply_slides_model_override_when_deck_open() -> None:
     """Inverted: a strong selection no longer survives an open deck either.
 
     This assertion used to read ``== "gpt-5.2"``. The client's selection won
@@ -123,6 +123,7 @@ def test_resolve_slides_llm_model_is_quiet_when_nothing_was_overridden(
     route a deck onto it. The configured model now owns every slides turn, and
     the pair of assertions below is the whole behaviour change.
     """
+    assert apply_slides_model_override("gpt-4.1-mini", None, None) == "gpt-4.1-mini"
     assert (
         apply_slides_model_override("gpt-4.1-mini", {"slides": {}}, None) == "gpt-4.1-mini"
     )
@@ -516,3 +517,36 @@ def test_model_override_upgrades_a_deck_request_from_main_chat() -> None:
         )
         == DEFAULT_SLIDES_MODEL
     )
+
+
+def test_validate_configured_slides_model_rejects_an_unregistered_id() -> None:
+    """A typo in ``abi_slides_agent_model`` has to fail the boot.
+
+    It cannot fail the turn any more. The configured model is now the only
+    model a slides turn can run on, so a mistyped id is not a degraded deck,
+    it is every deck broken, discovered whenever someone next opens Slides.
+    The message carries the id because that is the thing to go and fix.
+    """
+    from naas_abi_core.services.model_registry.ModelRegistryPort import (
+        DefaultModelNotResolvedError,
+    )
+    from naas_abi_core.services.model_registry.ModelRegistryService import (
+        ModelRegistryService,
+    )
+
+    with pytest.raises(DefaultModelNotResolvedError, match="claude-sonnet-5-typo"):
+        validate_configured_slides_model(
+            ModelRegistryService(),
+            "anthropic/claude-sonnet-5-typo",
+        )
+
+
+def test_validate_configured_slides_model_accepts_a_registered_id() -> None:
+    """Registered means registered, not constructible.
+
+    No provider is passed to the registry on purpose. ``get_chat_model`` falls
+    back to building an off-catalog model through the provider's chat factory,
+    and a factory will build any id it is handed, so pinning a provider here
+    would make every possible typo resolve and the check would assert nothing.
+    """
+    validate_configured_slides_model(_registry_with_slides_model(), "claude-sonnet-5")

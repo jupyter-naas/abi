@@ -600,7 +600,9 @@ class ABIModule(BaseModule):
 
         # Slides-only override. Nexus Slides briefs use this instead of
         # ``abi_agent_model`` so general chat can stay on a cheaper default.
-        # Must be a reasoning-capable registry id, not mini or a free Gemma.
+        # It is not a preference: a slides turn runs on this model whatever the
+        # client selected, so it must be a reasoning-capable id that some
+        # loaded module registers. ``on_initialized`` fails the boot if not.
         abi_slides_agent_model: str = "anthropic/claude-sonnet-5"
 
         # Canonical model id used by OntologyEngineerAgent. Same registry
@@ -616,6 +618,27 @@ class ABIModule(BaseModule):
         nexus_config: NexusConfig = Field(default_factory=NexusConfig)
 
     def on_initialized(self):
+        # Fail the boot, not the twentieth deck. Slides ignore the model the
+        # client selected, so this one id is the only model a slides turn can
+        # run on and a typo in it breaks every deck rather than one.
+        #
+        # Checked here rather than in ``on_load``: module load order is a
+        # topological sort over declared dependencies, and nothing makes a
+        # model-providing module a dependency of ``naas_abi``, so the module
+        # that registers the slides model routinely loads after this one (in
+        # Zen it is index 25 against 9) and a correct id would not be in the
+        # registry yet. ``on_initialized`` runs once every module has loaded,
+        # which is the point the engine already uses for ``validate_defaults``.
+        # It runs before ``super()`` so a bad id is reported as itself instead
+        # of as whatever the Nexus bootstrap fails on afterwards.
+        if self._engine.services.model_registry_available():
+            from naas_abi.agents.slides_policy import validate_configured_slides_model
+
+            validate_configured_slides_model(
+                self._engine.services.model_registry,
+                self.configuration.abi_slides_agent_model,
+            )
+
         super().on_initialized()
         # Initialize Nexus settings and service registry
 

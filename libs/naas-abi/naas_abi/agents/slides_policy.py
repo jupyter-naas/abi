@@ -81,6 +81,48 @@ def configured_slides_model() -> str:
     return DEFAULT_SLIDES_MODEL
 
 
+def validate_configured_slides_model(
+    registry: Any,
+    configured: str | None = None,
+) -> None:
+    """Resolve the configured slides model, or refuse to start.
+
+    Called at boot. Slides ignore the model the client selected, so this one id
+    is the only model any slides turn can run on, and an id that does not
+    resolve is not a degraded deck but every deck broken. Left unchecked it
+    surfaces on whichever deck someone opens next, which is exactly the shape
+    of failure this whole change exists to remove.
+
+    ``registry.get_chat_model`` is called without a provider deliberately. With
+    one it falls back to constructing an off-catalog model through that
+    provider's chat factory, and a factory builds whatever id it is handed, so
+    every typo would resolve and this would assert nothing. Registered-only is
+    also what ``ModelRegistryService.validate_defaults`` requires of the engine
+    defaults, so an operator sees one rule rather than two.
+    """
+    from naas_abi_core.services.model_registry.ModelRegistryPort import (
+        DefaultModelNotResolvedError,
+        ModelNotFoundError,
+        ProviderNotConfiguredError,
+    )
+
+    model_id = (configured or "").strip() or configured_slides_model()
+    try:
+        registry.get_chat_model(model_id)
+    except (ModelNotFoundError, ProviderNotConfiguredError) as exc:
+        registered = sorted(registry.list_canonical_ids())
+        listing = ", ".join(repr(i) for i in registered) if registered else "(none)"
+        raise DefaultModelNotResolvedError(
+            f"abi_slides_agent_model={model_id!r} is not registered as a chat model.\n"
+            f"  -> set it under modules.naas_abi.config.abi_slides_agent_model, but no "
+            f"loaded module registered a chat model with this id.\n"
+            f"  -> likely cause: the module shipping that ModelDefinition is not enabled, "
+            f"or the id is spelled differently there (the prefixed and bare forms are "
+            f"two different canonical ids).\n"
+            f"  -> currently registered model ids: {listing}"
+        ) from exc
+
+
 def resolve_slides_llm_model(
     incoming: str | None,
     slides_default: str | None = None,
