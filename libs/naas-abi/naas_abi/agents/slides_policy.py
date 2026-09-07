@@ -6,6 +6,7 @@ skip web_search and dump template filler into deck.html.
 
 from __future__ import annotations
 
+import copy
 import re
 from typing import Any
 
@@ -422,10 +423,18 @@ def load_slides_chat_model(model_id: str) -> Any:
 
 
 def bind_slides_reasoning(chat_model: Any, model_id: str) -> Any:
-    """Turn on high reasoning effort without replacing the LangChain chat class.
+    """Return a copy with high reasoning effort, leaving the caller's model alone.
 
-    ``model.bind(...)`` returns a RunnableBinding, which Agent rejects. Set the
-    attribute on the live ChatOpenAI (or equivalent) instead.
+    ``model.bind(...)`` returns a RunnableBinding, and Agent asserts
+    ``isinstance(chat_model, BaseChatModel | ChatModel)``, so a bound model is
+    rejected at construction. Writing the attribute instead is worse:
+    ``AbiAgent.New`` calls this on the ChatModel the ModelRegistry handed it,
+    and the registry hands back the registered entry itself, so the write
+    outlives the request and every later caller of that canonical id inherits
+    it.
+
+    ``model_copy`` keeps the concrete chat class and shares the underlying
+    OpenAI client, so the copy costs no connection setup.
     """
     if not (slides_active_slug.get() or "").strip():
         return chat_model
@@ -436,7 +445,13 @@ def bind_slides_reasoning(chat_model: Any, model_id: str) -> Any:
     if not hasattr(lc, "reasoning_effort"):
         return chat_model
     try:
-        lc.reasoning_effort = "high"
+        reasoning = lc.model_copy(update={"reasoning_effort": "high"})
     except Exception:  # noqa: BLE001
         return chat_model
-    return chat_model
+    if lc is chat_model:
+        return reasoning
+    # The wrapper is shared too, so hand back a copy of it rather than
+    # repointing the registry entry's model at the copy.
+    wrapper = copy.copy(chat_model)
+    wrapper.model = reasoning
+    return wrapper

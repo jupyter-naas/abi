@@ -1,6 +1,7 @@
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
 import pytest
 from naas_abi.agents.slides_policy import (
@@ -8,6 +9,7 @@ from naas_abi.agents.slides_policy import (
     MAX_SLIDES_SEARCHES,
     apply_slides_model_override,
     attach_slides_research_note,
+    bind_slides_reasoning,
     bind_slides_research_policy,
     is_weak_slides_model,
     load_slides_chat_model,
@@ -363,6 +365,89 @@ def test_load_slides_chat_model_rejects_a_missing_model_id() -> None:
     for missing in (None, "", "   "):
         with pytest.raises(ValueError, match="model id"):
             load_slides_chat_model(missing)  # type: ignore[arg-type]
+
+
+def _registry_with_slides_model() -> Any:
+    """A ModelRegistry holding one entry, wrapped the way production wraps it.
+
+    A mock cannot show this bug. The leak is a plain attribute write onto the
+    LangChain object the registry stores, so the object under test has to be a
+    real ChatOpenAI inside a real ChatModel inside a real registry.
+    """
+    from langchain_openai import ChatOpenAI
+    from naas_abi_core.models.Model import ChatModel
+    from naas_abi_core.services.model_registry.ModelRegistryService import (
+        ModelRegistryService,
+    )
+    from pydantic import SecretStr
+
+    registry = ModelRegistryService()
+    registry.register(
+        "claude-sonnet-5",
+        ChatModel(
+            model_id="anthropic/claude-sonnet-5",
+            provider="openrouter",
+            model=ChatOpenAI(
+                model="anthropic/claude-sonnet-5",
+                api_key=SecretStr("sk-or-test"),
+                base_url="https://openrouter.ai/api/v1",
+                timeout=180,
+            ),
+        ),
+    )
+    return registry
+
+
+def test_bind_slides_reasoning_leaves_the_shared_registry_model_clean() -> None:
+    """A slides turn must not write reasoning effort into the shared catalog.
+
+    AbiAgent.New calls bind_slides_reasoning on whatever the ModelRegistry
+    handed it, and the registry hands back the registered entry itself rather
+    than a copy. Writing the attribute through therefore outlives the request:
+    every later caller of that canonical id inherits high reasoning effort,
+    slides or not, permanently, with nothing recording that it happened.
+
+    Asserting only that the returned object reads "high" would pass against
+    the write-through version, so the original and a second fetch are checked
+    too.
+    """
+    registry = _registry_with_slides_model()
+    shared = registry.get_chat_model("claude-sonnet-5", provider="openrouter")
+
+    token = slides_active_slug.set("iran-now")
+    try:
+        bound = bind_slides_reasoning(shared, "anthropic/claude-sonnet-5")
+    finally:
+        slides_active_slug.reset(token)
+
+    assert shared.model.reasoning_effort is None
+    assert bound.model.reasoning_effort == "high"
+    refetched = registry.get_chat_model("claude-sonnet-5", provider="openrouter")
+    assert refetched.model.reasoning_effort is None
+
+
+def test_bind_slides_reasoning_keeps_the_chat_class_and_shares_the_client() -> None:
+    """The copy has to stay a chat model, and has to stay cheap.
+
+    ``model.bind(...)`` is the obvious way to avoid the write, but it returns a
+    RunnableBinding and Agent asserts isinstance(chat_model, BaseChatModel |
+    ChatModel), so a bound model is rejected at construction. A model_copy
+    keeps the concrete class, and it shares the underlying OpenAI client rather
+    than opening a new connection pool per slides turn.
+    """
+    from langchain_openai import ChatOpenAI
+
+    registry = _registry_with_slides_model()
+    shared = registry.get_chat_model("claude-sonnet-5", provider="openrouter")
+
+    token = slides_active_slug.set("iran-now")
+    try:
+        bound = bind_slides_reasoning(shared, "anthropic/claude-sonnet-5")
+    finally:
+        slides_active_slug.reset(token)
+
+    assert isinstance(bound.model, ChatOpenAI)
+    assert bound.model.root_client is shared.model.root_client
 
 
 def test_model_override_upgrades_a_deck_request_from_main_chat() -> None:
