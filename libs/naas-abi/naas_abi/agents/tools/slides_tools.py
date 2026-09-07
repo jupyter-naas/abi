@@ -103,7 +103,7 @@ def _is_repo_id_message(text: str) -> bool:
     repo_id = _repo_id()
     if raw == repo_id or _REPO_ID_RE.fullmatch(raw):
         return True
-    if raw.startswith(f"{repo_id}:") or raw.startswith(f"{repo_id}@"):
+    if raw.startswith((f"{repo_id}:", f"{repo_id}@")):
         return True
     return raw.endswith(f": {repo_id}")
 
