@@ -548,12 +548,19 @@ def test_load_slides_chat_model_raises_when_nothing_registered_the_model(
         load_slides_chat_model("anthropic/claude-sonnet-5")
 
 
-def _registry_with_slides_model(canonical_id: str = "claude-sonnet-5") -> Any:
+def _registry_with_slides_model(
+    canonical_id: str = "claude-sonnet-5",
+    extra_body: dict | None = None,
+) -> Any:
     """A ModelRegistry holding one entry, wrapped the way production wraps it.
 
     A mock cannot show this bug. The leak is a plain attribute write onto the
     LangChain object the registry stores, so the object under test has to be a
     real ChatOpenAI inside a real ChatModel inside a real registry.
+
+    ``extra_body`` is where a registration declares reasoning for an OpenRouter
+    model, which is how the downstream install this policy was written against
+    declares it.
     """
     from langchain_openai import ChatOpenAI
     from naas_abi_core.models.Model import ChatModel
@@ -573,10 +580,35 @@ def _registry_with_slides_model(canonical_id: str = "claude-sonnet-5") -> Any:
                 api_key=SecretStr("sk-or-test"),
                 base_url="https://openrouter.ai/api/v1",
                 timeout=180,
+                extra_body=extra_body,
             ),
         ),
     )
     return registry
+
+
+def test_bind_slides_reasoning_leaves_a_declared_registration_alone() -> None:
+    """A registration that already asks for reasoning is not asked twice.
+
+    One request would then carry the same decision in two places, extra_body's
+    reasoning.effort and a top-level reasoning_effort. Duplication is the mild
+    version. OpenRouter rejects reasoning.effort alongside reasoning.max_tokens
+    with a 400, so a registration spelling its reasoning with max_tokens would
+    have every slides turn fail outright, and the cause would read as a
+    provider problem rather than as this function's contribution.
+    """
+    registry = _registry_with_slides_model(extra_body={"reasoning": {"effort": "high"}})
+    shared = registry.get_chat_model("claude-sonnet-5", provider="openrouter")
+
+    token = slides_active_slug.set("iran-now")
+    try:
+        bound = bind_slides_reasoning(shared, "anthropic/claude-sonnet-5")
+    finally:
+        slides_active_slug.reset(token)
+
+    assert bound is shared
+    assert bound.model.reasoning_effort is None
+    assert bound.model.extra_body == {"reasoning": {"effort": "high"}}
 
 
 def test_bind_slides_reasoning_leaves_the_shared_registry_model_clean() -> None:

@@ -440,8 +440,48 @@ def load_slides_chat_model(model_id: str) -> Any:
     return bind_slides_reasoning(chat, resolved)
 
 
+def declares_reasoning(langchain_model: Any) -> bool:
+    """True when the registration already asked for reasoning itself.
+
+    Reasoning reaches a provider by three routes and a registration may use any
+    of them: ``reasoning_effort`` for the OpenAI-native field, ``reasoning``
+    for the object form, and a ``reasoning`` key inside ``extra_body`` or
+    ``model_kwargs`` for anything passed through to an OpenAI-compatible
+    gateway. Checking only the first would read a registration that declared
+    reasoning through OpenRouter's ``extra_body`` as having declared nothing.
+    """
+    if getattr(langchain_model, "reasoning_effort", None):
+        return True
+    if getattr(langchain_model, "reasoning", None):
+        return True
+    for attribute in ("extra_body", "model_kwargs"):
+        payload = getattr(langchain_model, attribute, None)
+        if isinstance(payload, dict) and payload.get("reasoning"):
+            return True
+    return False
+
+
 def bind_slides_reasoning(chat_model: Any, model_id: str) -> Any:
     """Return a copy with high reasoning effort, leaving the caller's model alone.
+
+    A fallback, not the design. The right home for reasoning config is the
+    ``ModelDefinition`` that describes the model, next to its context window
+    and its endpoint, where it is visible in the catalog and applies to every
+    caller rather than to slides only. This exists because roughly thirty
+    reasoning-capable models are registered upstream with no reasoning config
+    at all, so on an install with ``abi_slides_agent_model`` unset it is the
+    only thing supplying effort to them.
+
+    Both gates are load-bearing and neither is sufficient. ``reasoning_effort``
+    on the class answers "can this client carry the field": ChatAnthropic and
+    ChatGoogleGenerativeAI have no such field, so they fall out here. The id
+    tokens answer "does this model understand it": ChatOpenAI carries the field
+    for everything it wraps, including models that would reject it or bill for
+    it and ignore it, so guarding on the class alone would send high effort to
+    every OpenAI-compatible registration in the install. That is also why the
+    sonnet, opus and gemini tokens stay. They look dead against a native client
+    and are not: an Anthropic or Gemini model reached through OpenRouter is a
+    ChatOpenAI, which is exactly the registration shape this fires on.
 
     ``model.bind(...)`` returns a RunnableBinding, and Agent asserts
     ``isinstance(chat_model, BaseChatModel | ChatModel)``, so a bound model is
@@ -461,6 +501,13 @@ def bind_slides_reasoning(chat_model: Any, model_id: str) -> Any:
         return chat_model
     lc = getattr(chat_model, "model", chat_model)
     if not hasattr(lc, "reasoning_effort"):
+        return chat_model
+    if declares_reasoning(lc):
+        # The registration already decided. Adding a top-level reasoning_effort
+        # on top of an extra_body reasoning block puts the same decision in a
+        # request twice, and OpenRouter answers reasoning.effort alongside
+        # reasoning.max_tokens with a 400, so a registration using the
+        # max_tokens form would fail every slides turn.
         return chat_model
     try:
         reasoning = lc.model_copy(update={"reasoning_effort": "high"})
