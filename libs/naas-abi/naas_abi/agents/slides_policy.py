@@ -376,19 +376,26 @@ def slides_reasoning_extra_body(model_id: str) -> dict[str, Any] | None:
     return {"reasoning": {"effort": "high"}}
 
 
-def load_slides_chat_model(model_id: str | None) -> Any:
+def load_slides_chat_model(model_id: str) -> Any:
     """Build the slides chat model via OpenRouter, not api.openai.com.
 
-    ``model_id`` is required rather than defaulting to ``None``. A default let
-    a caller drop the model the turn was routed to and silently build the
-    configured slides default instead. Callers with genuinely no model in hand
-    must pass ``None`` on purpose.
+    Raises ``ValueError`` on an empty ``model_id``. ``resolve_slides_llm_model``
+    reads an empty value as "use the configured slides default", so a caller
+    that dropped the model the turn was routed to built a model for a different
+    model with no error and no log line. There is no safe default at this
+    boundary: a caller holding no model id has lost information, and the loss
+    has to be visible where it happens.
     """
     from langchain_openai import ChatOpenAI
     from naas_abi import ABIModule
     from naas_abi_core.models.Model import ChatModel
     from pydantic import SecretStr
 
+    if not (model_id or "").strip():
+        raise ValueError(
+            "load_slides_chat_model requires the model id the turn was routed "
+            "to. Resolve it with resolve_slides_llm_model first."
+        )
     resolved = resolve_slides_llm_model(model_id)
     or_id = openrouter_slides_model_id(resolved)
     abi = ABIModule.get_instance()

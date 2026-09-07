@@ -1,8 +1,8 @@
-import inspect
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+import pytest
 from naas_abi.agents.slides_policy import (
     DEFAULT_SLIDES_MODEL,
     MAX_SLIDES_SEARCHES,
@@ -351,15 +351,18 @@ def test_research_policy_stays_off_for_ordinary_main_chat() -> None:
         slides_creation_intent.reset(tokens[1])
 
 
-def test_load_slides_chat_model_requires_a_model_id() -> None:
-    """Omitting the model id resolved to the configured slides default, so a
-    caller that forgot to thread the user's choice through built a model for a
-    different model with no error and no log line. There is no safe default
-    here: the caller has to say which model the turn runs on.
-    """
-    model_id = inspect.signature(load_slides_chat_model).parameters["model_id"]
+def test_load_slides_chat_model_rejects_a_missing_model_id() -> None:
+    """A caller that has no model id must not silently get the configured one.
 
-    assert model_id.default is inspect.Parameter.empty
+    resolve_slides_llm_model treats an empty model id as "use the default", so
+    a caller that dropped the model the turn was routed to built a chat model
+    for a different model with no error and no log line. Removing the parameter
+    default does not close that: passing None explicitly reaches the same
+    resolve call. The information loss has to raise.
+    """
+    for missing in (None, "", "   "):
+        with pytest.raises(ValueError, match="model id"):
+            load_slides_chat_model(missing)  # type: ignore[arg-type]
 
 
 def test_model_override_upgrades_a_deck_request_from_main_chat() -> None:
