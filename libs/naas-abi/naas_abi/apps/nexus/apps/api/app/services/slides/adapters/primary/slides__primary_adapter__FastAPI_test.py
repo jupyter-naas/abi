@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+import json
+from pathlib import Path
+
+import pytest
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
 )
+from naas_abi.apps.nexus.apps.api.app.core.config import SlidesTemplateSourceConfig
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary import (
     slides__primary_adapter__FastAPI as slides_api,
@@ -51,6 +56,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import RepoNotFoun
 from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
 )
+from pydantic import ValidationError
 
 
 def test_slugify_and_paths() -> None:
@@ -108,28 +114,142 @@ def test_seed_template_includes_build_pptx() -> None:
 
 def test_seed_catalog_lists_all_templates() -> None:
     ids = _discover_seed_ids()
-    assert "pitch-dark-v1" in ids
-    assert "minimal-light-v1" in ids
-    assert "executive-v1" in ids
+    assert "abi/pitch-dark-v1" in ids
+    assert "abi/minimal-light-v1" in ids
+    assert "abi/executive-v1" in ids
     assert len(ids) == 3
-    assert ids[0] == "minimal-light-v1"
+    assert ids[0] == "abi/minimal-light-v1"
     records = _list_seed_template_records()
     by_id = {r["id"]: r for r in records}
-    assert by_id["minimal-light-v1"]["name"] == "Minimal Light"
-    assert by_id["pitch-dark-v1"]["preview_bg"].startswith("#")
-    light_slides = by_id["minimal-light-v1"]["slides"]
+    assert by_id["abi/minimal-light-v1"]["name"] == "Minimal Light"
+    assert by_id["abi/pitch-dark-v1"]["preview_bg"].startswith("#")
+    light_slides = by_id["abi/minimal-light-v1"]["slides"]
     titles = [s["title"] for s in light_slides]
     assert "Presentation Title" in titles
     assert "What we will cover" in titles
     assert any(s.get("eyebrow") == "Agenda" for s in light_slides)
-    assert by_id["minimal-light-v1"]["assets"]
+    assert by_id["abi/minimal-light-v1"]["assets"]
     for tid in ("pitch-dark-v1", "minimal-light-v1", "executive-v1"):
+        # Bare, as a project.json written before namespaces would have it.
         html = _load_seed_html(tid)
         assert "function buildPptx" in html
         assert "NEXUS_SLIDES_PPTX_FROM_DOM_V1" in html
         assert 'class="deck"' in html
         assert 'class="slide' in html
         assert "deck-menubar" in html
+        assert _load_seed_html(f"abi/{tid}") == html
+
+
+def _write_template_dir(directory: Path, stem: str, name: str) -> Path:
+    """One seed deck plus its catalog row, the shape a source must satisfy."""
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "catalog.json").write_text(
+        json.dumps({"templates": [{"id": stem, "name": name}]}),
+        encoding="utf-8",
+    )
+    (directory / f"{stem}.html").write_text(
+        f'<main class="deck"><section class="slide"><h1>{name}</h1></section></main>',
+        encoding="utf-8",
+    )
+    return directory
+
+
+def _configure_sources(monkeypatch, *sources: tuple[str, Path]) -> None:
+    monkeypatch.setattr(
+        slides_api.settings,
+        "slides_template_sources",
+        [
+            SlidesTemplateSourceConfig(namespace=namespace, path=str(path))
+            for namespace, path in sources
+        ],
+        raising=False,
+    )
+
+
+def test_templates_need_no_configured_source(monkeypatch) -> None:
+    """The zero-config install is the one that must not break.
+
+    ABI ships its own seeds. An install that configures nothing still has to
+    serve a full picker, or New Presentation opens onto an empty menu.
+    """
+    _configure_sources(monkeypatch)
+
+    ids = _discover_seed_ids()
+
+    assert ids == ["abi/minimal-light-v1", "abi/pitch-dark-v1", "abi/executive-v1"]
+    assert {row["source"] for row in _list_seed_template_records()} == {"abi"}
+    assert "function buildPptx" in _load_seed_html("abi/minimal-light-v1")
+
+
+def test_a_configured_source_adds_its_own_namespace(tmp_path, monkeypatch) -> None:
+    """A source names itself, so ABI never spells a consumer's name."""
+    directory = _write_template_dir(tmp_path / "acme", "tenant-only-v1", "Tenant Only")
+    _configure_sources(monkeypatch, ("acme", directory))
+
+    ids = _discover_seed_ids()
+
+    assert "abi/minimal-light-v1" in ids
+    assert "acme/tenant-only-v1" in ids
+    assert "acme/minimal-light-v1" not in ids
+    assert "Tenant Only" in _load_seed_html("acme/tenant-only-v1")
+    row = next(r for r in _list_seed_template_records() if r["source"] == "acme")
+    assert row["id"] == "acme/tenant-only-v1"
+    assert row["name"] == "Tenant Only"
+    assert row["origin"] == str(directory)
+
+
+def test_configured_sources_do_not_leak_into_each_other(tmp_path, monkeypatch) -> None:
+    """Two sources may ship the same stem. The namespace is what separates them."""
+    _configure_sources(
+        monkeypatch,
+        ("acme", _write_template_dir(tmp_path / "a", "house-style-v1", "Acme House")),
+        ("globex", _write_template_dir(tmp_path / "g", "house-style-v1", "Globex House")),
+    )
+
+    ids = _discover_seed_ids()
+
+    assert "acme/house-style-v1" in ids
+    assert "globex/house-style-v1" in ids
+    assert "Acme House" in _load_seed_html("acme/house-style-v1")
+    assert "Globex House" in _load_seed_html("globex/house-style-v1")
+    with pytest.raises(HTTPException) as caught:
+        _load_seed_html("abi/house-style-v1")
+    assert caught.value.status_code == 404
+
+
+def test_an_unknown_namespace_is_a_miss_not_a_syntax_error(monkeypatch) -> None:
+    """Which namespaces exist is configuration, so the grammar cannot judge it."""
+    _configure_sources(monkeypatch)
+
+    with pytest.raises(HTTPException) as caught:
+        _load_seed_html("nobody/minimal-light-v1")
+
+    assert caught.value.status_code == 404
+
+
+@pytest.mark.parametrize("namespace", ["abi", "ABI", "with space", "", "under_score"])
+def test_a_source_namespace_is_refused_at_config_time(namespace: str) -> None:
+    """Fail the boot, not the picker.
+
+    ``abi`` is ABI's own namespace, and a source claiming it would shadow the
+    seeds every install depends on. A namespace that is not a kebab slug cannot
+    round-trip through a template id. Both are typos in config.yaml, so they
+    belong to the boot, where the message names the field.
+    """
+    with pytest.raises(ValidationError):
+        SlidesTemplateSourceConfig(namespace=namespace, path="/tmp/templates")
+
+
+def test_a_missing_source_directory_does_not_hide_the_abi_seeds(
+    tmp_path, monkeypatch
+) -> None:
+    """A stale path in config.yaml must degrade to ABI's seeds, not to nothing."""
+    _configure_sources(monkeypatch, ("acme", tmp_path / "does-not-exist"))
+
+    ids = _discover_seed_ids()
+
+    assert "abi/minimal-light-v1" in ids
+    assert not [tid for tid in ids if tid.startswith("acme/")]
 
 
 def test_friendly_coding_detail_hides_raw_coder_json() -> None:
@@ -222,11 +342,12 @@ def test_list_and_create_projects_seed_in_memory_repo(monkeypatch) -> None:
     assert templates.status_code == 200, templates.text
     catalog = templates.json()
     assert {t["id"] for t in catalog} >= {
-        "minimal-light-v1",
-        "pitch-dark-v1",
-        "executive-v1",
+        "abi/minimal-light-v1",
+        "abi/pitch-dark-v1",
+        "abi/executive-v1",
     }
-    light = next(t for t in catalog if t["id"] == "minimal-light-v1")
+    assert all(t["source"] == "abi" for t in catalog)
+    light = next(t for t in catalog if t["id"] == "abi/minimal-light-v1")
     assert light["name"] == "Minimal Light"
     assert any(s["title"] == "What we will cover" for s in light["slides"])
     applied = client.post(
@@ -247,6 +368,17 @@ def test_list_and_create_projects_seed_in_memory_repo(monkeypatch) -> None:
     )
     assert proj.status_code == 200, proj.text
     assert proj.json()["template_id"] == "pitch-dark-v1"
+    namespaced = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Namespaced seed",
+            "slug": "namespaced-seed",
+            "template_id": "abi/executive-v1",
+        },
+    )
+    assert namespaced.status_code == 200, namespaced.text
+    assert namespaced.json()["template_id"] == "abi/executive-v1"
 
 
 def test_friendly_git_detail_hides_pushrejected_dump() -> None:

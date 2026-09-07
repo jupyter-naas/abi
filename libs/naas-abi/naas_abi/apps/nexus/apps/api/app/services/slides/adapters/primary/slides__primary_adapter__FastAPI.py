@@ -21,6 +21,7 @@ import time
 from datetime import timedelta
 from importlib import resources
 from pathlib import Path
+from typing import TYPE_CHECKING, NamedTuple
 from urllib.error import URLError
 from urllib.parse import quote
 from urllib.request import Request as UrlRequest
@@ -33,7 +34,10 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
     require_workspace_access,
 )
-from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core.config import (
+    ABI_SLIDES_TEMPLATE_NAMESPACE,
+    settings,
+)
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import create_access_token
@@ -61,13 +65,33 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+if TYPE_CHECKING:
+    # importlib.abc.Traversable is deprecated from 3.12 and the 3.11 home,
+    # importlib.resources.abc, does not exist on the 3.10 this subtree still
+    # declares. Annotations are postponed here, so neither is imported at run
+    # time and the name has to resolve only for a type checker.
+    from importlib.abc import Traversable
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+# A template id is ``<namespace>/<stem>``, or a bare stem from before the
+# namespaces existed. The namespace is not enumerated here: which ones exist
+# is configuration, so an unknown one is a lookup miss, not a syntax error.
+_TEMPLATE_REF_RE = re.compile(
+    r"^(?:(?P<namespace>[a-z0-9]+(?:-[a-z0-9]+)*)/)?"
+    r"(?P<stem>[a-z0-9]+(?:-[a-z0-9]+)*)$"
+)
 _BRANCH_PREFIX = "slides/"
 _DEFAULT_TEMPLATE = "minimal-light-v1"
+_ABI_NAMESPACE = ABI_SLIDES_TEMPLATE_NAMESPACE
+_ABI_PACKAGE = "naas_abi.apps.nexus.assets.slides.templates"
+_ABI_ORIGIN = _ABI_PACKAGE
+_DEFAULT_TEMPLATE_ID = f"{_ABI_NAMESPACE}/{_DEFAULT_TEMPLATE}"
+# Room for a namespace and a separator on top of a kebab stem.
+_TEMPLATE_ID_MAX_LEN = 96
 _SIDECAR_PORT = 8378
 # Ordered by preference. "local-directory" is what LocalDirectoryAdapter
 # advertises in the no-Docker runtime; without it the probe finds no template
@@ -454,8 +478,47 @@ def _slugify(title: str) -> str:
     return raw[:48] or "deck"
 
 
-def _template_dirs() -> list[Path]:
-    """Ordered filesystem candidate dirs for seed HTML + catalog.json."""
+def _parse_template_ref(template_id: str) -> tuple[str | None, str]:
+    """Split ``<namespace>/<stem>``, or a legacy bare stem.
+
+    The namespace is not matched against a fixed set here. Which namespaces
+    exist is configuration, so an unknown one is a 404 from the lookup rather
+    than a 422 from the grammar.
+    """
+    match = _TEMPLATE_REF_RE.fullmatch((template_id or "").strip())
+    if not match:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "template_id must be lowercase kebab-case (a-z, 0-9, hyphens), "
+                "optionally prefixed with a template source namespace, "
+                f"e.g. {_DEFAULT_TEMPLATE_ID}."
+            ),
+        )
+    return match.group("namespace"), match.group("stem")
+
+
+def _qualify_template_id(namespace: str, stem: str) -> str:
+    return f"{namespace}/{stem}"
+
+
+class _TemplateSource(NamedTuple):
+    """One namespaced tree of seed decks.
+
+    ``roots`` is ordered by preference and holds anything traversable: an
+    ``importlib.resources`` package root, so packaged seeds work inside a
+    wheel, and plain directories. Every source reads through the same two
+    helpers below, which is what keeps the resolver free of a branch on whose
+    templates these are.
+    """
+
+    namespace: str
+    origin: str
+    roots: tuple[Traversable, ...]
+
+
+def _abi_template_dirs() -> list[Path]:
+    """Checkout and container paths, for when the package root is not on disk."""
     here = Path(__file__).resolve()
     dirs = [
         here.parents[7] / "assets" / "slides" / "templates",
@@ -463,8 +526,7 @@ def _template_dirs() -> list[Path]:
         Path("assets/slides/templates"),
     ]
     try:
-        root = resources.files("naas_abi.apps.nexus.assets.slides.templates")
-        # Prefer real filesystem path when the package is editable / on disk.
+        root = resources.files(_ABI_PACKAGE)
         as_path = Path(str(root))
         if as_path.is_dir():
             dirs.insert(0, as_path)
@@ -485,96 +547,158 @@ def _template_dirs() -> list[Path]:
     return out
 
 
-def _read_bytes_from_templates_pkg(name: str) -> str | None:
+def _abi_template_source() -> _TemplateSource:
+    """The seeds ABI ships, as an ordinary source."""
+    roots: list[Traversable] = []
     try:
-        root = resources.files("naas_abi.apps.nexus.assets.slides.templates")
-        text = (root / name).read_text(encoding="utf-8")
-        return text if text.strip() else None
+        roots.append(resources.files(_ABI_PACKAGE))
     except Exception:
-        return None
+        pass
+    roots.extend(_abi_template_dirs())
+    return _TemplateSource(_ABI_NAMESPACE, _ABI_ORIGIN, tuple(roots))
 
 
-def _read_template_catalog() -> list[dict]:
-    """Load catalog.json metadata when present (first hit wins)."""
-    raw = _read_bytes_from_templates_pkg("catalog.json")
-    if raw is None:
-        for d in _template_dirs():
-            path = d / "catalog.json"
-            try:
-                if path.is_file():
-                    raw = path.read_text(encoding="utf-8")
-                    break
-            except OSError:
-                continue
+def _template_sources() -> list[_TemplateSource]:
+    """ABI's own seeds, then whatever ``slides_template_sources`` adds.
+
+    Additive rather than a default value for the config list: pydantic replaces
+    a list, it does not merge one, so expressing ABI's seeds as the default
+    would mean any deploy that declares a source of its own silently loses
+    them, and finds out from an empty New Presentation menu.
+    """
+    sources = [_abi_template_source()]
+    for entry in getattr(settings, "slides_template_sources", None) or []:
+        directory = Path(entry.path).expanduser()
+        try:
+            usable = directory.is_dir()
+        except OSError:
+            usable = False
+        if not usable:
+            # Warn, do not raise: the directory can go missing after boot, and
+            # losing one source must not take the whole picker down with it.
+            logger.warning(
+                "Slides template source '%s' is not a directory: %s",
+                entry.namespace,
+                directory,
+            )
+            continue
+        sources.append(
+            _TemplateSource(entry.namespace, str(directory), (directory,))
+        )
+    return sources
+
+
+def _source_named(namespace: str) -> _TemplateSource | None:
+    for source in _template_sources():
+        if source.namespace == namespace:
+            return source
+    return None
+
+
+def _read_from_roots(source: _TemplateSource, name: str) -> str | None:
+    """First root holding a non-empty ``name``."""
+    for root in source.roots:
+        try:
+            text = root.joinpath(name).read_text(encoding="utf-8")
+        except Exception:
+            continue
+        if text.strip():
+            return text
+    return None
+
+
+def _stems_in_roots(source: _TemplateSource) -> list[str]:
+    """Seed stems from the first root that has any."""
+    for root in source.roots:
+        try:
+            names = [getattr(entry, "name", "") for entry in root.iterdir()]
+        except Exception:
+            continue
+        stems = sorted(
+            name[:-5]
+            for name in names
+            if name.endswith(".html") and _SLUG_RE.match(name[:-5])
+        )
+        if stems:
+            return stems
+    return []
+
+
+def _parse_catalog(raw: str | None) -> list[dict]:
     if not raw:
         return []
     try:
         data = json.loads(raw)
-        items = data.get("templates") if isinstance(data, dict) else None
-        if isinstance(items, list):
-            return [t for t in items if isinstance(t, dict) and t.get("id")]
-    except (json.JSONDecodeError, TypeError):
+    except (ValueError, TypeError):
         return []
+    if isinstance(data, dict) and isinstance(data.get("templates"), list):
+        return [t for t in data["templates"] if isinstance(t, dict) and t.get("id")]
+    if isinstance(data, list):
+        return [t for t in data if isinstance(t, dict) and t.get("id")]
     return []
 
 
-def _discover_seed_ids() -> list[str]:
-    """HTML filenames (stem) from packaged assets or filesystem fallbacks."""
-    found: list[str] = []
-    try:
-        root = resources.files("naas_abi.apps.nexus.assets.slides.templates")
-        names = sorted(
-            p.name[:-5]
-            for p in root.iterdir()
-            if getattr(p, "name", "").endswith(".html") and _SLUG_RE.match(p.name[:-5])
-        )
-        if names:
-            found = names
-    except Exception:
-        pass
-    if not found:
-        for d in _template_dirs():
-            try:
-                names = sorted(
-                    p.stem
-                    for p in d.glob("*.html")
-                    if p.is_file() and _SLUG_RE.match(p.stem)
-                )
-            except OSError:
-                continue
-            if names:
-                found = names
-                break
-    if _DEFAULT_TEMPLATE not in found:
-        found.insert(0, _DEFAULT_TEMPLATE)
-    # Stable order: default first, then catalog order, then remaining alpha.
-    catalog_ids = [str(t["id"]) for t in _read_template_catalog()]
+def _catalog_for(source: _TemplateSource) -> list[dict]:
+    return _parse_catalog(_read_from_roots(source, "catalog.json"))
+
+
+def _stems_for(source: _TemplateSource) -> list[str]:
+    """Catalog order first, then anything else on disk, alphabetically.
+
+    Order comes from the source's own ``catalog.json``, so the first row in the
+    picker is that source's editorial choice and no id is named here.
+    """
+    found = set(_stems_in_roots(source))
+    catalog_ids = [str(t["id"]) for t in _catalog_for(source)]
     ordered: list[str] = []
-    for tid in [_DEFAULT_TEMPLATE, *catalog_ids, *sorted(found)]:
-        if tid in found and tid not in ordered:
-            ordered.append(tid)
+    for stem in [*catalog_ids, *sorted(found)]:
+        if stem in found and stem not in ordered:
+            ordered.append(stem)
     return ordered
 
 
+def _discover_seed_ids() -> list[str]:
+    """Qualified ids (``<namespace>/<stem>``) across every source."""
+    ids: list[str] = []
+    for source in _template_sources():
+        for stem in _stems_for(source):
+            qualified = _qualify_template_id(source.namespace, stem)
+            if qualified not in ids:
+                ids.append(qualified)
+    return ids
+
+
 def _seed_template_meta(template_id: str) -> dict[str, str]:
-    """Human metadata for a seed id (catalog override or generated)."""
-    for item in _read_template_catalog():
-        if str(item.get("id")) == template_id:
+    """Human metadata for a seed id (its source's catalog, else generated)."""
+    namespace, stem = _parse_template_ref(template_id)
+    source = _source_named(namespace) if namespace else None
+    if source is None:
+        source = next(
+            (s for s in _template_sources() if stem in _stems_for(s)),
+            _abi_template_source(),
+        )
+    qualified = _qualify_template_id(source.namespace, stem)
+    for item in _catalog_for(source):
+        if str(item.get("id")) == stem:
             preview = item.get("preview") if isinstance(item.get("preview"), dict) else {}
             return {
-                "id": template_id,
-                "name": str(item.get("name") or template_id),
+                "id": qualified,
+                "source": source.namespace,
+                "origin": source.origin,
+                "name": str(item.get("name") or stem),
                 "description": str(item.get("description") or ""),
                 "preview_bg": str(preview.get("bg") or "#f4f4f4"),
                 "preview_panel": str(preview.get("panel") or "#ffffff"),
                 "preview_accent": str(preview.get("accent") or "#0072ce"),
                 "preview_ink": str(preview.get("ink") or "#2d2d2d"),
             }
-    title = template_id.replace("-", " ").replace(" v1", "").title()
+    title = stem.replace("-", " ").replace(" v1", "").title()
     return {
-        "id": template_id,
+        "id": qualified,
+        "source": source.namespace,
+        "origin": source.origin,
         "name": title,
-        "description": f"Deck seed ({template_id})",
+        "description": f"Deck seed ({stem})",
         "preview_bg": "#f4f4f4",
         "preview_panel": "#ffffff",
         "preview_accent": "#0072ce",
@@ -597,32 +721,30 @@ def _list_seed_template_records() -> list[dict]:
 
 
 def _known_template_ids() -> set[str]:
-    return set(_discover_seed_ids())
+    """Qualified ids plus bare stems so older project.json values still apply."""
+    ids = set(_discover_seed_ids())
+    for tid in list(ids):
+        _namespace, stem = _parse_template_ref(tid)
+        ids.add(stem)
+    return ids
 
 
-def _load_seed_html(template_id: str = _DEFAULT_TEMPLATE) -> str:
-    if not _SLUG_RE.match(template_id):
+def _load_seed_html(template_id: str = _DEFAULT_TEMPLATE_ID) -> str:
+    namespace, stem = _parse_template_ref(template_id)
+    name = f"{stem}.html"
+    source = _source_named(namespace) if namespace else None
+    if namespace and source is None:
         raise HTTPException(
-            status_code=422,
-            detail="template_id must be lowercase kebab-case (a-z, 0-9, hyphens).",
+            status_code=404,
+            detail=f"Unknown slides template '{template_id}'.",
         )
-    name = f"{template_id}.html"
-    # Preferred: packaged Nexus assets (importlib.resources).
-    try:
-        root = resources.files("naas_abi.apps.nexus.assets.slides.templates")
-        text = (root / name).read_text(encoding="utf-8")
-        if text.strip():
+    # A bare stem predates namespaces, so it resolves in declaration order:
+    # ABI first, then configured sources.
+    candidates = [source] if source else _template_sources()
+    for candidate in candidates:
+        text = _read_from_roots(candidate, name)
+        if text:
             return text
-    except Exception:
-        pass
-
-    for directory in _template_dirs():
-        path = directory / name
-        try:
-            if path.is_file():
-                return path.read_text(encoding="utf-8")
-        except OSError:
-            continue
     raise HTTPException(
         status_code=404,
         detail=f"Unknown slides template '{template_id}'.",
@@ -633,7 +755,7 @@ class ProjectCreateRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     title: str = Field(..., min_length=1, max_length=120)
     slug: str | None = Field(default=None, max_length=64)
-    template_id: str = Field(default=_DEFAULT_TEMPLATE, max_length=64)
+    template_id: str = Field(default=_DEFAULT_TEMPLATE_ID, max_length=_TEMPLATE_ID_MAX_LEN)
 
 
 class ProjectResponse(BaseModel):
@@ -660,12 +782,12 @@ class DeckUpdateRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     html: str = Field(..., min_length=1)
     message: str = Field(default="Update slides deck", max_length=200)
-    template_id: str | None = Field(default=None, max_length=64)
+    template_id: str | None = Field(default=None, max_length=_TEMPLATE_ID_MAX_LEN)
 
 
 class ApplyTemplateRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
-    template_id: str = Field(..., min_length=1, max_length=64)
+    template_id: str = Field(..., min_length=1, max_length=_TEMPLATE_ID_MAX_LEN)
 
 
 class CommitResponse(BaseModel):
@@ -2109,6 +2231,9 @@ class TemplateAssetItem(BaseModel):
 
 class SeedTemplateResponse(BaseModel):
     id: str
+    # Namespace the id is prefixed with, and the tree it was read from.
+    source: str = _ABI_NAMESPACE
+    origin: str = _ABI_ORIGIN
     name: str
     description: str = ""
     preview_bg: str = "#f4f4f4"
