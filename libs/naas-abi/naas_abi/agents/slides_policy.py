@@ -93,6 +93,16 @@ def validate_configured_slides_model(
     surfaces on whichever deck someone opens next, which is exactly the shape
     of failure this whole change exists to remove.
 
+    An empty ``configured`` is not checked. Nothing is being asserted about:
+    no slides model was named, so slides follow the general agent model, and
+    that id is already covered by ``ModelRegistryService.validate_defaults``.
+    Checking it anyway is what made ABI fail its own boot, because the only id
+    worth shipping as a slides default is registered by a downstream module and
+    by nothing in ABI. This is deliberately not "fall back to
+    ``configured_slides_model()``": that would resolve the general agent model
+    under the slides key and report a mismatch against a setting the operator
+    never edited.
+
     ``registry.get_chat_model`` is called without a provider deliberately. With
     one it falls back to constructing an off-catalog model through that
     provider's chat factory, and a factory builds whatever id it is handed, so
@@ -100,13 +110,16 @@ def validate_configured_slides_model(
     also what ``ModelRegistryService.validate_defaults`` requires of the engine
     defaults, so an operator sees one rule rather than two.
     """
+    model_id = (configured or "").strip()
+    if not model_id:
+        return
+
     from naas_abi_core.services.model_registry.ModelRegistryPort import (
         DefaultModelNotResolvedError,
         ModelNotFoundError,
         ProviderNotConfiguredError,
     )
 
-    model_id = (configured or "").strip() or configured_slides_model()
     try:
         registry.get_chat_model(model_id)
     except (ModelNotFoundError, ProviderNotConfiguredError) as exc:
