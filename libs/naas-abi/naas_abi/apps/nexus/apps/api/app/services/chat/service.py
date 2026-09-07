@@ -4,14 +4,11 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 from uuid import uuid4
 
 import numpy as np
-from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
-    AuthPersistencePort,
-    AuthUserRecord,
-)
+from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthPersistencePort
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
     CompleteChatInput,
     CompleteChatResult,
@@ -256,8 +253,27 @@ def _render_coding_context_block(client_context: dict | None) -> str:
     )
 
 
-def _render_user_context_block(
-    user: AuthUserRecord,
+class UserProfile(Protocol):
+    """The fields the profile block reads, on whatever record carries them.
+
+    Two callers hold a different record for the same person: this service has
+    the auth adapter's ``AuthUserRecord``, and the OpenAI-compatible gateway
+    has the API ``User`` schema its auth dependency already resolved. Naming
+    the fields instead of one of the two classes is what lets both render the
+    same block, rather than one of them growing a second copy of the wording
+    that then drifts from this one.
+    """
+
+    id: str
+    name: str
+    email: str
+    company: str | None
+    role: str | None
+    bio: str | None
+
+
+def render_user_context_block(
+    user: UserProfile,
     workspace_id: str | None = None,
     conversation_id: str | None = None,
 ) -> str:
@@ -428,7 +444,7 @@ class ChatService:
             return ""
         if user is None:
             return ""
-        return _render_user_context_block(user, workspace_id, conversation_id)
+        return render_user_context_block(user, workspace_id, conversation_id)
 
     def _inject_chat_vector_context(
         self,

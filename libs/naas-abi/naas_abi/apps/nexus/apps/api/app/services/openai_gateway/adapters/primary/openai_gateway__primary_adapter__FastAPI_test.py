@@ -28,6 +28,7 @@ def _client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
         thread_id: str,
         ws_base: str | None = None,
         ws_secret: str | None = None,
+        user_context_preamble: str | None = None,
     ) -> AsyncGenerator[str, None]:
         for piece in ["Hello", " world"]:
             yield piece
@@ -81,6 +82,68 @@ def test_chat_completion_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
     joined = "".join(contents)
     assert shim._CHAT_MARKER_RE.search(joined)
     assert shim._CHAT_MARKER_RE.sub("", joined).strip() == "Hello world"
+
+
+def test_gateway_turn_carries_the_caller_profile_onto_the_agent_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The profile has to arrive on the prompt the agent actually runs.
+
+    ABI agents build their own system prompt, so prepending to the latest user
+    message is the only channel that reaches them. Nexus uses it; this gateway
+    called ``stream_with_abi_inprocess`` with three positional arguments and
+    never named the fourth, so every turn from an OpenAI-compatible client ran
+    with no idea who it was acting for.
+
+    Read off a fake agent rather than off the call, because a test that
+    asserts the gateway passes an argument passes just as well when the
+    argument is dropped one frame later.
+    """
+
+    class _Agent:
+        """Enough of ``Agent.stream_invoke`` to be driven for real.
+
+        The closing ``done`` event is not decoration: ``stream_with_abi_inprocess``
+        pumps this generator with ``asyncio.to_thread(next, ...)``, and a
+        ``StopIteration`` cannot be set on a future, so a double that ends by
+        running out hangs the request instead of finishing it.
+        """
+
+        def __init__(self) -> None:
+            self.prompt: str | None = None
+
+        def stream_invoke(self, prompt: str):
+            self.prompt = prompt
+            yield {"event": "ai_message", "data": "answer"}
+            yield {"event": "done", "data": "[DONE]"}
+
+    agent = _Agent()
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.provider_runtime._resolve_inprocess_abi_agent",
+        lambda _model: agent,
+    )
+
+    app = FastAPI()
+    app.include_router(shim.router, prefix="/v1")
+    app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
+        id="user-1",
+        email="user@example.com",
+        name="User One",
+        company="NaasAI",
+        role="CTO",
+        bio=None,
+    )
+
+    resp = TestClient(app).post(
+        "/v1/chat/completions",
+        json={"model": "aia", "messages": [{"role": "user", "content": "hi"}]},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert agent.prompt is not None
+    assert "User One" in agent.prompt
+    assert "user@example.com" in agent.prompt
+    assert agent.prompt.endswith("hi")
 
 
 def test_format_tool_event_renders_calls_and_results() -> None:
