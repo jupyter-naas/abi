@@ -29,6 +29,13 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.port import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMPermissionError
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message as ProviderMessage
+from naas_abi_core.services.agent.context import (
+    slides_active_slug,
+    slides_brief,
+    slides_creation_intent,
+    slides_research_queries,
+    slides_research_required,
+)
 
 
 def _conversation(now: datetime) -> ChatConversationRecord:
@@ -630,6 +637,107 @@ async def test_complete_chat_request_forwards_injection_preamble_for_abi(monkeyp
     assert _CREATE_SKILL_INSTRUCTIONS.strip() in preamble
     assert "Alice Smith" in preamble
     assert "Acme Corp" in preamble
+
+
+_WEAK_SLIDES_MODEL = "gpt-4.1-mini"
+_SLIDES_CONTEXT_VARS = (
+    slides_active_slug,
+    slides_brief,
+    slides_creation_intent,
+    slides_research_queries,
+    slides_research_required,
+)
+
+
+async def _complete_and_capture_llm_model(monkeypatch, message: str) -> str | None:
+    """Run the non-streaming turn and report the model that reached the provider."""
+    now = datetime.now()
+    adapter = SimpleNamespace(
+        get_conversation_by_id_for_user=AsyncMock(return_value=_conversation(now)),
+        create_message=AsyncMock(),
+        touch_conversation=AsyncMock(),
+    )
+    service = ChatService(adapter=adapter)
+    service.get_or_create_conversation = AsyncMock(return_value="conv-1")
+    service.resolve_provider = AsyncMock(
+        return_value=ResolvedProvider(
+            id="p1",
+            name="OpenAI",
+            type="openai",
+            enabled=True,
+            endpoint="https://api.openai.com/v1",
+            api_key="k",
+            account_id=None,
+            model="gpt-4o-mini",
+            llm_model=_WEAK_SLIDES_MODEL,
+        )
+    )
+    service.build_provider_messages_with_agents = AsyncMock(
+        return_value=[ChatInputMessage(role="user", content=message)]
+    )
+
+    captured: dict = {}
+
+    async def _fake_complete_chat(
+        messages, config, system_prompt, thread_id=None, injection_preamble=None
+    ):
+        captured["llm_model"] = config.llm_model
+        return "assistant answer"
+
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.chat.service.complete_with_provider",
+        _fake_complete_chat,
+    )
+
+    # complete_chat_request arms the request-scoped slides gates. Reset them so
+    # this turn cannot change how a later test's gate behaves.
+    tokens = [(var, var.set(var.get())) for var in _SLIDES_CONTEXT_VARS]
+    try:
+        await service.complete_chat_request(
+            request=CompleteChatInput(
+                message=message,
+                agent="abi",
+                workspace_id="ws-1",
+                messages=[ChatInputMessage(role="user", content=message)],
+            ),
+            context=_context(),
+            now=now,
+        )
+    finally:
+        for var, token in tokens:
+            var.reset(token)
+    return captured["llm_model"]
+
+
+@pytest.mark.asyncio
+async def test_complete_chat_request_upgrades_the_model_for_a_deck_brief(
+    monkeypatch,
+) -> None:
+    """The non-streaming path has to hand the user brief to the slides policy.
+
+    ``apply_slides_model_override`` needs the message to spot a deck request
+    when no deck is open, and that is the turn that writes the whole deck. The
+    policy unit tests pass whatever this call site does, so without a test here
+    it can stop passing ``request.message`` and stay green while every
+    chat-created deck silently runs on a mini model.
+    """
+    from naas_abi.agents.slides_policy import configured_slides_model
+
+    reached = await _complete_and_capture_llm_model(
+        monkeypatch, "create a deck on the latest developments in EU chip policy"
+    )
+
+    assert reached == configured_slides_model()
+
+
+@pytest.mark.asyncio
+async def test_complete_chat_request_keeps_the_selected_model_for_plain_chat(
+    monkeypatch,
+) -> None:
+    """Guard against over-triggering: an ordinary turn keeps the user's model."""
+    reached = await _complete_and_capture_llm_model(monkeypatch, "what is 2 + 2?")
+
+    assert reached == _WEAK_SLIDES_MODEL
 
 
 # ---------------------------------------------------------------------------
