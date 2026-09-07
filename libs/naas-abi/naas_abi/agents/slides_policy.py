@@ -22,9 +22,15 @@ from naas_abi_core.services.agent.context import (
     slides_research_required,
 )
 
-# OpenRouter id. This environment's OPENAI_API_KEY is an OpenRouter key, so
-# a native Anthropic / ChatGPT registry id (api.anthropic.com / api.openai.com)
-# 401s. Route slides through OpenRouter instead.
+# Last resort for callers that reach these helpers with no ABIModule
+# registered, which in practice means no engine and no registry either. It is
+# not a shipped default: ``abi_slides_agent_model`` is empty and slides follow
+# ``abi_agent_model``.
+#
+# The comment that stood here said this id existed because a native Anthropic
+# or ChatGPT registry id 401s against an OpenRouter key. That was the wrong
+# diagnosis. OPENAI_BASE_URL was set and every OpenAI client in the process
+# inherited it, so the requests were reaching the wrong endpoint.
 DEFAULT_SLIDES_MODEL = "anthropic/claude-sonnet-5"
 
 _COPY_EDIT_RE = re.compile(
@@ -383,56 +389,6 @@ def slides_research_tools() -> list[Any]:
         attach_slides_research_note(stack.make_web_search_tool()),
         stack.make_web_fetch_tool(),
     ]
-
-
-def _openrouter_api_key(abi: Any) -> str | None:
-    """Prefer the OpenRouter module key; this env often stores it as OPENAI_API_KEY."""
-    import os
-
-    for name, module in (getattr(getattr(abi, "engine", None), "modules", {}) or {}).items():
-        if "openrouter" not in str(name).lower():
-            continue
-        key = getattr(getattr(module, "configuration", None), "openrouter_api_key", None)
-        if key:
-            return str(key)
-    for env_name in ("OPENROUTER_API_KEY", "OPENAI_API_KEY"):
-        raw = (os.environ.get(env_name) or "").strip()
-        if raw.startswith("sk-or-"):
-            return raw
-    routed = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
-    return routed or None
-
-
-def openrouter_slides_model_id(model_id: str) -> str:
-    """Map a slides model id onto an OpenRouter provider/model slug.
-
-    Bare GPT ids stay ``openai/...``. Bare Claude / Sonnet / Opus / Haiku ids
-    become ``anthropic/...``. Never rewrite ``claude-sonnet-5`` to
-    ``openai/claude-sonnet-5``.
-    """
-    raw = (model_id or "").strip()
-    if not raw:
-        return DEFAULT_SLIDES_MODEL
-    if "/" in raw:
-        return raw
-    hay = raw.lower()
-    if hay.startswith(("claude", "anthropic")) or any(
-        token in hay for token in ("sonnet", "opus", "haiku")
-    ):
-        return f"anthropic/{raw}"
-    return f"openai/{raw}"
-
-
-def slides_reasoning_extra_body(model_id: str) -> dict[str, Any] | None:
-    """OpenRouter unified ``reasoning.effort`` for GPT-5 and Claude Sonnet 5.
-
-    Both families accept this payload on OpenRouter. Skip it for unknown ids
-    so we do not send an invalid body.
-    """
-    hay = (model_id or "").lower()
-    if not any(token in hay for token in ("gpt-5", "o3", "o4", "sonnet", "opus", "gemini")):
-        return None
-    return {"reasoning": {"effort": "high"}}
 
 
 def load_slides_chat_model(model_id: str) -> Any:

@@ -16,11 +16,9 @@ from naas_abi.agents.slides_policy import (
     configured_slides_model,
     load_slides_chat_model,
     note_slides_web_search,
-    openrouter_slides_model_id,
     reject_unresearched_slides_write,
     resolve_slides_llm_model,
     slides_brief_requires_research,
-    slides_reasoning_extra_body,
     slides_research_tools,
     slides_search_budget_remaining,
     slides_search_tool_bound,
@@ -121,25 +119,6 @@ def test_slides_turn_warns_when_the_fallback_overrides_the_selection(
     message = warnings[0].getMessage()
     assert "gpt-4.1-mini" in message
     assert "claude-sonnet-5" in message
-
-
-def test_openrouter_slides_model_id_keeps_anthropic_prefix() -> None:
-    assert openrouter_slides_model_id("anthropic/claude-sonnet-5") == (
-        "anthropic/claude-sonnet-5"
-    )
-    assert openrouter_slides_model_id("claude-sonnet-5") == "anthropic/claude-sonnet-5"
-    assert openrouter_slides_model_id("gpt-5") == "openai/gpt-5"
-    assert openrouter_slides_model_id("openai/gpt-5") == "openai/gpt-5"
-
-
-def test_slides_reasoning_extra_body_for_sonnet_and_gpt5() -> None:
-    assert slides_reasoning_extra_body("anthropic/claude-sonnet-5") == {
-        "reasoning": {"effort": "high"}
-    }
-    assert slides_reasoning_extra_body("openai/gpt-5") == {
-        "reasoning": {"effort": "high"}
-    }
-    assert slides_reasoning_extra_body("gpt-4.1-mini") is None
 
 
 def test_resolve_slides_llm_model_always_returns_the_configured_model() -> None:
