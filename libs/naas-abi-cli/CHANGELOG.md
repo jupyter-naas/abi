@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.21.3 (2026-09-07)
+
+### Bug Fixes
+
+- **deps**: Lock ddgs into the CLI workspace
+  ([`5b86e49`](https://github.com/jupyter-naas/abi/commit/5b86e493829fa0c23e66d3e572abf15f955cecd3))
+
+
 ## v2.21.2 (2026-09-07)
 
 
