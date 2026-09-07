@@ -38,20 +38,9 @@ Respond only based on what your available agents and tools can actually deliver.
 1. Match the user request to the best available agent or tool.
 2. If a match is found, delegate to that agent or tool with full context and report the result back verbatim.
 3. For organization/workspace/user admin requests (list orgs, create workspaces, invite or remove members, update roles or your own profile), use the Nexus admin tools directly. Do not invent success.
-4. For Slides edits (deck.html), use the Slides tools surgically. Never dump or rewrite the full deck for a small text change. When a deck is open in the Slides UI, you are already editing that presentation: do not ask which deck.
-5. If no match is found, tell the user you do not have the capabilities to handle its request and propose alternatives based on your available agents and tools.
+        4. For a deck, presentation, or slides request (English or French: slides, présentation, diaporama), hand off to the Slides agent. Do not write or edit deck.html yourself.
+        5. If no match is found, tell the user you do not have the capabilities to handle its request and propose alternatives based on your available agents and tools.
 </tasks>
-
-<slides_guidelines>
-- You edit the open presentation in the user's Slides overlay (Coder workspace files via sidecar when available; Forgejo for version history).
-- Never ask which deck, slug, or file when open-deck context is present (slug, path, title, mode). Omit slug on tool calls; tools default to the open deck.
-- Prefer replace_in_slides_deck for copy edits (matches plain text and HTML entities like &amp; so cover titles update with script strings).
-- For cover / title / slide 1 edits: call replace_in_slides_deck with section_index=0 and occurrence=0. Never use occurrence=1 for the title (that hits &lt;title&gt;/menubar before the cover &lt;h1&gt; Preview shows). Confirm cover_h1_updated is true in the tool result.
-- Use list_slides_sections then read_slides_section for targeted inspection.
-- Use write_slides_section to replace one &lt;section&gt; only.
-- Avoid read_slides_deck with include_assets=true. Default reads redact embedded data-URLs on purpose.
-- Avoid write_slides_deck unless creating or restructuring the whole presentation.
-</slides_guidelines>
 
 <tools>
 [TOOLS]
@@ -162,14 +151,6 @@ Respond only based on what your available agents and tools can actually deliver.
         from naas_abi.agents.tools.nexus_admin_tools import nexus_admin_tools
 
         tools += nexus_admin_tools()
-
-        try:
-            from naas_abi.agents.tools.slides_tools import slides_tools
-
-            tools += slides_tools()
-        except Exception as exc:  # noqa: BLE001
-            logger = __import__("logging").getLogger(__name__)
-            logger.debug("slides tools unavailable: %s", exc)
 
         try:
             from naas_abi.agents.tools.coding_tools import coding_tools
@@ -295,16 +276,24 @@ Respond only based on what your available agents and tools can actually deliver.
         return intents
 
     @classmethod
+    def get_chat_model_id(cls) -> str:
+        from naas_abi import ABIModule
+
+        return str(ABIModule.get_instance().configuration.abi_agent_model)
+
+    @classmethod
     def New(
         cls,
         agent_shared_state: AgentSharedState | None = None,
         agent_configuration: AgentConfiguration | None = None,
+        model_id: str | None = None,
     ) -> "AbiAgent":
         from naas_abi import ABIModule
 
         abi_module = ABIModule.get_instance()
+        resolved_model = model_id or abi_module.configuration.abi_agent_model
         chat_model = abi_module.engine.services.model_registry.get_chat_model(
-            abi_module.configuration.abi_agent_model,
+            resolved_model,
             provider=abi_module.configuration.abi_agent_provider,
         )
 

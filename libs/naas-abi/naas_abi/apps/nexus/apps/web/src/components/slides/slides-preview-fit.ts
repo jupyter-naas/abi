@@ -1,3 +1,8 @@
+import {
+  SLIDES_PPTX_FROM_DOM_SCRIPT,
+  SLIDES_PPTX_FROM_DOM_SCRIPT_ID,
+} from './slides-pptx-from-dom';
+
 /** Canonical slide stage used by Nexus deck seeds. */
 export const SLIDES_STAGE_WIDTH = 1280;
 export const SLIDES_STAGE_HEIGHT = 720;
@@ -155,6 +160,16 @@ export function prepareSlidesPreviewHtml(html: string): string {
       next = next.replace('</head>', `${inject}</head>`);
     } else {
       next = `${inject}${next}`;
+    }
+  }
+
+  // Override window.buildPptx so File → Export reads the live .slide DOM,
+  // even when the seeded deck still has a hardcoded 4-slide exporter.
+  if (!next.includes(`id="${SLIDES_PPTX_FROM_DOM_SCRIPT_ID}"`)) {
+    if (next.includes('</body>')) {
+      next = next.replace('</body>', `${SLIDES_PPTX_FROM_DOM_SCRIPT}</body>`);
+    } else {
+      next = `${next}${SLIDES_PPTX_FROM_DOM_SCRIPT}`;
     }
   }
 

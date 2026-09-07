@@ -11,6 +11,11 @@ import {
   type SlidesPreviewFrameHandle,
 } from '@/components/slides/slides-preview-frame';
 import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
+import {
+  openSlidesAgentPane,
+  slidesApiErrorMessage,
+  startNewPresentation,
+} from '@/lib/create-slides-project';
 import { authFetch } from '@/stores/auth';
 import {
   SLIDES_DECK_UPDATED_EVENT,
@@ -166,6 +171,7 @@ export default function SlidesEditorPage() {
   const runtimeStatus = useSlidesStore((s) => s.runtimeStatus);
   const runtimeDetail = useSlidesStore((s) => s.runtimeDetail);
   const refreshToken = useSlidesStore((s) => s.refreshToken);
+  const agentWriting = useSlidesStore((s) => s.agentWriting);
 
   const [title, setTitle] = useState(slug);
   const [html, setHtml] = useState('');
@@ -186,7 +192,9 @@ export default function SlidesEditorPage() {
   const saveRef = useRef<() => Promise<void>>(async () => {});
   const refreshRef = useRef<() => Promise<void>>(async () => {});
 
-  const newPresentationHref = `/workspace/${workspaceId}/slides/new`;
+  useEffect(() => {
+    openSlidesAgentPane();
+  }, []);
 
   useEffect(() => {
     dirtyRef.current = dirty;
@@ -253,8 +261,8 @@ export default function SlidesEditorPage() {
         if (!projRes.ok || !deckRes.ok) {
           const body = (await (projRes.ok ? deckRes : projRes)
             .json()
-            .catch(() => ({}))) as { detail?: string };
-          throw new Error(body.detail || 'Failed to load deck');
+            .catch(() => ({}))) as { detail?: unknown };
+          throw new Error(slidesApiErrorMessage(body.detail, 'Failed to load deck'));
         }
         const proj = (await projRes.json()) as {
           title: string;
@@ -284,6 +292,8 @@ export default function SlidesEditorPage() {
                 : null;
           setStatus(src ? `Preview refreshed (${src})` : 'Preview refreshed');
         }
+        setLoading(false);
+        setRefreshing(false);
         if (ensureRuntime) {
           const runtime = await ensureSlidesRuntime(workspaceId, slug, quiet ? 2 : 6);
           if (gen !== loadGenRef.current) return;
@@ -388,8 +398,8 @@ export default function SlidesEditorPage() {
         }),
       });
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(body.detail || `Save failed (${res.status})`);
+        const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
+        throw new Error(slidesApiErrorMessage(body.detail, `Save failed (${res.status})`));
       }
       const body = (await res.json()) as { commit_sha?: string };
       setDirty(false);
@@ -442,7 +452,9 @@ export default function SlidesEditorPage() {
     setStatus(null);
     try {
       await previewRef.current.exportPptx();
-      setStatus('PPTX export started (best-effort vs preview)');
+      setStatus(
+        'PPTX started from live HTML (closest fit; fonts and wrap will differ from preview)',
+      );
     } catch (e) {
       setError(`PPTX export failed: ${(e as Error).message}`);
     } finally {
@@ -452,7 +464,12 @@ export default function SlidesEditorPage() {
 
   const menuBar = (
     <SlidesMenuBar
-      onNewPresentation={() => router.push(newPresentationHref)}
+      onNewPresentation={() => {
+        if (!workspaceId) return;
+        void startNewPresentation(workspaceId, (href) => router.push(href)).catch((e) => {
+          setError(slidesApiErrorMessage((e as Error).message, 'Could not create the deck.'));
+        });
+      }}
       onCommit={() => void save()}
       commitDisabled={saving || !dirty || loading}
       onExportPptx={() => void exportPptx()}
@@ -496,13 +513,19 @@ export default function SlidesEditorPage() {
     <div className="flex h-full flex-col">
       <Header
         title={title}
-        subtitle={`slides/${slug}/deck.html · PPTX export is best-effort vs preview`}
+        subtitle={`HTML source · PPTX is a 1280x720 reconstruction (closest fit)`}
         nav={menuBar}
       />
 
       {error && (
         <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-600">
           {error}
+        </div>
+      )}
+
+      {agentWriting && (
+        <div className="border-b border-workspace-accent/20 bg-workspace-accent-10 px-4 py-2 text-xs text-foreground">
+          Abi is updating the deck…
         </div>
       )}
 

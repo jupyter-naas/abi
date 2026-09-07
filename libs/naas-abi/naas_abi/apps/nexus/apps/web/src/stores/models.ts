@@ -61,17 +61,38 @@ export const useModelsStore = create<ModelsState>()(
   )
 );
 
+function catalogName(model: CatalogModel | undefined): string | null {
+  return model?.name?.trim() || null;
+}
+
 /**
  * Resolve a human-readable model name (e.g. "Claude Sonnet 5") for a model id
  * or canonical id (e.g. "claude-sonnet-5"). Falls back to the id itself when the
  * catalog has no matching entry or no name, so callers always get something
  * printable. Returns null only when the id is empty.
+ *
+ * A `provider/model` routing slug needs a second look. The vendor prefix is the
+ * upstream vendor the gateway routes to, not the `provider` the catalog records,
+ * and the same model is spelled three ways across rows: `claude-sonnet-4.5`,
+ * `anthropic/claude-sonnet-4.5` on OpenRouter, `anthropic.claude-sonnet-5` on
+ * Bedrock. So an exact-match lookup misses any slug whose prefix happens to
+ * disagree with the row that holds the name, and the footer prints the slug.
+ * Retry on the model segment alone once the exact spellings are exhausted.
  */
 export function modelDisplayName(
   models: CatalogModel[],
   id: string | null | undefined
 ): string | null {
   if (!id) return null;
-  const match = models.find((m) => m.modelId === id || m.canonicalId === id);
-  return match?.name ?? id;
+  const exact = catalogName(models.find((m) => m.modelId === id || m.canonicalId === id));
+  if (exact) return exact;
+
+  const bare = id.includes('/') ? id.slice(id.lastIndexOf('/') + 1) : '';
+  if (bare) {
+    const routed = catalogName(
+      models.find((m) => m.canonicalId === bare || m.modelId === bare)
+    );
+    if (routed) return routed;
+  }
+  return id;
 }

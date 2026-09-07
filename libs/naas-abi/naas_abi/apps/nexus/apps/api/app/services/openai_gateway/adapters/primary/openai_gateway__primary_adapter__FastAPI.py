@@ -27,6 +27,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import decode_token
+from naas_abi.apps.nexus.apps.api.app.services.chat.service import render_user_context_block
 from naas_abi_core.services.agent.context import (
     coder_workspace_base,
     coder_workspace_secret,
@@ -83,15 +84,40 @@ def _format_tool_event(chunk: dict) -> str:
     return ""
 
 
+def _user_context_preamble(current_user: User, messages: list[ChatMessage]) -> str | None:
+    """The caller's profile, for the agent to be told who it is acting for.
+
+    Only the profile half of what Nexus injects can be answered here. The
+    skills catalog is scoped to a workspace and an OpenAI chat-completions
+    request names none: the token minted for a coding workspace claims ``sub``,
+    ``ws_base`` and ``ws_secret``, and nothing in it identifies a Nexus
+    workspace. The create-skill instructions that ship alongside the catalog
+    would be worse than absent, because they tell the agent to hand the user a
+    draft to save from a Nexus UI that an editor client does not have.
+
+    The profile is a different matter. ``get_current_user_required`` has
+    already turned the bearer token into the full user record before this runs,
+    so the tenant was resolved and then dropped.
+
+    First turn only, as in Nexus: a prior assistant message means this thread
+    already carries the profile, and the client resends the whole history on
+    every turn.
+    """
+    if any(m.role == "assistant" for m in messages):
+        return None
+    return render_user_context_block(current_user).strip() or None
+
+
 async def _stream_agent_text(
     model: str,
     messages: list[ChatMessage],
     thread_id: str,
     ws_base: str | None = None,
     ws_secret: str | None = None,
+    user_context_preamble: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Invoke an abi agent in-process and yield text deltas only."""
-    from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (  # noqa: PLC0415
+    from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
         Message,
         ProviderConfig,
         stream_with_abi_inprocess,
@@ -108,7 +134,9 @@ async def _stream_agent_text(
     config = ProviderConfig(id="abi", name="abi", type="abi", enabled=True, model=model)
     # Stream the agent's text AND its tool activity (calls + results) as it happens,
     # so the client shows what the agent is doing instead of just the final answer.
-    async for chunk in stream_with_abi_inprocess(pr_messages, config, thread_id):
+    async for chunk in stream_with_abi_inprocess(
+        pr_messages, config, thread_id, user_context_preamble=user_context_preamble
+    ):
         if isinstance(chunk, str) and chunk:
             yield chunk
         elif isinstance(chunk, dict):
@@ -120,7 +148,7 @@ async def _stream_agent_text(
 def _list_agent_model_ids() -> list[str]:
     """Best-effort list of invokable abi agent names (for /v1/models)."""
     try:
-        from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (  # noqa: PLC0415
+        from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
             _build_local_agent_index,
         )
 
@@ -161,9 +189,12 @@ async def _sse(
     ws_base: str | None = None,
     ws_secret: str | None = None,
     marker: str = "",
+    user_context_preamble: str | None = None,
 ) -> AsyncGenerator[str, None]:
     yield f"data: {json.dumps(_chunk(completion_id, model, role='assistant'))}\n\n"
-    async for delta in _stream_agent_text(model, messages, thread_id, ws_base, ws_secret):
+    async for delta in _stream_agent_text(
+        model, messages, thread_id, ws_base, ws_secret, user_context_preamble
+    ):
         yield f"data: {json.dumps(_chunk(completion_id, model, content=delta))}\n\n"
     if marker:
         yield f"data: {json.dumps(_chunk(completion_id, model, content=marker))}\n\n"
@@ -239,16 +270,26 @@ async def chat_completions(
     thread_id = f"openai-{chat_id}"
     marker = f"\n\n{_chat_marker(chat_id)}"
     ws_base, ws_secret = _workspace_target(request)
+    preamble = _user_context_preamble(current_user, body.messages)
 
     if body.stream:
         return StreamingResponse(
-            _sse(completion_id, body.model, body.messages, thread_id, ws_base, ws_secret, marker),
+            _sse(
+                completion_id,
+                body.model,
+                body.messages,
+                thread_id,
+                ws_base,
+                ws_secret,
+                marker,
+                preamble,
+            ),
             media_type="text/event-stream",
         )
 
     text = ""
     async for delta in _stream_agent_text(
-        body.model, body.messages, thread_id, ws_base, ws_secret
+        body.model, body.messages, thread_id, ws_base, ws_secret, preamble
     ):
         text += delta
     text += marker

@@ -231,6 +231,7 @@ async def stream_chat_response(
         return StreamingResponse(unsupported_stream(), media_type="text/event-stream")
 
     now = datetime.now(UTC).replace(tzinfo=None)
+    client_ctx = request.context if isinstance(request.context, dict) else {}
 
     async with AsyncSessionLocal() as db:
         try:
@@ -260,10 +261,11 @@ async def stream_chat_response(
                 if request.workspace_id is not None:
                     agent_workspace_id.set(str(request.workspace_id))
 
-                # Bind open Slides deck + its Coder sidecar so Abi tools act on
-                # workspace files (Continue-parity) without asking which deck.
+                # Bind open Slides deck + its Coder sidecar so SlidesAgent tools
+                # act on workspace files (Continue-parity) without asking which deck.
                 client_ctx = request.context if isinstance(request.context, dict) else {}
                 slides_ctx = client_ctx.get("slides") if isinstance(client_ctx, dict) else None
+                open_slug = ""
                 if isinstance(slides_ctx, dict):
                     open_slug = str(slides_ctx.get("slug") or "").strip()
                     if open_slug:
@@ -274,27 +276,43 @@ async def stream_chat_response(
                             slides_active_title.set(title)
                         if mode:
                             slides_active_mode.set(mode)
-                        if request.workspace_id:
-                            try:
-                                from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__primary_adapter__FastAPI import (  # noqa: PLC0415
-                                    lookup_slides_sidecar,
-                                )
 
-                                ws_base, ws_secret = await lookup_slides_sidecar(
-                                    db,
-                                    workspace_id=str(request.workspace_id),
-                                    user_id=str(current_user.id),
-                                    slug=open_slug,
-                                )
-                                if ws_base and ws_secret:
-                                    coder_workspace_base.set(ws_base)
-                                    coder_workspace_secret.set(ws_secret)
-                            except Exception:
-                                logger.warning(
-                                    "Failed to bind slides sidecar for %s",
-                                    open_slug,
-                                    exc_info=True,
-                                )
+                # Arm the research gate for both surfaces. With no deck open
+                # this also flags a deck requested from the main chat, so the
+                # agent gets a slides-sized step budget.
+                from naas_abi.agents.slides import bind_slides_research_policy
+
+                has_prior_assistant = any(
+                    getattr(m, "role", None) == "assistant"
+                    for m in (request.messages or [])
+                )
+                bind_slides_research_policy(
+                    request.message,
+                    has_prior_assistant,
+                    client_ctx,
+                )
+
+                if open_slug and request.workspace_id:
+                    try:
+                        from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__primary_adapter__FastAPI import (
+                            lookup_slides_sidecar,
+                        )
+
+                        ws_base, ws_secret = await lookup_slides_sidecar(
+                            db,
+                            workspace_id=str(request.workspace_id),
+                            user_id=str(current_user.id),
+                            slug=open_slug,
+                        )
+                        if ws_base and ws_secret:
+                            coder_workspace_base.set(ws_base)
+                            coder_workspace_secret.set(ws_secret)
+                    except Exception:
+                        logger.warning(
+                            "Failed to bind slides sidecar for %s",
+                            open_slug,
+                            exc_info=True,
+                        )
 
                 coding_ctx = (
                     client_ctx.get("coding") if isinstance(client_ctx, dict) else None
@@ -303,7 +321,7 @@ async def stream_chat_response(
                     repo_id = str(coding_ctx.get("repo_id") or "").strip()
                     branch = str(coding_ctx.get("branch") or "").strip()
                     if repo_id:
-                        from naas_abi_core.services.agent.context import (  # noqa: PLC0415
+                        from naas_abi_core.services.agent.context import (
                             coding_active_branch,
                             coding_active_repo,
                         )
@@ -313,11 +331,11 @@ async def stream_chat_response(
                             coding_active_branch.set(branch)
                         if request.workspace_id:
                             try:
-                                from naas_abi import ABIModule  # noqa: PLC0415
-                                from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.primary.coding_environment__primary_adapter__FastAPI import (  # noqa: PLC0415
+                                from naas_abi import ABIModule
+                                from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.primary.coding_environment__primary_adapter__FastAPI import (
                                     lookup_code_bindings,
                                 )
-                                from naas_abi_core.services.agent.context import (  # noqa: PLC0415
+                                from naas_abi_core.services.agent.context import (
                                     coding_harness_base,
                                 )
 
@@ -393,6 +411,9 @@ async def stream_chat_response(
     #             )
     #             break
 
+    from naas_abi.agents.slides import apply_slides_model_override
+
+    incoming_llm = getattr(provider, "llm_model", None) or request.llm_model
     provider_config = ProviderConfig(
         id=provider.id,
         name=provider.name,
@@ -402,7 +423,9 @@ async def stream_chat_response(
         api_key=provider.api_key,
         account_id=provider.account_id,
         model=provider.model,
-        llm_model=getattr(provider, "llm_model", None) or request.llm_model,
+        # Pass the brief: with no deck open it is the only signal that this
+        # turn is a deck request, and that turn writes the whole deck.
+        llm_model=apply_slides_model_override(incoming_llm, client_ctx, request.message),
     )
 
     assistant_msg_id = ""
@@ -493,7 +516,11 @@ async def stream_chat_response(
                 "execution_time": round(loop.time() - stream_started_at, 3),
                 "steps": _strip_internal_step_keys(steps),
                 "sources": _merge_source_urls(list(context_sources), web_source_urls),
-                "llm_model": request.llm_model,
+                # The model handed to the provider, not the one the UI asked
+                # for. Slides upgrade the model mid-request, and echoing the
+                # request here made the footer report a mini model while the
+                # deck was written by the slides model.
+                "llm_model": provider_config.llm_model or request.llm_model,
             }
             try:
                 await persist_stream_metadata(
@@ -517,6 +544,10 @@ async def stream_chat_response(
                     {
                         "conversation_id": conversation_id,
                         "assistant_message_id": assistant_msg_id,
+                        # Slides raise the model inside the request. Announce
+                        # the model this turn runs on so the footer stops
+                        # reporting the selection the client sent us.
+                        "llm_model": provider_config.llm_model,
                     }
                 )
                 + "\n\n"

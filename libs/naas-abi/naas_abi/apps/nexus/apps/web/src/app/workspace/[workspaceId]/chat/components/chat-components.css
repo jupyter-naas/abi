@@ -12,37 +12,8 @@
   gap: 2px;
 }
 
-/* New chat launcher */
-.chat-section-new-chat {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 6px;
-  padding: var(--space-1) var(--space-2);
-  border: none;
-  border-radius: var(--org-border-radius, var(--radius-md));
-  background: transparent;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--muted-foreground-hex);
-  text-align: left;
-  cursor: pointer;
-  transition: color 0.15s ease, background-color 0.15s ease;
-}
-
-.chat-section-new-chat:hover {
-  color: var(--foreground-hex);
-}
-
-.chat-section-new-chat.is-active {
-  background: color-mix(in srgb, var(--workspace-accent, #22c55e) 15%, transparent);
-  color: var(--workspace-accent, #22c55e);
-}
-
-.chat-section-new-chat.is-mobile-panel {
-  min-height: 44px;
-  padding: 10px var(--space-2);
-}
+/* New chat launcher lives in shell/sidebar/sidebar-new-item.css, shared with
+   the New Slides launcher so the two cannot drift apart. */
 
 /* Section labels (Agents, Pinned, Recent, …) */
 .chat-section-label {

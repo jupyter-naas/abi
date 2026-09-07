@@ -243,75 +243,212 @@ const IMG = {
   logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22120%22%20height%3D%2228%22%3E%3Crect%20width%3D%22120%22%20height%3D%2228%22%20rx%3D%224%22%20fill%3D%22%231a1a1a%22%20fill-opacity%3D%220.15%22%2F%3E%3Ctext%20x%3D%2212%22%20y%3D%2219%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2212%22%20fill%3D%22%231a1a1a%22%20font-weight%3D%22700%22%3EORG%3C%2Ftext%3E%3C%2Fsvg%3E",
 };
 
-const FOOTER_TXT = "Presentation Title";
-
+/* NEXUS_SLIDES_PPTX_FROM_DOM_V1 */
 async function buildPptx() {
   if (typeof PptxGenJS === "undefined") throw new Error("PptxGenJS failed to load");
-  const pptx = new PptxGenJS();
+  var slides = document.querySelectorAll("main.deck > section.slide, .deck > section.slide");
+  if (!slides.length) throw new Error("No .slide sections to export");
+  var pptx = new PptxGenJS();
   pptx.defineLayout({ name: "LAYOUT_16x9", width: 13.333, height: 7.5 });
   pptx.layout = "LAYOUT_16x9";
-  pptx.title = FOOTER_TXT;
-  const C = {
-    bg: "#ffffff".replace("#", ""),
-    ink: "#1a1a1a".replace("#", ""),
-    muted: "#6b6b6b".replace("#", ""),
-    accent: "#1a1a1a".replace("#", ""),
-    card: "#fafaf8".replace("#", ""),
+  var I = function (px) { return px / 96; };
+  var hex = function (raw, fallback) {
+    var s = String(raw || fallback || "").trim();
+    var m = s.match(/#([0-9a-fA-F]{6})/);
+    if (m) return m[1];
+    m = s.match(/#([0-9a-fA-F]{3})\b/);
+    if (m) {
+      var a = m[1];
+      return a.charAt(0) + a.charAt(0) + a.charAt(1) + a.charAt(1) + a.charAt(2) + a.charAt(2);
+    }
+    m = s.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+    if (m) {
+      return [m[1], m[2], m[3]].map(function (n) {
+        return ("0" + Number(n).toString(16)).slice(-2);
+      }).join("");
+    }
+    return String(fallback || "ffffff").replace("#", "");
   };
-  const I = (px) => px / 96;
-  const txt = (s, t, x, y, w, h, o = {}) =>
-    s.addText(t, { x: I(x), y: I(y), w: I(w), h: I(h), fontFace: "Arial", margin: 0, ...o });
-  const slideBg = { color: C.bg };
-
-  (() => {
-    const s = pptx.addSlide(); s.background = slideBg;
-    s.addImage({ data: IMG.hero, x: 0, y: 0, w: I(1280), h: I(300) });
-    txt(s, "Confidential · Working Session", 56, 340, 1000, 24, { fontSize: 12, color: C.accent, bold: true });
-    txt(s, "Presentation Title", 56, 380, 1100, 56, { fontSize: 32, bold: true, color: C.ink });
-    txt(s, "Subtitle: replace with your session objective and audience.", 56, 450, 1000, 40, { fontSize: 14, color: C.muted });
-  })();
-
-  (() => {
-    const s = pptx.addSlide(); s.background = slideBg;
-    txt(s, "AGENDA", 56, 48, 400, 20, { fontSize: 11, bold: true, color: C.accent });
-    txt(s, "What we will cover", 56, 78, 1100, 40, { fontSize: 26, bold: true, color: C.ink });
-    [["1","Context"],["2","Approach"],["3","Plan"],["4","Next steps"]].forEach((r, i) => {
-      const y = 160 + i * 90;
-      s.addShape(pptx.ShapeType.rect, { x: I(56), y: I(y), w: I(1168), h: I(76), fill: { color: C.card } });
-      txt(s, r[0], 76, y + 22, 40, 36, { fontSize: 20, bold: true, color: C.accent });
-      txt(s, r[1], 130, y + 26, 800, 30, { fontSize: 16, bold: true, color: C.ink });
-    });
-    txt(s, FOOTER_TXT, 56, 686, 760, 20, { fontSize: 9, color: C.muted });
-  })();
-
-  (() => {
-    const s = pptx.addSlide(); s.background = slideBg;
-    txt(s, "CONTEXT", 56, 48, 400, 20, { fontSize: 11, bold: true, color: C.accent });
-    txt(s, "Start from a shared problem statement", 56, 78, 1100, 40, { fontSize: 26, bold: true, color: C.ink });
-    s.addShape(pptx.ShapeType.rect, { x: I(56), y: I(160), w: I(560), h: I(360), fill: { color: C.card } });
-    txt(s, "Current state", 76, 180, 520, 28, { fontSize: 16, bold: true, color: C.ink });
-    txt(s, "Replace with the facts that frame the discussion.", 76, 230, 520, 200, { fontSize: 13, color: C.muted });
-    s.addShape(pptx.ShapeType.rect, { x: I(656), y: I(160), w: I(568), h: I(360), fill: { color: C.card } });
-    txt(s, "Desired state", 676, 180, 520, 28, { fontSize: 16, bold: true, color: C.ink });
-    txt(s, "Clear ownership, repeatable process, measurable quality.", 676, 230, 520, 200, { fontSize: 13, color: C.muted });
-    txt(s, FOOTER_TXT, 56, 686, 760, 20, { fontSize: 9, color: C.muted });
-  })();
-
-  (() => {
-    const s = pptx.addSlide(); s.background = slideBg;
-    txt(s, "NEXT STEPS", 56, 48, 400, 20, { fontSize: 11, bold: true, color: C.accent });
-    txt(s, "Decisions and follow-ups", 56, 78, 1100, 40, { fontSize: 26, bold: true, color: C.ink });
-    [["1","Confirm sponsor"],["2","Assign owners"],["3","Approve Phase 1"],["4","Schedule cadence"]].forEach((st, i) => {
-      const col = i % 2, row = Math.floor(i / 2);
-      const x = 56 + col * 596, y = 150 + row * 220;
-      s.addShape(pptx.ShapeType.rect, { x: I(x), y: I(y), w: I(576), h: I(190), fill: { color: C.card } });
-      txt(s, st[0], x + 20, y + 40, 44, 48, { fontSize: 28, bold: true, color: C.accent });
-      txt(s, st[1], x + 74, y + 48, 460, 32, { fontSize: 16, bold: true, color: C.ink });
-    });
-    txt(s, FOOTER_TXT, 56, 686, 760, 20, { fontSize: 9, color: C.muted });
-  })();
-
-  return pptx.writeFile({ fileName: "Presentation_Title.pptx" });
+  var cssUrl = function (name) {
+    try {
+      var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      var m = v.match(/url\(["']?(data:[^"')]+)["']?\)/);
+      return m ? m[1] : "";
+    } catch (e) {
+      return "";
+    }
+  };
+  var root;
+  try { root = getComputedStyle(document.documentElement); } catch (e) { root = null; }
+  var prop = function (name, fb) {
+    return hex(root ? root.getPropertyValue(name) : "", fb);
+  };
+  var C = {
+    bg: prop("--panel", "ffffff"),
+    ink: prop("--ink", "1a1a1a"),
+    muted: prop("--muted", "6b6b6b"),
+    accent: prop("--accent", "1a1a1a"),
+    card: prop("--card", "fafaf8")
+  };
+  var txt = function (s, t, x, y, w, h, o) {
+    if (!t) return;
+    s.addText(t, Object.assign({
+      x: I(x), y: I(y), w: I(w), h: I(h), fontFace: "Arial", margin: 0
+    }, o || {}));
+  };
+  var textOf = function (el) {
+    return el ? String(el.textContent || "").replace(/\s+/g, " ").trim() : "";
+  };
+  var first = function (rootEl, sel) {
+    try { return rootEl.querySelector(sel); } catch (e) { return null; }
+  };
+  var heroData = cssUrl("--hero");
+  var divData = cssUrl("--div1");
+  try {
+    if (!heroData && typeof IMG !== "undefined" && IMG && IMG.hero) heroData = IMG.hero;
+    if (!divData && typeof IMG !== "undefined" && IMG && IMG.d1) divData = IMG.d1;
+  } catch (e) {}
+  var coverH1 = "";
+  for (var i = 0; i < slides.length; i++) {
+    var el = slides[i];
+    var s = pptx.addSlide();
+    s.background = { color: C.bg };
+    var footerEl = first(el, ".footer");
+    var footerLeft = "";
+    var footerRight = "";
+    if (footerEl) {
+      var spans = footerEl.querySelectorAll(":scope > span");
+      footerLeft = textOf(spans[0]) || textOf(footerEl);
+      footerRight = spans.length > 1 ? textOf(spans[spans.length - 1]) : "";
+    }
+    var drawFooter = function () {
+      if (footerLeft) txt(s, footerLeft, 56, 686, 900, 20, { fontSize: 9, color: C.muted });
+      if (footerRight) txt(s, footerRight, 1100, 686, 124, 20, { fontSize: 9, color: C.muted, align: "right" });
+    };
+    if (el.classList.contains("cover")) {
+      if (heroData) {
+        try { s.addImage({ data: heroData, x: 0, y: 0, w: I(1280), h: I(300) }); } catch (e) {}
+      } else {
+        s.addShape(pptx.ShapeType.rect, {
+          x: 0, y: 0, w: I(1280), h: I(300),
+          fill: { color: prop("--hero-fallback", "eae8e1") }
+        });
+      }
+      var cEyebrow = textOf(first(el, ".eyebrow"));
+      var cH1 = textOf(first(el, "h1"));
+      var cSub = textOf(first(el, ".subtitle"));
+      var cHook = textOf(first(el, ".hook"));
+      if (!coverH1) coverH1 = cH1;
+      if (cEyebrow) txt(s, cEyebrow.toUpperCase(), 56, 340, 1168, 24, { fontSize: 12, color: C.accent, bold: true });
+      if (cH1) txt(s, cH1, 56, 372, 1168, 64, { fontSize: 32, bold: true, color: C.ink });
+      if (cSub) txt(s, cSub, 56, 444, 1168, 44, { fontSize: 14, color: C.muted });
+      if (cHook) txt(s, cHook, 56, 496, 1168, 28, { fontSize: 13, bold: true, color: C.accent });
+      continue;
+    }
+    if (el.classList.contains("section-divider")) {
+      if (divData) {
+        try { s.addImage({ data: divData, x: 0, y: 0, w: I(1280), h: I(720) }); } catch (e) {}
+      }
+      var dEyebrow = textOf(first(el, ".divider-eyebrow"));
+      var dNum = textOf(first(el, ".divider-number"));
+      var dTitle = textOf(first(el, ".divider-title"));
+      var dSub = textOf(first(el, ".divider-sub"));
+      if (dEyebrow) txt(s, dEyebrow.toUpperCase(), 56, 180, 1168, 24, { fontSize: 12, bold: true, color: C.accent });
+      if (dNum) txt(s, dNum, 56, 210, 1168, 110, { fontSize: 72, bold: true, color: C.ink });
+      if (dTitle) txt(s, dTitle, 56, 330, 1168, 56, { fontSize: 32, bold: true, color: C.ink });
+      if (dSub) txt(s, dSub, 56, 396, 900, 40, { fontSize: 14, color: C.muted });
+      continue;
+    }
+    var eyebrow = textOf(first(el, ":scope > .eyebrow")) || textOf(first(el, ".eyebrow"));
+    var h1 = textOf(first(el, ":scope > h1")) || textOf(first(el, "h1"));
+    if (eyebrow) txt(s, eyebrow.toUpperCase(), 56, 48, 1168, 20, { fontSize: 11, bold: true, color: C.accent });
+    if (h1) txt(s, h1, 56, 76, 1168, 44, { fontSize: 26, bold: true, color: C.ink });
+    var agendaRows = el.querySelectorAll(".agenda-row");
+    if (agendaRows.length) {
+      for (var ar = 0; ar < agendaRows.length; ar++) {
+        var row = agendaRows[ar];
+        var y = 140 + ar * 90;
+        s.addShape(pptx.ShapeType.rect, { x: I(56), y: I(y), w: I(1168), h: I(76), fill: { color: C.card } });
+        txt(s, textOf(first(row, ".agenda-num")), 76, y + 18, 48, 40, { fontSize: 20, bold: true, color: C.accent });
+        txt(s, textOf(first(row, "h2")), 130, y + 14, 820, 28, { fontSize: 16, bold: true, color: C.ink });
+        txt(s, textOf(first(row, "p")), 130, y + 42, 820, 24, { fontSize: 12, color: C.muted });
+        var kids = row.children;
+        if (kids.length) {
+          txt(s, textOf(kids[kids.length - 1]), 980, y + 24, 220, 28, { fontSize: 12, color: C.muted, align: "right" });
+        }
+      }
+      drawFooter();
+      continue;
+    }
+    var stepNodes = el.querySelectorAll(".step");
+    if (stepNodes.length) {
+      for (var st = 0; st < stepNodes.length; st++) {
+        var step = stepNodes[st];
+        var col = st % 2;
+        var srow = Math.floor(st / 2);
+        var sx = 56 + col * 596;
+        var sy = 140 + srow * 220;
+        s.addShape(pptx.ShapeType.rect, { x: I(sx), y: I(sy), w: I(576), h: I(200), fill: { color: C.card } });
+        s.addShape(pptx.ShapeType.rect, { x: I(sx), y: I(sy), w: I(6), h: I(200), fill: { color: C.accent } });
+        txt(s, textOf(first(step, ".step-n")), sx + 24, sy + 28, 60, 40, { fontSize: 24, bold: true, color: C.accent });
+        txt(s, textOf(first(step, "h2")), sx + 90, sy + 36, 450, 32, { fontSize: 16, bold: true, color: C.ink });
+        txt(s, textOf(first(step, "p")), sx + 24, sy + 84, 528, 90, { fontSize: 13, color: C.muted });
+      }
+      drawFooter();
+      continue;
+    }
+    var cards = el.querySelectorAll(".card");
+    if (cards.length) {
+      var n = cards.length;
+      var cols = n >= 4 ? 4 : (n === 3 ? 3 : 2);
+      var gap = 18;
+      var avail = 1168;
+      var cw = (avail - gap * (cols - 1)) / cols;
+      var ch = 360;
+      for (var ci = 0; ci < n; ci++) {
+        var card = cards[ci];
+        var ccol = ci % cols;
+        var crow = Math.floor(ci / cols);
+        var cx = 56 + ccol * (cw + gap);
+        var cy = 140 + crow * (ch + gap);
+        s.addShape(pptx.ShapeType.rect, { x: I(cx), y: I(cy), w: I(cw), h: I(ch), fill: { color: C.card } });
+        var pill = textOf(first(card, ".pill"));
+        var ch2 = textOf(first(card, "h2"));
+        var cp = textOf(first(card, "p"));
+        var lis = [];
+        var liNodes = card.querySelectorAll("li");
+        for (var li = 0; li < liNodes.length; li++) {
+          var lt = textOf(liNodes[li]);
+          if (lt) lis.push(lt);
+        }
+        var ty = cy + 22;
+        if (pill) { txt(s, pill.toUpperCase(), cx + 20, ty, cw - 40, 20, { fontSize: 10, bold: true, color: C.accent }); ty += 26; }
+        if (ch2) { txt(s, ch2, cx + 20, ty, cw - 40, 28, { fontSize: 16, bold: true, color: C.ink }); ty += 36; }
+        if (lis.length) {
+          txt(s, lis.map(function (item) { return "• " + item; }).join("\n"), cx + 20, ty, cw - 40, Math.max(40, ch - (ty - cy) - 20), { fontSize: 13, color: C.muted, valign: "top" });
+        } else if (cp) {
+          txt(s, cp, cx + 20, ty, cw - 40, Math.max(40, ch - (ty - cy) - 20), { fontSize: 13, color: C.muted, valign: "top" });
+        }
+      }
+      drawFooter();
+      continue;
+    }
+    var gSub = textOf(first(el, ".subtitle"));
+    var gy = 136;
+    if (gSub) { txt(s, gSub, 56, gy, 1168, 36, { fontSize: 14, color: C.muted }); gy += 44; }
+    var paras = el.querySelectorAll(":scope > p");
+    for (var pi = 0; pi < paras.length; pi++) {
+      var pt = textOf(paras[pi]);
+      if (!pt || pt === gSub) continue;
+      txt(s, pt, 56, gy, 1168, 48, { fontSize: 14, color: C.muted });
+      gy += 52;
+    }
+    drawFooter();
+  }
+  var title = coverH1 || textOf(document.querySelector("main.deck h1, .deck h1")) || "Presentation";
+  pptx.title = title;
+  var safe = title.replace(/[^\w]+/g, "_").replace(/^_|_$/g, "") || "Presentation";
+  return pptx.writeFile({ fileName: safe + ".pptx" });
 }
 
 (function(){

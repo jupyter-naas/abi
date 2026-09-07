@@ -1,0 +1,49 @@
+"""SlidesAgent internals: model policy, research gate, and title derivation."""
+
+from naas_abi.agents.slides.policy import (
+    DEFAULT_SLIDES_MODEL,
+    MAX_SLIDES_SEARCHES,
+    apply_slides_model_override,
+    attach_slides_research_note,
+    bind_slides_reasoning,
+    bind_slides_research_policy,
+    configured_slides_model,
+    load_slides_chat_model,
+    note_slides_web_search,
+    reject_unresearched_slides_write,
+    resolve_slides_llm_model,
+    slides_brief_requires_research,
+    slides_creation_requested,
+    slides_research_tools,
+    slides_search_budget_remaining,
+    slides_search_tool_bound,
+    validate_configured_slides_model,
+)
+from naas_abi.agents.slides.title import (
+    derive_deck_title,
+    is_placeholder_deck_title,
+    resolve_deck_title,
+)
+
+__all__ = [
+    "DEFAULT_SLIDES_MODEL",
+    "MAX_SLIDES_SEARCHES",
+    "apply_slides_model_override",
+    "attach_slides_research_note",
+    "bind_slides_reasoning",
+    "bind_slides_research_policy",
+    "configured_slides_model",
+    "derive_deck_title",
+    "is_placeholder_deck_title",
+    "load_slides_chat_model",
+    "note_slides_web_search",
+    "reject_unresearched_slides_write",
+    "resolve_deck_title",
+    "resolve_slides_llm_model",
+    "slides_brief_requires_research",
+    "slides_creation_requested",
+    "slides_research_tools",
+    "slides_search_budget_remaining",
+    "slides_search_tool_bound",
+    "validate_configured_slides_model",
+]

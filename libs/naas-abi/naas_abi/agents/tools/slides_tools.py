@@ -1,17 +1,19 @@
-"""Abi tools for Nexus Slides projects.
+"""SlidesAgent tools for Nexus Slides projects.
 
 Prefer the Coder workspace sidecar filesystem when a slides runtime is bound
 to the request (Continue-parity). Fall back to Forgejo with an explicit note.
 
 Decks live at ``slides/<slug>/deck.html`` on branch ``slides/<slug>``. When the
 user has a deck open in Nexus, ``slides_active_slug`` is set so tools default
-to that deck and Abi must not ask which presentation to edit.
+to that deck and the agent must not ask which presentation to edit.
 
 Template decks keep slide markup in ``<main>`` (~tens of KB) but also ship
-inline PPTX/asset ``<script>`` blobs (~1MB with base64 images). Tools therefore:
+inline asset ``<script>`` blobs (~1MB with base64 images). PPTX export walks
+the live ``.slide`` DOM; tools therefore:
 
 - expose section-scoped read/write and surgical string replace
 - redact heavy scripts / data-URLs on full-deck reads
+- never require the model to edit ``buildPptx`` or ``FOOTER_TXT``
 """
 
 from __future__ import annotations
@@ -19,19 +21,32 @@ from __future__ import annotations
 import html as html_lib
 import json
 import re
+import unicodedata
+from collections import OrderedDict
 from typing import Any
 
 from langchain_core.tools import BaseTool, tool
+from naas_abi.agents.slides import (
+    derive_deck_title,
+    is_placeholder_deck_title,
+    reject_unresearched_slides_write,
+    resolve_deck_title,
+)
 from naas_abi_core.services.agent.context import (
+    agent_chat_id,
     agent_user_id,
     agent_workspace_id,
     coder_workspace_base,
     slides_active_mode,
     slides_active_slug,
     slides_active_title,
+    slides_brief,
 )
 from naas_abi_core.services.agent.tools.workspace_tools import _call as _sidecar_call
-from naas_abi_core.services.source_control.SourceControlPorts import SourceControlError
+from naas_abi_core.services.source_control.SourceControlPorts import (
+    BranchNameConflictError,
+    SourceControlError,
+)
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _BRANCH_PREFIX = "slides/"
@@ -49,6 +64,8 @@ _H1_RE = re.compile(r"<h1\b[^>]*>(.*?)</h1>", re.IGNORECASE | re.DOTALL)
 _TAG_RE = re.compile(r"<[^>]+>")
 _REDACTED_PLACEHOLDER = "[REDACTED_DATA_URL]"
 _SCRIPT_PLACEHOLDER = "<!-- REDACTED_SCRIPT -->"
+_REPO_ID_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+_WIPED_DECK_ERROR = "API restart wiped this deck. Click New, then retry."
 
 
 def _get_source_control():
@@ -64,6 +81,240 @@ def _repo_id() -> str:
         return settings.coding_repo_id or "abi/monorepo"
     except Exception:  # noqa: BLE001
         return "abi/monorepo"
+
+
+def _ensure_coding_repo() -> str:
+    """Seed CODING_REPO_ID. Local in_memory starts empty; UI create already does this."""
+    repo_id = _repo_id()
+    owner, sep, name = repo_id.partition("/")
+    if not sep or not owner or not name or "/" in name:
+        return repo_id
+    try:
+        _get_source_control().ensure_repo(owner=owner, name=name)
+    except SourceControlError:
+        pass
+    return repo_id
+
+
+def _is_repo_id_message(text: str) -> bool:
+    raw = (text or "").strip()
+    if not raw:
+        return False
+    repo_id = _repo_id()
+    if raw == repo_id or _REPO_ID_RE.fullmatch(raw):
+        return True
+    if raw.startswith((f"{repo_id}:", f"{repo_id}@")):
+        return True
+    return raw.endswith(f": {repo_id}")
+
+
+def _friendly_sc_error(exc: BaseException) -> str:
+    """Never return a raw owner/name (InMemory RepoNotFoundError)."""
+    text = str(exc).strip() or type(exc).__name__
+    lowered = text.lower()
+    if any(
+        marker in lowered
+        for marker in (
+            "connection refused",
+            "failed to establish",
+            "timed out",
+            "timeout",
+            "connection reset",
+            "network is unreachable",
+        )
+    ):
+        return "Forgejo is not reachable. Slides needs git storage."
+    if _is_repo_id_message(text) or "deck.html" in lowered:
+        return _WIPED_DECK_ERROR
+    return text
+
+
+def _tool_error(exc: BaseException) -> dict[str, Any]:
+    return {"error": _friendly_sc_error(exc)}
+
+
+def _load_seed_deck_html() -> str | None:
+    """Same Minimal Light seed the UI New path writes."""
+    try:
+        from importlib import resources
+
+        root = resources.files("naas_abi.apps.nexus.assets.slides.templates")
+        text = (root / "minimal-light-v1.html").read_text(encoding="utf-8")
+        return text if text.strip() else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _looks_like_missing_deck(exc: BaseException, paths: dict[str, str]) -> bool:
+    text = str(exc)
+    deck = paths.get("deck_path") or ""
+    if deck and deck in text:
+        return True
+    return _is_repo_id_message(text)
+
+
+def _display_title(slug: str, stored_title: str | None) -> str:
+    """Best display title for a deck, naming it after the brief when untitled.
+
+    A deck created by the UI New button is stored as "Untitled presentation".
+    The first agent write is the moment we know what it is about, so adopt the
+    topic of the brief then. A title the user (or an earlier turn) already
+    chose is never overwritten.
+    """
+    for candidate in (stored_title, slides_active_title.get()):
+        text = (candidate or "").strip()
+        if text and not is_placeholder_deck_title(text):
+            return text
+    derived = derive_deck_title(slides_brief.get() or "")
+    if derived:
+        return derived
+    return (
+        (stored_title or "").strip()
+        or (slides_active_title.get() or "").strip()
+        or slug.replace("-", " ").title()
+    )
+
+
+def _ensure_project_json(
+    sc: Any, repo_id: str, paths: dict[str, str], slug: str
+) -> str:
+    """Seed (or retitle) project.json. Returns the deck's display title.
+
+    Preview GET resolves the project via project.json, and the sidebar tree
+    reads its title, so writes must keep it current.
+    """
+    meta: dict[str, Any] = {}
+    try:
+        existing = sc.get_file(
+            repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
+        )
+        if existing.text:
+            meta = json.loads(existing.text)
+    except (SourceControlError, json.JSONDecodeError, TypeError):
+        meta = {}
+    stored = str(meta.get("title") or "").strip() if isinstance(meta, dict) else ""
+    title = _display_title(slug, stored)
+    if isinstance(meta, dict) and meta and stored == title:
+        return title
+    ws = _workspace_id()
+    payload = {
+        **(meta if isinstance(meta, dict) else {}),
+        "slug": slug,
+        "workspace_id": (meta.get("workspace_id") if isinstance(meta, dict) else "")
+        or ws
+        or "",
+        "title": title,
+        "template_id": (
+            (meta.get("template_id") if isinstance(meta, dict) else "")
+            or "minimal-light-v1"
+        ),
+    }
+    try:
+        sc.upsert_file(
+            repo_id=repo_id,
+            path=paths["project_path"],
+            content=json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+            message=f"Name slides project {slug}",
+            branch=paths["branch"],
+        )
+    except SourceControlError:
+        return stored or title
+    # Later tools in this turn (and the open_deck note) report the new name.
+    slides_active_title.set(title)
+    return title
+
+
+def _ensure_slides_write_paths(slug: str) -> dict[str, str]:
+    """Repo + slides branch + project.json, matching the UI create path."""
+    paths = _resolve_paths(slug)
+    if paths.get("error"):
+        return paths
+    sc = _get_source_control()
+    repo_id = _ensure_coding_repo()
+    try:
+        names = {b.name for b in sc.list_branches(repo_id=repo_id)}
+    except SourceControlError as exc:
+        return {"error": _friendly_sc_error(exc)}
+    branch = paths["branch"]
+    if branch not in names:
+        default = "main" if "main" in names else (next(iter(names)) if names else "main")
+        if default not in names:
+            return {"error": _WIPED_DECK_ERROR}
+        try:
+            sc.create_branch(repo_id=repo_id, name=branch, from_ref=default)
+        except BranchNameConflictError:
+            pass
+        except SourceControlError as exc:
+            return {"error": _friendly_sc_error(exc)}
+    paths["title"] = _ensure_project_json(sc, repo_id, paths, slug)
+    return paths
+
+
+# LangChain runs each tool in an isolated context, so a ContextVar set inside
+# create_slides_project is invisible to the next tool call. Remember the deck
+# Abi just created per (user, conversation) instead, and let _resolve_slug fall
+# back to it. Bounded so a long-lived API process cannot grow without limit.
+_ACTIVE_SLUG_MEMO: OrderedDict[str, str] = OrderedDict()
+_ACTIVE_SLUG_MEMO_MAX = 256
+
+
+def _memo_key() -> str:
+    user = (agent_user_id.get() or "").strip()
+    if not user:
+        return ""
+    chat = (agent_chat_id.get() or "").strip() or "no-chat"
+    return f"{user}:{chat}"
+
+
+def _remember_active_slug(slug: str) -> None:
+    key = _memo_key()
+    if not key or not slug:
+        return
+    _ACTIVE_SLUG_MEMO[key] = slug
+    _ACTIVE_SLUG_MEMO.move_to_end(key)
+    while len(_ACTIVE_SLUG_MEMO) > _ACTIVE_SLUG_MEMO_MAX:
+        _ACTIVE_SLUG_MEMO.popitem(last=False)
+
+
+def _recalled_active_slug() -> str:
+    key = _memo_key()
+    return _ACTIVE_SLUG_MEMO.get(key, "") if key else ""
+
+
+def _forget_active_slugs() -> None:
+    _ACTIVE_SLUG_MEMO.clear()
+
+
+def _slugify_title(title: str) -> str:
+    """Kebab-case slug from a human title, matching the UI create path.
+
+    Accents fold to ASCII so a French title gives a readable URL
+    ("Matériaux de construction" -> ``materiaux-de-construction``) instead of
+    dropping the accented letters.
+    """
+    folded = unicodedata.normalize("NFKD", (title or "").strip().lower())
+    raw = "".join(ch for ch in folded if not unicodedata.combining(ch))
+    slug = re.sub(r"[^a-z0-9]+", "-", raw).strip("-")
+    return slug[:60].strip("-")
+
+
+def _unique_slug(base: str, taken: set[str]) -> str:
+    """First free ``base``, ``base-2``, ``base-3`` … against existing branches."""
+    if _branch(base) not in taken and _legacy_branch(base) not in taken:
+        return base
+    for suffix in range(2, 1000):
+        candidate = f"{base}-{suffix}"
+        if _branch(candidate) not in taken and _legacy_branch(candidate) not in taken:
+            return candidate
+    raise SourceControlError("Could not find a free slides slug")
+
+
+def _seed_deck_with_title(html: str, title: str) -> str:
+    """Put the requested title on the cover so the deck opens named correctly."""
+    applied = _apply_replacements(html, "Presentation Title", title, 0)
+    if isinstance(applied, dict):
+        return html
+    return applied[0]
 
 
 def _workspace_id() -> str | None:
@@ -112,8 +363,11 @@ def _resolve_paths(slug: str) -> dict[str, str]:
     """Prefer namespaced paths; fall back to legacy when that branch exists."""
     ws = _workspace_id()
     sc = _get_source_control()
-    repo_id = _repo_id()
-    names = {b.name for b in sc.list_branches(repo_id=repo_id)}
+    repo_id = _ensure_coding_repo()
+    try:
+        names = {b.name for b in sc.list_branches(repo_id=repo_id)}
+    except SourceControlError as exc:
+        return {"error": _friendly_sc_error(exc)}
     if ws:
         ns_branch = _branch(slug, ws)
         if ns_branch in names:
@@ -158,7 +412,11 @@ def _resolve_paths(slug: str) -> dict[str, str]:
 
 def _resolve_slug(slug: str | None) -> str | dict[str, Any]:
     """Prefer explicit slug; else the open deck from pane context."""
-    candidate = (slug or "").strip() or (slides_active_slug.get() or "").strip()
+    candidate = (
+        (slug or "").strip()
+        or (slides_active_slug.get() or "").strip()
+        or _recalled_active_slug()
+    )
     if not candidate:
         return {
             "error": (
@@ -233,29 +491,43 @@ def _load_deck_via_forgejo(slug: str) -> str | dict[str, Any]:
     if paths.get("error"):
         return {"error": paths["error"], "source": "forgejo"}
     sc = _get_source_control()
-    file = sc.get_file(
-        repo_id=_repo_id(), path=paths["deck_path"], ref=paths["branch"]
-    )
+    try:
+        file = sc.get_file(
+            repo_id=_repo_id(), path=paths["deck_path"], ref=paths["branch"]
+        )
+    except SourceControlError as exc:
+        if _looks_like_missing_deck(exc, paths):
+            seed = _load_seed_deck_html()
+            if seed:
+                return seed
+            return {"error": _WIPED_DECK_ERROR, "source": "forgejo"}
+        return {"error": _friendly_sc_error(exc), "source": "forgejo"}
     if file.is_binary or file.text is None:
         return {"error": "Deck is not UTF-8 text", "source": "forgejo"}
     return file.text
 
 
 def _commit_deck_forgejo(slug: str, html: str, message: str) -> dict[str, Any]:
-    paths = _resolve_paths(slug)
+    paths = _ensure_slides_write_paths(slug)
     if paths.get("error"):
         return {"error": paths["error"], "source": "forgejo"}
     sc = _get_source_control()
-    commit = sc.upsert_file(
-        repo_id=_repo_id(),
-        path=paths["deck_path"],
-        content=html,
-        message=message,
-        branch=paths["branch"],
-    )
+    try:
+        commit = sc.upsert_file(
+            repo_id=_repo_id(),
+            path=paths["deck_path"],
+            content=html,
+            message=message,
+            branch=paths["branch"],
+        )
+    except SourceControlError as exc:
+        return {"error": _friendly_sc_error(exc), "source": "forgejo"}
     return {
         "slug": slug,
+        # The chat deck card labels itself from this.
+        "title": paths.get("title") or slug.replace("-", " ").title(),
         "path": paths["deck_path"],
+        "branch": paths["branch"],
         "commit_sha": commit.sha,
         "message": commit.message,
         "source": "forgejo",
@@ -296,13 +568,25 @@ def _persist_deck(slug: str, html: str, message: str) -> dict[str, Any]:
             sources.append("sidecar-failed")
     try:
         forgejo = _commit_deck_forgejo(slug, html, message)
+        if forgejo.get("error"):
+            if sidecar_result and sidecar_result.get("ok"):
+                return {
+                    **sidecar_result,
+                    "sources": sources,
+                    "forgejo_error": forgejo.get("error"),
+                    "note": (
+                        "Updated Coder workspace (live edit); Forgejo snapshot failed. "
+                        "Preview should follow sidecar. Use File → Save later for history."
+                    ),
+                }
+            return {**forgejo, "sources": sources}
         sources.append("forgejo")
         result = {**forgejo, "sources": sources}
         if sidecar_result and not sidecar_result.get("ok"):
             result["sidecar_error"] = sidecar_result.get("error")
             result["note"] = (
-                "Wrote Forgejo snapshot only; Coder sidecar write failed. "
-                "Runtime may still be starting. Preview may lag until sidecar is ready."
+                "Wrote git snapshot only; Coder sidecar write failed. "
+                "Preview should refresh from the git copy."
             )
         elif "sidecar" in sources:
             result["note"] = (
@@ -314,13 +598,13 @@ def _persist_deck(slug: str, html: str, message: str) -> dict[str, Any]:
             return {
                 **sidecar_result,
                 "sources": sources,
-                "forgejo_error": str(exc),
+                "forgejo_error": _friendly_sc_error(exc),
                 "note": (
                     "Updated Coder workspace (live edit); Forgejo snapshot failed. "
                     "Preview should follow sidecar. Use File → Save later for history."
                 ),
             }
-        return {"error": str(exc), "sources": sources}
+        return {"error": _friendly_sc_error(exc), "sources": sources}
 
 
 def _replace_string_pairs(old: str, new: str) -> list[tuple[str, str]]:
@@ -676,15 +960,83 @@ def _view_for_llm(html: str) -> dict[str, Any]:
         "redacted_scripts": n_scripts,
         "redacted_assets": n_assets,
         "note": (
-            "Heavy <script> blocks (PPTX/assets) and data-URLs are redacted. "
+            "Heavy <script> blocks (assets / export) and data-URLs are redacted. "
             "Prefer list_slides_sections + replace_in_slides_deck / "
-            "write_slides_section for edits. Do not rewrite the whole file. "
+            "write_slides_section for HTML edits. Do not rewrite the whole file "
+            "or edit buildPptx. Preview is HTML; PPTX is derived at export. "
             "You are editing the open presentation; do not ask which deck."
         ),
     }
 
 
 def slides_tools() -> list[BaseTool]:
+    @tool
+    def create_slides_project(title: str) -> dict[str, Any]:
+        """Create a new Slides presentation and make it the deck you are editing.
+
+        Use this when the user asks for a deck, presentation, or slides and no
+        deck is open yet (for example from the main chat surface). It seeds the
+        Minimal Light template, then every later slides tool acts on this deck
+        without needing a slug.
+
+        Pass a short human title for the topic, in the user's language. Passing
+        the raw request is tolerated: the topic is extracted from it.
+
+        After creating it, research the topic with web_search and then write the
+        slides. Do not ask the user which presentation to edit.
+        """
+        if not agent_user_id.get():
+            return {"error": "No authenticated user on this agent session."}
+        # The deck name shows up in the sidebar tree, the chat card, and the
+        # URL, so never keep template filler or a whole sentence.
+        clean_title = resolve_deck_title(title, slides_brief.get() or "")
+        base = _slugify_title(clean_title)
+        if not base:
+            return {"error": "title must contain letters or digits"}
+        try:
+            sc = _get_source_control()
+            repo_id = _ensure_coding_repo()
+            taken = {b.name for b in sc.list_branches(repo_id=repo_id)}
+            slug = _unique_slug(base, taken)
+
+            # _ensure_project_json reads the title from context.
+            slides_active_title.set(clean_title)
+            paths = _ensure_slides_write_paths(slug)
+            if paths.get("error"):
+                return {"error": paths["error"]}
+
+            seed = _load_seed_deck_html()
+            if not seed:
+                return {"error": "Slides template is missing; cannot seed a deck."}
+            commit = sc.upsert_file(
+                repo_id=repo_id,
+                path=paths["deck_path"],
+                content=_seed_deck_with_title(seed, clean_title),
+                message=f"Create slides project {slug}",
+                branch=paths["branch"],
+            )
+
+            # Become the active deck for the rest of this conversation.
+            slides_active_slug.set(slug)
+            _remember_active_slug(slug)
+            return {
+                "ok": True,
+                "created": True,
+                "slug": slug,
+                "title": clean_title,
+                "branch": paths["branch"],
+                "path": paths["deck_path"],
+                "workspace_id": _workspace_id() or "",
+                "template_id": "minimal-light-v1",
+                "commit_sha": commit.sha,
+                "note": (
+                    f"Created '{clean_title}'. This is now the open deck. "
+                    "Research the topic with web_search, then write the slides."
+                ),
+            }
+        except Exception as exc:  # noqa: BLE001
+            return _tool_error(exc)
+
     @tool
     def list_slides_projects() -> dict[str, Any]:
         """List Slides projects in the workspace monorepo (branches slides/<slug>).
@@ -697,7 +1049,7 @@ def slides_tools() -> list[BaseTool]:
         open_slug = slides_active_slug.get()
         try:
             sc = _get_source_control()
-            repo_id = _repo_id()
+            repo_id = _ensure_coding_repo()
             ws = _workspace_id()
             ws_seg = _workspace_segment(ws) if ws else None
             ns_prefix = f"{_BRANCH_PREFIX}{ws_seg}/" if ws_seg else None
@@ -760,7 +1112,7 @@ def slides_tools() -> list[BaseTool]:
                 )
             return out
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def list_slides_sections(slug: str = "") -> dict[str, Any]:
@@ -788,7 +1140,7 @@ def slides_tools() -> list[BaseTool]:
                 "sections": [_section_meta(i, sec) for i, sec in enumerate(sections)],
             }
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def read_slides_section(
@@ -830,7 +1182,7 @@ def slides_tools() -> list[BaseTool]:
                 ),
             }
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def write_slides_section(
@@ -845,7 +1197,13 @@ def slides_tools() -> list[BaseTool]:
         Omit slug when a deck is open. Pass the full ``<section>...</section>``
         for that slide. If html still contains ``[REDACTED_DATA_URL]`` placeholders
         from a prior read, original embedded assets are restored automatically.
+
+        For news, current events, or factual briefs: call web_search first.
+        This tool rejects the write until search has run this turn.
         """
+        blocked = reject_unresearched_slides_write()
+        if blocked:
+            return blocked
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
         resolved = _resolve_slug(slug)
@@ -875,7 +1233,7 @@ def slides_tools() -> list[BaseTool]:
             result.update(_open_deck_note(resolved))
             return result
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def replace_in_slides_deck(
@@ -892,15 +1250,22 @@ def slides_tools() -> list[BaseTool]:
         Omit slug when a deck is open in the Slides UI. occurrence: 0 replaces all
         matches; 1 replaces the first, 2 the second, etc. Matches HTML entities
         flexibly (``&``/``&amp;``, ``—``/``&mdash;``/``&#8212;``, ``–``/``&ndash;``)
-        so cover ``<h1>`` / subtitle text updates with PPTX script strings.
+        so cover ``<h1>`` / subtitle HTML updates. PPTX export reads that live
+        DOM; do not edit ``buildPptx`` or ``FOOTER_TXT``.
 
         For cover / title / \"slide 1\" edits: pass section_index=0 (or
         section_id of the cover) and occurrence=0. Do not use occurrence=1 for
         \"the title\": document order hits ``<title>`` / menubar before the cover
         ``<h1>`` that Preview shows. Confirm ``cover_h1_updated`` /
         ``cover_subtitle_updated`` in the tool result before claiming Preview
-        changed.
+        and PPTX changed.
+
+        For news, current events, or factual briefs: call web_search first.
+        This tool rejects the write until search has run this turn.
         """
+        blocked = reject_unresearched_slides_write()
+        if blocked:
+            return blocked
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
         resolved = _resolve_slug(slug)
@@ -977,7 +1342,7 @@ def slides_tools() -> list[BaseTool]:
             result.update(_open_deck_note(resolved))
             return result
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def read_slides_deck(slug: str = "", include_assets: bool = False) -> dict[str, Any]:
@@ -1018,7 +1383,7 @@ def slides_tools() -> list[BaseTool]:
                 **view,
             }
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def write_slides_deck(
@@ -1030,7 +1395,13 @@ def slides_tools() -> list[BaseTool]:
 
         Omit slug when a deck is open. Prefer replace_in_slides_deck or
         write_slides_section.
+
+        For news, current events, or factual briefs: call web_search first.
+        This tool rejects the write until search has run this turn.
         """
+        blocked = reject_unresearched_slides_write()
+        if blocked:
+            return blocked
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
         resolved = _resolve_slug(slug)
@@ -1063,7 +1434,7 @@ def slides_tools() -> list[BaseTool]:
             result.update(_open_deck_note(resolved))
             return result
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     @tool
     def slides_history(slug: str = "", limit: int = 10) -> dict[str, Any]:
@@ -1095,9 +1466,10 @@ def slides_tools() -> list[BaseTool]:
                 ],
             }
         except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc)}
+            return _tool_error(exc)
 
     return [
+        create_slides_project,
         list_slides_projects,
         list_slides_sections,
         read_slides_section,

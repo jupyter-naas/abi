@@ -247,6 +247,7 @@ interface WorkspaceState {
   // Context panel (right AI / compare surface)
   contextPanelOpen: boolean;
   toggleContextPanel: () => void;
+  setContextPanelOpen: (open: boolean) => void;
   /** Width of the dock (icon nav). Persisted. Same default as the feature column. */
   dockWidth: number;
   setDockWidth: (width: number) => void;
@@ -320,6 +321,11 @@ interface WorkspaceState {
     conversationId: string,
     oldMessageId: string,
     newMessageId: string,
+  ) => void;
+  setMessageModelId: (
+    conversationId: string,
+    messageId: string,
+    modelId: string,
   ) => void;
   togglePinConversation: (id: string) => void;
   toggleArchiveConversation: (id: string) => void;
@@ -546,6 +552,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   // Context panel (right AI / compare surface)
   contextPanelOpen: false,
   toggleContextPanel: () => set((state) => ({ contextPanelOpen: !state.contextPanelOpen })),
+  setContextPanelOpen: (open) => set({ contextPanelOpen: open }),
   dockWidth: DOCK_WIDTH_DEFAULT,
   setDockWidth: (width) => set({ dockWidth: clampDockWidth(width) }),
   sectionPanelWidth: 256,
@@ -764,6 +771,24 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               ...conv,
               messages: conv.messages.map((msg) =>
                 msg.id === oldMessageId ? { ...msg, id: newMessageId } : msg,
+              ),
+            }
+          : conv,
+      ),
+    }));
+  },
+
+  // The model a turn ran on is only known server-side: slides raise it inside
+  // the request. Lets the stream correct the model the composer guessed.
+  setMessageModelId: (conversationId, messageId, modelId) => {
+    if (!messageId || !modelId) return;
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.id === conversationId
+          ? {
+              ...conv,
+              messages: conv.messages.map((msg) =>
+                msg.id === messageId ? { ...msg, modelId } : msg,
               ),
             }
           : conv,

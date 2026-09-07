@@ -12,6 +12,7 @@ Coder.
 from __future__ import annotations
 
 import hashlib
+import html as html_lib
 import json
 import logging
 import re
@@ -20,6 +21,7 @@ import time
 from datetime import timedelta
 from importlib import resources
 from pathlib import Path
+from typing import TYPE_CHECKING, NamedTuple
 from urllib.error import URLError
 from urllib.parse import quote
 from urllib.request import Request as UrlRequest
@@ -32,7 +34,10 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
     require_workspace_access,
 )
-from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core.config import (
+    ABI_SLIDES_TEMPLATE_NAMESPACE,
+    settings,
+)
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import create_access_token
@@ -60,15 +65,38 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+if TYPE_CHECKING:
+    # importlib.abc.Traversable is deprecated from 3.12 and the 3.11 home,
+    # importlib.resources.abc, does not exist on the 3.10 this subtree still
+    # declares. Annotations are postponed here, so neither is imported at run
+    # time and the name has to resolve only for a type checker.
+    from importlib.abc import Traversable
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+# A template id is ``<namespace>/<stem>``, or a bare stem from before the
+# namespaces existed. The namespace is not enumerated here: which ones exist
+# is configuration, so an unknown one is a lookup miss, not a syntax error.
+_TEMPLATE_REF_RE = re.compile(
+    r"^(?:(?P<namespace>[a-z0-9]+(?:-[a-z0-9]+)*)/)?"
+    r"(?P<stem>[a-z0-9]+(?:-[a-z0-9]+)*)$"
+)
 _BRANCH_PREFIX = "slides/"
 _DEFAULT_TEMPLATE = "minimal-light-v1"
+_ABI_NAMESPACE = ABI_SLIDES_TEMPLATE_NAMESPACE
+_ABI_PACKAGE = "naas_abi.apps.nexus.assets.slides.templates"
+_ABI_ORIGIN = _ABI_PACKAGE
+_DEFAULT_TEMPLATE_ID = f"{_ABI_NAMESPACE}/{_DEFAULT_TEMPLATE}"
+# Room for a namespace and a separator on top of a kebab stem.
+_TEMPLATE_ID_MAX_LEN = 96
 _SIDECAR_PORT = 8378
-_SLIDES_TEMPLATE_NAMES = ("abi-slides", "abi-code-server")
+# Ordered by preference. "local-directory" is what LocalDirectoryAdapter
+# advertises in the no-Docker runtime; without it the probe finds no template
+# and the deck view shows a permanent "Coder runtime unavailable" banner.
+_SLIDES_TEMPLATE_NAMES = ("abi-slides", "abi-code-server", "local-directory")
 # Cold start: agent connect + startup_script before :8378 listens. Ensure must
 # wait; a single probe races "running" phase and falsely marks degraded.
 _SIDECAR_WAIT_ATTEMPTS = 2
@@ -80,7 +108,7 @@ def _get_source_control(request: Request) -> SourceControlService:
     if service is not None:
         return service
     try:
-        from naas_abi import ABIModule  # noqa: PLC0415
+        from naas_abi import ABIModule
 
         service = ABIModule.get_instance().engine.services.source_control
         request.app.state.source_control = service
@@ -88,7 +116,7 @@ def _get_source_control(request: Request) -> SourceControlService:
     except Exception as exc:
         raise HTTPException(
             status_code=503,
-            detail="Source control (Forgejo) is not configured. Slides requires git storage.",
+            detail="Forgejo is not configured. Slides needs git storage.",
         ) from exc
 
 
@@ -97,7 +125,7 @@ def _get_coding_environment(request: Request) -> CodingEnvironmentService | None
     if service is not None:
         return service
     try:
-        from naas_abi import ABIModule  # noqa: PLC0415
+        from naas_abi import ABIModule
 
         service = ABIModule.get_instance().engine.services.coding_environment
         request.app.state.coding_environment = service
@@ -108,6 +136,77 @@ def _get_coding_environment(request: Request) -> CodingEnvironmentService | None
 
 def _repo_id() -> str:
     return settings.coding_repo_id or "abi/monorepo"
+
+
+_REPO_ID_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+_FORGEJO_NOT_CONFIGURED = "Forgejo is not configured. Slides needs git storage."
+_FORGEJO_UNREACHABLE = "Forgejo is not reachable. Slides needs git storage."
+
+
+def _is_repo_id_message(text: str) -> bool:
+    """True when the exception is just owner/name (InMemory RepoNotFoundError)."""
+    return bool(_REPO_ID_RE.fullmatch((text or "").strip()))
+
+
+def _repo_missing_detail(repo_id: str) -> str:
+    return (
+        f"Git repo '{repo_id}' is missing. Forgejo is not configured, "
+        "or coding-init did not seed it."
+    )
+
+
+def _is_forgejo_unreachable(exc: BaseException | str) -> bool:
+    text = str(exc or "").lower()
+    return any(
+        marker in text
+        for marker in (
+            "connection refused",
+            "failed to establish",
+            "name or service not known",
+            "nodename nor servname",
+            "timed out",
+            "timeout",
+            "connection reset",
+            "max retries",
+            "temporarily unavailable",
+            "network is unreachable",
+            "connectionerror",
+            "connecterror",
+        )
+    )
+
+
+def _source_control_http_error(exc: BaseException) -> HTTPException:
+    """Map forge failures: missing/down git is 503; transient writes stay 502."""
+    text = str(exc or "").strip()
+    repo_hint = text.split(":", 1)[0].strip() if text else ""
+    if isinstance(exc, RepoNotFoundError) and _is_repo_id_message(repo_hint):
+        return HTTPException(status_code=503, detail=_repo_missing_detail(repo_hint))
+    if _is_repo_id_message(text):
+        return HTTPException(status_code=503, detail=_repo_missing_detail(text))
+    if _is_forgejo_unreachable(exc):
+        return HTTPException(status_code=503, detail=_FORGEJO_UNREACHABLE)
+    return HTTPException(status_code=502, detail=_friendly_git_detail(exc))
+
+
+def _ensure_coding_repo(sc: SourceControlService) -> str:
+    """Idempotently seed CODING_REPO_ID (local in_memory starts empty)."""
+    repo_id = _repo_id()
+    owner, sep, name = repo_id.partition("/")
+    if not sep or not owner or not name or "/" in name:
+        raise HTTPException(status_code=503, detail=_FORGEJO_NOT_CONFIGURED)
+    try:
+        sc.ensure_repo(owner=owner, name=name)
+    except SourceControlError as exc:
+        raise _source_control_http_error(exc) from exc
+    except (OSError, TimeoutError) as exc:
+        raise HTTPException(status_code=503, detail=_FORGEJO_UNREACHABLE) from exc
+    return repo_id
+
+
+def _slides_sc(request: Request) -> tuple[SourceControlService, str]:
+    sc = _get_source_control(request)
+    return sc, _ensure_coding_repo(sc)
 
 
 def _forge_username(name: str, email: str) -> str:
@@ -310,13 +409,116 @@ def _count_embedded_images(html: str) -> int:
     return len(re.findall(r"data:image/[^;]+;base64,", html))
 
 
+_SECTION_SLIDE_RE = re.compile(
+    r"<section\b([^>]*)>(.*?)</section>",
+    re.IGNORECASE | re.DOTALL,
+)
+_SLIDE_CLASS_RE = re.compile(r"""\bclass\s*=\s*["'][^"']*\bslide\b""", re.IGNORECASE)
+_SECTION_ID_RE = re.compile(r"""\bid\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
+_EYEBROW_RE = re.compile(
+    r"""<div\b[^>]*class=["'][^"']*\b(?:eyebrow|divider-eyebrow)\b[^"']*["'][^>]*>(.*?)</div>""",
+    re.IGNORECASE | re.DOTALL,
+)
+_H1_RE = re.compile(r"<h1\b[^>]*>(.*?)</h1>", re.IGNORECASE | re.DOTALL)
+_DIVIDER_TITLE_RE = re.compile(
+    r"""<div\b[^>]*class=["'][^"']*\bdivider-title\b[^"']*["'][^>]*>(.*?)</div>""",
+    re.IGNORECASE | re.DOTALL,
+)
+_TAG_RE = re.compile(r"<[^>]+>")
+_IMG_CONST_RE = re.compile(r"const IMG\s*=\s*\{(.*?)\n\s*\};", re.DOTALL)
+_IMG_KEY_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:", re.MULTILINE)
+
+
+def _strip_html_text(raw: str) -> str:
+    return html_lib.unescape(_TAG_RE.sub("", raw or "")).strip()
+
+
+def _parse_slide_outline(html: str) -> list[dict]:
+    """h1 / eyebrow (or divider title) per ``<section class="slide">``."""
+    slides: list[dict] = []
+    index = 0
+    for match in _SECTION_SLIDE_RE.finditer(html or ""):
+        attrs = match.group(1) or ""
+        if not _SLIDE_CLASS_RE.search(attrs):
+            continue
+        body = match.group(2) or ""
+        id_m = _SECTION_ID_RE.search(attrs)
+        eyebrow_m = _EYEBROW_RE.search(body)
+        h1_m = _H1_RE.search(body)
+        divider_m = _DIVIDER_TITLE_RE.search(body)
+        title = (
+            _strip_html_text(h1_m.group(1))
+            if h1_m
+            else (_strip_html_text(divider_m.group(1)) if divider_m else "")
+        )
+        slides.append(
+            {
+                "index": index,
+                "id": id_m.group(1) if id_m else None,
+                "eyebrow": _strip_html_text(eyebrow_m.group(1)) if eyebrow_m else "",
+                "title": title,
+            }
+        )
+        index += 1
+    return slides
+
+
+def _parse_template_assets(html: str) -> list[dict[str, str]]:
+    """Embedded seed assets (``const IMG`` keys, else numbered data-URLs)."""
+    block = _IMG_CONST_RE.search(html or "")
+    if block:
+        keys = _IMG_KEY_RE.findall(block.group(1))
+        return [{"name": key, "kind": "embedded"} for key in keys]
+    count = _count_embedded_images(html or "")
+    return [{"name": f"embedded-{i + 1}", "kind": "embedded"} for i in range(count)]
+
+
 def _slugify(title: str) -> str:
     raw = re.sub(r"[^a-z0-9]+", "-", title.strip().lower()).strip("-")
     return raw[:48] or "deck"
 
 
-def _template_dirs() -> list[Path]:
-    """Ordered filesystem candidate dirs for seed HTML + catalog.json."""
+def _parse_template_ref(template_id: str) -> tuple[str | None, str]:
+    """Split ``<namespace>/<stem>``, or a legacy bare stem.
+
+    The namespace is not matched against a fixed set here. Which namespaces
+    exist is configuration, so an unknown one is a 404 from the lookup rather
+    than a 422 from the grammar.
+    """
+    match = _TEMPLATE_REF_RE.fullmatch((template_id or "").strip())
+    if not match:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "template_id must be lowercase kebab-case (a-z, 0-9, hyphens), "
+                "optionally prefixed with a template source namespace, "
+                f"e.g. {_DEFAULT_TEMPLATE_ID}."
+            ),
+        )
+    return match.group("namespace"), match.group("stem")
+
+
+def _qualify_template_id(namespace: str, stem: str) -> str:
+    return f"{namespace}/{stem}"
+
+
+class _TemplateSource(NamedTuple):
+    """One namespaced tree of seed decks.
+
+    ``roots`` is ordered by preference and holds anything traversable: an
+    ``importlib.resources`` package root, so packaged seeds work inside a
+    wheel, and plain directories. Every source reads through the same two
+    helpers below, which is what keeps the resolver free of a branch on whose
+    templates these are.
+    """
+
+    namespace: str
+    origin: str
+    roots: tuple[Traversable, ...]
+
+
+def _abi_template_dirs() -> list[Path]:
+    """Checkout and container paths, for when the package root is not on disk."""
     here = Path(__file__).resolve()
     dirs = [
         here.parents[7] / "assets" / "slides" / "templates",
@@ -324,8 +526,7 @@ def _template_dirs() -> list[Path]:
         Path("assets/slides/templates"),
     ]
     try:
-        root = resources.files("naas_abi.apps.nexus.assets.slides.templates")
-        # Prefer real filesystem path when the package is editable / on disk.
+        root = resources.files(_ABI_PACKAGE)
         as_path = Path(str(root))
         if as_path.is_dir():
             dirs.insert(0, as_path)
@@ -346,96 +547,158 @@ def _template_dirs() -> list[Path]:
     return out
 
 
-def _read_bytes_from_templates_pkg(name: str) -> str | None:
+def _abi_template_source() -> _TemplateSource:
+    """The seeds ABI ships, as an ordinary source."""
+    roots: list[Traversable] = []
     try:
-        root = resources.files("naas_abi.apps.nexus.assets.slides.templates")
-        text = (root / name).read_text(encoding="utf-8")
-        return text if text.strip() else None
+        roots.append(resources.files(_ABI_PACKAGE))
     except Exception:
-        return None
+        pass
+    roots.extend(_abi_template_dirs())
+    return _TemplateSource(_ABI_NAMESPACE, _ABI_ORIGIN, tuple(roots))
 
 
-def _read_template_catalog() -> list[dict]:
-    """Load catalog.json metadata when present (first hit wins)."""
-    raw = _read_bytes_from_templates_pkg("catalog.json")
-    if raw is None:
-        for d in _template_dirs():
-            path = d / "catalog.json"
-            try:
-                if path.is_file():
-                    raw = path.read_text(encoding="utf-8")
-                    break
-            except OSError:
-                continue
+def _template_sources() -> list[_TemplateSource]:
+    """ABI's own seeds, then whatever ``slides_template_sources`` adds.
+
+    Additive rather than a default value for the config list: pydantic replaces
+    a list, it does not merge one, so expressing ABI's seeds as the default
+    would mean any deploy that declares a source of its own silently loses
+    them, and finds out from an empty New Presentation menu.
+    """
+    sources = [_abi_template_source()]
+    for entry in getattr(settings, "slides_template_sources", None) or []:
+        directory = Path(entry.path).expanduser()
+        try:
+            usable = directory.is_dir()
+        except OSError:
+            usable = False
+        if not usable:
+            # Warn, do not raise: the directory can go missing after boot, and
+            # losing one source must not take the whole picker down with it.
+            logger.warning(
+                "Slides template source '%s' is not a directory: %s",
+                entry.namespace,
+                directory,
+            )
+            continue
+        sources.append(
+            _TemplateSource(entry.namespace, str(directory), (directory,))
+        )
+    return sources
+
+
+def _source_named(namespace: str) -> _TemplateSource | None:
+    for source in _template_sources():
+        if source.namespace == namespace:
+            return source
+    return None
+
+
+def _read_from_roots(source: _TemplateSource, name: str) -> str | None:
+    """First root holding a non-empty ``name``."""
+    for root in source.roots:
+        try:
+            text = root.joinpath(name).read_text(encoding="utf-8")
+        except Exception:
+            continue
+        if text.strip():
+            return text
+    return None
+
+
+def _stems_in_roots(source: _TemplateSource) -> list[str]:
+    """Seed stems from the first root that has any."""
+    for root in source.roots:
+        try:
+            names = [getattr(entry, "name", "") for entry in root.iterdir()]
+        except Exception:
+            continue
+        stems = sorted(
+            name[:-5]
+            for name in names
+            if name.endswith(".html") and _SLUG_RE.match(name[:-5])
+        )
+        if stems:
+            return stems
+    return []
+
+
+def _parse_catalog(raw: str | None) -> list[dict]:
     if not raw:
         return []
     try:
         data = json.loads(raw)
-        items = data.get("templates") if isinstance(data, dict) else None
-        if isinstance(items, list):
-            return [t for t in items if isinstance(t, dict) and t.get("id")]
-    except (json.JSONDecodeError, TypeError):
+    except (ValueError, TypeError):
         return []
+    if isinstance(data, dict) and isinstance(data.get("templates"), list):
+        return [t for t in data["templates"] if isinstance(t, dict) and t.get("id")]
+    if isinstance(data, list):
+        return [t for t in data if isinstance(t, dict) and t.get("id")]
     return []
 
 
-def _discover_seed_ids() -> list[str]:
-    """HTML filenames (stem) from packaged assets or filesystem fallbacks."""
-    found: list[str] = []
-    try:
-        root = resources.files("naas_abi.apps.nexus.assets.slides.templates")
-        names = sorted(
-            p.name[:-5]
-            for p in root.iterdir()
-            if getattr(p, "name", "").endswith(".html") and _SLUG_RE.match(p.name[:-5])
-        )
-        if names:
-            found = names
-    except Exception:
-        pass
-    if not found:
-        for d in _template_dirs():
-            try:
-                names = sorted(
-                    p.stem
-                    for p in d.glob("*.html")
-                    if p.is_file() and _SLUG_RE.match(p.stem)
-                )
-            except OSError:
-                continue
-            if names:
-                found = names
-                break
-    if _DEFAULT_TEMPLATE not in found:
-        found.insert(0, _DEFAULT_TEMPLATE)
-    # Stable order: default first, then catalog order, then remaining alpha.
-    catalog_ids = [str(t["id"]) for t in _read_template_catalog()]
+def _catalog_for(source: _TemplateSource) -> list[dict]:
+    return _parse_catalog(_read_from_roots(source, "catalog.json"))
+
+
+def _stems_for(source: _TemplateSource) -> list[str]:
+    """Catalog order first, then anything else on disk, alphabetically.
+
+    Order comes from the source's own ``catalog.json``, so the first row in the
+    picker is that source's editorial choice and no id is named here.
+    """
+    found = set(_stems_in_roots(source))
+    catalog_ids = [str(t["id"]) for t in _catalog_for(source)]
     ordered: list[str] = []
-    for tid in [_DEFAULT_TEMPLATE, *catalog_ids, *sorted(found)]:
-        if tid in found and tid not in ordered:
-            ordered.append(tid)
+    for stem in [*catalog_ids, *sorted(found)]:
+        if stem in found and stem not in ordered:
+            ordered.append(stem)
     return ordered
 
 
+def _discover_seed_ids() -> list[str]:
+    """Qualified ids (``<namespace>/<stem>``) across every source."""
+    ids: list[str] = []
+    for source in _template_sources():
+        for stem in _stems_for(source):
+            qualified = _qualify_template_id(source.namespace, stem)
+            if qualified not in ids:
+                ids.append(qualified)
+    return ids
+
+
 def _seed_template_meta(template_id: str) -> dict[str, str]:
-    """Human metadata for a seed id (catalog override or generated)."""
-    for item in _read_template_catalog():
-        if str(item.get("id")) == template_id:
+    """Human metadata for a seed id (its source's catalog, else generated)."""
+    namespace, stem = _parse_template_ref(template_id)
+    source = _source_named(namespace) if namespace else None
+    if source is None:
+        source = next(
+            (s for s in _template_sources() if stem in _stems_for(s)),
+            _abi_template_source(),
+        )
+    qualified = _qualify_template_id(source.namespace, stem)
+    for item in _catalog_for(source):
+        if str(item.get("id")) == stem:
             preview = item.get("preview") if isinstance(item.get("preview"), dict) else {}
             return {
-                "id": template_id,
-                "name": str(item.get("name") or template_id),
+                "id": qualified,
+                "source": source.namespace,
+                "origin": source.origin,
+                "name": str(item.get("name") or stem),
                 "description": str(item.get("description") or ""),
                 "preview_bg": str(preview.get("bg") or "#f4f4f4"),
                 "preview_panel": str(preview.get("panel") or "#ffffff"),
                 "preview_accent": str(preview.get("accent") or "#0072ce"),
                 "preview_ink": str(preview.get("ink") or "#2d2d2d"),
             }
-    title = template_id.replace("-", " ").replace(" v1", "").title()
+    title = stem.replace("-", " ").replace(" v1", "").title()
     return {
-        "id": template_id,
+        "id": qualified,
+        "source": source.namespace,
+        "origin": source.origin,
         "name": title,
-        "description": f"Deck seed ({template_id})",
+        "description": f"Deck seed ({stem})",
         "preview_bg": "#f4f4f4",
         "preview_panel": "#ffffff",
         "preview_accent": "#0072ce",
@@ -443,37 +706,45 @@ def _seed_template_meta(template_id: str) -> dict[str, str]:
     }
 
 
-def _list_seed_template_records() -> list[dict[str, str]]:
-    return [_seed_template_meta(tid) for tid in _discover_seed_ids()]
+def _list_seed_template_records() -> list[dict]:
+    rows: list[dict] = []
+    for tid in _discover_seed_ids():
+        meta = _seed_template_meta(tid)
+        try:
+            seed = _load_seed_html(tid)
+        except HTTPException:
+            seed = ""
+        meta["slides"] = _parse_slide_outline(seed) if seed else []
+        meta["assets"] = _parse_template_assets(seed) if seed else []
+        rows.append(meta)
+    return rows
 
 
 def _known_template_ids() -> set[str]:
-    return set(_discover_seed_ids())
+    """Qualified ids plus bare stems so older project.json values still apply."""
+    ids = set(_discover_seed_ids())
+    for tid in list(ids):
+        _namespace, stem = _parse_template_ref(tid)
+        ids.add(stem)
+    return ids
 
 
-def _load_seed_html(template_id: str = _DEFAULT_TEMPLATE) -> str:
-    if not _SLUG_RE.match(template_id):
+def _load_seed_html(template_id: str = _DEFAULT_TEMPLATE_ID) -> str:
+    namespace, stem = _parse_template_ref(template_id)
+    name = f"{stem}.html"
+    source = _source_named(namespace) if namespace else None
+    if namespace and source is None:
         raise HTTPException(
-            status_code=422,
-            detail="template_id must be lowercase kebab-case (a-z, 0-9, hyphens).",
+            status_code=404,
+            detail=f"Unknown slides template '{template_id}'.",
         )
-    name = f"{template_id}.html"
-    # Preferred: packaged Nexus assets (importlib.resources).
-    try:
-        root = resources.files("naas_abi.apps.nexus.assets.slides.templates")
-        text = (root / name).read_text(encoding="utf-8")
-        if text.strip():
+    # A bare stem predates namespaces, so it resolves in declaration order:
+    # ABI first, then configured sources.
+    candidates = [source] if source else _template_sources()
+    for candidate in candidates:
+        text = _read_from_roots(candidate, name)
+        if text:
             return text
-    except Exception:
-        pass
-
-    for directory in _template_dirs():
-        path = directory / name
-        try:
-            if path.is_file():
-                return path.read_text(encoding="utf-8")
-        except OSError:
-            continue
     raise HTTPException(
         status_code=404,
         detail=f"Unknown slides template '{template_id}'.",
@@ -484,7 +755,7 @@ class ProjectCreateRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     title: str = Field(..., min_length=1, max_length=120)
     slug: str | None = Field(default=None, max_length=64)
-    template_id: str = Field(default=_DEFAULT_TEMPLATE, max_length=64)
+    template_id: str = Field(default=_DEFAULT_TEMPLATE_ID, max_length=_TEMPLATE_ID_MAX_LEN)
 
 
 class ProjectResponse(BaseModel):
@@ -511,6 +782,12 @@ class DeckUpdateRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     html: str = Field(..., min_length=1)
     message: str = Field(default="Update slides deck", max_length=200)
+    template_id: str | None = Field(default=None, max_length=_TEMPLATE_ID_MAX_LEN)
+
+
+class ApplyTemplateRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    template_id: str = Field(..., min_length=1, max_length=_TEMPLATE_ID_MAX_LEN)
 
 
 class CommitResponse(BaseModel):
@@ -585,7 +862,7 @@ def _coder_ui_url(
         return None
     try:
         return build(access_url=access, owner=owner or "me", name=name)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 
@@ -664,7 +941,7 @@ def _sidecar_tool_call(
         )
         with urlopen(req, timeout=timeout_s) as resp:  # nosec B310 - internal docker DNS only
             return json.loads(resp.read().decode("utf-8"))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return {"error": f"sidecar {tool_name} failed: {exc}"}
 
 
@@ -718,7 +995,14 @@ def _friendly_git_detail(exc: BaseException) -> str:
     """Human detail for Forgejo failures; never dump raw forge JSON."""
     if _is_git_write_race(exc):
         return "Git write raced on the deck branch; retrying is safe"
+    if _is_forgejo_unreachable(exc):
+        return _FORGEJO_UNREACHABLE
     text = str(exc or "").strip()
+    repo_hint = text.split(":", 1)[0].strip() if text else ""
+    if _is_repo_id_message(text) or (
+        isinstance(exc, RepoNotFoundError) and _is_repo_id_message(repo_hint)
+    ):
+        return _repo_missing_detail(repo_hint or _repo_id())
     if (
         len(text) > 180
         or text.startswith("{")
@@ -747,6 +1031,31 @@ def _friendly_coding_detail(exc: BaseException) -> str:
     return text or "Coder runtime temporarily unavailable"
 
 
+def _git_clone_url(
+    sc: SourceControlService, repo_id: str, *, username: str, token: str
+) -> str:
+    """Clone URL the slides sidecar should use for this repo.
+
+    The default targets Forgejo over HTTP, which does not exist in the
+    no-Docker runtime. When source control keeps repos on disk it advertises a
+    ``file://`` clone URL; use that so provisioning does not try to reach
+    ``forgejo:3000`` and fail.
+    """
+    owner, _, name = repo_id.partition("/")
+    try:
+        repo = sc.ensure_repo(owner=owner, name=name)
+        clone_url = str(getattr(repo, "clone_url", "") or "").strip()
+    except Exception:
+        clone_url = ""
+    if clone_url.startswith("file://"):
+        return clone_url
+    creds = f"{quote(username, safe='')}:{quote(token, safe='')}"
+    return (
+        f"{settings.coding_git_clone_scheme}://{creds}"
+        f"@{settings.coding_git_clone_host}/{repo_id}.git"
+    )
+
+
 def _adapter_get_parameters(coding: CodingEnvironmentService, workspace_id: str) -> dict[str, str]:
     adapter = getattr(coding, "_adapter", None)
     getter = getattr(adapter, "get_parameters", None)
@@ -754,7 +1063,7 @@ def _adapter_get_parameters(coding: CodingEnvironmentService, workspace_id: str)
         return {}
     try:
         result = getter(workspace_id=workspace_id)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return {}
     return result if isinstance(result, dict) else {}
 
@@ -804,8 +1113,7 @@ async def list_projects(
     current_user: User = Depends(get_current_user_required),
 ) -> list[ProjectResponse]:
     await require_workspace_access(current_user.id, workspace_id)
-    sc = _get_source_control(request)
-    repo_id = _repo_id()
+    sc, repo_id = _slides_sc(request)
     ws_seg = _workspace_segment(workspace_id)
     ns_prefix = f"{_BRANCH_PREFIX}{ws_seg}/"
 
@@ -856,7 +1164,7 @@ async def list_projects(
     try:
         return await run_in_threadpool(_list)
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise _source_control_http_error(exc) from exc
 
 
 @router.post("/projects", response_model=ProjectResponse)
@@ -878,8 +1186,7 @@ async def create_project(
             status_code=422,
             detail=f"Unknown template_id '{body.template_id}'.",
         )
-    sc = _get_source_control(request)
-    repo_id = _repo_id()
+    sc, repo_id = _slides_sc(request)
     paths = _paths_for(body.workspace_id, slug, legacy=False)
     branch = paths["branch"]
     username = _forge_username(current_user.name or "", str(current_user.email))
@@ -994,9 +1301,7 @@ async def create_project(
     except BranchNameConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(
-            status_code=502, detail=_friendly_git_detail(exc)
-        ) from exc
+        raise _source_control_http_error(exc) from exc
 
     try:
         runtime = await _ensure_runtime_impl(
@@ -1010,7 +1315,7 @@ async def create_project(
             logger.warning(
                 "slides runtime not ensured for %s: %s", slug, runtime.detail
             )
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("slides runtime ensure failed for %s", slug)
 
     return project
@@ -1026,8 +1331,7 @@ async def get_project(
     await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
-    sc = _get_source_control(request)
-    repo_id = _repo_id()
+    sc, repo_id = _slides_sc(request)
 
     def _get() -> ProjectResponse:
         paths = _resolve_project_paths(
@@ -1056,9 +1360,7 @@ async def get_project(
     except RepoNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(
-            status_code=502, detail=_friendly_git_detail(exc)
-        ) from exc
+        raise _source_control_http_error(exc) from exc
 
 
 @router.get("/projects/{slug}/deck", response_model=DeckResponse)
@@ -1077,8 +1379,7 @@ async def get_deck(
     await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
-    sc = _get_source_control(request)
-    repo_id = _repo_id()
+    sc, repo_id = _slides_sc(request)
 
     def _resolve() -> dict[str, str]:
         paths = _resolve_project_paths(
@@ -1095,9 +1396,7 @@ async def get_deck(
     except RepoNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(
-            status_code=502, detail=_friendly_git_detail(exc)
-        ) from exc
+        raise _source_control_http_error(exc) from exc
 
     sidecar_base, sidecar_secret = await lookup_slides_sidecar(
         db,
@@ -1142,9 +1441,7 @@ async def get_deck(
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(
-            status_code=502, detail=_friendly_git_detail(exc)
-        ) from exc
+        raise _source_control_http_error(exc) from exc
 
 
 @router.put("/projects/{slug}/deck", response_model=DeckResponse)
@@ -1159,8 +1456,7 @@ async def put_deck(
     await require_workspace_access(current_user.id, body.workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
-    sc = _get_source_control(request)
-    repo_id = _repo_id()
+    sc, repo_id = _slides_sc(request)
     username = _forge_username(current_user.name or "", str(current_user.email))
     author_name = current_user.name or username
     author_email = str(current_user.email)
@@ -1208,6 +1504,8 @@ async def put_deck(
 
                 data["workspace_id"] = body.workspace_id
                 data["updated_at"] = datetime.now(UTC).isoformat()
+                if body.template_id:
+                    data["template_id"] = body.template_id
                 sc.upsert_file(
                     repo_id=repo_id,
                     path=paths["project_path"],
@@ -1232,9 +1530,36 @@ async def put_deck(
     except RepoNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SourceControlError as exc:
+        raise _source_control_http_error(exc) from exc
+
+
+@router.post("/projects/{slug}/apply-template", response_model=DeckResponse)
+async def apply_template(
+    slug: str,
+    body: ApplyTemplateRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> DeckResponse:
+    """Rewrite the open deck from a seed template (HTML source of truth)."""
+    if body.template_id not in _known_template_ids():
         raise HTTPException(
-            status_code=502, detail=_friendly_git_detail(exc)
-        ) from exc
+            status_code=422,
+            detail=f"Unknown template_id '{body.template_id}'.",
+        )
+    seed = _load_seed_html(body.template_id)
+    return await put_deck(
+        slug,
+        DeckUpdateRequest(
+            workspace_id=body.workspace_id,
+            html=seed,
+            message=f"Apply template {body.template_id}",
+            template_id=body.template_id,
+        ),
+        request,
+        current_user,
+        db,
+    )
 
 
 @router.get("/projects/{slug}/history", response_model=list[CommitResponse])
@@ -1248,8 +1573,7 @@ async def list_history(
     await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
-    sc = _get_source_control(request)
-    repo_id = _repo_id()
+    sc, repo_id = _slides_sc(request)
 
     def _hist() -> list[CommitResponse]:
         paths = _resolve_project_paths(
@@ -1272,13 +1596,40 @@ async def list_history(
     except RepoNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise _source_control_http_error(exc) from exc
 
 
 def _build_sidecar_base(*, coder_username: str | None, name: str) -> str | None:
     if not coder_username:
         return None
     return f"http://coder-{coder_username}-{name.lower()}:{_SIDECAR_PORT}"
+
+
+def _adapter_runtime_binding(
+    coding: CodingEnvironmentService, environment_id: str
+) -> tuple[str, str] | None:
+    """Where the adapter actually started the sidecar, if it says.
+
+    Coder resolves the sidecar by container DNS, so ``_build_sidecar_base``
+    can name it before it exists. LocalDirectoryAdapter instead picks a
+    loopback port and a secret at provision time and reports them here. This
+    is the same call the Code path makes in
+    ``/coding-environments/sandbox/runtime``; without it Slides probes a
+    Coder hostname that does not resolve outside Docker.
+    """
+    getter = getattr(coding, "get_runtime_binding", None)
+    if not callable(getter):
+        return None
+    try:
+        binding = getter(workspace_id=environment_id)
+    except Exception:
+        return None
+    if not binding:
+        return None
+    base, secret = binding
+    if not base or not secret:
+        return None
+    return str(base), str(secret)
 
 
 async def lookup_slides_sidecar(
@@ -1289,7 +1640,7 @@ async def lookup_slides_sidecar(
     slug: str,
 ) -> tuple[str | None, str | None]:
     """Return (sidecar_base, sidecar_secret) for an open Slides deck, if bound."""
-    if not workspace_id or not user_id or not slug or not _SLUG_RE.match(slug):
+    if db is None or not workspace_id or not user_id or not slug or not _SLUG_RE.match(slug):
         return None, None
     labels = _runtime_labels(workspace_id, slug)
     result = await db.execute(
@@ -1318,8 +1669,7 @@ async def _ensure_runtime_impl(
     db: AsyncSession | None,
 ) -> RuntimeResponse:
     # Ownership gate before provisioning compute.
-    sc_gate = _get_source_control(request)
-    repo_gate = _repo_id()
+    sc_gate, repo_gate = _slides_sc(request)
 
     def _owned() -> dict[str, str] | None:
         return _resolve_project_paths(
@@ -1360,8 +1710,8 @@ async def _ensure_runtime_impl(
             coder_workspace=name,
             branch=branch,
         )
-    sc = _get_source_control(request)
-    repo_id = _repo_id()
+    sc = sc_gate
+    repo_id = repo_gate
 
     def _pick_template() -> tuple[str, str] | None:
         templates = coding.list_templates()
@@ -1408,7 +1758,7 @@ async def _ensure_runtime_impl(
                 try:
                     await db.delete(existing)
                     await db.commit()
-                except Exception:  # noqa: BLE001
+                except Exception:
                     await db.rollback()
                 existing = None
         if existing is not None:
@@ -1423,11 +1773,20 @@ async def _ensure_runtime_impl(
                         workspace_id=existing.id,
                         params=start_params,
                     )
-                if expected_base and not existing.sidecar_base:
+                # The adapter is authoritative: a local runtime moves ports
+                # across restarts, so a stored base can be stale (or a Coder
+                # hostname written before the runtime was known).
+                bound = await run_in_threadpool(
+                    _adapter_runtime_binding, coding, existing.id
+                )
+                if bound is not None:
+                    existing.sidecar_base, existing.sidecar_secret = bound
+                elif expected_base and not existing.sidecar_base:
                     existing.sidecar_base = expected_base
+                if db.dirty:
                     try:
                         await db.commit()
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         await db.rollback()
                 has_creds = bool(existing.sidecar_base and existing.sidecar_secret)
                 sidecar_ready = False
@@ -1500,11 +1859,7 @@ async def _ensure_runtime_impl(
             username=username,
         )
         token = sc.mint_git_token(user_id=username)
-        creds = f"{quote(username, safe='')}:{quote(token, safe='')}"
-        repo_url = (
-            f"{settings.coding_git_clone_scheme}://{creds}"
-            f"@{settings.coding_git_clone_host}/{repo_id}.git"
-        )
+        repo_url = _git_clone_url(sc, repo_id, username=username, token=token)
         ws_secret = secrets.token_hex(16)
         ws_base = expected_base
         claims: dict[str, str] = {"sub": current_user.id}
@@ -1593,6 +1948,9 @@ async def _ensure_runtime_impl(
             if baked and baked != ws_secret:
                 adopted = True
                 ws_secret = baked
+        bound = await run_in_threadpool(_adapter_runtime_binding, coding, status.id)
+        if bound is not None:
+            ws_base, ws_secret = bound
     except WorkspaceNameConflictError as exc:
         # Belt-and-suspenders if list missed the workspace.
         try:
@@ -1628,6 +1986,11 @@ async def _ensure_runtime_impl(
                 baked = (on_ws or {}).get("sidecar_secret") or ""
                 if baked:
                     ws_secret = baked
+            bound = await run_in_threadpool(
+                _adapter_runtime_binding, coding, status.id
+            )
+            if bound is not None:
+                ws_base, ws_secret = bound
         except CodingEnvironmentError as adopt_exc:
             return RuntimeResponse(
                 ensured=False,
@@ -1664,7 +2027,10 @@ async def _ensure_runtime_impl(
         sidecar_ready = await run_in_threadpool(_wait_for_sidecar, ws_base, ws_secret)
     if db is not None:
         try:
-            # Upsert-style: replace any stale row for this label.
+            # Replace any stale row for this label, then upsert on the id.
+            # Re-adopting the same environment keeps status.id, so inserting a
+            # fresh row would collide on the primary key and roll the whole
+            # binding back; merge updates it in place instead.
             prior = await db.execute(
                 select(CodingEnvironmentModel).where(
                     CodingEnvironmentModel.workspace_id == workspace_id,
@@ -1672,10 +2038,10 @@ async def _ensure_runtime_impl(
                     CodingEnvironmentModel.label == label,
                 )
             )
-            old = prior.scalars().first()
-            if old is not None and old.id != status.id:
-                await db.delete(old)
-            db.add(
+            for old in prior.scalars().all():
+                if old.id != status.id:
+                    await db.delete(old)
+            await db.merge(
                 CodingEnvironmentModel(
                     id=status.id,
                     workspace_id=workspace_id,
@@ -1687,7 +2053,7 @@ async def _ensure_runtime_impl(
                 )
             )
             await db.commit()
-        except Exception:  # noqa: BLE001
+        except Exception:
             await db.rollback()
             logger.exception("Failed to persist slides runtime binding for %s", slug)
 
@@ -1751,8 +2117,7 @@ async def get_project_tree(
     await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
-    sc = _get_source_control(request)
-    repo_id = _repo_id()
+    sc, repo_id = _slides_sc(request)
 
     def _tree() -> ProjectTreeResponse:
         paths = _resolve_project_paths(
@@ -1849,17 +2214,34 @@ async def get_project_tree(
     except RepoNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise _source_control_http_error(exc) from exc
+
+
+class SlideOutlineItem(BaseModel):
+    index: int
+    id: str | None = None
+    eyebrow: str = ""
+    title: str = ""
+
+
+class TemplateAssetItem(BaseModel):
+    name: str
+    kind: str = "embedded"
 
 
 class SeedTemplateResponse(BaseModel):
     id: str
+    # Namespace the id is prefixed with, and the tree it was read from.
+    source: str = _ABI_NAMESPACE
+    origin: str = _ABI_ORIGIN
     name: str
     description: str = ""
     preview_bg: str = "#f4f4f4"
     preview_panel: str = "#ffffff"
     preview_accent: str = "#0072ce"
     preview_ink: str = "#2d2d2d"
+    slides: list[SlideOutlineItem] = Field(default_factory=list)
+    assets: list[TemplateAssetItem] = Field(default_factory=list)
 
 
 @router.get("/templates", response_model=list[SeedTemplateResponse])
@@ -1867,6 +2249,6 @@ async def list_seed_templates(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
 ) -> list[SeedTemplateResponse]:
-    """List Nexus seed templates available for New Presentation."""
+    """List seed templates with slide outlines for the Slides sidebar."""
     await require_workspace_access(current_user.id, workspace_id)
     return [SeedTemplateResponse(**row) for row in _list_seed_template_records()]

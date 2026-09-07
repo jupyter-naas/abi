@@ -225,7 +225,7 @@ def validated_provider_endpoint(config: ProviderConfig) -> str | None:
 async def complete_with_anthropic(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
 ) -> str:
     """Complete chat using Anthropic Claude API."""
     if not HAS_ANTHROPIC:
@@ -270,7 +270,7 @@ async def complete_with_anthropic(
 async def complete_with_openai(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
 ) -> str:
     """Complete chat using OpenAI API."""
     if not HAS_OPENAI:
@@ -310,7 +310,7 @@ async def complete_with_openai(
 async def complete_with_ollama(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
 ) -> str:
     """Complete chat using Ollama local API (non-streaming). Supports multimodal (images)."""
     # Falls back to the platform-resolved endpoint, which is not necessarily
@@ -349,7 +349,7 @@ async def complete_with_ollama(
 async def stream_with_ollama(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
 ) -> AsyncGenerator[str, None]:
     """Stream chat using Ollama local API. Supports multimodal (images).
 
@@ -410,7 +410,7 @@ async def stream_with_ollama(
 async def stream_with_openai_compatible(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
 ) -> AsyncGenerator[str, None]:
     """Stream chat using OpenAI-compatible API (OpenAI, XAI, Mistral, OpenRouter, etc)."""
     import json
@@ -526,7 +526,7 @@ async def stream_with_openai_compatible(
 async def complete_with_cloudflare(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
 ) -> str:
     """Complete chat using Cloudflare Workers AI API."""
     # Use env vars as fallback
@@ -586,7 +586,7 @@ async def complete_with_cloudflare(
 async def stream_with_cloudflare(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
 ) -> AsyncGenerator[str, None]:
     """Stream chat using Cloudflare Workers AI API with SSE."""
     import json
@@ -653,7 +653,7 @@ async def stream_with_cloudflare(
 async def complete_with_custom(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
 ) -> str:
     """Complete chat using custom OpenAI-compatible endpoint."""
     endpoint = validated_provider_endpoint(config)
@@ -695,9 +695,10 @@ async def complete_with_custom(
 async def complete_chat(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
+    *,
     thread_id: str | None = None,
-    injection_preamble: str | None = None,
+    injection_preamble: str | None,
 ) -> str:
     """
     Route chat completion to the appropriate provider.
@@ -730,9 +731,10 @@ async def complete_chat(
 async def complete_with_abi(
     messages: list[Message],
     config: ProviderConfig,
-    system_prompt: str | None = None,
+    system_prompt: str | None,
+    *,
     thread_id: str | None = None,
-    injection_preamble: str | None = None,
+    injection_preamble: str | None,
 ) -> str:
     del system_prompt
 
@@ -750,7 +752,10 @@ async def complete_with_abi(
             latest_user_message = f"{injection_preamble.strip()}\n\n{latest_user_message}"
 
         # Per-request isolation: never execute against the cached singleton.
+        llm_model = (getattr(config, "llm_model", None) or "").strip() or None
         agent = _duplicate_inprocess_agent(template_agent, thread_id)
+        if llm_model:
+            _retarget_inprocess_chat_model(agent, llm_model)
 
         if hasattr(agent, "ainvoke"):
             return await agent.ainvoke(latest_user_message, thread_id=thread_id)
@@ -1301,10 +1306,46 @@ def _resolve_inprocess_abi_agent(agent_name: str):
         try:
             instance = factory()
         except Exception:
+            from naas_abi_core import logger
+
+            logger.exception("In-process ABI agent factory failed for %s", raw_target)
             return None
 
         _INPROCESS_AGENT_INSTANCES[factory_key] = instance
         return instance
+
+
+def _retarget_inprocess_chat_model(agent: Any, model_id: str) -> None:
+    """Swap the chat model on a duplicated agent without rebuilding intents.
+
+    ``Agent.New(model_id=...)`` reconstructs IntentMapper and re-embeds, which
+    401s when OPENAI_API_KEY is actually an OpenRouter key. Keep the cached
+    mapper; only rebind tools onto the requested model.
+    """
+    from naas_abi.agents.slides import load_slides_chat_model
+    from naas_abi_core.services.agent.tools.utils import can_bind_tools
+
+    chat_model = load_slides_chat_model(model_id)
+    base = getattr(chat_model, "model", chat_model)
+    agent._chat_model = base
+    tools_to_bind: list[Any] = []
+    tools_to_bind.extend(getattr(agent, "_structured_tools", []) or [])
+    tools_to_bind.extend(getattr(agent, "_native_tools", []) or [])
+    if tools_to_bind and can_bind_tools(base):
+        agent._chat_model_with_tools = base.bind_tools(tools_to_bind)
+        requires_ws = getattr(type(agent), "_requires_workspace", None)
+        if callable(requires_ws):
+            gated = [t for t in tools_to_bind if not requires_ws(t)]
+            agent._chat_model_without_workspace_tools = (
+                base.bind_tools(gated)
+                if len(gated) != len(tools_to_bind)
+                else agent._chat_model_with_tools
+            )
+        else:
+            agent._chat_model_without_workspace_tools = agent._chat_model_with_tools
+        return
+    agent._chat_model_with_tools = base
+    agent._chat_model_without_workspace_tools = base
 
 
 def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
@@ -1394,13 +1435,31 @@ async def stream_with_abi_inprocess(
     messages: list[Message],
     config: ProviderConfig,
     thread_id: str,
-    user_context_preamble: str | None = None,
+    *,
+    user_context_preamble: str | None,
 ) -> AsyncGenerator[str | dict[str, Any], None]:
     """Stream chat by invoking ABI agent directly in-process.
 
     ``user_context_preamble`` is prepended to the latest user message (separated
     by a blank line) so skills catalog and first-turn profile context reach
     agents that ignore the Nexus ``system_prompt``.
+
+    Required, and keyword-only, because it defaulted to ``None`` and the
+    OpenAI-compatible gateway then passed three positional arguments and ran
+    every turn with no idea who it was acting for. The omission compiled, the
+    request succeeded, the answer read plausibly, and nothing anywhere recorded
+    that the agent had been told nothing about its caller. An argument whose
+    absence has no symptom has to be one the language refuses to let you leave
+    out. Keyword-only as well, so it cannot be passed by position and then be
+    silently repointed by a parameter inserted ahead of it.
+
+    A caller with genuinely nothing to inject passes ``None`` on purpose. That
+    is a decision in the diff; a default is not.
+
+    This is the streaming spelling of what 013567ec23 did to
+    ``injection_preamble`` on the completion path. That one survived here
+    because the same control has a different name on each path, which is worth
+    knowing the next time one of them is tightened.
     """
     import asyncio
     import json
@@ -1440,21 +1499,17 @@ async def stream_with_abi_inprocess(
     # (the previous behaviour) caused cross-conversation response leakage when
     # two requests overlapped — see jupyter-naas/abi#991.
     assert thread_id is not None, "thread_id is required"
-    agent = None
+    agent = _duplicate_inprocess_agent(template_agent, thread_id)
     if llm_model:
-        new_fn = getattr(type(template_agent), "New", None)
-        if callable(new_fn):
-            try:
-                from naas_abi_core.services.agent.Agent import AgentSharedState
-
-                agent = new_fn(
-                    agent_shared_state=AgentSharedState(thread_id=str(thread_id)),
-                    model_id=llm_model,
-                )
-            except TypeError:
-                agent = None
-    if agent is None:
-        agent = _duplicate_inprocess_agent(template_agent, thread_id)
+        try:
+            _retarget_inprocess_chat_model(agent, llm_model)
+        except Exception:
+            logger.exception("Failed to retarget in-process agent to %s", llm_model)
+            yield (
+                f"\n\n**Error:** Could not switch slides chat to {llm_model}. "
+                "Check the API logs and retry."
+            )
+            return
 
     logger.debug(
         f"Agent.state.thread_id: {getattr(getattr(agent, 'state', None), 'thread_id', None)}"
@@ -1502,6 +1557,8 @@ async def stream_with_abi_inprocess(
         return
 
     stream_iter = iter(agent.stream_invoke(latest_user_message))
+    emitted = False
+    final_replay: list[str] = []
 
     while True:
         try:
@@ -1521,11 +1578,14 @@ async def stream_with_abi_inprocess(
             if text == "[DONE]" or event_name == "done":
                 break
 
-            # Only forward the real-time ai_message events.
-            # Skip "message" events - those are a post-hoc replay of the final
-            # state and would duplicate the content already streamed via ai_message.
+            # Prefer live ai_message deltas. The closing "message" replay is the
+            # only text when the graph errors before an assistant token (for
+            # example a recursion-limit stop).
             if event_name == "ai_message" and text.strip():
+                emitted = True
                 yield text
+            elif event_name == "message" and text.strip():
+                final_replay.append(text.strip())
             elif event_name == "tool_usage" and text.strip():
                 yield {"event": "tool_usage", "tool": text}
             elif event_name == "tool_response" and text.strip():
@@ -1535,4 +1595,8 @@ async def stream_with_abi_inprocess(
             elif event_name == "agent_routing" and text.strip():
                 yield {"event": "agent_routing", "agent": text}
         elif isinstance(event, str) and event.strip():
+            emitted = True
             yield event
+
+    if not emitted and final_replay:
+        yield "\n".join(final_replay)

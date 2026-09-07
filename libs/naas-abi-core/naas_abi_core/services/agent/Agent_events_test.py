@@ -306,3 +306,39 @@ def test_agent_invocation_completed_event_class_constructs() -> None:
         workspace_id="w",
     )
     assert evt.content_length == 42
+
+
+def test_every_tool_response_in_a_turn_is_notified() -> None:
+    """Two tools in one turn must produce two tool_response notifications.
+
+    LangChain leaves ``ToolMessage.id`` unset, so deduping the stream on it
+    collapses every response after the first into one key. The Slides preview
+    only reloads on ``tool_response``, so a deck written by the second tool of
+    a turn never refreshed.
+    """
+    first = ToolMessage(content="{}", name="list_slides_sections", tool_call_id="call-1")
+    second = ToolMessage(content="{}", name="replace_in_slides_deck", tool_call_id="call-2")
+    assert first.id is None and second.id is None
+
+    notified: dict[Any, bool] = {}
+    delivered: list[str] = []
+    for message in (first, second):
+        key = Agent._tool_response_key(message)
+        if key not in notified:
+            delivered.append(str(message.name))
+            notified[key] = True
+
+    assert delivered == ["list_slides_sections", "replace_in_slides_deck"]
+
+
+def test_tool_response_key_still_dedupes_a_replayed_message() -> None:
+    """The same tool call seen twice must stay deduped."""
+    message = ToolMessage(content="{}", name="write_slides_deck", tool_call_id="call-9")
+    assert Agent._tool_response_key(message) == Agent._tool_response_key(message)
+
+
+def test_tool_response_key_falls_back_when_there_is_no_tool_call_id() -> None:
+    """Messages without a tool_call_id must not all collapse onto one key."""
+    a = AIMessage(content="a")
+    b = AIMessage(content="b")
+    assert Agent._tool_response_key(a) != Agent._tool_response_key(b)

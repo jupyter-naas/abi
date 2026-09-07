@@ -242,6 +242,23 @@ class FeatureFlagsConfig(BaseModel):
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
 
 
+class SlidesTemplateSourceConfig(BaseModel):
+    """An extra tree of Nexus Slides seed decks, declared by the deploy.
+
+    ABI serves the seeds it ships under ``abi/``. Anything else in the picker
+    is named here rather than in ABI, so the module never has to know which
+    application installed it. Validated again by the API's own model.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Prefixed onto every template id from this tree (``<namespace>/<id>``).
+    namespace: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=32)
+
+    # Directory of ``<id>.html`` seeds plus an optional ``catalog.json``.
+    path: str = Field(min_length=1)
+
+
 class UserSeedConfig(BaseModel):
     """User definition applied on startup (create by email if missing)."""
 
@@ -440,6 +457,9 @@ class NexusConfig(BaseModel):
     tenant: TenantConfig = Field(default_factory=TenantConfig)
     feature_flags: FeatureFlagsConfig = Field(default_factory=FeatureFlagsConfig)
     marketplace: MarketplaceConfig = Field(default_factory=MarketplaceConfig)
+    slides_template_sources: list[SlidesTemplateSourceConfig] = Field(
+        default_factory=list
+    )
     users: list[UserSeedConfig] = Field(default_factory=list)
     organizations: list[OrganizationSeedConfig] = Field(default_factory=list)
 
@@ -551,6 +571,11 @@ class ABIModule(BaseModule):
                 tenant:
                     tab_title: "My Portal"
                     favicon_url: "https://example.com/favicon.ico"
+                # Extra Slides seed trees. Additive: ABI's own seeds are
+                # always served, under the reserved "abi" namespace.
+                slides_template_sources:
+                    - namespace: "acme"
+                      path: "src/acme/assets/slides/templates"
                 users:
                     - email: "owner@example.com"
                       name: "Owner User"
@@ -598,6 +623,20 @@ class ABIModule(BaseModule):
         # whichever provider registered first.
         abi_agent_provider: str | None = None
 
+        # Optional slides-only override. Nexus Slides briefs use this instead
+        # of ``abi_agent_model`` so general chat can stay on a cheaper default.
+        # It is not a preference: a slides turn runs on this model whatever the
+        # client selected, so a value here must be a reasoning-capable id that
+        # some loaded module registers, and ``on_initialized`` fails the boot
+        # if it does not resolve.
+        #
+        # Empty by default because ABI has no id it can ship here. Slides want
+        # a reasoning model, every such id belongs to a marketplace or
+        # downstream module, and naming one made ABI's own boot fail ABI's own
+        # check on an install where that module is not enabled. Unset means
+        # slides follow ``abi_agent_model``, which the engine already resolves.
+        abi_slides_agent_model: str = ""
+
         # Canonical model id used by OntologyEngineerAgent. Same registry
         # semantics as ``abi_agent_model``.
         ontology_engineer_model: str = "claude-sonnet-5"
@@ -611,6 +650,28 @@ class ABIModule(BaseModule):
         nexus_config: NexusConfig = Field(default_factory=NexusConfig)
 
     def on_initialized(self):
+        # Fail the boot, not the twentieth deck. Slides ignore the model the
+        # client selected, so this one id is the only model a slides turn can
+        # run on and a typo in it breaks every deck rather than one.
+        #
+        # Checked here rather than in ``on_load``: module load order is a
+        # topological sort over declared dependencies, and nothing makes a
+        # model-providing module a dependency of ``naas_abi``, so the module
+        # that registers the slides model routinely loads after this one (on
+        # the install that found this, index 25 against 9) and a correct id
+        # would not be in the registry yet.
+        # ``on_initialized`` runs once every module has loaded,
+        # which is the point the engine already uses for ``validate_defaults``.
+        # It runs before ``super()`` so a bad id is reported as itself instead
+        # of as whatever the Nexus bootstrap fails on afterwards.
+        if self._engine.services.model_registry_available():
+            from naas_abi.agents.slides import validate_configured_slides_model
+
+            validate_configured_slides_model(
+                self._engine.services.model_registry,
+                self.configuration.abi_slides_agent_model,
+            )
+
         super().on_initialized()
         # Initialize Nexus settings and service registry
 

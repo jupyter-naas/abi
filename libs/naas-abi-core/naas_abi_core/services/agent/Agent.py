@@ -25,6 +25,7 @@ from typing import (
 
 import pydash as pd
 from langchain_core.language_models import BaseChatModel
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, StructuredTool, Tool, tool
 from langgraph.prebuilt import InjectedState
 from naas_abi_core.models.Model import ChatModel
@@ -60,6 +61,7 @@ from naas_abi_core.services.agent.context import (
     agent_user_id,
     agent_workspace_id,
     coder_workspace_base,
+    slides_turn_active,
 )
 from naas_abi_core.services.agent.ontologies.modules.AgentEventOntology import (
     AgentAIMessageEmitted,
@@ -117,6 +119,33 @@ def _reset_shared_checkpointer_for_tests() -> None:
 
 
 atexit.register(_close_shared_checkpointer)
+
+
+def _friendly_model_invoke_error(exc: BaseException) -> str:
+    """One-line human error. Never dump raw provider JSON into the chat bubble."""
+    text = str(exc or "").strip()
+    lowered = text.lower()
+    if "recursion limit" in lowered:
+        return (
+            "The agent hit its step limit before finishing. "
+            "Open the deck and send the brief again."
+        )
+    if (
+        "429" in text
+        or "rate-limited" in lowered
+        or "rate limited" in lowered
+        or "temporarily rate-limited" in lowered
+    ):
+        return (
+            "This model is rate limited. Pick another model in the agent menu and try again."
+        )
+    if (
+        "error code:" in lowered
+        or "provider returned error" in lowered
+        or (len(text) > 160 and ("{" in text or "'error'" in text or '"error"' in text))
+    ):
+        return "The model provider failed. Pick another model and try again."
+    return text or "The model provider failed. Pick another model and try again."
 
 
 def create_checkpointer() -> BaseCheckpointSaver:
@@ -1455,7 +1484,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                     **routing_update,
                     "messages": [
                         AIMessage(
-                            content=f"I'm sorry, I encountered an error while processing your request:\n\n{e}"
+                            content=_friendly_model_invoke_error(e)
                         )
                     ],
                 },
@@ -1515,6 +1544,35 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             goto="__end__",
             update={**routing_update, "messages": [response]},
         )
+
+    @staticmethod
+    def _merge_direct_tool_contents(messages: list[ToolMessage]) -> Any:
+        """Build the reply for a turn whose tools are all ``return_direct``.
+
+        One response is forwarded untouched, so structured content blocks reach
+        the client exactly as the tool produced them.
+
+        Multiple text responses are joined into one reply. When any response
+        contains structured blocks, concatenate the blocks in call order and
+        wrap plain strings as text blocks. Keep one assistant message without
+        discarding images or other non-text content.
+        """
+        if len(messages) == 1:
+            return messages[0].content
+        if all(isinstance(message.content, str) for message in messages):
+            return "\n\n".join(
+                message.content
+                for message in messages
+                if isinstance(message.content, str) and message.content.strip()
+            )
+        blocks: list[str | dict] = []
+        for message in messages:
+            if isinstance(message.content, str):
+                if message.content:
+                    blocks.append({"type": "text", "text": message.content})
+            else:
+                blocks.extend(message.content)
+        return blocks
 
     def call_tools(self, state: ABIAgentState) -> list[Command]:
         # Check if messages are present in the state.
@@ -1679,6 +1737,20 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             results[-1], "update.messages[-1]", None
         )
         logger.debug(f"last_tool_reponse: {last_tool_reponse}")
+
+        # Every tool response this turn produced, in call order. A turn can
+        # carry more than one: the model is free to ask for several tools at
+        # once, and when they are all return_direct every one of those
+        # responses is an answer addressed to the user, not just the last.
+        direct_tool_responses: list[ToolMessage] = [
+            message
+            for message in (
+                pd.get(result, "update.messages[-1]", None) for result in results
+            )
+            if isinstance(message, ToolMessage)
+            and isinstance(message.name, str)
+            and not message.name.startswith("transfer_to_")
+        ]
         if had_tool_error:
             # A tool call failed — including the case where a sub-agent
             # hallucinated a ``transfer_to_*`` handoff tool it does not own and
@@ -1708,7 +1780,13 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 results.append(
                     Command(
                         update={
-                            "messages": [AIMessage(content=last_tool_reponse.content)]
+                            "messages": [
+                                AIMessage(
+                                    content=self._merge_direct_tool_contents(
+                                        direct_tool_responses
+                                    )
+                                )
+                            ]
                         }
                     )
                 )
@@ -1785,6 +1863,19 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                     **identity,
                 )
             )
+
+    @staticmethod
+    def _tool_response_key(message: Any) -> Any:
+        """Dedupe key for a tool response seen on the stream.
+
+        LangChain leaves ``ToolMessage.id`` unset, so keying on it makes every
+        response after the first in a turn collide on ``None`` and get
+        dropped. ``tool_call_id`` is the identifier the model actually
+        assigned; fall back to object identity when there is none.
+        """
+        if isinstance(message, dict):
+            return message.get("tool_call_id") or id(message)
+        return getattr(message, "tool_call_id", None) or message.id or id(message)
 
     def _notify_tool_response(self, message: AnyMessage):
         self._event_queue.put(ToolResponseEvent(payload=message))
@@ -1954,9 +2045,18 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
         notified = {}
 
+        stream_config: RunnableConfig = {
+            "configurable": {"thread_id": self._state.thread_id}
+        }
+        # Default LangGraph limit is 25. A slides research loop (search, then
+        # write 6-8 sections) needs more steps than a normal chat turn. This
+        # also covers a deck requested from the main chat, where no deck is
+        # open yet at the start of the turn.
+        if slides_turn_active():
+            stream_config["recursion_limit"] = 80
         for chunk in self.graph.stream(
             {"messages": [human_message]},
-            config={"configurable": {"thread_id": self._state.thread_id}},
+            config=stream_config,
             subgraphs=True,
         ):
             source, payload = chunk
@@ -2015,12 +2115,13 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                             and isinstance(last_message.name, str)
                             and last_message.name.startswith("transfer_to_")
                         )
+                        response_key = self._tool_response_key(last_message)
                         if (
-                            last_message.id not in notified
+                            response_key not in notified
                             and is_handoff_tool_response is False
                         ):
                             self._notify_tool_response(last_message)
-                            notified[last_message.id] = True
+                            notified[response_key] = True
                     else:
                         if "tool_call_id" in last_message:
                             if last_message["tool_call_id"] not in notified:
@@ -2238,9 +2339,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 logger.opt(exception=True).error(
                     f"Agent invoke thread error for '{self._name}': {e}"
                 )
-                final_state = (
-                    f"I encountered an error while processing your request: {e}"
-                )
+                final_state = _friendly_model_invoke_error(e)
             self._event_queue.put(FinalStateEvent(payload=final_state))
 
         from threading import Thread

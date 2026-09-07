@@ -16,7 +16,12 @@ import { useAgentsStore } from '@/stores/agents';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
-import { dispatchSlidesDeckUpdated, useSlidesStore } from '@/stores/slides';
+import { dispatchSlidesDeckUpdated, isSlidesWriteTool, useSlidesStore } from '@/stores/slides';
+import {
+  slidesDeckCardFromToolCalls,
+  slidesDeckTitleFromToolOutput,
+} from '@/components/slides/slides-deck-card';
+import { SlidesDeckCardView } from '@/components/slides/slides-deck-card-view';
 import { dispatchCodeFileUpdated, useCodeStore } from '@/stores/code';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
@@ -26,6 +31,7 @@ import '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector.css';
 import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
+import { humanizeChatProviderError } from '@/lib/chat-provider-error';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import { getLogoUrl } from '@/lib/logo-url';
 import {
@@ -2011,6 +2017,9 @@ export function ChatInterface({
         // async function so it can't rely on the freshly-set state (closures
         // capture stale values).
         let assistantMessageIdRef: string | null = null;
+        // Slides raise the model inside the request, so the composer's choice
+        // is only a guess until the opening stream frame reports the real one.
+        let effectiveModelId = llmModel;
         {
           const convNow = useWorkspaceStore.getState().conversations.find(c => c.id === conversationId);
           const lastMsg = convNow?.messages[convNow.messages.length - 1];
@@ -2075,6 +2084,9 @@ export function ChatInterface({
           });
           streamActivityLine = prefix === 'Routing to' ? `${prefix} ${name}` : name;
           hasDetailedActivity = true;
+          if (isSlidesWriteTool(rawTool)) {
+            useSlidesStore.getState().setAgentWriting(true);
+          }
         };
 
         const handleToolResponseEvent = (output: string) => {
@@ -2099,18 +2111,24 @@ export function ChatInterface({
 
           // After Abi writes a Slides deck, nudge the open preview to reload.
           const raw = (target.rawName || target.toolName || '').toLowerCase();
-          if (
-            raw.includes('write_slides') ||
-            raw.includes('replace_in_slides')
-          ) {
+          if (isSlidesWriteTool(raw)) {
             let slug: string | undefined;
+            let writeFailed = false;
             try {
-              const parsed = JSON.parse(output) as { slug?: string };
+              const parsed = JSON.parse(output) as { slug?: string; error?: unknown };
               if (typeof parsed?.slug === 'string') slug = parsed.slug;
+              if (parsed && parsed.error) writeFailed = true;
             } catch {
               /* tool output may be plain text */
             }
-            dispatchSlidesDeckUpdated({ slug, source: target.rawName || target.toolName });
+            useSlidesStore.getState().setAgentWriting(false);
+            if (!writeFailed) {
+              // Abi names a still-untitled deck after the brief on its first
+              // write, so pick the new name up for the pane and sidebar.
+              const deckTitle = slidesDeckTitleFromToolOutput(output);
+              if (deckTitle) useSlidesStore.getState().setSelectedTitle(deckTitle);
+              dispatchSlidesDeckUpdated({ slug, source: target.rawName || target.toolName });
+            }
           }
           if (
             raw.includes('write_coding') ||
@@ -2328,6 +2346,20 @@ export function ChatInterface({
                   }
                 }
 
+                // The backend reports the model it actually ran this turn on.
+                // Adopt it so the footer and the final metadata PATCH stop
+                // echoing the selection we sent.
+                if (typeof parsed.llm_model === 'string' && parsed.llm_model) {
+                  effectiveModelId = parsed.llm_model as string;
+                  if (conversationId && assistantMessageIdRef) {
+                    useWorkspaceStore.getState().setMessageModelId(
+                      conversationId,
+                      assistantMessageIdRef,
+                      effectiveModelId,
+                    );
+                  }
+                }
+
                 if (parseEvent(parsed as Record<string, unknown>)) {
                   renderStreamingMessage(true);
                 }
@@ -2428,7 +2460,7 @@ export function ChatInterface({
                   output: t.output ?? null,
                 })),
                 sources: streamSources,
-                llm_model: llmModel,
+                llm_model: effectiveModelId,
               }),
             },
           ).catch(() => { /* non-blocking */ });
@@ -2458,6 +2490,7 @@ export function ChatInterface({
       } finally {
         setIsStreaming(false);
         setStreamingMessageId(null);
+        useSlidesStore.getState().setAgentWriting(false);
         if (connectingTimerRef.current) clearTimeout(connectingTimerRef.current);
         setShowConnecting(false);
         streamControllerRef.current = null;
@@ -2596,6 +2629,7 @@ export function ChatInterface({
       setIsLoading(false);
       setIsStreaming(false);
       isSubmittingRef.current = false;
+      useSlidesStore.getState().setAgentWriting(false);
     }
   };
 
@@ -2678,6 +2712,7 @@ export function ChatInterface({
           <EmptyState
             selectedAgentName={selectedAgentData?.name || selectedAgent}
             logoUrl={selectedAgentData?.logoUrl ?? undefined}
+            slidesOpen={Boolean(slidesChatContext)}
           />
         ) : (
           <div className="mx-auto max-w-3xl space-y-6">
@@ -2990,7 +3025,13 @@ export function ChatInterface({
                     }
                   }}
                   placeholder={
-                    attachedImages.length > 0 ? 'Ask about the image...' : pendingFileAttachments.length > 0 ? 'Ask about the file...' : 'Send a message...'
+                    attachedImages.length > 0
+                      ? 'Ask about the image...'
+                      : pendingFileAttachments.length > 0
+                        ? 'Ask about the file...'
+                        : slidesChatContext
+                          ? 'Describe the deck: topic, audience, how many slides...'
+                          : 'Send a message...'
                   }
                   // placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
                   className="chat-composer-input max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
@@ -3352,9 +3393,11 @@ function SuggestionChipsRow({
 function EmptyState({
   selectedAgentName,
   logoUrl,
+  slidesOpen,
 }: {
   selectedAgentName: string;
   logoUrl?: string | null;
+  slidesOpen?: boolean;
 }) {
   const { user } = useAuthStore();
   const resolvedLogoUrl = logoUrl ? getLogoUrl(logoUrl) : undefined;
@@ -3365,7 +3408,9 @@ function EmptyState({
     <div className="flex h-full flex-col items-center justify-center px-4">
       <EmptyStateLogo src={resolvedLogoUrl} name={selectedAgentName} />
       <p className="mb-6 text-center text-muted-foreground">
-        {greeting} {selectedAgentName} here, how can I help?
+        {slidesOpen
+          ? `${greeting} This is a Minimal Light deck. Tell me the topic and I will write the slides.`
+          : `${greeting} ${selectedAgentName} here, how can I help?`}
       </p>
     </div>
   );
@@ -3672,6 +3717,12 @@ const MessageBubble = React.memo(function MessageBubble({
   const [copiedCodeKey, setCopiedCodeKey] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  // Deck Abi built during this turn, shown as a card that opens it in Slides.
+  const messageWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const slidesDeckCard = useMemo(
+    () => (isUser ? null : slidesDeckCardFromToolCalls(message.toolCalls)),
+    [isUser, message.toolCalls],
+  );
   // true = iframe-embeddable → open in preview panel
   // false = blocked / unreachable → open new tab
   // undefined = test in progress
@@ -3959,7 +4010,7 @@ const MessageBubble = React.memo(function MessageBubble({
   // collapsible panel below handles display.
   const responseForRender = useMemo(() => {
     if (isUser || typeof responseForDisplay !== 'string') return responseForDisplay;
-    return stripTrailingSources(responseForDisplay);
+    return humanizeChatProviderError(stripTrailingSources(responseForDisplay));
   }, [isUser, responseForDisplay]);
 
   const handleCopyCode = useCallback(async (code: string, key: string) => {
@@ -4253,6 +4304,14 @@ const MessageBubble = React.memo(function MessageBubble({
               .join(' · ');
           })()}
         </div>
+
+        {/* Deck built this turn: opens it in the Slides surface */}
+        {slidesDeckCard && (
+          <SlidesDeckCardView
+            card={slidesDeckCard}
+            currentWorkspaceId={messageWorkspaceId ?? ''}
+          />
+        )}
 
         {/* RAG document source pills (filenames only; URLs use the panel below) */}
         {!isUser && message.sources && message.sources.some((src) => !/^https?:\/\//i.test(src)) && (

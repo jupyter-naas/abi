@@ -21,6 +21,7 @@ import {
   moveNavItem,
   shiftForReorder,
 } from '@/lib/sidebar-nav';
+import { requestQuickOpen } from '@/lib/quick-open';
 import { getWorkspacePath } from './utils';
 import { WorkspaceMark, WorkspaceMarkFrame } from '../workspace-mark';
 import { clearAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
@@ -231,6 +232,10 @@ export function Sidebar() {
 
   const handleSectionClick = (section: SectionDef) => {
     clearAppsSkipRestore();
+    if (section.id === 'search') {
+      requestQuickOpen();
+      return;
+    }
     if (section.id === 'home') {
       setActivePanelSection(null);
       router.push(getDefaultPath(section.id));

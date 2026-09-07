@@ -5,6 +5,8 @@ import {
   conversationUpdatedAtMs,
   filterQuickOpenItems,
   groupQuickOpenItems,
+  QUICK_OPEN_EVENT,
+  requestQuickOpen,
   scoreQuickOpen,
   type QuickOpenItem,
 } from './quick-open';
@@ -134,5 +136,12 @@ describe('buildQuickOpenItems', () => {
       href: '/workspace/ws-1/apps?open=acme-portal',
       panel: 'apps',
     });
+  });
+});
+
+describe('requestQuickOpen', () => {
+  it('uses a stable event name and is safe without window', () => {
+    expect(QUICK_OPEN_EVENT).toBe('nexus:quick-open');
+    expect(() => requestQuickOpen()).not.toThrow();
   });
 });
