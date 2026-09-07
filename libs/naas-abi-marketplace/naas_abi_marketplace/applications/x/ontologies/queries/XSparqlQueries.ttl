@@ -485,7 +485,7 @@ intentMapping:listIngestedSearchQueriesQuery a intentMapping:TemplatableSparqlQu
 
 intentMapping:findRecentPostCountQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_recent_post_count"@en ;
-    intentMapping:intentDescription "Return how many posts (tweets) matched a followed X query since a given UTC timestamp, by summing the hourly count buckets. Pass any fragment of the followed query as query_substring (e.g. 'drone', 'uas') and an ISO 8601 `since` timestamp (e.g. use 24h/48h/7d ago). Use this to answer 'how many posts about <topic> in the last 24 hours / 7 days?'." ;
+    intentMapping:intentDescription "Return how many posts (tweets) matched a followed X query since a given UTC timestamp, by summing the hourly count buckets. Pass any fragment of the followed query as query_substring (e.g. 'openai', 'anthropic') and an ISO 8601 `since` timestamp (e.g. use 24h/48h/7d ago). Use this to answer 'how many posts about <topic> in the last 24 hours / 7 days?'." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
@@ -541,7 +541,7 @@ intentMapping:findRecentPostCountTimeseriesQuery a intentMapping:TemplatableSpar
 
 intentMapping:findRecentTweetsForQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_recent_tweets_for_query"@en ;
-    intentMapping:intentDescription "Return the tweets ingested for a followed X query since a given UTC timestamp, one row per tweet with its creation date, full text, permalink, author handle, author profile URL, author location and verified type, newest first. Pass any fragment of the query as query_substring (e.g. 'drone', 'uas') and an ISO 8601 `since` timestamp. This backs the tweets table of the Post Count Following app; use it to answer 'show me the tweets about <topic> from the last 24 hours'." ;
+    intentMapping:intentDescription "Return the tweets ingested for a followed X query since a given UTC timestamp, one row per tweet with its creation date, full text, permalink, author handle, author profile URL, author location and verified type, newest first. Pass any fragment of the query as query_substring (e.g. 'openai', 'anthropic') and an ISO 8601 `since` timestamp. This backs the tweets table of the Post Count Following app; use it to answer 'show me the tweets about <topic> from the last 24 hours'." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>

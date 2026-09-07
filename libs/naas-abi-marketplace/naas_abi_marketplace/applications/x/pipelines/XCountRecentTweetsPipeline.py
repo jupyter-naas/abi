@@ -35,6 +35,7 @@ from naas_abi_marketplace.applications.x.pipelines.utils import (
     XTweetGraphBuilder,
     parse_dt,
 )
+from naas_abi_marketplace.applications.x.query_config import EXAMPLE_X_SEARCH_QUERY
 from pydantic import Field, model_validator
 from rdflib import Graph, Namespace, URIRef
 
@@ -89,7 +90,7 @@ class XCountRecentTweetsPipelineParameters(PipelineParameters):
                 "X v2 search query (1-4096 chars) whose recent-tweet count to "
                 "map. Required when file_path is not provided."
             ),
-            examples=["(drone OR drones OR uas OR uav) lang:en -is:retweet"],
+            examples=[EXAMPLE_X_SEARCH_QUERY],
         ),
     ] = None
     options: Annotated[

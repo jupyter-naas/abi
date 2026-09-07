@@ -29,7 +29,7 @@ ARTIFACT = (
     / "tests"
     / "artifacts"
     / "2026-08-07T06_55_19.928677+00_00_"
-    "(drone_or_drones_or_uas_or_uav)_lang_en_-is_retweet.json"
+    "(openai_or_anthropic)_lang_en_-is_retweet.json"
 )
 
 
@@ -146,7 +146,7 @@ def test_referenced_tweet_need_not_match_the_query(envelope: dict):
         for r in referenced
         if not any(
             term in r.get("text", "").lower()
-            for term in ("drone", "drones", "uas", "uav")
+            for term in ("openai", "anthropic", "llm")
         )
     ]
     assert len(off_topic) == 9

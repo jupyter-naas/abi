@@ -9,7 +9,7 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.api.search_recents_tweets 
 
 class _Ctx:
     built_at = datetime(2026, 8, 14, 10, 0, tzinfo=UTC)
-    queries = [{"name": "drones_and_uas", "query": "drone OR drones"}]
+    queries = [{"name": "example_feed", "query": "openai OR anthropic"}]
     scenarios = [
         {
             "id": "7d",

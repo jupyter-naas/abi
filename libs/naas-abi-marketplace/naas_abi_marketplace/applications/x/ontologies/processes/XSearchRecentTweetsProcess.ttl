@@ -230,7 +230,7 @@ x:SearchResultSet a owl:Class ;
     rdfs:label "Search Result Set"@en ;
     skos:altLabel "Tweet Search Result"@en ;
     skos:definition "A generically dependent continuant representing the response returned by a SearchRecentTweets process for a given query and parameter set, persisted as a JSON envelope in the local datastore. It carries two distinct populations: the tweets that matched the query (x:containsTweet, counted by result_count) and the referenced tweets pulled in by expansions to give those matches their conversational context (x:containsReferencedTweet, counted by referenced_count)."@en ;
-    skos:example "Result set 21dcaa8c containing 28 matched tweets plus 12 referenced tweets returned for query '(drone OR uas) lang:en -is:retweet' on 2026-08-07"@en ;
+    skos:example "Result set 21dcaa8c containing 28 matched tweets plus 12 referenced tweets returned for query '(openai OR anthropic) lang:en -is:retweet' on 2026-08-07"@en ;
     rdfs:subClassOf abi:GenericallyDependentContinuant ,
         [ a owl:Restriction ;
           owl:onProperty x:isProducedBy ;
@@ -266,7 +266,7 @@ x:SearchRecentTweets a owl:Class ;
     rdfs:label "Search Recent Tweets"@en ;
     skos:altLabel "Recent Tweet Search"@en ;
     skos:definition "A process by which the X v2 GET /2/tweets/search/recent endpoint is queried to retrieve tweets posted in the last seven days that match a given query and parameter set; the process consumes a SearchQuery and produces a SearchResultSet. It retrieves two populations: the Tweet individuals that matched the query, and the ReferencedTweet individuals the expansions pulled in as context for those matches."@en ;
-    skos:example "A search for query '(drone OR uas) lang:en -is:retweet' executed on 2026-08-07 producing result set 21dcaa8c with 28 matched tweets and 12 referenced tweets."@en ;
+    skos:example "A search for query '(openai OR anthropic) lang:en -is:retweet' executed on 2026-08-07 producing result set 21dcaa8c with 28 matched tweets and 12 referenced tweets."@en ;
     rdfs:subClassOf abi:Process ,
         [ a owl:Restriction ;
           owl:onProperty x:usesSearchQuery ;

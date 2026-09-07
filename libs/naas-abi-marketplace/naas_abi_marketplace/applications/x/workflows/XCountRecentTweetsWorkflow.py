@@ -22,6 +22,7 @@ from naas_abi_marketplace.applications.x.integrations.XIntegration import (
     XIntegration,
     slugify_query,
 )
+from naas_abi_marketplace.applications.x.query_config import EXAMPLE_X_SEARCH_QUERY
 from pydantic import Field
 
 # X keeps only the last 7 days of recent tweets; stay just inside that window.
@@ -107,7 +108,7 @@ class XCountRecentTweetsWorkflowParameters(WorkflowParameters):
                 "recomputed."
             ),
             examples=[
-                ["(drone OR drones OR uas OR uav) lang:en -is:retweet"],
+                [EXAMPLE_X_SEARCH_QUERY],
             ],
         ),
     ]
@@ -510,7 +511,7 @@ if __name__ == "__main__":
     abi dev up
     OXIGRAPH_URL=http://127.0.0.1:8432 uv run python \
         libs/naas-abi-marketplace/naas_abi_marketplace/applications/x/workflows/XCountRecentTweetsWorkflow.py \
-        --queries '(drone OR drones OR uas OR uav) lang:en -is:retweet'
+        --queries '(openai OR anthropic) lang:en -is:retweet'
     ```
     """
     import argparse
@@ -526,7 +527,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--queries",
         nargs="+",
-        default=["(drone OR drones OR uas OR uav) lang:en -is:retweet"],
+        required=True,
         help="One or more X v2 search queries to follow.",
     )
     args = parser.parse_args()

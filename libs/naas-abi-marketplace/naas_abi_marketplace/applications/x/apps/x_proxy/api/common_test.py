@@ -389,7 +389,7 @@ def test_filtered_reads_are_never_served_from_an_unfiltered_page():
 # left alone - or, for the fallback cases, that it was not.
 
 
-QUERY = "(drone OR drones) lang:en"
+QUERY = "(openai OR anthropic) lang:en"
 QUERY_SLUG = slugify(QUERY)
 
 
