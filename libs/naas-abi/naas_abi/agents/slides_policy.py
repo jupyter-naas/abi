@@ -386,16 +386,17 @@ def load_slides_chat_model(model_id: str) -> Any:
     boundary: a caller holding no model id has lost information, and the loss
     has to be visible where it happens.
     """
-    from langchain_openai import ChatOpenAI
-    from naas_abi import ABIModule
-    from naas_abi_core.models.Model import ChatModel
-    from pydantic import SecretStr
-
     if not (model_id or "").strip():
         raise ValueError(
             "load_slides_chat_model requires the model id the turn was routed "
             "to. Resolve it with resolve_slides_llm_model first."
         )
+
+    from langchain_openai import ChatOpenAI
+    from naas_abi import ABIModule
+    from naas_abi_core.models.Model import ChatModel
+    from pydantic import SecretStr
+
     resolved = resolve_slides_llm_model(model_id)
     or_id = openrouter_slides_model_id(resolved)
     abi = ABIModule.get_instance()
