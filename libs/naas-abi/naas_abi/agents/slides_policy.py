@@ -242,6 +242,18 @@ def reject_unresearched_slides_write() -> dict[str, Any] | None:
     queries = slides_research_queries.get()
     if queries:
         return None
+    if not slides_search_tool_bound():
+        # web_search is the only thing that can fill slides_research_queries,
+        # so with no search tool bound this gate can never be satisfied. Held
+        # shut, it fails every deck write on a factual brief forever while
+        # telling the model to retry after a search it cannot run.
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "slides research gate opened: no web_search tool is bound, so the "
+            "deck will be written without research"
+        )
+        return None
     return {"error": _UNRESEARCHED_WRITE_ERROR}
 
 
@@ -271,6 +283,23 @@ def attach_slides_research_note(tool: Any) -> Any:
 
 
 _SEARCH_STACK = "naas_abi.agents.tools.web_tools"
+
+
+def slides_search_tool_bound() -> bool:
+    """True when a web_search tool can be bound for this process.
+
+    A probe rather than a flag written by the registration. The agent is built
+    per request and the policy is armed per request, so a flag would have to be
+    set before it is read, and the gate would take the wrong branch, silently,
+    on any turn where that order slipped.
+    """
+    import importlib
+
+    try:
+        importlib.import_module(_SEARCH_STACK)
+    except ImportError:
+        return False
+    return True
 
 
 def slides_research_tools() -> list[Any]:

@@ -19,6 +19,7 @@ from naas_abi.agents.slides_policy import (
     slides_reasoning_extra_body,
     slides_research_tools,
     slides_search_budget_remaining,
+    slides_search_tool_bound,
 )
 from naas_abi_core.services.agent.context import (
     slides_active_slug,
@@ -189,6 +190,42 @@ def test_research_tools_do_not_depend_on_the_zen_repo() -> None:
         bound = {tool.name for tool in slides_research_tools()}
 
     assert bound == {"web_search", "web_fetch"}
+
+
+def test_write_gate_opens_when_no_search_tool_can_be_bound() -> None:
+    """A gate whose precondition is unsatisfiable must not block.
+
+    Only ``web_search`` can fill ``slides_research_queries``. With no search
+    tool bound the gate rejected every deck write on a factual brief forever,
+    and told the model to retry after a search it could not run.
+    """
+    with _unimportable("naas_abi.agents.tools.web_tools", "zen"):
+        assert slides_research_tools() == []
+        bind_slides_research_policy(
+            "create a presentation about what's going on in iran now",
+            has_prior_assistant=False,
+            client_context={"slides": {"slug": "iran-now"}},
+        )
+        try:
+            assert slides_research_queries.get() == []
+            assert reject_unresearched_slides_write() is None
+        finally:
+            slides_research_required.set(False)
+            slides_research_queries.set(None)
+            slides_active_slug.set(None)
+
+
+def test_write_gate_still_blocks_while_search_is_available() -> None:
+    """The open-on-missing-search branch must not disarm the working gate."""
+    slides_research_required.set(True)
+    slides_research_queries.set([])
+    try:
+        assert slides_search_tool_bound() is True
+        blocked = reject_unresearched_slides_write()
+        assert blocked is not None
+    finally:
+        slides_research_required.set(False)
+        slides_research_queries.set(None)
 
 
 def test_bind_policy_sets_gate_for_open_deck() -> None:
