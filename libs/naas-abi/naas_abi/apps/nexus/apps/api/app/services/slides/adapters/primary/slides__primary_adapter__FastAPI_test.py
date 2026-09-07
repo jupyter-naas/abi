@@ -237,7 +237,7 @@ def test_a_source_namespace_is_refused_at_config_time(namespace: str) -> None:
     belong to the boot, where the message names the field.
     """
     with pytest.raises(ValidationError):
-        SlidesTemplateSourceConfig(namespace=namespace, path="/tmp/templates")
+        SlidesTemplateSourceConfig(namespace=namespace, path="seeds/templates")
 
 
 def test_a_missing_source_directory_does_not_hide_the_abi_seeds(
