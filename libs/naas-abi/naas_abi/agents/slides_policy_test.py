@@ -679,8 +679,9 @@ def test_validate_configured_slides_model_rejects_an_unregistered_id() -> None:
 def test_validate_configured_slides_model_skips_when_nothing_is_configured() -> None:
     """No slides model configured is a valid configuration, not a boot failure.
 
-    Only Zen registers ``anthropic/claude-sonnet-5``, so ABI shipping it as the
-    slides default made ABI's own boot fail its own check, with an empty
+    No module in ABI registers ``anthropic/claude-sonnet-5``; it arrives with
+    a downstream application. ABI shipping it as the slides default therefore
+    made ABI's own boot fail its own check, with an empty
     registry and nothing an operator of a bare ABI could do about it. Unset has
     to mean "slides follow the general agent model" and skip the check, while a
     value that was actually typed still gets resolved or refused.

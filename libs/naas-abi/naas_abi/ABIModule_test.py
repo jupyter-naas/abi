@@ -94,11 +94,12 @@ def test_boot_ships_no_slides_model_of_its_own(
     """A bare ABI must not fail the check on ABI's own default.
 
     The default was anthropic/claude-sonnet-5, and the only module that
-    registers that canonical id lives in zen, downstream. So the shipped
-    configuration could not satisfy the shipped check: every ABI boot without
-    zen on the path raised against an empty registry, naming a setting nobody
-    had edited. The registry here is empty on purpose, which is exactly the
-    state an ABI checkout with no model modules enabled boots in.
+    registers that canonical id ships with a downstream application, not with
+    ABI. So the shipped configuration could not satisfy the shipped check:
+    every ABI boot without that application on the path raised against an
+    empty registry, naming a setting nobody had edited. The registry here is
+    empty on purpose, which is exactly the state an ABI checkout with no model
+    modules enabled boots in.
     """
     _default_module(ModelRegistryService()).on_initialized()
 
@@ -108,10 +109,10 @@ def test_boot_keeps_a_configured_and_registered_slides_model(
 ) -> None:
     """Naming a slides model still routes slides onto it.
 
-    The optional default is only safe if the configured path is untouched:
-    zen sets abi_slides_agent_model and its general agent model is a free
-    Gemma, so a fallback silently winning there would put every deck back on
-    the model that produced template filler.
+    The optional default is only safe if the configured path is untouched.
+    The install that found this sets abi_slides_agent_model while its general
+    agent model is a free Gemma, so a fallback silently winning there would
+    put every deck back on the model that produced template filler.
     """
     from langchain_openai import ChatOpenAI
     from naas_abi_core.models.Model import ChatModel

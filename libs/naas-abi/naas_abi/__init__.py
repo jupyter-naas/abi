@@ -657,9 +657,10 @@ class ABIModule(BaseModule):
         # Checked here rather than in ``on_load``: module load order is a
         # topological sort over declared dependencies, and nothing makes a
         # model-providing module a dependency of ``naas_abi``, so the module
-        # that registers the slides model routinely loads after this one (in
-        # Zen it is index 25 against 9) and a correct id would not be in the
-        # registry yet. ``on_initialized`` runs once every module has loaded,
+        # that registers the slides model routinely loads after this one (on
+        # the install that found this, index 25 against 9) and a correct id
+        # would not be in the registry yet.
+        # ``on_initialized`` runs once every module has loaded,
         # which is the point the engine already uses for ``validate_defaults``.
         # It runs before ``super()`` so a bad id is reported as itself instead
         # of as whatever the Nexus bootstrap fails on afterwards.
