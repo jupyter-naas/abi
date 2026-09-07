@@ -887,8 +887,8 @@ class XIntegration(Integration):
         is the cheap way to size a query before searching.
 
         Args:
-            query (str): X v2 search query (1-4096 chars), e.g. "(drone OR drones
-                OR UAS OR UAV) lang:en -is:retweet".
+            query (str): X v2 search query (1-4096 chars), e.g. "(openai OR anthropic)
+                lang:en -is:retweet".
             start_time (str, optional): Oldest UTC timestamp (YYYY-MM-DDTHH:mm:ssZ),
                 inclusive. Defaults to 7 days ago.
             end_time (str, optional): Newest UTC timestamp (YYYY-MM-DDTHH:mm:ssZ),
@@ -1080,7 +1080,7 @@ def as_tools(configuration: XIntegrationConfiguration):
     class CountRecentTweetsSchema(BaseModel):
         query: str = Field(
             ...,
-            description="X v2 search query (1-4096 chars), e.g. '(drone OR drones OR UAS OR UAV) lang:en -is:retweet'",
+            description="X v2 search query (1-4096 chars), e.g. '(openai OR anthropic) lang:en -is:retweet'",
         )
         start_time: str | None = Field(
             None,

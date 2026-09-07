@@ -51,7 +51,7 @@ def _post(tweet_id: str, created: str, **extra) -> dict:
         "verified_type": "",
         "referenced": False,
         "media_count": 0,
-        "queries": ["drone"],
+        "queries": ["openai"],
         **extra,
     }
 

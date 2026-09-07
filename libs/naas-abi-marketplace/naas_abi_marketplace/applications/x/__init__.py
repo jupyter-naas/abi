@@ -531,8 +531,8 @@ class ABIModule(BaseModule):
               # (b) cron-driven — a Dagster SCHEDULE fires at fixed wall-clock
               #     times (UTC). Same options as above, `cron` replacing
               #     `interval_seconds`; setting BOTH raises at config load.
-              - name: drones_business_hours
-                query: "(drone OR uas OR uav) lang:en -is:retweet"
+              - name: business_hours
+                query: "(openai OR anthropic) lang:en -is:retweet"
                 cron: "*/15 9-17 * * 1-5"  # every 15 min, 09:00-17:59 UTC, Mon-Fri
                 max_results: 100
                 max_pages: 1
@@ -586,9 +586,9 @@ class ABIModule(BaseModule):
             # when `enabled: true`. Fetch counts via `count_recent_tweets: true`
             # on a matching search_recent_tweets_workflow filter.
             count_recent_tweets_workflow:
-              - name: drones
-                query: "(drone OR drones OR uas OR uav) lang:en -is:retweet"
-                label: "Drones / UAS"
+              - name: example_feed
+                query: "(openai OR anthropic) lang:en -is:retweet"
+                label: "Example feed"
                 enabled: true
         """
 
@@ -603,9 +603,9 @@ class ABIModule(BaseModule):
         # One entry per query shown in the "Post Count Following" dashboard.
         #
         #     count_recent_tweets_workflow:
-        #       - name: drones
-        #         query: "(drone OR drones OR uas OR uav) lang:en -is:retweet"
-        #         label: "Drones / UAS"
+        #       - name: example_feed
+        #         query: "(openai OR anthropic) lang:en -is:retweet"
+        #         label: "Example feed"
         #         enabled: true
         count_recent_tweets_workflow: list[XCountFollowConfiguration] = []
         # ----- Recent Tweets catalog app (x/apps/x_proxy/) ------------------------

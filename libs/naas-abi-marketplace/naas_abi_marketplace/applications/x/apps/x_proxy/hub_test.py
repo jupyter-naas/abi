@@ -22,7 +22,7 @@ from rdflib.namespace import XSD
 _NS = "http://ontology.naas.ai/x/"
 _GRAPH = "http://ontology.naas.ai/graph/x_recent_posts_count"
 _TWEET_GRAPH = "http://ontology.naas.ai/graph/x"
-_QUERY = "(drone OR uas) lang:en -is:retweet"
+_QUERY = "(openai OR anthropic) lang:en -is:retweet"
 _X = Namespace(_NS)
 
 
@@ -47,17 +47,17 @@ def _seed_store() -> _FakeTripleStore:
     ]
     bucket_uris: list = []
     for start, end, count in buckets:
-        stable = f"drones-{start}"
+        stable = f"example_feed-{start}"
         interval = CountInterval(
             _uri=f"{_NS}CountInterval/{stable}",
-            label=f"Count Interval drones {start}",
+            label=f"Count Interval example_feed {start}",
             bucket_start=datetime.fromisoformat(start),
             bucket_end=datetime.fromisoformat(end),
         )
         graph += interval.rdf()
         bucket = TweetCountBucket(
             _uri=f"{_NS}TweetCountBucket/{stable}",
-            label=f"Tweet Count Bucket drones {start}",
+            label=f"Tweet Count Bucket example_feed {start}",
             bucket_tweet_count=count,
             has_count_interval=[URIRef(interval._uri)],
         )
@@ -69,7 +69,7 @@ def _seed_store() -> _FakeTripleStore:
         query_string=_QUERY,
         granularity="hour",
         total_tweet_count=32,
-        file_path="x/count_recent_tweets/drones/f.json",
+        file_path="x/count_recent_tweets/example_feed/f.json",
         contains_count_bucket=bucket_uris,
     )
     graph += result_set.rdf()
@@ -100,10 +100,10 @@ def _seed_tweets(store: "_FakeTripleStore") -> None:
             Literal("2026-07-07T13:30:00+00:00", datatype=XSD.dateTime),
         )
     )
-    g.add((tw, _X.full_text, Literal("Big drone sighting near the port")))
+    g.add((tw, _X.full_text, Literal("Big OpenAI model update announced today")))
     g.add((tw, _X.url, Literal("https://x.com/9/status/1")))
     g.add((tw, _X.isAuthoredBy, au))
-    g.add((au, _X.username, Literal("dronewatch")))
+    g.add((au, _X.username, Literal("openwatch")))
     g.add((au, _X.user_location, Literal("Ankara")))
     g.add((au, _X.verified_type, Literal("blue")))
     store.insert_graph(g, _TWEET_GRAPH)
@@ -147,13 +147,13 @@ def _seed_tweet(
 def _seed_tweet_corpus() -> "_FakeTripleStore":
     """Store with four tweets spanning two authors / locations / keywords."""
     store = _seed_store()
-    _seed_tweets(store)  # drone / dronewatch / Ankara / blue @ 13:30
+    _seed_tweets(store)  # openai / openwatch / Ankara / blue @ 13:30
     _seed_tweet(
         store,
         index=2,
         created="2026-07-07T14:00:00+00:00",
-        text="Another drones report over the airfield",
-        username="uasnews",
+        text="Another Anthropic benchmark release over the weekend",
+        username="ainews",
         location="Kyiv",
     )
     _seed_tweet(
@@ -161,14 +161,14 @@ def _seed_tweet_corpus() -> "_FakeTripleStore":
         index=3,
         created="2026-07-07T15:00:00+00:00",
         text="Unrelated chatter about the weather",
-        username="uasnews",
+        username="ainews",
         location="Kyiv",
     )
     _seed_tweet(
         store,
         index=4,
         created="2026-07-07T16:00:00+00:00",
-        text="Drones everywhere this morning",
+        text="OpenAI everywhere this morning",
         username="skywatch",
         location="Ankara",
     )
@@ -179,7 +179,7 @@ _WINDOW = ("2026-07-07T00:00:00+00:00", "2026-07-08T00:00:00+00:00")
 
 
 def test_slugify_is_stable_and_filesystem_safe():
-    assert slugify(_QUERY) == "drone_or_uas_lang_en_is_retweet"
+    assert slugify(_QUERY) == "openai_or_anthropic_lang_en_is_retweet"
     assert slugify("  ") == "query"
     assert "__" not in slugify("a???b")
 
@@ -289,8 +289,8 @@ def test_tweets_returns_rows_with_table_columns():
     )
     assert len(rows) == 1
     t = rows[0]
-    assert t["text"] == "Big drone sighting near the port"
-    assert t["username"] == "dronewatch"
+    assert t["text"] == "Big OpenAI model update announced today"
+    assert t["username"] == "openwatch"
     assert hub._timeseries(_QUERY)  # still reachable via facade
 
 
@@ -302,8 +302,8 @@ def test_ingested_timeseries_buckets_matched_tweets_by_created_hour():
         store,
         index=2,
         created="2026-07-07T13:45:00+00:00",
-        text="Second drone in the same hour",
-        username="dronewatch",
+        text="Second OpenAI post in the same hour",
+        username="openwatch",
         location="Ankara",
     )
     _seed_tweet(
@@ -311,7 +311,7 @@ def test_ingested_timeseries_buckets_matched_tweets_by_created_hour():
         index=3,
         created="2026-07-07T14:10:00+00:00",
         text="Next hour",
-        username="uasnews",
+        username="ainews",
         location="Kyiv",
     )
     ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
@@ -326,18 +326,18 @@ def test_ingested_timeseries_buckets_matched_tweets_by_created_hour():
 def test_search_tweets_text_contains_scans_whole_window():
     """A keyword search returns every matching tweet, newest first."""
     ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
-    rows = ctx.search_tweets(_QUERY, *_WINDOW, filters={"text": {"contains": "drone"}})
-    assert [r["username"] for r in rows] == ["skywatch", "uasnews", "dronewatch"]
-    assert all("drone" in r["text"].lower() for r in rows)
+    rows = ctx.search_tweets(_QUERY, *_WINDOW, filters={"text": {"contains": "openai"}})
+    assert [r["username"] for r in rows] == ["skywatch", "openwatch"]
+    assert all("openai" in r["text"].lower() for r in rows)
 
 
 def test_search_tweets_text_contains_is_case_insensitive():
     ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
     lower = ctx.search_tweets(
-        _QUERY, *_WINDOW, filters={"text": {"contains": "drones"}}
+        _QUERY, *_WINDOW, filters={"text": {"contains": "openai"}}
     )
     upper = ctx.search_tweets(
-        _QUERY, *_WINDOW, filters={"text": {"contains": "DRONES"}}
+        _QUERY, *_WINDOW, filters={"text": {"contains": "OPENAI"}}
     )
     assert len(lower) == 2
     assert [r["url"] for r in lower] == [r["url"] for r in upper]
@@ -347,9 +347,9 @@ def test_search_tweets_value_set_matches_any_selected_value():
     """Checkbox selections OR within a column."""
     ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
     rows = ctx.search_tweets(
-        _QUERY, *_WINDOW, filters={"username": {"values": ["uasnews", "skywatch"]}}
+        _QUERY, *_WINDOW, filters={"username": {"values": ["ainews", "skywatch"]}}
     )
-    assert sorted({r["username"] for r in rows}) == ["skywatch", "uasnews"]
+    assert sorted({r["username"] for r in rows}) == sorted(["skywatch", "ainews"])
     assert len(rows) == 3
 
 
@@ -359,20 +359,20 @@ def test_search_tweets_ands_across_columns():
         _QUERY,
         *_WINDOW,
         filters={
-            "text": {"contains": "drone"},
+            "text": {"contains": "openai"},
             "location": {"values": ["Ankara"]},
         },
     )
-    assert sorted(r["username"] for r in rows) == ["dronewatch", "skywatch"]
+    assert sorted(r["username"] for r in rows) == ["openwatch", "skywatch"]
 
 
 def test_search_tweets_limit_applies_after_filtering():
     """The cap selects the newest *matching* tweets, not matches within a cap."""
     ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
     rows = ctx.search_tweets(
-        _QUERY, *_WINDOW, filters={"text": {"contains": "drone"}}, limit=2
+        _QUERY, *_WINDOW, filters={"text": {"contains": "openai"}}, limit=2
     )
-    assert [r["username"] for r in rows] == ["skywatch", "uasnews"]
+    assert [r["username"] for r in rows] == ["skywatch", "openwatch"]
 
 
 def test_search_tweets_without_filters_matches_tweets_in_window():
@@ -392,10 +392,10 @@ def test_search_tweets_escapes_quotes_in_filter_values():
 def test_distinct_column_values_counts_and_ranks():
     ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
     values = ctx.distinct_column_values(_QUERY, *_WINDOW, "username")
-    assert [v["value"] for v in values] == ["uasnews", "dronewatch", "skywatch"] or [
+    assert [v["value"] for v in values] == ["ainews", "openwatch", "skywatch"] or [
         v["value"] for v in values
-    ] == ["uasnews", "skywatch", "dronewatch"]
-    assert {v["value"]: v["count"] for v in values}["uasnews"] == 2
+    ] == ["ainews", "skywatch", "openwatch"]
+    assert {v["value"]: v["count"] for v in values}["ainews"] == 2
 
 
 def test_distinct_column_values_honours_other_column_filters():
@@ -403,7 +403,7 @@ def test_distinct_column_values_honours_other_column_filters():
     values = ctx.distinct_column_values(
         _QUERY, *_WINDOW, "username", filters={"location": {"values": ["Ankara"]}}
     )
-    assert sorted(v["value"] for v in values) == ["dronewatch", "skywatch"]
+    assert sorted(v["value"] for v in values) == ["openwatch", "skywatch"]
 
 
 def test_distinct_column_values_ignores_its_own_column_filter():
@@ -412,13 +412,15 @@ def test_distinct_column_values_ignores_its_own_column_filter():
     values = ctx.distinct_column_values(
         _QUERY, *_WINDOW, "username", filters={"username": {"values": ["skywatch"]}}
     )
-    assert sorted(v["value"] for v in values) == ["dronewatch", "skywatch", "uasnews"]
+    assert sorted(v["value"] for v in values) == sorted(
+        ["openwatch", "skywatch", "ainews"]
+    )
 
 
 def test_distinct_column_values_search_narrows_options():
     ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
     values = ctx.distinct_column_values(_QUERY, *_WINDOW, "username", contains="watch")
-    assert sorted(v["value"] for v in values) == ["dronewatch", "skywatch"]
+    assert sorted(v["value"] for v in values) == ["openwatch", "skywatch"]
 
 
 def test_distinct_column_values_rejects_unknown_column():
@@ -429,7 +431,7 @@ def test_distinct_column_values_rejects_unknown_column():
 def test_normalize_tweet_filters_drops_unknown_and_empty():
     normalized = normalize_tweet_filters(
         {
-            "text": {"contains": " drone "},
+            "text": {"contains": " openai "},
             "username": {"values": ["a"]},
             "location": {"contains": "", "values": []},
             "evil": {"contains": "x"},
@@ -437,7 +439,7 @@ def test_normalize_tweet_filters_drops_unknown_and_empty():
         }
     )
     assert set(normalized) == {"text", "username"}
-    assert normalized["text"]["contains"] == "drone"
+    assert normalized["text"]["contains"] == "openai"
     assert normalized["username"]["values"] == ["a"]
 
 
@@ -556,13 +558,13 @@ def _seed_count_buckets(store: "_FakeTripleStore") -> None:
     g.add((rs, _X.query_string, Literal(_QUERY)))
     for stable_id, start, end, count in (
         (
-            "drones-2026-07-07T14:00:00+00:00",
+            "example_feed-2026-07-07T14:00:00+00:00",
             "2026-07-07T14:00:00+00:00",
             "2026-07-07T15:00:00+00:00",
             280,
         ),
         (
-            "drones-partial",
+            "example_feed-partial",
             "2026-07-07T15:00:00+00:00",
             "2026-07-07T15:25:00+00:00",
             120,
@@ -601,8 +603,8 @@ def test_partial_bucket_is_none_when_only_complete_hours_exist():
     store = _FakeTripleStore()
     g = Graph()
     rs = _X["TweetCountResultSet/rs2"]
-    bucket = _X["TweetCountBucket/drones-2026-07-07T14:00:00+00:00"]
-    interval = _X["CountInterval/drones-2026-07-07T14:00:00+00:00"]
+    bucket = _X["TweetCountBucket/example_feed-2026-07-07T14:00:00+00:00"]
+    interval = _X["CountInterval/example_feed-2026-07-07T14:00:00+00:00"]
     g.add((rs, RDF.type, _X.TweetCountResultSet))
     g.add((rs, _X.query_string, Literal(_QUERY)))
     g.add((rs, _X.containsCountBucket, bucket))
@@ -657,8 +659,8 @@ def test_memo_separates_distinct_filters_and_caches_counts():
     store = _counting_corpus()
     ctx = SnapshotContext(None, store, queries=[])  # type: ignore[arg-type]
 
-    ctx.search_tweets(_QUERY, *_WINDOW, filters={"text": {"contains": "drone"}})
-    ctx.search_tweets(_QUERY, *_WINDOW, filters={"text": {"contains": "drone"}})
+    ctx.search_tweets(_QUERY, *_WINDOW, filters={"text": {"contains": "openai"}})
+    ctx.search_tweets(_QUERY, *_WINDOW, filters={"text": {"contains": "openai"}})
     assert store.queries_run == 1
     # Different filter → different key.
     ctx.search_tweets(_QUERY, *_WINDOW, filters={"text": {"contains": "weather"}})
@@ -701,10 +703,10 @@ def test_posts_for_usernames_survives_a_corpus_with_no_media():
     fail-soft handler. No seeded tweet here has ``hasAttachedMedia``.
     """
     ctx = SnapshotContext(None, _seed_tweet_corpus(), queries=[])  # type: ignore[arg-type]
-    posts = ctx.posts_for_usernames(["dronewatch", "uasnews"])
-    assert sorted(posts) == ["dronewatch", "uasnews"]
-    assert [p["text"] for p in posts["dronewatch"]] == [
-        "Big drone sighting near the port"
+    posts = ctx.posts_for_usernames(["openwatch", "ainews"])
+    assert sorted(posts) == sorted(["openwatch", "ainews"])
+    assert [p["text"] for p in posts["openwatch"]] == [
+        "Big OpenAI model update announced today"
     ]
     # No media anywhere → the key is simply absent.
     assert all("media_url" not in p for ps in posts.values() for p in ps)
@@ -722,8 +724,8 @@ def test_posts_for_usernames_keeps_media_urls_clean():
     g.add((tw, _X.hasAttachedMedia, blank))
     store.insert_graph(g, _TWEET_GRAPH)
 
-    posts = SnapshotContext(None, store, queries=[]).posts_for_usernames(["uasnews"])  # type: ignore[arg-type]
-    with_media = [p for p in posts["uasnews"] if "media_url" in p]
+    posts = SnapshotContext(None, store, queries=[]).posts_for_usernames(["ainews"])  # type: ignore[arg-type]
+    with_media = [p for p in posts["ainews"] if "media_url" in p]
     assert len(with_media) == 1
     assert with_media[0]["media_url"] == "https://pbs.x.com/a.jpg"
 

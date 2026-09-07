@@ -93,7 +93,7 @@ def _envelope(
     referenced: list[dict] | None = None,
     users=None,
     ended="2026-08-12T06:00:00+00:00",
-    query="(drone OR drones) lang:en",
+    query="(openai OR anthropic) lang:en",
 ) -> dict:
     return {
         "query": query,
@@ -112,7 +112,7 @@ def _envelope(
 
 def _store_envelope(storage: _Storage, name: str, doc: dict) -> None:
     storage.put_object(
-        f"{ENVELOPE_PREFIX}/drones", name, json.dumps(doc).encode("utf-8")
+        f"{ENVELOPE_PREFIX}/example_feed", name, json.dumps(doc).encode("utf-8")
     )
 
 
@@ -517,7 +517,7 @@ def test_hourly_counts_are_matched_by_created_at_not_referenced():
     buckets = reader.hourly_counts(
         "2026-08-12T00:00:00+00:00",
         "2026-08-13T00:00:00+00:00",
-        query_slug="drone_or_drones_lang_en",
+        query_slug="openai_or_anthropic_lang_en",
     )
     by_hour = {datetime.fromisoformat(b["start"]).hour: b["count"] for b in buckets}
     # bob's referenced post at 03:00 is out; matched posts at 04:00 and 05:00.
@@ -580,7 +580,7 @@ def test_posts_by_username_names_the_queries_a_match_answered():
         _envelope(
             matched=[_tweet("2", "2026-08-12T04:00:00.000Z", author="a2")],
             users=[{"id": "a2", "username": "bob"}],
-            query="counter uas",
+            query="llm news",
         ),
     )
     projection.refresh(storage, kv)  # type: ignore[arg-type]
@@ -588,7 +588,7 @@ def test_posts_by_username_names_the_queries_a_match_answered():
         p["url"].rsplit("/", 1)[-1]: p
         for p in CacheReader(storage).posts_by_username(["bob"])["bob"]  # type: ignore[arg-type]
     }
-    assert by_id["2"]["queries"] == ["counter_uas", "drone_or_drones_lang_en"]
+    assert by_id["2"]["queries"] == ["llm_news", "openai_or_anthropic_lang_en"]
     assert "queries" not in by_id["9"]
 
 
@@ -599,7 +599,7 @@ def test_reads_are_scoped_to_one_query():
     users = [{"id": "a1", "username": "alice", "location": "USA"}]
     _store_envelope(
         storage,
-        "2026-08-12T05:00:00+00:00_drones.json",
+        "2026-08-12T05:00:00+00:00_example_feed.json",
         _envelope(
             matched=[
                 _tweet("1", "2026-08-12T05:00:00.000Z"),
@@ -621,8 +621,8 @@ def test_reads_are_scoped_to_one_query():
 
     reader = CacheReader(storage)  # type: ignore[arg-type]
     window = ("2026-08-12T00:00:00+00:00", "2026-08-13T00:00:00+00:00")
-    assert reader.known_query_slugs() == {"drone_or_drones_lang_en", "ships_lang_en"}
-    assert reader.count_in_window(*window, query_slug="drone_or_drones_lang_en") == 2
+    assert reader.known_query_slugs() == {"openai_or_anthropic_lang_en", "ships_lang_en"}
+    assert reader.count_in_window(*window, query_slug="openai_or_anthropic_lang_en") == 2
     assert reader.count_in_window(*window, query_slug="ships_lang_en") == 1
     # Unscoped still spans both - the Users dataset wants every followed query.
     assert reader.count_in_window(*window) == 3

@@ -11,11 +11,11 @@ from naas_abi_marketplace.applications.x.orchestrations.XSearchRecentTweetsOrche
     _build_search_recent_tweets_definitions,
 )
 
-_QUERY = "(drone OR drones OR UAS OR UAV) lang:en -is:retweet"
+_QUERY = "(openai OR anthropic) lang:en -is:retweet"
 
 
 def _workflow_config(
-    name: str = "drones_and_uas", **overrides
+    name: str = "example_feed", **overrides
 ) -> XTweetSearchWorkflowConfiguration:
     return XTweetSearchWorkflowConfiguration(
         name=name,
@@ -29,10 +29,10 @@ def test_cron_schedule_defaults_running():
         _workflow_config(cron="10,25,40,55 * * * *")
     )
 
-    assert job.name == "x_search_recent_tweets_drones_and_uas"
+    assert job.name == "x_search_recent_tweets_example_feed"
     assert sensor is None
     assert schedule is not None
-    assert schedule.name == "x_search_recent_tweets_schedule_drones_and_uas"
+    assert schedule.name == "x_search_recent_tweets_schedule_example_feed"
     assert schedule.cron_schedule == "10,25,40,55 * * * *"
     assert schedule.default_status == dg.DefaultScheduleStatus.RUNNING
 
@@ -42,10 +42,10 @@ def test_interval_sensor_defaults_running():
         _workflow_config(interval_seconds=3600)
     )
 
-    assert job.name == "x_search_recent_tweets_drones_and_uas"
+    assert job.name == "x_search_recent_tweets_example_feed"
     assert schedule is None
     assert sensor is not None
-    assert sensor.name == "x_search_recent_tweets_sensor_drones_and_uas"
+    assert sensor.name == "x_search_recent_tweets_sensor_example_feed"
     assert sensor.minimum_interval_seconds == 3600
     assert sensor.default_status == dg.DefaultSensorStatus.RUNNING
 
@@ -68,7 +68,7 @@ def test_definitions_expose_running_triggers_for_configured_workflows():
     sensor_by_name = {s.name: s for s in defs.sensors or []}
 
     assert (
-        schedule_by_name["x_search_recent_tweets_schedule_drones_and_uas"].default_status
+        schedule_by_name["x_search_recent_tweets_schedule_example_feed"].default_status
         == dg.DefaultScheduleStatus.RUNNING
     )
     assert (

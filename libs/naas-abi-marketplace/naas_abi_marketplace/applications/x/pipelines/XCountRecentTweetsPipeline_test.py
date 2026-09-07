@@ -22,7 +22,7 @@ from rdflib import RDF, Graph, URIRef
 
 _COUNT_GRAPH = "http://ontology.naas.ai/graph/x_recent_posts_count"
 _NS = "http://ontology.naas.ai/x/"
-_QUERY = "(drone OR uas) lang:en -is:retweet"
+_QUERY = "(openai OR anthropic) lang:en -is:retweet"
 _ENVELOPE = {
     "query": _QUERY,
     "options": {

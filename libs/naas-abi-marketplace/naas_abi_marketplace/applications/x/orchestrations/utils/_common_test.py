@@ -48,7 +48,7 @@ def _module_with_result_set(file_path: str) -> _FakeModule:
 
 
 def test_search_envelope_ingested_true_when_file_path_present():
-    path = "x/search_recent_tweets/drones_and_uas/2026-07-24T12:00:00_drones.json"
+    path = "x/search_recent_tweets/example_feed/2026-07-24T12:00:00_example.json"
     module = _module_with_result_set(path)
     assert search_envelope_ingested(module, path) is True
 
