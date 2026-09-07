@@ -634,7 +634,11 @@ check-core: deps
 	@echo ""
 	@echo "\033[1;4m🔍 Running code quality checks...\033[0m\n"
 	@echo "📝 Linting with ruff..."
-	@uvx ruff check libs/naas-abi-core libs/naas-abi-cli libs/naas-abi --exclude "libs/naas-abi-cli/naas_abi_cli/cli/new/templates" --exclude "**/sandbox/**"
+	@# naas-abi-platform is in this list because it was in no ruff invocation at
+	@# all. It ships the platform CLI and it is a distribution of its own, so the
+	@# TID251 zen import ban did not reach it and a `from zen...` line there would
+	@# have passed CI, exactly as one did under apps/nexus/apps/api until 03e82cb.
+	@uvx ruff check libs/naas-abi-core libs/naas-abi-cli libs/naas-abi libs/naas-abi-platform --exclude "libs/naas-abi-cli/naas_abi_cli/cli/new/templates" --exclude "**/sandbox/**"
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
 	@echo "• Checking naas_abi_core..."
