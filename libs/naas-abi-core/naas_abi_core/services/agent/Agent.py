@@ -1741,7 +1741,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 pd.get(result, "update.messages[-1]", None) for result in results
             )
             if isinstance(message, ToolMessage)
-            and isinstance(getattr(message, "name", None), str)
+            and isinstance(message.name, str)
             and not message.name.startswith("transfer_to_")
         ]
         if had_tool_error:
