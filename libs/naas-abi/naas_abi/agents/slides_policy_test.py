@@ -1,4 +1,7 @@
 import inspect
+import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 from naas_abi.agents.slides_policy import (
     DEFAULT_SLIDES_MODEL,
@@ -14,6 +17,7 @@ from naas_abi.agents.slides_policy import (
     resolve_slides_llm_model,
     slides_brief_requires_research,
     slides_reasoning_extra_body,
+    slides_research_tools,
     slides_search_budget_remaining,
 )
 from naas_abi_core.services.agent.context import (
@@ -139,6 +143,52 @@ def test_write_gate_blocks_until_web_search() -> None:
     assert reject_unresearched_slides_write() is None
     slides_research_required.set(False)
     slides_research_queries.set(None)
+
+
+@contextmanager
+def _unimportable(*prefixes: str) -> Iterator[None]:
+    """Make each prefix and its submodules raise ImportError on import.
+
+    Monkeypatching the imported name would test a different failure. The one
+    that ships is an ImportError raised while the module is being loaded, in a
+    deployment where the package simply is not installed, so the finder has to
+    be the thing that refuses.
+    """
+
+    def blocked(fullname: str) -> bool:
+        return any(
+            fullname == prefix or fullname.startswith(f"{prefix}.") for prefix in prefixes
+        )
+
+    class _Blocker:
+        def find_spec(self, fullname: str, path=None, target=None) -> None:
+            if blocked(fullname):
+                raise ImportError(f"blocked by test: {fullname}")
+            # Falling through to None hands everything else to the real finders.
+
+    blocker = _Blocker()
+    evicted = {name: mod for name, mod in sys.modules.items() if blocked(name)}
+    for name in evicted:
+        del sys.modules[name]
+    sys.meta_path.insert(0, blocker)
+    try:
+        yield
+    finally:
+        sys.meta_path.remove(blocker)
+        sys.modules.update(evicted)
+
+
+def test_research_tools_do_not_depend_on_the_zen_repo() -> None:
+    """ABI has to own the search stack the slides gate depends on.
+
+    The registration used to import ``zen.tools.WebTools``, which only exists
+    in a sibling repository. Every deployment without that repository on the
+    path bound no search tool at all, and nothing said so.
+    """
+    with _unimportable("zen"):
+        bound = {tool.name for tool in slides_research_tools()}
+
+    assert bound == {"web_search", "web_fetch"}
 
 
 def test_bind_policy_sets_gate_for_open_deck() -> None:

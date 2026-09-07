@@ -192,17 +192,9 @@ Respond only based on what your available agents and tools can actually deliver.
             logger = __import__("logging").getLogger(__name__)
             logger.debug("coding tools unavailable: %s", exc)
 
-        try:
-            from naas_abi.agents.slides_policy import attach_slides_research_note
-            from zen.tools.WebTools import make_web_fetch_tool, make_web_search_tool
+        from naas_abi.agents.slides_policy import slides_research_tools
 
-            tools += [
-                attach_slides_research_note(make_web_search_tool()),
-                make_web_fetch_tool(),
-            ]
-        except Exception as exc:  # noqa: BLE001
-            logger = __import__("logging").getLogger(__name__)
-            logger.debug("web search tools unavailable: %s", exc)
+        tools += slides_research_tools()
 
         # NOTE: coding-workspace filesystem tools (write_file/read_file/list_dir)
         # are injected generically for every agent via default_tools, so the

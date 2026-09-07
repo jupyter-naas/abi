@@ -270,6 +270,33 @@ def attach_slides_research_note(tool: Any) -> Any:
     return tool
 
 
+_SEARCH_STACK = "naas_abi.agents.tools.web_tools"
+
+
+def slides_research_tools() -> list[Any]:
+    """Bind the web tools the research gate depends on, or nothing.
+
+    Extracted from AbiAgent so the gate and the registration agree on one
+    source of search, instead of the gate assuming a tool the registration
+    never managed to bind.
+    """
+    import importlib
+    import logging
+
+    try:
+        stack = importlib.import_module(_SEARCH_STACK)
+    except ImportError as exc:
+        logging.getLogger(__name__).warning(
+            "slides web search unavailable, the research gate will not be armed: %s",
+            exc,
+        )
+        return []
+    return [
+        attach_slides_research_note(stack.make_web_search_tool()),
+        stack.make_web_fetch_tool(),
+    ]
+
+
 def _openrouter_api_key(abi: Any) -> str | None:
     """Prefer the OpenRouter module key; this env often stores it as OPENAI_API_KEY."""
     import os
