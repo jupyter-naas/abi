@@ -126,6 +126,72 @@ def test_web_fetch_accepts_an_uppercase_scheme() -> None:
         assert "ok" in make_web_fetch_tool().invoke({"url": "HTTPS://example.com"})
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://169.254.169.254/latest/meta-data/iam/security-credentials/",
+        "http://metadata.google.internal/computeMetadata/v1/",
+        "http://[fd00:ec2::254]/latest/meta-data/",
+        "http://127.0.0.1:10217/api/v1/agents",
+        "http://localhost:12334/",
+        "http://api.localhost/",
+        "http://10.0.0.7/admin",
+        "http://192.168.1.1/",
+        "http://[::1]:8080/",
+        "http://forgejo.local/",
+    ],
+)
+def test_web_fetch_refuses_metadata_and_private_hosts(url: str) -> None:
+    """An http:// URL is a valid scheme pointing at the wrong network.
+
+    Everything web_fetch reads is returned into the transcript, so an instance
+    metadata endpoint is a credential read with an audience. The private and
+    loopback ranges are the same shape one hop down: the live API and Nexus are
+    on loopback ports on the machine running the agent.
+
+    This is a host deny list on the URL as written, not SSRF protection. A
+    public hostname that resolves to 127.0.0.1 still gets through, because
+    closing that needs the address pinned between resolution and connect. What
+    it does close is every target reachable by writing the address down, which
+    is the whole of the metadata problem, since 169.254.169.254 is a fixed
+    literal with no name to look up.
+    """
+    tool = make_web_fetch_tool()
+    opener = MagicMock()
+
+    with patch(
+        "naas_abi.agents.tools.web_tools._http_only_opener",
+        return_value=opener,
+    ):
+        result = tool.invoke({"url": url})
+
+    assert "Error" in result
+    opener.open.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://naas.ai/pricing?plan=team#faq",
+        "https://8.8.8.8/",
+        "https://docs.naas.ai:8443/",
+    ],
+)
+def test_web_fetch_still_opens_ordinary_public_urls(url: str) -> None:
+    """The deny list must not cost the tool its actual job.
+
+    Query strings and fragments are in here on purpose: the endpoint validator
+    in the Nexus API rejects both, which is correct for a provider base URL and
+    would break fetching most pages on the web.
+    """
+    resp = _html_response(b"<p>public</p>")
+    with patch(
+        "naas_abi.agents.tools.web_tools._http_only_opener",
+        return_value=_mock_opener(resp),
+    ):
+        assert "public" in make_web_fetch_tool().invoke({"url": url})
+
+
 def test_web_fetch_opener_cannot_speak_a_non_http_scheme() -> None:
     """Validating the URL the model gave is not enough on its own.
 
