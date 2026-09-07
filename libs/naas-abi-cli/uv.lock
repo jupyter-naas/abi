@@ -2502,7 +2502,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-cli"
-version = "2.21.0"
+version = "2.21.1"
 source = { editable = "." }
 dependencies = [
     { name = "naas-abi" },
@@ -2535,7 +2535,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "2.30.0"
+version = "2.31.1"
 source = { editable = "../naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -2645,6 +2645,7 @@ provides-extras = ["ssh", "aws", "qdrant", "sqlite-vec", "all", "openrouter", "d
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "moto", extras = ["s3"], specifier = ">=5.0.0" },
     { name = "mypy", specifier = ">=1.19.0" },
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "python-semantic-release", specifier = ">=9.21.0" },

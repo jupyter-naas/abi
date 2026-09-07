@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.21.1 (2026-09-07)
+
+### Bug Fixes
+
+- **cli**: Snapshot storage/ via the root helper to fix root-owned files on Linux
+  ([`0b3d358`](https://github.com/jupyter-naas/abi/commit/0b3d358275e8ef816d93266845ce4bd6ab76b55f))
+
+
 ## v2.21.0 (2026-09-03)
 
 ### Bug Fixes
