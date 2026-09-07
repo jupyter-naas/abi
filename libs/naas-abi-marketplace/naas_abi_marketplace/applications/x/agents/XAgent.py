@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
@@ -45,6 +43,11 @@ class XAgent(Agent):
             "description": "Rank X users by number of tweets collected",
         },
         {
+            "label": "Tweets by handle",
+            "value": "Show me all tweets by @",
+            "description": "List ingested tweets authored by an X username",
+        },
+        {
             "label": "Language breakdown",
             "value": "What is the language distribution of collected tweets?",
             "description": "See which languages dominate the ingested dataset",
@@ -81,7 +84,10 @@ questions over previously-ingested data):
 - `find_top_liked_tweets`, `find_top_retweeted_tweets`,
   `find_top_impression_tweets`, `find_top_engaging_tweets` — engagement
   rankings with a `limit`.
-- `find_tweets_by_author` — tweets by a specific `author_id`.
+- `find_tweets_by_username` — tweets by a specific X handle (`username`,
+  with or without `@`; case-insensitive). Prefer this when the user names
+  an author by handle.
+- `find_tweets_by_author` — tweets by a specific numeric `author_id`.
 - `find_tweets_containing_keyword` — substring match on tweet text.
 - `find_tweets_in_language` — filter by BCP 47 `lang_code`.
 - `find_tweets_since` — tweets created after a UTC `since` timestamp.
@@ -99,6 +105,9 @@ questions over previously-ingested data):
 Routing rules:
 - "Most liked / retweeted / viewed / engaging tweets" → graph tool.
 - "Top authors / language distribution / tweets containing X / tweets since X" → graph tool.
+- "Tweets by @handle / username / what did <handle> post" → graph tool
+  (`find_tweets_by_username`). Use `find_tweets_by_author` only when the
+  user already gave a numeric author id.
 - "What filters are we ingesting / list ingested tweets / tweets for query X" → graph tool
   (`list_ingested_search_queries` then `find_tweets_by_search_query`).
 - "What does @handle look like / fetch tweets now / who follows X" → API tool.
@@ -125,6 +134,7 @@ Constraints:
 - The integration is read-only. If the user asks to post, like, follow, or
   retweet, explain that those write actions are not available.
 """
+
     @classmethod
     def get_tools(cls) -> list:
         """Load the X SPARQL competency-question tools from the templatable
@@ -135,7 +145,6 @@ Constraints:
         from naas_abi_core.modules.templatablesparqlquery import (
             ABIModule as TemplatableSparqlQueryABIModule,
         )
-
         from naas_abi_marketplace.applications.x import ABIModule
 
         templatable_sparql_query_module: BaseModule = (
@@ -153,6 +162,7 @@ Constraints:
             "find_top_impression_tweets",
             "find_top_engaging_tweets",
             "find_tweets_by_author",
+            "find_tweets_by_username",
             "find_tweets_containing_keyword",
             "find_tweets_in_language",
             "find_tweets_since",
@@ -167,10 +177,9 @@ Constraints:
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "XAgent":
-        from naas_abi_core.engine.context import get_default_model_registry
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> XAgent:
         # from naas_abi_marketplace.applications.x import ABIModule
         # from naas_abi_marketplace.applications.x.integrations.XIntegration import (
         #     XIntegrationConfiguration,
@@ -180,8 +189,10 @@ Constraints:
         # )
 
         # module = ABIModule.get_instance()
-        registry = get_default_model_registry()
-        assert registry is not None, "ModelRegistryService not initialized"
+        from naas_abi_marketplace.applications.x import ABIModule
+
+        abi_module = ABIModule.get_instance()
+        registry = abi_module.engine.services.model_registry
         chat_model = registry.get_default_chat_model()
 
         # x_integration_config = XIntegrationConfiguration(

@@ -15,7 +15,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.Conversation import Conversation
+from naas_abi.ontologies.classes.ontology_demo.nexus.Conversation import Conversation
 
 class MyConversation(Conversation):
     def actions(self):

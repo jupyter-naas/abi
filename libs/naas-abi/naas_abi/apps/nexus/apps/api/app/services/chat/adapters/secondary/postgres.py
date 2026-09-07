@@ -261,6 +261,7 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
         content: str,
         created_at,
         agent: str | None = None,
+        metadata_: str | None = None,
     ) -> None:
         self.db.add(
             MessageModel(
@@ -270,6 +271,7 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
                 content=content,
                 agent=agent,
                 created_at=created_at,
+                metadata_=metadata_,
             )
         )
         await self.db.flush()

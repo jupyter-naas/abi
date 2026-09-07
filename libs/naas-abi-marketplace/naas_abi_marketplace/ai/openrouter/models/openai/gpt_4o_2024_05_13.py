@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt4o20240513Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-4o (2024-05-13)",
+        name="GPT-4o (2024-05-13)",
         owner="openai",
         description="GPT-4o (\"o\" for \"omni\") is OpenAI's latest AI model, supporting both text and image inputs with text outputs. It maintains the intelligence level of [GPT-4 Turbo](/models/openai/gpt-4-turbo) while being twice as...",
         canonical_slug="openai/gpt-4o-2024-05-13",
         hugging_face_id=None,
-        created_at=datetime.fromtimestamp(1715558400),
+        created_at=datetime.fromtimestamp(1715558400, tz=UTC),
         pricing={'prompt': '0.000005', 'completion': '0.000015'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['text', 'image', 'file'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 128000, 'max_completion_tokens': 4096, 'is_moderated': False},

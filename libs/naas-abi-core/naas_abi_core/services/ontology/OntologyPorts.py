@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-from rdflib import Graph
+
 from langchain_core.language_models import BaseChatModel
+from rdflib import Graph
 
 
 class IOntologyNERPort(ABC):
@@ -17,7 +18,6 @@ class IOntologyNERPort(ABC):
         Returns:
             Graph: An RDFLib Graph containing the mapped entities and their relationships from the input text
         """
-        pass
 
 
 class IOntologyService(ABC):
@@ -33,4 +33,3 @@ class IOntologyService(ABC):
         Returns:
             Graph: An RDFLib Graph containing the mapped entities and their relationships
         """
-        pass

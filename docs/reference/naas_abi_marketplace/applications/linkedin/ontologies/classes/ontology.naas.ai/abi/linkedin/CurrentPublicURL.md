@@ -2,18 +2,18 @@
 
 ## What it is
 - A thin subclass wrapper around `ActOfConnectionsOnLinkedIn.CurrentPublicURL`.
-- Intended as an action class placeholder for implementing custom logic via `actions()`.
+- Provides an override point (`actions`) for adding custom behavior.
 
 ## Public API
 - `class CurrentPublicURL(_CurrentPublicURL)`
-  - Subclasses `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.CurrentPublicURL`.
+  - Inherits from `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.CurrentPublicURL`.
   - `actions(self)`
-    - Placeholder method for action logic.
-    - Currently does nothing (`pass`).
+    - Intended hook for implementing action logic.
+    - Declared but contains no implementation in this file.
 
 ## Configuration/Dependencies
-- Depends on:
-  - `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.CurrentPublicURL` (imported as `_CurrentPublicURL`).
+- Imports:
+  - `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.CurrentPublicURL` (aliased as `_CurrentPublicURL`)
 
 ## Usage
 ```python
@@ -21,9 +21,9 @@ from naas_abi_marketplace.applications.linkedin.ontologies.classes.ontology.naas
     CurrentPublicURL,
 )
 
-action = CurrentPublicURL()
-action.actions()  # no-op by default
+obj = CurrentPublicURL()
+obj.actions()  # no implementation provided in this module
 ```
 
 ## Caveats
-- `actions()` is not implemented in this class and will perform no operation until you add logic.
+- `actions()` has no body in this module; calling it will not execute custom logic unless implemented (behavior depends on how Python handles the missing function body in the actual runtime context).

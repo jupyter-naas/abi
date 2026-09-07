@@ -1,15 +1,18 @@
-from typing import Dict, Literal, Tuple, Union
+from typing import Literal, Self
 
-from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import \
-    GenericLoader
-from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import \
-    pydantic_model_validator
-from naas_abi_core.services.object_storage.ObjectStoragePort import \
-    IObjectStorageAdapter
-from naas_abi_core.services.object_storage.ObjectStorageService import \
-    ObjectStorageService
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
+    GenericLoader,
+)
+from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
+    pydantic_model_validator,
+)
+from naas_abi_core.services.object_storage.ObjectStoragePort import (
+    IObjectStorageAdapter,
+)
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 from pydantic import BaseModel, ConfigDict, model_validator
-from typing_extensions import Self
 
 
 class ObjectStorageAdapterFSConfiguration(BaseModel):
@@ -67,18 +70,35 @@ class ObjectStorageAdapterNaasConfiguration(BaseModel):
     base_prefix: str = ""
 
 
+class ObjectStorageAdapterR2Configuration(BaseModel):
+    """Object storage adapter Cloudflare R2 configuration.
+
+    object_storage_adapter:
+      adapter: "r2"
+      config:
+        account_id: "{{ secret.R2_ACCOUNT_ID }}"
+        bucket_name: "my-bucket"
+        base_prefix: "my-prefix"
+        access_key_id: "{{ secret.R2_ACCESS_KEY_ID }}"
+        secret_access_key: "{{ secret.R2_SECRET_ACCESS_KEY }}"
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    account_id: str
+    bucket_name: str
+    access_key_id: str
+    secret_access_key: str
+    base_prefix: str = ""
+
+
 class ObjectStorageAdapterConfiguration(GenericLoader):
-    adapter: Literal["fs", "s3", "naas", "custom"]
+    adapter: Literal["fs", "s3", "naas", "r2", "custom"]
     config: (
-        Union[
-            ObjectStorageAdapterFSConfiguration,
-            ObjectStorageAdapterS3Configuration,
-            ObjectStorageAdapterNaasConfiguration,
-        ]
+        ObjectStorageAdapterFSConfiguration | ObjectStorageAdapterS3Configuration | ObjectStorageAdapterNaasConfiguration | ObjectStorageAdapterR2Configuration
         | None
     ) = None
 
-    __MAPPING: Dict[Literal["fs", "s3", "naas"], Tuple[str, str]] = {
+    __MAPPING: dict[Literal["fs", "s3", "naas", "r2"], tuple[str, str]] = {
         "fs": (
             "abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS",
             "ObjectStorageSecondaryAdapterFS",
@@ -90,6 +110,10 @@ class ObjectStorageAdapterConfiguration(GenericLoader):
         "naas": (
             "abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterNaas",
             "ObjectStorageSecondaryAdapterNaas",
+        ),
+        "r2": (
+            "abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterR2",
+            "ObjectStorageSecondaryAdapterR2",
         ),
     }
 
@@ -118,6 +142,12 @@ class ObjectStorageAdapterConfiguration(GenericLoader):
                 self.config,
                 "Invalid configuration for services.object_storage.object_storage_adapter 'naas' adapter",
             )
+        if self.adapter == "r2":
+            pydantic_model_validator(
+                ObjectStorageAdapterR2Configuration,
+                self.config,
+                "Invalid configuration for services.object_storage.object_storage_adapter 'r2' adapter",
+            )
 
         return self
 
@@ -128,20 +158,29 @@ class ObjectStorageAdapterConfiguration(GenericLoader):
             )
 
             if self.adapter == "fs":
-                from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import \
-                    ObjectStorageSecondaryAdapterFS
+                from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
+                    ObjectStorageSecondaryAdapterFS,
+                )
 
                 return ObjectStorageSecondaryAdapterFS(**self.config.model_dump())
             elif self.adapter == "s3":
-                from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterS3 import \
-                    ObjectStorageSecondaryAdapterS3
+                from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterS3 import (
+                    ObjectStorageSecondaryAdapterS3,
+                )
 
                 return ObjectStorageSecondaryAdapterS3(**self.config.model_dump())
             elif self.adapter == "naas":
-                from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterNaas import \
-                    ObjectStorageSecondaryAdapterNaas
+                from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterNaas import (
+                    ObjectStorageSecondaryAdapterNaas,
+                )
 
                 return ObjectStorageSecondaryAdapterNaas(**self.config.model_dump())
+            elif self.adapter == "r2":
+                from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterR2 import (
+                    ObjectStorageSecondaryAdapterR2,
+                )
+
+                return ObjectStorageSecondaryAdapterR2(**self.config.model_dump())
             else:
                 raise ValueError(f"Unknown adapter: {self.adapter}")
             # return GenericLoader(

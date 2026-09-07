@@ -3,7 +3,6 @@ import importlib
 import click
 import pytest
 
-
 stack_module = importlib.import_module("naas_abi_cli.cli.stack")
 
 
@@ -11,7 +10,7 @@ def test_start_stack_opens_nexus_when_compose_succeeds(monkeypatch) -> None:
     opened: list[str] = []
 
     monkeypatch.setattr(stack_module, "run_compose", lambda args: None)
-    monkeypatch.setattr(stack_module, "_get_error_services", lambda: [])
+    monkeypatch.setattr(stack_module, "_get_error_services", list)
     monkeypatch.setattr(stack_module.webbrowser, "open", lambda url: opened.append(url))
     monkeypatch.setattr(stack_module, "_nexus_web_url", lambda: "http://nexus/")
 
@@ -49,7 +48,7 @@ def test_start_stack_retries_compose_up_before_succeeding(monkeypatch) -> None:
             raise click.ClickException("temporary failure")
 
     monkeypatch.setattr(stack_module, "run_compose", _flaky_compose)
-    monkeypatch.setattr(stack_module, "_get_error_services", lambda: [])
+    monkeypatch.setattr(stack_module, "_get_error_services", list)
     monkeypatch.setattr(stack_module.webbrowser, "open", lambda url: True)
     monkeypatch.setattr(
         stack_module.click, "echo", lambda message: messages.append(message)
@@ -70,7 +69,7 @@ def test_start_stack_fails_after_two_retries(monkeypatch) -> None:
         raise click.ClickException("still failing")
 
     monkeypatch.setattr(stack_module, "run_compose", _always_failing_compose)
-    monkeypatch.setattr(stack_module, "_get_error_services", lambda: [])
+    monkeypatch.setattr(stack_module, "_get_error_services", list)
 
     with pytest.raises(click.ClickException, match="still failing"):
         stack_module._start_stack()

@@ -71,11 +71,9 @@ def test_create_individual_ontology_yaml_workflow(
 
     # Check if ontology id is set
     graph = sparql_utils.get_subject_graph(str(uri), 1)
-    naas_ontology_id = list(
-        graph.triples(
+    naas_ontology_id = next(iter(graph.triples(
             (None, URIRef("http://ontology.naas.ai/abi/naas_ontology_id"), None)
-        )
-    )[0][2]
+        )))[2]
     assert str(ontology_id) == str(naas_ontology_id), ontology_id
 
     # Remove graph

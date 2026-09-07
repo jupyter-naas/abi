@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any
 
 
 class SecretAuthenticationError(Exception):
@@ -20,12 +20,12 @@ class ISecretAdapter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def list(self) -> Dict[str, str | None]:
+    def list(self) -> dict[str, str | None]:
         raise NotImplementedError()
 
 
 class ISecretService(ABC):
-    __adapter: List[ISecretAdapter]
+    __adapter: list[ISecretAdapter]
 
     @abstractmethod
     def get(self, key: str, default: Any = None) -> str | Any | None:
@@ -40,6 +40,6 @@ class ISecretService(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def list(self) -> Dict[str, str | None]:
+    def list(self) -> dict[str, str | None]:
         raise NotImplementedError()
         raise NotImplementedError()

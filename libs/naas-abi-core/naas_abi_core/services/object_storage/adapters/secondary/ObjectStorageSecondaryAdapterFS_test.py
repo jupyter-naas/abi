@@ -1,8 +1,26 @@
+import io
 from concurrent.futures import ThreadPoolExecutor
 
+import pytest
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
     ObjectStorageSecondaryAdapterFS,
 )
+from naas_abi_core.services.object_storage.tests.object_storage__secondary_adapter__generic_test import (
+    ObjectStorageSecondaryAdapterContract,
+)
+
+
+def test_put_object_creates_nested_key_directories(tmp_path):
+    adapter = ObjectStorageSecondaryAdapterFS(base_path=str(tmp_path / "storage"))
+    adapter.put_object("signals/github/data", "jupyter-naas/repos/stamp.json", b"{}")
+    assert adapter.get_object("signals/github/data", "jupyter-naas/repos/stamp.json") == b"{}"
+
+
+def test_put_object_stream_writes_from_a_stream(tmp_path):
+    adapter = ObjectStorageSecondaryAdapterFS(base_path=str(tmp_path / "storage"))
+    payload = b"x" * (3 * 1024 * 1024)
+    adapter.put_object_stream("objects", "big.bin", io.BytesIO(payload))
+    assert adapter.get_object("objects", "big.bin") == payload
 
 
 def test_persistence_across_restart(tmp_path):
@@ -18,10 +36,16 @@ def test_atomic_concurrent_put(tmp_path):
     adapter = ObjectStorageSecondaryAdapterFS(base_path=str(tmp_path / "storage"))
 
     def _put(i: int) -> None:
-        adapter.put_object("objects", "k.bin", f"value-{i}".encode("utf-8"))
+        adapter.put_object("objects", "k.bin", f"value-{i}".encode())
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         list(executor.map(_put, range(30)))
 
     data = adapter.get_object("objects", "k.bin")
     assert data.startswith(b"value-")
+
+
+class TestObjectStorageSecondaryAdapterFS(ObjectStorageSecondaryAdapterContract):
+    @pytest.fixture
+    def adapter(self, tmp_path) -> ObjectStorageSecondaryAdapterFS:
+        return ObjectStorageSecondaryAdapterFS(base_path=str(tmp_path / "storage"))

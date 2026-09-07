@@ -2,8 +2,8 @@ import sys
 
 import click
 
-from .bootstrap import maybe_rerun_in_project_context
 from .agent import agent
+from .bootstrap import maybe_rerun_in_project_context
 from .chat import chat
 from .config import config
 from .deploy import deploy
@@ -12,11 +12,14 @@ from .docs import docs
 from .init import init
 from .module import module
 from .new import new
+from .org import org
 from .run import run
 from .secret import secrets
 from .setup import setup
 from .snapshot import snapshot
 from .stack import logs, stack, start, stop
+from .user import user
+from .workspace import workspace
 
 
 @click.group("abi")
@@ -41,6 +44,9 @@ _main.add_command(logs)
 stack.add_command(snapshot)
 _main.add_command(stack)
 _main.add_command(dev)
+_main.add_command(workspace)
+_main.add_command(user)
+_main.add_command(org)
 ran = False
 
 

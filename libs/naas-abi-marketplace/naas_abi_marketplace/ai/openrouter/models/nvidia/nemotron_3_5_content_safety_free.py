@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Nemotron35ContentSafetyFreeModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="NVIDIA: Nemotron 3.5 Content Safety (free)",
+        name="Nemotron 3.5 Content Safety (free)",
         owner="nvidia",
         description="NVIDIA Nemotron 3.5 Content Safety is a compact 4B-parameter multimodal guardrail model from NVIDIA, fine-tuned from Google Gemma-3-4B. It moderates both inputs to and responses from LLMs and VLMs, accepting...",
         canonical_slug="nvidia/nemotron-3.5-content-safety-20260604",
         hugging_face_id="nvidia/Nemotron-3.5-Content-Safety",
-        created_at=datetime.fromtimestamp(1780581864),
+        created_at=datetime.fromtimestamp(1780581864, tz=UTC),
         pricing={'prompt': '0', 'completion': '0'},
         architecture={'modality': 'text+image->text', 'input_modalities': ['text', 'image'], 'output_modalities': ['text'], 'tokenizer': 'Other', 'instruct_type': None},
         top_provider={'context_length': 128000, 'max_completion_tokens': 8192, 'is_moderated': False},

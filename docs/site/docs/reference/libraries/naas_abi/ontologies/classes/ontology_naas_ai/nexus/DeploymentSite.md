@@ -16,7 +16,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.DeploymentSite import DeploymentSite
+from naas_abi.ontologies.classes.ontology_demo.nexus.DeploymentSite import DeploymentSite
 
 site = DeploymentSite()
 site.actions()  # no-op by default

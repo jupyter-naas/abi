@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt4o20240806Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-4o (2024-08-06)",
+        name="GPT-4o (2024-08-06)",
         owner="openai",
         description="The 2024-08-06 version of GPT-4o offers improved performance in structured outputs, with the ability to supply a JSON schema in the respone_format. Read more [here](https://openai.com/index/introducing-structured-outputs-in-the-api/). GPT-4o (\"o\" for \"omni\") is...",
         canonical_slug="openai/gpt-4o-2024-08-06",
         hugging_face_id=None,
-        created_at=datetime.fromtimestamp(1722902400),
+        created_at=datetime.fromtimestamp(1722902400, tz=UTC),
         pricing={'prompt': '0.0000025', 'completion': '0.00001', 'input_cache_read': '0.00000125'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['text', 'image', 'file'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 128000, 'max_completion_tokens': 16384, 'is_moderated': False},

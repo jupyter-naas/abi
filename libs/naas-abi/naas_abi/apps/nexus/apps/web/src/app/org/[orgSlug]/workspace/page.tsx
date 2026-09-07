@@ -54,7 +54,7 @@ export default function OrgWorkspacePage() {
         if (workspaces.length > 0) {
           router.replace(`/org/${orgSlug}/workspace/${workspaces[0].id}/chat`);
         } else {
-          setError('No workspaces found');
+          router.replace('/no-workspace');
         }
       } catch (err) {
         setError('Failed to load workspaces');

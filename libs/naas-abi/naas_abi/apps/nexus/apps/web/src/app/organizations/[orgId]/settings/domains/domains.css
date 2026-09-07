@@ -1,0 +1,7 @@
+/* organizations settings / domains */
+
+.org-settings-domains-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}

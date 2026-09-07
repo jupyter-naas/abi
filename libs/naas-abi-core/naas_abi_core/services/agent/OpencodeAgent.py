@@ -10,12 +10,13 @@ import shlex
 import socket
 import subprocess
 import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from threading import Lock, Thread
-from typing import Any, AsyncIterator, Optional
+from typing import Any
 
 import httpx
 from fastapi import APIRouter
@@ -151,7 +152,7 @@ class OpencodeAgent(Expose):
                 response = httpx.get(self._health_url, timeout=1.0)
                 if self._is_healthy(response):
                     return
-            except Exception:
+            except Exception:  # noqa: BLE001,S110
                 pass
             raise OpencodeStartupError(
                 f"opencode port {self.conf.port} is already in use"
@@ -161,7 +162,7 @@ class OpencodeAgent(Expose):
             response = httpx.get(self._health_url, timeout=1.0)
             if self._is_healthy(response):
                 return
-        except Exception:
+        except Exception:  # noqa: BLE001,S110
             pass
 
         os.makedirs(self.conf.workdir, exist_ok=True)
@@ -189,7 +190,7 @@ class OpencodeAgent(Expose):
             try:
                 cls._ensure_opencode_auth_file()
                 cls._auth_bootstrap_done = True
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Failed to initialize opencode auth file: {e}")
 
     @classmethod
@@ -282,7 +283,7 @@ class OpencodeAgent(Expose):
                 response = httpx.get(self._health_url, timeout=1.0)
                 if self._is_healthy(response):
                     return
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 last_error = e
 
             time.sleep(0.25)
@@ -358,14 +359,14 @@ class OpencodeAgent(Expose):
                 current_thread_id = int(self.state.thread_id)
                 self.state.set_thread_id(str(current_thread_id + 1))
                 return
-            except Exception:
+            except Exception:  # noqa: BLE001,S110
                 pass
         self._thread_to_session = {}
 
-    def invoke(self, prompt: str, thread_id: Optional[str] = None) -> str:
+    def invoke(self, prompt: str, thread_id: str | None = None) -> str:
         return _run_coroutine_sync(self.ainvoke(message=prompt, thread_id=thread_id))
 
-    async def ainvoke(self, message: str, thread_id: Optional[str] = None) -> str:
+    async def ainvoke(self, message: str, thread_id: str | None = None) -> str:
         self.start()
 
         try:
@@ -424,7 +425,7 @@ class OpencodeAgent(Expose):
 
                     try:
                         event = json.loads(data)
-                    except Exception:
+                    except Exception:  # noqa: BLE001,S112
                         continue
 
                     properties = event.get("properties") or {}
@@ -433,7 +434,7 @@ class OpencodeAgent(Expose):
                         continue
 
                     await self._handle_event(client, session_id, event)
-        except Exception:
+        except Exception:  # noqa: BLE001
             return
 
     async def _handle_event(
@@ -526,7 +527,7 @@ class OpencodeAgent(Expose):
                 )
                 if response.status_code < 300:
                     return True
-            except Exception:
+            except Exception:  # noqa: BLE001,S112
                 continue
         return False
 
@@ -552,7 +553,7 @@ class OpencodeAgent(Expose):
     async def astream(
         self,
         message: str,
-        thread_id: Optional[str] = None,
+        thread_id: str | None = None,
     ) -> AsyncIterator[str]:
         self.start()
 
@@ -579,7 +580,7 @@ class OpencodeAgent(Expose):
 
                         try:
                             event = json.loads(data)
-                        except Exception:
+                        except Exception:  # noqa: BLE001,S112
                             continue
 
                         if not isinstance(event, dict):
@@ -626,7 +627,7 @@ class OpencodeAgent(Expose):
     async def stream(
         self,
         message: str,
-        thread_id: Optional[str] = None,
+        thread_id: str | None = None,
     ) -> AsyncIterator[str]:
         async for chunk in self.astream(message=message, thread_id=thread_id):
             yield chunk
@@ -634,7 +635,7 @@ class OpencodeAgent(Expose):
     async def _get_or_create_session(
         self,
         client: httpx.AsyncClient,
-        thread_id: Optional[str],
+        thread_id: str | None,
     ) -> str:
         if thread_id:
             cached = self._thread_to_session.get(thread_id)
@@ -646,7 +647,7 @@ class OpencodeAgent(Expose):
                 self._thread_to_session[thread_id] = thread_id
                 return thread_id
 
-        title = f"{self.conf.name}-{datetime.now(timezone.utc).isoformat()}"
+        title = f"{self.conf.name}-{datetime.now(UTC).isoformat()}"
         response = await client.post(f"{self._base_url}/session", json={"title": title})
         self._raise_for_status(response)
 
@@ -716,7 +717,7 @@ class OpencodeAgent(Expose):
             return False
         try:
             payload = response.json()
-        except Exception:
+        except Exception:  # noqa: BLE001
             return False
         return isinstance(payload, dict) and payload.get("healthy") is True
 
@@ -752,14 +753,14 @@ class OpencodeAgent(Expose):
             content = payload.get("content")
             if isinstance(content, str):
                 return content
-        except Exception:
+        except Exception:  # noqa: BLE001
             return ""
         return ""
 
     async def _persist_best_effort(
         self,
         session_id: str,
-        thread_id: Optional[str],
+        thread_id: str | None,
         user_message: str,
         assistant_parts: list[dict[str, Any]],
     ) -> None:
@@ -783,7 +784,7 @@ class OpencodeAgent(Expose):
             await self.session_service.persist_file_events(
                 assistant_message, assistant_parts
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Opencode persistence failed: {e}")
 
     def as_tools(self) -> list[BaseTool]:
@@ -878,7 +879,7 @@ def _run_coroutine_sync(coro: Any) -> Any:
     def _runner() -> None:
         try:
             container["result"] = asyncio.run(coro)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             container["error"] = e
 
     thread = Thread(target=_runner, daemon=True)

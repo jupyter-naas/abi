@@ -1,43 +1,51 @@
 # ExchangeRatesAPIAgent
 
 ## What it is
-- An `IntentAgent` factory and thin agent class for interacting with (or guiding use of) the ExchangeRatesAPI service.
-- Builds an agent configured with:
-  - A system prompt describing constraints and capabilities.
-  - Tool definitions derived from an ExchangeRatesAPI integration (configured via API key).
-  - A small set of predefined “raw” intents for exchange-rate guidance.
+- An `IntentAgent` implementation for providing guidance about currency exchange rates and the ExchangeRatesAPI service.
+- Includes a factory-style constructor (`New`) that:
+  - Retrieves default chat/embedding models from the module engine’s model registry.
+  - Builds ExchangeRatesAPI tools via the ExchangeRatesAPI integration (using an API key from module configuration).
+  - Injects the tool list into the agent system prompt.
+  - Registers a small set of predefined “raw” intents.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Creates and returns an `ExchangeRatesAPIAgent` instance.
-  - Loads API key from the application module configuration.
-  - Registers tools from `ExchangeratesapiIntegration.as_tools(...)`.
-  - Injects tool names/descriptions into the system prompt.
-  - Uses the `gpt_4_1` chat model.
-
 - `class ExchangeRatesAPIAgent(IntentAgent)`
-  - No additional methods or overrides (inherits behavior from `IntentAgent`).
+  - Class attributes:
+    - `name`: `"ExchangeRatesAPI"`
+    - `description`: `"Helps you interact with ExchangeRatesAPI for currency exchange rate information."`
+    - `system_prompt`: Instruction prompt with a `[TOOLS]` placeholder that is filled at construction time.
+    - `suggestions`: empty list (`[]`)
+  - `@classmethod New(cls, agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> ExchangeRatesAPIAgent`
+    - Creates and returns an initialized agent instance.
+    - Populates tools via `ExchangeratesapiIntegration.as_tools(...)`.
+    - Creates two `IntentType.RAW` intents related to exchange rates and currency conversion.
+    - Uses `AgentConfiguration(system_prompt=...)` if none is provided.
+    - Uses `AgentSharedState(thread_id="0")` if none is provided.
 
 ## Configuration/Dependencies
-- Configuration source:
-  - `ABIModule.get_instance().configuration.exchangeratesapi_api_key` (API key used to configure the integration tools).
-- External dependencies (imported/used):
+- Configuration:
+  - `ABIModule.get_instance().configuration.exchangeratesapi_api_key` (used to configure integration tools)
+- Dependencies (imports/usage):
   - `naas_abi_core.services.agent.IntentAgent`:
     - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
-  - Chat model:
-    - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1.model`
-  - Integration tooling:
-    - `naas_abi_marketplace.applications.exchangeratesapi.integrations.ExchangeratesapiIntegration`:
-      - `as_tools`, `ExchangeratesapiIntegrationConfiguration`
+  - `naas_abi_marketplace.applications.exchangeratesapi.ABIModule`:
+    - Provides module instance, configuration, and engine services
+  - `naas_abi_marketplace.applications.exchangeratesapi.integrations.ExchangeratesapiIntegration`:
+    - `ExchangeratesapiIntegrationConfiguration`, `as_tools`
+- Runtime requirement:
+  - `abi_module.engine.services.model_registry` must be initialized (asserted in `New`).
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.exchangeratesapi.agents.ExchangeRatesAPIAgent import create_agent
+from naas_abi_marketplace.applications.exchangeratesapi.agents.ExchangeRatesAPIAgent import (
+    ExchangeRatesAPIAgent,
+)
 
-agent = create_agent()
-# Use `agent` via the IntentAgent interface provided by naas_abi_core.
+agent = ExchangeRatesAPIAgent.New()
+
+# Interact with `agent` through the IntentAgent interface (methods defined in naas_abi_core).
 ```
 
 ## Caveats
-- The system prompt explicitly states the agent “currently do not have access to ExchangeRatesAPI tools” and should only provide general guidance; however, the factory **does** attach tools via `as_tools(...)` if available and configured.
-- Real-time rates and conversions depend on correct API key configuration and the behavior of the integration tools (not defined in this file).
+- The default `system_prompt` states the agent “currently do not have access to ExchangeRatesAPI tools” and should not retrieve real-time data; however, `New()` still attaches tools produced by `as_tools(...)` and injects them into the prompt.
+- If the module engine’s `model_registry` is not initialized, `New()` will raise an assertion error.

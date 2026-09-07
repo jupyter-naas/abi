@@ -176,6 +176,7 @@ help:
 	@echo "  datastore-push           Push local datastore changes to remote storage"
 	@echo "  storage-pull             Pull storage data from remote"
 	@echo "  storage-push             Push local storage changes to remote"
+	@echo "  ollama-models            Pull local-first Ollama models (qwen2.5:3b + nomic-embed-text)"
 	@echo "  triplestore-prod-remove  Remove production triplestore data"
 	@echo "  triplestore-prod-override Override production triplestore with local data"
 	@echo "  triplestore-prod-pull    Pull triplestore data from production environment"
@@ -477,13 +478,13 @@ pr:
 # =============================================================================
 
 chat-ontology-engineer-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.ontology_engineer OntologyEngineerAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.operations.modules.ontology_engineer OntologyEngineerAgent
 
 chat-process-ontology-engineer-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.ontology_engineer ProcessOntologyEngineerAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.operations.modules.ontology_engineer ProcessOntologyEngineerAgent
 
 chat-support-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.support SupportAgent
+	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.domains.operations.modules.support SupportAgent
 
 # =============================================================================
 # DEVELOPMENT SERVERS & TOOLS
@@ -576,8 +577,7 @@ test-api-init-container: build
 		-e GITHUB_ACCESS_TOKEN="${GITHUB_ACCESS_TOKEN}" \
 		abi:latest uv run --no-dev python -m naas_abi_core.apps.api.test_init
 
-# TTL_FILES := $(wildcard src/*/*/ontologies/*.ttl src/marketplace/*/*/ontologies/*.ttl)
-TTL_FILES := $(shell find src -name '*.ttl' 2>/dev/null)
+TTL_FILES := $(shell find libs -name '*.ttl' -not -path '*/.venv/*' 2>/dev/null)
 PY_FILES := $(patsubst %.ttl, %.py, $(TTL_FILES))
 
 onto2py-force: onto2py-clean $(PY_FILES) onto2py-ruff-fix
@@ -595,7 +595,7 @@ onto2py: $(PY_FILES)
 
 %.py: %.ttl
 	@printf "📦 Converting ttl to py for $< ... "
-	@uv run python -m lib.abi.utils.onto2py '$<' '$@'
+	@uv run python -m naas_abi_core.utils.onto2py.onto2py '$<'
 
 # Test command for debugging
 hello:
@@ -663,7 +663,6 @@ check-marketplace: deps
 		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/domains \
 		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/__demo__ \
 		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/sandbox \
-		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/alpha \
 		--exclude "**/sandbox/**"
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
@@ -671,7 +670,6 @@ check-marketplace: deps
 		--exclude 'naas_abi_marketplace/domains' \
 		--exclude 'naas_abi_marketplace/__demo__' \
 		--exclude 'naas_abi_marketplace/sandbox' \
-		--exclude 'naas_abi_marketplace/alpha' \
 		--exclude 'naas_abi_marketplace/.*/sandbox' \
 		--exclude '.*sandbox.*' \
 		--follow-untyped-imports
@@ -942,6 +940,15 @@ storage-push: deps storage-pull
 	@ echo "Pushing storage..."
 	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/storage_push.py | sh'
 
+# Pull the local-first Ollama models (opt-in; not part of every boot/update).
+ollama-models:
+	@ command -v ollama >/dev/null 2>&1 || { echo "ollama not found; install from https://ollama.com first"; exit 1; }
+	@ echo "Pulling qwen2.5:3b ..."
+	@ ollama pull qwen2.5:3b
+	@ echo "Pulling nomic-embed-text ..."
+	@ ollama pull nomic-embed-text
+	@ echo "Ollama models ready."
+
 # Remove production triplestore data
 triplestore-prod-remove: deps
 	@ echo "Removing production triplestore..."
@@ -1024,4 +1031,4 @@ clean:
 # =============================================================================
 # Declare all targets as phony to avoid conflicts with files of the same name
 
-.PHONY: test test-local-embedded-core test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology docs docs-clean
+.PHONY: ollama-models test test-local-embedded-core test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology docs docs-clean

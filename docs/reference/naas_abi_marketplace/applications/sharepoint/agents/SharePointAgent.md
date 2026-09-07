@@ -1,41 +1,50 @@
 # SharePointAgent
 
 ## What it is
-A minimal `IntentAgent` implementation for SharePoint guidance. It provides general informational responses about SharePoint features and document/site management, but **does not include any SharePoint tools** for real operations.
+A SharePoint-focused `IntentAgent` that provides general guidance about SharePoint document management and collaboration. It does **not** include any tools to access or operate on SharePoint.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Factory that builds and returns a configured `SharePointAgent`.
-  - Sets:
-    - `name`: `"SharePoint"`
-    - `description`: SharePoint document management/collaboration helper
-    - `system_prompt`: guidance-only (no tool access)
-    - `tools`: empty list
-    - `intents`: two predefined RAW intents (features; document/site management)
-    - `state`: provided or new `AgentSharedState`
-    - `configuration`: provided or new `AgentConfiguration(system_prompt=SYSTEM_PROMPT)`
-    - `memory`: `None`
-
 - `class SharePointAgent(IntentAgent)`
-  - Concrete agent type (no additional methods; inherits behavior from `IntentAgent`).
+  - An `IntentAgent` configured for SharePoint guidance.
+  - Class attributes:
+    - `name = "SharePoint"`
+    - `description = "Helps you interact with SharePoint for document management and collaboration."`
+    - `system_prompt` (guidance-only; explicitly states no tool access)
+    - `suggestions = []`
+
+- `SharePointAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> SharePointAgent`
+  - Factory constructor that:
+    - Fetches default chat and embedding models from the ABIModule model registry.
+    - Configures:
+      - `tools = []`
+      - `intents`: two predefined `IntentType.RAW` intents:
+        - “Get information about SharePoint features”
+        - “Understand document and site management”
+    - Defaults:
+      - `AgentConfiguration(system_prompt=SharePointAgent.system_prompt)` if none provided
+      - `AgentSharedState(thread_id="0")` if none provided
+    - Returns a fully constructed `SharePointAgent` with `memory=None`.
 
 ## Configuration/Dependencies
 - Depends on `naas_abi_core.services.agent.IntentAgent`:
-  - `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentAgent`, `IntentType`
-- Uses chat model:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1.model` (passed as `chat_model=model.model`)
-- No tools are configured (`tools = []`).
-- Key module constants:
-  - `NAME`, `DESCRIPTION`, `SYSTEM_PROMPT`, `SUGGESTIONS` (empty list)
+  - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
+- Depends on `naas_abi_marketplace.applications.sharepoint.ABIModule`:
+  - Uses `ABIModule.get_instance().engine.services.model_registry`
+  - Requires the model registry service to be initialized (`assert registry is not None`)
+- Model requirements (resolved via registry):
+  - `chat_model = registry.get_default_chat_model()`
+  - `embedding_model = registry.get_default_embedding_model().model`
+- Tools:
+  - None (`tools = []`)
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.sharepoint.agents.SharePointAgent import create_agent
+from naas_abi_marketplace.applications.sharepoint.agents.SharePointAgent import SharePointAgent
 
-agent = create_agent()
-# Use agent via the IntentAgent interface provided by naas_abi_core
+agent = SharePointAgent.New()
+# Interact with `agent` using the IntentAgent interface from naas_abi_core.
 ```
 
 ## Caveats
-- This agent **cannot access SharePoint** or perform document/site actions because **no tools are provided**.
-- Responses are limited to general guidance based on the system prompt and predefined intents.
+- No SharePoint operations can be performed because `tools` is empty and the system prompt explicitly states tool access is unavailable.
+- `New()` requires the SharePoint `ABIModule` engine and its `model_registry` to be initialized; otherwise it asserts.

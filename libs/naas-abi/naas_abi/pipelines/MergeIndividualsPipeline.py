@@ -101,7 +101,7 @@ class MergeIndividualsPipeline(Pipeline):
 
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, MergeIndividualsPipelineParameters):
-            raise ValueError(
+            raise TypeError(
                 "Parameters must be of type MergeIndividualsPipelineParameters"
             )
 
@@ -222,7 +222,6 @@ class MergeIndividualsPipeline(Pipeline):
     ) -> None:
         if tags is None:
             tags = []
-        return None
 
 
 if __name__ == "__main__":

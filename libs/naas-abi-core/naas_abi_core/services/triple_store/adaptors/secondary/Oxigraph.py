@@ -35,10 +35,10 @@ License: MIT
 
 import logging
 import os
-from typing import Tuple, Union
 
 import rdflib
 import requests
+from naas_abi_core.services.triple_store.resolve import resolve_local_http_url
 from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStorePort,
     OntologyEvent,
@@ -46,6 +46,8 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
 from rdflib import BNode, Graph, URIRef
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_OXIGRAPH_URL = "http://localhost:7878"
 
 
 class Oxigraph(ITripleStorePort):
@@ -97,7 +99,7 @@ class Oxigraph(ITripleStorePort):
         ...     print(f"Person: {row.person}, Name: {row.name}")
     """
 
-    def __init__(self, oxigraph_url: str = "http://localhost:7878", timeout: int = 60):
+    def __init__(self, oxigraph_url: str = _DEFAULT_OXIGRAPH_URL, timeout: int = 60):
         """
         Initialize Oxigraph adapter.
 
@@ -112,7 +114,14 @@ class Oxigraph(ITripleStorePort):
         Raises:
             requests.exceptions.ConnectionError: If Oxigraph is not accessible
         """
-        oxigraph_url = os.environ.get("OXIGRAPH_URL", oxigraph_url)
+        if oxigraph_url == _DEFAULT_OXIGRAPH_URL:
+            oxigraph_url = resolve_local_http_url(
+                "oxigraph",
+                env_var="OXIGRAPH_URL",
+                default_url=_DEFAULT_OXIGRAPH_URL,
+            )
+        else:
+            oxigraph_url = os.environ.get("OXIGRAPH_URL", oxigraph_url)
         self.oxigraph_url = oxigraph_url.rstrip("/")
         self.query_endpoint = f"{self.oxigraph_url}/query"
         self.update_endpoint = f"{self.oxigraph_url}/update"
@@ -227,7 +236,7 @@ class Oxigraph(ITripleStorePort):
                 )
         else:
             # Build INSERT DATA query
-            insert_query = f"INSERT DATA {{\n  GRAPH <{str(graph_name)}> {{\n"
+            insert_query = f"INSERT DATA {{\n  GRAPH <{graph_name!s}> {{\n"
 
             for s, p, o in triples:
                 if isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode):
@@ -274,7 +283,7 @@ class Oxigraph(ITripleStorePort):
                 )
         else:
             # Build DELETE DATA query
-            delete_query = f"DELETE DATA {{\n  GRAPH <{str(graph_name)}> {{\n"
+            delete_query = f"DELETE DATA {{\n  GRAPH <{graph_name!s}> {{\n"
 
             for s, p, o in triples:
                 if isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode):
@@ -325,9 +334,9 @@ class Oxigraph(ITripleStorePort):
 
     def handle_view_event(
         self,
-        view: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        view: tuple[URIRef | None, URIRef | None, URIRef | None],
         event: OntologyEvent,
-        triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        triple: tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         """
         Handle ontology change events for views.
@@ -342,7 +351,6 @@ class Oxigraph(ITripleStorePort):
             event: Type of event (INSERT or DELETE)
             triple: The actual triple that triggered the event
         """
-        pass
 
     def query(self, query: str) -> rdflib.query.Result:  # type: ignore
         """
@@ -450,7 +458,7 @@ class Oxigraph(ITripleStorePort):
                         binding_type = binding_info.get("type", "literal")
 
                         # Convert to appropriate RDFLib term
-                        value: Union[URIRef, BNode, Literal, None]
+                        value: URIRef | BNode | Literal | None
                         if binding_type == "uri":
                             value = URIRef(value_str)
                         elif binding_type == "bnode":
@@ -535,8 +543,8 @@ class Oxigraph(ITripleStorePort):
             >>> print(f"Alice has {len(alice_graph)} properties")
         """
         query = f"""
-        CONSTRUCT {{ <{str(subject)}> ?p ?o }}
-        WHERE {{ GRAPH <{str(graph_name)}> {{ <{str(subject)}> ?p ?o }} }}
+        CONSTRUCT {{ <{subject!s}> ?p ?o }}
+        WHERE {{ GRAPH <{graph_name!s}> {{ <{subject!s}> ?p ?o }} }}
         """
 
         result = self.query(query)
@@ -550,17 +558,17 @@ class Oxigraph(ITripleStorePort):
     def create_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
-        self.query(f"CREATE GRAPH <{str(graph_name)}>")
+        self.query(f"CREATE GRAPH <{graph_name!s}>")
 
     def clear_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
-        self.query(f"CLEAR GRAPH <{str(graph_name)}>")
+        self.query(f"CLEAR GRAPH <{graph_name!s}>")
 
     def drop_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
-        self.query(f"DROP GRAPH <{str(graph_name)}>")
+        self.query(f"DROP GRAPH <{graph_name!s}>")
 
     def list_graphs(self) -> list[URIRef]:
         result = self.query("SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } }")
@@ -585,8 +593,11 @@ if __name__ == "__main__":
 
     load_dotenv()
 
-    # Initialize Oxigraph adapter
-    oxigraph_url = os.getenv("OXIGRAPH_URL", "http://localhost:7878")
+    oxigraph_url = resolve_local_http_url(
+        "oxigraph",
+        env_var="OXIGRAPH_URL",
+        default_url=_DEFAULT_OXIGRAPH_URL,
+    )
 
     print(f"Connecting to Oxigraph at {oxigraph_url}")
 
@@ -635,6 +646,6 @@ if __name__ == "__main__":
 
         print("\n✓ All tests passed!")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"✗ Error: {e}")
         print("Make sure Oxigraph is running and accessible")

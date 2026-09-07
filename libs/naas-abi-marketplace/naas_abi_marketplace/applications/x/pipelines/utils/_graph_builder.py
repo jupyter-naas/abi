@@ -18,7 +18,6 @@ stay here since they are only reached through ``build_tweet``.
 from __future__ import annotations
 
 import hashlib
-from typing import Optional
 
 from naas_abi_core import logger
 from naas_abi_core.services.triple_store.TripleStorePorts import (
@@ -80,6 +79,16 @@ class XTweetGraphBuilder:
         """Deterministic IRI for an instance of *class_name* keyed on *stable_id*."""
         return uri_for(self._ontology_namespace, class_name, stable_id)
 
+    def prop(self, local_name: str) -> URIRef:
+        """IRI of an ``x:`` property, asserted as a raw triple.
+
+        Needed for the links that cross an ontology-module boundary: the
+        tweet↔result-set properties are declared in
+        ``XSearchRecentTweetsProcess.ttl``, where ``x:Tweet`` is an *imported*
+        class, so onto2py does not generate a field for them on ``Tweet``.
+        """
+        return URIRef(f"{self._ontology_namespace}{local_name}")
+
     def label_exists(self, label: str, class_uri: str) -> bool:
         """Return True iff an instance of *class_uri* with *label* already exists.
 
@@ -137,18 +146,24 @@ class XTweetGraphBuilder:
 
         return build_media(self, record)
 
-    def build_tweet(self, record: dict, source_set_uri: Optional[str] = None) -> Graph:
+    def build_tweet(
+        self,
+        record: dict,
+        source_set_uri: str | None = None,
+        *,
+        referenced: bool = False,
+    ) -> Graph:
         """Map a single X v2 tweet record to RDF (see :mod:`build_tweet`)."""
         from naas_abi_marketplace.applications.x.pipelines.utils.build_tweet import (
             build_tweet,
         )
 
-        return build_tweet(self, record, source_set_uri)
+        return build_tweet(self, record, source_set_uri, referenced=referenced)
 
     # ----- Private sub-entity helpers (reached only through build_tweet) --------
 
     def _build_user(
-        self, author_id: str, username: Optional[str] = None
+        self, author_id: str, username: str | None = None
     ) -> tuple[XUser, Graph]:
         """Minimal XUser stub when only the id (and maybe handle) is known."""
         label = f"X User {author_id}"
@@ -182,8 +197,8 @@ class XTweetGraphBuilder:
         return instance, graph
 
     def _build_language(
-        self, lang_code: Optional[str], tweet: Tweet
-    ) -> Optional[tuple[TweetLanguage, Graph]]:
+        self, lang_code: str | None, tweet: Tweet
+    ) -> tuple[TweetLanguage, Graph] | None:
         if not lang_code:
             return None
         label = f"Tweet language {lang_code}"
@@ -202,7 +217,7 @@ class XTweetGraphBuilder:
 
     def _build_context_annotation(
         self, payload: dict
-    ) -> Optional[tuple[ContextAnnotation, Graph]]:
+    ) -> tuple[ContextAnnotation, Graph] | None:
         """Map one ``context_annotations[]`` domain/entity pair to RDF."""
         domain = payload.get("domain") or {}
         entity = payload.get("entity") or {}
@@ -231,7 +246,7 @@ class XTweetGraphBuilder:
         self.mark_existing(ContextAnnotation._class_uri, label)
         return instance, graph
 
-    def _build_url_entity(self, payload: dict) -> Optional[tuple[TweetURL, Graph]]:
+    def _build_url_entity(self, payload: dict) -> tuple[TweetURL, Graph] | None:
         """Map one ``entities.urls[]`` record to RDF, keyed on the expanded URL."""
         target = payload.get("expanded_url") or payload.get("url")
         if not target:

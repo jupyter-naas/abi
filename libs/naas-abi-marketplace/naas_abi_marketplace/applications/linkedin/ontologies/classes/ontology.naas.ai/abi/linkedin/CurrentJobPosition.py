@@ -8,4 +8,3 @@ class CurrentJobPosition(_CurrentJobPosition):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

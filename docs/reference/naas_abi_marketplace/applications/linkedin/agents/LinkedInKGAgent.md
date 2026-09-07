@@ -1,64 +1,75 @@
 # LinkedInKGAgent
 
 ## What it is
-A factory and thin agent wrapper that builds an `IntentAgent` specialized for querying LinkedIn data stored in a knowledge graph. It:
-- Loads SPARQL query tools from the “templatable SPARQL query” module.
-- Adds vector-search tools to resolve person/company URIs via semantic similarity.
-- Returns an `IntentAgent` instance (`LinkedInKGAgent`) configured with a LinkedIn-focused system prompt and intents.
+`LinkedInKGAgent` is an `IntentAgent` specialization for querying LinkedIn data stored in a knowledge graph. It:
+- Loads a fixed set of SPARQL query tools from the templatable SPARQL query module.
+- Adds two vector-similarity lookup tools to resolve person/company URIs.
+- Builds an agent configuration whose system prompt includes the generated tool list.
 
 ## Public API
 
-### Constants
-- `NAME`: `"LinkedIn_KG"`
-- `DESCRIPTION`: Human-readable agent description.
-- `AVATAR_URL`: LinkedIn logo URL.
-- `SYSTEM_PROMPT`: System instructions template. Tool list is injected at runtime.
-- `SUGGESTIONS`: Empty list (`list[str]`).
+### Class: `LinkedInKGAgent(IntentAgent)`
+Class attributes (agent metadata and prompt):
+- `name`: `"LinkedIn_KG"`
+- `description`: `"Helps users query and understand LinkedIn data stored in a knowledge graph."`
+- `avatar_url`: LinkedIn logo URL
+- `suggestions`: `[]`
+- `system_prompt`: Prompt template containing a `[TOOLS]` placeholder that is replaced at runtime.
 
-### Functions
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Creates and returns a configured `LinkedInKGAgent`.
-  - Wires SPARQL tools and two vector-search tools:
-    - `linkedin_search_person_uri` (collection: `linkedin_persons`)
-    - `linkedin_search_company_uri` (collection: `linkedin_companies`)
+#### `@classmethod New(cls, agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> LinkedInKGAgent`
+Creates and returns a configured `LinkedInKGAgent` instance.
 
-### Classes
-- `class LinkedInKGAgent(IntentAgent)`
-  - No additional behavior; inherits everything from `IntentAgent`.
+What it wires:
+- **Chat model / embeddings**
+  - Uses `ABIModule.get_instance().engine.services.model_registry` to get:
+    - `registry.get_default_chat_model()`
+    - `registry.get_default_embedding_model().model` (used for vector search)
+- **SPARQL tools**
+  - Fetches tools via `TemplatableSparqlQueryABIModule.get_instance().get_tools(...)` for:
+    - `linkedin_count_connections_by_person`
+    - `linkedin_search_connections_by_person`
+    - `linkedin_search_connections_by_organization`
+    - `linkedin_search_connections_by_job_position`
+    - `linkedin_search_person_info`
+- **Vector-search tools** (added as `langchain_core.tools.StructuredTool`)
+  - `linkedin_search_person_uri` (collection: `linkedin_persons`, param: `person_name`)
+  - `linkedin_search_company_uri` (collection: `linkedin_companies`, param: `company_name`)
+  - Each tool returns a `list[dict]` with items like: `{"uri": ..., "label": ..., "score": ...}` or an `{"error": ...}` dict on failure.
+- **Intents** (`IntentType.TOOL`)
+  - `"Who is connected with {person}?"` → `linkedin_search_connections_by_person_name`
+  - `"How many connections does {person} have?"` → `linkedin_count_connections_by_person`
+  - `"What do you know about {person}?"` → `linkedin_get_connection_information`
+  - `"What is {person}'s email address?"` → `linkedin_search_email_address_by_person_uri`
+
+Defaulting behavior:
+- If `agent_configuration` is not provided, it creates one with the tool-injected `system_prompt`.
+- If `agent_shared_state` is not provided, it creates `AgentSharedState(thread_id="0")`.
 
 ## Configuration/Dependencies
-This module relies on an existing Naas ABI runtime with modules/services available:
+Runtime dependencies assumed by `New()`:
+- `naas_abi_marketplace.applications.linkedin.ABIModule.get_instance()` with an initialized `engine` containing:
+  - `engine.services.model_registry` (must not be `None`; asserted)
+  - `engine.services.vector_store` (used for similarity search)
+  - `engine.modules["naas_abi_core.modules.templatablesparqlquery"]` (must be a `TemplatableSparqlQueryABIModule`; asserted)
+- Python packages used internally:
+  - `numpy`
+  - `pydantic`
+  - `langchain_core.tools.StructuredTool`
 
-- **Naas ABI core**
-  - `naas_abi_core.services.agent.IntentAgent` (`IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`)
-  - `naas_abi_core.modules.templatablesparqlquery.ABIModule` to provide SPARQL tools via `get_tools(...)`
-  - `naas_abi_core.services.vector_store.VectorStoreService` for similarity search
-
-- **Marketplace / Application**
-  - `naas_abi_marketplace.applications.linkedin.ABIModule.get_instance().engine` must be initialized and contain:
-    - module key: `"naas_abi_core.modules.templatablesparqlquery"`
-    - service: `engine.services.vector_store`
-
-- **LLM / embeddings**
-  - Chat model: `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini.model`
-  - Embeddings: `langchain_openai.OpenAIEmbeddings(model="text-embedding-3-large")`
-  - Requires `numpy`, `pydantic`, `langchain_core.tools.StructuredTool`
+Vector store collections referenced:
+- `linkedin_persons`
+- `linkedin_companies`
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.linkedin.agents.LinkedInKGAgent import create_agent
 from naas_abi_core.services.agent.IntentAgent import AgentSharedState
+from naas_abi_marketplace.applications.linkedin.agents.LinkedInKGAgent import LinkedInKGAgent
 
-agent = create_agent(agent_shared_state=AgentSharedState(thread_id="demo"))
-
-# How you invoke/run the agent depends on IntentAgent's interface in naas_abi_core.
-# This module only constructs and returns the configured agent instance.
-print(agent.name)
+agent = LinkedInKGAgent.New(agent_shared_state=AgentSharedState(thread_id="demo"))
+print(agent.name)  # LinkedIn_KG
 ```
 
 ## Caveats
-- The factory assumes the LinkedIn `ABIModule` engine is already initialized and contains the required module/service; otherwise tool wiring will fail (including an `assert` on the SPARQL module type).
-- Two intents reference tool names not defined in the tool list built here (e.g., `linkedin_search_connections_by_person_name`, `linkedin_get_connection_information`, `linkedin_search_email_address_by_person_uri`). Successful execution depends on those tools existing in the broader runtime/tool registry.
-- Vector search tools require populated vector store collections named:
-  - `linkedin_persons`
-  - `linkedin_companies`
+- `New()` asserts the presence of `model_registry` and a correctly-typed templatable SPARQL query module; missing/incorrect runtime initialization will fail fast.
+- Several intent targets are not among the SPARQL tools explicitly loaded in this file (e.g., `linkedin_search_connections_by_person_name`, `linkedin_get_connection_information`, `linkedin_search_email_address_by_person_uri`). Successful execution depends on those tools being available elsewhere in the runtime/tooling.
+- Vector-search tools require the referenced vector store collections to exist and contain metadata fields `uri` and `label` for meaningful results.

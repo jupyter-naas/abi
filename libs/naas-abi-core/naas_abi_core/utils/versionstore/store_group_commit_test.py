@@ -19,7 +19,6 @@ import pytest
 
 from .store import ConcurrencyConflict, Store
 
-
 # A modest window — large enough to actually catch concurrent writers in
 # this process, small enough not to slow the test suite noticeably.
 WINDOW_MS = 5.0

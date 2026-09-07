@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -60,9 +58,9 @@ You have access to profile of the user: [LINKEDIN_PROFILE_URL].
 I found x mutual connections with [person name].
 
 Here are the first 10 profiles:
-- [Profile 1](https://www.linkedin.com/in/profile-1)
-- [Profile 2](https://www.linkedin.com/in/profile-2)
-- [Profile 3](https://www.linkedin.com/in/profile-3)
+- [Profile 1](https://demo.example/profiles/demo
+- [Profile 2](https://demo.example/profiles/demo
+- [Profile 3](https://demo.example/profiles/demo
 
 Would you like to filter the results on their current organization [organization name] to reduce the number of results?
 ...
@@ -84,10 +82,9 @@ Would you like to filter the results on their current organization [organization
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "LinkedInAgent":
-        from naas_abi_core.engine.context import get_default_model_registry
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> LinkedInAgent:
         from naas_abi_core.modules.templatablesparqlquery import (
             ABIModule as TemplatableSparqlQueryABIModule,
         )
@@ -115,7 +112,11 @@ Would you like to filter the results on their current organization [organization
             NaasIntegrationConfiguration,
         )
 
-        registry = get_default_model_registry()
+
+
+        abi_module = ABIModule.get_instance()
+
+        registry = abi_module.engine.services.model_registry
         assert registry is not None, "ModelRegistryService not initialized"
         chat_model = registry.get_default_chat_model()
         embedding_model = registry.get_default_embedding_model().model

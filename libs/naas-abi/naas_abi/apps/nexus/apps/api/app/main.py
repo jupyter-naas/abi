@@ -23,7 +23,11 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_worker import
 from naas_abi.apps.nexus.apps.api.app.services.exceptions import (
     register_service_exception_handlers,
 )
-from naas_abi.apps.nexus.apps.api.app.services.ollama import ensure_ollama_ready, get_ollama_status
+from naas_abi.apps.nexus.apps.api.app.services.ollama import (
+    DEFAULT_MODEL,
+    ensure_ollama_ready,
+    get_ollama_status,
+)
 from naas_abi.apps.nexus.apps.api.app.services.websocket import init_websocket
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -151,10 +155,10 @@ async def _startup(app: FastAPI) -> None:
     # preserving any frontend property overrides.
     asyncio.create_task(_sync_model_catalog())
 
-    # # Auto-start Ollama and pull default model (Qwen3-VL:2b for vision demos)
+    # # Auto-start Ollama and pull the project's default chat model
     # print("Checking Ollama status...")
     # # Gate autostart behind config flag to avoid process management in prod
-    # required_model = "qwen3-vl:2b"
+    # required_model = DEFAULT_MODEL
     # if settings.enable_ollama_autostart:
     #     ollama_result = await ensure_ollama_ready(required_model=required_model)
     # else:
@@ -295,7 +299,7 @@ async def ollama_status():
     return await get_ollama_status()
 
 
-async def ollama_pull_model(model: str = "qwen3-vl:2b"):
+async def ollama_pull_model(model: str = DEFAULT_MODEL):
     """Trigger a model pull. Returns immediately, pull runs in background."""
     import asyncio
 
@@ -309,7 +313,7 @@ async def ollama_pull_model(model: str = "qwen3-vl:2b"):
     return {"success": True, "message": f"Pulling {model} in background..."}
 
 
-async def ollama_ensure_ready(model: str = "qwen3-vl:2b"):
+async def ollama_ensure_ready(model: str = DEFAULT_MODEL):
     """Ensure Ollama is running and the requested model is available.
 
     Returns a lightweight status with a `ready` flag consumed by the frontend
@@ -364,9 +368,9 @@ def _configure_middleware(app: FastAPI) -> None:
 
 
 async def serve_app_html(path: str) -> FileResponse:
-    """Serve an HTML asset from any loaded module's apps directory.
+    """Serve a browser asset from any loaded module's apps directory.
 
-    Resolution uses the pre-built html-path map from the apps catalog scan
+    Resolution uses the pre-built asset-path map from the apps catalog scan
     so no module lookup is needed at request time.
     """
     from naas_abi.apps.nexus.apps.api.app.services.apps.adapters.primary.apps__primary_adapter__FastAPI import (
@@ -415,11 +419,36 @@ def _register_routes(app: FastAPI) -> None:
     app.add_api_route("/provider-logos/{provider_id}", serve_provider_logo, methods=["GET"])
 
 
+def _first_existing_file(relative: str, *roots: Path) -> Path | None:
+    """Return the first existing file under ``roots`` for a relative path."""
+    rel = Path(relative)
+    if rel.is_absolute() or ".." in rel.parts:
+        return None
+    for root in roots:
+        if not root.is_dir():
+            continue
+        candidate = (root / rel).resolve()
+        try:
+            candidate.relative_to(root.resolve())
+        except ValueError:
+            continue
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def _mount_static_assets(app: FastAPI) -> None:
-    # Serve static assets (logos, avatars)
-    logos_path = Path(__file__).parent.parent / "public" / "logos"
-    if logos_path.exists():
-        app.mount("/logos", StaticFiles(directory=str(logos_path)), name="logos")
+    # Serve static assets (logos, avatars). ``storage/logos`` in the project
+    # root overlays the engine package defaults.
+    abi_logos_path = Path(__file__).parent.parent / "public" / "logos"
+    project_logos_path = Path.cwd() / "storage" / "logos"
+
+    @app.get("/logos/{path:path}")
+    async def serve_logo(path: str) -> FileResponse:
+        found = _first_existing_file(path, project_logos_path, abi_logos_path)
+        if found is None:
+            raise HTTPException(status_code=404, detail="Logo not found")
+        return FileResponse(found)
 
     avatars_path = Path(__file__).parent.parent / "public" / "avatars"
     if avatars_path.exists():
@@ -465,6 +494,11 @@ def create_app(app: FastAPI | None = None):
         _configure_middleware(app)
         _register_routes(app)
         _mount_static_assets(app)
+        from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
+            register_nexus_app_html_jwt_auth,
+        )
+
+        register_nexus_app_html_jwt_auth()
         app.state._nexus_api_patched = True
 
     # Wrap app with WebSocket support (must be LAST, after all middleware)

@@ -11,7 +11,9 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationMemberRecord,
     OrganizationPermissionPort,
     OrganizationRecord,
+    OrganizationRoleFeaturesRecord,
     OrganizationUpdateInput,
+    OrganizationWorkspaceMembershipRecord,
     OrganizationWorkspaceRecord,
 )
 
@@ -154,6 +156,14 @@ class OrganizationService:
     async def list_workspaces(self, org_id: str, user_id: str) -> list[OrganizationWorkspaceRecord]:
         return await self.adapter.list_workspaces_for_org_and_user(org_id=org_id, user_id=user_id)
 
+    async def list_all_workspaces(self, org_id: str) -> list[OrganizationWorkspaceRecord]:
+        return await self.adapter.list_workspaces_for_org(org_id=org_id)
+
+    async def list_workspace_memberships(
+        self, org_id: str
+    ) -> list[OrganizationWorkspaceMembershipRecord]:
+        return await self.adapter.list_workspace_memberships_for_org(org_id=org_id)
+
     async def list_members(self, org_id: str) -> list[OrganizationMemberRecord]:
         return await self.adapter.list_organization_members(org_id=org_id)
 
@@ -164,7 +174,11 @@ class OrganizationService:
         role: str,
         now: datetime,
     ) -> OrganizationMemberRecord | None:
-        user = await self.adapter.get_user_by_email(email=email)
+        """Attach an existing user by email. Callers that support create-on-invite
+        must ensure the user exists (via AuthService.ensure_user_for_invite) first.
+        """
+        normalized_email = email.lower().strip()
+        user = await self.adapter.get_user_by_email(email=normalized_email)
         if user is None:
             return None
         if await self.adapter.is_organization_member(org_id=org_id, user_id=user.id):
@@ -233,3 +247,20 @@ class OrganizationService:
 
     async def delete_domain(self, org_id: str, domain_id: str) -> bool:
         return await self.adapter.delete_organization_domain(org_id=org_id, domain_id=domain_id)
+
+    async def get_role_features(self, org_id: str) -> OrganizationRoleFeaturesRecord | None:
+        return await self.adapter.get_organization_role_features(org_id=org_id)
+
+    async def upsert_role_features(
+        self,
+        org_id: str,
+        role_baseline: dict[str, list[str]],
+        updated_by: str | None,
+        now: datetime,
+    ) -> OrganizationRoleFeaturesRecord:
+        return await self.adapter.upsert_organization_role_features(
+            org_id=org_id,
+            role_baseline=role_baseline,
+            updated_by=updated_by,
+            now=now,
+        )

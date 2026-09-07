@@ -32,9 +32,9 @@ class AppInfo(BaseModel):
     """A launchable web application discovered from a module's apps/<name>/manifest.json."""
 
     # Identity
-    module_path: str           # e.g. "naas_abi_marketplace.alpha.wsr"
-    module_name: str           # human-readable parent module, e.g. "wsr"
-    app_name: str              # folder name under apps/, e.g. "dashboard"
+    module_path: str           # e.g. "naas_abi_marketplace.domains.intelligence"
+    module_name: str           # human-readable parent module, e.g. "intelligence"
+    app_name: str              # folder name under apps/, e.g. "wsr"
     app_id: str                # "<module_path>:<app_name>"
     category: str              # "core" | "ai" | "application" | "domain" | "alpha"
 
@@ -61,8 +61,8 @@ class AppInfo(BaseModel):
 
     # Runtime
     installed: bool = False
-    # Per-workspace enable state. Defaults to True (apps enabled by default).
-    enabled: bool = True
+    # Per-workspace enable state. Missing config rows default to off.
+    enabled: bool = False
 
 
 class AppsResponse(BaseModel):

@@ -2,9 +2,9 @@ import hashlib
 import json as _json
 import posixpath
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core import logger
@@ -25,14 +25,17 @@ from naas_abi_marketplace.applications.x.integrations.XIntegration import (
 )
 from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import (
     Media,
-    SearchInterval,
-    SearchQuery,
-    SearchRecentTweets,
-    SearchResultSet,
+    ReferencedTweet,
     TemporalInstant,
     Tweet,
     XPlatform,
     XUser,
+)
+from naas_abi_marketplace.applications.x.ontologies.processes.XSearchRecentTweetsProcess import (
+    SearchInterval,
+    SearchQuery,
+    SearchRecentTweets,
+    SearchResultSet,
 )
 from naas_abi_marketplace.applications.x.pipelines.utils import (
     XTweetGraphBuilder,
@@ -70,7 +73,7 @@ class XSearchRecentTweetsPipelineConfiguration(PipelineConfiguration):
 
 class XSearchRecentTweetsPipelineParameters(PipelineParameters):
     query: Annotated[
-        Optional[str],
+        str | None,
         Field(
             default=None,
             description=(
@@ -82,7 +85,7 @@ class XSearchRecentTweetsPipelineParameters(PipelineParameters):
         ),
     ] = None
     options: Annotated[
-        Optional[dict],
+        dict | None,
         Field(
             default=None,
             description=(
@@ -105,7 +108,7 @@ class XSearchRecentTweetsPipelineParameters(PipelineParameters):
         ),
     ] = None
     file_path: Annotated[
-        Optional[str],
+        str | None,
         Field(
             default=None,
             description=(
@@ -158,13 +161,27 @@ class XSearchRecentTweetsPipeline(Pipeline):
     """Calls XIntegration.search_recent_tweets and maps the result to the graph.
 
     For every tweet returned by the X v2 ``GET /2/tweets/search/recent``
-    endpoint, the pipeline creates a ``Tweet`` individual linked to its author
-    ``XUser``, ``TweetPublicMetrics`` and ``TweetLanguage``; all tweets are
-    linked to a ``SearchResultSet`` produced by a ``SearchRecentTweets``
-    process that uses a ``SearchQuery``. URIs are deterministic (derived from
-    the X-side identifiers plus a hash of the request parameters) so re-runs
-    are idempotent, and each individual is skipped when one with the same
-    ``rdfs:label`` already lives in the configured named graph.
+    endpoint, the pipeline creates a tweet individual linked to its author
+    ``XUser``, ``TweetPublicMetrics`` and ``TweetLanguage``, all hanging off a
+    ``SearchResultSet`` produced by a ``SearchRecentTweets`` process that uses
+    a ``SearchQuery``.
+
+    The response carries two populations and the graph keeps them apart. The
+    ``data`` array holds the tweets that matched the query: they become
+    ``Tweet`` individuals linked by ``x:isContainedInSearchResultSet``. The
+    ``includes.tweets`` array holds every tweet the matches reference, which
+    is a *superset* of ``data``; the ids absent from ``data`` become
+    ``ReferencedTweet`` individuals linked by
+    ``x:isReferencedTweetOfSearchResultSet``. Referenced tweets are reply
+    parents, quoted tweets and retweeted originals returned purely as context
+    — they routinely carry none of the query terms and may sit outside its
+    language filter or time window — so they are queryable and scoped to the
+    query without ever inflating matched-tweet volume.
+
+    URIs are deterministic (derived from the X-side identifiers plus a hash of
+    the request parameters) so re-runs are idempotent, and each individual is
+    skipped when one with the same ``rdfs:label`` already lives in the
+    configured named graph.
     """
 
     __configuration: XSearchRecentTweetsPipelineConfiguration
@@ -197,7 +214,7 @@ class XSearchRecentTweetsPipeline(Pipeline):
 
     def run(self, parameters: XSearchRecentTweetsPipelineParameters) -> Graph:  # type: ignore[override]
         if not isinstance(parameters, XSearchRecentTweetsPipelineParameters):
-            raise ValueError(
+            raise TypeError(
                 "Parameters must be of type XSearchRecentTweetsPipelineParameters"
             )
 
@@ -244,7 +261,7 @@ class XSearchRecentTweetsPipeline(Pipeline):
         ended_at = parse_dt(envelope.get("ended_at"))
         # Path of the persisted envelope: the parameter when ingesting a file,
         # otherwise the path the integration just wrote in the direct-query case.
-        file_path: Optional[str] = parameters.file_path or envelope.get("file_path")
+        file_path: str | None = parameters.file_path or envelope.get("file_path")
 
         # ``results`` is the merged X v2 response {data, includes, meta}:
         #   data            → tweets that matched the query (the result set)
@@ -258,10 +275,24 @@ class XSearchRecentTweetsPipeline(Pipeline):
         tweets: list[dict] = includes.get("tweets") or []
         media: list[dict] = includes.get("media") or []
 
+        # ``includes.tweets`` is a superset of ``data``: X hydrates every id in
+        # a match's ``referenced_tweets`` there, and a tweet that both matched
+        # the query and is referenced by another match appears in both arrays.
+        # Only the ids absent from ``data`` are genuinely context — they may
+        # carry none of the query terms, another language, or a timestamp
+        # outside the window, so counting them as matches overstates volume.
+        matched_ids = {str(record["id"]) for record in data if record.get("id")}
+        referenced: list[dict] = [
+            record
+            for record in tweets
+            if record.get("id") and str(record["id"]) not in matched_ids
+        ]
+
         logger.info(
             f"XSearchRecentTweetsPipeline: {len(data)} matched tweets, "
+            f"{len(referenced)} referenced tweets "
+            f"({len(tweets)} expanded, {len(tweets) - len(referenced)} also matched), "
             f"{len(users)} expanded users, "
-            f"{len(tweets)} context tweets, "
             f"{len(media)} media (query={query!r})"
         )
 
@@ -318,6 +349,7 @@ class XSearchRecentTweetsPipeline(Pipeline):
             label=rs_label,
             result_set_id=result_set_id,
             result_count=meta.get("result_count") or len(data),
+            referenced_count=len(referenced),
             newest_id=meta.get("newest_id"),
             oldest_id=meta.get("oldest_id"),
             next_token=meta.get("next_token"),
@@ -329,7 +361,7 @@ class XSearchRecentTweetsPipeline(Pipeline):
 
         # SearchInterval bounded by the started_at / ended_at instants of the
         # API call (taken from the file envelope or measured around the call).
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         interval_label = f"Search Interval {result_set_id}"
         interval = SearchInterval(
             _uri=builder.uri("SearchInterval", result_set_id),
@@ -364,6 +396,9 @@ class XSearchRecentTweetsPipeline(Pipeline):
             for record in data
             if record.get("id")
         ]
+        retrieved_referenced_uris: list[ReferencedTweet | URIRef | str] = [
+            URIRef(builder.uri("Tweet", str(record["id"]))) for record in referenced
+        ]
         retrieved_user_uris: list[XUser | URIRef | str] = [
             URIRef(builder.uri("XUser", str(user_record["id"])))
             for user_record in users
@@ -385,6 +420,7 @@ class XSearchRecentTweetsPipeline(Pipeline):
             has_search_interval=[URIRef(interval._uri)],
             occursIn=[URIRef(platform._uri)],
             retrieves_tweet=retrieved_tweet_uris or None,
+            retrieves_referenced_tweet=retrieved_referenced_uris or None,
             retrieves_user=retrieved_user_uris or None,
             retrieves_media=retrieved_media_uris or None,
             created=now,
@@ -410,12 +446,16 @@ class XSearchRecentTweetsPipeline(Pipeline):
         for record in data:
             graph += builder.build_tweet(record, source_set_uri=result_set._uri)
 
-        # Context tweets (referenced_tweets.id expansion) — mapped without a
-        # result-set link since they did not match the search themselves.
-        # Mapped after the matched tweets so a tweet present in both keeps
-        # its result-set link.
-        for record in tweets:
-            graph += builder.build_tweet(record, source_set_uri=None)
+        # Referenced tweets (referenced_tweets.id expansion) — typed
+        # x:ReferencedTweet and attached to the result set by
+        # x:isReferencedTweetOfSearchResultSet rather than
+        # x:isContainedInSearchResultSet, so they stay queryable and scoped to
+        # this query/window without ever counting as matches. Mapped after the
+        # matched tweets so a tweet present in both keeps its match typing.
+        for record in referenced:
+            graph += builder.build_tweet(
+                record, source_set_uri=result_set._uri, referenced=True
+            )
 
         logger.info(
             f"XSearchRecentTweetsPipeline: produced graph with {len(graph)} triples"
@@ -435,7 +475,7 @@ class XSearchRecentTweetsPipeline(Pipeline):
     # ----- Utilities ------------------------------------------------------------
 
     @staticmethod
-    def _join(value: Any) -> Optional[str]:
+    def _join(value: Any) -> str | None:
         """Render a list-valued X v2 expansion field as the comma-joined form
         stored on SearchQuery (matching the wire format sent to the API)."""
         if value is None:
@@ -453,10 +493,14 @@ class XSearchRecentTweetsPipeline(Pipeline):
                 description=(
                     "Call XIntegration.search_recent_tweets with the given "
                     "query (and optional X v2 parameters) and map the result "
-                    "into the ABI knowledge graph as Tweet, XUser, "
-                    "XUserPublicMetrics, TweetPublicMetrics, TweetLanguage, "
-                    "Media, ContextAnnotation, TweetURL, SearchQuery, "
-                    "SearchResultSet and SearchRecentTweets individuals."
+                    "into the ABI knowledge graph as Tweet, ReferencedTweet, "
+                    "XUser, XUserPublicMetrics, TweetPublicMetrics, "
+                    "TweetLanguage, Media, ContextAnnotation, TweetURL, "
+                    "SearchQuery, SearchResultSet and SearchRecentTweets "
+                    "individuals. Tweets matching the query are typed Tweet; "
+                    "the reply parents, quoted tweets and retweeted originals "
+                    "returned only as context are typed ReferencedTweet and "
+                    "are excluded from matched-tweet counts."
                 ),
                 func=lambda **kwargs: self.run(
                     XSearchRecentTweetsPipelineParameters(**kwargs)
@@ -476,4 +520,3 @@ class XSearchRecentTweetsPipeline(Pipeline):
     ) -> None:
         if tags is None:
             tags = []
-        return None

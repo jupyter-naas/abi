@@ -3,7 +3,7 @@ import weakref
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Optional, Tuple
+from typing import Any
 
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -66,7 +66,7 @@ class Intent:
     intent_value: str
     intent_type: IntentType
     intent_target: Any
-    intent_scope: Optional[IntentScope] = IntentScope.ALL
+    intent_scope: IntentScope | None = IntentScope.ALL
 
 
 class IntentMapper:
@@ -144,7 +144,7 @@ You: code a project
             for mapper in mappers:
                 try:
                     mapper._ensure_index()
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     logger.warning(
                         f"Background intent-index warmup failed for one mapper: {exc}"
                     )
@@ -239,7 +239,7 @@ You: code a project
 
         return results
 
-    def map_prompt(self, prompt: str, k: int = 1) -> Tuple[list[dict], list[dict]]:
+    def map_prompt(self, prompt: str, k: int = 1) -> tuple[list[dict], list[dict]]:
         # Use direct prompt mapping without LLM intent extraction for speed
         # Return empty first result and prompt results as second (matches expected format)
         prompt_results = self.map_intent(prompt, k)

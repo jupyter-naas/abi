@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt35TurboModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=16385,
-        name="OpenAI: GPT-3.5 Turbo",
+        name="GPT-3.5 Turbo",
         owner="openai",
         description="GPT-3.5 Turbo is OpenAI's fastest model. It can understand and generate natural language or code, and is optimized for chat and traditional completion tasks.\n\nTraining data up to Sep 2021.",
         canonical_slug="openai/gpt-3.5-turbo",
         hugging_face_id=None,
-        created_at=datetime.fromtimestamp(1685232000),
+        created_at=datetime.fromtimestamp(1685232000, tz=UTC),
         pricing={'prompt': '0.0000005', 'completion': '0.0000015'},
         architecture={'modality': 'text->text', 'input_modalities': ['text'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 16385, 'max_completion_tokens': 4096, 'is_moderated': True},

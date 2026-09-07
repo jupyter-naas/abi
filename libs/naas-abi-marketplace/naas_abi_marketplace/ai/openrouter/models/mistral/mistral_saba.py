@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class MistralSabaModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=32768,
-        name="Mistral: Saba",
+        name="Saba",
         owner="mistralai",
         description="Mistral Saba is a 24B-parameter language model specifically designed for the Middle East and South Asia, delivering accurate and contextually relevant responses while maintaining efficient performance. Trained on curated regional...",
         canonical_slug="mistralai/mistral-saba-2502",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1739803239),
+        created_at=datetime.fromtimestamp(1739803239, tz=UTC),
         pricing={'prompt': '0.0000002', 'completion': '0.0000006', 'input_cache_read': '0.00000002'},
         architecture={'modality': 'text+file->text', 'input_modalities': ['text', 'file'], 'output_modalities': ['text'], 'tokenizer': 'Mistral', 'instruct_type': None},
         top_provider={'context_length': 32768, 'max_completion_tokens': None, 'is_moderated': False},

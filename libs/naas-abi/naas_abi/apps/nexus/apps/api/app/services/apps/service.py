@@ -68,7 +68,7 @@ class AppsService:
         """Return ``{app_id: enabled}`` for every record in ``workspace_id``.
 
         Apps without a stored record are absent from the result; callers
-        should default missing entries to ``True`` (enabled by default).
+        should default missing entries to ``False`` (disabled by default).
         """
         records = await self.list_app_configs(workspace_id)
         return {r.app_id: r.enabled for r in records}

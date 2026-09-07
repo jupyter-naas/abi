@@ -10,7 +10,7 @@
 @prefix ppt: <http://ontology.naas.ai/abi/powerpoint/> .
 
 <http://ontology.naas.ai/abi/PowerPointOntology> rdf:type owl:Ontology ;
-    dc11:contributor "Florent Ravenel" ;
+    dc11:contributor "Alice Dupont" ;
     dc:description "Domain ontology for PowerPoint."@en ;
     dc:title "PowerPoint Ontology" .
 

@@ -9,26 +9,68 @@ from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary import (
     auth__primary_adapter__FastAPI as auth_api,
 )
+from naas_abi.apps.nexus.apps.api.app.services.auth.service import MagicLinkChallenge
 
 
 @pytest.mark.asyncio
-async def test_request_magic_link_never_logs_token(caplog) -> None:
+async def test_request_magic_link_response_never_includes_secrets(monkeypatch) -> None:
     auth_service = AsyncMock()
-    auth_service.request_magic_link = AsyncMock(return_value="sensitive-magic-token")
+    auth_service.request_magic_link = AsyncMock(
+        return_value=MagicLinkChallenge(
+            token="sensitive-magic-token",
+            otp_code="123456",
+            token_id="ml-1",
+        )
+    )
     fake_request = type(
         "Req", (), {"headers": {}, "client": type("Client", (), {"host": "127.0.0.1"})()}
     )()
+    send_mock = AsyncMock()
+    monkeypatch.setattr(auth_api, "_send_magic_link_email", send_mock)
 
     response = await auth_api.request_magic_link(
         request=fake_request,
         payload=auth_api.MagicLinkRequest(email="user@example.com"),
         auth_service=auth_service,
-        email_service=None,
+        email_service=SimpleNamespace(send=lambda **_: None),
     )
 
     assert response["status"] == "success"
-    assert "sensitive-magic-token" not in caplog.text
+    assert "sensitive-magic-token" not in str(response)
+    assert "123456" not in str(response)
+    send_mock.assert_awaited_once()
     auth_service.request_magic_link.assert_awaited_once_with("user@example.com")
+
+
+@pytest.mark.asyncio
+async def test_request_magic_link_revokes_challenge_when_email_fails(monkeypatch) -> None:
+    auth_service = AsyncMock()
+    auth_service.request_magic_link = AsyncMock(
+        return_value=MagicLinkChallenge(
+            token="sensitive-magic-token",
+            otp_code="123456",
+            token_id="ml-orphan",
+        )
+    )
+    auth_service.invalidate_magic_link_challenge = AsyncMock()
+    fake_request = type(
+        "Req", (), {"headers": {}, "client": type("Client", (), {"host": "127.0.0.1"})()}
+    )()
+
+    async def _boom(*_args, **_kwargs):
+        raise RuntimeError("smtp down")
+
+    monkeypatch.setattr(auth_api, "_send_magic_link_email", _boom)
+
+    with pytest.raises(RuntimeError, match="smtp down"):
+        await auth_api.request_magic_link(
+            request=fake_request,
+            payload=auth_api.MagicLinkRequest(email="user@example.com"),
+            auth_service=auth_service,
+            email_service=SimpleNamespace(send=lambda **_: None),
+        )
+
+    auth_service.invalidate_magic_link_challenge.assert_awaited_once_with("ml-orphan")
 
 
 @pytest.mark.asyncio
@@ -73,16 +115,22 @@ async def test_send_magic_link_email_uses_configured_templates(monkeypatch) -> N
     monkeypatch.setattr(settings, "magic_link_path", "/auth/magic-link")
     monkeypatch.setattr(settings, "magic_link_expire_minutes", 20)
     monkeypatch.setattr(settings, "magic_link_email_app_name", "ABI Platform")
-    monkeypatch.setattr(settings, "magic_link_email_subject_template", "Login to {app_name}")
+    monkeypatch.setattr(
+        settings,
+        "magic_link_email_subject_template",
+        "Login to {app_name}: {otp_code}",
+    )
     monkeypatch.setattr(
         settings,
         "magic_link_email_text_template",
-        "Open this link for {app_name}: {magic_link_url} (expires in {expire_minutes} min)",
+        "Code {otp_code}. Open this link for {app_name}: {magic_link_url} "
+        "(expires in {expire_minutes} min)",
     )
     monkeypatch.setattr(
         settings,
         "magic_link_email_html_template",
-        '<p>{app_name}</p><a href="{magic_link_url}">open</a><p>{expire_minutes}</p>',
+        '<p>{app_name}</p><p>{otp_code}</p><a href="{magic_link_url}">open</a>'
+        "<p>{expire_minutes}</p>",
     )
     monkeypatch.setattr(settings, "email_from_address", "no-reply@example.com")
     monkeypatch.setattr(settings, "email_from_name", "ABI")
@@ -90,9 +138,12 @@ async def test_send_magic_link_email_uses_configured_templates(monkeypatch) -> N
     sent: dict = {}
     email_service = SimpleNamespace(send=lambda **kwargs: sent.update(kwargs))
 
-    await auth_api._send_magic_link_email("user@example.com", "token-123", email_service)
+    await auth_api._send_magic_link_email(
+        "user@example.com", "token-123", "654321", email_service
+    )
 
-    assert sent["subject"] == "Login to ABI Platform"
+    assert sent["subject"] == "Login to ABI Platform: 654321"
+    assert "654321" in sent["text_body"]
     assert "https://platform.example.com/auth/magic-link?token=token-123" in sent["text_body"]
     assert "ABI Platform" in sent["html_body"]
     assert sent["from_email"] == "no-reply@example.com"
@@ -100,14 +151,17 @@ async def test_send_magic_link_email_uses_configured_templates(monkeypatch) -> N
 
 
 @pytest.mark.asyncio
-async def test_send_magic_link_email_logs_when_no_service(caplog) -> None:
+async def test_send_magic_link_email_logs_when_no_service(caplog, monkeypatch) -> None:
     import logging
 
+    monkeypatch.setattr(settings, "log_otp_codes_when_email_unavailable", True)
     caplog.set_level(logging.INFO, logger=auth_api.logger.name)
 
-    await auth_api._send_magic_link_email("user@example.com", "token-456", None)
+    await auth_api._send_magic_link_email("user@example.com", "token-456", "111222", None)
 
     assert any(
-        "Magic link for user@example.com" in record.message and "token-456" in record.message
+        "Sign-in code for user@example.com" in record.message
+        and "111222" in record.message
+        and "token-456" in record.message
         for record in caplog.records
     )

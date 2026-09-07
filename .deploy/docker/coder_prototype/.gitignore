@@ -1,0 +1,4 @@
+.coder-token
+.env
+__pycache__/
+*.pyc

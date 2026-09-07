@@ -5,6 +5,7 @@ import { ArrowLeft, Bot, CheckCircle, Save, XCircle } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
+import { getLogoUrl } from '@/lib/logo-url';
 import { authFetch } from '@/stores/auth';
 import { useAgentsStore } from '@/stores/agents';
 import { useIntegrationsStore } from '@/stores/integrations';
@@ -36,12 +37,6 @@ type ServiceAgent = {
   updated_at: string;
   suggestions?: ServiceSuggestion[] | null;
   intents?: ServiceIntent[] | null;
-};
-
-const getLogoUrl = (url: string | null | undefined): string | undefined => {
-  if (!url) return undefined;
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  return `${getApiUrl()}${url}`;
 };
 
 export default function AgentEditPage() {

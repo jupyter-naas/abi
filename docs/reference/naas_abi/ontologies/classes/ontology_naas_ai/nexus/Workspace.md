@@ -16,7 +16,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.Workspace import Workspace
+from naas_abi.ontologies.classes.ontology_demo.nexus.Workspace import Workspace
 
 ws = Workspace()
 ws.actions()  # no-op

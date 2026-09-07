@@ -1,6 +1,8 @@
 import os
+import sys
 
 import click
+
 import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
@@ -33,7 +35,7 @@ def new_module(module_name: str, module_path: str = ".", quiet: bool = False):
         os.makedirs(module_path, exist_ok=True)
     elif len(os.listdir(module_path)) > 0:
         print(f"Folder {module_path} already exists and is not empty.")
-        exit(1)
+        sys.exit(1)
 
     copier = Copier(
         templates_path=os.path.join(
@@ -87,8 +89,17 @@ def new_module(module_name: str, module_path: str = ".", quiet: bool = False):
     )
 
     if not quiet:
+        # Configuration file requires an importable module namespace rather than an
+        # actual file path on the filesystem, so the path is made relative to the
+        # current working directory and its separators replaced with '.'
+        module_namespace = os.path.relpath(module_path, os.getcwd()).replace(os.sep, ".")
+
         print(f"\nModule '{module_name}' has been created at:\n  {module_path}\n")
         print("To enable this module, add the following to your config.yaml:\n")
         print("modules:")
-        print(f"  - path: {module_path}")
+        print(f"  - module: {module_namespace}")
         print("    enabled: true\n")
+        print(
+            "Note: please check the module import namespace root level that might need "
+            "to be updated depending on your actual project structure.\n"
+        )

@@ -6,7 +6,7 @@ in one focused module; the builder method ``build_user`` delegates here.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import (
     XUser,
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     )
 
 
-def build_user(builder: "XTweetGraphBuilder", record: dict) -> tuple[XUser, Graph]:
+def build_user(builder: XTweetGraphBuilder, record: dict) -> tuple[XUser, Graph]:
     """Map an expanded X v2 ``User`` object (``includes.users[]``) to RDF.
 
     Emits a rich ``XUser`` individual (profile fields) plus its
@@ -34,7 +34,7 @@ def build_user(builder: "XTweetGraphBuilder", record: dict) -> tuple[XUser, Grap
     uri = builder.uri("XUser", user_id)
 
     graph = Graph()
-    metrics_uri: Optional[str] = None
+    metrics_uri: str | None = None
     metrics_payload = record.get("public_metrics") or {}
     if metrics_payload:
         metrics_label = f"Public metrics of X user {user_id}"

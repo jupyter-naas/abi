@@ -34,7 +34,6 @@ import tempfile
 import textwrap
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Optional dependency probes
 # ---------------------------------------------------------------------------
@@ -177,7 +176,7 @@ def run_reasoning(source_path: str) -> dict[str, Any]:
 
     try:
         onto = get_ontology(file_uri).load()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         result["errors"].append({
             "severity": "ERROR",
             "category": "REASONING_LOAD",
@@ -215,7 +214,7 @@ def run_reasoning(source_path: str) -> dict[str, Any]:
             ),
         })
         return result
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         result["warnings"].append({
             "severity": "WARNING",
             "category": "REASONING_ERROR",
@@ -354,7 +353,7 @@ _BUILTIN_SHACL = textwrap.dedent("""\
 
 def _build_shacl_shapes_from_ontology(ont_path: str) -> str:
     try:
-        from rdflib import Graph, RDF, RDFS, OWL, URIRef, BNode
+        from rdflib import OWL, RDF, RDFS, BNode, Graph, URIRef
 
         fmt = detect_format(ont_path)
         g = Graph()
@@ -416,7 +415,7 @@ def _build_shacl_shapes_from_ontology(ont_path: str) -> str:
 
         return "\n".join(lines)
 
-    except Exception:
+    except Exception:  # noqa: BLE001
         return ""
 
 
@@ -463,7 +462,7 @@ def run_shacl(
             meta_shacl=False,
             debug=False,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         result["warnings"].append({
             "severity": "WARNING",
             "category": "SHACL_ERROR",
@@ -477,14 +476,14 @@ def run_shacl(
 
     try:
         _parse_shacl_results(results_graph, result)
-    except Exception:
+    except Exception:  # noqa: BLE001,S110
         pass
 
     return result
 
 
 def _parse_shacl_results(results_graph: Any, result: dict) -> None:
-    from rdflib import Namespace, RDF
+    from rdflib import RDF, Namespace
     SH = Namespace("http://www.w3.org/ns/shacl#")
 
     SEVERITY_MAP = {
@@ -718,7 +717,7 @@ def main() -> None:
     except ValueError as exc:
         print(f"\nStopped on first error:\n  {exc}", file=sys.stderr)
         sys.exit(1)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         print(f"UNEXPECTED ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
 

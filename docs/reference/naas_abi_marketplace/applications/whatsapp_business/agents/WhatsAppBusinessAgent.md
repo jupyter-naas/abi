@@ -1,42 +1,50 @@
 # WhatsAppBusinessAgent
 
 ## What it is
-- A minimal `IntentAgent` wrapper for WhatsApp Business guidance.
-- Ships with a system prompt and two basic informational intents.
-- No tools are configured; it only provides general information (per prompt/constraints).
+- An `IntentAgent` subclass configured to provide **general guidance** about WhatsApp Business (features, messaging best practices, customer communication).
+- Includes a built-in system prompt and a couple of basic informational intents.
+- Ships **without tools**, so it cannot execute WhatsApp actions.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Factory that returns a configured `WhatsAppBusinessAgent`.
-  - Sets:
-    - `name`: `"WhatsApp_Business"`
-    - `description`: messaging/customer communication guidance
-    - `chat_model`: `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1.model.model`
-    - `tools`: `[]` (none)
-    - `intents`: two `IntentType.RAW` intents with informational responses
-    - `configuration`: defaults to `AgentConfiguration(system_prompt=SYSTEM_PROMPT)` if not provided
-    - `state`: defaults to new `AgentSharedState()` if not provided
-    - `memory`: `None`
-
 - `class WhatsAppBusinessAgent(IntentAgent)`
-  - Empty subclass of `IntentAgent` (no additional methods/overrides).
+  - Preconfigured agent metadata:
+    - `name = "WhatsApp_Business"`
+    - `description = "Helps you interact with WhatsApp Business for business messaging and customer communication."`
+    - `system_prompt`: multi-section prompt describing role/objectives/constraints (guidance only, no tool access).
+    - `suggestions = []` (empty)
+
+- `WhatsAppBusinessAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> WhatsAppBusinessAgent` (classmethod)
+  - Factory that constructs and returns a configured `WhatsAppBusinessAgent`.
+  - Behavior:
+    - Retrieves the default chat and embedding models from the application `ModelRegistryService` via `ABIModule.get_instance()`.
+    - Configures:
+      - `tools = []`
+      - `intents`: two `IntentType.RAW` intents with predefined informational responses.
+      - `memory = None`
+    - Defaults:
+      - If `agent_configuration` is not provided: `AgentConfiguration(system_prompt=cls.system_prompt)`
+      - If `agent_shared_state` is not provided: `AgentSharedState(thread_id="0")`
 
 ## Configuration/Dependencies
-- Depends on `naas_abi_core.services.agent.IntentAgent`:
+- Imports from `naas_abi_core.services.agent.IntentAgent`:
   - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
-- Uses model:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1.model` (expects `model.model` to be a chat model instance)
-- Key module constants:
-  - `SYSTEM_PROMPT`: instructs the agent to provide guidance only and acknowledge lack of tool access
-  - `SUGGESTIONS`: empty list (unused in this file)
+- Runtime dependency:
+  - `naas_abi_marketplace.applications.whatsapp_business.ABIModule`
+    - Must provide an initialized engine with `services.model_registry` available.
+    - Uses:
+      - `registry.get_default_chat_model()`
+      - `registry.get_default_embedding_model().model`
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.whatsapp_business.agents.WhatsAppBusinessAgent import create_agent
+from naas_abi_marketplace.applications.whatsapp_business.agents.WhatsAppBusinessAgent import (
+    WhatsAppBusinessAgent,
+)
 
-agent = create_agent()
+agent = WhatsAppBusinessAgent.New()
 print(agent.name)  # WhatsApp_Business
 ```
 
 ## Caveats
-- No WhatsApp Business tools are configured (`tools = []`), so the agent cannot send messages or perform real operations—only provide general guidance.
+- No tools are configured (`tools = []`), so the agent cannot send messages or manage real WhatsApp conversations—only provide general information.
+- Requires a properly initialized `ABIModule` with `ModelRegistryService` available; otherwise an assertion will fail (`"ModelRegistryService not initialized"`).

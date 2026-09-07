@@ -1,0 +1,52 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix ce: <http://ontology.naas.ai/abi/coding_environment/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+#################################################################
+#    Coding Environment event classes (subclasses of abi:LogProcess)
+#################################################################
+
+ce:WorkspaceProvisioned a owl:Class ;
+    rdfs:subClassOf abi:LogProcess ;
+    rdfs:label "Workspace Provisioned"@en ;
+    rdfs:comment "A coding-environment workspace was created from a template."@en .
+
+ce:WorkspaceStarted a owl:Class ;
+    rdfs:subClassOf abi:LogProcess ;
+    rdfs:label "Workspace Started"@en ;
+    rdfs:comment "A workspace build with transition=start was issued."@en .
+
+ce:WorkspaceStopped a owl:Class ;
+    rdfs:subClassOf abi:LogProcess ;
+    rdfs:label "Workspace Stopped"@en ;
+    rdfs:comment "A workspace build with transition=stop was issued."@en .
+
+ce:WorkspaceDeleted a owl:Class ;
+    rdfs:subClassOf abi:LogProcess ;
+    rdfs:label "Workspace Deleted"@en ;
+    rdfs:comment "A workspace build with transition=delete was issued."@en .
+
+ce:WorkspaceAccessGranted a owl:Class ;
+    rdfs:subClassOf abi:LogProcess ;
+    rdfs:label "Workspace Access Granted"@en ;
+    rdfs:comment "A scoped per-user token and embeddable app URL were minted."@en .
+
+ce:WorkspaceProvisionFailed a owl:Class ;
+    rdfs:subClassOf abi:LogProcess ;
+    rdfs:label "Workspace Provision Failed"@en ;
+    rdfs:comment "A provision attempt failed."@en .
+
+#################################################################
+#    Data properties
+#################################################################
+
+ce:user a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "user"@en .
+ce:workspaceId a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "workspace id"@en .
+ce:workspaceName a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "workspace name"@en .
+ce:templateId a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "template id"@en .
+ce:phase a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "phase"@en .
+ce:appSlug a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "app slug"@en .
+ce:tokenExpiresAt a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "token expires at"@en .
+ce:message a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "message"@en .

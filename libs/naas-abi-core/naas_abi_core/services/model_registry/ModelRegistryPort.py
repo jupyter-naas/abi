@@ -15,7 +15,7 @@ the registry knows which provider's factory to route through.
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -27,7 +27,6 @@ from naas_abi_core.models.Model import (
     Model,
     ModelProviderLike,
 )
-
 
 ChatProviderFactory = Callable[[str], BaseChatModel]
 EmbeddingProviderFactory = Callable[[str], Embeddings]
@@ -93,7 +92,7 @@ class IModelRegistry:
     def get(
         self,
         canonical_id: CanonicalModelIdLike,
-        provider: Optional[ModelProviderLike] = None,
+        provider: ModelProviderLike | None = None,
     ) -> Model:
         """Return a Model for ``canonical_id``.
 
@@ -113,7 +112,7 @@ class IModelRegistry:
     def get_chat_model(
         self,
         canonical_id: CanonicalModelIdLike,
-        provider: Optional[ModelProviderLike] = None,
+        provider: ModelProviderLike | None = None,
     ) -> ChatModel:
         """Like ``get`` but constrained to ``ChatModel``. Off-catalog lookups
         require an explicit ``provider=`` and use that provider's chat factory."""
@@ -122,7 +121,7 @@ class IModelRegistry:
     def get_embedding_model(
         self,
         canonical_id: CanonicalModelIdLike,
-        provider: Optional[ModelProviderLike] = None,
+        provider: ModelProviderLike | None = None,
     ) -> EmbeddingModel:
         """Like ``get`` but constrained to ``EmbeddingModel``. Off-catalog
         lookups require an explicit ``provider=`` and use that provider's
@@ -130,6 +129,22 @@ class IModelRegistry:
         raise NotImplementedError
 
     # ------------------------------------------------------------------ defaults
+
+    @property
+    def default_chat_model_id(self) -> str | None:
+        """Return the canonical id configured as the engine default chat model.
+
+        Unlike ``get_default_chat_model`` this never builds the live model and
+        never raises: it exposes the raw configured canonical id (or ``None``
+        when no default is configured), which callers can use for display or to
+        cross-reference the model catalog."""
+        raise NotImplementedError
+
+    @property
+    def default_embedding_model_id(self) -> str | None:
+        """Return the canonical id configured as the engine default embedding
+        model, or ``None`` when no default is configured. Never raises."""
+        raise NotImplementedError
 
     def get_default_chat_model(self) -> ChatModel:
         """Return the chat model configured as the engine default.

@@ -1,35 +1,40 @@
 # DeepSeekAgent
 
 ## What it is
-A minimal agent factory and `IntentAgent` subclass that wires a local **DeepSeek R1 8B** chat model (via Ollama) into the `naas_abi_core` intent-based agent framework, with a reasoning/math/science-oriented system prompt and a predefined set of intent triggers.
+A small factory and `IntentAgent` subclass that wires a local **DeepSeek R1 8B** chat model (via the ABI model registry) into the `naas_abi_core` intent-based agent framework, with a reasoning/math/science-oriented system prompt and predefined intent triggers.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Builds and returns a configured `DeepSeekAgent`:
-    - Loads the DeepSeek model from `naas_abi_marketplace.ai.deepseek.models.deepseek_r1_8b`.
-    - Registers a list of `Intent` entries that route to the `"call_model"` target.
-    - Applies default `AgentConfiguration(system_prompt=SYSTEM_PROMPT)` if none provided.
-    - Applies default `AgentSharedState(thread_id="0")` if none provided.
-    - Uses no tools, no sub-agents, and `memory=None`.
 
+### Functions
+- `create_agent(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> IntentAgent`
+  - Builds and returns a configured `DeepSeekAgent`.
+  - Retrieves the chat model from the ABI model registry: `get_chat_model("deepseek-r1:8b")`.
+  - Registers a fixed list of `Intent` entries that target `"call_model"`.
+  - Defaults:
+    - `AgentConfiguration(system_prompt=SYSTEM_PROMPT)` when `agent_configuration` is `None`
+    - `AgentSharedState(thread_id="0")` when `agent_shared_state` is `None`
+  - Sets:
+    - `tools = []`
+    - `agents = []`
+    - `memory = None`
+
+### Classes
 - `class DeepSeekAgent(IntentAgent)`
-  - Empty subclass of `IntentAgent` (no additional behavior defined here).
+  - Empty subclass (no additional behavior beyond `IntentAgent`).
 
-### Module-level constants
+### Module constants
 - `NAME`: `"DeepSeek"`
 - `DESCRIPTION`: `"Local DeepSeek R1 8B model via Ollama - advanced reasoning, mathematics, and problem-solving"`
-- `AVATAR_URL`: URL string for an avatar image
-- `SYSTEM_PROMPT`: multi-section prompt describing reasoning/math/science focus and response style
-- `SUGGESTIONS`: empty list
+- `AVATAR_URL`: `"https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/deepseek.png"`
+- `SYSTEM_PROMPT`: multi-section prompt focused on systematic reasoning, math, and scientific analysis
+- `SUGGESTIONS`: empty list (`[]`)
 
 ## Configuration/Dependencies
-- Depends on `naas_abi_core.services.agent.IntentAgent` for:
+- Depends on `naas_abi_core.services.agent.IntentAgent`:
   - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
-- Depends on a model definition:
-  - `naas_abi_marketplace.ai.deepseek.models.deepseek_r1_8b` (imports `model`)
-- Default configuration applied by `create_agent`:
-  - `AgentConfiguration(system_prompt=SYSTEM_PROMPT)`
-  - `AgentSharedState(thread_id="0")`
+- Depends on the DeepSeek ABI module singleton:
+  - `from naas_abi_marketplace.ai.deepseek import ABIModule`
+  - Uses `ABIModule.get_instance().engine.services.model_registry.get_chat_model("deepseek-r1:8b")`
 
 ## Usage
 ```python
@@ -37,11 +42,11 @@ from naas_abi_marketplace.ai.deepseek.agents.DeepSeekAgent import create_agent
 
 agent = create_agent()
 
-# The returned object is an IntentAgent (specifically DeepSeekAgent)
-print(type(agent).__name__)
-print(agent.name)
+print(type(agent).__name__)  # DeepSeekAgent
+print(agent.name)            # DeepSeek
 ```
 
 ## Caveats
-- This module does not define runtime execution methods; it only constructs the agent object and intent mappings. Actual message handling depends on `IntentAgent` implementation in `naas_abi_core`.
-- Tools, sub-agents, and memory are explicitly set to empty/`None` in `create_agent`.
+- This module only constructs the agent, intent mappings, and configuration; actual execution/routing behavior depends on `IntentAgent` in `naas_abi_core`.
+- No tools, sub-agents, or memory are configured (`tools=[]`, `agents=[]`, `memory=None`).
+- Model retrieval assumes the ABI runtime has a chat model registered under `"deepseek-r1:8b"`.

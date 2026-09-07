@@ -30,7 +30,7 @@ def test_workflow_search_linkedin_profile_page(
     workflow: SearchLinkedInProfilePageWorkflow,
 ):
     result = workflow.search_linkedin_profile_page(
-        SearchLinkedInProfilePageWorkflowParameters(profile_name="Florent Ravenel")
+        SearchLinkedInProfilePageWorkflowParameters(profile_name="Alice Dupont")
     )
     assert result is not None, result
     assert len(result) > 0, result
@@ -45,7 +45,7 @@ def test_workflow_search_linkedin_profile_page_with_organization(
 ):
     result = workflow.search_linkedin_profile_page(
         SearchLinkedInProfilePageWorkflowParameters(
-            profile_name="Florent Ravenel", organization_name="Naas.ai"
+            profile_name="Alice Dupont", organization_name="Naas.ai"
         )
     )
     assert result is not None, result

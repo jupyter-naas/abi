@@ -1,56 +1,57 @@
 # GrokAgent
 
 ## What it is
-A thin wrapper around `naas_abi_core.services.agent.IntentAgent` that instantiates a “Grok” intent-based agent with a predefined system prompt, metadata, and a set of intents that route to `call_model`.
+A small factory module that creates a preconfigured `IntentAgent` instance named **Grok**, with a fixed system prompt and a set of intent phrases routed to the agent’s `"call_model"` target.
 
 ## Public API
 - **Constants**
-  - `NAME`: Agent display name (`"Grok"`).
-  - `DESCRIPTION`: Human-readable description.
-  - `AVATAR_URL`: URL to an avatar image.
-  - `SYSTEM_PROMPT`: Long-form system prompt that defines behavior/style.
-  - `SUGGESTIONS`: Empty list placeholder.
+  - `NAME`: `"Grok"`
+  - `DESCRIPTION`: Agent description string
+  - `AVATAR_URL`: Avatar image URL
+  - `SYSTEM_PROMPT`: System prompt used when no configuration is provided
+  - `SUGGESTIONS`: Empty list (`[]`)
 
 - **Functions**
-  - `create_agent(agent_configuration: Optional[AgentConfiguration] = None, agent_shared_state: Optional[AgentSharedState] = None) -> IntentAgent`
-    - Builds and returns a configured `GrokAgent`.
-    - Loads the chat model from `naas_abi_marketplace.ai.grok.models.grok_4`.
-    - Creates a fixed set of `Intent` entries whose `intent_target` is `"call_model"`.
+  - `create_agent(agent_configuration: AgentConfiguration | None = None, agent_shared_state: AgentSharedState | None = None) -> IntentAgent`
+    - Loads chat model `"grok-4"` from the marketplace module engine model registry.
+    - Builds an `IntentAgent` with:
+      - no tools (`tools = []`)
+      - no sub-agents (`agents = []`)
+      - a predefined list of `Intent` entries (all `IntentType.AGENT` targeting `"call_model"`)
+    - Applies defaults if parameters are not provided:
+      - `AgentConfiguration(system_prompt=SYSTEM_PROMPT)`
+      - `AgentSharedState(thread_id="0")`
 
 - **Classes**
   - `class GrokAgent(IntentAgent)`
-    - No additional behavior; inherits all functionality from `IntentAgent`.
+    - No additional methods/overrides; inherits all behavior from `IntentAgent`.
 
 ## Configuration/Dependencies
-- **Dependencies**
+- **Imports / dependencies**
   - `naas_abi_core.services.agent.IntentAgent`:
     - `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentAgent`, `IntentType`
-  - Chat model import (required at runtime):
-    - `from naas_abi_marketplace.ai.grok.models.grok_4 import model`
+  - `naas_abi_marketplace.ai.grok.ABIModule`:
+    - Used to fetch `chat_model` via `abi_module.engine.services.model_registry.get_chat_model("grok-4")`
 
-- **Default configuration**
-  - If `agent_configuration` is not provided:
-    - `AgentConfiguration(system_prompt=SYSTEM_PROMPT)`
-  - If `agent_shared_state` is not provided:
-    - `AgentSharedState(thread_id="0")`
-
-- **Tools/Agents/Memory**
-  - `tools`: empty list
-  - `agents`: empty list
-  - `memory`: `None`
+- **Intent routing**
+  - The following intent values are registered, each with `intent_type=IntentType.AGENT` and `intent_target="call_model"`:
+    - `"search news about"`
+    - `"search web about"`
+    - `"search information about"`
+    - `"analyze scientific problems"`
+    - `"think critically"`
+    - `"seek truth"`
+    - `"challenge conventional views"`
+    - `"reason rigorously"`
 
 ## Usage
 ```python
 from naas_abi_marketplace.ai.grok.agents.GrokAgent import create_agent
 
 agent = create_agent()
-
-# Interact using IntentAgent's interface (methods depend on IntentAgent implementation).
-# Example placeholder:
-# response = agent.call_model("search news about space missions")
-# print(response)
+# Use the returned IntentAgent via the IntentAgent interface provided by naas_abi_core.
 ```
 
 ## Caveats
-- This module does not implement any custom logic in `GrokAgent`; all behavior depends on `IntentAgent` and the imported `model`.
-- The listed intents route to the target string `"call_model"`; actual dispatch behavior depends on `IntentAgent`’s implementation.
+- `GrokAgent` adds no custom behavior; functionality depends entirely on `IntentAgent` and the `"grok-4"` model returned by the model registry.
+- Intent dispatch behavior for `"call_model"` is defined by `IntentAgent` (not in this module).

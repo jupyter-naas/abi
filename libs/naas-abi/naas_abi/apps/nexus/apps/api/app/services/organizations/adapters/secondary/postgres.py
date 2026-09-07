@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from datetime import datetime
 from uuid import uuid4
@@ -8,6 +9,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     OrganizationDomainModel,
     OrganizationMemberModel,
     OrganizationModel,
+    OrganizationRoleFeaturesModel,
     UserModel,
     WorkspaceMemberModel,
     WorkspaceModel,
@@ -19,7 +21,9 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationMemberRecord,
     OrganizationPermissionPort,
     OrganizationRecord,
+    OrganizationRoleFeaturesRecord,
     OrganizationUpdateInput,
+    OrganizationWorkspaceMembershipRecord,
     OrganizationWorkspaceRecord,
     UserRecord,
 )
@@ -206,20 +210,49 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             .distinct()
             .order_by(WorkspaceModel.name)
         )
-        return [
-            OrganizationWorkspaceRecord(
-                id=row.id,
-                name=row.name,
-                slug=row.slug,
-                owner_id=row.owner_id,
-                organization_id=row.organization_id,
-                created_at=row.created_at,
-                updated_at=row.updated_at,
-                logo_url=row.logo_url,
-                logo_emoji=row.logo_emoji,
+        return [self._to_workspace_record(row) for row in result.scalars().all()]
+
+    async def list_workspaces_for_org(self, org_id: str) -> list[OrganizationWorkspaceRecord]:
+        result = await self.db.execute(
+            select(WorkspaceModel)
+            .where(WorkspaceModel.organization_id == org_id)
+            .order_by(WorkspaceModel.name)
+        )
+        return [self._to_workspace_record(row) for row in result.scalars().all()]
+
+    async def list_workspace_memberships_for_org(
+        self, org_id: str
+    ) -> list[OrganizationWorkspaceMembershipRecord]:
+        result = await self.db.execute(
+            select(
+                WorkspaceMemberModel.user_id,
+                WorkspaceMemberModel.workspace_id,
+                WorkspaceMemberModel.role,
             )
-            for row in result.scalars().all()
+            .join(WorkspaceModel, WorkspaceModel.id == WorkspaceMemberModel.workspace_id)
+            .where(WorkspaceModel.organization_id == org_id)
+        )
+        return [
+            OrganizationWorkspaceMembershipRecord(
+                user_id=user_id,
+                workspace_id=workspace_id,
+                role=role,
+            )
+            for user_id, workspace_id, role in result.all()
         ]
+
+    def _to_workspace_record(self, row: WorkspaceModel) -> OrganizationWorkspaceRecord:
+        return OrganizationWorkspaceRecord(
+            id=row.id,
+            name=row.name,
+            slug=row.slug,
+            owner_id=row.owner_id,
+            organization_id=row.organization_id,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            logo_url=row.logo_url,
+            logo_emoji=row.logo_emoji,
+        )
 
     async def list_organization_members(self, org_id: str) -> list[OrganizationMemberRecord]:
         result = await self.db.execute(
@@ -242,7 +275,8 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         ]
 
     async def get_user_by_email(self, email: str) -> UserRecord | None:
-        result = await self.db.execute(select(UserModel).where(UserModel.email == email))
+        normalized = email.lower().strip()
+        result = await self.db.execute(select(UserModel).where(UserModel.email == normalized))
         user = result.scalar_one_or_none()
         if user is None:
             return None
@@ -443,3 +477,76 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         await self.db.delete(row)
         await self.db.flush()
         return True
+
+    @staticmethod
+    def _decode_role_baseline(raw: str) -> dict[str, list[str]]:
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(parsed, dict):
+            return {}
+        decoded: dict[str, list[str]] = {}
+        for role, features in parsed.items():
+            if not isinstance(role, str) or not isinstance(features, list):
+                continue
+            decoded[role] = [str(feature) for feature in features]
+        return decoded
+
+    def _to_role_features_record(
+        self, row: OrganizationRoleFeaturesModel
+    ) -> OrganizationRoleFeaturesRecord:
+        return OrganizationRoleFeaturesRecord(
+            organization_id=row.organization_id,
+            role_baseline=self._decode_role_baseline(row.role_baseline),
+            updated_by=row.updated_by,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    async def get_organization_role_features(
+        self, org_id: str
+    ) -> OrganizationRoleFeaturesRecord | None:
+        result = await self.db.execute(
+            select(OrganizationRoleFeaturesModel).where(
+                OrganizationRoleFeaturesModel.organization_id == org_id
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        return self._to_role_features_record(row)
+
+    async def upsert_organization_role_features(
+        self,
+        org_id: str,
+        role_baseline: dict[str, list[str]],
+        updated_by: str | None,
+        now: datetime,
+    ) -> OrganizationRoleFeaturesRecord:
+        payload = json.dumps(
+            {role: list(features) for role, features in role_baseline.items()},
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        result = await self.db.execute(
+            select(OrganizationRoleFeaturesModel).where(
+                OrganizationRoleFeaturesModel.organization_id == org_id
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            row = OrganizationRoleFeaturesModel(
+                organization_id=org_id,
+                role_baseline=payload,
+                updated_by=updated_by,
+                created_at=now,
+                updated_at=now,
+            )
+            self.db.add(row)
+        else:
+            row.role_baseline = payload
+            row.updated_by = updated_by
+            row.updated_at = now
+        await self.db.flush()
+        return self._to_role_features_record(row)

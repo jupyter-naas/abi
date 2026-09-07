@@ -9,6 +9,7 @@ from naas_abi_core.module.Module import (
 from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.cache.CacheService import CacheService
+from naas_abi_core.services.dataset.DatasetService import DatasetService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.model_registry.ModelRegistryService import (
@@ -30,7 +31,7 @@ def _initialize_nexus_service_registry() -> None:
         )
 
         initialize_nexus_service_registry()
-    except Exception:
+    except Exception:  # noqa: BLE001,S110
         # Registry warm-up must never block module import.
         pass
 
@@ -178,27 +179,39 @@ class ExternalAppConfig(BaseModel):
 
 
 FeatureKey = Literal[
+    "maps",
     "chat",
     "files",
     "agents",
+    "skills",
     "apps",
     "marketplace",
     "search",
     "ontology",
     "graph",
+    "datasets",
     "settings",
+    # Opt-in: only when listed in enabled_features + role_baseline.
+    "code",
+    # Business slides (Forgejo decks + Monaco). On for members by default.
+    "slides",
 ]
 
+# Default catalog (excludes opt-in features like "code").
 _ALL_FEATURES: list[FeatureKey] = [
+    "maps",
     "chat",
     "files",
     "agents",
+    "skills",
     "apps",
     "marketplace",
     "search",
     "ontology",
     "graph",
+    "datasets",
     "settings",
+    "slides",
 ]
 
 
@@ -210,8 +223,8 @@ def _default_role_baseline() -> dict[str, list[FeatureKey]]:
     return {
         "owner": list(_ALL_FEATURES),
         "admin": list(_ALL_FEATURES),
-        "member": ["chat", "files"],
-        "viewer": ["chat", "files"],
+        "member": ["maps", "chat", "files", "datasets", "skills", "slides"],
+        "viewer": ["maps", "chat", "files", "datasets", "skills", "slides"],
     }
 
 
@@ -278,8 +291,22 @@ class WorkspaceSeedConfig(BaseModel):
     primary_color: str | None = "#22c55e"
     accent_color: str | None = None
     background_color: str | None = None
+    background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    # Same syntax as engine ``default_agent``: ``module AgentClass``.
+    default_agent: str | None = None
+    # Registry refs (``module AgentClass``) enabled in this workspace.
+    # ``None`` means the engine default agent only. A list is exclusive:
+    # listed on, others off. An empty list enables none.
+    agents: list[str] | None = None
+    # Catalog ``app_id`` values (``module.path:folder``) to enable at boot.
+    # ``None`` means no seed; missing app-config rows default to off.
+    apps: list[str] | None = None
+    # Ontology catalog ids (``module:filename.ttl``). Exclusive when a list
+    # is set: listed on, others off. ``None`` keeps the full engine listing.
+    # An empty list shows none. owl:imports are not implied; name every file.
+    ontologies: list[str] | None = None
 
 
 class OrganizationSeedConfig(BaseModel):
@@ -345,22 +372,52 @@ class NexusConfig(BaseModel):
 
     secret_key: str = "change-me-in-production"
     auth_password_enabled: bool = False
+    pages_sso_secret: str = ""
+    pages_sso_expire_seconds: int = 300
     magic_link_allow_signup: bool = False
     access_token_expire_minutes: int = 1440
     refresh_token_expire_days: int = 30
     magic_link_expire_minutes: int = 15
     magic_link_path: str = "/auth/magic-link"
     magic_link_email_app_name: str = "NEXUS"
-    magic_link_email_subject_template: str = "Your {app_name} magic sign-in link"
+    magic_link_email_subject_template: str = "Your {app_name} sign-in code"
     magic_link_email_text_template: str = (
-        "Use the link below to sign in to {app_name}:\n\n"
-        "{magic_link_url}\n\n"
-        "This link expires in {expire_minutes} minutes."
+        "Your {app_name} sign-in code is: {otp_code}\n\n"
+        "Enter this code in the app to continue.\n\n"
+        "Or use this magic link:\n{magic_link_url}\n\n"
+        "This code and link expire in {expire_minutes} minutes."
     )
     magic_link_email_html_template: str = (
-        "<p>Use the link below to sign in to {app_name}:</p>"
-        '<p><a href="{magic_link_url}">Sign in to {app_name}</a></p>'
-        "<p>This link expires in {expire_minutes} minutes.</p>"
+        '<!DOCTYPE html><html><body style="margin:0;padding:0;'
+        'background-color:{background_color};'
+        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="background-color:{background_color};padding:48px 16px;">'
+        '<tr><td align="center">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="max-width:440px;background-color:{login_card_color};'
+        'padding:40px 48px;border-radius:{login_border_radius}px;">'
+        '<tr><td align="center" style="padding-bottom:24px;">{logo_html}</td></tr>'
+        '<tr><td align="center" style="padding-bottom:24px;">'
+        '<p style="margin:0;font-size:28px;font-weight:600;color:#1a1a1a;">Welcome</p>'
+        '<p style="margin:8px 0 0;font-size:14px;color:#737373;">Sign in to continue</p>'
+        "</td></tr>"
+        '<tr><td align="center" style="padding-bottom:8px;">'
+        '<p style="margin:0;font-size:14px;color:#737373;">Your sign-in code</p>'
+        '<p style="margin:12px 0 0;font-size:28px;letter-spacing:6px;'
+        'font-weight:700;color:#1a1a1a;">{otp_code}</p>'
+        "</td></tr>"
+        '<tr><td align="center" style="padding:24px 0;">'
+        '<a href="{magic_link_url}" style="display:inline-block;background-color:{primary_color};'
+        "color:#ffffff;text-decoration:none;padding:12px 24px;font-size:14px;"
+        'font-weight:500;border-radius:{login_border_radius}px;">Sign in</a>'
+        "</td></tr>"
+        '<tr><td align="center">'
+        '<p style="margin:0;font-size:12px;color:#737373;">'
+        "This code and link expire in {expire_minutes} minutes.</p>"
+        "</td></tr></table>"
+        '<p style="margin:24px 0 0;font-size:12px;color:#737373;">{login_footer_text}</p>'
+        "</td></tr></table></body></html>"
     )
     email_from_address: EmailStr = "no-reply@nexus.example.com"
     email_from_name: str = "NEXUS"
@@ -447,12 +504,24 @@ class ABIModule(BaseModule):
             "naas_abi_marketplace.applications.yahoofinance#soft",
             "naas_abi_marketplace.applications.youtube#soft",
             "naas_abi_marketplace.applications.zoho#soft",
-            "naas_abi_marketplace.domains.support#soft",
+            "naas_abi_marketplace.domains.external#soft",
+            "naas_abi_marketplace.domains.finance#soft",
+            "naas_abi_marketplace.domains.intelligence#soft",
+            "naas_abi_marketplace.domains.logistics#soft",
+            "naas_abi_marketplace.domains.operations#soft",
+            "naas_abi_marketplace.domains.operations.modules.document#soft",
+            "naas_abi_marketplace.domains.operations.modules.ontology_engineer#soft",
+            "naas_abi_marketplace.domains.operations.modules.support#soft",
+            "naas_abi_marketplace.domains.personnel#soft",
+            "naas_abi_marketplace.domains.plans#soft",
+            "naas_abi_marketplace.domains.signals#soft",
+            "naas_abi_marketplace.domains.training#soft",
         ],
         services=[
             Secret,
             TripleStoreService,
             ObjectStorageService,
+            DatasetService,
             VectorStoreService,
             BusService,
             CacheService,
@@ -504,6 +573,11 @@ class ABIModule(BaseModule):
                         - name: "Ops Workspace"
                           slug: "ops-workspace"
                           owner_email: "owner@example.com"
+                          default_agent: "naas_abi AbiAgent"
+                          agents:
+                            - "naas_abi AbiAgent"
+                          apps:
+                            - example.module:dashboard
                           members:
                             - email: "admin@example.com"
                               role: "member"
@@ -516,7 +590,7 @@ class ABIModule(BaseModule):
         # Canonical model id used by AbiAgent. Must resolve against the
         # ModelRegistry once all modules have loaded; the engine's
         # validate_defaults pass will surface any mismatch.
-        abi_agent_model: str = "claude-sonnet-4.6"
+        abi_agent_model: str = "claude-sonnet-5"
 
         # Optional provider pin. When multiple modules register the same
         # canonical id (e.g. ``claude-sonnet-4`` ships via both the anthropic
@@ -526,8 +600,12 @@ class ABIModule(BaseModule):
 
         # Canonical model id used by OntologyEngineerAgent. Same registry
         # semantics as ``abi_agent_model``.
-        ontology_engineer_model: str = "claude-sonnet-4.6"
+        ontology_engineer_model: str = "claude-sonnet-5"
         ontology_engineer_provider: str | None = None
+
+        # When False, skip NexusPlatformPipeline on API boot and DROP the
+        # leftover named graph so a reload does not keep stale catalog triples.
+        run_nexus_platform_pipeline: bool = True
 
         # Canonical nexus runtime settings (passed to app.core.config.Settings).
         nexus_config: NexusConfig = Field(default_factory=NexusConfig)
@@ -539,35 +617,54 @@ class ABIModule(BaseModule):
         from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
 
         settings_kwargs = self.configuration.nexus_config.model_dump(exclude_none=True)
+        # Empty yaml (``pages_sso_secret: ""``) would override ``PAGES_SSO_SECRET``.
+        if not str(settings_kwargs.get("pages_sso_secret") or "").strip():
+            settings_kwargs.pop("pages_sso_secret", None)
 
         nexus_config.settings = nexus_config.Settings(**settings_kwargs)
 
         _initialize_nexus_service_registry()
 
-        import glob
-        import os
-
-        # Convert ontologies to Python classes.
-        from naas_abi_core import logger
-        from naas_abi_core.utils.onto2py import onto2py
-
-        ontologies_dir = os.path.join(os.path.dirname(__file__), "ontologies")
-        ttl_files = glob.glob(
-            os.path.join(ontologies_dir, "modules", "*.ttl"), recursive=True
-        )
-
-        if not ttl_files:
-            logger.warning(f"No TTL files found in {ontologies_dir}")
-            return
-
-        for ttl_file in ttl_files:
-            try:
-                logger.debug(f"Converting {ttl_file} to Python")
-                onto2py(ttl_file)
-            except Exception as e:
-                logger.error(
-                    f"Failed to convert {ttl_file} to Python: {e}", exc_info=True
-                )
+        # Ontology -> Python codegen is deliberately not run at boot.
+        #
+        # `on_initialized` fires on every `Engine.load()`: every API start, every
+        # uvicorn reload after a file is saved, every `abi chat`, every dagster
+        # boot. `onto2py()` is expensive on all of them. It runs BFO static
+        # validation and resolves `owl:imports`, which walks every project root
+        # and rdflib-parses every `.ttl` beneath it — 439 files and ~7s on the
+        # checkout this was measured on — then fetches any IRI it could not
+        # resolve locally over HTTP, with a 10s timeout per import and no
+        # caching. Behind a proxy or a slow resolver that turns a ~30s engine
+        # load into minutes, and the reload child pays it again on every save.
+        #
+        # The generated modules are committed, so boot has nothing to
+        # regenerate. Run the generator when a .ttl actually changes:
+        #     python -m naas_abi_core.utils.onto2py <ttl_file>
+        #
+        # import glob
+        # import os
+        #
+        # # Convert ontologies to Python classes.
+        # from naas_abi_core import logger
+        # from naas_abi_core.utils.onto2py import onto2py
+        #
+        # ontologies_dir = os.path.join(os.path.dirname(__file__), "ontologies")
+        # ttl_files = glob.glob(
+        #     os.path.join(ontologies_dir, "modules", "*.ttl"), recursive=True
+        # )
+        #
+        # if not ttl_files:
+        #     logger.warning(f"No TTL files found in {ontologies_dir}")
+        #     return
+        #
+        # for ttl_file in ttl_files:
+        #     try:
+        #         logger.debug(f"Converting {ttl_file} to Python")
+        #         onto2py(ttl_file)
+        #     except Exception as e:
+        #         logger.error(
+        #             f"Failed to convert {ttl_file} to Python: {e}", exc_info=True
+        #         )
 
     def on_load(self):
         super().on_load()
@@ -584,19 +681,13 @@ class ABIModule(BaseModule):
         # Initialize Nexus platform (graphs + agent metadata in the triple
         # store). Deferred from on_initialized so non-API entry points
         # (Dagster run workers, CLI commands, tests) don't pay this cost.
-        from naas_abi.pipelines.NexusPlatformPipeline import (
-            NexusPlatformPipeline,
-            NexusPlatformPipelineConfiguration,
-            NexusPlatformPipelineParameters,
-        )
+        from naas_abi.apply_nexus_platform_pipeline import apply_nexus_platform_pipeline
 
-        pipeline = NexusPlatformPipeline(
-            NexusPlatformPipelineConfiguration(
-                triple_store=self.engine.services.triple_store,
-                object_storage=self.engine.services.object_storage,
-            )
+        apply_nexus_platform_pipeline(
+            enabled=self.configuration.run_nexus_platform_pipeline,
+            triple_store=self.engine.services.triple_store,
+            object_storage=self.engine.services.object_storage,
         )
-        pipeline.run(NexusPlatformPipelineParameters())
 
         # Keep API and Nexus CORS aligned from a single source of truth.
         app.state.abi_cors_origins = self.engine.api_configuration.cors_origins

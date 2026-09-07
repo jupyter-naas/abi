@@ -1,13 +1,11 @@
 import uuid
 from dataclasses import dataclass
-from enum import Enum
 from typing import Annotated, Optional
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core import logger
 from naas_abi_core.pipeline import (Pipeline, PipelineConfiguration,
                                     PipelineParameters)
-from naas_abi_core.utils.Expose import APIRouter
 from pydantic import Field
 from rdflib import DCTERMS, OWL, RDF, RDFS, Graph, Literal, Namespace, URIRef
 
@@ -55,15 +53,5 @@ class {{pipeline_name_pascal}}Pipeline(Pipeline[{{pipeline_name_pascal}}Pipeline
             )
         ]
 
-    def as_api(
-        self,
-        router: APIRouter,
-        route_name: str = "",
-        name: str = "",
-        description: str = "",
-        description_stream: str = "",
-        tags: list[str | Enum] | None = None,
-    ) -> None:
-        if tags is None:
-            tags = []
-        return None
+    # as_api is inherited from Expose: POST /{slug} calls run() when this
+    # method is not overridden. Override only for a custom HTTP surface.

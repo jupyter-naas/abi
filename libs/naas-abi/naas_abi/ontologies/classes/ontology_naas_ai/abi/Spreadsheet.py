@@ -8,4 +8,3 @@ class Spreadsheet(_Spreadsheet):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

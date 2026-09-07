@@ -63,7 +63,7 @@ graph = service.named_entity_recognition("Bob met Alice in Paris.")
 No tests in this directory. Related downstream coverage:
 
 ```bash
-uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/domains/ontology_engineer/
+uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/domains/signals/pipelines/ontology_engineer/
 ```
 
 If you change `OntologyService` semantics, add a `OntologyService_test.py` next to it.

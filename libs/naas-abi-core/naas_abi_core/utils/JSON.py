@@ -62,7 +62,7 @@ def extract_json_from_completion(completion_text: str) -> list | dict:
             cleaned_str = attempt(json_str)
             return json.loads(cleaned_str)
         except json.JSONDecodeError as e:
-            logger.debug(f"JSON parse attempt failed: {str(e)}")
+            logger.debug(f"JSON parse attempt failed: {e!s}")
             continue
 
     raw = _raw_decode_json_object(json_str)

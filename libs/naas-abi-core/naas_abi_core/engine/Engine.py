@@ -1,18 +1,17 @@
-from typing import Dict, List
 
 from naas_abi_core import logger
 from naas_abi_core.engine.context import (
     set_default_event_service,
     set_default_model_registry,
 )
-from naas_abi_core.engine.engine_configuration.EngineConfiguration import \
-    EngineConfiguration
-from naas_abi_core.engine.engine_loaders.EngineModuleLoader import \
-    EngineModuleLoader
-from naas_abi_core.engine.engine_loaders.EngineOntologyLoader import \
-    EngineOntologyLoader
-from naas_abi_core.engine.engine_loaders.EngineServiceLoader import \
-    EngineServiceLoader
+from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+    EngineConfiguration,
+)
+from naas_abi_core.engine.engine_loaders.EngineModuleLoader import EngineModuleLoader
+from naas_abi_core.engine.engine_loaders.EngineOntologyLoader import (
+    EngineOntologyLoader,
+)
+from naas_abi_core.engine.engine_loaders.EngineServiceLoader import EngineServiceLoader
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.module.Module import BaseModule
 
@@ -22,7 +21,7 @@ class Engine(IEngine):
     __engine_module_loader: EngineModuleLoader
     __engine_service_loader: EngineServiceLoader
 
-    __modules: Dict[
+    __modules: dict[
         str, BaseModule
     ]  # Must not set a default value to prevent modules to try to access modules inside constructors.
 
@@ -33,7 +32,7 @@ class Engine(IEngine):
         return self.__configuration
 
     @property
-    def modules(self) -> Dict[str, BaseModule]:
+    def modules(self) -> dict[str, BaseModule]:
         try:
             return self.__modules
         except AttributeError:
@@ -51,7 +50,7 @@ class Engine(IEngine):
         self.__engine_module_loader = EngineModuleLoader(self.__configuration)
         self.__engine_service_loader = EngineServiceLoader(self.__configuration)
 
-    def load(self, module_names: List[str] = []):
+    def load(self, module_names: list[str] | None = None):
         # Per-module CLI invocations (e.g. ``abi chat <module> <agent>``)
         # pass a narrow ``module_names`` to skip the cost of loading every
         # enabled module. The in-memory ModelRegistry only sees models from
@@ -63,6 +62,8 @@ class Engine(IEngine):
         # enabled module that ships ``ModelDefinition`` subclasses so the
         # registry's configured defaults are always present, regardless of
         # which entry point asked the engine to load.
+        if module_names is None:
+            module_names = []
         if module_names:
             model_providers = (
                 self.__engine_module_loader.get_model_providing_modules()

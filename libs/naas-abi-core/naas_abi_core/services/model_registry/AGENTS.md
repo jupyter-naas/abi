@@ -43,6 +43,9 @@ get(canonical_id, provider=None) -> Model
 get_chat_model(canonical_id, provider=None) -> ChatModel              # raises if wrong type
 get_embedding_model(canonical_id, provider=None) -> EmbeddingModel    # raises if wrong type
 
+default_chat_model_id -> str | None       # configured default canonical id (property, never raises)
+default_embedding_model_id -> str | None   # configured default canonical id (property, never raises)
+
 get_default_chat_model() -> ChatModel
 get_default_embedding_model() -> EmbeddingModel
 validate_defaults()         # called at engine startup

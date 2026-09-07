@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class NemotronNano9bV2FreeModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="NVIDIA: Nemotron Nano 9B V2 (free)",
+        name="Nemotron Nano 9B V2 (free)",
         owner="nvidia",
         description="NVIDIA-Nemotron-Nano-9B-v2 is a large language model (LLM) trained from scratch by NVIDIA, and designed as a unified model for both reasoning and non-reasoning tasks. It responds to user queries and...",
         canonical_slug="nvidia/nemotron-nano-9b-v2",
         hugging_face_id="nvidia/NVIDIA-Nemotron-Nano-9B-v2",
-        created_at=datetime.fromtimestamp(1757106807),
+        created_at=datetime.fromtimestamp(1757106807, tz=UTC),
         pricing={'prompt': '0', 'completion': '0'},
         architecture={'modality': 'text->text', 'input_modalities': ['text'], 'output_modalities': ['text'], 'tokenizer': 'Other', 'instruct_type': None},
         top_provider={'context_length': 128000, 'max_completion_tokens': None, 'is_moderated': False},

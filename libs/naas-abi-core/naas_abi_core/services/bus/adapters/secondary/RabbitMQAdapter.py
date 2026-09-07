@@ -1,6 +1,7 @@
 import hashlib
-from threading import Thread
-from typing import Callable, Optional
+from collections.abc import Callable
+from threading import RLock, Thread
+from typing import Self
 
 import pika
 from naas_abi_core.services.bus.BusPorts import IBusAdapter
@@ -9,17 +10,21 @@ from naas_abi_core.utils.Logger import logger
 
 class RabbitMQAdapter(IBusAdapter):
     __rabbitmq_url: str
-    __publish_connection: Optional[pika.BlockingConnection]
-    __publish_channel: Optional[pika.adapters.blocking_connection.BlockingChannel]
+    __publish_connection: pika.BlockingConnection | None
+    __publish_channel: pika.adapters.blocking_connection.BlockingChannel | None
     __declared_publish_exchanges: set[str]
+    __publish_lock: RLock
 
     def __init__(self, rabbitmq_url: str):
         self.__rabbitmq_url = rabbitmq_url
         self.__publish_connection = None
         self.__publish_channel = None
         self.__declared_publish_exchanges = set()
+        # Pika BlockingConnection and BlockingChannel must only be used by
+        # one thread at a time. Services share this adapter across workers.
+        self.__publish_lock = RLock()
 
-    def __enter__(self) -> "RabbitMQAdapter":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, exc_type, exc, tb):
@@ -27,7 +32,8 @@ class RabbitMQAdapter(IBusAdapter):
         return False
 
     def close(self) -> None:
-        self._close_publish_connection()
+        with self.__publish_lock:
+            self._close_publish_connection()
 
     def _close_publish_connection(self) -> None:
         if self.__publish_channel is not None:
@@ -64,7 +70,7 @@ class RabbitMQAdapter(IBusAdapter):
 
     @staticmethod
     def _durable_queue_name(topic: str, routing_key: str) -> str:
-        digest = hashlib.sha256(f"{topic}:{routing_key}".encode("utf-8")).hexdigest()
+        digest = hashlib.sha256(f"{topic}:{routing_key}".encode()).hexdigest()
         return f"naas-abi.{digest}"
 
     def _do_publish(self, topic: str, routing_key: str, payload: bytes) -> None:
@@ -98,16 +104,17 @@ class RabbitMQAdapter(IBusAdapter):
         broker (e.g. due to a missed heartbeat while the process was not
         actively publishing).
         """
-        try:
-            self._do_publish(topic, routing_key, payload)
-        except Exception:
-            # Connection was stale — drop it and retry with a fresh one.
-            self._close_publish_connection()
+        with self.__publish_lock:
             try:
                 self._do_publish(topic, routing_key, payload)
-            except Exception as exc:
+            except Exception:  # noqa: BLE001
+                # Connection was stale — drop it and retry with a fresh one.
                 self._close_publish_connection()
-                raise ConnectionError("RabbitMQ publish failed") from exc
+                try:
+                    self._do_publish(topic, routing_key, payload)
+                except Exception as exc:
+                    self._close_publish_connection()
+                    raise ConnectionError("RabbitMQ publish failed") from exc
 
     def dequeue(
         self, topic: str, routing_key: str, callback: Callable[[bytes], None]
@@ -184,21 +191,22 @@ class RabbitMQAdapter(IBusAdapter):
         return f"{RabbitMQAdapter._PUBSUB_EXCHANGE_PREFIX}{topic}"
 
     def publish(self, topic: str, routing_key: str, payload: bytes) -> None:
-        channel = self._ensure_publish_channel()
-        exchange = self._pubsub_exchange(topic)
-        if exchange not in self.__declared_publish_exchanges:
-            channel.exchange_declare(
+        with self.__publish_lock:
+            channel = self._ensure_publish_channel()
+            exchange = self._pubsub_exchange(topic)
+            if exchange not in self.__declared_publish_exchanges:
+                channel.exchange_declare(
+                    exchange=exchange,
+                    exchange_type="topic",
+                    durable=False,
+                    auto_delete=True,
+                )
+                self.__declared_publish_exchanges.add(exchange)
+            channel.basic_publish(
                 exchange=exchange,
-                exchange_type="topic",
-                durable=False,
-                auto_delete=True,
+                routing_key=routing_key,
+                body=payload,
             )
-            self.__declared_publish_exchanges.add(exchange)
-        channel.basic_publish(
-            exchange=exchange,
-            routing_key=routing_key,
-            body=payload,
-        )
 
     def subscribe(
         self, topic: str, routing_key: str, callback: Callable[[bytes], None]
@@ -239,7 +247,7 @@ class RabbitMQAdapter(IBusAdapter):
                     except StopIteration:
                         ch.basic_ack(delivery_tag=method.delivery_tag)
                         ch.stop_consuming()
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         # Pub/sub is best-effort; ACK so a buggy subscriber
                         # doesn't redeliver the same message.
                         ch.basic_ack(delivery_tag=method.delivery_tag)

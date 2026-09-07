@@ -16,7 +16,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.FileSystemRole import FileSystemRole
+from naas_abi.ontologies.classes.ontology_demo.nexus.FileSystemRole import FileSystemRole
 
 role = FileSystemRole()
 role.actions()  # no-op by default

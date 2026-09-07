@@ -2,7 +2,8 @@ import glob
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
+
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.utils.Graph import ABIGraph
@@ -31,8 +32,8 @@ class AuthorQueryParameters(BaseModel):
         paper_title (str, optional): Title or part of the title of the paper
     """
 
-    paper_id: Optional[str] = Field(None, description="ArXiv paper ID")
-    paper_title: Optional[str] = Field(
+    paper_id: str | None = Field(None, description="ArXiv paper ID")
+    paper_title: str | None = Field(
         None, description="Title or part of the title of the paper"
     )
 
@@ -45,14 +46,13 @@ class PaperQueryParameters(BaseModel):
         category (str, optional): ArXiv category
     """
 
-    author_name: Optional[str] = Field(None, description="Name of the author")
-    category: Optional[str] = Field(None, description="ArXiv category")
+    author_name: str | None = Field(None, description="Name of the author")
+    category: str | None = Field(None, description="ArXiv category")
 
 
 class SchemaParameters(BaseModel):
     """Parameters for getting the ontology schema."""
 
-    pass
 
 
 class SparqlQueryParameters(BaseModel):
@@ -107,12 +107,12 @@ class ArXivQueryWorkflow(Workflow):
                 file_graph.parse(ttl_file, format="turtle")
                 for triple in file_graph:
                     combined_graph.add(triple)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 print(f"Error loading {ttl_file}: {e}")
 
         return combined_graph
 
-    def query_authors(self, parameters: AuthorQueryParameters) -> Dict[str, Any]:
+    def query_authors(self, parameters: AuthorQueryParameters) -> dict[str, Any]:
         """Finds authors of a paper based on ID or title.
 
         Args:
@@ -154,7 +154,7 @@ class ArXivQueryWorkflow(Workflow):
 
         results = graph.query(query)
 
-        papers: Dict[str, Dict[str, Any]] = {}
+        papers: dict[str, dict[str, Any]] = {}
         for row in results:
             # Type assertion for SPARQL result row
             if (
@@ -181,7 +181,7 @@ class ArXivQueryWorkflow(Workflow):
 
         return {"papers": list(papers.values())}
 
-    def query_papers(self, parameters: PaperQueryParameters) -> Dict[str, Any]:
+    def query_papers(self, parameters: PaperQueryParameters) -> dict[str, Any]:
         """Finds papers by author name or category.
 
         Args:
@@ -246,7 +246,7 @@ class ArXivQueryWorkflow(Workflow):
 
         return {"papers": papers}
 
-    def get_schema(self, parameters: SchemaParameters) -> Dict[str, str]:
+    def get_schema(self, parameters: SchemaParameters) -> dict[str, str]:
         """Gets the ArXiv ontology schema.
 
         Args:
@@ -263,7 +263,7 @@ class ArXivQueryWorkflow(Workflow):
         with open(ontology_path, "r") as f:
             return {"schema": f.read()}
 
-    def execute_query(self, parameters: SparqlQueryParameters) -> Dict[str, Any]:
+    def execute_query(self, parameters: SparqlQueryParameters) -> dict[str, Any]:
         """Executes a custom SPARQL query against the ArXiv knowledge graph.
 
         Args:
@@ -290,10 +290,10 @@ class ArXivQueryWorkflow(Workflow):
                 result_list.append(row_dict)
 
             return {"results": result_list}
-        except Exception as e:
-            return {"error": f"Query execution failed: {str(e)}"}
+        except Exception as e:  # noqa: BLE001
+            return {"error": f"Query execution failed: {e!s}"}
 
-    def get_frequent_authors(self) -> Dict[str, Any]:
+    def get_frequent_authors(self) -> dict[str, Any]:
         """Identifies authors who appear most frequently in the stored papers.
 
         Returns:
@@ -335,8 +335,8 @@ class ArXivQueryWorkflow(Workflow):
                     )
 
             return {"authors": authors}
-        except Exception as e:
-            return {"error": f"Query execution failed: {str(e)}"}
+        except Exception as e:  # noqa: BLE001
+            return {"error": f"Query execution failed: {e!s}"}
 
     def as_tools(self) -> list[BaseTool]:
         """Returns a list of LangChain tools for this workflow.

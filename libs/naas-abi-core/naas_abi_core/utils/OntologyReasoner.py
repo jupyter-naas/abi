@@ -1,8 +1,8 @@
-from rdflib import Graph, RDF, RDFS, URIRef, Literal
-import rdflib
 import re
 import uuid
-from typing import List, Dict, Tuple
+
+import rdflib
+from rdflib import RDF, RDFS, Graph, Literal, URIRef
 
 
 class OntologyReasoner:
@@ -22,15 +22,15 @@ class OntologyReasoner:
     def dedup_subject(self, class_label: tuple, graph: Graph) -> Graph:
         cls, label = class_label
         # Search all IRI in graph using SPARQL where p = rdf:type and o = cls and p = rdfs:label and o = label
-        query = """
-        SELECT ?s WHERE {
-            ?s a <%s> .
-            ?s rdfs:label "%s" .
-            FILTER NOT EXISTS { ?other rdfs:subClassOf ?s }
-            FILTER NOT EXISTS { ?s a owl:Class }
-            FILTER NOT EXISTS { ?s a rdfs:Class }
-        }
-        """ % (cls, label)
+        query = f"""
+        SELECT ?s WHERE {{
+            ?s a <{cls}> .
+            ?s rdfs:label "{label}" .
+            FILTER NOT EXISTS {{ ?other rdfs:subClassOf ?s }}
+            FILTER NOT EXISTS {{ ?s a owl:Class }}
+            FILTER NOT EXISTS {{ ?s a rdfs:Class }}
+        }}
+        """
         # print(query)
         results: rdflib.query.Result = graph.query(query)
 
@@ -43,7 +43,7 @@ class OntologyReasoner:
                 else False
             )
 
-        main_node: List[rdflib.query.ResultRow] = list(
+        main_node: list[rdflib.query.ResultRow] = list(
             filter(
                 filter_func,
                 [
@@ -98,13 +98,13 @@ class OntologyReasoner:
 
         return new_graph
 
-    def dedup_ttl(self, ttl: str) -> Tuple[str, Graph]:
+    def dedup_ttl(self, ttl: str) -> tuple[str, Graph]:
         graph = Graph()
         graph.parse(data=ttl, format="turtle")
 
-        types: Dict[URIRef, URIRef] = {}
-        labels: Dict[URIRef, str] = {}
-        types_label: Dict[Tuple[URIRef, str], List[URIRef]] = {}
+        types: dict[URIRef, URIRef] = {}
+        labels: dict[URIRef, str] = {}
+        types_label: dict[tuple[URIRef, str], list[URIRef]] = {}
 
         pn = graph.namespaces()
 

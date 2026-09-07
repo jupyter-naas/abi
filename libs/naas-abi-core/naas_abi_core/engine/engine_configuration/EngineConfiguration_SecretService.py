@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, List, Literal, Union
+from typing import TYPE_CHECKING, Literal, Self
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
@@ -9,7 +9,6 @@ from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator impo
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
 from pydantic import BaseModel, ConfigDict, model_validator
-from typing_extensions import Self
 
 # Only import for type checking, not at runtime
 if TYPE_CHECKING:
@@ -74,11 +73,7 @@ class Base64SecretConfiguration(BaseModel):
 class SecretAdapterConfiguration(GenericLoader):
     adapter: Literal["dotenv", "naas", "base64", "custom"]
     config: (
-        Union[
-            DotenvSecretConfiguration,
-            NaasSecretConfiguration,
-            Base64SecretConfiguration,
-        ]
+        DotenvSecretConfiguration | NaasSecretConfiguration | Base64SecretConfiguration
         | None
     ) = None
 
@@ -142,7 +137,7 @@ class SecretAdapterConfiguration(GenericLoader):
 
 
 class SecretServiceConfiguration(BaseModel):
-    secret_adapters: List[SecretAdapterConfiguration]
+    secret_adapters: list[SecretAdapterConfiguration]
 
     def load(self) -> Secret:
         return Secret(adapters=[adapter.load() for adapter in self.secret_adapters])

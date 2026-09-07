@@ -502,7 +502,9 @@ async def export_conversation(
 
 @router.get("/ollama/status")
 async def get_ollama_status(
-    endpoint: str = "http://localhost:11434",
+    endpoint: str | None = None,
     current_user: User = Depends(get_current_user_required),
 ) -> dict:
+    # None means "resolve for this platform" — inside a container that is the
+    # host gateway, not localhost.
     return await check_ollama_status(endpoint)

@@ -8,4 +8,3 @@ class FrontEndEvent(_FrontEndEvent):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

@@ -1,44 +1,50 @@
 # YfinanceAgent
 
 ## What it is
-A thin `IntentAgent` wrapper configured for Yahoo Finance research workflows. It wires a chat model, yfinance-backed tools, and a set of tool intents into an `IntentAgent` instance via `create_agent()`.
+An `IntentAgent` subclass preconfigured for Yahoo Finance–based market research. It boots with the default chat/embedding models from the application engine, wires in `yfinance` integration tools, and registers tool-driven intents for common finance queries.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Builds and returns a configured `YfinanceAgent`:
-    - Loads the chat model (`gpt_4_1_mini`).
-    - Instantiates Yahoo Finance integration tools via `as_tools(...)`.
-    - Defines tool-based intents (ticker search, info, history, financials, sector, industry).
-    - Assembles a system prompt that includes the available tool names/descriptions.
-    - Applies default `AgentConfiguration` and `AgentSharedState` when not provided.
-
 - `class YfinanceAgent(IntentAgent)`
-  - No additional behavior; inherits all functionality from `IntentAgent`.
+  - Predefined class attributes:
+    - `name = "YahooFinance"`
+    - `description = "Expert financial analyst agent ... using Yahoo Finance."`
+    - `avatar_url = "https://.../yahoo_finance_logo.png"`
+    - `system_prompt` (template containing `[TOOLS]` placeholder)
+    - `suggestions: list = []`
+  - `@classmethod New(cls, agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> YfinanceAgent`
+    - Creates and returns a configured agent instance:
+      - Fetches the default chat model and embedding model via the app module engine registry.
+      - Builds Yahoo Finance tools via `YfinanceIntegrationConfiguration()` and `as_tools(...)`.
+      - Registers tool intents targeting:
+        - `yfinance_search_ticker`
+        - `yfinance_get_ticker_info`
+        - `yfinance_get_ticker_history`
+        - `yfinance_get_ticker_financials`
+        - `yfinance_get_sector_info`
+        - `yfinance_get_industry_info`
+      - Renders `system_prompt` by replacing `[TOOLS]` with a list of tool names/descriptions.
+      - Defaults:
+        - `AgentConfiguration(system_prompt=rendered_prompt)` if not provided
+        - `AgentSharedState(thread_id="0")` if not provided
 
 ## Configuration/Dependencies
-- Core agent framework:
-  - `naas_abi_core.services.agent.IntentAgent`:
-    - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
-- Model dependency:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini.model`
+- Agent framework:
+  - `naas_abi_core.services.agent.IntentAgent`: `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
+- Application module / engine:
+  - `naas_abi_marketplace.applications.yahoofinance.ABIModule` (used to access `engine.services.model_registry`)
 - Yahoo Finance integration:
   - `naas_abi_marketplace.applications.yahoofinance.integrations.YfinanceIntegration`:
-    - `YfinanceIntegrationConfiguration`, `as_tools`
-
-Constants used to configure the agent:
-- `NAME = "YahooFinance"`
-- `DESCRIPTION = "..."`
-- `AVATAR_URL = "..."` (declared but not used in `create_agent`)
-- `SYSTEM_PROMPT` (templated; `[TOOLS]` replaced with tool list)
+    - `YfinanceIntegrationConfiguration`
+    - `as_tools`
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.yahoofinance.agents.YfinanceAgent import create_agent
+from naas_abi_marketplace.applications.yahoofinance.agents.YfinanceAgent import YfinanceAgent
 
-agent = create_agent()
-# Use `agent` through the IntentAgent interface provided by naas_abi_core
+agent = YfinanceAgent.New()
+# Interact with `agent` through the IntentAgent interface provided by naas_abi_core.
 ```
 
 ## Caveats
-- `YfinanceAgent` itself adds no custom methods; all runtime behavior comes from `IntentAgent`, the loaded model, and the yfinance integration tools.
-- The configured system prompt constrains the agent to use provided yfinance tools for data retrieval and to avoid investment advice.
+- Requires the Yahoo Finance `ABIModule` engine and its `model_registry` to be initialized; otherwise `New()` asserts with `"ModelRegistryService not initialized"`.
+- If you pass a custom `AgentConfiguration`, its `system_prompt` is not automatically overwritten with the rendered `[TOOLS]` prompt.

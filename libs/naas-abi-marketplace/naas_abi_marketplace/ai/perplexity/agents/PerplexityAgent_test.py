@@ -1,3 +1,5 @@
+from datetime import UTC
+
 import pytest
 
 
@@ -53,7 +55,7 @@ def test_search_news_with_datetime(agent):
     #  • The Independent News Sept 24
 
     assert result is not None, result
-    assert datetime.now().strftime("%Y-%m-%d") in result, result
+    assert datetime.now(UTC).strftime("%Y-%m-%d") in result, result
     assert "sources" in result.lower(), result
 
 

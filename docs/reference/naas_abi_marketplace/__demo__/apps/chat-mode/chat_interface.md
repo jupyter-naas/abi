@@ -1,41 +1,55 @@
 # chat_interface
 
 ## What it is
-- A Streamlit-based chat UI for interacting with an `AbiAgent` loaded from `naas_abi.modules`.
-- Provides basic chat history, agent initialization/reset, and `@mention` parsing to switch the displayed “active agent” context and route input via an orchestration-style prompt.
+- A Streamlit chat app for interacting with an `AbiAgent` discovered from `naas_abi.modules`.
+- Maintains chat history in `st.session_state`, supports `@mentions` to set an “active agent” label and rewrites the prompt into an orchestration-style command (e.g., `ask claude ...`).
 
 ## Public API
-This file is primarily a Streamlit app script; the following top-level functions are defined and callable:
+This file is primarily a Streamlit app script (executes on import). The following top-level functions are defined:
 
 - `load_agent(agent_class: str)`
-  - Searches `naas_abi.modules` for an agent whose class name matches `agent_class` (e.g., `"AbiAgent"`), and returns that agent instance (or `None`).
-- `initialize_agent()`
-  - Initializes and stores the `AbiAgent` in `st.session_state.agent` (lazy init). Returns the agent or `None`.
-- `handle_agent_response(response)`
-  - Extracts text content from `response` (string, `.content`, or `.messages[*].content`), strips `<think>...</think>` blocks, and appends an assistant message to `st.session_state.messages`.
-- `process_user_input(user_input: str) -> str`
-  - Detects `@mentions` (e.g., `@claude`), updates `st.session_state.active_agent`, and rewrites the user input into an orchestration prompt:
-    - `@agent some text` → `ask agent some text`
-    - `@agent` alone → `I want to talk to agent`
-- `send_message(user_input: str)`
-  - Calls `st.session_state.agent.invoke(user_input)` and passes the result to `handle_agent_response()`.
+  - Imports `naas_abi.modules`, iterates loaded modules/agents, and returns the first agent whose class name matches `agent_class`.
+  - Writes debug info to the Streamlit page; returns `None` on failures.
 
-Other notable module-level items:
-- `AGENT_MAPPING`: maps mention keys (e.g., `"claude"`) to display names (e.g., `"Claude"`).
+- `initialize_agent()`
+  - Lazy-initializes `st.session_state.agent` by calling `load_agent("AbiAgent")`.
+  - Returns the agent instance or `None`.
+
+- `handle_agent_response(response)`
+  - Extracts text from:
+    - `response.content`, or
+    - `response` if it’s a `str`, or
+    - concatenated `.messages[*].content` if present.
+  - Removes `<think>...</think>` blocks and appends an assistant message to `st.session_state.messages`.
+
+- `process_user_input(user_input: str) -> str`
+  - Detects the first `@mention` (`@(\w+)`) and, if in `AGENT_MAPPING`:
+    - updates `st.session_state.active_agent`,
+    - rewrites input:
+      - `@agent some text` → `ask agent some text`
+      - `@agent` alone → `I want to talk to agent`
+  - If unknown mention: reports an error via Streamlit and returns the original input.
+
+- `send_message(user_input: str)`
+  - Calls `st.session_state.agent.invoke(user_input)` and forwards the result to `handle_agent_response()`.
+
+Other module-level items:
+- `AGENT_MAPPING: dict[str, str]`
+  - Maps mention keys (e.g., `"claude"`) to display names (e.g., `"Claude"`).
 
 ## Configuration/Dependencies
-- Runtime environment:
-  - Loads environment variables via `dotenv.load_dotenv()` at import time.
-  - Forces:
+- Environment / runtime behavior:
+  - Calls `dotenv.load_dotenv()` at import time.
+  - Computes a `project_root` relative to this file, inserts it into `sys.path`, and `os.chdir()` to it.
+  - Sets:
     - `os.environ["ENV"] = "dev"`
     - `os.environ["LOG_LEVEL"] = "ERROR"`
-  - Changes working directory to a computed project root and inserts it into `sys.path`.
-- Python packages:
+- External dependencies:
   - `streamlit`
   - `python-dotenv`
-- Internal dependencies:
-  - Imports `naas_abi.modules` and expects an agent class named `AbiAgent` to be present within loaded modules.
-  - Attempts to import `src` (for debug/validation).
+- Internal dependencies / expectations:
+  - Imports `naas_abi.modules` and expects modules to expose `.agents` collections containing an `AbiAgent` instance.
+  - Attempts `import src` (fails the agent load if unavailable).
 
 ## Usage
 Run as a Streamlit app:
@@ -45,14 +59,12 @@ streamlit run libs/naas-abi-marketplace/naas_abi_marketplace/__demo__/apps/chat-
 ```
 
 In the UI:
-- Type messages in the chat input.
-- Use `@mentions` to switch “Active Agent” and rewrite the message, e.g.:
+- Type into the chat input.
+- Use `@mentions` (from the sidebar list) to switch the displayed active agent and rewrite the prompt, e.g.:
   - `@claude Summarize this` → sent as `ask claude Summarize this`
-- Sidebar:
-  - **Clear Chat** resets `st.session_state.messages`.
-  - **Reset Agent** clears `st.session_state.agent` and resets active agent to `"Abi"`.
+  - `@claude` → sent as `I want to talk to claude`
 
 ## Caveats
-- This script executes Streamlit UI code at import time; it is not structured as a reusable library module.
-- The “active agent” is a UI/session-state concept; messages are always sent through `st.session_state.agent.invoke(...)` (the loaded `AbiAgent`), with routing implied by the rewritten prompt (e.g., `ask claude ...`).
-- Extensive debug output is written to the Streamlit page (working directory, import status, module/agent discovery).
+- The script executes Streamlit UI code at import time; it is not structured as a reusable library module.
+- `active_agent` is a UI/session-state label; all messages are still sent through the single loaded agent via `agent.invoke(...)`, relying on prompt rewriting (`ask <agent> ...`) for routing.
+- The app changes the current working directory and mutates `sys.path`, which can affect imports and file resolution. Debug output is written directly to the Streamlit page.

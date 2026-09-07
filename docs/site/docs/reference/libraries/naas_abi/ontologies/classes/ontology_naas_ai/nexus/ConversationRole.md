@@ -17,7 +17,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.ConversationRole import ConversationRole
+from naas_abi.ontologies.classes.ontology_demo.nexus.ConversationRole import ConversationRole
 
 role = ConversationRole()
 role.actions()  # no-op by default

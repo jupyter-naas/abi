@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -53,17 +51,20 @@ You currently do not have access to ExchangeRatesAPI tools. You can only provide
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "ExchangeRatesAPIAgent":
-        from naas_abi_core.engine.context import get_default_model_registry
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> ExchangeRatesAPIAgent:
         from naas_abi_marketplace.applications.exchangeratesapi import ABIModule
         from naas_abi_marketplace.applications.exchangeratesapi.integrations.ExchangeratesapiIntegration import (
             ExchangeratesapiIntegrationConfiguration,
             as_tools,
         )
 
-        registry = get_default_model_registry()
+
+
+        abi_module = ABIModule.get_instance()
+
+        registry = abi_module.engine.services.model_registry
         assert registry is not None, "ModelRegistryService not initialized"
         chat_model = registry.get_default_chat_model()
         embedding_model = registry.get_default_embedding_model().model

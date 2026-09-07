@@ -21,7 +21,6 @@ import pytest
 
 from .store import ConcurrencyConflict, Store
 
-
 # Each test creates its own Store. SQLite with check_same_thread=False is fine
 # for our usage because every method takes the connection's internal mutex
 # briefly — we never hold a transaction across threads.

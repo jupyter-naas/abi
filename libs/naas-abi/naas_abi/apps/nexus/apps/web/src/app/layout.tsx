@@ -30,6 +30,7 @@ async function fetchTenantBranding(): Promise<{
   title: string;
   description: string | null;
   ogImageUrl: string | null;
+  faviconUrl: string | null;
 }> {
   const apiBase =
     process.env.NEXUS_INTERNAL_API_URL ||
@@ -39,15 +40,18 @@ async function fetchTenantBranding(): Promise<{
 
   try {
     const res = await fetch(`${apiBase}/api/tenant`, { cache: 'no-store' });
-    if (!res.ok) return { title: DEFAULT_TITLE, description: null, ogImageUrl: null };
+    if (!res.ok) {
+      return { title: DEFAULT_TITLE, description: null, ogImageUrl: null, faviconUrl: null };
+    }
     const data = await res.json();
     return {
       title: (data.og_title ?? data.tab_title ?? DEFAULT_TITLE) as string,
       description: (data.og_description ?? null) as string | null,
       ogImageUrl: (data.og_image_url ?? null) as string | null,
+      faviconUrl: (data.favicon_url ?? null) as string | null,
     };
   } catch {
-    return { title: DEFAULT_TITLE, description: null, ogImageUrl: null };
+    return { title: DEFAULT_TITLE, description: null, ogImageUrl: null, faviconUrl: null };
   }
 }
 
@@ -56,9 +60,10 @@ export async function generateMetadata(): Promise<Metadata> {
     process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3042'
   );
 
-  const { title, description, ogImageUrl } = await fetchTenantBranding();
+  const { title, description, ogImageUrl, faviconUrl } = await fetchTenantBranding();
   const resolvedDescription = description ?? DEFAULT_DESCRIPTION;
   const ogImage = ogImageUrl || DEFAULT_OG_IMAGE;
+  const iconUrl = faviconUrl || '/favicon.ico';
 
   return {
     metadataBase,
@@ -76,14 +81,31 @@ export async function generateMetadata(): Promise<Metadata> {
       images: [ogImage],
     },
     icons: {
-      icon: [
-        { url: '/favicon.ico', sizes: 'any' },
-        { url: '/favicon.ico', sizes: '16x16', type: 'image/x-icon' },
-        { url: '/favicon.ico', sizes: '32x32', type: 'image/x-icon' },
-      ],
-      shortcut: '/favicon.ico',
-      apple: '/favicon.ico',
+      icon: iconUrl,
+      shortcut: iconUrl,
+      apple: iconUrl,
     },
+  };
+}
+
+function getServerRuntimeConfig() {
+  return {
+    apiUrl:
+      process.env.NEXUS_API_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      '',
+    env:
+      process.env.NEXUS_ENV ||
+      process.env.NEXT_PUBLIC_NEXUS_ENV ||
+      'local',
+    websocketPath:
+      process.env.NEXUS_WS_PATH ||
+      process.env.NEXT_PUBLIC_WS_PATH ||
+      '/ws/socket.io',
+    frontendUrl:
+      process.env.NEXUS_FRONTEND_URL ||
+      process.env.NEXT_PUBLIC_FRONTEND_URL ||
+      '',
   };
 }
 
@@ -92,9 +114,20 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Inline first so client modules never race an external /runtime-config.js
+  // load (App Router can schedule async chunks before beforeInteractive src).
+  const runtimeConfig = getServerRuntimeConfig();
+
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <body className={`${inter.className} antialiased`}>
+        <Script
+          id="nexus-runtime-config-inline"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `window.__NEXUS_RUNTIME_CONFIG__=${JSON.stringify(runtimeConfig)};`,
+          }}
+        />
         <Script src="/runtime-config.js" strategy="beforeInteractive" />
         <ThemeProvider
           attribute="class"

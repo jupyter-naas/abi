@@ -1,4 +1,4 @@
-from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import (
+from naas_abi_marketplace.applications.x.ontologies.processes.XSearchRecentTweetsProcess import (
     SearchQuery as _SearchQuery,
 )
 
@@ -8,4 +8,3 @@ class SearchQuery(_SearchQuery):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

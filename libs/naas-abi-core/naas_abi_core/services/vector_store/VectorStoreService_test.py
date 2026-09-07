@@ -1,8 +1,10 @@
-import pytest
 from unittest.mock import Mock
+
 import numpy as np
+import pytest
+
+from .IVectorStorePort import IVectorStorePort, SearchResult, VectorDocument
 from .VectorStoreService import VectorStoreService
-from .IVectorStorePort import IVectorStorePort, VectorDocument, SearchResult
 
 
 class TestVectorStoreService:

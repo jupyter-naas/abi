@@ -9,12 +9,13 @@
 This module is a **Streamlit script** (UI executed at import/run time), not a library-style module.
 
 - `load_sample_data() -> pandas.DataFrame`
-  - Cached (`@st.cache_data`) generator for deterministic sample data (200 rows) with fields like `ID`, `Date`, `Category`, `Status`, `Progress`, `Budget`, etc.
+  - Cached with `@st.cache_data`.
+  - Generates deterministic sample data (200 rows) including columns: `ID`, `Date`, `Category`, `Title`, `Status`, `Priority`, `Assigned_To`, `Progress`, `Budget`, `Hours_Spent`, `Due_Date`.
 
-Other “public” behavior is via Streamlit widgets:
-- Page routing via `st.session_state.page`:
+Other externally visible behavior (via Streamlit widgets/state):
+- `st.session_state.page` routing:
   - `"main"`: table UI
-  - `"sop"`: SOP markdown display
+  - `"sop"`: SOP markdown display page
 
 ## Configuration/Dependencies
 ### Runtime dependencies
@@ -23,34 +24,40 @@ Other “public” behavior is via Streamlit widgets:
 - `numpy`
 - `plotly.express`
 
-### App configuration
+### Streamlit configuration
 - `st.set_page_config(page_title="Table Mode", page_icon="📊", layout="wide")`
-- When run as `__main__`, sets:
-  - `os.environ["STREAMLIT_SERVER_PORT"] = "8522"`
+- When run as `__main__`:
+  - Sets `os.environ["STREAMLIT_SERVER_PORT"] = "8522"`
 
-### Data sources (UI)
-- **Sample Data** (implemented)
-- **Upload CSV** (implemented via `st.sidebar.file_uploader`; falls back to sample data if none uploaded)
-- **Database Connection**, **API Endpoint** (not implemented; fall back to sample data with an info message)
+### Data sources (as implemented)
+- **Sample Data**: uses `load_sample_data()`
+- **Upload CSV**: `st.sidebar.file_uploader(..., type="csv")` + `pd.read_csv()`
+- **Database Connection / API Endpoint**: placeholders; fall back to sample data with an info message
 
 ## Usage
-Run with Streamlit (from your repo root, adjust path as needed):
+Run with Streamlit (path relative to repo root):
 
 ```bash
 streamlit run libs/naas-abi-marketplace/naas_abi_marketplace/__demo__/apps/table-mode/table_interface.py
 ```
 
 In the UI:
-- Use **Filters & Search** (search term, category, status, date range).
+- Use **Filters & Search**: text search (all columns), `Category`, `Status`, `Date Range` (when those columns exist).
 - Choose **View Mode**:
   - Standard Table (`st.dataframe`)
-  - Editable Grid (`st.data_editor`, changes not persisted)
-  - Summary View (groupby `Category`)
-  - Pivot Table (configurable pivot over selected columns)
-- Use **Quick Actions** in the sidebar to refresh data (clears Streamlit cache and reruns).
+  - Editable Grid (`st.data_editor`)
+  - Summary View (grouped by `Category`)
+  - Pivot Table (configurable index/columns/values; mean aggregation)
+- Use **Quick Visualizations** (when columns exist):
+  - Category pie chart
+  - Progress histogram
+- Use **Quick Actions** in the sidebar:
+  - Refresh Data (clears cache and reruns)
+  - Generate Report / Advanced Search (placeholders)
 
 ## Caveats
-- **Not implemented**: database/API sources, Excel export, clipboard copy, report generation, advanced search dialog (placeholders only).
-- **Editable Grid** changes are not persisted beyond the current session rerun; the app states they are not persisted in this demo.
+- Database/API sources are **not implemented**; they always fall back to sample data.
+- “Download Excel” and “Copy to Clipboard” are **placeholders** (info messages only).
+- Editable Grid changes are **not persisted** beyond the current rerun/session.
 - SOP page requires `SOP.md` in the same directory; otherwise an error is shown.
-- Date filtering assumes `df["Date"]` is datetime-like; sample data satisfies this. CSV uploads with non-datetime `Date` may break date-range behavior.
+- Date filtering uses `filtered_df['Date'].dt.date`; uploaded CSVs must have a datetime-like `Date` column or filtering may error.

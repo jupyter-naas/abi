@@ -1,13 +1,14 @@
-from rich.console import Console
-from rich.panel import Panel
-from rich.syntax import Syntax
-from rich.text import Text
-from rich.table import Table
-from rich.box import ROUNDED
+import atexit
 import os
 import platform
 import readline
-import atexit
+
+from rich.box import ROUNDED
+from rich.console import Console
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.table import Table
+from rich.text import Text
 
 console = Console()
 
@@ -56,7 +57,7 @@ def print_query_error(error):
     """Print SPARQL query error in a formatted panel"""
     console.print(
         Panel(
-            f"[red]Error executing SPARQL query:[/red]\n{str(error)}",
+            f"[red]Error executing SPARQL query:[/red]\n{error!s}",
             border_style="red",
             box=ROUNDED,
             expand=False,
@@ -208,9 +209,8 @@ def save_history():
     history_file = os.path.expanduser("~/.sparql_terminal_history")
     try:
         with open(history_file, "w") as f:
-            for cmd in command_history:
-                f.write(cmd + "\n")
-    except Exception:
+            f.writelines(cmd + "\n" for cmd in command_history)
+    except Exception:  # noqa: BLE001,S110
         pass
 
 
@@ -223,9 +223,9 @@ def load_history():
         if os.path.exists(history_file):
             with open(history_file, "r") as f:
                 command_history = [
-                    line.strip() for line in f.readlines() if line.strip()
+                    line.strip() for line in f if line.strip()
                 ]
-    except Exception:
+    except Exception:  # noqa: BLE001,S110
         pass
 
 

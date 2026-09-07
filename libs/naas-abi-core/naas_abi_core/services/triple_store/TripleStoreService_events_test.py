@@ -3,29 +3,25 @@
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import pytest
 import rdflib
-from rdflib import ConjunctiveGraph, Graph, Literal, URIRef
-
-from naas_abi_core.services.triple_store.TripleStorePorts import (
-    Exceptions,
-    ITripleStorePort,
-    OntologyEvent,
-)
-from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.services.triple_store.ontologies.modules.TripleStoreEventOntology import (
     GraphCleared,
     GraphCreated,
     GraphDropped,
     SchemaLoaded,
     SchemaRemoved,
-    TripleStoreError,
     TriplesInserted,
     TriplesRemoved,
+    TripleStoreError,
 )
-
+from naas_abi_core.services.triple_store.TripleStorePorts import (
+    Exceptions,
+    ITripleStorePort,
+    OntologyEvent,
+)
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
+from rdflib import ConjunctiveGraph, Graph, Literal, URIRef
 
 SCHEMA_GRAPH = URIRef("http://ontology.naas.ai/graph/schema")
 
@@ -66,9 +62,9 @@ class _InMemoryAdapter(ITripleStorePort):
 
     def handle_view_event(
         self,
-        view: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        view: tuple[URIRef | None, URIRef | None, URIRef | None],
         event: OntologyEvent,
-        triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        triple: tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         return None
 
@@ -95,6 +91,9 @@ class _FakeEventService:
 
 class _NoopBus:
     def publish(self, *_args, **_kwargs) -> None:
+        return None
+
+    def publish_many(self, *_args, **_kwargs) -> None:
         return None
 
     def subscribe(self, *_args, **_kwargs) -> None:

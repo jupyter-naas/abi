@@ -6,7 +6,7 @@ directory, taken while the stack is briefly stopped. See
 :mod:`naas_abi_cli.cli.snapshot_runtime` for the underlying logic.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import click
 from rich.console import Console
@@ -16,7 +16,7 @@ from . import snapshot_runtime as runtime
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _human_size(num_bytes: int) -> str:

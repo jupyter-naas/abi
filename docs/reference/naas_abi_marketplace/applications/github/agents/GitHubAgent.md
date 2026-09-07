@@ -1,40 +1,51 @@
 # GitHubAgent
 
 ## What it is
-A factory and thin agent wrapper that builds an `IntentAgent` configured to interact with GitHub via provided REST and GraphQL tool integrations, using a predefined system prompt and a set of tool-backed intents.
+An `IntentAgent` subclass preconfigured to interact with GitHub using REST and GraphQL tool integrations. It builds its system prompt dynamically by injecting the available tool names and descriptions.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Creates and returns a configured `GitHubAgent` instance.
-  - Wires:
-    - Chat model: `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini.model`
-    - Tools: REST + GraphQL GitHub integrations (converted to tool objects)
-    - Intents: a fixed list of tool intents (e.g., repo, issues, PRs, secrets)
-    - System prompt: `SYSTEM_PROMPT` with an injected `[TOOLS]` section listing tool names/descriptions.
-  - Uses provided `AgentSharedState` / `AgentConfiguration` if supplied, otherwise creates defaults.
-
 - `class GitHubAgent(IntentAgent)`
-  - Subclass of `IntentAgent` with no additional behavior (placeholder).
+  - Agent metadata:
+    - `name = "GitHub"`
+    - `description`: GitHub REST/GraphQL assistance
+    - `avatar_url`: GitHub mark image URL
+    - `system_prompt`: structured prompt template containing a `[TOOLS]` placeholder
+    - `suggestions = []`
+- `GitHubAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> GitHubAgent`
+  - Factory constructor that:
+    - Loads default chat and embedding models from `ABIModule.get_instance().engine.services.model_registry`
+    - Reads `github_access_token` from `ABIModule.get_instance().configuration.github_access_token`
+    - Builds tool list from:
+      - `naas_abi_marketplace.applications.github.integrations.GitHubIntegration.as_tools`
+      - `naas_abi_marketplace.applications.github.integrations.GitHubGraphqlIntegration.as_tools`
+    - Injects tool descriptions into `system_prompt` (replacing `[TOOLS]`)
+    - Defaults:
+      - `AgentConfiguration(system_prompt=...)` if not provided
+      - `AgentSharedState(thread_id="0")` if not provided
+    - Instantiates and returns `GitHubAgent(..., intents=INTENTS, memory=None)`
 
 ## Configuration/Dependencies
-- Requires `ABIModule.get_instance().configuration.github_access_token` to exist; it is passed to:
-  - `GitHubIntegrationConfiguration(access_token=...)` (REST tools)
-  - `GitHubGraphqlIntegrationConfiguration(access_token=...)` (GraphQL tools)
-- Depends on `naas_abi_core.services.agent.IntentAgent` types:
-  - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
-- Tools are sourced from:
-  - `naas_abi_marketplace.applications.github.integrations.GitHubIntegration.as_tools`
-  - `naas_abi_marketplace.applications.github.integrations.GitHubGraphqlIntegration.as_tools`
+- Requires the GitHub application module:
+  - `from naas_abi_marketplace.applications.github import ABIModule`
+  - Must provide `ABIModule.get_instance().configuration.github_access_token`
+- Requires model registry service to be initialized:
+  - `abi_module.engine.services.model_registry` must not be `None` (asserted)
+  - Uses:
+    - `registry.get_default_chat_model()`
+    - `registry.get_default_embedding_model().model`
+- Intents are imported from:
+  - `naas_abi_marketplace.applications.github.agents.intents.GitHubAgentIntents.INTENTS`
+- Tools come from REST/GraphQL integration `as_tools(...)` functions with configurations initialized using the access token.
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.github.agents.GitHubAgent import create_agent
+from naas_abi_marketplace.applications.github.agents.GitHubAgent import GitHubAgent
 
-agent = create_agent()
-# Agent is now configured with GitHub tools and intents.
-# How you run/send messages depends on the IntentAgent runtime in naas_abi_core.
+agent = GitHubAgent.New()
+# Use the returned IntentAgent according to your naas_abi_core runtime/orchestration.
 ```
 
 ## Caveats
-- The returned `GitHubAgent` behavior is entirely defined by `IntentAgent` plus configured tools/intents; `GitHubAgent` itself adds no methods.
-- The system prompt dynamically lists available tools; tool availability depends on integration `as_tools(...)` output and a valid GitHub access token.
+- `GitHubAgent.New()` asserts that the model registry service is initialized; it will raise an `AssertionError` otherwise.
+- A GitHub access token is required via `ABIModule` configuration; tool creation depends on it.
+- The prompt tool list is generated from whatever the integrations return via `as_tools(...)`.

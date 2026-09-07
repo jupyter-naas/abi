@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, Optional
+from typing import Annotated
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi import ABIModule
@@ -36,14 +36,7 @@ class UpdateDataPropertyPipelineParameters(PipelineParameters):
             description="New value for the object",
         ),
     ]
-    language: Optional[
-        Annotated[
-            Optional[str],
-            Field(
-                description="Language of the object",
-            ),
-        ]
-    ] = None
+    language: Annotated[str | None, Field(description="Language of the object")] | None = None
 
 
 class UpdateDataPropertyPipeline(Pipeline):
@@ -60,7 +53,7 @@ class UpdateDataPropertyPipeline(Pipeline):
 
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, UpdateDataPropertyPipelineParameters):
-            raise ValueError(
+            raise TypeError(
                 "Parameters must be of type UpdateDataPropertyPipelineParameters"
             )
 
@@ -148,7 +141,6 @@ class UpdateDataPropertyPipeline(Pipeline):
     ) -> None:
         if tags is None:
             tags = []
-        return None
 
 
 if __name__ == "__main__":

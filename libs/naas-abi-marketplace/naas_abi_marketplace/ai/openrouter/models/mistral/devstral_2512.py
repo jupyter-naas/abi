@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Devstral2512Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=262144,
-        name="Mistral: Devstral 2 2512",
+        name="Devstral 2 2512",
         owner="mistralai",
         description="Devstral 2 is a state-of-the-art open-source model by Mistral AI specializing in agentic coding. It is a 123B-parameter dense transformer model supporting a 256K context window. Devstral 2 supports exploring...",
         canonical_slug="mistralai/devstral-2512",
         hugging_face_id="mistralai/Devstral-2-123B-Instruct-2512",
-        created_at=datetime.fromtimestamp(1765285419),
+        created_at=datetime.fromtimestamp(1765285419, tz=UTC),
         pricing={'prompt': '0.0000004', 'completion': '0.000002', 'input_cache_read': '0.00000004'},
         architecture={'modality': 'text+file->text', 'input_modalities': ['text', 'file'], 'output_modalities': ['text'], 'tokenizer': 'Mistral', 'instruct_type': None},
         top_provider={'context_length': 262144, 'max_completion_tokens': None, 'is_moderated': False},

@@ -7,10 +7,10 @@ import pytest
 
 boto3 = pytest.importorskip("boto3")
 
-from naas_abi_core.services.email.adapters.secondary.SESAdapter import (  # noqa: E402
+from naas_abi_core.services.email.adapters.secondary.SESAdapter import (
     SESAdapter,
 )
-from naas_abi_core.services.email.tests.email__secondary_adapter__generic_test import (  # noqa: E402
+from naas_abi_core.services.email.tests.email__secondary_adapter__generic_test import (
     GenericEmailSecondaryAdapterTest,
 )
 

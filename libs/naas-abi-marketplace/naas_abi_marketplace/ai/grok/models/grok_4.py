@@ -1,6 +1,6 @@
 from langchain_xai import ChatXAI
-from naas_abi_marketplace.ai.grok import ABIModule
 from naas_abi_core.models.Model import ChatModel
+from naas_abi_marketplace.ai.grok import ABIModule
 from pydantic import SecretStr
 
 MODEL_ID = "grok-4"

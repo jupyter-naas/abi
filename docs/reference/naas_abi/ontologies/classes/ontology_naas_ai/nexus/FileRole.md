@@ -17,7 +17,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.FileRole import FileRole
+from naas_abi.ontologies.classes.ontology_demo.nexus.FileRole import FileRole
 
 class MyFileRole(FileRole):
     def actions(self):

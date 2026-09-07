@@ -41,6 +41,7 @@ export default function ThemeSettingsPage() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [customColor, setCustomColor] = useState(theme.primaryColor);
   const [logoUrl, setLogoUrl] = useState(theme.logoUrl || '');
+  const [backgroundImageUrl, setBackgroundImageUrl] = useState(theme.backgroundImageUrl || '');
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -49,6 +50,7 @@ export default function ThemeSettingsPage() {
     if (workspace) {
       setCustomColor(workspace.theme?.primaryColor || DEFAULT_THEME.primaryColor);
       setLogoUrl(workspace.theme?.logoUrl || '');
+      setBackgroundImageUrl(workspace.theme?.backgroundImageUrl || '');
     }
   }, [workspace]);
 
@@ -73,6 +75,11 @@ export default function ThemeSettingsPage() {
   const handleLogoUrlChange = (url: string) => {
     setLogoUrl(url);
     updateWorkspaceTheme({ logoUrl: url });
+  };
+
+  const handleBackgroundImageUrlChange = (url: string) => {
+    setBackgroundImageUrl(url);
+    updateWorkspaceTheme({ backgroundImageUrl: url });
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -286,6 +293,32 @@ export default function ThemeSettingsPage() {
             
             <p className="mt-2 text-xs text-muted-foreground">
               The logo will be used instead of the emoji icon
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              Desktop wallpaper
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={backgroundImageUrl}
+                onChange={(e) => handleBackgroundImageUrlChange(e.target.value)}
+                placeholder="https://example.com/hero.jpg"
+                className="flex-1 rounded-lg border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+              />
+              {backgroundImageUrl && (
+                <button
+                  onClick={() => handleBackgroundImageUrlChange('')}
+                  className="rounded-lg border px-3 py-2 hover:bg-muted"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              URL of the image used as the Home canvas background
             </p>
           </div>
         </div>

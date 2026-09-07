@@ -81,6 +81,7 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             primary_color=model.primary_color,
             accent_color=model.accent_color,
             background_color=model.background_color,
+            background_image_url=model.background_image_url,
             sidebar_color=model.sidebar_color,
             font_family=model.font_family,
             platform_drive_enabled=bool(model.platform_drive_enabled),
@@ -178,6 +179,7 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             primary_color=workspace.primary_color,
             accent_color=workspace.accent_color,
             background_color=workspace.background_color,
+            background_image_url=workspace.background_image_url,
             sidebar_color=workspace.sidebar_color,
             font_family=workspace.font_family,
             created_at=now,
@@ -223,6 +225,7 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             "primary_color": updates.primary_color,
             "accent_color": updates.accent_color,
             "background_color": updates.background_color,
+            "background_image_url": updates.background_image_url,
             "sidebar_color": updates.sidebar_color,
             "font_family": updates.font_family,
             "platform_drive_enabled": updates.platform_drive_enabled,
@@ -305,7 +308,8 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
         ]
 
     async def get_user_by_email(self, email: str) -> UserRecord | None:
-        result = await self.db.execute(select(UserModel).where(UserModel.email == email))
+        normalized = email.lower().strip()
+        result = await self.db.execute(select(UserModel).where(UserModel.email == normalized))
         user = result.scalar_one_or_none()
         if user is None:
             return None

@@ -1,8 +1,9 @@
 import base64
 import hashlib
 import os
+from collections.abc import Callable
 from types import SimpleNamespace
-from typing import Any, Callable, Tuple, cast
+from typing import Any, cast
 
 import rdflib
 from naas_abi_core.services.triple_store.TripleStorePorts import (
@@ -10,7 +11,7 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     OntologyEvent,
 )
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from rdflib import ConjunctiveGraph, Graph, Literal, RDF, URIRef
+from rdflib import RDF, ConjunctiveGraph, Graph, Literal, URIRef
 
 
 class _FakeBus:
@@ -20,6 +21,10 @@ class _FakeBus:
 
     def publish(self, topic: str, routing_key: str, payload: bytes) -> None:
         self.published.append((topic, routing_key, payload))
+
+    def publish_many(self, topic: str, messages) -> None:
+        for routing_key, payload in messages:
+            self.published.append((topic, routing_key, payload))
 
     def subscribe(
         self,
@@ -49,9 +54,12 @@ class _FakeTripleStoreAdapter(ITripleStorePort):
         self.clear_graph_calls: list[URIRef | None] = []
         self.drop_graph_calls: list[URIRef] = []
         self.graphs_to_return: list[URIRef] = []
+        self.schema_graph_present = False
 
     def insert(self, triples: Graph, graph_name: URIRef | None = None):
         self.insert_calls.append((triples, graph_name))
+        if graph_name == URIRef("http://ontology.naas.ai/graph/schema"):
+            self.schema_graph_present = True
 
     def remove(self, triples: Graph, graph_name: URIRef | None = None):
         self.remove_calls.append((triples, graph_name))
@@ -60,6 +68,10 @@ class _FakeTripleStoreAdapter(ITripleStorePort):
         return Graph()
 
     def query(self, query: str) -> rdflib.query.Result:
+        if "ASK" in query.upper() and "triple-store.internal#Schema" in query:
+            result = rdflib.query.Result("ASK")
+            result.askAnswer = self.schema_graph_present
+            return result
         return rdflib.query.Result("SELECT")
 
     def query_view(self, view: str, query: str) -> rdflib.query.Result:
@@ -70,9 +82,9 @@ class _FakeTripleStoreAdapter(ITripleStorePort):
 
     def handle_view_event(
         self,
-        view: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        view: tuple[URIRef | None, URIRef | None, URIRef | None],
         event: OntologyEvent,
-        triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        triple: tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         return None
 
@@ -131,9 +143,9 @@ class _InMemoryTripleStoreAdapter(ITripleStorePort):
 
     def handle_view_event(
         self,
-        view: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        view: tuple[URIRef | None, URIRef | None, URIRef | None],
         event: OntologyEvent,
-        triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        triple: tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         return None
 
@@ -164,6 +176,23 @@ def _build_service() -> tuple[TripleStoreService, _FakeTripleStoreAdapter, _Fake
     bus = _FakeBus()
     service.set_services(cast(Any, SimpleNamespace(bus=bus)))
     return service, adapter, bus
+
+
+def test_constructor_skips_schema_insert_when_schema_graph_already_present():
+    adapter = _InMemoryTripleStoreAdapter()
+
+    TripleStoreService(adapter)
+    schema_inserts = [
+        call
+        for call in adapter.insert_calls
+        if call[1] == URIRef("http://ontology.naas.ai/graph/schema")
+    ]
+    assert len(schema_inserts) == 1
+
+    adapter.insert_calls.clear()
+    TripleStoreService(adapter)
+
+    assert adapter.insert_calls == []
 
 
 def test_insert_default_graph_publishes_default_topic_and_passes_none_graph():

@@ -201,7 +201,7 @@ class TemplatableSparqlQueryLoader:
                     self.triple_store_service,
                 )
                 workflows.append(p)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(
                     f"Error loading workflow for query {query['label']}\nMessage: {e}"
                 )

@@ -7,7 +7,7 @@ from naas_abi_marketplace.applications.linkedin.integrations.LinkedInExportInteg
 
 @pytest.fixture
 def integration() -> LinkedInExportIntegration:
-    export_file_path = "storage/datastore/linkedin/export/florent-ravenel/Complete_LinkedInDataExport_11-06-2025.zip (1).zip"
+    export_file_path = "storage/datastore/linkedin/export/alice-dupont/Complete_LinkedInDataExport_11-06-2025.zip (1).zip"
     configuration = LinkedInExportIntegrationConfiguration(
         export_file_path=export_file_path
     )

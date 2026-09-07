@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Dict
 
 import requests
 from langchain_core.tools import BaseTool, StructuredTool
@@ -46,8 +45,10 @@ class ExchangeratesapiIntegration(Integration):
         self.__configuration = configuration
         self.params = {"access_key": self.__configuration.api_key}
 
-    def _make_request(self, method: str, endpoint: str, params: Dict = {}) -> Dict:
+    def _make_request(self, method: str, endpoint: str, params: dict | None = None) -> dict:
         """Make HTTP request to Exchangeratesapi API."""
+        if params is None:
+            params = {}
         url = f"{self.__configuration.base_url}{endpoint}"
         try:
             response = requests.request(
@@ -59,11 +60,11 @@ class ExchangeratesapiIntegration(Integration):
             return response.json() if response.content else {}
         except requests.exceptions.RequestException as e:
             raise IntegrationConnectionError(
-                f"Exchangeratesapi API request failed: {str(e)}"
+                f"Exchangeratesapi API request failed: {e!s}"
             )
 
     @cache(lambda self: "list_symbols", cache_type=DataType.JSON)
-    def list_symbols(self) -> Dict:
+    def list_symbols(self) -> dict:
         """List symbols."""
         return self._make_request("GET", "/symbols")
 
@@ -75,8 +76,8 @@ class ExchangeratesapiIntegration(Integration):
         cache_type=DataType.JSON,
     )
     def get_exchange_rates(
-        self, date: str = "latest", base: str = "EUR", symbols: list[str] = []
-    ) -> Dict:
+        self, date: str = "latest", base: str = "EUR", symbols: list[str] | None = None
+    ) -> dict:
         """Get exchange rates.
 
         Args:
@@ -84,6 +85,8 @@ class ExchangeratesapiIntegration(Integration):
             base: The base currency to get the exchange rates for. Default is "EUR".
             symbols: The symbols to get the exchange rates for. Default is all symbols.
         """
+        if symbols is None:
+            symbols = []
         params = {
             "base": base,
         }

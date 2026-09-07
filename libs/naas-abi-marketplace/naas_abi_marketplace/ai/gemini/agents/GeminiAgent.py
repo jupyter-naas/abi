@@ -1,4 +1,3 @@
-from typing import Optional
 
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
@@ -75,16 +74,20 @@ SUGGESTIONS: list = [
 
 
 def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> Optional[IntentAgent]:
+    agent_shared_state: AgentSharedState | None = None,
+    agent_configuration: AgentConfiguration | None = None,
+) -> IntentAgent | None:
     # Init module
     from naas_abi_marketplace.ai.gemini import ABIModule
     module: ABIModule = ABIModule.get_instance()
     gemini_api_key = module.configuration.gemini_api_key
 
     # Define model
-    from naas_abi_marketplace.ai.gemini.models.google_gemini_2_5_flash import model
+    from naas_abi_marketplace.ai.gemini import ABIModule
+
+    abi_module = ABIModule.get_instance()
+    chat_model = abi_module.engine.services.model_registry.get_chat_model("gemini-2.5-flash")
+
 
     # Init
     tools: list = []
@@ -177,7 +180,7 @@ def create_agent(
     return GeminiAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model,
+        chat_model=chat_model,
         tools=tools,
         agents=agents,
         intents=intents,

@@ -16,7 +16,7 @@ A thin subclass of `naas_abi.ontologies.modules.NexusPlatformOntology.OntologyCl
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.OntologyClassRole import OntologyClassRole
+from naas_abi.ontologies.classes.ontology_demo.nexus.OntologyClassRole import OntologyClassRole
 
 role = OntologyClassRole()
 role.actions()  # no-op by default

@@ -11,7 +11,7 @@ from naas_abi_core.services.email.tests.email__secondary_adapter__generic_test i
 
 
 class _FakeSMTPBase:
-    instances: list["_FakeSMTPBase"] = []
+    instances: list[_FakeSMTPBase] = []
 
     def __init__(self, host: str, port: int, timeout: int) -> None:
         self.host = host

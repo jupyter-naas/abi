@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt55ProModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1050000,
-        name="OpenAI: GPT-5.5 Pro",
+        name="GPT-5.5 Pro",
         owner="openai",
         description="GPT-5.5 Pro is OpenAI’s high-capability model optimized for deep reasoning and accuracy on complex, high-stakes workloads. It features a 1M+ token context window (922K input, 128K output) with support for...",
         canonical_slug="openai/gpt-5.5-pro-20260423",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1777051896),
+        created_at=datetime.fromtimestamp(1777051896, tz=UTC),
         pricing={'prompt': '0.00003', 'completion': '0.00018', 'web_search': '0.01'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['file', 'image', 'text'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 1050000, 'max_completion_tokens': 128000, 'is_moderated': True},

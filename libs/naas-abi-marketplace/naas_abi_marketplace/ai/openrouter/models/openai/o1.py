@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class O1Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="OpenAI: o1",
+        name="o1",
         owner="openai",
         description="The latest and strongest model family from OpenAI, o1 is designed to spend more time thinking before responding. The o1 model series is trained with large-scale reinforcement learning to reason...",
         canonical_slug="openai/o1-2024-12-17",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1734459999),
+        created_at=datetime.fromtimestamp(1734459999, tz=UTC),
         pricing={'prompt': '0.000015', 'completion': '0.00006', 'web_search': '0.01', 'input_cache_read': '0.0000075'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['text', 'image', 'file'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 200000, 'max_completion_tokens': 100000, 'is_moderated': True},

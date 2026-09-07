@@ -16,7 +16,7 @@ from .stack_runtime import (
     compose_service_states,
     run_compose,
 )
-from .stack_services import ReadinessResult, SERVICE_CATALOG, evaluate_service_readiness
+from .stack_services import SERVICE_CATALOG, ReadinessResult, evaluate_service_readiness
 
 
 class StackTextualApp(App[None]):
@@ -217,7 +217,7 @@ class StackTextualApp(App[None]):
                     self._ensure_probe_workers_locked()
                     self.last_error = None
                     self._dirty = True
-            except Exception as error:  # pragma: no cover
+            except Exception as error:  # pragma: no cover  # noqa: BLE001
                 with self._lock:
                     self.last_error = str(error)
                     self._dirty = True
@@ -238,7 +238,7 @@ class StackTextualApp(App[None]):
                     http_timeout=self._probe_http_timeout,
                     tcp_timeout=self._probe_tcp_timeout,
                 )
-            except Exception as error:  # pragma: no cover
+            except Exception as error:  # pragma: no cover  # noqa: BLE001
                 readiness = ReadinessResult(False, "probe", str(error))
 
             with self._lock:
@@ -261,10 +261,10 @@ class StackTextualApp(App[None]):
         try:
             process.terminate()
             process.wait(timeout=0.5)
-        except Exception:  # pragma: no cover
+        except Exception:  # pragma: no cover  # noqa: BLE001
             try:
                 process.kill()
-            except Exception:
+            except Exception:  # noqa: BLE001,S110
                 pass
 
     def _start_logs_follow_process(self, service_name: str) -> None:
@@ -323,7 +323,7 @@ class StackTextualApp(App[None]):
                         capture_output=True,
                     )
                     logs_text = result.stdout.strip() or "No container logs yet."
-                except Exception as error:  # pragma: no cover
+                except Exception as error:  # pragma: no cover  # noqa: BLE001
                     logs_text = f"No container logs yet ({error})"
                 with self._lock:
                     self.logs_text = logs_text
@@ -335,7 +335,7 @@ class StackTextualApp(App[None]):
             if selected_changed or self._logs_follow_process is None:
                 try:
                     self._start_logs_follow_process(selected)
-                except Exception as error:  # pragma: no cover
+                except Exception as error:  # pragma: no cover  # noqa: BLE001
                     with self._lock:
                         self.logs_text = f"Failed to stream logs: {error}"
                         self._dirty = True
@@ -385,7 +385,7 @@ class StackTextualApp(App[None]):
             try:
                 run_compose(args)
                 status = f"{label} done"
-            except Exception as error:  # pragma: no cover
+            except Exception as error:  # pragma: no cover  # noqa: BLE001
                 status = f"{label} failed: {error}"
             with self._lock:
                 self.action_status = status

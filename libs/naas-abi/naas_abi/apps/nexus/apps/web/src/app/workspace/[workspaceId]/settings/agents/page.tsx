@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Bot, User, Cpu, Plus, Pencil, Trash2, Brain, Sparkles, Zap, Target, Search, X, CheckCircle, XCircle, Circle, Server, Check } from 'lucide-react';
+import { Bot, User, Cpu, Plus, Pencil, Trash2, Brain, Sparkles, Zap, Target, Search, X, CheckCircle, XCircle, Server, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getApiUrl } from '@/lib/config';
+import { getLogoUrl } from '@/lib/logo-url';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore, RESERVED_AGENT_TYPES, type Agent } from '@/stores/agents';
+import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useServersStore } from '@/stores/servers';
 import { useConfirm } from '@/components/ui/dialogs';
 import { useParams, useRouter } from 'next/navigation';
@@ -256,14 +257,6 @@ function AgentTypeSelect({
   );
 }
 
-const getApiBase = () => getApiUrl();
-
-const getLogoUrl = (url: string | null): string | undefined => {
-  if (!url) return undefined;
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  return `${getApiBase()}${url}`;
-};
-
 const iconMap = {
   bot: Bot,
   user: User,
@@ -315,6 +308,7 @@ export default function AgentsPage() {
     setAgentTypeOverride,
   } = useAgentsStore();
   const { fetchServers } = useServersStore();
+  const { models, fetchModels } = useModelsStore();
   const { confirm: confirmSwitchDefault, dialog: confirmDialog } = useConfirm();
 
   const getAgentTypeLabel = (agent: Agent): string => {
@@ -354,6 +348,10 @@ export default function AgentsPage() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    fetchModels();
+  }, [fetchModels]);
 
   const enabledProviders = mounted ? providers.filter((p) => p.enabled) : [];
   const displayAgents = mounted ? agents : [];
@@ -418,13 +416,26 @@ export default function AgentsPage() {
     return 'Model Registry';
   };
 
-  const getModelDisplay = (agent: Agent): string => {
-    // For ABI agents, models are not exposed
+  const getModelIds = (agent: Agent): string[] => {
+    const declared = (agent.modelIds || []).map((id) => id.trim()).filter(Boolean);
+    if (declared.length > 0) return Array.from(new Set(declared));
+
+    let rawId: string | null = null;
     if (agent.provider === 'abi') {
-      return 'Not exposed';
+      rawId = agent.modelId || agent.resolvedModelId || null;
+    } else if (agent.provider) {
+      const provider = enabledProviders.find((p) => p.type === agent.provider && p.enabled);
+      rawId = agent.modelId || provider?.model || agent.resolvedModelId || null;
+    } else if (agent.providerId) {
+      rawId =
+        getAssignedProvider(agent.providerId)?.model ||
+        agent.modelId ||
+        agent.resolvedModelId ||
+        null;
+    } else {
+      rawId = agent.modelId || agent.resolvedModelId || null;
     }
-    // Otherwise show model ID if available
-    return agent.modelId || agent.providerId || 'Not assigned';
+    return rawId ? [rawId] : [];
   };
 
   if (!mounted) {
@@ -594,7 +605,7 @@ export default function AgentsPage() {
                 <tr className="border-b bg-muted/50 text-left text-sm">
                   <th className="p-3 font-medium">Agent</th>
                   <th className="p-3 font-medium">Source</th>
-                  <th className="p-3 font-medium">Model</th>
+                  <th className="p-3 font-medium">Models</th>
                   <th className="p-3 font-medium">Type</th>
                   <th className="p-3 font-medium w-24">Enabled</th>
                   <th className="p-3 font-medium w-32">Actions</th>
@@ -609,7 +620,6 @@ export default function AgentsPage() {
                   </tr>
                 ) : (
                   filteredAgents.map((agent) => {
-                    const assignedProvider = getAssignedProvider(agent.providerId);
                     return (
                       <tr
                         key={agent.id}
@@ -646,29 +656,44 @@ export default function AgentsPage() {
                           </span>
                         </td>
                         <td className="p-3">
-                          {agent.provider === 'abi' ? (
-                            <div className="flex items-center gap-2">
-                              <Server size={14} className="text-muted-foreground" />
-                              <span className="text-sm text-muted-foreground italic">
-                                {getModelDisplay(agent)}
-                              </span>
-                            </div>
-                          ) : assignedProvider ? (
-                            <div className="flex items-center gap-2">
-                              <CheckCircle size={14} className="text-green-500" />
-                              <span className="text-sm">{assignedProvider.model}</span>
-                            </div>
-                          ) : agent.providerId || agent.modelId ? (
-                            <div className="flex items-center gap-2">
-                              <Circle size={14} className="text-blue-500" />
-                              <span className="text-sm text-muted-foreground">{getModelDisplay(agent)}</span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <XCircle size={14} className="text-muted-foreground" />
-                              <span className="text-sm text-muted-foreground">Not assigned</span>
-                            </div>
-                          )}
+                          {(() => {
+                            const modelIds = getModelIds(agent);
+                            if (modelIds.length === 0) {
+                              return (
+                                <div className="flex items-center gap-2">
+                                  <XCircle size={14} className="text-muted-foreground" />
+                                  <span className="text-sm text-muted-foreground">
+                                    {agent.provider === 'abi' ? 'Not exposed' : 'Not assigned'}
+                                  </span>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div className="flex flex-col gap-1">
+                                {modelIds.map((id) => {
+                                  const label = modelDisplayName(models, id) ?? id;
+                                  return (
+                                    <div key={id} className="flex items-center gap-2">
+                                      {agent.provider === 'abi' ? (
+                                        <Server size={14} className="shrink-0 text-muted-foreground" />
+                                      ) : (
+                                        <CheckCircle size={14} className="shrink-0 text-green-500" />
+                                      )}
+                                      <span
+                                        className={cn(
+                                          'text-sm',
+                                          agent.provider === 'abi' && 'text-muted-foreground italic'
+                                        )}
+                                        title={id}
+                                      >
+                                        {label}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="p-3" onClick={(e) => e.stopPropagation()}>
                           <AgentTypeSelect

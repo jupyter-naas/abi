@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Nemotron3Ultra550bA55bFreeModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1000000,
-        name="NVIDIA: Nemotron 3 Ultra (free)",
+        name="Nemotron 3 Ultra (free)",
         owner="nvidia",
         description="NVIDIA Nemotron 3 Ultra is an open frontier-reasoning and orchestration model from NVIDIA, with 55B active parameters out of 550B total (MoE). Built on a hybrid Transformer-Mamba mixture-of-experts architecture, it...",
         canonical_slug="nvidia/nemotron-3-ultra-550b-a55b-20260604",
         hugging_face_id="nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16",
-        created_at=datetime.fromtimestamp(1780551208),
+        created_at=datetime.fromtimestamp(1780551208, tz=UTC),
         pricing={'prompt': '0', 'completion': '0'},
         architecture={'modality': 'text->text', 'input_modalities': ['text'], 'output_modalities': ['text'], 'tokenizer': 'Other', 'instruct_type': None},
         top_provider={'context_length': 1000000, 'max_completion_tokens': 65536, 'is_moderated': False},

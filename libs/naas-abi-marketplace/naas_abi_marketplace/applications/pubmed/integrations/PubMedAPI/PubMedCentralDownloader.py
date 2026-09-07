@@ -1,7 +1,7 @@
 # pyright: reportMissingImports=false, reportMissingModuleSource=false, reportMissingTypeStubs=false
+import importlib
 import io
 import tarfile
-import importlib
 from typing import Any, BinaryIO
 
 requests: Any = importlib.import_module("requests")

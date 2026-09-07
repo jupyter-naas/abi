@@ -6,7 +6,7 @@ from naas_abi_core.services.cache.adapters.secondary.CacheFSAdapter import (
 from naas_abi_core.services.cache.adapters.secondary.CacheObjectStorageAdapter import (
     CacheObjectStorageAdapter,
 )
-from naas_abi_core.services.cache.CacheService import CacheService, TIER_COLD
+from naas_abi_core.services.cache.CacheService import TIER_COLD, CacheService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )

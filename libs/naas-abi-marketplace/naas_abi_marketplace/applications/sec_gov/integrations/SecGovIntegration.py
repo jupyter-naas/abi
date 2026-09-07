@@ -79,8 +79,7 @@ class SecGovIntegration(Integration):
     @staticmethod
     def _normalize_cik(cik: str | int) -> str:
         cik_str = str(cik).strip()
-        if cik_str.startswith("CIK"):
-            cik_str = cik_str[3:]
+        cik_str = cik_str.removeprefix("CIK")
         cik_digits = "".join(ch for ch in cik_str if ch.isdigit())
         return cik_digits.zfill(10)
 

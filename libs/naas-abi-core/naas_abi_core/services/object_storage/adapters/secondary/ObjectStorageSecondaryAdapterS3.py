@@ -1,7 +1,8 @@
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from queue import Queue
-from typing import BinaryIO, Iterator, Optional
+from typing import BinaryIO
 
 import boto3
 from botocore.exceptions import ClientError
@@ -23,6 +24,7 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
         base_prefix: str = "",
         session_token: str | None = None,
         endpoint_url: str | None = None,
+        region_name: str | None = None,
     ):
         """Initialize S3 adapter with bucket name and credentials.
 
@@ -32,6 +34,9 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
             secret_access_key (str): AWS secret access key
             base_prefix (str, optional): Base prefix to prepend to all operations. Defaults to ""
             session_token (str, optional): AWS session token. Defaults to None
+            endpoint_url (str, optional): Custom endpoint (MinIO, R2, ...). Defaults to None
+            region_name (str, optional): Region to sign requests with (e.g. "auto" for
+                Cloudflare R2). Defaults to None
         """
         self.bucket_name = bucket_name
         self.base_prefix = base_prefix.rstrip("/")  # Remove trailing slash if present
@@ -43,6 +48,7 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
                 aws_secret_access_key=secret_access_key,
                 aws_session_token=session_token,
                 endpoint_url=endpoint_url,
+                region_name=region_name,
             )
         else:
             self.s3_client = boto3.client(
@@ -50,6 +56,7 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
                 aws_access_key_id=access_key_id,
                 aws_secret_access_key=secret_access_key,
                 aws_session_token=session_token,
+                region_name=region_name,
             )
 
     def __get_full_key(self, prefix: str, key: str | None = None) -> str:
@@ -109,7 +116,7 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
         except ClientError as e:
             if e.response["Error"]["Code"] in ["404", "NoSuchKey"]:
                 raise Exceptions.ObjectNotFound(f"Object {prefix}/{key} not found")
-            raise e
+            raise
 
     def get_object(self, prefix: str, key: str) -> bytes:
         """Get object from S3 bucket.
@@ -160,6 +167,12 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
             Bucket=self.bucket_name, Key=self.__get_full_key(prefix, key), Body=content
         )
 
+    def put_object_stream(self, prefix: str, key: str, stream: BinaryIO) -> None:
+        """Stream ``stream`` to S3 without buffering it whole (multipart upload)."""
+        self.s3_client.upload_fileobj(
+            stream, self.bucket_name, self.__get_full_key(prefix, key)
+        )
+
     def delete_object(self, prefix: str, key: str) -> None:
         """Delete object from S3 bucket.
 
@@ -173,7 +186,7 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
             Bucket=self.bucket_name, Key=self.__get_full_key(prefix, key)
         )
 
-    def list_objects(self, prefix: str, queue: Optional[Queue] = None) -> list[str]:
+    def list_objects(self, prefix: str, queue: Queue | None = None) -> list[str]:
         """List objects in S3 bucket with given prefix.
 
         Args:
@@ -214,6 +227,41 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
                         objects.append(prefix_key)
                         if queue:
                             queue.put(prefix_key)
+        return objects
+
+    def list_objects_recursive(
+        self, prefix: str, queue: Queue | None = None
+    ) -> list[str]:
+        """List every object at or beneath *prefix*, at any nesting depth.
+
+        Args:
+            prefix (str): Prefix/folder path to walk
+
+        Returns:
+            list[str]: Object keys at any depth. No ``Delimiter`` is sent, so S3
+                returns the flattened subtree and never a CommonPrefixes entry,
+                which is why no directory placeholders can appear here.
+        """
+        self.__object_exists(prefix)
+
+        objects = []
+        paginator = self.s3_client.get_paginator("list_objects_v2")
+
+        for page in paginator.paginate(
+            Bucket=self.bucket_name,
+            Prefix=self.__get_full_key(prefix),
+        ):
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                if self.base_prefix:
+                    key = key.replace(f"{self.base_prefix}/", "", 1)
+                # A zero-byte marker object whose key ends in "/" is how some
+                # tools represent a folder; it is not a retrievable object.
+                if key == "" or key.endswith("/"):
+                    continue
+                objects.append(key)
+                if queue:
+                    queue.put(key)
         return objects
 
     def get_object_metadata(self, prefix: str, key: str) -> ObjectMetaData:

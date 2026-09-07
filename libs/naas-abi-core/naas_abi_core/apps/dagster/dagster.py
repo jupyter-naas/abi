@@ -3,8 +3,7 @@ from typing import cast
 
 from dagster import Definitions
 from naas_abi_core.engine.Engine import Engine
-from naas_abi_core.orchestrations.DagsterOrchestration import \
-    DagsterOrchestration
+from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestration
 
 engine = Engine()
 engine.load()

@@ -8,4 +8,3 @@ class BusMessageEnqueued(_BusMessageEnqueued):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

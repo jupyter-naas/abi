@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class GptOss120bModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=131072,
-        name="OpenAI: gpt-oss-120b",
+        name="gpt-oss-120b",
         owner="openai",
         description="gpt-oss-120b is an open-weight, 117B-parameter Mixture-of-Experts (MoE) language model from OpenAI designed for high-reasoning, agentic, and general-purpose production use cases. It activates 5.1B parameters per forward pass and is optimized...",
         canonical_slug="openai/gpt-oss-120b",
         hugging_face_id="openai/gpt-oss-120b",
-        created_at=datetime.fromtimestamp(1754414231),
+        created_at=datetime.fromtimestamp(1754414231, tz=UTC),
         pricing={'prompt': '0.000000039', 'completion': '0.00000018'},
         architecture={'modality': 'text->text', 'input_modalities': ['text'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 131072, 'max_completion_tokens': None, 'is_moderated': False},

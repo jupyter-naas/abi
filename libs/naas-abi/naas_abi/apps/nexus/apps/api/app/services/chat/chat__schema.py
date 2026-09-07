@@ -45,6 +45,7 @@ class ChatProviderConfigInput:
     endpoint: str | None = None
     api_key: str | None = None
     account_id: str | None = None
+    llm_model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,10 @@ class CompleteChatInput:
     system_prompt: str | None = None
     context: dict | None = None
     search_enabled: bool = False
+    # Id of the assistant message this turn re-runs. Set when the user hits the
+    # refresh action on a past answer: the same prompt is replayed, the previous
+    # answer is marked superseded, and both turns stay in the database.
+    regenerate_of: str | None = None
 
 
 @dataclass(frozen=True)

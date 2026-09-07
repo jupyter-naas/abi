@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class O3ProModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="OpenAI: o3 Pro",
+        name="o3 Pro",
         owner="openai",
         description="The o-series of models are trained with reinforcement learning to think before they answer and perform complex reasoning. The o3-pro model uses more compute to think harder and provide consistently...",
         canonical_slug="openai/o3-pro-2025-06-10",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1749598352),
+        created_at=datetime.fromtimestamp(1749598352, tz=UTC),
         pricing={'prompt': '0.00002', 'completion': '0.00008', 'web_search': '0.01'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['text', 'file', 'image'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 200000, 'max_completion_tokens': 100000, 'is_moderated': True},

@@ -75,6 +75,7 @@
 ### YAML templating
 - YAML is rendered using Jinja2 with a `secret` object available:
   - Example usage in YAML: `{{ secret.SOME_KEY }}`
+- Full-line YAML comments (optional space/tab, then `#`) are not Jinja-rendered, so commented-out `{{ secret.X }}` / `{% ... %}` is left as-is and cannot hard-fail on a missing secret. Inline comments after a value are still rendered.
 
 ### Secret resolution order
 - During *first pass* (before secret service is loaded):

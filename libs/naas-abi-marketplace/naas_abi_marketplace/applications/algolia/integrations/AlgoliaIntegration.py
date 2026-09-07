@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any
+
 from algoliasearch.search.client import SearchClient
 from naas_abi_core.integration.integration import Integration, IntegrationConfiguration
 from naas_abi_marketplace.applications.algolia import ABIModule
@@ -70,7 +71,7 @@ class AlgoliaIntegration(Integration):
         response = await self.__client.search(search_method_params=search_params)
         return response
 
-    def create_index(self, index_name: str, settings: Dict | None = None) -> Dict:
+    def create_index(self, index_name: str, settings: dict | None = None) -> dict:
         """Create a new index in Algolia.
 
         Args:
@@ -93,7 +94,7 @@ class AlgoliaIntegration(Integration):
         """
         return self.__client.list_indices()
 
-    def delete_index(self, index_name: str) -> Dict:
+    def delete_index(self, index_name: str) -> dict:
         """Delete an index in Algolia.
 
         Args:
@@ -152,7 +153,7 @@ def as_tools(configuration: AlgoliaIntegrationConfiguration):
 
     class AlgoliaCreateIndexSchema(BaseModel):
         index_name: str = Field(..., description="Name of the Algolia index to create")
-        settings: Dict[str, Any] | None = Field(
+        settings: dict[str, Any] | None = Field(
             None, description="Optional configuration settings for the index"
         )
 
@@ -166,7 +167,7 @@ def as_tools(configuration: AlgoliaIntegrationConfiguration):
         index_name: str = Field(
             ..., description="Name of the Algolia index to update records"
         )
-        records: List[Dict[str, Any]] = Field(
+        records: list[dict[str, Any]] = Field(
             ..., description="List of records to update"
         )
 

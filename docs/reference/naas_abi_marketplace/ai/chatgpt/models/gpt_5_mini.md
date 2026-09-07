@@ -1,43 +1,40 @@
-# gpt_5_mini
+# Gpt5MiniModel
 
 ## What it is
-A module-level `ChatModel` definition that wraps LangChain’s `ChatOpenAI` configured for the OpenAI model **`gpt-5-mini`** with deterministic output (`temperature=0`).
+A module that defines and exports a preconfigured `ChatModel` wrapper around LangChain’s `ChatOpenAI` for the OpenAI model **`gpt-5-mini`**, with `temperature=0`.
 
 ## Public API
-- **Constants**
-  - `MODEL_ID: str` — set to `"gpt-5-mini"`.
-  - `PROVIDER: str` — set to `"openai"`.
+- **Class**
+  - `Gpt5MiniModel (ModelDefinition)` — model definition container with:
+    - `CANONICAL_ID = CanonicalModelId.GPT_5_MINI`
+    - `MODEL_ID = "gpt-5-mini"`
+    - `PROVIDER = ModelProvider.OPENAI`
+    - `model: ChatModel` — configured `ChatModel` instance using `ChatOpenAI(...)`.
 
-- **Objects**
-  - `model: ChatModel` — preconfigured chat model instance:
-    - `model_id` = `MODEL_ID`
-    - `provider` = `PROVIDER`
-    - `model` = `langchain_openai.ChatOpenAI(...)` with:
-      - `model="gpt-5-mini"`
-      - `temperature=0`
-      - `api_key=SecretStr(ABIModule.get_instance().configuration.openai_api_key)`
+- **Module variable**
+  - `model: ChatModel` — alias to `Gpt5MiniModel.model` for convenient import.
 
 ## Configuration/Dependencies
 - **Dependencies**
   - `langchain_openai.ChatOpenAI`
-  - `naas_abi_core.models.Model.ChatModel`
+  - `naas_abi_core.models.Model`:
+    - `CanonicalModelId`, `ChatModel`, `ModelDefinition`, `ModelProvider`
   - `naas_abi_marketplace.ai.chatgpt.ABIModule`
   - `pydantic.SecretStr`
+
 - **Required configuration**
-  - `ABIModule.get_instance().configuration.openai_api_key` must be set and accessible at import time (used to build `SecretStr` for `api_key`).
+  - `ABIModule.get_instance().configuration.openai_api_key` is read at import time and wrapped as `SecretStr(...)` for `ChatOpenAI(api_key=...)`.
 
 ## Usage
 ```python
 from naas_abi_marketplace.ai.chatgpt.models.gpt_5_mini import model
 
-# `model` is a ChatModel wrapper; use it according to your ChatModel interface.
 print(model.model_id)   # "gpt-5-mini"
-print(model.provider)   # "openai"
+print(model.provider)   # ModelProvider.OPENAI
 
-# Access underlying LangChain ChatOpenAI instance if needed:
+# Underlying LangChain model (ChatOpenAI)
 llm = model.model
 ```
 
 ## Caveats
-- The OpenAI API key is read during module import; missing/invalid configuration can cause import-time errors.
-- This file does not define any methods; runtime interaction depends on the external `ChatModel` and `ChatOpenAI` interfaces.
+- The OpenAI API key is accessed during module import; missing or misconfigured `openai_api_key` can raise errors when importing this module.

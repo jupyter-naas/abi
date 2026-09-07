@@ -1,7 +1,7 @@
 import uuid
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, Optional
+from typing import Annotated
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi.workflows.SearchIndividualWorkflow import (
@@ -50,7 +50,7 @@ class AddIndividualPipelineParameters(PipelineParameters):
         ),
     ]
     threshold: Annotated[
-        Optional[int],
+        int | None,
         Field(
             description="Threshold to use for the search individual workflow.",
             ge=0,
@@ -73,7 +73,7 @@ class AddIndividualPipeline(Pipeline):
 
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, AddIndividualPipelineParameters):
-            raise ValueError(
+            raise TypeError(
                 "Parameters must be of type AddIndividualPipelineParameters"
             )
 
@@ -212,4 +212,3 @@ class AddIndividualPipeline(Pipeline):
     ) -> None:
         if tags is None:
             tags = []
-        return None

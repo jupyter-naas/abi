@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt4o20241120Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-4o (2024-11-20)",
+        name="GPT-4o (2024-11-20)",
         owner="openai",
         description="The 2024-11-20 version of GPT-4o offers a leveled-up creative writing ability with more natural, engaging, and tailored writing to improve relevance & readability. It’s also better at working with uploaded...",
         canonical_slug="openai/gpt-4o-2024-11-20",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1732127594),
+        created_at=datetime.fromtimestamp(1732127594, tz=UTC),
         pricing={'prompt': '0.0000025', 'completion': '0.00001', 'input_cache_read': '0.00000125'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['text', 'image', 'file'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 128000, 'max_completion_tokens': 16384, 'is_moderated': True},

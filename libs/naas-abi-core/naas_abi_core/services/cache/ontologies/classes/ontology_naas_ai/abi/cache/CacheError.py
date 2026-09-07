@@ -8,4 +8,3 @@ class CacheError(_CacheError):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

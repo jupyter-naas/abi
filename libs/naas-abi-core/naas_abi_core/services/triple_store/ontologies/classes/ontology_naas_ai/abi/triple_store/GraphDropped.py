@@ -8,4 +8,3 @@ class GraphDropped(_GraphDropped):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

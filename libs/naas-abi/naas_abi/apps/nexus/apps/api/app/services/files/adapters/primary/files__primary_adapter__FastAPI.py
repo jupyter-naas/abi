@@ -31,6 +31,7 @@ from naas_abi.apps.nexus.apps.api.app.services.files.drive_roots import (
     SCOPE_PLATFORM_DRIVE,
     SCOPE_SYSTEM_DRIVE,
     SYSTEM_DRIVE_ROOT,
+    WORKSPACE_DRIVE_ROOT,
     my_drive_root,
     workspace_drive_root,
 )
@@ -75,6 +76,7 @@ def _to_file_list_response_schema(value: FileListResponseData) -> FileListRespon
     return FileListResponse(
         files=[_to_file_info_schema(file) for file in value.files],
         path=value.path,
+        total=value.total,
     )
 
 
@@ -101,7 +103,7 @@ def _normalize_user_id(user_id: str) -> str:
 def _scope_to_path(root: str, path: str) -> str:
     """Anchor ``path`` under ``root`` regardless of whether the caller already
     prefixed it. Accepts an empty path (returns the root itself). An empty
-    ``root`` means "no prefix" — paths are returned as-is, resolving against
+    ``root`` means "no prefix" : paths are returned as-is, resolving against
     the underlying object-storage root."""
     normalized_path = FilesService.normalize_relative_path(path, allow_empty=True)
     if not root:
@@ -114,8 +116,19 @@ def _scope_to_path(root: str, path: str) -> str:
 
 
 def _resolve_workspace_scoped_path(path: str, workspace_id: str | None) -> tuple[str, str]:
+    """Resolve a workspace-drive path to its storage key.
+
+    Callers may pass:
+    - a path relative to the workspace root (``docs/readme.md``)
+    - a legacy bare-workspace path (``ws-1/docs/readme.md``)
+    - a full storage path returned by list/create (``naas_abi/workspace-drive/ws-1/...``)
+
+    List/rename/delete round-trip the full storage path from the API response, so
+    already-scoped paths must not be re-prefixed under the workspace root.
+    """
     normalized_path = FilesService.normalize_relative_path(path, allow_empty=True)
     normalized_workspace = _normalize_workspace_id(workspace_id) if workspace_id else None
+    drive_prefix = f"{WORKSPACE_DRIVE_ROOT}/"
 
     if not normalized_workspace:
         if not normalized_path:
@@ -123,21 +136,40 @@ def _resolve_workspace_scoped_path(path: str, workspace_id: str | None) -> tuple
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="workspace_id is required when path is empty",
             )
-        normalized_workspace = normalized_path.split("/", 1)[0]
-        # Allow callers that still pass the legacy bare-workspace path layout.
-        body = normalized_path.split("/", 1)[1] if "/" in normalized_path else ""
-    else:
-        # Strip a redundant leading workspace segment from the request path if present
-        if normalized_path == normalized_workspace:
-            body = ""
-        elif normalized_path.startswith(f"{normalized_workspace}/"):
-            body = normalized_path[len(normalized_workspace) + 1 :]
+        if normalized_path.startswith(drive_prefix):
+            rest = normalized_path[len(drive_prefix) :]
+            if not rest:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="workspace_id is required when path is empty",
+                )
+            normalized_workspace = _normalize_workspace_id(rest.split("/", 1)[0])
         else:
-            body = normalized_path
+            # Legacy bare-workspace path layout: <ws>/...
+            normalized_workspace = _normalize_workspace_id(normalized_path.split("/", 1)[0])
 
     root = workspace_drive_root(normalized_workspace)
-    scoped = root if not body else f"{root}/{body}"
-    return normalized_workspace, scoped
+
+    # Full storage paths from list/create/rename round-trips.
+    if normalized_path == WORKSPACE_DRIVE_ROOT:
+        return normalized_workspace, root
+    if normalized_path == root or normalized_path.startswith(f"{root}/"):
+        return normalized_workspace, normalized_path
+    if normalized_path.startswith(drive_prefix):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Path is outside the requested workspace",
+        )
+
+    # Strip a redundant leading workspace segment, then anchor under the root.
+    if normalized_path == normalized_workspace:
+        body = ""
+    elif normalized_path.startswith(f"{normalized_workspace}/"):
+        body = normalized_path[len(normalized_workspace) + 1 :]
+    else:
+        body = normalized_path
+
+    return normalized_workspace, _scope_to_path(root, body)
 
 
 def _resolve_my_drive_scoped_path(path: str, user_id: str) -> str:
@@ -247,11 +279,42 @@ async def list_files(
     path: str = Query("", description="Directory path to list"),
     workspace_id: str | None = Query(default=None, max_length=100),
     scope: str = Query(default="workspace", pattern=SCOPE_PATTERN),
+    limit: int | None = Query(
+        default=None,
+        ge=1,
+        le=1000,
+        description="Max entries to return. Omit to return the full listing.",
+    ),
+    offset: int = Query(default=0, ge=0, description="Number of entries to skip"),
+    search: str | None = Query(
+        default=None,
+        max_length=255,
+        description="Case-insensitive substring filter on entry name (this folder only)",
+    ),
+    sort_by: str = Query(
+        default="name",
+        pattern="^(name|size|modified)$",
+        description="Column to sort the full listing by before paging",
+    ),
+    sort_dir: str = Query(
+        default="asc",
+        pattern="^(asc|desc)$",
+        description="Sort direction",
+    ),
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
     scoped_path = await _authorize_path(current_user, path, workspace_id, scope, files_service=files_service)
-    return _to_file_list_response_schema(files_service.list_files(path=scoped_path))
+    return _to_file_list_response_schema(
+        files_service.list_files(
+            path=scoped_path,
+            limit=limit,
+            offset=offset,
+            search=search,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+        )
+    )
 
 
 @router.post("/", response_model=FileInfo)
@@ -311,7 +374,7 @@ async def rename_file(
         )
 
     def _workspace_segment(scoped: str) -> str:
-        # scoped paths are "naas_abi/workspace-drive/<ws>/..." — extract the <ws>
+        # scoped paths are "naas_abi/workspace-drive/<ws>/...", extract the <ws>
         parts = scoped.split("/", 3)
         return parts[2] if len(parts) >= 3 else ""
 

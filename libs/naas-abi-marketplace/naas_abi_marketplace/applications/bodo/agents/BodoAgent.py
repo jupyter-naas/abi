@@ -46,13 +46,16 @@ Your responses should be short, factual, and focused on analytical insights rath
         agent_shared_state: AgentSharedState | None = None,
         agent_configuration: AgentConfiguration | None = None,
     ) -> BodoAgent:
-        from naas_abi_core.engine.context import get_default_model_registry
         from naas_abi_marketplace.__demo__.workflows.ExecutePythonCodeWorkflow import (
             ExecutePythonCodeWorkflow,
             ExecutePythonCodeWorkflowConfiguration,
         )
+        from naas_abi_marketplace.applications.bodo import ABIModule
 
-        registry = get_default_model_registry()
+
+        abi_module = ABIModule.get_instance()
+
+        registry = abi_module.engine.services.model_registry
         assert registry is not None, "ModelRegistryService not initialized"
         chat_model = registry.get_default_chat_model()
 

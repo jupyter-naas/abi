@@ -143,3 +143,93 @@ opencode:
     assert len(configuration.opencode.providers) == 1
     assert configuration.opencode.providers[0].id == "openrouter"
     assert configuration.opencode.providers[0].key == "test-opencode"
+
+
+def test_from_yaml_content_does_not_render_jinja_on_yaml_comment_lines(tmp_path):
+    """Commented-out `{{ secret.X }}` must not be resolved (or hard-fail)."""
+    dotenv = tmp_path / ".env.bootstrap"
+    dotenv.write_text("ENV=local\n", encoding="utf-8")
+
+    configuration = EngineConfiguration.from_yaml_content(
+        _configuration_yaml(
+            title="BASE",
+            dotenv_path=str(dotenv),
+            extra_top_level="""
+# default_agent: "{{ secret.THIS_SECRET_MUST_NOT_BE_RESOLVED }}"
+#   api_key: "{{ secret.ALSO_MUST_NOT_BE_RESOLVED }}"
+""".strip(),
+        )
+    )
+
+    assert configuration.default_agent == "naas_abi AbiAgent"
+
+
+def test_from_yaml_content_still_renders_uncommented_jinja_secrets(tmp_path):
+    dotenv = tmp_path / ".env.bootstrap"
+    dotenv.write_text("ENV=local\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="THIS_SECRET_MUST_BE_RESOLVED"):
+        EngineConfiguration.from_yaml_content(
+            _configuration_yaml(
+                title="BASE",
+                dotenv_path=str(dotenv),
+                extra_top_level='default_agent: "{{ secret.THIS_SECRET_MUST_BE_RESOLVED }}"',
+            )
+        )
+
+
+def test_leave_yaml_comments_unrendered_preserves_comment_text():
+    source = (
+        "key: value\n"
+        "  # api_key: \"{{ secret.MISSING }}\"\n"
+        "other: '{{ secret.PRESENT }}'\n"
+    )
+    masked = EngineConfiguration._leave_yaml_comments_unrendered(source)
+
+    assert "{% raw %}  # api_key: \"{{ secret.MISSING }}\"{% endraw %}\n" in masked
+    assert "other: '{{ secret.PRESENT }}'" in masked
+    assert not masked.split("other:", 1)[1].startswith("{% raw %}")
+
+
+# =============================================================================
+# ABI_SKIP_ONTOLOGY_LOADING
+#
+# Processes sharing one triple store (`abi dev up` runs the api and dagster
+# against the same oxigraph) must not each replay the ontology bootstrap.
+# `config.yaml` is per-project and cannot express a per-process decision, so
+# the launcher nominates an owner via the environment.
+# =============================================================================
+
+def _global_config(dotenv_path: str):
+    return EngineConfiguration.from_yaml_content(
+        _configuration_yaml(title="BASE", dotenv_path=dotenv_path)
+    ).global_config
+
+
+def _dotenv(tmp_path):
+    path = tmp_path / ".env.bootstrap"
+    path.write_text("ENV=local\n", encoding="utf-8")
+    return str(path)
+
+
+def test_skip_ontology_loading_defaults_to_false(tmp_path, monkeypatch):
+    monkeypatch.delenv("ABI_SKIP_ONTOLOGY_LOADING", raising=False)
+
+    assert _global_config(_dotenv(tmp_path)).skip_ontology_loading is False
+
+
+@pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on", " true "])
+def test_env_override_forces_the_skip_on(tmp_path, monkeypatch, value):
+    monkeypatch.setenv("ABI_SKIP_ONTOLOGY_LOADING", value)
+
+    assert _global_config(_dotenv(tmp_path)).skip_ontology_loading is True
+
+
+@pytest.mark.parametrize("value", ["0", "false", "no", "", "nonsense"])
+def test_non_truthy_env_leaves_the_configured_value_alone(
+    tmp_path, monkeypatch, value
+):
+    """Opt-in only: this must never re-enable loading a project turned off."""
+    monkeypatch.setenv("ABI_SKIP_ONTOLOGY_LOADING", value)
+
+    assert _global_config(_dotenv(tmp_path)).skip_ontology_loading is False

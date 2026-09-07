@@ -1,12 +1,12 @@
 # `mappings` (`COLORS_NODES`)
 
 ## What it is
-A module-level mapping of ontology term URIs to color values (hex strings or named colors). Intended for consistent node coloring (e.g., in graph/visualization contexts).
+A module that defines a single dictionary mapping ontology term URIs (strings) to color values (CSS-like strings). Intended for consistent node coloring in graph/visualization contexts.
 
 ## Public API
 - `COLORS_NODES: dict[str, str]`
   - Maps an ontology class/term URI to a color value.
-  - Values are CSS-like color strings (e.g., `"#f61685"`, `"white"`, `"grey"`, `"black"`).
+  - Values are color strings such as hex codes (e.g., `"#f61685"`) or named colors (e.g., `"white"`, `"grey"`, `"black"`).
 
 ## Configuration/Dependencies
 - No external dependencies.
@@ -17,10 +17,10 @@ A module-level mapping of ontology term URIs to color values (hex strings or nam
 from naas_abi_marketplace.applications.naas.mappings import COLORS_NODES
 
 uri = "http://ontology.naas.ai/abi/Product"
-color = COLORS_NODES.get(uri, "#000000")  # fallback if unknown
-print(uri, color)
+color = COLORS_NODES.get(uri, "#000000")  # fallback color if unknown URI
+print(color)
 ```
 
 ## Caveats
 - Keys are exact URI strings; lookups are case- and character-sensitive.
-- Some values are named colors (e.g., `"white"`, `"grey"`, `"black"`) rather than hex codes; ensure your renderer supports both.
+- Some values are named colors (e.g., `"white"`, `"grey"`, `"black"`) instead of hex codes; ensure your renderer supports both formats.

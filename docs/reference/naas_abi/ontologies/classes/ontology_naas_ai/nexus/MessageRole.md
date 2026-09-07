@@ -15,7 +15,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.MessageRole import MessageRole
+from naas_abi.ontologies.classes.ontology_demo.nexus.MessageRole import MessageRole
 
 role = MessageRole()
 role.actions()  # no-op by default

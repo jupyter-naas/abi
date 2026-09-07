@@ -521,7 +521,7 @@ export default function CreateIndividualPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <Header />
+      <Header title="New Individual" />
       <div className="flex flex-1 flex-col overflow-y-auto bg-card p-6">
         <div className="mx-auto w-full max-w-2xl">
           <div className="mb-6 flex items-center justify-between">

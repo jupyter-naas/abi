@@ -423,7 +423,7 @@ export default function OrgRegisterPage() {
 
       {/* Footer */}
       {(branding?.showTermsFooter ?? true) && (
-        <p className="mt-8 text-center text-sm" style={{ color: subtitleColor || 'var(--muted-foreground)' }}>
+        <p className="mt-8 text-center text-caption" style={{ color: subtitleColor || 'var(--muted-foreground)' }}>
           By signing up, you agree to our{' '}
           <Link href="/terms" className="hover:underline">
             Terms of Service
@@ -437,14 +437,14 @@ export default function OrgRegisterPage() {
 
       {/* Powered by NEXUS */}
       {(branding?.showPoweredBy ?? true) && (
-        <p className="mt-4 text-center text-xs" style={{ color: subtitleColor || 'rgba(255,255,255,0.3)' }}>
+        <p className="mt-4 text-center text-caption" style={{ color: subtitleColor || 'rgba(255,255,255,0.3)' }}>
           Powered by NEXUS
         </p>
       )}
 
       {/* Custom footer text */}
       {branding?.loginFooterText && (
-        <p className="mt-4 text-center text-xs" style={{ color: subtitleColor || 'rgba(255,255,255,0.4)' }}>
+        <p className="mt-4 text-center text-caption" style={{ color: subtitleColor || 'rgba(255,255,255,0.4)' }}>
           {branding.loginFooterText}
         </p>
       )}

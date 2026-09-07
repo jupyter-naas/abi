@@ -1,9 +1,9 @@
 import os
 import sqlite3
-import time
 import threading
+import time
+from collections.abc import Callable, Sequence
 from threading import Event, Thread
-from typing import Callable
 
 from naas_abi_core.services.bus.BusPorts import IBusAdapter
 
@@ -78,6 +78,12 @@ class PythonQueueAdapter(IBusAdapter):
         self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_bus_pubsub_topic_seq "
             "ON bus_pubsub(topic, seq)"
+        )
+        # The TTL sweep in publish() filters on created_at; without this the
+        # DELETE degrades to a full table scan on every publish.
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bus_pubsub_created_at "
+            "ON bus_pubsub(created_at)"
         )
         self._conn.commit()
         self._db_lock = threading.RLock()
@@ -181,12 +187,25 @@ class PythonQueueAdapter(IBusAdapter):
     # ------------------------------------------------------------------
 
     def publish(self, topic: str, routing_key: str, payload: bytes) -> None:
+        self.publish_many(topic, ((routing_key, payload),))
+
+    def publish_many(
+        self, topic: str, messages: Sequence[tuple[str, bytes]]
+    ) -> None:
+        """Append a batch of messages in a single transaction.
+
+        One commit (and one fsync) for the whole batch instead of one per
+        message. Subscribers see the same rows in the same order either way;
+        they just become visible together.
+        """
+        if not messages:
+            return
         now = time.time()
         with self._db_lock:
-            self._conn.execute(
+            self._conn.executemany(
                 "INSERT INTO bus_pubsub(topic, routing_key, payload, created_at) "
                 "VALUES(?, ?, ?, ?)",
-                (topic, routing_key, payload, now),
+                [(topic, routing_key, payload, now) for routing_key, payload in messages],
             )
             # Opportunistic TTL cleanup so the log doesn't grow unbounded.
             # Rows older than the retention window are long past any live
@@ -234,7 +253,7 @@ class PythonQueueAdapter(IBusAdapter):
                     except StopIteration:
                         stop_event.set()
                         return
-                    except Exception:
+                    except Exception:  # noqa: BLE001,S110
                         # Best-effort: pub/sub does not redeliver on
                         # subscriber failure. Caller-side error handling
                         # is the subscriber's responsibility.

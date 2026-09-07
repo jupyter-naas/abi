@@ -73,11 +73,10 @@ The adapter handles this automatically:
 
 Write serialisation (distributed lock)
 ---------------------------------------
-By default the adapter uses a ``threading.Lock`` to prevent concurrent writes
-from the *same process* reaching Fuseki simultaneously.  For multi-process or
+The adapter uses a ``threading.Lock`` to prevent concurrent writes from the
+same adapter instance reaching Fuseki simultaneously. For multi-process or
 multi-instance deployments — where multiple adapter instances point at the same
-Fuseki dataset — you can inject a ``KeyValueService`` to promote that lock to a
-*distributed* lock:
+Fuseki dataset — you can inject a ``KeyValueService`` to add a distributed lock:
 
 .. code-block:: python
 
@@ -90,7 +89,7 @@ Fuseki dataset — you can inject a ``KeyValueService`` to promote that lock to 
         key_value_service=kv,
     )
 
-When a ``KeyValueService`` is provided:
+When a ``KeyValueService`` is provided, both locks are used:
 
 - Acquisition uses ``set_if_not_exists(key, token, ttl=timeout+10)`` — atomic
   across processes via the underlying store (e.g. Redis).
@@ -121,6 +120,11 @@ Query behavior
 - Results are mapped to RDFLib-compatible structures:
   - JSON SPARQL results -> iterable of ``ResultRow`` (or ``ASK`` result)
   - RDF payloads (N-Triples/Turtle) -> ``rdflib.Graph``
+- ``list_graphs()`` lists IRI named graphs from the catalog
+  (``GRAPH ?g { } FILTER(isIRI(?g))``) so a dangling null graph node in TDB2
+  cannot NPE Jena mid-response.
+- Truncated SPARQL JSON (HTTP 200 + Java exception appended) is recovered
+  when complete bindings were already streamed.
 """
 
 import hashlib
@@ -131,8 +135,9 @@ import random
 import re
 import threading
 import time
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Generator, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
@@ -147,6 +152,84 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
 from rdflib import BNode, Graph, URIRef
 
 logger = logging.getLogger(__name__)
+
+
+def _recover_truncated_sparql_results_json(text: str) -> dict[str, Any] | None:
+    """Best-effort parse of SPARQL JSON that Jena truncated mid-stream.
+
+    Fuseki can return HTTP 200 and start streaming ``application/sparql-results+json``,
+    then abort with a Java exception (for example ``Node.hashCode()`` on a null
+    graph node) appended to the body. ``json.loads`` fails; complete bindings
+    already written are still usable.
+    """
+    decoder = json.JSONDecoder()
+    stripped = text.lstrip()
+    if stripped.startswith("{"):
+        try:
+            obj, _end = decoder.raw_decode(stripped)
+            if isinstance(obj, dict) and ("boolean" in obj or "results" in obj):
+                return obj
+        except json.JSONDecodeError:
+            pass
+
+    vars_: list[str] = []
+    vars_match = re.search(r'"vars"\s*:\s*(\[[^\]]*\])', text)
+    if vars_match:
+        try:
+            parsed_vars = json.loads(vars_match.group(1))
+        except json.JSONDecodeError:
+            parsed_vars = None
+        if isinstance(parsed_vars, list):
+            vars_ = [v for v in parsed_vars if isinstance(v, str)]
+
+    boolean_match = re.search(r'"boolean"\s*:\s*(true|false)', text)
+    if boolean_match:
+        return {"head": {"vars": vars_}, "boolean": boolean_match.group(1) == "true"}
+
+    bindings_idx = text.find('"bindings"')
+    if bindings_idx == -1:
+        return None
+    bracket = text.find("[", bindings_idx)
+    if bracket == -1:
+        return None
+
+    bindings: list[dict[str, Any]] = []
+    pos = bracket + 1
+    while pos < len(text):
+        while pos < len(text) and text[pos] in " \t\r\n,":
+            pos += 1
+        if pos >= len(text) or text[pos] == "]":
+            break
+        try:
+            obj, end = decoder.raw_decode(text, pos)
+        except json.JSONDecodeError:
+            break
+        if isinstance(obj, dict):
+            bindings.append(obj)
+        pos = end
+
+    if not bindings:
+        return None
+    return {"head": {"vars": vars_}, "results": {"bindings": bindings}}
+
+
+def _parse_sparql_results_json(text: str) -> dict[str, Any]:
+    """Parse SPARQL JSON, recovering complete bindings from a truncated body."""
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        recovered = _recover_truncated_sparql_results_json(text)
+        if recovered is not None:
+            n_bindings = len(recovered.get("results", {}).get("bindings", []))
+            logger.warning(
+                "Recovered %d SPARQL JSON binding(s) from truncated Fuseki response",
+                n_bindings,
+            )
+            return recovered
+        raise
+    if not isinstance(parsed, dict):
+        raise json.JSONDecodeError("SPARQL JSON root must be an object", text, 0)
+    return parsed
 
 
 class ApacheJenaTDB2(ITripleStorePort):
@@ -173,26 +256,98 @@ class ApacheJenaTDB2(ITripleStorePort):
         # gets its own lock namespace in the key-value store.
         _url_hash = hashlib.sha256(jena_tdb2_url.encode()).hexdigest()[:16]
         self._dataset_lock_key = f"fuseki:write_lock:{_url_hash}"
-        # Fallback thread lock used when no KeyValueService is provided.
+        # Always serialize writes from this adapter instance before acquiring
+        # the optional cross-process lock.
         self._write_lock = threading.Lock()
 
         self._test_connection()
 
         logger.info("ApacheJenaTDB2 adapter initialized: %s", self.jena_tdb2_url)
 
-    def _test_connection(self):
-        response = self._session.get(
-            self.query_endpoint,
-            params={"query": "ASK { ?s ?p ?o }"},
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
+    def _test_connection(self) -> None:
+        """Verify the dataset is queryable, tolerating a slow/starting server.
+
+        The probe query is ``ASK { ?s ?p ?o }`` — it short-circuits at the first
+        triple (so it stays cheap even on a huge dataset) while still opening and
+        reading TDB2 storage, which is what makes it a genuine *corruption*
+        detector rather than a mere liveness ping.
+
+        A freshly (re)started Fuseki can take several seconds to attach a large
+        TDB2 dataset, during which it may refuse the connection or answer 500/503.
+        Those are transient, so we retry with the same exponential back-off used
+        by the read/write paths instead of letting a single boot-time blip crash
+        the whole engine import (which manifests as the Dagster code-server
+        failing to load). On a *persistent* failure we raise a domain
+        ``RequestError`` carrying Fuseki's own response body (e.g. a TDB2 recovery
+        stack trace), so the cause is diagnosable rather than a bare
+        ``HTTPError: 500 Server Error``.
+        """
+        last_error: Exceptions.RequestError | None = None
+        for attempt in range(self._CONNECT_MAX_RETRIES + 1):
+            try:
+                response = self._session.get(
+                    self.query_endpoint,
+                    params={"query": "ASK { ?s ?p ?o }"},
+                    timeout=self.timeout,
+                )
+            except requests.RequestException as exc:
+                # Connection refused/reset/read-timeout while Fuseki is still
+                # coming up. Treat as transient and retry.
+                last_error = Exceptions.RequestError(
+                    operation="connect",
+                    message=(
+                        f"Could not reach Fuseki at {self.query_endpoint}: {exc}"
+                    ),
+                    endpoint=self.query_endpoint,
+                    attempts=attempt + 1,
+                )
+            else:
+                if response.status_code not in self._RETRYABLE_STATUS_CODES:
+                    # Success (<400) or a non-retryable error (e.g. 401/404):
+                    # surface it immediately with the server's body.
+                    self._raise_for_status(
+                        response,
+                        operation="connect",
+                        endpoint=self.query_endpoint,
+                        attempts=attempt + 1,
+                    )
+                    return
+                # Retryable 500/503: capture the body in case this is the last
+                # attempt, then fall through to back-off.
+                try:
+                    self._raise_for_status(
+                        response,
+                        operation="connect",
+                        endpoint=self.query_endpoint,
+                        attempts=attempt + 1,
+                    )
+                except Exceptions.RequestError as exc:
+                    last_error = exc
+
+            if attempt < self._CONNECT_MAX_RETRIES:
+                delay = self.retry_delay * (2 ** attempt) + random.uniform(0, 0.1)
+                logger.warning(
+                    "Fuseki connectivity check failed (attempt %d/%d); "
+                    "retrying in %.2fs",
+                    attempt + 1,
+                    self._CONNECT_MAX_RETRIES + 1,
+                    delay,
+                )
+                time.sleep(delay)
+
+        assert last_error is not None  # loop always sets it before exhausting
+        raise last_error
 
     # ------------------------------------------------------------------
     # Internal HTTP helpers with retry
     # ------------------------------------------------------------------
 
     _RETRYABLE_STATUS_CODES = frozenset({500, 503})
+
+    # Boot-time connectivity probe retries. A restarting Fuseki can take a few
+    # seconds to attach a large TDB2 dataset; we tolerate that many transient
+    # failures before declaring the store unreachable.
+    _CONNECT_MAX_RETRIES = 5
 
     # Upper bound on how many characters of the server's error body we keep.
     # Fuseki error responses are usually a short message + Java stack trace;
@@ -233,62 +388,62 @@ class ApacheJenaTDB2(ITripleStorePort):
     def _acquire_write_lock(self) -> Generator[None, None, None]:
         """Acquire a write lock appropriate for the deployment topology.
 
-        - With a ``KeyValueService``: acquires a distributed lock via
-          ``set_if_not_exists`` so writes are serialised across all processes
-          and service instances pointing at the same Fuseki dataset.
-        - Without: acquires ``self._write_lock`` (``threading.Lock``) to
-          serialise writes within the current process only.
+        The process-local ``threading.Lock`` is always acquired first. With a
+        ``KeyValueService``, a distributed lock is then acquired via
+        ``set_if_not_exists`` so writes are also serialised across all processes
+        and service instances pointing at the same Fuseki dataset.
 
         In both cases the same exponential back-off / retry parameters
         (``max_retries``, ``retry_delay``) are used for acquisition attempts.
         """
-        if self._key_value_service is None:
-            with self._write_lock:
+        with self._write_lock:
+            if self._key_value_service is None:
                 yield
-            return
+                return
 
-        # --- Distributed lock path ---
-        # Each acquisition uses a unique random token so that only the exact
-        # caller that acquired the lock can release it (prevents accidental
-        # release of another holder's lock after a long retry pause).
-        lock_token = os.urandom(16)
-        # TTL = request timeout + buffer; self-heals after process crash.
-        lock_ttl = self.timeout + 10
+            # --- Distributed lock path ---
+            # Each acquisition uses a unique random token so that only the exact
+            # caller that acquired the lock can release it (prevents accidental
+            # release of another holder's lock after a long retry pause).
+            lock_token = os.urandom(16)
+            # TTL = request timeout + buffer; self-heals after process crash.
+            lock_ttl = self.timeout + 10
 
-        acquired = False
-        for attempt in range(self.max_retries + 1):
-            if self._key_value_service.set_if_not_exists(
-                self._dataset_lock_key, lock_token, ttl=lock_ttl
-            ):
-                acquired = True
-                break
-            if attempt < self.max_retries:
-                delay = self.retry_delay * (2 ** attempt) + random.uniform(0, 0.1)
-                logger.warning(
-                    "Fuseki distributed write lock busy (attempt %d/%d); waiting %.2fs",
-                    attempt + 1,
-                    self.max_retries + 1,
-                    delay,
+            acquired = False
+            for attempt in range(self.max_retries + 1):
+                if self._key_value_service.set_if_not_exists(
+                    self._dataset_lock_key, lock_token, ttl=lock_ttl
+                ):
+                    acquired = True
+                    break
+                if attempt < self.max_retries:
+                    delay = self.retry_delay * (2 ** attempt) + random.uniform(0, 0.1)
+                    logger.warning(
+                        "Fuseki distributed write lock busy (attempt %d/%d); "
+                        "waiting %.2fs",
+                        attempt + 1,
+                        self.max_retries + 1,
+                        delay,
+                    )
+                    time.sleep(delay)
+
+            if not acquired:
+                raise Exceptions.RequestError(
+                    operation="acquire_write_lock",
+                    message=(
+                        f"Could not acquire distributed write lock for "
+                        f"{self.jena_tdb2_url} after {self.max_retries + 1} attempts"
+                    ),
+                    endpoint=self.jena_tdb2_url,
+                    attempts=self.max_retries + 1,
                 )
-                time.sleep(delay)
 
-        if not acquired:
-            raise Exceptions.RequestError(
-                operation="acquire_write_lock",
-                message=(
-                    f"Could not acquire distributed write lock for "
-                    f"{self.jena_tdb2_url} after {self.max_retries + 1} attempts"
-                ),
-                endpoint=self.jena_tdb2_url,
-                attempts=self.max_retries + 1,
-            )
-
-        try:
-            yield
-        finally:
-            self._key_value_service.delete_if_value_matches(
-                self._dataset_lock_key, lock_token
-            )
+            try:
+                yield
+            finally:
+                self._key_value_service.delete_if_value_matches(
+                    self._dataset_lock_key, lock_token
+                )
 
     def _post_update(self, sparql: str) -> requests.Response:
         """POST to the SPARQL update endpoint, retrying on transient 500/503.
@@ -395,7 +550,7 @@ class ApacheJenaTDB2(ITripleStorePort):
 
         return (
             f"{operation} {{\n"
-            + f"  GRAPH <{str(graph_name)}> {{\n"
+            + f"  GRAPH <{graph_name!s}> {{\n"
             + "\n".join(statements)
             + "\n  }\n}"
         )
@@ -426,9 +581,9 @@ class ApacheJenaTDB2(ITripleStorePort):
 
     def handle_view_event(
         self,
-        view: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        view: tuple[URIRef | None, URIRef | None, URIRef | None],
         event: OntologyEvent,
-        triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        triple: tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         pass
 
@@ -460,82 +615,111 @@ class ApacheJenaTDB2(ITripleStorePort):
         is_update = self.__is_update_query(query)
 
         if is_update:
-            response = self._post_update(query)
-        else:
-            response = self._post_query(query)
-
-        if is_update:
+            self._post_update(query)
             return rdflib.query.Result("SELECT")
 
-        content_type = response.headers.get("Content-Type", "")
+        result_data: dict[str, Any] | None = None
+        response: requests.Response | None = None
+        for attempt in range(self.max_retries + 1):
+            response = self._post_query(query)
+            content_type = response.headers.get("Content-Type", "")
 
-        if "sparql-results" in content_type:
-            result_data = json.loads(response.text)
+            if "sparql-results" in content_type:
+                try:
+                    result_data = _parse_sparql_results_json(response.text)
+                    break
+                except json.JSONDecodeError as exc:
+                    if attempt >= self.max_retries:
+                        body = response.text[:500]
+                        raise Exceptions.RequestError(
+                            operation="query",
+                            message=(
+                                "Fuseki returned malformed SPARQL JSON after "
+                                f"{self.max_retries + 1} attempts"
+                            ),
+                            status_code=response.status_code,
+                            response_body=body,
+                            endpoint=self.query_endpoint,
+                            attempts=self.max_retries + 1,
+                        ) from exc
+                    delay = self.retry_delay * (2**attempt) + random.uniform(0, 0.1)
+                    logger.warning(
+                        "Fuseki returned malformed SPARQL JSON (attempt %d/%d); "
+                        "retrying in %.2fs",
+                        attempt + 1,
+                        self.max_retries + 1,
+                        delay,
+                    )
+                    time.sleep(delay)
+                    continue
 
-            if "boolean" in result_data:
-                ask_result = rdflib.query.Result("ASK")
-                ask_result.askAnswer = bool(result_data["boolean"])
-                return ask_result
+            if "n-triples" in content_type or "turtle" in content_type:
+                graph = Graph()
+                format_type = "nt" if "n-triples" in content_type else "turtle"
+                graph.parse(data=response.text, format=format_type)
+                return graph  # type: ignore
 
-            from rdflib.query import ResultRow
-            from rdflib.term import BNode, Literal, URIRef, Variable
+            raise ValueError(f"Unexpected content type: {content_type}")
 
-            vars = result_data.get("head", {}).get("vars", [])
-            bindings = result_data.get("results", {}).get("bindings", [])
+        if result_data is None or response is None:
+            raise AssertionError("unreachable: SPARQL JSON retry loop must return")
 
-            var_objects = [Variable(var) for var in vars]
-            results = []
+        if "boolean" in result_data:
+            ask_result = rdflib.query.Result("ASK")
+            ask_result.askAnswer = bool(result_data["boolean"])
+            return ask_result
 
-            for binding in bindings:
-                row_values = {}
-                for var in vars:
-                    var_obj = Variable(var)
-                    if var in binding:
-                        binding_info = binding[var]
-                        value_str = binding_info["value"]
-                        binding_type = binding_info.get("type", "literal")
+        from rdflib.query import ResultRow
+        from rdflib.term import BNode, Literal, URIRef, Variable
 
-                        value: Union[URIRef, BNode, Literal, None]
-                        if binding_type == "uri":
-                            value = URIRef(value_str)
-                        elif binding_type == "bnode":
-                            value = BNode(value_str)
-                        else:
-                            datatype = binding_info.get("datatype")
-                            lang = binding_info.get("xml:lang")
+        vars = result_data.get("head", {}).get("vars", [])
+        bindings = result_data.get("results", {}).get("bindings", [])
 
-                            if datatype:
-                                value = Literal(value_str, datatype=URIRef(datatype))
-                            elif lang:
-                                value = Literal(value_str, lang=lang)
-                            else:
-                                value = Literal(value_str)
+        var_objects = [Variable(var) for var in vars]
+        results = []
 
-                        row_values[var_obj] = value
+        for binding in bindings:
+            row_values = {}
+            for var in vars:
+                var_obj = Variable(var)
+                if var in binding:
+                    binding_info = binding[var]
+                    value_str = binding_info["value"]
+                    binding_type = binding_info.get("type", "literal")
+
+                    value: URIRef | BNode | Literal | None
+                    if binding_type == "uri":
+                        value = URIRef(value_str)
+                    elif binding_type == "bnode":
+                        value = BNode(value_str)
                     else:
-                        row_values[var_obj] = None  # type: ignore
+                        datatype = binding_info.get("datatype")
+                        lang = binding_info.get("xml:lang")
 
-                results.append(ResultRow(row_values, var_objects))
+                        if datatype:
+                            value = Literal(value_str, datatype=URIRef(datatype))
+                        elif lang:
+                            value = Literal(value_str, lang=lang)
+                        else:
+                            value = Literal(value_str)
 
-            return iter(results)  # type: ignore
+                    row_values[var_obj] = value
+                else:
+                    row_values[var_obj] = None  # type: ignore
 
-        if "n-triples" in content_type or "turtle" in content_type:
-            graph = Graph()
-            format_type = "nt" if "n-triples" in content_type else "turtle"
-            graph.parse(data=response.text, format=format_type)
-            return graph  # type: ignore
+            results.append(ResultRow(row_values, var_objects))
 
-        raise ValueError(f"Unexpected content type: {content_type}")
+        return iter(results)  # type: ignore
 
     def query_view(self, view: str, query: str) -> Any:
         return self.query(query)
 
     def get_subject_graph(self, subject: URIRef, graph_name: str | URIRef) -> Graph:
         query = f"""
-        CONSTRUCT {{ <{str(subject)}> ?p ?o . }}
+        CONSTRUCT {{ <{subject!s}> ?p ?o . }}
         WHERE {{ 
-            GRAPH <{str(graph_name)}> 
-            {{ <{str(subject)}> ?p ?o . }} 
+            GRAPH <{graph_name!s}> 
+            {{ <{subject!s}> ?p ?o . }} 
         }}
         """
         result = self.query(query)
@@ -546,22 +730,29 @@ class ApacheJenaTDB2(ITripleStorePort):
     def create_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
-        self.query(f"CREATE GRAPH <{str(graph_name)}>")
+        self.query(f"CREATE GRAPH <{graph_name!s}>")
 
     def clear_graph(self, graph_name: URIRef | None = None) -> None:
         if graph_name is None:
             self.query("CLEAR DEFAULT")
         else:
             assert isinstance(graph_name, URIRef)
-            self.query(f"CLEAR GRAPH <{str(graph_name)}>")
+            self.query(f"CLEAR GRAPH <{graph_name!s}>")
 
     def drop_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
-        self.query(f"DROP GRAPH <{str(graph_name)}>")
+        self.query(f"DROP GRAPH <{graph_name!s}>")
 
     def list_graphs(self) -> list[URIRef]:
-        result = self.query("SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } }")
+        # GRAPH ?g { } reads the named-graph catalog (cheap) rather than scanning
+        # every triple. FILTER(isIRI(?g)) skips blank/null graph names: Jena TDB2
+        # can keep a dangling null graph node after compact or a crashed write,
+        # and DISTINCT then NPEs in Node.hashCode() while streaming SPARQL JSON
+        # (HTTP 200 + truncated body), which used to crash ABI on boot.
+        result = self.query(
+            "SELECT DISTINCT ?g WHERE { GRAPH ?g { } FILTER(isIRI(?g)) }"
+        )
         graphs: list[URIRef] = []
         for row in result:
             graph = getattr(row, "g", None)

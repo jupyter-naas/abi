@@ -36,42 +36,42 @@ def test_imports():
     )
     from naas_abi_core.services.vector_store.adapters.QdrantAdapter import QdrantAdapter
 
-    Agent
-    IntentAgent
-    CacheService
-    CacheFactory
-    CachePort
-    CacheFSAdapter
-    EmailService
-    EmailFactory
-    IEmailAdapter
-    SMTPAdapter
-    ObjectStorageService
-    ObjectStorageSecondaryAdapterFS
-    ObjectStorageSecondaryAdapterNaas
-    ObjectStorageSecondaryAdapterS3
-    ObjectStorageSecondaryAdapterFS
-    ObjectStorageSecondaryAdapterNaas
-    ObjectStorageSecondaryAdapterS3
-    TripleStoreService
-    TripleStoreFactory
-    TripleStorePorts
-    ApacheJenaTDB2
-    AWSNeptune
-    Oxigraph
-    ObjectStorageSecondaryAdapterNaas
-    ObjectStorageSecondaryAdapterS3
-    TripleStoreService
-    TripleStoreFactory
-    Secret
-    SecretPorts
-    Base64Secret
-    dotenv_secret_secondaryadaptor
-    NaasSecret
-    VectorStoreFactory
-    VectorStoreService
-    IVectorStorePort
-    QdrantAdapter
-    VectorStoreService
-    IVectorStorePort
-    QdrantAdapter
+    _ = Agent
+    _ = IntentAgent
+    _ = CacheService
+    _ = CacheFactory
+    _ = CachePort
+    _ = CacheFSAdapter
+    _ = EmailService
+    _ = EmailFactory
+    _ = IEmailAdapter
+    _ = SMTPAdapter
+    _ = ObjectStorageService
+    _ = ObjectStorageSecondaryAdapterFS
+    _ = ObjectStorageSecondaryAdapterNaas
+    _ = ObjectStorageSecondaryAdapterS3
+    _ = ObjectStorageSecondaryAdapterFS
+    _ = ObjectStorageSecondaryAdapterNaas
+    _ = ObjectStorageSecondaryAdapterS3
+    _ = TripleStoreService
+    _ = TripleStoreFactory
+    _ = TripleStorePorts
+    _ = ApacheJenaTDB2
+    _ = AWSNeptune
+    _ = Oxigraph
+    _ = ObjectStorageSecondaryAdapterNaas
+    _ = ObjectStorageSecondaryAdapterS3
+    _ = TripleStoreService
+    _ = TripleStoreFactory
+    _ = Secret
+    _ = SecretPorts
+    _ = Base64Secret
+    _ = dotenv_secret_secondaryadaptor
+    _ = NaasSecret
+    _ = VectorStoreFactory
+    _ = VectorStoreService
+    _ = IVectorStorePort
+    _ = QdrantAdapter
+    _ = VectorStoreService
+    _ = IVectorStorePort
+    _ = QdrantAdapter

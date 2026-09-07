@@ -1,0 +1,7 @@
+/* organizations settings / billing — page chrome; plan cards still use Tailwind in TSX */
+
+.org-settings-billing-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}

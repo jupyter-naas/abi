@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import requests
 from naas_abi_core import logger
@@ -43,8 +43,8 @@ class GitHubGraphqlIntegration(Integration):
         }
 
     def execute_query(
-        self, query: str, variables: Optional[Dict] = None
-    ) -> Dict[str, Any]:
+        self, query: str, variables: dict | None = None
+    ) -> dict[str, Any]:
         """Execute a GraphQL query against Github's API.
 
         Args:
@@ -72,10 +72,10 @@ class GitHubGraphqlIntegration(Integration):
 
             return result
         except IntegrationConnectionError as e:
-            logger.error(f"Github GraphQL API request failed: {str(e)}")
+            logger.error(f"Github GraphQL API request failed: {e!s}")
             return {"error": str(e)}
 
-    def get_project_node_id(self, organization: str, number: int) -> Dict[str, Any]:
+    def get_project_node_id(self, organization: str, number: int) -> dict[str, Any]:
         """Get the node ID of an organization project.
 
         Args:
@@ -97,7 +97,7 @@ class GitHubGraphqlIntegration(Integration):
         variables = {"org": organization, "number": int(number)}
         return self.execute_query(query, variables)
 
-    def get_project_details(self, project_node_id: str) -> Dict[str, Any]:
+    def get_project_details(self, project_node_id: str) -> dict[str, Any]:
         """Get detailed information about a GitHub Project.
 
         Args:
@@ -179,7 +179,7 @@ class GitHubGraphqlIntegration(Integration):
         project_details = self.get_project_details(project_node_id)
 
         # Get current date
-        current_date = datetime.now()
+        current_date = datetime.now(UTC)
 
         # Find iteration field and extract iterations
         iteration_field = next(
@@ -198,14 +198,14 @@ class GitHubGraphqlIntegration(Integration):
 
         # Find current iteration based on start date and duration
         for iteration in iterations:
-            start_date = datetime.strptime(iteration["startDate"], "%Y-%m-%d")
+            start_date = datetime.strptime(iteration["startDate"], "%Y-%m-%d").replace(tzinfo=UTC)
             end_date = start_date + timedelta(days=iteration["duration"])
             if start_date <= current_date <= end_date:
                 return iteration["id"]
 
         return None
 
-    def list_priorities(self, project_node_id: str) -> List[Dict[str, Any]]:
+    def list_priorities(self, project_node_id: str) -> list[dict[str, Any]]:
         """List all priorities configured in a GitHub Project.
 
         Args:
@@ -234,7 +234,7 @@ class GitHubGraphqlIntegration(Integration):
         priorities = priority_field.get("options", [])
         return priorities
 
-    def get_project_fields(self, project_id: str) -> Dict[str, Any]:
+    def get_project_fields(self, project_id: str) -> dict[str, Any]:
         """Get information about project fields in a GitHub Project.
 
         Args:
@@ -284,7 +284,7 @@ class GitHubGraphqlIntegration(Integration):
         variables = {"projectId": project_id}
         return self.execute_query(query, variables)
 
-    def get_item_id_from_node_id(self, node_id: str) -> Dict[str, Any]:
+    def get_item_id_from_node_id(self, node_id: str) -> dict[str, Any]:
         """Retrieves a project item ID from a node ID using the GitHub GraphQL API.
 
         Args:
@@ -330,7 +330,7 @@ class GitHubGraphqlIntegration(Integration):
         variables = {"nodeId": node_id}
         return self.execute_query(query, variables)
 
-    def get_item_details(self, item_id: str) -> Dict[str, Any]:
+    def get_item_details(self, item_id: str) -> dict[str, Any]:
         """Retrieves a project item using its ID from the GitHub GraphQL API.
 
         Args:
@@ -417,13 +417,13 @@ class GitHubGraphqlIntegration(Integration):
         self,
         project_node_id: str,
         issue_node_id: str,
-        status_field_id: Optional[str] = None,
-        priority_field_id: Optional[str] = None,
-        iteration_field_id: Optional[str] = None,
-        status_option_id: Optional[str] = None,
-        priority_option_id: Optional[str] = None,
-        iteration_option_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        status_field_id: str | None = None,
+        priority_field_id: str | None = None,
+        iteration_field_id: str | None = None,
+        status_option_id: str | None = None,
+        priority_option_id: str | None = None,
+        iteration_option_id: str | None = None,
+    ) -> dict[str, Any]:
         """
         Associates an issue with a project using the GitHub GraphQL API and sets the status and priority fields.
 
@@ -462,9 +462,9 @@ class GitHubGraphqlIntegration(Integration):
         item_id = add_result["data"]["addProjectV2ItemById"]["item"]["id"]
 
         # Optional mutation responses are initialized to None when not executed.
-        status_result: Dict[str, Any] | None = None
-        priority_result: Dict[str, Any] | None = None
-        iteration_result: Dict[str, Any] | None = None
+        status_result: dict[str, Any] | None = None
+        priority_result: dict[str, Any] | None = None
+        iteration_result: dict[str, Any] | None = None
 
         # Update status field if provided
         if status_field_id and status_option_id:

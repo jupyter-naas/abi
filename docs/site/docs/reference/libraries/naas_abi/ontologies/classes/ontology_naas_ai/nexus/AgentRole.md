@@ -16,7 +16,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.AgentRole import AgentRole
+from naas_abi.ontologies.classes.ontology_demo.nexus.AgentRole import AgentRole
 
 class MyAgentRole(AgentRole):
     def actions(self):

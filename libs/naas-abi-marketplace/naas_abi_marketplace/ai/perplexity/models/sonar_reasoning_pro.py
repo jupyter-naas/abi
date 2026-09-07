@@ -1,6 +1,6 @@
 from langchain_perplexity import ChatPerplexity
-from naas_abi_marketplace.ai.perplexity import ABIModule
 from naas_abi_core.models.Model import ChatModel
+from naas_abi_marketplace.ai.perplexity import ABIModule
 from pydantic import SecretStr
 
 MODEL_ID = "sonar-reasoning-pro"

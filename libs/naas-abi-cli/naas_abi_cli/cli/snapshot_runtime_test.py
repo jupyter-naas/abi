@@ -1,6 +1,6 @@
 import io
 import tarfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import click
@@ -9,7 +9,7 @@ import pytest
 from naas_abi_cli.cli import snapshot_runtime as rt
 from naas_abi_cli.cli.snapshot_runtime import SnapshotManifest
 
-FIXED_NOW = datetime(2026, 6, 30, 14, 5, 9, tzinfo=timezone.utc)
+FIXED_NOW = datetime(2026, 6, 30, 14, 5, 9, tzinfo=UTC)
 
 
 # --------------------------------------------------------------------------- #
@@ -23,7 +23,10 @@ def test_sanitize_slug_normalises_text() -> None:
 
 def test_generate_snapshot_id_with_and_without_slug() -> None:
     assert rt.generate_snapshot_id(FIXED_NOW) == "20260630-140509"
-    assert rt.generate_snapshot_id(FIXED_NOW, "Pre Upgrade") == "20260630-140509-pre-upgrade"
+    assert (
+        rt.generate_snapshot_id(FIXED_NOW, "Pre Upgrade")
+        == "20260630-140509-pre-upgrade"
+    )
     # A slug that sanitises to empty is dropped.
     assert rt.generate_snapshot_id(FIXED_NOW, "***") == "20260630-140509"
 
@@ -129,13 +132,17 @@ def test_chown_to_host_fragment() -> None:
         assert frag == ""
 
 
-def test_archive_volume_tars_via_root_helper(tmp_path: Path, monkeypatch) -> None:
+def test_archive_volumes_returns_ownership_to_host(tmp_path: Path, monkeypatch) -> None:
     calls: list[list[str]] = []
     monkeypatch.setattr(rt, "run_docker", lambda args, **kw: calls.append(args))
-    rt.archive_volume("abi_postgres_data", tmp_path / "volumes", "postgres_data")
+    monkeypatch.setattr(rt.os, "getuid", lambda: 1000, raising=False)
+    monkeypatch.setattr(rt.os, "getgid", lambda: 1001, raising=False)
+    rt.archive_volumes({"postgres_data": "abi_postgres_data"}, tmp_path / "volumes")
     joined = " ".join(calls[0])
     assert "type=volume,source=abi_postgres_data" in joined
-    assert "tar czf /to/postgres_data.tar.gz -C /from ." in joined
+    assert "tar cf - -C /from/postgres_data . | zstd" in joined
+    assert calls[0][-1].endswith(" && chown -R 1000:1001 /to")
+    assert calls[0][-1].startswith("set -eo pipefail;")
 
 
 def test_archive_storage_uses_root_helper(tmp_path: Path, monkeypatch) -> None:
@@ -167,7 +174,7 @@ def test_extract_storage_rejects_path_traversal(tmp_path: Path) -> None:
 def _make_snapshot_dir(base: Path, snapshot_id: str) -> Path:
     snap_dir = base / snapshot_id
     (snap_dir / "volumes").mkdir(parents=True)
-    (snap_dir / "volumes" / "postgres_data.tar.gz").write_bytes(b"vol")
+    (snap_dir / "volumes" / rt.volume_archive_name("postgres_data")).write_bytes(b"vol")
     manifest = SnapshotManifest(
         id=snapshot_id,
         # created_at tracks the id so list ordering is deterministic in tests.
@@ -190,9 +197,7 @@ def test_export_then_import_round_trip(tmp_path: Path) -> None:
     dest_root = tmp_path / "dest"
     imported_id = rt.import_snapshot(archive, root=dest_root)
     assert imported_id == "20260630-140509"
-    manifest = rt.read_manifest(
-        rt.snapshots_root(dest_root) / "20260630-140509"
-    )
+    manifest = rt.read_manifest(rt.snapshots_root(dest_root) / "20260630-140509")
     assert manifest.volumes == ["postgres_data"]
 
 
@@ -232,13 +237,16 @@ def test_create_snapshot_stops_archives_and_restarts(
     monkeypatch.setattr(rt, "volume_exists", lambda name: True)
     monkeypatch.setattr(rt, "current_git_commit", lambda root: "abc1234")
     monkeypatch.setattr(rt, "config_hashes", lambda root: {})
-    monkeypatch.setattr(rt, "run_compose", lambda args, **kw: compose_calls.append(args))
     monkeypatch.setattr(
-        rt, "archive_volume", lambda volume, dest, key: archived.append(key)
+        rt, "run_compose", lambda args, **kw: compose_calls.append(args)
+    )
+    monkeypatch.setattr(
+        rt, "archive_volumes", lambda volumes, dest: archived.extend(volumes)
     )
     monkeypatch.setattr(
         rt, "archive_storage", lambda root, dest: Path(dest).write_bytes(b"s")
     )
+    monkeypatch.setattr(rt, "ensure_snapshot_helper_image", lambda: None)
 
     manifest = rt.create_snapshot(
         note="pre-migration", now=FIXED_NOW, root=tmp_path, echo=lambda m: None
@@ -271,12 +279,15 @@ def test_create_snapshot_cleans_up_and_restarts_on_failure(
     compose_calls: list[list[str]] = []
     monkeypatch.setattr(rt, "compose_project_name", lambda: "abi")
     monkeypatch.setattr(rt, "volume_exists", lambda name: True)
-    monkeypatch.setattr(rt, "run_compose", lambda args, **kw: compose_calls.append(args))
+    monkeypatch.setattr(
+        rt, "run_compose", lambda args, **kw: compose_calls.append(args)
+    )
 
-    def _boom(volume: str, dest: Path, key: str) -> None:
+    def _boom(volumes: dict, dest: Path) -> None:
         raise click.ClickException("archive blew up")
 
-    monkeypatch.setattr(rt, "archive_volume", _boom)
+    monkeypatch.setattr(rt, "archive_volumes", _boom)
+    monkeypatch.setattr(rt, "ensure_snapshot_helper_image", lambda: None)
 
     with pytest.raises(click.ClickException, match="archive blew up"):
         rt.create_snapshot(now=FIXED_NOW, root=tmp_path, echo=lambda m: None)
@@ -307,12 +318,15 @@ def test_restore_snapshot_takes_safety_snapshot_and_restores(
     monkeypatch.setattr(rt, "current_git_commit", lambda root: "abc1234")
     monkeypatch.setattr(rt, "config_hashes", lambda root: {})
     monkeypatch.setattr(rt, "volume_exists", lambda name: True)
-    monkeypatch.setattr(rt, "run_compose", lambda args, **kw: compose_calls.append(args))
+    monkeypatch.setattr(
+        rt, "run_compose", lambda args, **kw: compose_calls.append(args)
+    )
     monkeypatch.setattr(rt, "reset_volume", lambda vol: reset.append(vol))
     monkeypatch.setattr(
         rt, "extract_volume", lambda vol, src, key: extracted.append(key)
     )
     monkeypatch.setattr(rt, "extract_storage", lambda root, src: None)
+    monkeypatch.setattr(rt, "ensure_snapshot_helper_image", lambda: None)
 
     def _fake_safety(**kw):
         safety_calls.append(kw.get("slug"))
@@ -321,7 +335,11 @@ def test_restore_snapshot_takes_safety_snapshot_and_restores(
     monkeypatch.setattr(rt, "create_snapshot", _fake_safety)
 
     rt.restore_snapshot(
-        "20260101-000000", safety=True, now=FIXED_NOW, root=tmp_path, echo=lambda m: None
+        "20260101-000000",
+        safety=True,
+        now=FIXED_NOW,
+        root=tmp_path,
+        echo=lambda m: None,
     )
 
     assert safety_calls == ["safety"]
@@ -343,6 +361,7 @@ def test_restore_snapshot_can_skip_safety(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(rt, "run_compose", lambda args, **kw: None)
     monkeypatch.setattr(rt, "reset_volume", lambda vol: None)
     monkeypatch.setattr(rt, "extract_volume", lambda vol, src, key: None)
+    monkeypatch.setattr(rt, "ensure_snapshot_helper_image", lambda: None)
 
     def _record_safety(**kw):
         safety_calls.append("called")
@@ -350,7 +369,11 @@ def test_restore_snapshot_can_skip_safety(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(rt, "create_snapshot", _record_safety)
 
     rt.restore_snapshot(
-        "20260101-000000", safety=False, now=FIXED_NOW, root=tmp_path, echo=lambda m: None
+        "20260101-000000",
+        safety=False,
+        now=FIXED_NOW,
+        root=tmp_path,
+        echo=lambda m: None,
     )
     assert safety_calls == []
 
@@ -390,14 +413,17 @@ def test_import_rejects_colliding_id_and_force_replaces(tmp_path: Path) -> None:
     dest_base.mkdir(parents=True)
     _make_snapshot_dir(dest_base, "20260630-140509")
     # Give the existing snapshot an extra tarball to prove no silent merge.
-    (dest_base / "20260630-140509" / "volumes" / "minio_data.tar.gz").write_bytes(b"x")
+    orphan = (
+        dest_base / "20260630-140509" / "volumes" / rt.volume_archive_name("minio_data")
+    )
+    orphan.write_bytes(b"x")
 
     with pytest.raises(click.ClickException, match="already exists locally"):
         rt.import_snapshot(archive, root=dest_root)
 
     # --force replaces cleanly (the orphan minio tarball must not survive).
     rt.import_snapshot(archive, root=dest_root, force=True)
-    assert not (dest_base / "20260630-140509" / "volumes" / "minio_data.tar.gz").exists()
+    assert not orphan.exists()
 
 
 def test_import_rejects_incomplete_archive(tmp_path: Path) -> None:
@@ -438,7 +464,7 @@ def test_restore_preflight_rejects_missing_volume_tarball(
     base = rt.snapshots_root(tmp_path)
     snap_dir = base / "20260101-000000"
     (snap_dir / "volumes").mkdir(parents=True)
-    (snap_dir / "volumes" / "postgres_data.tar.gz").write_bytes(b"ok")
+    (snap_dir / "volumes" / rt.volume_archive_name("postgres_data")).write_bytes(b"ok")
     # Manifest lists minio_data too, but its tarball is absent.
     rt.write_manifest(
         snap_dir,
@@ -454,7 +480,9 @@ def test_restore_preflight_rejects_missing_volume_tarball(
     monkeypatch.setattr(rt, "compose_project_name", lambda: "abi")
     monkeypatch.setattr(rt, "current_git_commit", lambda root: None)
     monkeypatch.setattr(rt, "config_hashes", lambda root: {})
-    monkeypatch.setattr(rt, "run_compose", lambda args, **kw: compose_calls.append(args))
+    monkeypatch.setattr(
+        rt, "run_compose", lambda args, **kw: compose_calls.append(args)
+    )
     monkeypatch.setattr(rt, "reset_volume", lambda vol: reset.append(vol))
 
     with pytest.raises(click.ClickException, match="Refusing to restore"):
@@ -478,15 +506,22 @@ def test_restore_skips_safety_on_fresh_host(tmp_path: Path, monkeypatch) -> None
     monkeypatch.setattr(rt, "current_git_commit", lambda root: None)
     monkeypatch.setattr(rt, "config_hashes", lambda root: {})
     monkeypatch.setattr(rt, "volume_exists", lambda name: False)  # fresh host
-    monkeypatch.setattr(rt, "run_compose", lambda args, **kw: compose_calls.append(args))
+    monkeypatch.setattr(
+        rt, "run_compose", lambda args, **kw: compose_calls.append(args)
+    )
     monkeypatch.setattr(rt, "reset_volume", lambda vol: reset.append(vol))
     monkeypatch.setattr(rt, "extract_volume", lambda vol, src, key: None)
+    monkeypatch.setattr(rt, "ensure_snapshot_helper_image", lambda: None)
     monkeypatch.setattr(
         rt, "create_snapshot", lambda **kw: safety_calls.append("called")
     )
 
     rt.restore_snapshot(
-        "20260101-000000", safety=True, now=FIXED_NOW, root=tmp_path, echo=lambda m: None
+        "20260101-000000",
+        safety=True,
+        now=FIXED_NOW,
+        root=tmp_path,
+        echo=lambda m: None,
     )
     # Safety was skipped (nothing to snapshot) but the restore still ran.
     assert safety_calls == []
@@ -494,7 +529,9 @@ def test_restore_skips_safety_on_fresh_host(tmp_path: Path, monkeypatch) -> None
     assert ["up", "-d"] in compose_calls
 
 
-def test_restore_brings_stack_up_when_extract_fails(tmp_path: Path, monkeypatch) -> None:
+def test_restore_brings_stack_up_when_extract_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
     base = rt.snapshots_root(tmp_path)
     base.mkdir(parents=True)
     _make_snapshot_dir(base, "20260101-000000")
@@ -504,13 +541,16 @@ def test_restore_brings_stack_up_when_extract_fails(tmp_path: Path, monkeypatch)
     monkeypatch.setattr(rt, "current_git_commit", lambda root: None)
     monkeypatch.setattr(rt, "config_hashes", lambda root: {})
     monkeypatch.setattr(rt, "volume_exists", lambda name: True)
-    monkeypatch.setattr(rt, "run_compose", lambda args, **kw: compose_calls.append(args))
+    monkeypatch.setattr(
+        rt, "run_compose", lambda args, **kw: compose_calls.append(args)
+    )
     monkeypatch.setattr(rt, "reset_volume", lambda vol: None)
     monkeypatch.setattr(
         rt,
         "create_snapshot",
         lambda **kw: SnapshotManifest(id="20260101-000000-safety", created_at="t"),
     )
+    monkeypatch.setattr(rt, "ensure_snapshot_helper_image", lambda: None)
 
     def _boom(vol, src, key):
         raise click.ClickException("tar truncated")
@@ -519,7 +559,11 @@ def test_restore_brings_stack_up_when_extract_fails(tmp_path: Path, monkeypatch)
 
     with pytest.raises(click.ClickException, match="tar truncated"):
         rt.restore_snapshot(
-            "20260101-000000", safety=True, now=FIXED_NOW, root=tmp_path, echo=lambda m: None
+            "20260101-000000",
+            safety=True,
+            now=FIXED_NOW,
+            root=tmp_path,
+            echo=lambda m: None,
         )
     # Stack is brought back up despite the mid-restore failure.
     assert ["down"] in compose_calls
@@ -558,6 +602,106 @@ def test_volume_exists_distinguishes_absent_from_docker_down(monkeypatch) -> Non
     )
     with pytest.raises(click.ClickException):
         rt.volume_exists("x")
+
+
+class _InspectProc:
+    def __init__(self, returncode: int, stderr: str = "") -> None:
+        self.returncode = returncode
+        self.stderr = stderr
+        self.stdout = ""
+
+
+def test_ensure_snapshot_helper_image_skips_build_when_present(monkeypatch) -> None:
+    calls: list[list[str]] = []
+
+    def _fake_run(args, **kwargs):
+        calls.append(args)
+        return _InspectProc(0)  # inspect succeeds -> image already present
+
+    monkeypatch.setattr(rt.subprocess, "run", _fake_run)
+    rt.ensure_snapshot_helper_image()
+    # Only the inspect ran; no build was triggered.
+    assert calls == [["docker", "image", "inspect", rt.SNAPSHOT_HELPER_IMAGE]]
+
+
+def test_ensure_snapshot_helper_image_builds_when_missing(monkeypatch) -> None:
+    calls: list[list[str]] = []
+    build_inputs: list[str | None] = []
+
+    def _fake_run(args, **kwargs):
+        calls.append(args)
+        if args[:3] == ["docker", "image", "inspect"]:
+            return _InspectProc(1, "No such image")
+        build_inputs.append(kwargs.get("input"))
+        return _InspectProc(0)
+
+    monkeypatch.setattr(rt.subprocess, "run", _fake_run)
+    rt.ensure_snapshot_helper_image()
+    assert ["docker", "build", "-t", rt.SNAPSHOT_HELPER_IMAGE, "-"] in calls
+    # The Dockerfile is piped in on stdin, not written to disk.
+    assert build_inputs == [rt.SNAPSHOT_HELPER_DOCKERFILE]
+
+
+def test_ensure_snapshot_helper_image_raises_on_build_failure(monkeypatch) -> None:
+    def _fake_run(args, **kwargs):
+        if args[:3] == ["docker", "image", "inspect"]:
+            return _InspectProc(1)
+        raise rt.subprocess.CalledProcessError(2, args, stderr="build broke")
+
+    monkeypatch.setattr(rt.subprocess, "run", _fake_run)
+    with pytest.raises(click.ClickException, match="build broke"):
+        rt.ensure_snapshot_helper_image()
+
+
+def test_archive_volumes_batches_into_one_zstd_helper(
+    monkeypatch, tmp_path: Path
+) -> None:
+    captured: list[list[str]] = []
+    monkeypatch.setattr(rt, "run_docker", lambda args, **kw: captured.append(args))
+
+    rt.archive_volumes(
+        {"fuseki_data": "abi_fuseki_data", "redis_data": "abi_redis_data"}, tmp_path
+    )
+
+    # A single container archives every volume.
+    assert len(captured) == 1
+    args = captured[0]
+    assert rt.SNAPSHOT_HELPER_IMAGE in args
+    # Each volume is mounted read-only at its own /from/<key> path.
+    assert any(
+        "source=abi_fuseki_data" in a
+        and "destination=/from/fuseki_data" in a
+        and "readonly" in a
+        for a in args
+    )
+    assert any(
+        "source=abi_redis_data" in a
+        and "destination=/from/redis_data" in a
+        and "readonly" in a
+        for a in args
+    )
+    script = args[-1]
+    assert "-T0" in script  # compress with all cores
+    assert "/to/fuseki_data.tar.zst" in script
+    assert "/to/redis_data.tar.zst" in script
+
+
+def test_archive_volumes_is_noop_when_empty(monkeypatch, tmp_path: Path) -> None:
+    called: list[list[str]] = []
+    monkeypatch.setattr(rt, "run_docker", lambda args, **kw: called.append(args))
+    rt.archive_volumes({}, tmp_path)
+    assert called == []
+
+
+def test_extract_volume_uses_zstd_helper(monkeypatch, tmp_path: Path) -> None:
+    captured: list[list[str]] = []
+    monkeypatch.setattr(rt, "run_docker", lambda args, **kw: captured.append(args))
+
+    rt.extract_volume("abi_fuseki_data", tmp_path, "fuseki_data")
+
+    shell_cmd = captured[0][-1]
+    assert "zstd -dc /from/fuseki_data.tar.zst" in shell_cmd
+    assert "tar xf - -C /to" in shell_cmd
 
 
 def test_import_dotslash_archive_gives_clean_error(tmp_path: Path) -> None:
@@ -606,7 +750,7 @@ def _build_snapshot_archive(
     staging = tmp_path / f"staging-{dir_name}"
     (staging / "volumes").mkdir(parents=True)
     for key in volumes:
-        (staging / "volumes" / f"{key}.tar.gz").write_bytes(b"x")
+        (staging / "volumes" / rt.volume_archive_name(key)).write_bytes(b"x")
     rt.write_manifest(
         staging, SnapshotManifest(id=manifest_id, created_at="t", volumes=volumes)
     )
@@ -628,7 +772,10 @@ def test_import_rejects_manifest_id_mismatch(tmp_path: Path) -> None:
 
 def test_import_rejects_unmanaged_volume(tmp_path: Path) -> None:
     archive = _build_snapshot_archive(
-        tmp_path, "20260101-000000", manifest_id="20260101-000000", volumes=["caddy_data"]
+        tmp_path,
+        "20260101-000000",
+        manifest_id="20260101-000000",
+        volumes=["caddy_data"],
     )
     dest = tmp_path / "dest"
     with pytest.raises(click.ClickException, match="does not manage"):
@@ -642,7 +789,7 @@ def test_restore_rejects_unmanaged_volume_before_destruction(
     base = rt.snapshots_root(tmp_path)
     snap_dir = base / "20260101-000000"
     (snap_dir / "volumes").mkdir(parents=True)
-    (snap_dir / "volumes" / "caddy_data.tar.gz").write_bytes(b"x")
+    (snap_dir / "volumes" / rt.volume_archive_name("caddy_data")).write_bytes(b"x")
     rt.write_manifest(
         snap_dir,
         SnapshotManifest(
@@ -653,7 +800,9 @@ def test_restore_rejects_unmanaged_volume_before_destruction(
     compose_calls: list[list[str]] = []
     reset: list[str] = []
     monkeypatch.setattr(rt, "compose_project_name", lambda: "abi")
-    monkeypatch.setattr(rt, "run_compose", lambda args, **kw: compose_calls.append(args))
+    monkeypatch.setattr(
+        rt, "run_compose", lambda args, **kw: compose_calls.append(args)
+    )
     monkeypatch.setattr(rt, "reset_volume", lambda vol: reset.append(vol))
 
     with pytest.raises(click.ClickException, match="does not manage"):
@@ -688,7 +837,9 @@ def test_import_rejects_parent_top_level_member(tmp_path: Path) -> None:
     _tar_with_member(archive, "../escape.txt")
     proj = tmp_path / "proj"
     rt.snapshots_root(proj).mkdir(parents=True)
-    sentinel = proj / "sentinel.txt"  # sibling of .snapshots -> would die on rmtree('..')
+    sentinel = (
+        proj / "sentinel.txt"
+    )  # sibling of .snapshots -> would die on rmtree('..')
     sentinel.write_text("keep", encoding="utf-8")
 
     with pytest.raises(click.ClickException, match="valid snapshot directory"):

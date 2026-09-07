@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-07-31 11:44",
+  "records": [
+    {
+      "role": "Owner",
+      "key": "owner",
+      "scope": "Global",
+      "description": "Root identity declared in config.yaml — full access, never editable from the app.",
+      "permissions": 13,
+      "users": 1,
+      "managed_in": "config.yaml",
+      "status": "Protected"
+    },
+    {
+      "role": "Admin",
+      "key": "admin",
+      "scope": "Global",
+      "description": "Full access to every perimeter and every administration screen.",
+      "permissions": 13,
+      "users": 2,
+      "managed_in": "Application",
+      "status": "Active"
+    },
+    {
+      "role": "Finance Manager",
+      "key": "finance_manager",
+      "scope": "Perimeter",
+      "description": "Owns the numbers: closes periods, validates entries, revises budgets.",
+      "permissions": 8,
+      "users": 3,
+      "managed_in": "Application",
+      "status": "Active"
+    },
+    {
+      "role": "Controller",
+      "key": "controller",
+      "scope": "Perimeter",
+      "description": "Steers budget and forecast without touching the ledger lock.",
+      "permissions": 5,
+      "users": 4,
+      "managed_in": "Application",
+      "status": "Active"
+    },
+    {
+      "role": "Accountant",
+      "key": "accountant",
+      "scope": "Perimeter",
+      "description": "Prepares entries and the close checklist; validation sits above.",
+      "permissions": 5,
+      "users": 5,
+      "managed_in": "Application",
+      "status": "Active"
+    },
+    {
+      "role": "Analyst",
+      "key": "analyst",
+      "scope": "Perimeter",
+      "description": "Reads and extracts; changes nothing.",
+      "permissions": 2,
+      "users": 7,
+      "managed_in": "Application",
+      "status": "Active"
+    },
+    {
+      "role": "Viewer",
+      "key": "viewer",
+      "scope": "Perimeter",
+      "description": "Reads the pages explicitly granted to them.",
+      "permissions": 1,
+      "users": 12,
+      "managed_in": "Application",
+      "status": "Active"
+    },
+    {
+      "role": "Auditor",
+      "key": "auditor",
+      "scope": "Global",
+      "description": "Read-only across every perimeter, plus the audit trail.",
+      "permissions": 3,
+      "users": 2,
+      "managed_in": "Application",
+      "status": "Active"
+    }
+  ]
+}

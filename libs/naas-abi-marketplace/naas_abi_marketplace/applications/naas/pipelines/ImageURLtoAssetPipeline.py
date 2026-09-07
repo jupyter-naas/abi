@@ -1,7 +1,7 @@
 import hashlib
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any
 
 import requests
 from fastapi import APIRouter
@@ -94,7 +94,7 @@ class ImageURLtoAssetPipeline(Pipeline):
 
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, ImageURLtoAssetPipelineParameters):
-            raise ValueError(
+            raise TypeError(
                 "Parameters must be of type ImageURLtoAssetPipelineParameters"
             )
 
@@ -104,7 +104,7 @@ class ImageURLtoAssetPipeline(Pipeline):
 
         # Check existing objects for this subject/predicate
         graph = self.__sparql_utils.get_subject_graph(parameters.subject_uri)
-        objects = set(o for _, _, o in graph.triples((subject, predicate, None)))
+        objects = {o for _, _, o in graph.triples((subject, predicate, None))}
 
         # Return if URL already exists
         if parameters.image_url in objects:
@@ -148,7 +148,7 @@ class ImageURLtoAssetPipeline(Pipeline):
 
             return graph_insert
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(
                 f"Error uploading image from URL '{parameters.image_url}' to Storage: {e}"
             )
@@ -164,7 +164,7 @@ class ImageURLtoAssetPipeline(Pipeline):
         response.raise_for_status()  # Raise exception for bad status codes
         return response.content
 
-    def _upload_to_storage(self, image_data: bytes, file_name: str) -> Optional[str]:
+    def _upload_to_storage(self, image_data: bytes, file_name: str) -> str | None:
         """Upload image to Storage and return the asset URL."""
         asset = self.__naas_integration.upload_asset(
             data=image_data,
@@ -178,8 +178,7 @@ class ImageURLtoAssetPipeline(Pipeline):
         if not asset_url:
             logger.error(f"Error uploading image to Storage: {asset}")
             return None
-        if asset_url.endswith("/"):
-            asset_url = asset_url[:-1]
+        asset_url = asset_url.removesuffix("/")
         return asset_url
 
     def as_tools(self) -> list[BaseTool]:
@@ -205,4 +204,3 @@ class ImageURLtoAssetPipeline(Pipeline):
     ) -> None:
         if tags is None:
             tags = []
-        return None

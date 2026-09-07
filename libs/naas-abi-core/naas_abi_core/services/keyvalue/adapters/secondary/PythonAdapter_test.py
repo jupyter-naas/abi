@@ -75,8 +75,8 @@ class TestPythonAdapter(GenericKVSecondaryAdapterTest):
 
     def test_delete_if_value_matches(self, adapter):
         key = f"naas-abi-core:kv:cmp-del:{uuid4()}"
-        token = f"token:{uuid4()}".encode("utf-8")
-        other = f"token:{uuid4()}".encode("utf-8")
+        token = f"token:{uuid4()}".encode()
+        other = f"token:{uuid4()}".encode()
 
         adapter.set(key, token, ttl=5)
         assert adapter.delete_if_value_matches(key, other) is False
@@ -118,8 +118,19 @@ class TestPythonAdapter(GenericKVSecondaryAdapterTest):
         def _writer(value: bytes) -> None:
             adapter.set(key, value)
 
-        values = [f"value-{i}".encode("utf-8") for i in range(20)]
+        values = [f"value-{i}".encode() for i in range(20)]
         with ThreadPoolExecutor(max_workers=8) as executor:
             list(executor.map(_writer, values))
 
         assert adapter.get(key) in values
+
+    def test_read_releases_sqlite_lock_for_other_connection(self, tmp_path):
+        db_path = tmp_path / "kv-lock.sqlite3"
+        first = PythonAdapter(persistence_path=str(db_path), busy_timeout_ms=1000)
+        second = PythonAdapter(persistence_path=str(db_path), busy_timeout_ms=1000)
+        key = f"naas-abi-core:kv:lock:{uuid4()}"
+        first.set(key, b"held")
+        assert first.get(key) == b"held"
+        assert first.exists(key) is True
+        second.set(f"{key}-other", b"ok")
+        assert second.get(f"{key}-other") == b"ok"

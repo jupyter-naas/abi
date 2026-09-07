@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, JSON, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
-
 from naas_abi_core.models.opencode.Base import OpencodeBase
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
 
 
 class OpencodeMessage(OpencodeBase):
@@ -23,5 +22,5 @@ class OpencodeMessage(OpencodeBase):
     content: Mapped[str | None] = mapped_column(Text(), nullable=True)
     parts: Mapped[list[dict[str, Any]]] = mapped_column(JSON(), default=list)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )

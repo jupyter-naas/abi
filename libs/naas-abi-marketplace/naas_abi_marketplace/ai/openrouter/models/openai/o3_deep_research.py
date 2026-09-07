@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class O3DeepResearchModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="OpenAI: o3 Deep Research",
+        name="o3 Deep Research",
         owner="openai",
         description="o3-deep-research is OpenAI's advanced model for deep research, designed to tackle complex, multi-step research tasks.\n\nNote: This model always uses the 'web_search' tool which adds additional cost.",
         canonical_slug="openai/o3-deep-research-2025-06-26",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1760129661),
+        created_at=datetime.fromtimestamp(1760129661, tz=UTC),
         pricing={'prompt': '0.00001', 'completion': '0.00004', 'web_search': '0.01', 'input_cache_read': '0.0000025'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['image', 'text', 'file'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 200000, 'max_completion_tokens': 100000, 'is_moderated': True},

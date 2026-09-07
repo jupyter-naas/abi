@@ -244,6 +244,8 @@ class GraphQueryRequest(BaseModel):
     limit: int | None = Field(default=None, ge=1, le=5000)
     include_sparql: bool = False
     force_count_refresh: bool = False
+    # "Always refresh" tick in the Composer: bypass the result cache and re-run the SPARQL.
+    force_refresh: bool = False
 
 
 # ── Response ──────────────────────────────────────────────────────────────────

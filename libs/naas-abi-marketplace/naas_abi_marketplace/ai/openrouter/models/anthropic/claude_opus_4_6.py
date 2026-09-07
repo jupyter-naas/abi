@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class ClaudeOpus46Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=1000000,
-        name="Anthropic: Claude Opus 4.6",
+        name="Opus 4.6",
         owner="anthropic",
         description="Opus 4.6 is Anthropic’s strongest model for coding and long-running professional tasks. It is built for agents that operate across entire workflows rather than single prompts, making it especially effective...",
         canonical_slug="anthropic/claude-4.6-opus-20260205",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1770219050),
+        created_at=datetime.fromtimestamp(1770219050, tz=UTC),
         pricing={'prompt': '0.000005', 'completion': '0.000025', 'web_search': '0.01', 'input_cache_read': '0.0000005', 'input_cache_write': '0.00000625'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['text', 'image', 'file'], 'output_modalities': ['text'], 'tokenizer': 'Claude', 'instruct_type': None},
         top_provider={'context_length': 1000000, 'max_completion_tokens': 128000, 'is_moderated': False},

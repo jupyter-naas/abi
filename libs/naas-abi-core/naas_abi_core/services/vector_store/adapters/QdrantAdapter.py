@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, cast
 from uuid import UUID
 
 import numpy as np
@@ -26,7 +26,7 @@ class QdrantAdapter(IVectorStorePort):
         self,
         host: str = "localhost",
         port: int = 6333,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         https: bool = False,
         timeout: int = 300,
     ):
@@ -35,7 +35,7 @@ class QdrantAdapter(IVectorStorePort):
         self.api_key = api_key
         self.https = https
         self.timeout = timeout
-        self.client: Optional[QdrantClient] = None
+        self.client: QdrantClient | None = None
 
     def initialize(self) -> None:
         if self.client is None:
@@ -82,7 +82,7 @@ class QdrantAdapter(IVectorStorePort):
         self.client.delete_collection(collection_name=collection_name)
         logger.info(f"Deleted collection: {collection_name}")
 
-    def list_collections(self) -> List[str]:
+    def list_collections(self) -> list[str]:
         if not self.client:
             raise RuntimeError("Adapter not initialized")
 
@@ -90,7 +90,7 @@ class QdrantAdapter(IVectorStorePort):
         return [c.name for c in collections.collections]
 
     def store_vectors(
-        self, collection_name: str, documents: List[VectorDocument]
+        self, collection_name: str, documents: list[VectorDocument]
     ) -> None:
         if not self.client:
             raise RuntimeError("Adapter not initialized")
@@ -124,10 +124,10 @@ class QdrantAdapter(IVectorStorePort):
         collection_name: str,
         query_vector: np.ndarray,
         k: int = 10,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: dict[str, Any] | None = None,
         include_vectors: bool = False,
         include_metadata: bool = True,
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         if not self.client:
             raise RuntimeError("Adapter not initialized")
 
@@ -171,7 +171,7 @@ class QdrantAdapter(IVectorStorePort):
 
     def get_vector(
         self, collection_name: str, vector_id: str, include_vector: bool = True
-    ) -> Optional[VectorDocument]:
+    ) -> VectorDocument | None:
         if not self.client:
             raise RuntimeError("Adapter not initialized")
 
@@ -200,9 +200,9 @@ class QdrantAdapter(IVectorStorePort):
         self,
         collection_name: str,
         vector_id: str,
-        vector: Optional[np.ndarray] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        payload: Optional[Dict[str, Any]] = None,
+        vector: np.ndarray | None = None,
+        metadata: dict[str, Any] | None = None,
+        payload: dict[str, Any] | None = None,
     ) -> None:
         if not self.client:
             raise RuntimeError("Adapter not initialized")
@@ -224,11 +224,11 @@ class QdrantAdapter(IVectorStorePort):
                 collection_name=collection_name, payload=new_payload, points=[vector_id]
             )
 
-    def delete_vectors(self, collection_name: str, vector_ids: List) -> None:
+    def delete_vectors(self, collection_name: str, vector_ids: list) -> None:
         if not self.client:
             raise RuntimeError("Adapter not initialized")
 
-        point_ids = cast(List[Union[int, str, UUID]], vector_ids)
+        point_ids = cast(list[int | str | UUID], vector_ids)
 
         # Cast to satisfy mypy: list[str] is compatible with list[int | str | UUID | PointId]
         self.client.delete(

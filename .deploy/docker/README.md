@@ -10,6 +10,9 @@ This directory contains all Docker-related files organized for maintainability a
 docker/
 ├── compose/
 │   └── docker-compose.yml          # Main orchestration configuration
+├── coder_prototype/                # Coder embed harness + workspace templates
+│   ├── template/                   # abi-code-server Coder template
+│   └── slides_template/            # abi-slides Coder template
 ├── images/
 │   ├── Dockerfile                  # Primary application container
 │   └── Dockerfile.linux.x86_64     # Linux x86_64 optimized build

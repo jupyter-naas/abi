@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt4oMiniSearchPreviewModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT-4o-mini Search Preview",
+        name="GPT-4o-mini Search Preview",
         owner="openai",
         description="GPT-4o mini Search Preview is a specialized model for web search in Chat Completions. It is trained to understand and execute web search queries.",
         canonical_slug="openai/gpt-4o-mini-search-preview-2025-03-11",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1741818122),
+        created_at=datetime.fromtimestamp(1741818122, tz=UTC),
         pricing={'prompt': '0.00000015', 'completion': '0.0000006', 'web_search': '0.0275'},
         architecture={'modality': 'text->text', 'input_modalities': ['text'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 128000, 'max_completion_tokens': 16384, 'is_moderated': True},

@@ -1,12 +1,34 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { Sidebar } from './sidebar';
 import { SectionPanel } from './sidebar/section-panel';
+import { ChatSection } from '@/app/workspace/[workspaceId]/chat/components/chat-section';
 import { AIPane } from './ai-pane';
+import { PlatformStatusFooter } from './platform-status-footer';
+import { MobileBottomNav } from './mobile/mobile-bottom-nav';
+import { MobileMoreSheet } from './mobile/mobile-more-sheet';
+import { MobileTopBar } from './mobile/mobile-top-bar';
+import { ChatExportButton } from '@/components/chat/chat-export-button';
+import { ChatInterface } from '@/components/chat/chat-interface';
+import {
+  isMobileChatThreadOpen,
+  parseChatRoute,
+  resolveMobileThreadConversationId,
+} from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
+import { parseFilesRoute } from '@/app/workspace/[workspaceId]/files/lib/files-route';
+import { parseMapsRoute } from '@/app/workspace/[workspaceId]/maps/lib/maps-route';
+import { parseDatasetsRoute } from '@/app/workspace/[workspaceId]/datasets/lib/datasets-route';
+import { FilesSection } from './sidebar/files-section';
+import { MapsSection } from './sidebar/maps-section';
+import { DatasetsSection } from './sidebar/datasets-section';
+import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { PresenceIndicator } from '@/components/presence-indicator';
+import { getWorkspacePath } from './sidebar/utils';
+import { pathNeedsAgentCatalog } from '@/lib/feature-access';
 
 interface WorkspaceLayoutProps {
   children: React.ReactNode;
@@ -45,8 +67,15 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
   const toggleContextPanel = useWorkspaceStore((state) => state.toggleContextPanel);
   const fetchWorkspaces = useWorkspaceStore((state) => state.fetchWorkspaces);
+  const mobilePendingChatSlug = useWorkspaceStore((state) => state.mobilePendingChatSlug);
+  const setMobilePendingChatSlug = useWorkspaceStore((state) => state.setMobilePendingChatSlug);
+  const contextPanelOpen = useWorkspaceStore((state) => state.contextPanelOpen);
   const { setTheme } = useTheme();
   const [orgBorderRadius, setOrgBorderRadius] = useState('0');
+  const [moreOpen, setMoreOpen] = useState(false);
+  const isMobile = useIsMobile();
+  const pathname = usePathname();
+  const router = useRouter();
 
   // Fetch workspaces on mount
   useEffect(() => {
@@ -58,10 +87,10 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     const fetchOrgBranding = async () => {
       const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
       if (!currentWorkspace) return;
-      
+
       // Check if user has explicitly overridden theme
       const hasUserOverride = localStorage.getItem('nexus-theme-user-override') === 'true';
-      
+
       // Fetch workspace details to get organization_id
       try {
         const { authFetch } = await import('@/stores/auth');
@@ -77,7 +106,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
               const radius = orgData.loginBorderRadius ?? orgData.login_border_radius ?? '0';
               console.log('[WorkspaceLayout] Org border radius:', radius, 'from org:', wsData.organization_id);
               setOrgBorderRadius(radius);
-              
+
               // Apply org theme ONLY if user hasn't explicitly overridden it
               if (!hasUserOverride) {
                 const orgTheme = orgData.defaultTheme || orgData.default_theme;
@@ -122,29 +151,41 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkspaceId]);
 
-  // Fetch agents when workspace loads
+  // Agents/skills belong to chat, lab, agent settings, and the open AI pane.
+  // Fetching them on every workspace switch (including Apps) POSTed
+  // /agents/sync and starved GET /api/apps.
   useEffect(() => {
+    const needsAgents = Boolean(
+      currentWorkspaceId && (contextPanelOpen || pathNeedsAgentCatalog(pathname)),
+    );
+    if (!needsAgents || !currentWorkspaceId) return;
     const loadAgents = async () => {
-      if (currentWorkspaceId) {
-        const { useAgentsStore } = await import('@/stores/agents');
-        await useAgentsStore.getState().fetchAgents(currentWorkspaceId);
-      }
+      const { useAgentsStore } = await import('@/stores/agents');
+      await useAgentsStore.getState().fetchAgents(currentWorkspaceId);
+    };
+    const loadSkills = async () => {
+      const { useSkillsStore } = await import('@/stores/skills');
+      await useSkillsStore.getState().fetchSkills(currentWorkspaceId);
     };
     loadAgents();
-  }, [currentWorkspaceId]);
+    loadSkills();
+  }, [currentWorkspaceId, contextPanelOpen, pathname]);
 
-  // Keyboard shortcut: Cmd+K to toggle AI pane
+  // Keyboard shortcut: Cmd+K to toggle the side chat pane (desktop only).
+  // Capture phase so Monaco / editors do not swallow ⌘K as a chord starter.
   useEffect(() => {
+    if (isMobile) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
+        e.stopPropagation();
         toggleContextPanel();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleContextPanel]);
-  
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [toggleContextPanel, isMobile]);
+
   // Find current workspace from state
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
   
@@ -171,10 +212,148 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     }
   }, [primaryColor, accentColor]);
   
+  // Also on the root element, not just the shell div: menus and sheets render
+  // through portals into document.body, outside any inline style we set here.
+  useEffect(() => {
+    document.documentElement.style.setProperty('--org-border-radius', `${orgBorderRadius}px`);
+  }, [orgBorderRadius]);
+
   // Create dynamic CSS variables for org branding
   const themeStyles = {
     '--org-border-radius': `${orgBorderRadius}px`,
   } as React.CSSProperties;
+
+  // The URL owns which chat view is showing: /chat is the list, /chat/{id} and
+  // /chat/new are threads. mobilePendingChatSlug lets the shell flip to the
+  // thread immediately on tap before router.push updates the pathname.
+  const chatRoute = parseChatRoute(pathname);
+  const { isChatRoute, isThread } = chatRoute;
+  const { isFilesRoute, isBrowse: isFilesBrowse } = parseFilesRoute(pathname);
+  const { isMapsRoute, isDataset: isMapsDataset } = parseMapsRoute(pathname);
+  const { isDatasetsRoute, isTable: isDatasetsTable } = parseDatasetsRoute(pathname);
+  const showMobileChatThread = isMobile && isMobileChatThreadOpen(chatRoute, mobilePendingChatSlug);
+  const showMobileChatList = isMobile && isChatRoute && !showMobileChatThread;
+  const mobileThreadConversationId = resolveMobileThreadConversationId(
+    chatRoute,
+    mobilePendingChatSlug,
+  );
+  const showMobileFilesList = isMobile && isFilesRoute && !isFilesBrowse;
+  const showMobileFilesDetail = isMobile && isFilesRoute && isFilesBrowse;
+  const showMobileMapsList = isMobile && isMapsRoute && !isMapsDataset;
+  const showMobileMapsDetail = isMobile && isMapsRoute && isMapsDataset;
+  const showMobileDatasetsList = isMobile && isDatasetsRoute && !isDatasetsTable;
+  const showMobileDatasetsDetail = isMobile && isDatasetsRoute && isDatasetsTable;
+  const showMobileDetail = showMobileChatThread || showMobileFilesDetail || showMobileMapsDetail || showMobileDatasetsDetail;
+
+  useEffect(() => {
+    if (mobilePendingChatSlug && isThread) {
+      setMobilePendingChatSlug(null);
+    }
+  }, [mobilePendingChatSlug, isThread, setMobilePendingChatSlug]);
+
+  const handleFilesListBack = () => {
+    router.replace(getWorkspacePath(currentWorkspaceId, '/files'));
+  };
+
+  const handleMapsListBack = () => {
+    router.replace(getWorkspacePath(currentWorkspaceId, '/maps'));
+  };
+
+  const handleDatasetsListBack = () => {
+    router.replace(getWorkspacePath(currentWorkspaceId, '/datasets'));
+  };
+
+  // Detail views are immersive: dismiss More if it was open.
+  useEffect(() => {
+    if (showMobileDetail) setMoreOpen(false);
+  }, [showMobileDetail]);
+
+  if (isMobile) {
+    return (
+      <div
+        className="flex h-[100dvh] w-screen flex-col overflow-hidden bg-background"
+        style={themeStyles}
+        data-org-branded="true"
+        data-mobile-shell="true"
+      >
+        <MobileTopBar
+          variant={showMobileDetail ? 'detail' : 'top'}
+          // List screens are shell-owned, so no page Header is mounted to name them.
+          title={
+            showMobileChatList ? 'Chat'
+              : showMobileFilesList ? 'Files'
+                : showMobileMapsList ? 'Maps'
+                  : showMobileDatasetsList ? 'Datasets'
+                    : undefined
+          }
+          // The page passes its actions to the desktop Header, but mobile chrome
+          // is shell-owned, so the route decides what the bar carries.
+          actions={showMobileChatThread ? <ChatExportButton /> : undefined}
+          onDetailBack={
+            showMobileFilesDetail
+              ? handleFilesListBack
+              : showMobileMapsDetail
+                ? handleMapsListBack
+                : showMobileDatasetsDetail
+                  ? handleDatasetsListBack
+                  : undefined
+          }
+          detailBackLabel={
+            showMobileFilesDetail
+              ? 'Back to files'
+              : showMobileMapsDetail
+                ? 'Back to maps'
+                : showMobileDatasetsDetail
+                  ? 'Back to datasets'
+                  : undefined
+          }
+        />
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {currentWorkspaceId && <PresenceIndicator workspaceId={currentWorkspaceId} />}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {showMobileChatList ? (
+              <nav className="min-h-0 flex-1 overflow-y-auto p-2">
+                <ChatSection collapsed={false} detailOnly />
+              </nav>
+            ) : showMobileFilesList ? (
+              <nav className="min-h-0 flex-1 overflow-y-auto p-2">
+                <FilesSection collapsed={false} detailOnly />
+              </nav>
+            ) : showMobileMapsList ? (
+              <nav className="min-h-0 flex-1 overflow-y-auto p-2">
+                <MapsSection collapsed={false} detailOnly />
+              </nav>
+            ) : showMobileDatasetsList ? (
+              <nav className="min-h-0 flex-1 overflow-y-auto p-2">
+                <DatasetsSection collapsed={false} detailOnly />
+              </nav>
+            ) : showMobileChatThread ? (
+              // Flex column so ChatInterface flex-1/h-full fills the shell and the
+              // composer pins to the bottom (empty + non-empty). A plain block
+              // wrapper leaves the chat column content-sized and mid-screen.
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <ChatInterface initialConversationId={mobileThreadConversationId} />
+              </div>
+            ) : (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
+            )}
+            <PlatformStatusFooter />
+          </div>
+        </main>
+
+        {/* Teams-style: bottom nav on list tabs only. Detail views own the screen. */}
+        {!showMobileDetail && (
+          <>
+            <MobileBottomNav
+              moreOpen={moreOpen}
+              onMoreToggle={() => setMoreOpen((v) => !v)}
+            />
+            <MobileMoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div 
@@ -182,16 +361,19 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
       style={themeStyles}
       data-org-branded="true"
     >
-      {/* Primary icon sidebar */}
+      {/* Dock: workspace mark, nav, profile. Width matches the feature column by default and is resizable. */}
       <Sidebar />
 
-      {/* Secondary detail panel — pushes main content */}
+      {/* Feature column: Chat, Files, Workspaces, ... */}
       <SectionPanel />
 
-      {/* Main content area */}
+      {/* Main content + platform status footer (User / Business workspace / Repo / Branch / Code workspace) */}
       <main className="flex flex-1 flex-col overflow-hidden">
         {currentWorkspaceId && <PresenceIndicator workspaceId={currentWorkspaceId} />}
-        {children}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+          <PlatformStatusFooter />
+        </div>
       </main>
 
       {/* Right AI pane */}

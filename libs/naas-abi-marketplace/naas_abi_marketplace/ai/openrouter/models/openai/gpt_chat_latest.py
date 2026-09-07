@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class GptChatLatestModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT Chat Latest",
+        name="GPT Chat Latest",
         owner="openai",
         description="GPT Chat Latest points to OpenAI's stable API alias `chat-latest` that always resolves to the latest Instant chat model used in ChatGPT. As OpenAI rolls out new Instant model updates...",
         canonical_slug="openai/gpt-chat-latest-20260505",
         hugging_face_id=None,
-        created_at=datetime.fromtimestamp(1778000212),
+        created_at=datetime.fromtimestamp(1778000212, tz=UTC),
         pricing={'prompt': '0.000005', 'completion': '0.00003', 'web_search': '0.01', 'input_cache_read': '0.0000005'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['text', 'image', 'file'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 400000, 'max_completion_tokens': 128000, 'is_moderated': True},

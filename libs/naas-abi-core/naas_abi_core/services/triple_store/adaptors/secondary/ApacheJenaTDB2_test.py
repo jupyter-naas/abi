@@ -1,7 +1,9 @@
+import threading
+import time
 from unittest.mock import MagicMock, Mock, patch
 
-import rdflib
 import pytest
+import rdflib
 import requests
 from naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2 import (
     ApacheJenaTDB2,
@@ -161,10 +163,10 @@ def test_graph_management_queries_delegate_to_query():
         adapter.clear_graph()
         adapter.drop_graph(graph_name)
 
-    assert mock_query.call_args_list[0].args[0] == f"CREATE GRAPH <{str(graph_name)}>"
-    assert mock_query.call_args_list[1].args[0] == f"CLEAR GRAPH <{str(graph_name)}>"
+    assert mock_query.call_args_list[0].args[0] == f"CREATE GRAPH <{graph_name!s}>"
+    assert mock_query.call_args_list[1].args[0] == f"CLEAR GRAPH <{graph_name!s}>"
     assert mock_query.call_args_list[2].args[0] == "CLEAR DEFAULT"
-    assert mock_query.call_args_list[3].args[0] == f"DROP GRAPH <{str(graph_name)}>"
+    assert mock_query.call_args_list[3].args[0] == f"DROP GRAPH <{graph_name!s}>"
 
 
 def test_list_graphs_returns_graph_uris_from_query_rows():
@@ -179,6 +181,73 @@ def test_list_graphs_returns_graph_uris_from_query_rows():
         graphs = adapter.list_graphs()
 
     assert graphs == [graph_name]
+
+
+def test_list_graphs_filters_catalog_to_iri_graph_names():
+    """Jena DISTINCT over GRAPH ?g NPEs on a null/dangling graph node.
+
+    Listing the named-graph catalog with FILTER(isIRI(?g)) skips that node
+    instead of streaming truncated SPARQL JSON (HTTP 200 + Java NPE).
+    """
+    adapter = _build_adapter()
+    graph_name = URIRef("http://example.org/graphs/g1")
+
+    query_result = rdflib.query.Result("SELECT")
+    query_result.vars = [Variable("g")]
+    query_result.bindings = [{Variable("g"): graph_name}]
+
+    with patch.object(adapter, "query", return_value=query_result) as mock_query:
+        adapter.list_graphs()
+
+    sparql = mock_query.call_args.args[0]
+    assert "FILTER(isIRI(?g))" in sparql
+    assert "GRAPH ?g { }" in sparql
+
+
+_TRUNCATED_SPARQL_JSON = """{ "head": {
+    "vars": [ "g" ]
+  } ,
+  "results": {
+    "bindings": [
+      {
+        "g": { "type": "uri" , "value": "http://ontology.naas.ai/graph/nexus" }
+      } ,
+      {
+        "g": { "type": "uri" , "value": "http://ontology.naas.ai/graph/schema" }
+      }Cannot invoke "org.apache.jena.graph.Node.hashCode()" because "node" is null
+"""
+
+
+def test_parse_sparql_results_json_recovers_truncated_bindings():
+    from naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2 import (
+        _parse_sparql_results_json,
+    )
+
+    parsed = _parse_sparql_results_json(_TRUNCATED_SPARQL_JSON)
+
+    values = [row["g"]["value"] for row in parsed["results"]["bindings"]]
+    assert values == [
+        "http://ontology.naas.ai/graph/nexus",
+        "http://ontology.naas.ai/graph/schema",
+    ]
+
+
+def test_query_recovers_truncated_sparql_json_without_retrying():
+    adapter = _build_adapter()
+    adapter.max_retries = 3
+
+    response = _ok_response()
+    response.headers = {"Content-Type": "application/sparql-results+json"}
+    response.text = _TRUNCATED_SPARQL_JSON
+    adapter._session.post.return_value = response
+
+    result = list(adapter.query("SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } }"))
+
+    assert [str(row.g) for row in result] == [
+        "http://ontology.naas.ai/graph/nexus",
+        "http://ontology.naas.ai/graph/schema",
+    ]
+    assert adapter._session.post.call_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +435,42 @@ def test_distributed_lock_acquired_and_released_on_insert():
     assert acquire_token == release_token
 
 
+def test_distributed_writes_are_also_serialized_within_process():
+    adapter, _mock_kv = _build_adapter_with_kv()
+    active = 0
+    max_active = 0
+    state_lock = threading.Lock()
+
+    def slow_post(*_args, **_kwargs):
+        nonlocal active, max_active
+        with state_lock:
+            active += 1
+            max_active = max(max_active, active)
+        time.sleep(0.02)
+        with state_lock:
+            active -= 1
+        return _ok_response()
+
+    adapter._session.post.side_effect = slow_post
+    graph = Graph()
+    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+    barrier = threading.Barrier(3)
+
+    def insert() -> None:
+        barrier.wait()
+        adapter.insert(graph)
+
+    threads = [threading.Thread(target=insert) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        thread.join(timeout=1)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert max_active == 1
+
+
 @patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
 def test_distributed_lock_retries_when_busy_then_succeeds(mock_sleep):
     adapter, mock_kv = _build_adapter_with_kv()
@@ -453,7 +558,7 @@ def test_clear_graph_with_name_emits_clear_graph():
     with patch.object(adapter, "query", return_value=rdflib.query.Result("SELECT")) as mock_query:
         adapter.clear_graph(graph_name)
 
-    mock_query.assert_called_once_with(f"CLEAR GRAPH <{str(graph_name)}>")
+    mock_query.assert_called_once_with(f"CLEAR GRAPH <{graph_name!s}>")
 
 
 def test_clear_graph_without_name_emits_clear_default():
@@ -463,3 +568,77 @@ def test_clear_graph_without_name_emits_clear_default():
         adapter.clear_graph()
 
     mock_query.assert_called_once_with("CLEAR DEFAULT")
+
+
+# ---------------------------------------------------------------------------
+# Boot-time connectivity probe (_test_connection) resilience
+#
+# A restarting Fuseki can refuse connections or answer 500/503 for a few seconds
+# while TDB2 attaches. Those blips must NOT crash the engine import; a *persistent*
+# failure must surface the server's own body so the cause is diagnosable.
+# ---------------------------------------------------------------------------
+
+def _build_adapter_with_get(get_side_effect: list) -> ApacheJenaTDB2:
+    """Build an adapter, driving the boot-time GET probe with ``get_side_effect``."""
+    mock_session = MagicMock()
+    mock_session.get.side_effect = get_side_effect
+    mock_session.post.return_value = _ok_response()
+    with patch(
+        "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.requests.Session",
+        return_value=mock_session,
+    ):
+        return ApacheJenaTDB2(jena_tdb2_url="http://localhost:3030/ds", timeout=30)
+
+
+@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+def test_test_connection_retries_transient_500_then_succeeds(mock_sleep):
+    # First probe 500s (Fuseki still attaching), second succeeds → construction
+    # completes without raising.
+    adapter = _build_adapter_with_get([_make_500_response(), _ok_response()])
+
+    assert adapter._session.get.call_count == 2
+    assert mock_sleep.call_count == 1
+
+
+@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+def test_test_connection_retries_connection_error_then_succeeds(mock_sleep):
+    # A refused connection while the server is coming up is transient, not fatal.
+    adapter = _build_adapter_with_get(
+        [requests.ConnectionError("connection refused"), _ok_response()]
+    )
+
+    assert adapter._session.get.call_count == 2
+    assert mock_sleep.call_count == 1
+
+
+@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+@patch.object(ApacheJenaTDB2, "_CONNECT_MAX_RETRIES", 2)
+def test_test_connection_raises_request_error_after_retries_exhausted(mock_sleep):
+    # A dataset that stays broken must surface a RequestError carrying the
+    # server's body (the real cause), not a bare HTTPError.
+    with pytest.raises(Exceptions.RequestError) as exc_info:
+        _build_adapter_with_get(
+            [_make_500_response(text="TDB2 recovery failed") for _ in range(3)]
+        )
+
+    err = exc_info.value
+    assert err.operation == "connect"
+    assert err.status_code == 500
+    assert err.response_body == "TDB2 recovery failed"
+    assert err.attempts == 3  # 1 initial + 2 retries
+    assert mock_sleep.call_count == 2
+
+
+@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+def test_test_connection_does_not_retry_non_retryable_status(mock_sleep):
+    # A 401/404 is not transient — surface it immediately, no back-off.
+    unauthorized = Mock(status_code=401)
+    unauthorized.text = "Unauthorized"
+
+    with pytest.raises(Exceptions.RequestError) as exc_info:
+        _build_adapter_with_get([unauthorized])
+
+    assert exc_info.value.operation == "connect"
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.attempts == 1
+    mock_sleep.assert_not_called()

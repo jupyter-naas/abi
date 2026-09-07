@@ -1,5 +1,7 @@
-import pytest
 import os
+
+import pytest
+
 from ..IVectorStorePort_test import GenericVectorStoreAdapterTest
 from .QdrantAdapter import QdrantAdapter
 
@@ -22,14 +24,14 @@ class TestQdrantAdapter(GenericVectorStoreAdapterTest):
         
         try:
             adapter.delete_collection("test_collection")
-        except Exception:
+        except Exception:  # noqa: BLE001,S110
             pass
         
         yield adapter
         
         try:
             adapter.delete_collection("test_collection")
-        except Exception:
+        except Exception:  # noqa: BLE001,S110
             pass
         
         adapter.close()

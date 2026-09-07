@@ -38,7 +38,6 @@ from pathlib import Path
 
 from .store import Store
 
-
 # --------------------------------------------------------------------- types
 
 

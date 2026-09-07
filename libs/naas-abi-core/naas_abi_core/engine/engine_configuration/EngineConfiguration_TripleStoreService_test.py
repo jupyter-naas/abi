@@ -1,12 +1,11 @@
 import pytest
-
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_TripleStoreService import (
     ApacheJenaTDB2AdapterConfiguration,
     AWSNeptuneSSHTunnelAdapterConfiguration,
     OxigraphAdapterConfiguration,
     TripleStoreAdapterConfiguration,
-    TripleStoreAdapterOxigraphEmbeddedConfiguration,
     TripleStoreAdapterFilesystemConfiguration,
+    TripleStoreAdapterOxigraphEmbeddedConfiguration,
     TripleStoreServiceConfiguration,
 )
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStorePort

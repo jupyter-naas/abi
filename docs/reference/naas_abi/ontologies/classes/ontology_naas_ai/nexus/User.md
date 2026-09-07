@@ -15,7 +15,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.User import User
+from naas_abi.ontologies.classes.ontology_demo.nexus.User import User
 
 u = User()
 u.actions()  # no-op

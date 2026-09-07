@@ -8,4 +8,3 @@ class SecretSet(_SecretSet):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

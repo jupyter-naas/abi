@@ -1,9 +1,9 @@
 # ArXivIntegration
 
 ## What it is
-- An integration wrapper around the `arxiv` Python client for:
-  - Searching ArXiv papers
-  - Fetching metadata for a specific ArXiv paper
+- A thin integration wrapper around the `arxiv` Python client to:
+  - Search ArXiv papers
+  - Fetch metadata for a specific ArXiv paper by ID
 - Can also expose these capabilities as LangChain `StructuredTool` tools.
 
 ## Public API
@@ -11,41 +11,51 @@
 ### `ArXivIntegrationConfiguration`
 - Dataclass extending `IntegrationConfiguration`.
 - Fields:
-  - `max_results: int = 10` — default maximum number of search results when not provided per-call.
+  - `max_results: int = 10` — default maximum number of search results when `max_results` is not provided per call.
 
 ### `ArXivIntegration`
 Integration class (extends `naas_abi_core.integration.Integration`).
 
-#### `__init__(configuration: ArXivIntegrationConfiguration)`
-- Creates an `arxiv.Client()` and stores configuration.
+- `__init__(configuration: ArXivIntegrationConfiguration)`
+  - Stores configuration and creates an `arxiv.Client()`.
 
-#### `search_papers(query: str, max_results: Optional[int] = None) -> List[dict]`
-- Searches ArXiv with `arxiv.Search(query=..., max_results=...)`.
-- Returns a list of paper metadata dictionaries with keys:
-  - `id`, `title`, `authors`, `summary`, `published`, `updated`, `categories`, `links`, `pdf_url`
+- `search_papers(query: str, max_results: int | None = None) -> list[dict]`
+  - Runs `arxiv.Search(query=..., max_results=...)`.
+  - Returns a list of metadata dictionaries with keys:
+    - `id` (derived from `paper.entry_id.split("/")[-1]`)
+    - `title`
+    - `authors` (list of strings)
+    - `summary`
+    - `published`
+    - `updated`
+    - `categories`
+    - `links` (list of link href strings)
+    - `pdf_url`
 
-#### `get_paper(paper_id: str) -> dict`
-- Fetches metadata for one paper using `arxiv.Search(id_list=[paper_id])`.
-- Returns a metadata dictionary with the same keys as `search_papers`.
+- `get_paper(paper_id: str) -> dict`
+  - Runs `arxiv.Search(id_list=[paper_id])` and returns the first result.
+  - Returns a metadata dictionary with the same keys as `search_papers`.
 
-#### `as_tools(configuration: ArXivIntegrationConfiguration) -> List[StructuredTool]` (staticmethod)
-- Builds and returns two LangChain `StructuredTool` instances:
-  - `search_arxiv_papers` → calls `search_papers`
-  - `get_arxiv_paper` → calls `get_paper`
-- Uses Pydantic argument schemas defined inside the method.
+- `as_tools(configuration: ArXivIntegrationConfiguration) -> list[StructuredTool]` (staticmethod)
+  - Builds two LangChain `StructuredTool` tools backed by an internal `ArXivIntegration` instance:
+    - `search_arxiv_papers` → calls `search_papers`
+    - `get_arxiv_paper` → calls `get_paper`
+  - Uses inline Pydantic schemas for tool arguments:
+    - `query: str`, `max_results: int | None`
+    - `paper_id: str`
 
 ## Configuration/Dependencies
-- Depends on:
-  - `arxiv` (Python package)
+- Dependencies:
+  - `arxiv`
   - `langchain_core.tools.StructuredTool`
   - `pydantic` (`BaseModel`, `Field`)
   - `naas_abi_core.integration` (`Integration`, `IntegrationConfiguration`)
 - Configuration:
-  - `ArXivIntegrationConfiguration.max_results` controls default search result count.
+  - `ArXivIntegrationConfiguration.max_results` sets the default search result count.
 
 ## Usage
 
-### Direct integration usage
+### Direct usage
 ```python
 from naas_abi_marketplace.applications.arxiv.integrations.ArXivIntegration import (
     ArXivIntegration,
@@ -53,12 +63,12 @@ from naas_abi_marketplace.applications.arxiv.integrations.ArXivIntegration impor
 )
 
 cfg = ArXivIntegrationConfiguration(max_results=5)
-client = ArXivIntegration(cfg)
+arxiv_integration = ArXivIntegration(cfg)
 
-papers = client.search_papers("cat:cs.CL")
+papers = arxiv_integration.search_papers("cat:cs.CL")
 print(papers[0]["id"], papers[0]["title"])
 
-paper = client.get_paper(papers[0]["id"])
+paper = arxiv_integration.get_paper(papers[0]["id"])
 print(paper["pdf_url"])
 ```
 
@@ -76,5 +86,5 @@ print(len(result))
 ```
 
 ## Caveats
-- `get_paper` uses `next(self.__client.results(search))`; if no results are returned for the given `paper_id`, it will raise `StopIteration`.
-- `id` is derived from `paper.entry_id.split("/")[-1]` (the last URL segment of the entry id).
+- `get_paper()` uses `next(self.__client.results(search))`; if the ID yields no results, it raises `StopIteration`.
+- Returned `id` is derived from the last path segment of `paper.entry_id` (not necessarily the full entry URL).

@@ -3,10 +3,11 @@ ABI Marketplace - Minimalist Design
 Apple-level clean interface for apps and modules
 """
 
-import streamlit as st
-import requests
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any
+
+import requests
+import streamlit as st
 
 # Configure page
 st.set_page_config(
@@ -285,10 +286,10 @@ def get_app_status(port: int) -> str:
     try:
         response = requests.get(f"http://localhost:{port}", timeout=2)
         return "running" if response.status_code == 200 else "stopped"
-    except Exception:
+    except Exception:  # noqa: BLE001
         return "stopped"
 
-def load_modules_from_path(path: Path, module_type: str = "module") -> List[Dict[str, Any]]:
+def load_modules_from_path(path: Path, module_type: str = "module") -> list[dict[str, Any]]:
     """Helper function to load modules from a given path"""
     modules = []
     
@@ -313,7 +314,7 @@ def load_modules_from_path(path: Path, module_type: str = "module") -> List[Dict
                                         description = line.split('=', 1)[1].strip().strip('"\'')
                             if avatar_url and description:
                                 break
-                        except Exception:
+                        except Exception:  # noqa: BLE001,S112
                             continue
                 
                 # Fallback values
@@ -337,7 +338,7 @@ def load_modules_from_path(path: Path, module_type: str = "module") -> List[Dict
     
     return modules
 
-def get_modules() -> List[Dict[str, Any]]:
+def get_modules() -> list[dict[str, Any]]:
     """Get available modules"""
     modules = []
     
@@ -495,10 +496,10 @@ if filtered_items:
                                 webbrowser.open(f"http://localhost:{item['port']}")
                             else:
                                 # Start the app and open it
-                                import subprocess
                                 import os
-                                import time
+                                import subprocess
                                 import threading
+                                import time
                                 
                                 # Map ports to their corresponding app files
                                 app_files = {
@@ -525,14 +526,14 @@ if filtered_items:
                                         ], cwd=os.path.dirname(os.path.abspath(__file__)))
                                         
                                         # Open the app in a new tab after a short delay (no rerun interruption)
-                                        def open_after_delay():
+                                        def open_after_delay(port=item["port"]):
                                             time.sleep(4)  # Slightly longer to ensure app is ready
-                                            webbrowser.open(f"http://localhost:{item['port']}")
+                                            webbrowser.open(f"http://localhost:{port}")
                                         
                                         threading.Thread(target=open_after_delay, daemon=True).start()
                                         # Don't call st.rerun() here to avoid interrupting the flow
-                                    except Exception as e:
-                                        st.error(f"❌ Failed to start {item['name']}: {str(e)}")
+                                    except Exception as e:  # noqa: BLE001
+                                        st.error(f"❌ Failed to start {item['name']}: {e!s}")
                                 else:
                                     st.error(f"❌ App file not found for {item['name']}")
                         else:

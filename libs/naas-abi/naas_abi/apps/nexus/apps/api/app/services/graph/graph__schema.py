@@ -217,6 +217,8 @@ class GraphKpisData:
     individuals: int
     relations: int
     properties: int
+    #: True when served from an expired cache entry while a refresh runs in the background.
+    stale: bool = False
 
 
 @dataclass(frozen=True)
@@ -240,6 +242,8 @@ class NetworkSchemaEdgeData:
 class NetworkSchemaData:
     nodes: list[NetworkSchemaNodeData]
     edges: list[NetworkSchemaEdgeData]
+    #: True when served from an expired cache entry while a refresh runs in the background.
+    stale: bool = False
 
 
 @dataclass(frozen=True)

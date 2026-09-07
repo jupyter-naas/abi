@@ -2,10 +2,10 @@
 
 ## What it is
 A workflow that:
-- Queries a triple store for all entities of a given RDF class (plus their datatype properties).
+- Queries a triple store for all entities of a given RDF class (`a {class_uri}`), including optional `owl:DatatypeProperty` values.
 - Creates OpenAI embeddings from each entity’s `rdfs:label`.
-- Stores new embeddings (skipping already-indexed entities) into a vector store collection.
-- Optionally builds a LangChain `StructuredTool` for similarity search over a collection.
+- Stores embeddings and metadata in a vector store collection, skipping entities already present.
+- Optionally creates a LangChain `StructuredTool` to run similarity search against the stored embeddings.
 
 ## Public API
 
@@ -14,15 +14,15 @@ A workflow that:
 - `CreateClassEmbeddingsWorkflowConfiguration(WorkflowConfiguration)`
   - Holds required services and embedding settings.
   - Fields:
-    - `triple_store: ITripleStoreService` (required)
-    - `vector_store: VectorStoreService` (required)
+    - `triple_store: ITripleStoreService`
+    - `vector_store: VectorStoreService`
     - `embeddings_model_name: str = "text-embedding-3-large"`
     - `embeddings_dimension: int = 3072`
 
 - `CreateClassEmbeddingsWorkflowParameters(WorkflowParameters)`
   - Input parameters for embedding creation.
   - Fields:
-    - `class_uri: str` — RDF class URI used in SPARQL `a {class_uri}`.
+    - `class_uri: str` — RDF class URI used in SPARQL.
     - `collection_name: str` — vector store collection name.
     - `entity_variable_name: str` — SPARQL variable name for the entity (e.g. `"person"`).
     - `entity_type_label: str` — label used in logs (e.g. `"person"`).
@@ -32,39 +32,47 @@ A workflow that:
 
 ### Methods (CreateClassEmbeddingsWorkflow)
 
-- `create_class_embeddings(parameters: CreateClassEmbeddingsWorkflowParameters) -> Dict[str, Any]`
-  - Ensures the target vector collection exists (cosine distance; configured dimension).
-  - Queries the triple store for:
-    - entity URI, `rdfs:label`, and all `owl:DatatypeProperty` values (optional).
-  - Creates embeddings for **new** entities only (based on `document_id = uri.split("/")[-1]`).
-  - Stores vectors and metadata in the vector store.
-  - Returns a status dict including `entities_processed` and, when embeddings were added, `collection_name` and `entity_type`.
+- `create_class_embeddings(parameters: CreateClassEmbeddingsWorkflowParameters) -> dict[str, Any]`
+  - Ensures the vector collection exists (cosine distance; configured dimension).
+  - Queries the triple store for entity URI + `rdfs:label` and optional datatype properties.
+  - Skips entities already stored in the vector store by checking `document_id = uri.split("/")[-1]`.
+  - Embeds only new entity labels and stores vectors + metadata.
+  - Returns:
+    - When nothing found / nothing new: `{"status": "success", "entities_processed": 0}`
+    - When embeddings added: includes `collection_name` and `entity_type`.
 
 - `create_search_tool(collection_name: str, search_param_name: str, tool_name: str, tool_description: str, entity_type_label: str) -> StructuredTool`
   - Builds a LangChain `StructuredTool` that:
-    - Accepts a dynamically named query parameter (e.g. `"person_name"`) and `k` (default 5, 1–20).
-    - Embeds the query text and runs vector similarity search.
-    - Returns a list of `{uri, label, score}` from stored metadata.
+    - Accepts a dynamically named search parameter (e.g. `"person_name"`) and `k` (default `5`, bounds `1..20`).
+    - Embeds the query (`embed_query`) and searches the vector store.
+    - Returns a list of `{uri, label, score}` (from stored metadata), or `{"error": ...}` on failure.
 
 - `as_tools() -> list[BaseTool]`
-  - Exposes the workflow as a LangChain tool:
-    - Tool name: `"create_class_embeddings"`
+  - Exposes a LangChain tool:
+    - Name: `"create_class_embeddings"`
     - Args schema: `CreateClassEmbeddingsWorkflowParameters`
+    - Calls `create_class_embeddings(...)`.
 
 - `as_api(...) -> None`
   - Declared but not implemented (`pass`).
 
 ## Configuration/Dependencies
-- Requires:
-  - `ITripleStoreService` for SPARQL querying (`query()`).
-  - `VectorStoreService` for collection management and vector operations:
-    - `ensure_collection(...)`
-    - `get_document(...)`
-    - `add_documents(...)`
-    - `search_similar(...)`
-- Uses OpenAI embeddings via `langchain_openai.OpenAIEmbeddings` with `embeddings_model_name`.
-- Uses `numpy` to convert embedding lists to arrays before storage.
-- Uses `SPARQLUtils(...).results_to_list(...)` to normalize triple store query results.
+- Services:
+  - `ITripleStoreService` with `query(sparql: str)`.
+  - `VectorStoreService` with:
+    - `ensure_collection(collection_name, dimension, distance_metric)`
+    - `get_document(collection_name, document_id, include_vector=False)`
+    - `add_documents(collection_name, ids, vectors, metadata)`
+    - `search_similar(collection_name, query_vector, k, include_metadata=True)`
+- Embeddings:
+  - `langchain_openai.OpenAIEmbeddings(model=embeddings_model_name)`
+  - Uses:
+    - `embed_documents(list[str])` for batch embedding
+    - `embed_query(str)` for search
+- Utilities:
+  - `SPARQLUtils(...).results_to_list(...)` to normalize triple store query results.
+- Data handling:
+  - Converts embeddings to `numpy.array` before storage.
 
 ## Usage
 
@@ -109,11 +117,10 @@ tool = wf.create_search_tool(
     entity_type_label="person",
 )
 
-# Call tool function directly (LangChain integration may vary)
 print(tool.func(person_name="Ada Lovelace", k=5))
 ```
 
 ## Caveats
-- Document IDs are derived from `uri.split("/")[-1]`; URIs not containing `/` or requiring different ID logic may collide or behave unexpectedly.
+- Document IDs are derived from `uri.split("/")[-1]`; URIs without `/` or with non-unique trailing segments can collide.
 - Embeddings are computed only from `rdfs:label`; datatype properties are stored as metadata but not embedded.
 - `as_api()` is not implemented.

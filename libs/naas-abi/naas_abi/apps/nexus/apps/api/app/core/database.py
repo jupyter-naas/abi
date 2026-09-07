@@ -127,6 +127,7 @@ KNOWN_TABLES = frozenset(
         "password_changes",
         "workspace_secrets",
         "model_catalog",
+        "organization_role_features",
     }
 )
 
@@ -141,8 +142,6 @@ class Base(DeclarativeBase):
 
 
 # ============ Async Engine & Session ============
-
-print(f"Database URL: {settings.database_url}")
 
 _is_sqlite = settings.database_url.startswith("sqlite")
 

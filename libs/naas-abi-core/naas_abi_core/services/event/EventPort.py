@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from threading import Thread
-from typing import Any, Callable, Iterator
+from typing import Any
 
 
 class EventNotFoundError(Exception):
@@ -79,6 +80,16 @@ class IEventAdapter(ABC):
         """Return last delivered seq for (consumer_id, event_type). 0 if unset."""
 
     @abstractmethod
+    def set_cursor(self, consumer_id: str, event_type: str, last_seq: int) -> None:
+        """Set last delivered seq for (consumer_id, event_type).
+
+        Used to seek a consumer to a known position (for example the current
+        max seq) without draining events. ``last_seq`` may be lower than the
+        stored cursor — that is how a reset event log is repaired after
+        ``seq`` restarts from 1 while the cursor row still holds an old value.
+        """
+
+    @abstractmethod
     def query_for_consumer(
         self,
         consumer_id: str,
@@ -118,7 +129,7 @@ class IEventService(ABC):
     @abstractmethod
     def query(
         self,
-        event_class: "type | None" = None,
+        event_class: type | None = None,
         since_seq: int | None = None,
         until_seq: int | None = None,
         since_timestamp: str | None = None,
@@ -138,7 +149,7 @@ class IEventService(ABC):
     @abstractmethod
     def iter_query(
         self,
-        event_class: "type | None" = None,
+        event_class: type | None = None,
         since_seq: int | None = None,
         since_timestamp: str | None = None,
         until_timestamp: str | None = None,

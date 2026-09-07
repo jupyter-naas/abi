@@ -37,6 +37,48 @@ def test_resolve_workspace_scoped_path_uses_path_workspace_when_not_provided() -
     assert scoped_path == "naas_abi/workspace-drive/ws-2/docs/readme.md"
 
 
+def test_resolve_workspace_scoped_path_keeps_full_storage_path() -> None:
+    """List/rename round-trip full storage paths; do not double-prefix them."""
+    workspace_id, scoped_path = files_api._resolve_workspace_scoped_path(
+        "naas_abi/workspace-drive/ws-1/operations",
+        "ws-1",
+    )
+
+    assert workspace_id == "ws-1"
+    assert scoped_path == "naas_abi/workspace-drive/ws-1/operations"
+
+
+def test_resolve_workspace_scoped_path_keeps_workspace_root_folder() -> None:
+    workspace_id, scoped_path = files_api._resolve_workspace_scoped_path(
+        "naas_abi/workspace-drive/ws-1",
+        "ws-1",
+    )
+
+    assert workspace_id == "ws-1"
+    assert scoped_path == "naas_abi/workspace-drive/ws-1"
+
+
+def test_resolve_workspace_scoped_path_infers_workspace_from_full_storage_path() -> None:
+    workspace_id, scoped_path = files_api._resolve_workspace_scoped_path(
+        "naas_abi/workspace-drive/ws-3/s2_intelligence",
+        None,
+    )
+
+    assert workspace_id == "ws-3"
+    assert scoped_path == "naas_abi/workspace-drive/ws-3/s2_intelligence"
+
+
+def test_resolve_workspace_scoped_path_rejects_other_workspace_storage_path() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        files_api._resolve_workspace_scoped_path(
+            "naas_abi/workspace-drive/ws-other/ops",
+            "ws-1",
+        )
+
+    assert exc_info.value.status_code == 400
+    assert "outside the requested workspace" in str(exc_info.value.detail)
+
+
 @pytest.mark.asyncio
 async def test_authorize_workspace_path_checks_workspace_access(monkeypatch) -> None:
     require_access = AsyncMock()

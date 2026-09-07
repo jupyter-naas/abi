@@ -1,10 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor
 
-from rdflib import Graph, Literal, URIRef
-
 from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import (
     TripleStoreService__SecondaryAdaptor__Filesystem,
 )
+from rdflib import Graph, Literal, URIRef
 
 
 def _build_graph(subject: URIRef, index: int) -> Graph:

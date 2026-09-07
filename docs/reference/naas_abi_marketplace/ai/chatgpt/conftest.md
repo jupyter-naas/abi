@@ -1,26 +1,26 @@
-# `conftest.py` (pytest fixtures)
+# `conftest.py` (pytest fixture: `module`)
 
 ## What it is
-- A `pytest` configuration module that provides a fixture to initialize and retrieve the ChatGPT `ABIModule` for tests.
-- Ensures the `Engine` loads the module before the singleton `ABIModule` instance is accessed.
+- A `pytest` configuration module that defines a fixture to load the ChatGPT ABI module via the core `Engine` and return the singleton `ABIModule` instance for tests.
 
 ## Public API
 - `module() -> ABIModule` (pytest fixture)
-  - Creates an `Engine`, loads the module named `"src.core.chatgpt"`, then returns `ABIModule.get_instance()`.
+  - Instantiates `Engine`.
+  - Calls `engine.load(module_names=["src.core.chatgpt"])`.
+  - Returns `ABIModule.get_instance()`.
 
 ## Configuration/Dependencies
-- **pytest**: used for fixture declaration.
+- **pytest**: provides `@pytest.fixture`.
 - **naas_abi_core.engine.Engine.Engine**: used to load modules.
-- **naas_abi_marketplace.ai.chatgpt.ABIModule**: singleton module returned by the fixture.
-- Module name loaded: `src.core.chatgpt` (must be loadable by `Engine.load`).
+- **naas_abi_marketplace.ai.chatgpt.ABIModule**: singleton module returned.
+- **Module name loaded**: `"src.core.chatgpt"` must be resolvable by `Engine.load`.
 
 ## Usage
 ```python
-def test_module_available(module):
-    # `module` is an instance of ABIModule provided by the fixture
+def test_chatgpt_module_loaded(module):
     assert module is not None
 ```
 
 ## Caveats
-- The fixture depends on `Engine.load(module_names=["src.core.chatgpt"])` succeeding; missing/incorrect module registration will cause setup failures.
-- `ABIModule.get_instance()` implies singleton behavior; tests may share module state across runs unless the implementation isolates it.
+- If `Engine.load(module_names=["src.core.chatgpt"])` fails (e.g., module not registered/available), fixture setup will fail.
+- The fixture returns a singleton (`ABIModule.get_instance()`), so state may be shared across tests depending on `ABIModule` implementation.

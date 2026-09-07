@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from naas_abi_core import logger
-from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.email.EmailPorts import (
     EmailAttachment,
     IEmailAdapter,
@@ -11,6 +10,7 @@ from naas_abi_core.services.email.ontologies.modules.EmailEventOntology import (
     EmailError,
     EmailSent,
 )
+from naas_abi_core.services.ServiceBase import ServiceBase
 
 
 class EmailService(ServiceBase):
@@ -25,7 +25,7 @@ class EmailService(ServiceBase):
             return
         try:
             self.services.events.publish(event)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             # Send is the source of truth; event logging must never break it.
             logger.warning(f"EmailService: failed to publish event: {exc}")
 
@@ -41,8 +41,15 @@ class EmailService(ServiceBase):
         reply_to: str | None = None,
         attachments: list[EmailAttachment] | None = None,
         to_emails: list[str] | str | None = None,
+        cc_emails: list[str] | str | None = None,
     ) -> None:
         recipients = ", ".join(resolve_recipients(to_email, to_emails))
+        cc_recipients = (
+            ", ".join(resolve_recipients(None, cc_emails)) if cc_emails else ""
+        )
+        display_recipients = (
+            f"{recipients}; cc: {cc_recipients}" if cc_recipients else recipients
+        )
         try:
             self._adapter.send(
                 to_email=to_email,
@@ -54,12 +61,13 @@ class EmailService(ServiceBase):
                 reply_to=reply_to,
                 attachments=attachments,
                 to_emails=to_emails,
+                cc_emails=cc_emails,
             )
         except Exception as exc:
             self.__publish_event(
-                EmailError(to=recipients, subject=subject, message=str(exc))
+                EmailError(to=display_recipients, subject=subject, message=str(exc))
             )
             raise
         self.__publish_event(
-            EmailSent(to=recipients, subject=subject, sender=from_email)
+            EmailSent(to=display_recipients, subject=subject, sender=from_email)
         )

@@ -30,25 +30,25 @@ Public API:
     DEFAULT_BRANCH     - "main"
 """
 
-from .revision import DEFAULT_BRANCH, Revision
 from .registry import StoreRegistry
+from .revision import DEFAULT_BRANCH, Revision
 from .store import (
-    BranchNotFoundError,
-    ConcurrencyConflict,
     DURABILITY_FAST,
     DURABILITY_FULL,
     GENESIS,
+    BranchNotFoundError,
+    ConcurrencyConflict,
     Store,
 )
 from .uuid7 import uuid7
 
 __all__ = [
-    "BranchNotFoundError",
-    "ConcurrencyConflict",
     "DEFAULT_BRANCH",
     "DURABILITY_FAST",
     "DURABILITY_FULL",
     "GENESIS",
+    "BranchNotFoundError",
+    "ConcurrencyConflict",
     "Revision",
     "Store",
     "StoreRegistry",

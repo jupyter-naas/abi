@@ -8,6 +8,8 @@ configuration over HTTP.
 Routes
 ------
 * ``GET    /api/apps/?workspace_id=…``         — catalog (with enable state)
+* ``POST   /api/apps/access-token``            — scoped JWT for ``/app-html/``
+* ``POST   /api/apps/sso-token``               — HMAC handshake for a Pages portal
 * ``GET    /api/apps/{ws}``                    — list configs for workspace
 * ``POST   /api/apps/{ws}``                    — create config
 * ``GET    /api/apps/{ws}/{app_id:path}``      — get one config
@@ -38,6 +40,17 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
     require_workspace_access,
 )
+from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
+from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
+    resolve_app_enabled,
+    workspace_seed_for_slug,
+)
+from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
+    mint_app_html_access_token,
+)
+from naas_abi.apps.nexus.apps.api.app.services.apps.pages_sso import (
+    mint_pages_sso_token,
+)
 from naas_abi.apps.nexus.apps.api.app.services.apps.port import (
     AppConfigCreate,
     AppConfigCreateInput,
@@ -56,6 +69,11 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
     get_service_registry,
 )
+from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
+    resolve_public_module_asset_url,
+)
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 _log = logging.getLogger(__name__)
 
@@ -65,6 +83,23 @@ router = APIRouter(dependencies=[Depends(get_current_user_required)])
 # ---------------------------------------------------------------------------
 # Catalog discovery (driven by loaded engine modules)
 # ---------------------------------------------------------------------------
+
+
+def _live_settings():
+    # ``on_initialized`` replaces ``nexus_config.settings``. Do not bind the
+    # module-level ``settings = get_settings()`` snapshot from import time.
+    return nexus_config.settings
+
+
+async def _workspace_slug(workspace_id: str) -> str | None:
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(WorkspaceModel.slug).where(WorkspaceModel.id == workspace_id)
+        )
+        return result.scalar_one_or_none()
 
 
 def _fallback_name(dir_name: str) -> str:
@@ -99,6 +134,36 @@ def _resolve_manifest_url(raw_url: str | None, module_path: str, app_name: str) 
     return raw_url
 
 
+def _resolve_avatar_url(
+    avatar_url: str | None,
+    module_path: str,
+) -> str | None:
+    """Rewrite module-served avatar paths to absolute public API URLs.
+
+    Manifests may declare either:
+    * ``/modules/<mod>/assets/public/...`` — already under the ``/modules`` mount
+    * ``<mod>/assets/public/...`` — agent-style module-relative path
+
+    Both are only reachable on ``public_api_host`` (e.g.
+    ``https://api.localhost/modules/operations/report/assets/public/avatar.png``).
+    Absolute ``http(s)`` URLs are left untouched. Falls back to the raw value when
+    the ABIModule instance is not initialized (unit tests).
+    """
+    if not avatar_url:
+        return None
+    try:
+        return resolve_public_module_asset_url(
+            avatar_url,
+            abi_module_path=module_path,
+        )
+    except Exception:
+        _log.debug(
+            "Could not resolve avatar_url against public_api_host; leaving relative",
+            exc_info=True,
+        )
+    return avatar_url
+
+
 def _build_app_info(
     module_path: str,
     app_dir: Path,
@@ -118,7 +183,7 @@ def _build_app_info(
         name=manifest.get("name") or _fallback_name(app_dir.name),
         description=manifest.get("description") or "",
         url=url,
-        avatar_url=manifest.get("avatar_url"),
+        avatar_url=_resolve_avatar_url(manifest.get("avatar_url"), module_path),
         icon_emoji=manifest.get("icon_emoji"),
         demo_login=manifest.get("demo_login"),
         demo_password=manifest.get("demo_password"),
@@ -191,12 +256,32 @@ def _scan_apps_catalog() -> tuple[AppInfo, ...]:
     return tuple(catalog)
 
 
+_APP_ASSET_SUFFIXES = {
+    ".css",
+    ".gif",
+    ".html",
+    ".ico",
+    ".jpeg",
+    ".jpg",
+    ".js",
+    ".json",
+    ".mjs",
+    ".png",
+    ".svg",
+    ".webp",
+    ".woff",
+    ".woff2",
+}
+
+
 @lru_cache(maxsize=1)
 def _scan_apps_html_paths() -> dict[str, str]:
-    """Build a {url_path: absolute_file_path} map for every HTML asset under app dirs.
+    """Build a URL map for safe browser assets under app directories.
 
-    Walks each discovered app's folder so subpaths (e.g. ``reports/foo.html``)
-    are served under ``/app-html/`` without listing them in the manifest.
+    HTML entry points commonly import colocated scripts, styles, fonts,
+    images, and JSON (for example ``graph.json``). Serve those assets from
+    the same authenticated ``/app-html/`` namespace while excluding source
+    and other non-browser files.
     """
     html_map: dict[str, str] = {}
     for module in _iter_loaded_modules():
@@ -214,11 +299,16 @@ def _scan_apps_html_paths() -> dict[str, str]:
             manifest_path = app_dir / "manifest.json"
             if not manifest_path.is_file():
                 continue
-            for html_file in app_dir.rglob("*.html"):
-                rel = html_file.relative_to(app_dir).as_posix()
+            for asset_file in app_dir.rglob("*"):
+                if (
+                    not asset_file.is_file()
+                    or asset_file.suffix.lower() not in _APP_ASSET_SUFFIXES
+                ):
+                    continue
+                rel = asset_file.relative_to(app_dir).as_posix()
                 url_key = f"{module_path_url}/{app_dir.name}/{rel}"
-                html_map[url_key] = str(html_file.resolve())
-    _log.info("Apps HTML map built: %d entries", len(html_map))
+                html_map[url_key] = str(asset_file.resolve())
+    _log.info("Apps browser asset map built: %d entries", len(html_map))
     return html_map
 
 
@@ -259,6 +349,88 @@ class AppsFastAPIPrimaryAdapter:
 # ---------------------------------------------------------------------------
 
 
+class AppHtmlAccessTokenRequest(BaseModel):
+    """Mint a short-lived JWT for ``/app-html/`` (Bearer or ``?token=``)."""
+
+    expires_minutes: int | None = Field(
+        default=None,
+        ge=1,
+        le=24 * 60,
+        description="Lifetime; defaults to app_html_access_token_expire_minutes",
+    )
+    path_prefix: str | None = Field(
+        default=None,
+        description="Optional path lock, e.g. /app-html/axi/devops/",
+    )
+
+
+class AppHtmlAccessTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    path_prefix: str | None = None
+
+
+@router.post("/access-token", response_model=AppHtmlAccessTokenResponse)
+async def create_app_html_access_token(
+    body: AppHtmlAccessTokenRequest,
+    current_user: User = Depends(get_current_user_required),
+) -> AppHtmlAccessTokenResponse:
+    """Issue a time-limited JWT accepted by ``/app-html/`` (alongside ABI_API_KEY)."""
+    try:
+        token, expires_in = mint_app_html_access_token(
+            user_id=current_user.id,
+            expires_minutes=body.expires_minutes,
+            path_prefix=body.path_prefix,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return AppHtmlAccessTokenResponse(
+        access_token=token,
+        expires_in=expires_in,
+        path_prefix=body.path_prefix,
+    )
+
+
+class PagesSsoTokenRequest(BaseModel):
+    """Mint a short-lived HMAC token for a Cloudflare Pages portal."""
+
+    audience: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Portal hostname, e.g. portal.example.com",
+    )
+
+
+class PagesSsoTokenResponse(BaseModel):
+    token: str
+    token_type: str = "bearer"
+    expires_in: int
+    audience: str
+
+
+@router.post("/sso-token", response_model=PagesSsoTokenResponse)
+async def create_pages_sso_token(
+    body: PagesSsoTokenRequest,
+    current_user: User = Depends(get_current_user_required),
+) -> PagesSsoTokenResponse:
+    """Issue a handshake token so a Pages portal can skip a second login."""
+    live = _live_settings()
+    if not live.pages_sso_secret:
+        raise HTTPException(status_code=503, detail="Pages SSO is not configured")
+    try:
+        token, expires_in = mint_pages_sso_token(
+            email=str(current_user.email),
+            audience=body.audience,
+            secret=live.pages_sso_secret,
+            expires_seconds=live.pages_sso_expire_seconds,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return PagesSsoTokenResponse(token=token, expires_in=expires_in, audience=body.audience.lower())
+
+
 @router.get("/", response_model=AppsResponse)
 async def list_apps(
     request: Request,
@@ -269,7 +441,7 @@ async def list_apps(
     """Return every app discovered from loaded-module manifests.
 
     When ``workspace_id`` is provided, results carry the workspace's enable
-    state. Apps without a stored record default to ``enabled=True``.
+    state. Apps without a stored record default to ``enabled=False``.
     """
     if workspace_id:
         await require_workspace_access(current_user.id, workspace_id)
@@ -282,14 +454,26 @@ async def list_apps(
         loaded_modules = {}
 
     catalog = _scan_apps_catalog()
+    workspace_slug: str | None = None
+    if workspace_id:
+        workspace_slug = await _workspace_slug(workspace_id)
 
     enabled_by_app_id: dict[str, bool] = (
         await apps_service.get_enabled_states(workspace_id) if workspace_id else {}
     )
+    seed_apps: set[str] = set()
+    if workspace_id:
+        seed = workspace_seed_for_slug(workspace_slug)
+        if seed is not None and seed.apps:
+            seed_apps = {
+                str(app_id).strip() for app_id in seed.apps if str(app_id).strip()
+            }
 
     results: list[AppInfo] = []
     for app in catalog:
-        update: dict = {"enabled": enabled_by_app_id.get(app.app_id, True)}
+        update: dict = {
+            "enabled": resolve_app_enabled(app.app_id, enabled_by_app_id, seed_apps)
+        }
 
         # Manifest values take precedence; only fall back to runtime config
         # when the manifest omits the credential.
@@ -385,9 +569,9 @@ async def update_app_config(
         updates=AppConfigUpdateInput(enabled=updates.enabled),
     )
     if record is None:
-        # No existing row — create one. Missing fields fall back to defaults
-        # (enabled=True), then we apply the requested update on top.
-        enabled = True if updates.enabled is None else updates.enabled
+        # No existing row: create one. Missing fields fall back to defaults
+        # (enabled=False), then we apply the requested update on top.
+        enabled = False if updates.enabled is None else updates.enabled
         record = await apps_service.create_app_config(
             AppConfigCreateInput(
                 workspace_id=workspace_id,
@@ -405,7 +589,7 @@ async def delete_app_config(
     current_user: User = Depends(get_current_user_required),
     apps_service: AppsService = Depends(get_apps_service),
 ) -> dict[str, str]:
-    """Delete the app config (reverts to the default ``enabled=True``)."""
+    """Delete the app config (reverts to the default ``enabled=False``)."""
     await require_workspace_access(current_user.id, workspace_id)
     _ensure_app_exists(app_id)
     deleted = await apps_service.delete_app_config(workspace_id, app_id)

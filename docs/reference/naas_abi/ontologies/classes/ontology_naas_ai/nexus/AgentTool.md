@@ -17,7 +17,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.AgentTool import AgentTool
+from naas_abi.ontologies.classes.ontology_demo.nexus.AgentTool import AgentTool
 
 class MyTool(AgentTool):
     def actions(self):

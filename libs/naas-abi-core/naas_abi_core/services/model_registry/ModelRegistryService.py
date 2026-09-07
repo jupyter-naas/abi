@@ -12,8 +12,6 @@ Lifecycle:
 
 from __future__ import annotations
 
-from typing import Optional
-
 from naas_abi_core.models.Model import (
     CanonicalModelIdLike,
     ChatModel,
@@ -33,7 +31,7 @@ from naas_abi_core.services.model_registry.ModelRegistryPort import (
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
-def _norm(value: CanonicalModelIdLike | ModelProviderLike | None) -> Optional[str]:
+def _norm(value: CanonicalModelIdLike | ModelProviderLike | None) -> str | None:
     """Normalize an enum-or-string identifier to a plain string."""
     if value is None:
         return None
@@ -46,8 +44,8 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
 
     def __init__(
         self,
-        default_chat_model: Optional[str] = None,
-        default_embedding_model: Optional[str] = None,
+        default_chat_model: str | None = None,
+        default_embedding_model: str | None = None,
     ) -> None:
         super().__init__()
         self._default_chat_model = _norm(default_chat_model)
@@ -95,8 +93,8 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
     # ------------------------------------------------------------------ lookup
 
     def _lookup_registered(
-        self, canonical_id: str, provider: Optional[str]
-    ) -> Optional[Model]:
+        self, canonical_id: str, provider: str | None
+    ) -> Model | None:
         bucket = self._models.get(canonical_id)
         if not bucket:
             return None
@@ -118,7 +116,7 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
     def get(
         self,
         canonical_id: CanonicalModelIdLike,
-        provider: Optional[ModelProviderLike] = None,
+        provider: ModelProviderLike | None = None,
     ) -> Model:
         cid = _norm(canonical_id)
         assert cid is not None
@@ -150,7 +148,7 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
     def get_chat_model(
         self,
         canonical_id: CanonicalModelIdLike,
-        provider: Optional[ModelProviderLike] = None,
+        provider: ModelProviderLike | None = None,
     ) -> ChatModel:
         cid = _norm(canonical_id)
         assert cid is not None
@@ -170,7 +168,7 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
     def get_embedding_model(
         self,
         canonical_id: CanonicalModelIdLike,
-        provider: Optional[ModelProviderLike] = None,
+        provider: ModelProviderLike | None = None,
     ) -> EmbeddingModel:
         cid = _norm(canonical_id)
         assert cid is not None
@@ -191,7 +189,7 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
 
     @staticmethod
     def _require_off_catalog_provider(
-        canonical_id: str, requested_provider: Optional[str]
+        canonical_id: str, requested_provider: str | None
     ) -> str:
         if requested_provider is None:
             raise ModelNotFoundError(
@@ -202,7 +200,7 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
         return requested_provider
 
     def _build_off_catalog_chat(
-        self, canonical_id: str, requested_provider: Optional[str]
+        self, canonical_id: str, requested_provider: str | None
     ) -> ChatModel:
         provider = self._require_off_catalog_provider(canonical_id, requested_provider)
         factory = self._chat_providers.get(provider)
@@ -215,7 +213,7 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
         return ChatModel(model_id=canonical_id, provider=provider, model=base)
 
     def _build_off_catalog_embedding(
-        self, canonical_id: str, requested_provider: Optional[str]
+        self, canonical_id: str, requested_provider: str | None
     ) -> EmbeddingModel:
         provider = self._require_off_catalog_provider(canonical_id, requested_provider)
         factory = self._embedding_providers.get(provider)
@@ -230,6 +228,14 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
         )
 
     # ------------------------------------------------------------------ defaults
+
+    @property
+    def default_chat_model_id(self) -> str | None:
+        return self._default_chat_model
+
+    @property
+    def default_embedding_model_id(self) -> str | None:
+        return self._default_embedding_model
 
     def get_default_chat_model(self) -> ChatModel:
         if self._default_chat_model is None:

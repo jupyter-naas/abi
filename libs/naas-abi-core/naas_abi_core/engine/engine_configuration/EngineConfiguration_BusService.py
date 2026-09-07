@@ -100,6 +100,13 @@ class BusAdapterConfiguration(GenericLoader):
 
 class BusServiceConfiguration(BaseModel):
     bus_adapter: BusAdapterConfiguration
+    # Log a durable event for every message crossing the bus. Off by default:
+    # it costs one event-log append per message, and engine boot alone
+    # publishes one message per ontology triple. Turn on to debug bus traffic.
+    emit_message_events: bool = False
 
     def load(self) -> BusService:
-        return BusService(adapter=self.bus_adapter.load())
+        return BusService(
+            adapter=self.bus_adapter.load(),
+            emit_message_events=self.emit_message_events,
+        )

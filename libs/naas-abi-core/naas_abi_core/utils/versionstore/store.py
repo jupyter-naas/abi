@@ -43,13 +43,13 @@ import sqlite3
 import sys
 import threading
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
+from typing import Self
 
 from .revision import DEFAULT_BRANCH, HASH_LEN, Revision
-
 
 GENESIS = "0" * HASH_LEN
 """Sentinel prev_hash for the first revision of any uid on a branch."""
@@ -305,7 +305,7 @@ class Store:
             # otherwise be a static attribute error on non-Apple
             # type-checks. ``_use_full_fsync`` is only True on Apple,
             # so we know it exists at runtime here.
-            f_fullfsync = getattr(fcntl, "F_FULLFSYNC")
+            f_fullfsync = getattr(fcntl, "F_FULLFSYNC")  # noqa: B009
             fcntl.fcntl(fd, f_fullfsync)
         else:
             os.fsync(fd)
@@ -376,7 +376,7 @@ class Store:
         with self._db_lock:
             self._conn.close()
 
-    def __enter__(self) -> "Store":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_exc) -> None:
@@ -573,7 +573,7 @@ class Store:
                 self._sync_fd(f.fileno())
             os.rename(w.tmp_path, w.final_path)
             self._sync_dir(w.uid_dir)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             _best_effort_unlink(w.tmp_path)
             w.error = e
             return

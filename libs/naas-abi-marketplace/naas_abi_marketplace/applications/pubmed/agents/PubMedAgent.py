@@ -3,7 +3,6 @@ from __future__ import annotations
 import concurrent.futures
 import os
 import tempfile
-from typing import List, Optional
 
 from langchain_core.tools import BaseTool, Tool, tool
 from naas_abi_core.services.agent.Agent import (
@@ -24,10 +23,9 @@ You must always display the request results as a Markdown table.
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "PubMedAgent":
-        from naas_abi_core.engine.context import get_default_model_registry
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> PubMedAgent:
         from naas_abi_marketplace.applications.pubmed import ABIModule
         from naas_abi_marketplace.applications.pubmed.integrations.PubMedAPI.PubMedAPI import (
             PubMedAPIConfiguration,
@@ -38,14 +36,18 @@ You must always display the request results as a Markdown table.
             PubMedPipelineConfiguration,
         )
 
-        registry = get_default_model_registry()
+
+
+        abi_module = ABIModule.get_instance()
+
+        registry = abi_module.engine.services.model_registry
         assert registry is not None, "ModelRegistryService not initialized"
         chat_model = registry.get_default_chat_model()
 
         object_storage = ABIModule.get_instance().engine.services.object_storage
 
         @tool(description="Download a PDF from PubMed Central using it's PMCID")
-        def download_pdf(pmcids: List[str]) -> str:
+        def download_pdf(pmcids: list[str]) -> str:
             def _download_and_store(pmcid: str) -> None:
                 print(f"Downloading {pmcid}")
                 integration = PubMedIntegration(PubMedAPIConfiguration())

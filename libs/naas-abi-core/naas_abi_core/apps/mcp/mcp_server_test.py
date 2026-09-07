@@ -4,10 +4,11 @@ Test script to validate MCP server functionality
 """
 
 import asyncio
-import httpx
 import os
 import sys
-from typing import Dict, Any
+from typing import Any
+
+import httpx
 
 # Test configuration
 API_BASE = os.environ.get("ABI_API_BASE", "http://localhost:9879")
@@ -25,11 +26,11 @@ async def test_api_health() -> bool:
             else:
                 print(f"❌ API returned status {response.status_code}")
                 return False
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"❌ Failed to connect to API: {e}")
         return False
 
-async def test_openapi_spec() -> Dict[str, Any]:
+async def test_openapi_spec() -> dict[str, Any]:
     """Test if OpenAPI spec is accessible and contains agents"""
     print(f"\n🔍 Fetching OpenAPI spec from {API_BASE}/openapi.json...")
     try:
@@ -39,11 +40,11 @@ async def test_openapi_spec() -> Dict[str, Any]:
             spec = response.json()
             print("✅ OpenAPI spec fetched successfully")
             return spec
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"❌ Failed to fetch OpenAPI spec: {e}")
         return {}
 
-def analyze_agents(openapi_spec: Dict[str, Any]) -> list:
+def analyze_agents(openapi_spec: dict[str, Any]) -> list:
     """Extract and display agent information from OpenAPI spec"""
     print("\n📋 Analyzing available agents...")
     agents = []
@@ -102,7 +103,7 @@ async def test_agent_call(agent_name: str) -> bool:
                 print(f"   Error: {response.text}")
                 return False
                 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"❌ Failed to call agent: {e}")
         return False
 
@@ -118,7 +119,7 @@ async def test_mcp_http_server() -> bool:
             else:
                 print(f"❌ MCP server returned status {response.status_code}")
                 return False
-    except Exception:
+    except Exception:  # noqa: BLE001
         print("⚠️  MCP HTTP server not running (this is OK if testing STDIO mode)")
         return False
 

@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+from collections.abc import Callable, Iterator
 from threading import Thread
-from typing import Any, Callable, Iterator
+from typing import Any
 
 from naas_abi_core import logger
 from naas_abi_core.services.bus.BusService import BusService
@@ -92,7 +93,7 @@ class EventService(ServiceBase, IEventService):
         # round-trips through reconstruction. Caller-supplied values are kept.
         created_at = getattr(event, "created_at", None)
         if created_at is None:
-            created_at = datetime.datetime.now()
+            created_at = datetime.datetime.now(datetime.UTC)
             event.created_at = created_at
         timestamp = created_at.isoformat()
 
@@ -112,7 +113,7 @@ class EventService(ServiceBase, IEventService):
                     routing_key=event_id,
                     payload=payload,
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 # Durability is the contract; bus failure must not lose the event.
                 logger.warning(f"EventService: bus broadcast failed for {event_id}: {exc}")
 
@@ -227,6 +228,27 @@ class EventService(ServiceBase, IEventService):
         )
         return [self._reconstruct(row, event_class) for row in rows]
 
+    def seek_consumer_to_end(
+        self, consumer_id: str, event_class: type[LogProcess]
+    ) -> dict[str, Any]:
+        """Jump ``consumer_id`` to the latest seq for ``event_class``.
+
+        Pending events between the previous cursor and now are skipped
+        permanently for this consumer. Returns ``cursor_before`` /
+        ``cursor_after`` so callers can log how far the seek jumped.
+        """
+        event_type = str(event_class._class_uri)
+        before = self._adapter.get_cursor(consumer_id, event_type)
+        mx = self._adapter.max_seq(event_type)
+        if before != mx:
+            self._adapter.set_cursor(consumer_id, event_type, mx)
+        return {
+            "consumer_id": consumer_id,
+            "event_type": event_type,
+            "cursor_before": before,
+            "cursor_after": mx,
+        }
+
     def iter_query_for_consumer(
         self,
         consumer_id: str,
@@ -312,7 +334,7 @@ class EventService(ServiceBase, IEventService):
                 )
                 instance = self._reconstruct(row, event_class)
                 callback(instance)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.exception(f"EventService: subscriber callback failed: {exc}")
 
         return self._bus.subscribe(topic, "#", _on_message)

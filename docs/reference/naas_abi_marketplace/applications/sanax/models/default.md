@@ -10,25 +10,25 @@
 
 ## Configuration/Dependencies
 - Depends on:
-  - `naas_abi_marketplace.applications.sanax.ABIModule` (singleton access via `get_instance()`)
+  - `naas_abi_marketplace.applications.sanax.ABIModule` (via `get_instance()`)
   - `ABIModule.get_instance().configuration.global_config.ai_mode` (string)
-  - `naas_abi_core.models.Model.ChatModel` (type)
-- Model selection:
+  - `naas_abi_core.models.Model.ChatModel` (type annotation)
+- Selection logic:
   - If `ai_mode == "airgap"`:
-    - Imports `naas_abi_marketplace.ai.qwen.models.qwen3_8b.model` as the selected model.
+    - Uses `naas_abi_marketplace.ai.qwen.models.qwen3_8b.model`
   - Otherwise:
-    - Imports `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini.model` as the selected model.
+    - Uses `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini.model`
 
 ## Usage
 ```python
 from naas_abi_marketplace.applications.sanax.models.default import model
 
-# Use `model` wherever a ChatModel is required.
-print(type(model))
+print(model)          # selected model instance
+print(type(model))    # should be compatible with ChatModel
 ```
 
 ## Caveats
 - Import-time behavior:
-  - The configuration (`ai_mode`) is read and the model is imported at module import time.
+  - `ai_mode` is read and the corresponding model is imported when this module is imported.
 - Mode matching:
-  - Only the exact string `"airgap"` selects the airgap (Qwen) model; all other values fall back to the cloud (GPT) model.
+  - Only the exact string `"airgap"` selects the Qwen model; any other value falls back to the GPT model.

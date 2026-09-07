@@ -18,7 +18,6 @@ import threading
 import time
 import uuid
 
-
 _lock = threading.Lock()
 _last_ts_ms = 0
 _last_seq = 0

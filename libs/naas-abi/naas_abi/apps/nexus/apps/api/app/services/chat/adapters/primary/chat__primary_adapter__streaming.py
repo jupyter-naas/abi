@@ -13,6 +13,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
     bind_registry,
     build_provider_messages_with_agents,
     get_or_create_conversation,
+    mark_message_superseded,
     persist_stream_content,
     persist_stream_metadata,
     request_context,
@@ -22,6 +23,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__schemas import (
     ChatRequest,
 )
+from naas_abi.apps.nexus.apps.api.app.services.ollama import DEFAULT_CHAT_MODEL_TAG
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     ProviderConfig,
     stream_with_abi_inprocess,
@@ -157,6 +159,32 @@ def _strip_internal_step_keys(steps: list[dict[str, Any]]) -> list[dict[str, Any
     return [{k: v for k, v in step.items() if not k.startswith("_")} for step in steps]
 
 
+def _extract_urls_from_text(text: str) -> list[str]:
+    import re
+
+    if not text:
+        return []
+    urls: list[str] = []
+    seen: set[str] = set()
+    for match in re.findall(r"https?://[^\s<>\]\)]+", text):
+        url = match.rstrip(".,;)")
+        if url not in seen:
+            seen.add(url)
+            urls.append(url)
+    return urls
+
+
+def _merge_source_urls(*groups: list[str]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        for url in group:
+            if url not in seen:
+                seen.add(url)
+                merged.append(url)
+    return merged
+
+
 async def stream_chat_response(
     request: ChatRequest,
     current_user: User,
@@ -185,7 +213,11 @@ async def stream_chat_response(
     if not provider:
 
         async def error_stream():
-            yield 'data: {"error": "No provider configured. Install Ollama and run: ollama pull qwen3-vl:2b"}\n\n'
+            hint = (
+                "No provider configured. Install Ollama and run: "
+                f"ollama pull {DEFAULT_CHAT_MODEL_TAG}"
+            )
+            yield f"data: {json.dumps({'error': hint})}\n\n"
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(error_stream(), media_type="text/event-stream")
@@ -217,11 +249,103 @@ async def stream_chat_response(
                     agent_chat_id,
                     agent_user_id,
                     agent_workspace_id,
+                    coder_workspace_base,
+                    coder_workspace_secret,
+                    slides_active_mode,
+                    slides_active_slug,
+                    slides_active_title,
                 )
                 agent_user_id.set(str(current_user.id))
                 agent_chat_id.set(str(conversation_id))
                 if request.workspace_id is not None:
                     agent_workspace_id.set(str(request.workspace_id))
+
+                # Bind open Slides deck + its Coder sidecar so Abi tools act on
+                # workspace files (Continue-parity) without asking which deck.
+                client_ctx = request.context if isinstance(request.context, dict) else {}
+                slides_ctx = client_ctx.get("slides") if isinstance(client_ctx, dict) else None
+                if isinstance(slides_ctx, dict):
+                    open_slug = str(slides_ctx.get("slug") or "").strip()
+                    if open_slug:
+                        slides_active_slug.set(open_slug)
+                        title = str(slides_ctx.get("title") or "").strip()
+                        mode = str(slides_ctx.get("mode") or "").strip()
+                        if title:
+                            slides_active_title.set(title)
+                        if mode:
+                            slides_active_mode.set(mode)
+                        if request.workspace_id:
+                            try:
+                                from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__primary_adapter__FastAPI import (  # noqa: PLC0415
+                                    lookup_slides_sidecar,
+                                )
+
+                                ws_base, ws_secret = await lookup_slides_sidecar(
+                                    db,
+                                    workspace_id=str(request.workspace_id),
+                                    user_id=str(current_user.id),
+                                    slug=open_slug,
+                                )
+                                if ws_base and ws_secret:
+                                    coder_workspace_base.set(ws_base)
+                                    coder_workspace_secret.set(ws_secret)
+                            except Exception:
+                                logger.warning(
+                                    "Failed to bind slides sidecar for %s",
+                                    open_slug,
+                                    exc_info=True,
+                                )
+
+                coding_ctx = (
+                    client_ctx.get("coding") if isinstance(client_ctx, dict) else None
+                )
+                if isinstance(coding_ctx, dict):
+                    repo_id = str(coding_ctx.get("repo_id") or "").strip()
+                    branch = str(coding_ctx.get("branch") or "").strip()
+                    if repo_id:
+                        from naas_abi_core.services.agent.context import (  # noqa: PLC0415
+                            coding_active_branch,
+                            coding_active_repo,
+                        )
+
+                        coding_active_repo.set(repo_id)
+                        if branch:
+                            coding_active_branch.set(branch)
+                        if request.workspace_id:
+                            try:
+                                from naas_abi import ABIModule  # noqa: PLC0415
+                                from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.primary.coding_environment__primary_adapter__FastAPI import (  # noqa: PLC0415
+                                    lookup_code_bindings,
+                                )
+                                from naas_abi_core.services.agent.context import (  # noqa: PLC0415
+                                    coding_harness_base,
+                                )
+
+                                coding_service = (
+                                    ABIModule.get_instance().engine.services.coding_environment
+                                )
+                                ws_base, ws_secret, harness_base, _env_id = (
+                                    await lookup_code_bindings(
+                                        db,
+                                        workspace_id=str(request.workspace_id),
+                                        user_id=str(current_user.id),
+                                        repo_id=repo_id,
+                                        branch=branch or "main",
+                                        service=coding_service,
+                                    )
+                                )
+                                if ws_base and ws_secret:
+                                    coder_workspace_base.set(ws_base)
+                                    coder_workspace_secret.set(ws_secret)
+                                if harness_base:
+                                    coding_harness_base.set(harness_base)
+                            except Exception:
+                                logger.warning(
+                                    "Failed to bind coding runtime for %s",
+                                    repo_id,
+                                    exc_info=True,
+                                )
+
                 provider_messages = await build_provider_messages_with_agents(
                     request=request,
                     context=request_context(current_user),
@@ -240,10 +364,18 @@ async def stream_chat_response(
                     explicit_system_prompt=request.system_prompt,
                     prior_messages=prior_messages,
                     user_id=current_user.id,
+                    workspace_id=request.workspace_id,
+                    conversation_id=conversation_id,
+                    context=request_context(current_user),
+                    client_context=client_ctx or None,
                 )
-                user_context_preamble = await registry.chat.build_user_context_addendum(
+                user_context_preamble = await registry.chat.build_abi_injection_preamble(
                     prior_messages=prior_messages,
                     user_id=current_user.id,
+                    workspace_id=request.workspace_id,
+                    conversation_id=conversation_id,
+                    context=request_context(current_user),
+                    client_context=client_ctx or None,
                 )
             await db.commit()
         except Exception:
@@ -270,6 +402,7 @@ async def stream_chat_response(
         api_key=provider.api_key,
         account_id=provider.account_id,
         model=provider.model,
+        llm_model=getattr(provider, "llm_model", None) or request.llm_model,
     )
 
     assistant_msg_id = ""
@@ -282,6 +415,7 @@ async def stream_chat_response(
                     user_content=request.message,
                     assistant_agent=request.agent,
                     created_at=datetime.now(UTC).replace(tzinfo=None),
+                    regenerate_of=request.regenerate_of,
                 )
             await pre_db.commit()
     except Exception:
@@ -301,6 +435,7 @@ async def stream_chat_response(
         # tool / agent activity for this turn is captured on the server even
         # if the frontend never PATCHes its final metadata payload.
         steps: list[dict[str, Any]] = []
+        web_source_urls: list[str] = []
 
         async def maybe_flush_incremental() -> None:
             nonlocal last_flush, buffered_chars
@@ -325,7 +460,7 @@ async def stream_chat_response(
             buffered_chars = 0
 
         async def emit_stream(chunks) -> None:
-            nonlocal full_response, buffered_chars
+            nonlocal full_response, buffered_chars, web_source_urls
             async for chunk in chunks:
                 if isinstance(chunk, str):
                     full_response += chunk
@@ -334,6 +469,11 @@ async def stream_chat_response(
                 elif isinstance(chunk, dict):
                     payload = chunk
                     _ingest_stream_event_into_steps(chunk, steps)
+                    if chunk.get("event") == "tool_response":
+                        output = chunk.get("output") or chunk.get("content") or ""
+                        for url in _extract_urls_from_text(str(output)):
+                            if url not in web_source_urls:
+                                web_source_urls.append(url)
                 else:
                     continue
 
@@ -352,7 +492,8 @@ async def stream_chat_response(
             metadata = {
                 "execution_time": round(loop.time() - stream_started_at, 3),
                 "steps": _strip_internal_step_keys(steps),
-                "sources": list(context_sources) if context_sources else [],
+                "sources": _merge_source_urls(list(context_sources), web_source_urls),
+                "llm_model": request.llm_model,
             }
             try:
                 await persist_stream_metadata(
@@ -380,8 +521,10 @@ async def stream_chat_response(
                 )
                 + "\n\n"
             )
-            if context_sources:
-                yield f"data: {json.dumps({'sources': context_sources})}\n\n"
+            if context_sources or web_source_urls:
+                yield (
+                    f"data: {json.dumps({'sources': _merge_source_urls(list(context_sources), web_source_urls)})}\n\n"
+                )
             # if search_context:
             #     yield 'data: {"search": true}\n\n'
 
@@ -433,6 +576,26 @@ async def stream_chat_response(
                 except Exception:
                     logger.error("Failed to finalize stream messages to DB", exc_info=True)
                 await persist_final_metadata()
+                if request.regenerate_of and full_response.strip():
+                    # Only once the refreshed answer actually exists — a failed
+                    # regeneration must leave the original answer on screen.
+                    try:
+                        await mark_message_superseded(
+                            user_id=current_user.id,
+                            conversation_id=conversation_id,
+                            message_id=request.regenerate_of,
+                            superseded_by=assistant_msg_id,
+                        )
+                    except Exception:
+                        logger.warning(
+                            "Failed to mark message %s as superseded",
+                            request.regenerate_of,
+                            exc_info=True,
+                        )
+
+            final_sources = _merge_source_urls(list(context_sources), web_source_urls)
+            if final_sources:
+                yield f"data: {json.dumps({'sources': final_sources})}\n\n"
 
             yield "data: [DONE]\n\n"
         except Exception as exc:

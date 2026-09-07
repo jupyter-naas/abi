@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class O3Model(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="OpenAI: o3",
+        name="o3",
         owner="openai",
         description="o3 is a well-rounded and powerful model across domains. It sets a new standard for math, science, coding, and visual reasoning tasks. It also excels at technical writing and instruction-following....",
         canonical_slug="openai/o3-2025-04-16",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1744823457),
+        created_at=datetime.fromtimestamp(1744823457, tz=UTC),
         pricing={'prompt': '0.000002', 'completion': '0.000008', 'web_search': '0.01', 'input_cache_read': '0.0000005'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['image', 'text', 'file'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 200000, 'max_completion_tokens': 100000, 'is_moderated': True},

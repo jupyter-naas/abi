@@ -1,0 +1,124 @@
+/* account/notifications — semantic page styles (vanilla CSS, theme tokens) */
+
+.account-notifications-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+/* Settings table */
+.account-notifications-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.account-notifications-table-head-row {
+  border-bottom: 1px solid var(--border-hex);
+  text-align: left;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.account-notifications-table-head-cell {
+  padding: var(--space-4);
+  font-weight: var(--font-weight-medium);
+}
+
+.account-notifications-table-head-cell-center {
+  text-align: center;
+}
+
+.account-notifications-column-heading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.account-notifications-table-row {
+  border-bottom: 1px solid var(--border-hex);
+}
+
+.account-notifications-table-row:last-child {
+  border-bottom: none;
+}
+
+.account-notifications-table-cell {
+  padding: var(--space-4);
+}
+
+.account-notifications-table-cell-center {
+  text-align: center;
+}
+
+.account-notifications-setting-label {
+  margin: 0;
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}
+
+.account-notifications-setting-description {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+}
+
+/* Save button */
+.account-notifications-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.account-notifications-save-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--color-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-sm);
+  color: var(--color-primary-foreground);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.account-notifications-save-button:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.account-notifications-save-button-saved {
+  background-color: var(--color-primary-subtle);
+  color: var(--color-primary);
+}
+
+.account-notifications-save-button-saved:hover {
+  background-color: var(--color-primary-subtle);
+  color: var(--color-primary);
+}
+
+@media (max-width: 767px) {
+  .account-notifications-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .account-notifications-table-head-cell,
+  .account-notifications-table-cell {
+    padding: var(--space-3);
+  }
+
+  .account-notifications-actions {
+    justify-content: stretch;
+  }
+
+  .account-notifications-save-button {
+    width: 100%;
+    justify-content: center;
+  }
+}

@@ -21,7 +21,7 @@ def pipeline():
 
     limit = 1
     linkedin_export_integration_configuration = LinkedInExportIntegrationConfiguration(
-        export_file_path="storage/datastore/linkedin/export/florent-ravenel/Complete_LinkedInDataExport_11-06-2025.zip (1).zip"
+        export_file_path="storage/datastore/linkedin/export/alice-dupont/Complete_LinkedInDataExport_11-06-2025.zip (1).zip"
     )
     linkedin_export_profile_pipeline_configuration = (
         LinkedInExportProfilePipelineConfiguration(
@@ -40,7 +40,7 @@ def pipeline():
 
 def test_run(pipeline: LinkedInExportConnectionsPipeline):
     parameters = LinkedInExportConnectionsPipelineParameters(
-        linkedin_public_url="https://www.linkedin.com/in/florent-ravenel/",
+        linkedin_public_url="https://demo.example/profiles/demo",
         file_name="Connections.csv",
     )
     graph = pipeline.run(parameters)

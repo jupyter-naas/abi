@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
@@ -17,11 +17,27 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import deprecated_en
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import build_feature_flags
+from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
+    get_auth_service,
+)
+from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
+from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
+    issue_and_send_invite_sign_in,
+)
+from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
+    OrganizationSecondaryAdapterPostgres,
+)
+from naas_abi.apps.nexus.apps.api.app.services.organizations.service import OrganizationService
+from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
+    check_rate_limit,
+    get_rate_limit_identifier,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.postgres import (
     WorkspaceSecondaryAdapterPostgres,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     WorkspaceCreateInput,
+    WorkspaceMemberRecord,
     WorkspaceRecord,
     WorkspaceUpdateInput,
 )
@@ -30,6 +46,10 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
     WorkspaceService,
     WorkspaceSlugAlreadyExistsError,
 )
+from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
+    resolve_public_module_asset_url,
+)
+from naas_abi_core.services.email.EmailService import EmailService
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +58,24 @@ router = APIRouter()
 
 def get_workspace_service(db: AsyncSession = Depends(get_db)) -> WorkspaceService:
     return WorkspaceService(adapter=WorkspaceSecondaryAdapterPostgres(db=db))
+
+
+def get_organization_service(db: AsyncSession = Depends(get_db)) -> OrganizationService:
+    return OrganizationService(adapter=OrganizationSecondaryAdapterPostgres(db=db))
+
+
+def _get_email_service(request: Request) -> EmailService | None:
+    service = getattr(request.app.state, "email_service", None)
+    if service is not None:
+        return service
+    try:
+        from naas_abi import ABIModule
+
+        service = ABIModule.get_instance().engine.services.email
+        request.app.state.email_service = service
+        return service
+    except Exception:
+        return None
 
 
 class Workspace(BaseModel):
@@ -51,6 +89,7 @@ class Workspace(BaseModel):
     primary_color: str | None = "#22c55e"
     accent_color: str | None = None
     background_color: str | None = None
+    background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
     platform_drive_enabled: bool = False
@@ -72,6 +111,7 @@ class WorkspaceCreate(BaseModel):
     primary_color: str | None = "#22c55e"
     accent_color: str | None = None
     background_color: str | None = None
+    background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
 
@@ -83,6 +123,7 @@ class WorkspaceUpdate(BaseModel):
     primary_color: str | None = None
     accent_color: str | None = None
     background_color: str | None = None
+    background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
     platform_drive_enabled: bool | None = None
@@ -102,6 +143,7 @@ class WorkspaceMember(BaseModel):
 class WorkspaceMemberInvite(BaseModel):
     email: str = Field(..., min_length=3, max_length=255)
     role: str = Field(default="member", pattern=r"^(admin|member|viewer)$")
+    name: str | None = Field(default=None, min_length=1, max_length=120)
 
 
 class InferenceServer(BaseModel):
@@ -140,7 +182,52 @@ class InferenceServerUpdate(BaseModel):
     models_path: str | None = None
 
 
-def _to_schema(record: WorkspaceRecord, current_user_role: str | None) -> Workspace:
+async def _load_org_role_override(
+    org_id: str | None,
+    org_service: OrganizationService,
+) -> dict[str, list[str]] | None:
+    if not org_id:
+        return None
+    stored = await org_service.get_role_features(org_id=org_id)
+    if stored is None:
+        return None
+    return stored.role_baseline
+
+
+async def _load_org_role_overrides(
+    org_ids: list[str | None],
+    org_service: OrganizationService,
+) -> dict[str, dict[str, list[str]] | None]:
+    unique = sorted({org_id for org_id in org_ids if org_id})
+    if not unique:
+        return {}
+    rows = await asyncio.gather(
+        *[org_service.get_role_features(org_id=org_id) for org_id in unique]
+    )
+    return {
+        org_id: (row.role_baseline if row is not None else None)
+        for org_id, row in zip(unique, rows, strict=True)
+    }
+
+
+def _workspace_public_asset_url(raw: str | None) -> str | None:
+    """Rewrite module asset paths (``src/external/…/assets/public/…``) to API URLs."""
+    if not raw:
+        return raw
+    if raw.startswith(("http://", "https://", "/uploads/")):
+        return raw
+    try:
+        return resolve_public_module_asset_url(raw, abi_module_path=None)
+    except Exception:
+        return raw
+
+
+def _to_schema(
+    record: WorkspaceRecord,
+    current_user_role: str | None,
+    *,
+    organization_override: dict[str, list[str]] | None = None,
+) -> Workspace:
     role = current_user_role or "member"
     return Workspace(
         id=record.id,
@@ -148,11 +235,12 @@ def _to_schema(record: WorkspaceRecord, current_user_role: str | None) -> Worksp
         slug=record.slug,
         owner_id=record.owner_id,
         organization_id=record.organization_id,
-        logo_url=record.logo_url,
+        logo_url=_workspace_public_asset_url(record.logo_url),
         logo_emoji=record.logo_emoji,
         primary_color=record.primary_color,
         accent_color=record.accent_color,
         background_color=record.background_color,
+        background_image_url=_workspace_public_asset_url(record.background_image_url),
         sidebar_color=record.sidebar_color,
         font_family=record.font_family,
         platform_drive_enabled=record.platform_drive_enabled,
@@ -167,6 +255,8 @@ def _to_schema(record: WorkspaceRecord, current_user_role: str | None) -> Worksp
             feature_flags_config=settings.feature_flags,
             workspace_slug=record.slug,
             workspace_id=record.id,
+            organization_id=record.organization_id,
+            organization_override=organization_override,
         ),
     )
 
@@ -175,12 +265,23 @@ def _to_schema(record: WorkspaceRecord, current_user_role: str | None) -> Worksp
 async def list_workspaces(
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
+    org_service: OrganizationService = Depends(get_organization_service),
 ) -> list[Workspace]:
     rows = await service.list_workspaces(user_id=current_user.id)
     roles = await asyncio.gather(
         *[service.get_workspace_role(user_id=current_user.id, workspace_id=row.id) for row in rows]
     )
-    return [_to_schema(row, role) for row, role in zip(rows, roles, strict=False)]
+    overrides = await _load_org_role_overrides(
+        [row.organization_id for row in rows], org_service
+    )
+    return [
+        _to_schema(
+            row,
+            role,
+            organization_override=overrides.get(row.organization_id or ""),
+        )
+        for row, role in zip(rows, roles, strict=False)
+    ]
 
 
 @router.get("/{workspace_id}")
@@ -188,12 +289,17 @@ async def get_workspace(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
+    org_service: OrganizationService = Depends(get_organization_service),
 ) -> Workspace:
     role = await require_workspace_access(current_user.id, workspace_id)
     row = await service.get_workspace(workspace_id=workspace_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    return _to_schema(row, role)
+    return _to_schema(
+        row,
+        role,
+        organization_override=await _load_org_role_override(row.organization_id, org_service),
+    )
 
 
 @router.get("/slug/{slug}")
@@ -201,12 +307,17 @@ async def get_workspace_by_slug(
     slug: str,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
+    org_service: OrganizationService = Depends(get_organization_service),
 ) -> Workspace:
     row = await service.get_workspace_by_slug(slug=slug)
     if row is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
     role = await require_workspace_access(current_user.id, row.id)
-    return _to_schema(row, role)
+    return _to_schema(
+        row,
+        role,
+        organization_override=await _load_org_role_override(row.organization_id, org_service),
+    )
 
 
 @router.post("")
@@ -214,6 +325,7 @@ async def create_workspace(
     workspace: WorkspaceCreate,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
+    org_service: OrganizationService = Depends(get_organization_service),
 ) -> Workspace:
     try:
         record = await service.create_workspace(
@@ -227,13 +339,20 @@ async def create_workspace(
                 primary_color=workspace.primary_color,
                 accent_color=workspace.accent_color,
                 background_color=workspace.background_color,
+                background_image_url=workspace.background_image_url,
                 sidebar_color=workspace.sidebar_color,
                 font_family=workspace.font_family,
             )
         )
     except WorkspaceSlugAlreadyExistsError as exc:
         raise HTTPException(status_code=400, detail="Slug already exists") from exc
-    return _to_schema(record, "owner")
+    return _to_schema(
+        record,
+        "owner",
+        organization_override=await _load_org_role_override(
+            record.organization_id, org_service
+        ),
+    )
 
 
 @router.delete("/{workspace_id}")
@@ -259,6 +378,7 @@ async def update_workspace(
     updates: WorkspaceUpdate,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
+    org_service: OrganizationService = Depends(get_organization_service),
 ) -> Workspace:
     role = await require_workspace_access(current_user.id, workspace_id)
     if role not in ("owner", "admin"):
@@ -270,7 +390,13 @@ async def update_workspace(
     )
     if record is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    return _to_schema(record, role)
+    return _to_schema(
+        record,
+        role,
+        organization_override=await _load_org_role_override(
+            record.organization_id, org_service
+        ),
+    )
 
 
 @router.get("/{workspace_id}/stats")
@@ -313,29 +439,69 @@ async def list_workspace_members(
     ]
 
 
+async def _find_workspace_member(
+    service: WorkspaceService, *, workspace_id: str, user_id: str
+) -> WorkspaceMemberRecord | None:
+    """Existing membership row, for resending an invite to a current member."""
+    members = await service.list_workspace_members(workspace_id=workspace_id)
+    return next((m for m in members if m.user_id == user_id), None)
+
+
 @router.post("/{workspace_id}/members/invite")
 async def invite_workspace_member(
     workspace_id: str,
     invite: WorkspaceMemberInvite,
+    request: Request,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
-) -> dict[str, str]:
+    auth_service: AuthService = Depends(get_auth_service),
+    email_service: EmailService | None = Depends(_get_email_service),
+) -> dict[str, object]:
     role = await get_workspace_role(current_user.id, workspace_id)
     if role not in ["admin", "owner"]:
         raise HTTPException(status_code=403, detail="Only admins can invite members")
 
+    email = invite.email.lower().strip()
+    await check_rate_limit(
+        get_rate_limit_identifier(request, current_user.id),
+        "/api/workspaces/members/invite",
+    )
+    await check_rate_limit(f"email:{email}", "/api/workspaces/members/invite")
+    _user, user_created = await auth_service.ensure_user_for_invite(email, name=invite.name)
+
+    already_member = False
     try:
         member = await service.invite_workspace_member(
             workspace_id=workspace_id,
-            email=invite.email,
+            email=email,
             role=invite.role,
         )
     except WorkspaceMemberAlreadyExistsError as exc:
-        raise HTTPException(status_code=400, detail="User is already a member") from exc
+        # Re-inviting is how an admin resends an invite that never arrived, so
+        # keep the membership as-is and fall through to issue a fresh challenge
+        # rather than rejecting the only retry path they have.
+        member = await _find_workspace_member(
+            service, workspace_id=workspace_id, user_id=exc.user_id
+        )
+        if member is None:
+            raise HTTPException(status_code=400, detail="User is already a member") from exc
+        already_member = True
 
     if member is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    return {"status": "invited", "member_id": member.id}
+        raise HTTPException(status_code=500, detail="Failed to create or find user for invite")
+
+    sign_in_email_sent = await issue_and_send_invite_sign_in(
+        auth_service,
+        email,
+        email_service=email_service or _get_email_service(request),
+    )
+
+    return {
+        "status": "already_member" if already_member else "invited",
+        "member_id": member.id,
+        "user_created": user_created,
+        "sign_in_email_sent": sign_in_email_sent,
+    }
 
 
 @router.delete("/{workspace_id}/members/{user_id}")

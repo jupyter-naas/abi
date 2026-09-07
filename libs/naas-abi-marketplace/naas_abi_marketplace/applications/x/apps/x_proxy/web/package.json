@@ -1,0 +1,27 @@
+{
+  "name": "x-recent-tweets-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "config": "python3 ../app_config.py --write",
+    "predev": "python3 ../app_config.py --write",
+    "dev": "next dev --port 3045",
+    "prebuild": "python3 ../app_config.py --write",
+    "build": "next build",
+    "start": "next start --port 3045",
+    "lint": "next lint",
+    "pretypecheck": "python3 ../app_config.py --write",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "14.2.35",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "typescript": "^5.3.3"
+  }
+}

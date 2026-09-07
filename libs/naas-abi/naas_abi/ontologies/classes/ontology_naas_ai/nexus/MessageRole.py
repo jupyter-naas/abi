@@ -8,4 +8,3 @@ class MessageRole(_MessageRole):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

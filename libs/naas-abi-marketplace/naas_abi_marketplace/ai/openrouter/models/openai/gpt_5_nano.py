@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class Gpt5NanoModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=400000,
-        name="OpenAI: GPT-5 Nano",
+        name="GPT-5 Nano",
         owner="openai",
         description="GPT-5-Nano is the smallest and fastest variant in the GPT-5 system, optimized for developer tools, rapid interactions, and ultra-low latency environments. While limited in reasoning depth compared to its larger...",
         canonical_slug="openai/gpt-5-nano-2025-08-07",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1754587402),
+        created_at=datetime.fromtimestamp(1754587402, tz=UTC),
         pricing={'prompt': '0.00000005', 'completion': '0.0000004', 'web_search': '0.01', 'input_cache_read': '0.00000001'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['text', 'image', 'file'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 400000, 'max_completion_tokens': None, 'is_moderated': False},

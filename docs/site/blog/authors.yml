@@ -1,17 +1,17 @@
 jravenel:
   name: Jérémy Ravenel
   title: Founder & CEO, naas.ai
-  url: https://www.linkedin.com/in/jeremyravenel/
+  url: https://demo.example/profiles/emma-petit
   image_url: https://avatars.githubusercontent.com/u/21052349?v=4
 
 fravenel:
-  name: Florent Ravenel
+  name: Alice Dupont
   title: Co-Founder & COO, naas.ai
-  url: https://www.linkedin.com/in/florent-ravenel/
+  url: https://demo.example/profiles/demo
   image_url: https://avatars.githubusercontent.com/u/52425587?v=4
 
 mjublou:
-  name: Maxime Jublou
+  name: Grace Lambert
   title: CTO, naas.ai
-  url: https://www.linkedin.com/in/maximejublou/
+  url: https://demo.example/profiles/grace-lambert
   image_url: https://avatars.githubusercontent.com/u/22365519?v=4

@@ -14,12 +14,6 @@ const nextConfig = {
     return config;
   },
   async rewrites() {
-    const apiBase =
-      process.env.NEXUS_INTERNAL_API_URL ||
-      process.env.NEXUS_API_URL ||
-      process.env.NEXT_PUBLIC_API_URL ||
-      'http://localhost:9879';
-
     return [
       {
         source: '/login',
@@ -29,10 +23,8 @@ const nextConfig = {
         source: '/register',
         destination: '/auth/register',
       },
-      {
-        source: '/app-html/:path*',
-        destination: `${apiBase}/app-html/:path*`,
-      },
+      // /app-html/* is handled by the route handler (or Caddy → ABI). Do not
+      // rewrite here and never forge ABI_API_KEY for anonymous browsers.
     ];
   },
   images: {

@@ -3,13 +3,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import pytest
 
 from .IVectorStorePort import IVectorStorePort, SearchResult, VectorDocument
-from .VectorStoreService import VectorStoreService
 from .ontologies.modules.VectorStoreEventOntology import (
     CollectionDeleted,
     CollectionEnsured,
@@ -18,6 +17,7 @@ from .ontologies.modules.VectorStoreEventOntology import (
     DocumentUpdated,
     VectorStoreError,
 )
+from .VectorStoreService import VectorStoreService
 
 
 class _MemoryAdapter(IVectorStorePort):
@@ -39,11 +39,11 @@ class _MemoryAdapter(IVectorStorePort):
     def delete_collection(self, collection_name: str) -> None:
         self.collections.pop(collection_name, None)
 
-    def list_collections(self) -> List[str]:
+    def list_collections(self) -> list[str]:
         return list(self.collections.keys())
 
     def store_vectors(
-        self, collection_name: str, documents: List[VectorDocument]
+        self, collection_name: str, documents: list[VectorDocument]
     ) -> None:
         coll = self.collections.setdefault(collection_name, {})
         for doc in documents:
@@ -54,10 +54,10 @@ class _MemoryAdapter(IVectorStorePort):
         collection_name: str,
         query_vector: np.ndarray,
         k: int = 10,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: dict[str, Any] | None = None,
         include_vectors: bool = False,
         include_metadata: bool = True,
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         return []
 
     def get_vector(
@@ -65,16 +65,16 @@ class _MemoryAdapter(IVectorStorePort):
         collection_name: str,
         vector_id: str,
         include_vector: bool = True,
-    ) -> Optional[VectorDocument]:
+    ) -> VectorDocument | None:
         return self.collections.get(collection_name, {}).get(vector_id)
 
     def update_vector(
         self,
         collection_name: str,
         vector_id: str,
-        vector: Optional[np.ndarray] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        payload: Optional[Dict[str, Any]] = None,
+        vector: np.ndarray | None = None,
+        metadata: dict[str, Any] | None = None,
+        payload: dict[str, Any] | None = None,
     ) -> None:
         coll = self.collections.setdefault(collection_name, {})
         existing = coll.get(vector_id)
@@ -92,7 +92,7 @@ class _MemoryAdapter(IVectorStorePort):
         coll[vector_id] = existing
 
     def delete_vectors(
-        self, collection_name: str, vector_ids: List[str]
+        self, collection_name: str, vector_ids: list[str]
     ) -> None:
         coll = self.collections.get(collection_name, {})
         for vid in vector_ids:

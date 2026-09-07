@@ -2,26 +2,22 @@ from __future__ import annotations
 
 import datetime
 import uuid
+from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
-    Callable,
     ClassVar,
-    Iterable,
-    List,
-    Optional,
     Union,
     get_args,
     get_origin,
 )
 
-from pydantic import BaseModel, Field, ValidationError
-from rdflib import Graph, Literal, Namespace, URIRef
-from rdflib.namespace import OWL, RDF, RDFS, XSD
-
 from naas_abi_core.services.event.ontologies.modules.EventOntology import (
     LogProcess,
 )
+from pydantic import BaseModel, Field, ValidationError
+from rdflib import Graph, Literal, Namespace, URIRef
+from rdflib.namespace import OWL, RDF, RDFS, XSD
 
 BFO = Namespace("http://purl.obolibrary.org/obo/")
 ABI = Namespace("http://ontology.naas.ai/abi/")
@@ -98,7 +94,7 @@ class RDFEntity(BaseModel):
     def _field_expects_list(field_annotation: object) -> bool:
         """Return True when a field annotation contains a list type."""
         origin = get_origin(field_annotation)
-        if origin in (list, List):
+        if origin in (list, list):
             return True
         if origin is Annotated:
             args = get_args(field_annotation)
@@ -330,42 +326,15 @@ class KeyValueSet(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    key: Optional[Annotated[str, Field(description="Key the operation targeted.")]] = (
+    key: Annotated[str, Field(description="Key the operation targeted.")] | None = (
         None
     )
-    size_bytes: Optional[
-        Annotated[
-            int,
-            Field(description="Size of the written value in bytes (len(value))."),
-        ]
-    ] = None
-    ttl_seconds: Optional[
-        Annotated[
-            int,
-            Field(description="TTL in seconds, set only when the caller passed a TTL."),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    size_bytes: Annotated[int, Field(description="Size of the written value in bytes (len(value)).")] | None = None
+    ttl_seconds: Annotated[int, Field(description="TTL in seconds, set only when the caller passed a TTL.")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class KeyValueDeleted(LogProcess, RDFEntity):
@@ -385,30 +354,13 @@ class KeyValueDeleted(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    key: Optional[Annotated[str, Field(description="Key the operation targeted.")]] = (
+    key: Annotated[str, Field(description="Key the operation targeted.")] | None = (
         None
     )
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class KeyValueError(LogProcess, RDFEntity):
@@ -430,46 +382,15 @@ class KeyValueError(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    key: Optional[Annotated[str, Field(description="Key the operation targeted.")]] = (
+    key: Annotated[str, Field(description="Key the operation targeted.")] | None = (
         None
     )
-    operation: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Name of the operation that failed (set/delete/set_if_not_exists/delete_if_value_matches)."
-            ),
-        ]
-    ] = None
-    message: Optional[
-        Annotated[
-            str,
-            Field(
-                description="String representation of the exception raised by the adapter."
-            ),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    operation: Annotated[str, Field(description="Name of the operation that failed (set/delete/set_if_not_exists/delete_if_value_matches).")] | None = None
+    message: Annotated[str, Field(description="String representation of the exception raised by the adapter.")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 # Rebuild models to resolve forward references

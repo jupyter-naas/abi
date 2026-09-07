@@ -1,7 +1,7 @@
 import hashlib
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, cast
+from typing import cast
 
 from langchain_core.tools import BaseTool
 from naas_abi.ontologies.modules.NexusPlatformOntology import (
@@ -79,7 +79,6 @@ class NexusPlatformPipelineConfiguration(PipelineConfiguration):
 class NexusPlatformPipelineParameters(PipelineParameters):
     """Parameters for NexusPlatformPipeline execution."""
 
-    pass
 
 
 class NexusPlatformPipeline(Pipeline):
@@ -172,7 +171,7 @@ class NexusPlatformPipeline(Pipeline):
                     agent_entries.append(
                         f"{class_path}@{file_hashes.get(source_file, '')}"
                     )
-        except Exception:
+        except Exception:  # noqa: BLE001
             # If we can't enumerate agents we should not pretend the cache
             # is valid — fall through to a forced rebuild by returning a
             # signature that will never match.
@@ -191,9 +190,9 @@ class NexusPlatformPipeline(Pipeline):
         results = self.__triple_store.query(
             f"""
             SELECT ?sig WHERE {{
-                GRAPH <{str(self.__nexus_graph_uri)}> {{
-                    <{str(self._bootstrap_uri())}>
-                        <{str(self._signature_predicate())}>
+                GRAPH <{self.__nexus_graph_uri!s}> {{
+                    <{self._bootstrap_uri()!s}>
+                        <{self._signature_predicate()!s}>
                         ?sig .
                 }}
             }}
@@ -209,9 +208,9 @@ class NexusPlatformPipeline(Pipeline):
         old_results = self.__triple_store.query(
             f"""
             SELECT ?sig WHERE {{
-                GRAPH <{str(self.__nexus_graph_uri)}> {{
-                    <{str(self._bootstrap_uri())}>
-                        <{str(self._signature_predicate())}>
+                GRAPH <{self.__nexus_graph_uri!s}> {{
+                    <{self._bootstrap_uri()!s}>
+                        <{self._signature_predicate()!s}>
                         ?sig .
                 }}
             }}
@@ -237,8 +236,8 @@ class NexusPlatformPipeline(Pipeline):
     def _query_nexus_instances(
         self,
         class_uri: URIRef,
-        metadata: dict[str, URIRef] = {},
-    ) -> List[Dict]:
+        metadata: dict[str, URIRef] | None = None,
+    ) -> list[dict]:
         """Query Nexus instances of a given class.
 
         Args:
@@ -248,10 +247,12 @@ class NexusPlatformPipeline(Pipeline):
         Returns:
             A list of dictionaries containing the URI and label of the Nexus instances.
         """
+        if metadata is None:
+            metadata = {}
         metadata_labels: list[str] = list(metadata.keys())
         metadata_vars = " ".join(f"?{metadata_key}" for metadata_key in metadata_labels)
         metadata_optionals = " ".join(
-            f"OPTIONAL {{ ?uri <{str(metadata_value)}> ?{metadata_key} . }}"
+            f"OPTIONAL {{ ?uri <{metadata_value!s}> ?{metadata_key} . }}"
             for metadata_key, metadata_value in metadata.items()
         )
 
@@ -266,8 +267,8 @@ class NexusPlatformPipeline(Pipeline):
             "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> "
             f"{select_clause} "
             "WHERE { "
-            f"GRAPH <{str(self.__nexus_graph_uri)}> {{ "
-            f"?uri rdf:type <{str(class_uri)}> . "
+            f"GRAPH <{self.__nexus_graph_uri!s}> {{ "
+            f"?uri rdf:type <{class_uri!s}> . "
             "OPTIONAL { ?uri rdfs:label ?label . } "
             f"{metadata_optionals} "
             "} "
@@ -278,7 +279,7 @@ class NexusPlatformPipeline(Pipeline):
         nexus_instances = self.__sparql_utils.results_to_list(results)
         return nexus_instances if nexus_instances is not None else []
 
-    def list_nexus_graphs(self) -> List[Dict]:
+    def list_nexus_graphs(self) -> list[dict]:
         return self._query_nexus_instances(URIRef(KnowledgeGraph._class_uri))
 
     def create_graph_to_nexus_graph(
@@ -287,7 +288,7 @@ class NexusPlatformPipeline(Pipeline):
         admin_role: KnowledgeGraphRole | None = None,
         unknown_role: KnowledgeGraphRole | None = None,
     ) -> tuple[KnowledgeGraph, KnowledgeGraphRole]:
-        is_admin = any(token in str(uri).lower() for token in {"schema", "nexus"})
+        is_admin = any(token in str(uri).lower() for token in ("schema", "nexus"))
         if is_admin:
             knowledge_graph_role = admin_role or KnowledgeGraphRole(label="Admin")
         else:
@@ -325,7 +326,7 @@ class NexusPlatformPipeline(Pipeline):
         graph_uris.add(self.__nexus_graph_uri)
         for graph_uri in graph_uris:
             if str(graph_uri) not in nexus_graph_uris:
-                logger.debug(f"🟢 Graph {str(graph_uri)} added to nexus graph")
+                logger.debug(f"🟢 Graph {graph_uri!s} added to nexus graph")
                 knowledge_graph, _ = self.create_graph_to_nexus_graph(
                     graph_uri, admin_role=admin_role, unknown_role=unknown_role
                 )
@@ -337,13 +338,15 @@ class NexusPlatformPipeline(Pipeline):
             )
         return inserted_graph
 
-    def list_nexus_agents(self, metadata: dict[str, URIRef] = {}) -> List[Dict]:
+    def list_nexus_agents(self, metadata: dict[str, URIRef] | None = None) -> list[dict]:
+        if metadata is None:
+            metadata = {}
         return self._query_nexus_instances(URIRef(Agent._class_uri), metadata)
 
-    def list_nexus_ai_providers(self) -> List[Dict]:
+    def list_nexus_ai_providers(self) -> list[dict]:
         return self._query_nexus_instances(_CCO_ORGANIZATION)
 
-    def list_nexus_ai_models(self) -> List[Dict]:
+    def list_nexus_ai_models(self) -> list[dict]:
         return self._query_nexus_instances(URIRef(AIModel._class_uri))
 
     def create_agent_to_nexus_graph(
@@ -491,7 +494,7 @@ class NexusPlatformPipeline(Pipeline):
                 isinstance(logo_url, str)
                 and logo_url
                 and not (
-                    logo_url.startswith("http://") or logo_url.startswith("https://")
+                    logo_url.startswith(("http://", "https://"))
                 )
             ):
                 top_level_module = _module_name_from_module_path(module_name)
@@ -630,7 +633,9 @@ class NexusPlatformPipeline(Pipeline):
             )
         return inserted_graph
 
-    def list_nexus_graph_views(self, metadata: dict[str, URIRef] = {}) -> List[Dict]:
+    def list_nexus_graph_views(self, metadata: dict[str, URIRef] | None = None) -> list[dict]:
+        if metadata is None:
+            metadata = {}
         return self._query_nexus_instances(URIRef(GraphView._class_uri), metadata)
 
     def create_graph_view_to_nexus_graph(
@@ -720,7 +725,7 @@ class NexusPlatformPipeline(Pipeline):
 
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, NexusPlatformPipelineParameters):
-            raise ValueError(
+            raise TypeError(
                 "Parameters must be of type NexusPlatformPipelineParameters"
             )
 

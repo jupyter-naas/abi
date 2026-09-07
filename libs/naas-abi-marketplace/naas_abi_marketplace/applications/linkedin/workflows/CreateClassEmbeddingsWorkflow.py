@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, Any, Dict, List
+from typing import Annotated, Any
 
 import numpy as np
 from langchain_core.tools import BaseTool, StructuredTool
@@ -83,7 +83,7 @@ class CreateClassEmbeddingsWorkflow(Workflow):
 
     def create_class_embeddings(
         self, parameters: CreateClassEmbeddingsWorkflowParameters
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create embeddings for entities of a given class and store them in a vector store.
 
         Args:
@@ -121,7 +121,7 @@ class CreateClassEmbeddingsWorkflow(Workflow):
         """
         results = self.__triple_store_service.query(sparql_query)
         sparql_utils = SPARQLUtils(self.__triple_store_service)
-        results_list: List[Dict[str, Any]] = sparql_utils.results_to_list(results) or []
+        results_list: list[dict[str, Any]] = sparql_utils.results_to_list(results) or []
         if len(results_list) == 0:
             logger.warning(f"No entities found for class {parameters.class_uri}")
             return {
@@ -131,7 +131,7 @@ class CreateClassEmbeddingsWorkflow(Workflow):
 
         # Prepare data for embedding
         # Group by entity to collect all datatype properties
-        entity_data: Dict[str, Dict[str, Any]] = {}
+        entity_data: dict[str, dict[str, Any]] = {}
 
         for row in results_list:
             entity_uri = str(row.get(parameters.entity_variable_name, ""))
@@ -158,9 +158,9 @@ class CreateClassEmbeddingsWorkflow(Workflow):
                     entity_data[entity_uri]["properties"][property_uri_str] = value_str
 
         # Convert to lists for processing
-        labels: List[str] = []
-        uris: List[str] = []
-        metadata: List[Dict[str, Any]] = []
+        labels: list[str] = []
+        uris: list[str] = []
+        metadata: list[dict[str, Any]] = []
 
         for entity_uri, data in entity_data.items():
             labels.append(data["label"])
@@ -192,10 +192,10 @@ class CreateClassEmbeddingsWorkflow(Workflow):
                     existing_doc_ids.add(doc_id)
 
         # Filter out entities that already have embeddings
-        new_labels: List[str] = []
-        new_uris: List[str] = []
-        new_metadata: List[Dict[str, Any]] = []
-        new_doc_ids: List[str] = []
+        new_labels: list[str] = []
+        new_uris: list[str] = []
+        new_metadata: list[dict[str, Any]] = []
+        new_doc_ids: list[str] = []
 
         for i, doc_id in enumerate(doc_ids):
             if doc_id not in existing_doc_ids:
@@ -273,7 +273,7 @@ class CreateClassEmbeddingsWorkflow(Workflow):
             )
 
         # Create search function that accepts the dynamic parameter name
-        def search_entity(**kwargs) -> List[Dict[str, Any]]:
+        def search_entity(**kwargs) -> list[dict[str, Any]]:
             """Search for entity URIs by name using vector similarity search.
 
             Args:
@@ -315,7 +315,7 @@ class CreateClassEmbeddingsWorkflow(Workflow):
                         )
 
                 return results
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 return [{"error": str(e)}]
 
         # Create and return the search tool

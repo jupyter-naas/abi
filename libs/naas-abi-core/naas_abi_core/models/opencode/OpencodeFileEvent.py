@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
+from naas_abi_core.models.opencode.Base import OpencodeBase
 from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
-
-from naas_abi_core.models.opencode.Base import OpencodeBase
 
 
 class OpencodeFileEvent(OpencodeBase):
@@ -24,5 +23,5 @@ class OpencodeFileEvent(OpencodeBase):
     diff: Mapped[str | None] = mapped_column(Text(), nullable=True)
     command: Mapped[str | None] = mapped_column(Text(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )

@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-08-19 17:25",
+  "person": {
+    "first_name": "Emma",
+    "last_name": "Petit",
+    "full_name": "Emma Petit",
+    "linkedin_profile_url": "https://demo.example/profiles/emma_petit"
+  },
+  "records": [
+    {
+      "process_type": "ActOfWorking",
+      "organization": "Demo",
+      "title": "CTO",
+      "contract_type": "Permanent",
+      "site": "Remote",
+      "start": "2020-12-01",
+      "end": "2024-12-31",
+      "duration": "4 yrs",
+      "mission_label": "Led core engineering for the Demo open-source platform.",
+      "mission": "Led core engineering for the Demo open-source platform.",
+      "skills": [
+        "TypeScript",
+        "DevOps"
+      ],
+      "source": "https://demo.example/profiles/emma_petit"
+    },
+    {
+      "process_type": "ActOfWorking",
+      "organization": "LaunchPad",
+      "title": "Solo Maker",
+      "contract_type": "Self-employed",
+      "site": "Remote",
+      "start": "2021-12-01",
+      "end": null,
+      "duration": "4 yrs",
+      "mission_label": "Build and operate a mobile delivery tooling product.",
+      "mission": "Build and operate a mobile delivery tooling product.",
+      "skills": [
+        "Product",
+        "Vue.js"
+      ],
+      "source": "https://demo.example/profiles/emma_petit"
+    }
+  ]
+}

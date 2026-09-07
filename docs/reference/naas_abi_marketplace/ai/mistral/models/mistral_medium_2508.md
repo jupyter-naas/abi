@@ -1,35 +1,34 @@
 # mistral_medium_2508
 
 ## What it is
-A module-level definition of a `ChatModel` configured to use Mistral’s **`mistral-medium-2508`** chat model via `langchain_mistralai.ChatMistralAI`.
+A module that defines a preconfigured `ChatModel` wrapper for Mistral’s `mistral-medium-2508` via `langchain_mistralai.ChatMistralAI`.
 
 ## Public API
 - **Constants**
-  - `MODEL_ID`: `"mistral-medium-2508"` — the Mistral model name.
+  - `MODEL_ID`: `"mistral-medium-2508"` — Mistral model name.
   - `PROVIDER`: `"mistral"` — provider identifier.
   - `TEMPERATURE`: `0` — generation temperature.
 
 - **Objects**
-  - `model: ChatModel` — a preconfigured `naas_abi_core.models.Model.ChatModel` wrapping a `ChatMistralAI` instance.
+  - `model: ChatModel` — a `naas_abi_core.models.Model.ChatModel` instance wrapping `ChatMistralAI` configured with the above constants and an API key from `ABIModule`.
 
 ## Configuration/Dependencies
 - **Dependencies**
   - `langchain_mistralai.ChatMistralAI`
-  - `naas_abi_marketplace.ai.mistral.ABIModule`
   - `naas_abi_core.models.Model.ChatModel`
+  - `naas_abi_marketplace.ai.mistral.ABIModule`
   - `pydantic.SecretStr`
 
 - **Required configuration**
-  - `ABIModule.get_instance().configuration.mistral_api_key` must be set; it is passed as a `SecretStr` to `ChatMistralAI`.
+  - `ABIModule.get_instance().configuration.mistral_api_key` must be set; it is wrapped in `SecretStr` and passed to `ChatMistralAI` as `api_key`.
 
 ## Usage
 ```python
 from naas_abi_marketplace.ai.mistral.models.mistral_medium_2508 import model
 
-# Use `model` wherever a ChatModel is expected in your application.
-print(model.model_id)   # mistral-medium-2508
-print(model.provider)   # mistral
+print(model.model_id)   # "mistral-medium-2508"
+print(model.provider)   # "mistral"
 ```
 
 ## Caveats
-- Importing the module constructs the underlying `ChatMistralAI` immediately; missing/invalid `mistral_api_key` configuration may cause failures at import time.
+- Importing this module constructs `ChatMistralAI` immediately; missing/invalid `mistral_api_key` may cause import-time failures.

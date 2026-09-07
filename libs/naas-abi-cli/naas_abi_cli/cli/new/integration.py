@@ -1,6 +1,7 @@
 import os
 
 import click
+
 import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
@@ -15,7 +16,9 @@ def _new_integration(integration_name: str, integration_path: str = "."):
     new_integration(integration_name, integration_path)
 
 
-def new_integration(integration_name: str, integration_path: str = ".", extra_values: dict = {}):
+def new_integration(integration_name: str, integration_path: str = ".", extra_values: dict | None = None):
+    if extra_values is None:
+        extra_values = {}
     integration_name = to_pascal_case(integration_name)
 
     if integration_path == ".":

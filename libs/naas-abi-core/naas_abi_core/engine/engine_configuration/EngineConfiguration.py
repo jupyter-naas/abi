@@ -1,7 +1,7 @@
 import os
 import sys
 from io import StringIO
-from typing import List
+from typing import Literal, Self
 
 import yaml
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader
@@ -17,12 +17,24 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService im
     BusServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_CacheService import (
+    TIER_COLD,
+    TIER_HOT,
     CacheAdapterEntry,
     CacheAdapterObjectStorageConfiguration,
     CacheAdapterRedisConfiguration,
     CacheServiceConfiguration,
-    TIER_COLD,
-    TIER_HOT,
+)
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_CodingEnvironmentService import (
+    CodingEnvironmentAdapterConfiguration,
+    CodingEnvironmentServiceConfiguration,
+)
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_DatasetService import (
+    DatasetAdapterConfiguration,
+    DatasetAdapterDuckLakeConfiguration,
+    DatasetServiceConfiguration,
+)
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
+    DeployConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_EmailService import (
     EmailAdapterConfiguration,
@@ -33,9 +45,6 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_EventService 
     EventAdapterConfiguration,
     EventAdapterSqliteConfiguration,
     EventServiceConfiguration,
-)
-from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
-    DeployConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueService import (
     KeyValueAdapterConfiguration,
@@ -55,6 +64,10 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_SecretService
     SecretAdapterConfiguration,
     SecretServiceConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_SourceControlService import (
+    SourceControlAdapterConfiguration,
+    SourceControlServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_TripleStoreService import (
     TripleStoreAdapterConfiguration,
     TripleStoreAdapterOxigraphEmbeddedConfiguration,
@@ -69,7 +82,6 @@ from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
 from pydantic import BaseModel, Field, model_validator
 from rich.prompt import Prompt
-from typing_extensions import Literal, Self
 
 
 class ServicesConfiguration(BaseModel):
@@ -81,6 +93,15 @@ class ServicesConfiguration(BaseModel):
                     base_path="storage/datastore"
                 ),
             )
+        )
+    )
+    dataset: DatasetServiceConfiguration = DatasetServiceConfiguration(
+        dataset_adapter=DatasetAdapterConfiguration(
+            adapter="ducklake",
+            config=DatasetAdapterDuckLakeConfiguration(
+                catalog="sqlite:storage/datasets.sqlite",
+                data_path="storage/datasets/",
+            ).model_dump(),
         )
     )
     triple_store: TripleStoreServiceConfiguration = TripleStoreServiceConfiguration(
@@ -140,6 +161,22 @@ class ServicesConfiguration(BaseModel):
             ).model_dump(),
         )
     )
+    coding_environment: CodingEnvironmentServiceConfiguration = (
+        CodingEnvironmentServiceConfiguration(
+            coding_environment_adapter=CodingEnvironmentAdapterConfiguration(
+                adapter="in_memory",
+                config={},
+            )
+        )
+    )
+    source_control: SourceControlServiceConfiguration = (
+        SourceControlServiceConfiguration(
+            source_control_adapter=SourceControlAdapterConfiguration(
+                adapter="in_memory",
+                config={},
+            )
+        )
+    )
     activity_log: ActivityLogServiceConfiguration = ActivityLogServiceConfiguration(
         activity_log_adapter=ActivityLogAdapterConfiguration(
             adapter="sqlite",
@@ -181,7 +218,7 @@ class ApiConfiguration(BaseModel):
     description: str = "API for ABI, your Artifical Business Intelligence"
     logo_path: str = "assets/logo.png"
     favicon_path: str = "assets/favicon.ico"
-    cors_origins: List[str] = ["http://localhost:9879"]
+    cors_origins: list[str] = ["http://localhost:9879"]
     reload: bool = True
     host: str = "0.0.0.0"  # nosec B104 - default binds all interfaces
     port: int = 9879
@@ -241,6 +278,26 @@ class GlobalConfig(BaseModel):
     skip_ontology_loading: bool = False
     public_api_host: str = "localhost:9879"
 
+    @model_validator(mode="after")
+    def apply_skip_ontology_loading_override(self) -> Self:
+        """Let a launcher opt one process out of the ontology bootstrap.
+
+        Several processes can share a single triple store — `abi dev up` runs
+        the api and dagster against the same oxigraph — but the bootstrap is
+        the same tens of thousands of triples every time, so having each one
+        apply it is pure duplicated work plus cross-process write contention.
+        `config.yaml` cannot express that: it is per-project, and these are
+        per-process. The env var lets the launcher nominate a single owner.
+
+        Opt-in only. A truthy value forces the skip on; anything else leaves
+        the configured value alone, so this can never silently re-enable
+        loading for a project that turned it off in `config.yaml`.
+        """
+        override = os.environ.get("ABI_SKIP_ONTOLOGY_LOADING", "").strip().lower()
+        if override in ("1", "true", "yes", "on"):
+            self.skip_ontology_loading = True
+        return self
+
 
 # Process-wide cache of the parsed configuration. Without this, every
 # caller (api.py at import, Engine.__init__, etc.) constructs a fresh
@@ -261,7 +318,7 @@ class EngineConfiguration(BaseModel):
 
     global_config: GlobalConfig
 
-    modules: List[ModuleConfig]
+    modules: list[ModuleConfig]
 
     default_agent: str = "naas_abi AbiAgent"
 
@@ -285,16 +342,65 @@ class EngineConfiguration(BaseModel):
         return self
 
     @staticmethod
+    def _leave_yaml_comments_unrendered(yaml_content: str) -> str:
+        """Keep Jinja from evaluating expressions on YAML `#` comment lines.
+
+        Jinja runs before YAML parsing, so `{{ secret.X }}` (or `{% include %}`)
+        on a commented-out line would still resolve — and hard-fail when the
+        secret is missing and there is no TTY. Wrap those lines in `{% raw %}`
+        so they pass through unchanged and stay comments for the YAML parser.
+
+        Only full-line comments (optional space/tab, then `#`) are skipped.
+        Inline comments after a value are still rendered.
+        """
+        masked: list[str] = []
+        for line in yaml_content.splitlines(keepends=True):
+            newline = ""
+            body = line
+            if body.endswith("\r\n"):
+                newline = "\r\n"
+                body = body[:-2]
+            elif body.endswith("\n"):
+                newline = "\n"
+                body = body[:-1]
+            if body.lstrip(" \t").startswith("#"):
+                # Neutralize a closer that would otherwise terminate the wrap
+                # early and leak the rest of the comment into Jinja.
+                body = body.replace("{% endraw %}", "{ % endraw %}")
+                masked.append("{% raw %}" + body + "{% endraw %}" + newline)
+            else:
+                masked.append(line)
+        return "".join(masked)
+
+    @classmethod
+    def _render_yaml_template(
+        cls, env: Environment, yaml_content: str, **context
+    ) -> str:
+        return env.from_string(
+            cls._leave_yaml_comments_unrendered(yaml_content)
+        ).render(**context)
+
+    @staticmethod
     def _build_jinja_env(base_dir: str | None = None) -> Environment:
         # FileSystemLoader so {% include %} / {% import %} resolve relative to the
         # config file's directory (defaults to CWD when rendering inline content).
         # ChainableUndefined so `{{ secret.X }}` renders to "" instead of raising
         # when no secret context is supplied (used by the bootstrap pass below).
         root = base_dir or os.getcwd()
+
+        class _YamlCommentAwareLoader(FileSystemLoader):
+            def get_source(self, environment, template):
+                source, filename, uptodate = super().get_source(environment, template)
+                return (
+                    EngineConfiguration._leave_yaml_comments_unrendered(source),
+                    filename,
+                    uptodate,
+                )
+
         # autoescape stays off intentionally: this renders YAML config, not HTML.
         # HTML-escaping would corrupt config values (e.g. & < > in secrets/URLs).
         env = Environment(  # nosec B701 - YAML rendering, no HTML/XSS surface
-            loader=FileSystemLoader(root),
+            loader=_YamlCommentAwareLoader(root),
             undefined=ChainableUndefined,
         )
 
@@ -323,7 +429,7 @@ class EngineConfiguration(BaseModel):
         # the dotenv path here, which is bootstrap config and cannot itself depend
         # on a secret, so empty-rendered secrets are harmless.
         env = cls._build_jinja_env(base_dir)
-        raw_data = yaml.safe_load(StringIO(env.from_string(yaml_content).render()))
+        raw_data = yaml.safe_load(StringIO(cls._render_yaml_template(env, yaml_content)))
         if not isinstance(raw_data, dict):
             return None
 
@@ -429,10 +535,12 @@ class EngineConfiguration(BaseModel):
 
         first_pass_data = yaml.safe_load(
             StringIO(
-                env.from_string(yaml_content).render(
+                cls._render_yaml_template(
+                    env,
+                    yaml_content,
                     secret=SecretServiceWrapper(
                         bootstrap_dotenv_adapter=bootstrap_dotenv_adapter
-                    )
+                    ),
                 )
             )
         )
@@ -445,8 +553,9 @@ class EngineConfiguration(BaseModel):
 
         logger.debug(f"Yaml content: {yaml_content}")
 
-        template = env.from_string(yaml_content)
-        templated_yaml = template.render(secret=SecretServiceWrapper(secret_service))
+        templated_yaml = cls._render_yaml_template(
+            env, yaml_content, secret=SecretServiceWrapper(secret_service)
+        )
 
         data = yaml.safe_load(StringIO(templated_yaml))
 

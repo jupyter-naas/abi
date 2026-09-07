@@ -4,14 +4,21 @@ import React, { useState } from 'react';
 import { ChevronRight, File, Folder, HardDrive, RefreshCw, Server, Settings, Star } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useFilesStore } from '@/stores/files';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
 import { SidebarToolbarButton } from './sidebar-toolbar';
 import { getWorkspacePath } from './utils';
+import { filesBrowsePath } from '@/app/workspace/[workspaceId]/files/lib/files-route';
+import { shellTokens } from '../tokens';
 
 export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const router = useRouter();
+  const isMobile = useIsMobile();
+  const isMobilePanel = isMobile && !!detailOnly;
+  const rowPadClass = isMobilePanel ? 'px-2 py-2.5 min-h-11' : 'px-2 py-1';
+  const iconSize = isMobilePanel ? 14 : 12;
   const { currentWorkspaceId } = useWorkspaceStore();
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId) || null;
@@ -26,6 +33,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     activeSource,
     setActiveSource,
     syncedFolders,
+    fetchFiles,
     fetchLocalFiles,
     refreshFiles,
     currentPath,
@@ -55,6 +63,20 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     e.preventDefault();
     e.stopPropagation();
     router.push(getWorkspacePath(currentWorkspaceId, '/settings/drives'));
+  };
+
+  const openFilesBrowser = () => {
+    const target = isMobilePanel
+      ? filesBrowsePath(currentWorkspaceId)
+      : getWorkspacePath(currentWorkspaceId, '/files');
+    router.push(target);
+  };
+
+  /** Load drive root before navigation so browse detail is never empty on first paint. */
+  const openRemoteDrive = async (sourceId: string) => {
+    setActiveSource(sourceId);
+    await fetchFiles('', { limit: 50, offset: 0, search: '', workspaceId: currentWorkspaceId ?? undefined });
+    openFilesBrowser();
   };
 
   const sectionActions = (
@@ -93,7 +115,10 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
       <div className="space-y-0.5">
         <button
           onClick={() => toggleFileCategory('local')}
-          className="flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+          className={cn(
+            'flex w-full items-center gap-1 rounded-md px-1 py-1 hover:text-foreground',
+            shellTokens.sidebar.sectionLabel,
+          )}
         >
           <ChevronRight
             size={12}
@@ -105,68 +130,68 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
         {fileExpandedCategories.includes('local') && (
           <div className="ml-3 space-y-0.5">
             <button
-              onClick={() => {
-                setActiveSource('my-drive');
-                router.push(getWorkspacePath(currentWorkspaceId, '/files'));
-              }}
+              onClick={() => openRemoteDrive('my-drive')}
               className={cn(
-                'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors',
+                'flex w-full items-center gap-2 rounded-md transition-colors',
+                rowPadClass,
+                shellTokens.sidebar.listRow,
                 'hover:bg-workspace-accent-10',
                 activeSource === 'my-drive' && 'bg-workspace-accent-15 text-workspace-accent'
               )}
             >
-              <HardDrive size={12} className="text-muted-foreground" />
+              <HardDrive size={iconSize} className="text-muted-foreground" />
               <span className="flex-1 truncate text-left">My Drive</span>
+              {isMobilePanel && <ChevronRight size={18} className="flex-shrink-0 text-muted-foreground" />}
             </button>
 
             <button
-              onClick={() => {
-                setActiveSource('workspace');
-                router.push(getWorkspacePath(currentWorkspaceId, '/files'));
-              }}
+              onClick={() => openRemoteDrive('workspace')}
               className={cn(
-                'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors',
+                'flex w-full items-center gap-2 rounded-md transition-colors',
+                rowPadClass,
+                shellTokens.sidebar.listRow,
                 'hover:bg-workspace-accent-10',
                 activeSource === 'workspace' && 'bg-workspace-accent-15 text-workspace-accent'
               )}
             >
-              <HardDrive size={12} className="text-muted-foreground" />
+              <HardDrive size={iconSize} className="text-muted-foreground" />
               <span className="flex-1 truncate text-left">Workspace Drive</span>
+              {isMobilePanel && <ChevronRight size={18} className="flex-shrink-0 text-muted-foreground" />}
             </button>
 
             {platformDriveEnabled && (
               <button
-                onClick={() => {
-                  setActiveSource('platform-drive');
-                  router.push(getWorkspacePath(currentWorkspaceId, '/files'));
-                }}
+                onClick={() => openRemoteDrive('platform-drive')}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors',
+                  'flex w-full items-center gap-2 rounded-md transition-colors',
+                  rowPadClass,
+                shellTokens.sidebar.listRow,
                   'hover:bg-workspace-accent-10',
                   activeSource === 'platform-drive' && 'bg-workspace-accent-15 text-workspace-accent'
                 )}
                 title="Files shared across every workspace where platform drive is enabled"
               >
-                <HardDrive size={12} className="text-muted-foreground" />
+                <HardDrive size={iconSize} className="text-muted-foreground" />
                 <span className="flex-1 truncate text-left">Platform Drive</span>
+                {isMobilePanel && <ChevronRight size={18} className="flex-shrink-0 text-muted-foreground" />}
               </button>
             )}
 
             {isWorkspaceAdmin && systemDriveEnabled && (
               <button
-                onClick={() => {
-                  setActiveSource('system-drive');
-                  router.push(getWorkspacePath(currentWorkspaceId, '/files'));
-                }}
+                onClick={() => openRemoteDrive('system-drive')}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors',
+                  'flex w-full items-center gap-2 rounded-md transition-colors',
+                  rowPadClass,
+                shellTokens.sidebar.listRow,
                   'hover:bg-workspace-accent-10',
                   activeSource === 'system-drive' && 'bg-workspace-accent-15 text-workspace-accent'
                 )}
                 title="Full object storage tree — visible to workspace owners and admins"
               >
-                <Server size={12} className="text-muted-foreground" />
+                <Server size={iconSize} className="text-muted-foreground" />
                 <span className="flex-1 truncate text-left">System Drive</span>
+                {isMobilePanel && <ChevronRight size={18} className="flex-shrink-0 text-muted-foreground" />}
               </button>
             )}
 
@@ -176,17 +201,20 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                 onClick={async () => {
                   setActiveSource(folder.id);
                   await fetchLocalFiles(folder.id);
-                  router.push(getWorkspacePath(currentWorkspaceId, '/files'));
+                  openFilesBrowser();
                 }}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors',
+                  'flex w-full items-center gap-2 rounded-md transition-colors',
+                  rowPadClass,
+                shellTokens.sidebar.listRow,
                   'hover:bg-workspace-accent-10',
                   activeSource === folder.id && 'bg-workspace-accent-15 text-workspace-accent'
                 )}
                 title={folder.name}
               >
-                <Folder size={12} className="text-muted-foreground" />
+                <Folder size={iconSize} className="text-muted-foreground" />
                 <span className="flex-1 truncate text-left">{folder.name}</span>
+                {isMobilePanel && <ChevronRight size={18} className="flex-shrink-0 text-muted-foreground" />}
               </button>
             ))}
 
@@ -198,7 +226,10 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
       <div className="mt-1 space-y-0.5">
         <button
           onClick={() => setStarredExpanded((v) => !v)}
-          className="flex w-full items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+          className={cn(
+            'flex w-full items-center gap-1 rounded-md px-1 py-1 hover:text-foreground',
+            shellTokens.sidebar.sectionLabel,
+          )}
         >
           <ChevronRight
             size={12}
@@ -222,7 +253,6 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                 >
                   <button
                     onClick={() => {
-                      const filesPath = getWorkspacePath(currentWorkspaceId, '/files');
                       if (item.type === 'folder') {
                         setStarredNavigation({ source: item.source, path: item.path });
                       } else {
@@ -235,21 +265,28 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                           previewPath: item.path,
                         });
                       }
-                      router.push(filesPath);
+                      router.push(
+                        isMobilePanel
+                          ? filesBrowsePath(currentWorkspaceId)
+                          : getWorkspacePath(currentWorkspaceId, '/files')
+                      );
                     }}
                     className={cn(
-                      'flex flex-1 items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors',
+                      'flex flex-1 items-center gap-2 rounded-md transition-colors',
+                      rowPadClass,
+                      shellTokens.sidebar.listRow,
                       'hover:bg-workspace-accent-10',
                       activeSource === item.source && 'text-workspace-accent'
                     )}
                     title={item.path}
                   >
                     {item.type === 'folder' ? (
-                      <Folder size={12} className="flex-shrink-0 text-muted-foreground" />
+                      <Folder size={iconSize} className="flex-shrink-0 text-muted-foreground" />
                     ) : (
-                      <File size={12} className="flex-shrink-0 text-muted-foreground" />
+                      <File size={iconSize} className="flex-shrink-0 text-muted-foreground" />
                     )}
                     <span className="flex-1 truncate text-left">{item.name}</span>
+                    {isMobilePanel && <ChevronRight size={18} className="flex-shrink-0 text-muted-foreground" />}
                   </button>
                   <button
                     title="Remove from starred"

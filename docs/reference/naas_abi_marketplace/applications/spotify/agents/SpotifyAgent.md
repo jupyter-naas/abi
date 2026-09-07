@@ -1,42 +1,51 @@
 # SpotifyAgent
 
 ## What it is
-A minimal `IntentAgent` implementation configured to provide **general guidance** about Spotify features, playlist management concepts, and music discovery. It does **not** include Spotify API/tools access.
+A minimal `IntentAgent` implementation for Spotify-related guidance (features, playlists, discovery). It is explicitly **tool-less**, so it cannot access Spotify data or perform real operations.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Factory that builds and returns a configured `SpotifyAgent` with:
-    - system prompt (`SYSTEM_PROMPT`)
-    - zero tools (`tools = []`)
-    - a small set of predefined raw intents
-    - optional shared state and configuration
 - `class SpotifyAgent(IntentAgent)`
-  - Concrete agent class (no additional behavior; inherits everything from `IntentAgent`).
+  - Agent definition with preset metadata:
+    - `name = "Spotify"`
+    - `description = "Helps you interact with Spotify for music streaming and playlist management."`
+    - `system_prompt` describing scope/constraints
+    - `suggestions = []`
+- `SpotifyAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> SpotifyAgent`
+  - Factory constructor that:
+    - retrieves default chat and embedding models via the application `ABIModule` model registry
+    - configures **no tools** (`tools = []`)
+    - registers a small set of raw `Intent`s
+    - initializes default state/config when not provided
 
 ## Configuration/Dependencies
 - Depends on `naas_abi_core.services.agent.IntentAgent`:
   - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
-- Uses a chat model from:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1` (imported inside `create_agent`)
-- Configuration defaults:
-  - If `agent_configuration` is not provided, it uses `AgentConfiguration(system_prompt=SYSTEM_PROMPT)`.
-  - If `agent_shared_state` is not provided, it creates a new `AgentSharedState()`.
-- Tools:
-  - None configured (`tools = []`), so the agent must not perform real Spotify operations.
+- Depends on marketplace Spotify module:
+  - `from naas_abi_marketplace.applications.spotify import ABIModule`
+  - Uses `ABIModule.get_instance().engine.services.model_registry`
+    - Requires model registry to be initialized (`assert registry is not None`)
+  - Models used:
+    - `chat_model = registry.get_default_chat_model()`
+    - `embedding_model = registry.get_default_embedding_model().model`
+- Defaults:
+  - `agent_configuration`: `AgentConfiguration(system_prompt=SpotifyAgent.system_prompt)`
+  - `agent_shared_state`: `AgentSharedState(thread_id="0")`
+- Tools/Memory:
+  - `tools = []`
+  - `memory = None`
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.spotify.agents.SpotifyAgent import create_agent
+from naas_abi_marketplace.applications.spotify.agents.SpotifyAgent import SpotifyAgent
 
-agent = create_agent()
+agent = SpotifyAgent.New()
 
-# How you invoke the agent depends on IntentAgent's interface in naas_abi_core.
-# The agent is configured to answer with general Spotify guidance (no tool access).
+# Interaction methods are provided by IntentAgent (naas_abi_core), not by this file.
+# The agent is configured for general Spotify guidance without tool access.
 ```
 
 ## Caveats
 - No Spotify tools are configured; the agent cannot:
-  - access Spotify accounts/data
-  - manage real playlists/tracks
-  - perform playback or API operations
-- Responses are limited to general information and conceptual guidance per `SYSTEM_PROMPT`.
+  - access accounts, playlists, tracks, or playback data
+  - perform playlist/track mutations
+- Requires a properly initialized `ABIModule` engine and `model_registry`; otherwise `SpotifyAgent.New()` will assert.

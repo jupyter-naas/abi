@@ -1,6 +1,6 @@
 from langchain_mistralai import ChatMistralAI
-from naas_abi_marketplace.ai.mistral import ABIModule
 from naas_abi_core.models.Model import ChatModel
+from naas_abi_marketplace.ai.mistral import ABIModule
 from pydantic import SecretStr
 
 MODEL_ID = "mistral-large-2411"

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from enum import Enum
-from typing import Callable, Dict, List, Tuple
 
 import rdflib
 from rdflib import Graph, URIRef
@@ -95,9 +95,9 @@ class ITripleStorePort(ABC):
     @abstractmethod
     def handle_view_event(
         self,
-        view: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        view: tuple[URIRef | None, URIRef | None, URIRef | None],
         event: OntologyEvent,
-        triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
+        triple: tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         pass
 
@@ -120,7 +120,6 @@ class ITripleStorePort(ABC):
         Raises:
             Exceptions.GraphAlreadyExistsError: When graph already exists and backend can detect it.
         """
-        pass
 
     @abstractmethod
     def clear_graph(self, graph_name: URIRef):
@@ -129,7 +128,6 @@ class ITripleStorePort(ABC):
         Raises:
             Exceptions.GraphNotFoundError: When graph does not exist and backend can detect it.
         """
-        pass
 
     @abstractmethod
     def drop_graph(self, graph_name: URIRef):
@@ -138,7 +136,6 @@ class ITripleStorePort(ABC):
         Raises:
             Exceptions.GraphNotFoundError: When graph does not exist and backend can detect it.
         """
-        pass
 
     @abstractmethod
     def list_graphs(self) -> list[URIRef]:
@@ -148,11 +145,11 @@ class ITripleStorePort(ABC):
 class ITripleStoreService(ABC):
     __ontology_adaptor: ITripleStorePort
 
-    __event_listeners: Dict[
-        tuple, Dict[OntologyEvent, List[tuple[str, Callable, bool]]]
+    __event_listeners: dict[
+        tuple, dict[OntologyEvent, list[tuple[str, Callable, bool]]]
     ]
 
-    __views: List[Tuple[URIRef | None, URIRef | None, URIRef | None]]
+    __views: list[tuple[URIRef | None, URIRef | None, URIRef | None]]
 
     @abstractmethod
     def subscribe(
@@ -191,7 +188,6 @@ class ITripleStoreService(ABC):
             >>> subscription_id = triple_store_service.subscribe(
             ...     (None, RDF.type, None), print_triple, OntologyEvent.INSERT)
         """
-        pass
 
     # @abstractmethod
     # def unsubscribe(self, subscription_id: str):
@@ -225,7 +221,6 @@ class ITripleStoreService(ABC):
         Returns:
             None
         """
-        pass
 
     @abstractmethod
     def remove(self, triples: Graph, graph_name: URIRef):
@@ -241,7 +236,6 @@ class ITripleStoreService(ABC):
         Returns:
             None
         """
-        pass
 
     @abstractmethod
     def get(self) -> Graph:
@@ -253,7 +247,6 @@ class ITripleStoreService(ABC):
         Returns:
             Graph: The complete RDF graph containing all stored triples
         """
-        pass
 
     @abstractmethod
     def query(self, query: str) -> rdflib.query.Result:
@@ -271,7 +264,6 @@ class ITripleStoreService(ABC):
         Example:
             >>> store.query("SELECT ?s WHERE { ?s a owl:Class }")
         """
-        pass
 
     @abstractmethod
     def query_view(self, view: str, query: str) -> rdflib.query.Result:
@@ -293,7 +285,6 @@ class ITripleStoreService(ABC):
         Raises:
             SubjectNotFoundError: If no triples exist with the specified subject
         """
-        pass
 
     @abstractmethod
     def create_graph(self, graph_name: URIRef):
@@ -308,7 +299,6 @@ class ITripleStoreService(ABC):
         Raises:
             Exceptions.GraphAlreadyExistsError: When graph already exists and backend can detect it.
         """
-        pass
 
     @abstractmethod
     def clear_graph(self, graph_name: URIRef):
@@ -323,7 +313,6 @@ class ITripleStoreService(ABC):
         Raises:
             Exceptions.GraphNotFoundError: When graph does not exist and backend can detect it.
         """
-        pass
 
     @abstractmethod
     def drop_graph(self, graph_name: URIRef):
@@ -338,7 +327,6 @@ class ITripleStoreService(ABC):
         Raises:
             Exceptions.GraphNotFoundError: When graph does not exist and backend can detect it.
         """
-        pass
 
     @abstractmethod
     def list_graphs(self) -> list[URIRef]:
@@ -347,7 +335,6 @@ class ITripleStoreService(ABC):
         Returns:
             list[URIRef]: Distinct named graph URIs.
         """
-        pass
 
     @abstractmethod
     def load_schema(self, filepath: str):
@@ -366,7 +353,6 @@ class ITripleStoreService(ABC):
         Example:
             >>> store.load_schema("path/to/schema.ttl")
         """
-        pass
 
     @abstractmethod
     def get_schema_graph(self) -> Graph:
@@ -382,4 +368,3 @@ class ITripleStoreService(ABC):
         Example:
             >>> schema = store.get_schema_graph()
         """
-        pass

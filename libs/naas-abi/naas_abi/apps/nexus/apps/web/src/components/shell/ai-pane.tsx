@@ -1,737 +1,427 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import {
-  X,
-  Send,
-  Sparkles,
-  Bot,
-  Loader2,
-  ChevronDown,
-  Infinity,
-  ListTree,
-  Bug,
-  MessageSquare,
-  Check,
-  Plus,
-  History,
-  Download,
-  Trash2,
-} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
+import { History, MessageSquare, MoreHorizontal, Plus, Presentation, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { downloadConversationTranscript } from '@/lib/chat-transcript-export';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
-import { useIntegrationsStore } from '@/stores/integrations';
-import { useSecretsStore } from '@/stores/secrets';
-import { useAuthStore } from '@/stores/auth';
+import { useSlidesStore } from '@/stores/slides';
+import { ChatInterface } from '@/components/chat/chat-interface';
 
-import { getApiUrl, getOllamaUrl } from '@/lib/config';
-
-const getApiBase = () => getApiUrl();
-
-type Mode = 'agent' | 'plan' | 'debug' | 'ask';
-
-const modes: { id: Mode; label: string; icon: React.ElementType; shortcut?: string; description: string }[] = [
-  { id: 'agent', label: 'Agent', icon: Infinity, shortcut: '⌘I', description: 'Can perform actions' },
-  { id: 'plan', label: 'Plan', icon: ListTree, description: 'Proposes plans' },
-  { id: 'debug', label: 'Debug', icon: Bug, description: 'Helps debug issues' },
-  { id: 'ask', label: 'Ask', icon: MessageSquare, description: 'Only answers questions' },
-];
-
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  thinkingDuration?: number;
-}
-
-interface ChatSession {
-  id: string;
-  title: string;
-  messages: Message[];
-  createdAt: Date;
-}
-
+/**
+ * Right chat pane: same ChatInterface as the central panel, with Cursor-like
+ * open-chat tabs and a history clock. Side-by-side compare stays available by
+ * keeping this pane open next to the main thread (⌘K / Sparkles).
+ */
 export function AIPane() {
-  const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  const [input, setInput] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [mode, setMode] = useState<Mode>('agent');
-  const [showModeMenu, setShowModeMenu] = useState(false);
-  const [showAgentMenu, setShowAgentMenu] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const modeMenuRef = useRef<HTMLDivElement>(null);
-  const modelMenuRef = useRef<HTMLDivElement>(null);
+  const [showOverflow, setShowOverflow] = useState(false);
+  const dragStartX = useRef(0);
+  const dragStartWidth = useRef(0);
+  const isDraggingRef = useRef(false);
+  const controlsRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
-  const { contextPanelOpen, toggleContextPanel, currentWorkspaceId, paneAgent, setPaneAgent } = useWorkspaceStore();
-  const { agents, getAgent } = useAgentsStore();
-  const { providers } = useIntegrationsStore();
-  const { getSecretByKey } = useSecretsStore();
-  
-  const currentAgent = mounted ? agents.find((a) => a.id === paneAgent) || agents.find((a) => a.id === 'abi') || agents[0] : null;
-  
-  // Get provider for agent with resolved secrets
-  const getProviderForAgent = (agentId: string) => {
-    const agent = getAgent(agentId);
-    if (agent?.providerId) {
-      const provider = providers.find(p => p.id === agent.providerId && p.enabled);
-      if (provider) {
-        // Resolve secrets to actual values
-        let resolvedApiKey = provider.apiKey; // Legacy fallback
-        let resolvedAccountId = provider.accountId; // Legacy fallback
-        
-        // Note: Secrets are server-side encrypted, we can't access actual values
-        // Just use the provider's configured keys
-        if (provider.apiKeySecretKey) {
-          resolvedApiKey = provider.apiKeySecretKey; // Reference to secret key
+  const contextPanelOpen = useWorkspaceStore((s) => s.contextPanelOpen);
+  const toggleContextPanel = useWorkspaceStore((s) => s.toggleContextPanel);
+  const aiPaneWidth = useWorkspaceStore((s) => s.aiPaneWidth);
+  const setAiPaneWidth = useWorkspaceStore((s) => s.setAiPaneWidth);
+  const paneConversationId = useWorkspaceStore((s) => s.paneConversationId);
+  const setPaneConversationId = useWorkspaceStore((s) => s.setPaneConversationId);
+  const paneOpenTabIds = useWorkspaceStore((s) => s.paneOpenTabIds);
+  const openPaneTab = useWorkspaceStore((s) => s.openPaneTab);
+  const closePaneTab = useWorkspaceStore((s) => s.closePaneTab);
+  const conversations = useWorkspaceStore((s) => s.conversations);
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const slidesSlug = useSlidesStore((s) => s.selectedSlug);
+  const slidesTitle = useSlidesStore((s) => s.selectedTitle);
+  const slidesMode = useSlidesStore((s) => s.editorMode);
+  const slidesRuntimeStatus = useSlidesStore((s) => s.runtimeStatus);
+  const isSlidesRoute = typeof pathname === 'string' && pathname.includes('/slides');
+  const slidesContext =
+    isSlidesRoute && slidesSlug
+      ? {
+          slug: slidesSlug,
+          title: slidesTitle || slidesSlug,
+          mode: slidesMode,
+          branch: `slides/${slidesSlug}`,
+          path: `slides/${slidesSlug}/deck.html`,
+          runtime: slidesRuntimeStatus,
         }
-        if (provider.accountIdSecretKey) {
-          resolvedAccountId = provider.accountIdSecretKey; // Reference to secret key
-        }
-        
-        return {
-          ...provider,
-          apiKey: resolvedApiKey,
-          accountId: resolvedAccountId,
-        };
-      }
-    }
-    return null;
-  };
+      : null;
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    const onMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      const delta = dragStartX.current - e.clientX;
+      setAiPaneWidth(dragStartWidth.current + delta);
+    };
+    const onUp = () => {
+      if (!isDraggingRef.current) return;
+      isDraggingRef.current = false;
+      setIsDragging(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [setAiPaneWidth]);
 
-  // Focus input when pane opens
   useEffect(() => {
-    if (contextPanelOpen && mounted) {
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
-  }, [contextPanelOpen, mounted]);
-
-  // Close menus on click outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (modeMenuRef.current && !modeMenuRef.current.contains(e.target as Node)) {
-        setShowModeMenu(false);
-      }
-      if (modelMenuRef.current && !modelMenuRef.current.contains(e.target as Node)) {
-        setShowAgentMenu(false);
+    if (!showHistory && !showOverflow) return;
+    const onDown = (e: MouseEvent) => {
+      if (controlsRef.current && !controlsRef.current.contains(e.target as Node)) {
+        setShowHistory(false);
+        setShowOverflow(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [showHistory, showOverflow]);
 
-  // Chat session management
-  const handleNewChat = () => {
-    // Save current session if it has messages
-    if (messages.length > 0) {
-      const newSession: ChatSession = {
-        id: currentSessionId || Date.now().toString(),
-        title: messages[0]?.content.slice(0, 30) + '...' || 'New chat',
-        messages: [...messages],
-        createdAt: new Date(),
-      };
-      setChatSessions((prev) => {
-        const existing = prev.find((s) => s.id === newSession.id);
-        if (existing) {
-          return prev.map((s) => (s.id === newSession.id ? newSession : s));
-        }
-        return [newSession, ...prev];
-      });
-    }
-    // Start fresh
-    setMessages([]);
-    setCurrentSessionId(Date.now().toString());
-    setShowHistory(false);
-    inputRef.current?.focus();
-  };
-
-  const handleLoadSession = (session: ChatSession) => {
-    // Save current first
-    if (messages.length > 0 && currentSessionId) {
-      setChatSessions((prev) =>
-        prev.map((s) =>
-          s.id === currentSessionId ? { ...s, messages: [...messages] } : s
-        )
-      );
-    }
-    setMessages(session.messages);
-    setCurrentSessionId(session.id);
-    setShowHistory(false);
-  };
-
-  const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setChatSessions((prev) => prev.filter((s) => s.id !== sessionId));
-    if (currentSessionId === sessionId) {
-      setMessages([]);
-      setCurrentSessionId(null);
-    }
-  };
-
-  const handleExportChat = () => {
-    if (messages.length === 0) return;
-    
-    const transcript = messages
-      .map((m) => `${m.role === 'user' ? 'You' : 'AI'}: ${m.content}`)
-      .join('\n\n');
-    
-    const blob = new Blob([transcript], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `chat-${new Date().toISOString().slice(0, 10)}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
-
-    const userContent = input.trim();
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: userContent,
-    };
-    setMessages((prev) => [...prev, userMessage]);
-    setInput('');
-    setIsLoading(true);
-
-    try {
-      // Get provider for current agent (AI Pane uses paneAgent)
-      const provider = getProviderForAgent(paneAgent);
-      
-      // Build provider payload (may be null if no provider, API will fallback to Ollama)
-      const providerPayload = provider ? {
-        id: provider.id,
-        name: provider.name,
-        type: provider.type,
-        enabled: provider.enabled,
-        endpoint: provider.endpoint || getOllamaUrl(),
-        api_key: provider.apiKey,
-        account_id: provider.accountId,
-        model: provider.model,
-      } : null;
-
-      // Get agent's system prompt
-      const agentData = getAgent(paneAgent);
-      const systemPrompt = agentData?.systemPrompt || null;
-      
-      // Build message history for the API (must include the current user message)
-      // Note: React setState is async, so `messages` doesn't have userMessage yet.
-      // We manually append it, matching how chat-interface uses getState() for fresh data.
-      const fullHistory = [...messages, userMessage].map(m => ({ role: m.role, content: m.content }));
-
-      // Add placeholder for streaming response
-      const assistantId = (Date.now() + 1).toString();
-      const thinkingStartTime = Date.now();
-      setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', content: '▌' }]);
-      setIsLoading(false); // Stop loading indicator, streaming will show the cursor
-
-      const token = useAuthStore.getState().token;
-      const response = await fetch(`${getApiBase()}/api/chat/stream`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          workspace_id: currentWorkspaceId,
-          message: userContent,
-          messages: fullHistory,
-          agent: paneAgent,
-          provider: providerPayload,
-          system_prompt: systemPrompt,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let thinkingContent = '';
-      let responseContent = '';
-      let isInThinking = false;
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') continue;
-              
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.content) {
-                  const token = parsed.content as string;
-                  
-                  // Track <think> tags
-                  if (token.includes('<think>')) {
-                    isInThinking = true;
-                    const assembled = `<think>${thinkingContent}</think>`;
-                    setMessages((prev) => 
-                      prev.map((m) => m.id === assistantId ? { ...m, content: assembled } : m)
-                    );
-                    continue;
-                  }
-                  
-                  if (token.includes('</think>')) {
-                    isInThinking = false;
-                    const assembled = `<think>${thinkingContent}</think>\n\n▌`;
-                    setMessages((prev) => 
-                      prev.map((m) => m.id === assistantId ? { ...m, content: assembled } : m)
-                    );
-                    continue;
-                  }
-                  
-                  if (isInThinking) {
-                    thinkingContent += token;
-                    const assembled = `<think>${thinkingContent}</think>`;
-                    setMessages((prev) => 
-                      prev.map((m) => m.id === assistantId ? { ...m, content: assembled } : m)
-                    );
-                    continue;
-                  }
-                  
-                  // Regular response content
-                  responseContent += token;
-                  const assembled = thinkingContent
-                    ? `<think>${thinkingContent}</think>\n\n${responseContent}▌`
-                    : `${responseContent}▌`;
-                  setMessages((prev) => 
-                    prev.map((m) => m.id === assistantId ? { ...m, content: assembled } : m)
-                  );
-                }
-                if (parsed.error) {
-                  const errContent = `Error: ${parsed.error}`;
-                  setMessages((prev) => 
-                    prev.map((m) => m.id === assistantId ? { ...m, content: errContent } : m)
-                  );
-                  throw new Error(parsed.error);
-                }
-              } catch (parseError) {
-                // Only swallow JSON parsing failures for partial SSE chunks
-                if (!(parseError instanceof SyntaxError)) {
-                  throw parseError;
-                }
-              }
-            }
-          }
-        }
-        // Final: store full content with thinking duration
-        const thinkingDuration = (Date.now() - thinkingStartTime) / 1000;
-        const finalContent = thinkingContent
-          ? `<think>${thinkingContent}</think>\n\n${responseContent}`
-          : responseContent;
-        setMessages((prev) => 
-          prev.map((m) => m.id === assistantId ? { ...m, content: finalContent, thinkingDuration } : m)
-        );
-      }
-    } catch (error) {
-      console.error('AI Pane API error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      setMessages((prev) => [...prev, {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: `Error: ${errorMessage}\n\nMake sure the API server is running and the agent has a configured provider.`,
-      }]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+  const handleDragStart = useCallback(
+    (e: React.MouseEvent) => {
       e.preventDefault();
-      handleSubmit(e);
+      isDraggingRef.current = true;
+      setIsDragging(true);
+      dragStartX.current = e.clientX;
+      dragStartWidth.current = aiPaneWidth;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    },
+    [aiPaneWidth]
+  );
+
+  const handleNewChat = () => {
+    const ws = useWorkspaceStore.getState();
+    setPaneConversationId(null);
+    // New blank pane chat: restore Abi unless the user picked another agent
+    // in the selector (history tabs must not count as an explicit pick).
+    if (!ws.paneAgentExplicitlySelected) {
+      const agents = useAgentsStore.getState().agents;
+      const abi =
+        agents.find(
+          (a) =>
+            a.enabled &&
+            (a.name === 'Abi' ||
+              (typeof a.class_name === 'string' &&
+                a.class_name.toLowerCase().includes('abiagent')))
+        ) ??
+        agents.find((a) => a.isDefault && a.enabled) ??
+        agents.find((a) => a.enabled);
+      if (abi) ws.setPaneAgent(abi.id);
     }
+    setShowHistory(false);
+    setShowOverflow(false);
   };
 
-  const currentMode = modes.find((m) => m.id === mode) || modes[0];
-  const ModeIcon = currentMode.icon;
+  const paneConversation = useMemo(() => {
+    if (!paneConversationId) return null;
+    return conversations.find((c) => c.id === paneConversationId) ?? null;
+  }, [paneConversationId, conversations]);
+
+  const canExportTranscript = Boolean(
+    paneConversation && paneConversation.messages.some((m) => m.role === 'user' || m.role === 'assistant')
+  );
+
+  const handleExportTranscript = (format: 'md' | 'txt') => {
+    if (!paneConversation || !canExportTranscript) return;
+    downloadConversationTranscript(
+      {
+        id: paneConversation.id,
+        title: paneConversation.title,
+        workspaceId: paneConversation.workspaceId,
+        messages: paneConversation.messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          agent: m.agent,
+          timestamp: m.timestamp,
+        })),
+      },
+      format
+    );
+    setShowOverflow(false);
+  };
+
+  const openTabs = useMemo(() => {
+    return paneOpenTabIds
+      .map((id) => conversations.find((c) => c.id === id))
+      .filter((c): c is NonNullable<typeof c> => Boolean(c));
+  }, [paneOpenTabIds, conversations]);
+
+  const recentConversations = useMemo(() => {
+    if (!currentWorkspaceId) return [];
+    return conversations
+      .filter((c) => c.workspaceId === currentWorkspaceId && !c.archived)
+      .slice()
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .slice(0, 30);
+  }, [conversations, currentWorkspaceId]);
+
+  const showNewChatTab = paneConversationId === null;
 
   if (!mounted || !contextPanelOpen) return null;
 
   return (
-    <aside className="flex h-full w-80 flex-col border-l border-border/50 bg-background">
-      {/* Header */}
-      <div className="flex h-14 items-center justify-between border-b px-3">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handleNewChat}
-            className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-            title="New chat"
-          >
-            <Plus size={16} />
-          </button>
-          <button
-            onClick={() => setShowHistory(!showHistory)}
-            className={cn(
-              'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground',
-              showHistory && 'bg-muted text-foreground'
-            )}
-            title="Chat history"
-          >
-            <History size={16} />
-          </button>
-          <button
-            onClick={handleExportChat}
-            disabled={messages.length === 0}
-            className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Export conversation"
-          >
-            <Download size={16} />
-          </button>
+    <>
+      {isDragging && <div className="fixed inset-0 z-50 cursor-col-resize" />}
+      <div
+        className="group relative flex w-2 shrink-0 cursor-col-resize items-center justify-center"
+        onMouseDown={handleDragStart}
+        title="Drag to resize chat pane"
+        aria-label="Resize chat pane"
+        role="separator"
+        aria-orientation="vertical"
+      >
+        <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors group-hover:bg-workspace-accent" />
+        <div className="relative z-10 flex flex-col gap-[5px]">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="h-[3px] w-[3px] rounded-full bg-muted-foreground/40 transition-colors group-hover:bg-workspace-accent"
+            />
+          ))}
         </div>
-        <button
-          onClick={toggleContextPanel}
-          className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-          title="Close"
-        >
-          <X size={16} />
-        </button>
       </div>
-
-      {/* History Panel */}
-      {showHistory && (
-        <div className="border-b bg-muted/30 p-2 max-h-48 overflow-auto">
-          <div className="text-xs font-medium text-muted-foreground mb-2 px-1">Recent Chats</div>
-          {chatSessions.length === 0 ? (
-            <p className="text-xs text-muted-foreground px-1">No chat history</p>
-          ) : (
-            <div className="space-y-1">
-              {chatSessions.map((session) => (
+      <aside
+        className="flex h-full shrink-0 flex-col border-l border-border/50 bg-background"
+        style={{ width: aiPaneWidth }}
+        data-ai-pane="true"
+      >
+        <div className="flex h-10 shrink-0 items-stretch border-b border-border/50">
+          <div
+            className="flex min-w-0 flex-1 items-stretch overflow-x-auto"
+            role="tablist"
+            aria-label="Open chats"
+          >
+            {showNewChatTab && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected
+                className={cn(
+                  'group/tab relative flex max-w-[160px] shrink-0 items-center gap-1.5 border-r border-border/50 px-3 text-xs',
+                  'bg-background text-foreground'
+                )}
+              >
+                <span className="truncate font-medium">New chat</span>
+              </button>
+            )}
+            {openTabs.map((tab) => {
+              const active = paneConversationId === tab.id;
+              return (
                 <div
-                  key={session.id}
-                  onClick={() => handleLoadSession(session)}
+                  key={tab.id}
+                  role="tab"
+                  aria-selected={active}
                   className={cn(
-                    'flex items-center justify-between rounded px-2 py-1.5 cursor-pointer text-xs hover:bg-muted',
-                    currentSessionId === session.id && 'bg-muted'
+                    'group/tab relative flex max-w-[160px] shrink-0 items-center gap-1 border-r border-border/50 pl-3 pr-1 text-xs',
+                    active
+                      ? 'bg-background text-foreground'
+                      : 'bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                   )}
                 >
-                  <div className="flex items-center gap-2 truncate flex-1">
-                    <MessageSquare size={12} className="text-muted-foreground shrink-0" />
-                    <span className="truncate">{session.title}</span>
-                  </div>
                   <button
-                    onClick={(e) => handleDeleteSession(session.id, e)}
-                    className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                    type="button"
+                    onClick={() => openPaneTab(tab.id)}
+                    className="min-w-0 flex-1 truncate py-2 text-left font-medium"
+                    title={tab.title}
                   >
-                    <Trash2 size={12} />
+                    {tab.title || 'Chat'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closePaneTab(tab.id);
+                    }}
+                    className={cn(
+                      'rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground',
+                      'group-hover/tab:opacity-100 focus-visible:opacity-100',
+                      active && 'opacity-70'
+                    )}
+                    style={{ borderRadius: 'var(--org-border-radius, 0px)' }}
+                    title="Close tab"
+                    aria-label={`Close ${tab.title || 'chat'}`}
+                  >
+                    <X size={12} />
                   </button>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Messages */}
-      <div className="flex-1 overflow-auto p-3">
-        {messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center text-center">
-            <Bot size={40} className="mb-3 text-muted-foreground/20" />
-            <p className="text-sm text-muted-foreground">How can I help you?</p>
+              );
+            })}
           </div>
-        ) : (
-          <div className="space-y-3">
-            {messages.map((message) => (
-              <PaneMessage key={message.id} message={message} />
-            ))}
-            {isLoading && messages[messages.length - 1]?.role !== 'assistant' && (
-              <div className="mr-6 flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
-                <Loader2 size={14} className="animate-spin" />
-                <span className="text-muted-foreground">Processing...</span>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-        )}
-      </div>
 
-      {/* Input area */}
-      <div className="border-t p-3">
-        <form onSubmit={handleSubmit}>
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask anything..."
-            rows={3}
-            className={cn(
-              'w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none',
-              'placeholder:text-muted-foreground/50',
-              'focus:ring-1 focus:ring-primary/30'
-            )}
-            disabled={isLoading}
-          />
-          
-          {/* Bottom bar with mode and model selectors */}
-          <div className="mt-2 flex items-center justify-between">
-            <div className="flex items-center gap-1">
-              {/* Mode selector */}
-              <div ref={modeMenuRef} className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowModeMenu(!showModeMenu)}
-                  className={cn(
-                    'flex items-center gap-1.5 rounded px-2 py-1 text-xs',
-                    'hover:bg-muted',
-                    showModeMenu && 'bg-muted'
-                  )}
-                >
-                  <ModeIcon size={14} />
-                  <span>{currentMode.label}</span>
-                  {currentMode.shortcut && (
-                    <kbd className="ml-1 rounded border bg-background px-1 text-[10px] text-muted-foreground">
-                      {currentMode.shortcut}
-                    </kbd>
-                  )}
-                </button>
-                
-                {showModeMenu && (
-                  <div className="absolute bottom-full left-0 mb-1 w-36 rounded-lg border bg-background py-1 shadow-lg">
-                    {modes.map((m) => {
-                      const Icon = m.icon;
-                      return (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => {
-                            setMode(m.id);
-                            setShowModeMenu(false);
-                          }}
-                          className={cn(
-                            'flex w-full items-center gap-2 px-3 py-1.5 text-sm',
-                            'hover:bg-muted',
-                            mode === m.id && 'bg-muted'
-                          )}
-                        >
-                          <Icon size={14} />
-                          <span className="flex-1 text-left">{m.label}</span>
-                          {m.shortcut && (
-                            <kbd className="rounded border bg-background px-1 text-[10px] text-muted-foreground">
-                              {m.shortcut}
-                            </kbd>
-                          )}
-                          {mode === m.id && <Check size={12} />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+          <div className="relative flex shrink-0 items-center gap-0.5 px-1.5" ref={controlsRef}>
+            <button
+              type="button"
+              onClick={handleNewChat}
+              className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              style={{ borderRadius: 'var(--org-border-radius, 0px)' }}
+              title="New chat"
+              aria-label="New chat"
+            >
+              <Plus size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowOverflow(false);
+                setShowHistory((v) => !v);
+              }}
+              className={cn(
+                'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground',
+                showHistory && 'bg-muted text-foreground'
+              )}
+              style={{ borderRadius: 'var(--org-border-radius, 0px)' }}
+              title="Chat history"
+              aria-label="Chat history"
+              aria-expanded={showHistory}
+            >
+              <History size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowHistory(false);
+                setShowOverflow((v) => !v);
+              }}
+              className={cn(
+                'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground',
+                showOverflow && 'bg-muted text-foreground'
+              )}
+              style={{ borderRadius: 'var(--org-border-radius, 0px)' }}
+              title="More"
+              aria-label="More chat actions"
+              aria-expanded={showOverflow}
+              aria-haspopup="menu"
+            >
+              <MoreHorizontal size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={toggleContextPanel}
+              className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              style={{ borderRadius: 'var(--org-border-radius, 0px)' }}
+              title="Close chat pane"
+              aria-label="Close chat pane"
+            >
+              <X size={16} />
+            </button>
 
-              {/* Agent selector (AI Pane has its own selection, defaults to SupervisorAgent) */}
-              <div ref={modelMenuRef} className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowAgentMenu(!showAgentMenu)}
-                  className={cn(
-                    'flex items-center gap-1.5 rounded px-2 py-1 text-xs',
-                    'hover:bg-muted',
-                    showAgentMenu && 'bg-muted'
-                  )}
-                >
-                  <span>{currentAgent?.name || 'SupervisorAgent'}</span>
-                  <ChevronDown size={12} className="text-muted-foreground" />
-                </button>
-                
-                {showAgentMenu && (
-                  <div className="absolute bottom-full left-0 mb-1 w-48 rounded-lg border bg-background py-1 shadow-lg">
-                    <div className="px-3 py-1.5 text-xs text-muted-foreground">
-                      Select agent
-                    </div>
-                    {agents.filter(agent => agent.enabled).sort((a, b) => a.name.localeCompare(b.name)).map((agent) => (
+            {showHistory && (
+              <div className="absolute right-1 top-full z-40 mt-1 w-72 max-h-80 overflow-auto rounded-md border border-border bg-popover py-1 shadow-lg">
+                <div className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Recent
+                </div>
+                {recentConversations.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-muted-foreground">No chat history yet</p>
+                ) : (
+                  recentConversations.map((conv) => {
+                    const isActive = paneConversationId === conv.id;
+                    const isOpen = paneOpenTabIds.includes(conv.id);
+                    return (
                       <button
-                        key={agent.id}
+                        key={conv.id}
                         type="button"
                         onClick={() => {
-                          setPaneAgent(agent.id);
-                          setShowAgentMenu(false);
+                          openPaneTab(conv.id);
+                          setShowHistory(false);
                         }}
                         className={cn(
-                          'flex w-full items-center gap-2 px-3 py-1.5 text-sm',
+                          'flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors',
                           'hover:bg-muted',
-                          paneAgent === agent.id && 'bg-muted'
+                          isActive && 'bg-muted'
                         )}
                       >
-                        <span className="flex-1 text-left">{agent.name}</span>
-                        {paneAgent === agent.id && <Check size={12} />}
+                        <MessageSquare
+                          size={12}
+                          className={cn(
+                            'shrink-0',
+                            isOpen ? 'text-workspace-accent' : 'text-muted-foreground'
+                          )}
+                        />
+                        <span className="min-w-0 flex-1 truncate">{conv.title || 'Chat'}</span>
                       </button>
-                    ))}
-                  </div>
+                    );
+                  })
                 )}
               </div>
-            </div>
+            )}
 
-            {/* Send button */}
-            <button
-              type="submit"
-              disabled={!input.trim() || isLoading}
-              className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground',
-                'hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50'
-              )}
-            >
-              <Send size={14} />
-            </button>
+            {showOverflow && (
+              <div
+                role="menu"
+                aria-label="Chat actions"
+                className="absolute right-1 top-full z-40 mt-1 w-52 rounded-md border border-border bg-popover py-1 shadow-lg"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!canExportTranscript}
+                  onClick={() => handleExportTranscript('md')}
+                  className={cn(
+                    'flex w-full px-3 py-2 text-left text-xs transition-colors',
+                    canExportTranscript
+                      ? 'text-foreground hover:bg-muted'
+                      : 'cursor-not-allowed text-muted-foreground'
+                  )}
+                >
+                  Export transcript
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!canExportTranscript}
+                  onClick={() => handleExportTranscript('txt')}
+                  className={cn(
+                    'flex w-full px-3 py-2 text-left text-xs transition-colors',
+                    canExportTranscript
+                      ? 'text-foreground hover:bg-muted'
+                      : 'cursor-not-allowed text-muted-foreground'
+                  )}
+                >
+                  Export as text
+                </button>
+              </div>
+            )}
           </div>
-        </form>
-      </div>
-    </aside>
-  );
-}
-
-function PaneMessage({ message }: { message: Message }) {
-  const isUser = message.role === 'user';
-  const [showThinking, setShowThinking] = useState(false);
-  const [autoCollapsed, setAutoCollapsed] = useState(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const wasProcessingRef = useRef(false);
-  const processingStartRef = useRef<number | null>(null);
-
-  // Parse <think> tags
-  const parseThinking = (content: string) => {
-    const match = content.match(/<think>([\s\S]*?)<\/think>/);
-    if (match) {
-      const thinking = match[1].trim();
-      const response = content.replace(/<think>[\s\S]*?<\/think>/, '').trim();
-      return { thinking, response };
-    }
-    return { thinking: null, response: content };
-  };
-
-  const { thinking, response } = isUser
-    ? { thinking: null, response: message.content }
-    : parseThinking(message.content);
-
-  const isStillProcessing = Boolean(
-    !isUser && thinking && (!response || response === '▌')
-  );
-
-  // Live elapsed timer while processing
-  useEffect(() => {
-    if (isStillProcessing) {
-      if (processingStartRef.current === null) {
-        processingStartRef.current = Date.now();
-        setElapsedSeconds(0);
-      }
-      const interval = setInterval(() => {
-        setElapsedSeconds(Math.floor((Date.now() - (processingStartRef.current ?? Date.now())) / 1000));
-      }, 1000);
-      return () => clearInterval(interval);
-    } else {
-      processingStartRef.current = null;
-    }
-  }, [isStillProcessing]);
-
-  // Auto-close thinking 3s after processing finishes
-  useEffect(() => {
-    if (isStillProcessing) {
-      wasProcessingRef.current = true;
-    } else if (wasProcessingRef.current && !autoCollapsed) {
-      const timer = setTimeout(() => {
-        setShowThinking(false);
-        setAutoCollapsed(true);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [isStillProcessing, autoCollapsed]);
-
-  const formatDuration = (seconds: number) => {
-    if (seconds < 1) return '<1s';
-    if (seconds < 60) return `${Math.round(seconds)}s`;
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.round(seconds % 60);
-    return `${mins}m ${secs}s`;
-  };
-
-  const hasThinkingSection = !isUser && (thinking || (message.thinkingDuration && message.thinkingDuration > 0));
-
-  if (isUser) {
-    return (
-      <div className="ml-6 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground">
-        <p className="whitespace-pre-wrap">{message.content}</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mr-6 space-y-1">
-      {/* Processing / Processed indicator */}
-      {hasThinkingSection && (
-        <div>
-          <button
-            onClick={() => thinking && setShowThinking(!showThinking)}
-            className={cn(
-              'flex items-center gap-1 text-[10px] text-muted-foreground transition-colors',
-              thinking && !isStillProcessing && 'hover:text-foreground cursor-pointer'
-            )}
-            disabled={!thinking || isStillProcessing}
-          >
-            {isStillProcessing ? (
-              <span className="font-medium tabular-nums">{formatDuration(elapsedSeconds)}</span>
-            ) : (
-              <span className="font-medium">
-                Processed in {formatDuration(message.thinkingDuration || 0)}
-              </span>
-            )}
-            {thinking && !isStillProcessing && (
-              <ChevronDown
-                size={10}
-                className={cn('transition-transform', showThinking && 'rotate-180')}
-              />
-            )}
-          </button>
-
-          {thinking && (showThinking || (isStillProcessing && !autoCollapsed)) && (
-            <div className="mt-1 max-h-32 overflow-y-auto rounded border border-border/50 bg-muted/50 px-2 py-1.5 text-[10px] text-muted-foreground">
-              <p className="whitespace-pre-wrap leading-relaxed">{thinking}</p>
-            </div>
-          )}
         </div>
-      )}
-
-      {/* Response bubble */}
-      <div className="rounded-lg bg-muted px-3 py-2 text-sm prose prose-sm dark:prose-invert max-w-none [&_p]:my-0.5 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs">
-        {isStillProcessing ? (
-          <span className="inline-flex items-center gap-0.5">
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '0ms' }} />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '150ms' }} />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: '300ms' }} />
-          </span>
-        ) : (
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{response}</ReactMarkdown>
+        {slidesContext && (
+          <div className="flex shrink-0 items-center gap-2 border-b border-border/50 bg-muted/30 px-3 py-1.5 text-[11px] text-muted-foreground">
+            <Presentation size={12} className="shrink-0 text-workspace-accent" />
+            <span className="min-w-0 truncate">
+              Editing{' '}
+              <span className="font-medium text-foreground">
+                {slidesContext.title || slidesContext.slug}
+              </span>
+              {' · '}
+              {slidesContext.path}
+              {slidesContext.runtime === 'error' || slidesContext.runtime === 'degraded'
+                ? ' · Forgejo fallback'
+                : slidesContext.runtime === 'ready'
+                  ? ' · workspace'
+                  : ''}
+            </span>
+          </div>
         )}
-      </div>
-    </div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ChatInterface surface="pane" />
+        </div>
+      </aside>
+    </>
   );
 }

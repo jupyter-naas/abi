@@ -1,5 +1,7 @@
 import pytest
-from naas_abi_marketplace.applications.google_search.agents.GoogleSearchAgent import GoogleSearchAgent
+from naas_abi_marketplace.applications.google_search.agents.GoogleSearchAgent import (
+    GoogleSearchAgent,
+)
 
 
 @pytest.fixture

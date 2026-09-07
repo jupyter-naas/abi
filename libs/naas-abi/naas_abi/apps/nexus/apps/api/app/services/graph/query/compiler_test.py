@@ -505,6 +505,44 @@ def test_compile_facet_refuses_measure() -> None:
         compile_facet(spec, CompileContext(), target_column_id="chats")
 
 
+# ── Adaptive graph scoping (single-graph fast form vs multi-graph per-hop) ───────
+
+G2 = "http://ontology.naas.ai/graph/other"
+
+
+def test_single_graph_keeps_original_single_graph_form() -> None:
+    # Exactly one graph selected → the fast original form: one outer GRAPH ?g, bare triples.
+    q = _norm(compile_list(_spec_a(), _ctx_a()).sparql)
+    assert "VALUES ?g { " in q and "GRAPH ?g {" in q
+    assert "?g_anchor" not in q  # no per-hop scoping for a single graph
+
+
+def test_multigraph_uses_per_hop_graph_scoping() -> None:
+    # >1 graph selected → each triple gets its own VALUES ?gK / GRAPH ?gK so a single row's
+    # path may cross graph boundaries. NO single outer GRAPH ?g (that binds one graph for the
+    # whole path — the cross-graph bug) and NO FROM (which drops TDB2 onto its slow
+    # dynamic-dataset path).
+    spec = ListSpec(
+        graph_uris=(G, G2),
+        root=ClassAnchor((DOC + "ExtractedItem",)),
+        columns=(
+            Column(
+                "paperPath", "string",
+                PropertySource(DOC + "path", path=(Hop(DOC + "extracted_from_chunk", "out"), Hop(DOC + "chunk_of", "out"))),
+            ),
+        ),
+    )
+    q = _norm(compile_list(spec, _ctx_a()).sparql)
+    # Anchor + every hop + the leaf are each scoped over BOTH selected graphs, independently.
+    assert f"VALUES ?g_anchor {{ <{G}> <{G2}> }} GRAPH ?g_anchor {{ ?root a ?cls . }}" in q
+    assert f"VALUES ?g_paperPath_0 {{ <{G}> <{G2}> }} GRAPH ?g_paperPath_0 {{ ?root <{DOC}extracted_from_chunk> ?paperPath_0 . }}" in q
+    assert f"GRAPH ?g_paperPath_1 {{ ?paperPath_0 <{DOC}chunk_of> ?paperPath_1 . }}" in q
+    assert f"GRAPH ?g_paperPathL {{ ?paperPath_1 <{DOC}path> ?col_paperPath . }}" in q
+    # No single-graph wrapper and no FROM anywhere.
+    assert "GRAPH ?g {" not in q and "VALUES ?g {" not in q
+    assert "FROM <" not in q
+
+
 def test_measure_sort_falls_back_to_offset() -> None:
     compiled = compile_list(_spec_1(), CompileContext(single_valued_predicates=frozenset({LBL})))
     assert compiled.uses_offset_fallback is True  # sort key is a measure → not keyset-eligible

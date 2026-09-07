@@ -1,0 +1,77 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix {{module_name_snake}}: <http://ontology.naas.ai/{{module_name_snake}}/> .
+
+# One file per business process. The process ontology imports the module
+# ontology, never the reverse: vocabulary must stand alone, while a process is
+# always *about* something.
+{{module_name_snake}}:{{module_name_pascal}}Process a owl:Ontology ;
+  # One owl:imports statement per IRI — see the note in
+  # ontologies/modules/{{module_name_pascal}}Ontology.ttl.
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/{{module_name_snake}}/{{module_name_pascal}}Ontology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/{{module_name_snake}}/{{module_name_pascal}}Ontology> ;
+
+  # Set pythonPackage to the module's full dotted import path.
+  abi:pythonPackage "{{module_name_snake}}" ;
+  abi:ontologyResource "ontologies/processes/{{module_name_pascal}}Process.ttl" ;
+  abi:pythonResource "ontologies/processes/{{module_name_pascal}}Process.py" ;
+
+  dc:title "{{module_name_pascal}} Process Ontology"@en ;
+  dc:description "Process ontology for the {{module_name}} process. Describe what happens, what it consumes and what it produces — and call out any two populations the model deliberately keeps apart, because that is what a reader will get wrong."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Process ontology for the {{module_name}} process."@en ;
+  dc11:contributor "TODO: your name" ;
+  dc11:date "2026-01-01"^^xsd:date .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+{{module_name_snake}}:producesResult a owl:ObjectProperty ;
+    owl:inverseOf {{module_name_snake}}:isProducedBy ;
+    rdfs:label "produces result"@en ;
+    skos:definition "Relates a process to the result set it produces."@en ;
+    rdfs:domain abi:Process ;
+    rdfs:range {{module_name_snake}}:{{module_name_pascal}}ResultSet .
+
+{{module_name_snake}}:isProducedBy a owl:ObjectProperty ;
+    owl:inverseOf {{module_name_snake}}:producesResult ;
+    rdfs:label "is produced by"@en ;
+    skos:definition "Relates a result set to the process that produced it."@en ;
+    rdfs:domain {{module_name_snake}}:{{module_name_pascal}}ResultSet ;
+    rdfs:range abi:Process .
+
+#################################################################
+#    Classes
+#################################################################
+
+# WHAT'S HAPPENING — the process, decomposed across the seven buckets.
+# Add one owl:Restriction per bucket the process actually touches; delete the
+# ones it does not. An unused restriction is worse than a missing one.
+{{module_name_snake}}:{{module_name_pascal}} a owl:Class ;
+    rdfs:subClassOf abi:Process ,
+      # WHEN — occupies temporal region
+      [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+      # WHO — has participant
+      [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
+      # HOW WE KNOW — produces a result set
+      [ a owl:Restriction ; owl:onProperty {{module_name_snake}}:producesResult ; owl:someValuesFrom {{module_name_snake}}:{{module_name_pascal}}ResultSet ] ;
+    rdfs:label "{{module_name_pascal}}"@en ;
+    skos:definition "A process that TODO: state what occurs, in one sentence."@en ;
+    skos:example "TODO: a concrete run of this process."@en .
+
+# HOW WE KNOW — what the process produced
+{{module_name_snake}}:{{module_name_pascal}}ResultSet a owl:Class ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ;
+    rdfs:label "{{module_name_pascal}} Result Set"@en ;
+    skos:definition "An information content entity holding the results produced by one run of the {{module_name}} process."@en ;
+    skos:example "TODO: the payload of one run."@en .

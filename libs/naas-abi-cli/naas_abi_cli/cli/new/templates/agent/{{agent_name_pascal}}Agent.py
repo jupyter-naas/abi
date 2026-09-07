@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from langchain_core.messages import AnyMessage
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
@@ -89,3 +90,42 @@ Help the user accomplish their tasks using the tools available to you.
             state=agent_shared_state,
             configuration=agent_configuration,
         )
+
+    # ------------------------------------------------------------------
+    # Message hooks
+    #
+    # Already wired: the runtime calls these on every message, you only have
+    # to fill in the body. They are observation points -- whatever you return
+    # is ignored, and if you raise, the error is logged and swallowed so the
+    # conversation keeps going.
+    #
+    # They run inline on the streaming thread, so keep them quick. Hand slow
+    # work (HTTP calls, big writes) off to a queue or a thread yourself.
+    # ------------------------------------------------------------------
+
+    def onHumanMessage(self, message: AnyMessage) -> None:
+        """Called every time the user sends a new message to this agent.
+
+        Runs once per turn, before the message reaches the model.
+
+        Args:
+            message (AnyMessage): The HumanMessage that was just received.
+        """
+        # Example -- replace with whatever you need:
+        # from naas_abi_core.utils.Logger import logger
+        # logger.info(f"[{self.name}] human: {message.content}")
+
+    def onAImessage(self, message: AnyMessage, agent_name: str) -> None:
+        """Called every time a new AI message is emitted.
+
+        Fires for messages from this agent *and* from any of its sub-agents --
+        use ``agent_name`` to tell them apart. Messages that only carry tool
+        calls are not reported here.
+
+        Args:
+            message (AnyMessage): The AIMessage that was just emitted.
+            agent_name (str): Name of the agent that produced the message.
+        """
+        # Example -- replace with whatever you need:
+        # from naas_abi_core.utils.Logger import logger
+        # logger.info(f"[{agent_name}] ai: {message.content}")

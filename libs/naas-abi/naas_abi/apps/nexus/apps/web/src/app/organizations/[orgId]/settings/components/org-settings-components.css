@@ -1,0 +1,234 @@
+/* organizations/[orgId]/settings/components — shared semantic styles */
+
+.org-settings-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.org-settings-page-header-with-actions {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.org-settings-page-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.org-settings-page-header-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-lg);
+  color: var(--foreground-hex);
+}
+
+.org-settings-page-header-subtitle {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.org-settings-section-card {
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--card-hex);
+}
+
+.org-settings-section-card-padded {
+  padding: var(--space-6);
+}
+
+.org-settings-section-card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.org-settings-section-card-flush {
+  padding: 0;
+}
+
+.org-settings-section-card-overflow-hidden {
+  overflow: hidden;
+}
+
+.org-settings-primary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--color-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-sm);
+  color: var(--color-primary-foreground);
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.org-settings-primary-button:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.org-settings-primary-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.org-settings-primary-button-saved {
+  background-color: var(--color-primary-subtle);
+  color: var(--color-primary);
+}
+
+.org-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.org-settings-field-label {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-sm);
+  color: var(--foreground-hex);
+}
+
+.org-settings-field-hint {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-xs, 1.4);
+  color: var(--muted-foreground-hex);
+}
+
+.org-settings-input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--background-hex);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--foreground-hex);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.org-settings-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-subtle);
+}
+
+.org-settings-slug-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.org-settings-slug-prefix {
+  flex-shrink: 0;
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.org-settings-card-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+  color: var(--muted-foreground-hex);
+}
+
+.org-settings-card-heading-title {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-foreground-hex);
+}
+
+.org-settings-page-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.org-settings-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+}
+
+.org-settings-empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: var(--space-4);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--muted-bg-hex);
+  color: var(--muted-foreground-hex);
+}
+
+.org-settings-empty-title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}
+
+.org-settings-empty-body {
+  margin: 0;
+  max-width: 28rem;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-xs, 1.4);
+  color: var(--muted-foreground-hex);
+}
+
+.org-settings-footnote {
+  margin: 0;
+  text-align: center;
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}
+
+.org-settings-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-12) 0;
+  color: var(--muted-foreground-hex);
+  font-size: var(--font-size-sm);
+}
+
+@media (max-width: 767px) {
+  .org-settings-page-header-with-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .org-settings-section-card-padded {
+    padding: var(--space-4);
+  }
+
+  .org-settings-page-actions {
+    justify-content: stretch;
+  }
+
+  .org-settings-page-actions .org-settings-primary-button {
+    width: 100%;
+    justify-content: center;
+  }
+}

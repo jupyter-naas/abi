@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class MistralNemoModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=131072,
-        name="Mistral: Mistral Nemo",
+        name="Mistral Nemo",
         owner="mistralai",
         description="A 12B parameter model with a 128k token context length built by Mistral in collaboration with NVIDIA. The model is multilingual, supporting English, French, German, Spanish, Italian, Portuguese, Chinese, Japanese,...",
         canonical_slug="mistralai/mistral-nemo",
         hugging_face_id="mistralai/Mistral-Nemo-Instruct-2407",
-        created_at=datetime.fromtimestamp(1721347200),
+        created_at=datetime.fromtimestamp(1721347200, tz=UTC),
         pricing={'prompt': '0.00000002', 'completion': '0.00000003'},
         architecture={'modality': 'text->text', 'input_modalities': ['text'], 'output_modalities': ['text'], 'tokenizer': 'Mistral', 'instruct_type': 'mistral'},
         top_provider={'context_length': 131072, 'max_completion_tokens': None, 'is_moderated': False},

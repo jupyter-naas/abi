@@ -337,14 +337,14 @@ export default function OrgForgotPasswordPage() {
 
       {/* Powered by NEXUS */}
       {(branding?.showPoweredBy ?? true) && (
-        <p className="mt-4 text-center text-xs" style={{ color: subtitleColor || 'rgba(255,255,255,0.3)' }}>
+        <p className="mt-4 text-center text-caption" style={{ color: subtitleColor || 'rgba(255,255,255,0.3)' }}>
           Powered by NEXUS
         </p>
       )}
 
       {/* Custom footer text */}
       {branding?.loginFooterText && (
-        <p className="mt-4 text-center text-xs" style={{ color: subtitleColor || 'rgba(255,255,255,0.4)' }}>
+        <p className="mt-4 text-center text-caption" style={{ color: subtitleColor || 'rgba(255,255,255,0.4)' }}>
           {branding.loginFooterText}
         </p>
       )}

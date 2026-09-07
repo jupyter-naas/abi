@@ -1,9 +1,8 @@
+from rich.align import Align
 from rich.console import Console
 from rich.panel import Panel
-from rich.text import Text
-from rich.align import Align
 from rich.prompt import Prompt
-
+from rich.text import Text
 
 console = Console()
 
@@ -11,7 +10,7 @@ def set_terminal_title():
     """Set the terminal window title"""
     try:
         print("\33]0;Oxigraph Admin\a", end="", flush=True)
-    except Exception:
+    except Exception:  # noqa: BLE001,S110
         pass
 
 def print_welcome_message():

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, Dict, Optional
+from typing import Annotated
 
 import pydash as _
 import yaml
@@ -48,7 +48,7 @@ class ConvertOntologyGraphToYamlWorkflowParameters(WorkflowParameters):
         str, Field(..., description="The graph serialized as turtle format")
     ]
     ontology_id: Annotated[
-        Optional[str], Field(..., description="The ID of the ontology")
+        str | None, Field(..., description="The ID of the ontology")
     ] = None
     label: Annotated[str, Field(..., description="The label of the ontology")] = (
         "New Ontology"
@@ -61,7 +61,7 @@ class ConvertOntologyGraphToYamlWorkflowParameters(WorkflowParameters):
         ),
     ] = "New Ontology Description"
     logo_url: Annotated[
-        Optional[str], Field(..., description="The logo URL of the ontology")
+        str | None, Field(..., description="The logo URL of the ontology")
     ] = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
     level: Annotated[str, Field(..., description="The level of the ontology")] = (
         "USE_CASE"
@@ -73,7 +73,7 @@ class ConvertOntologyGraphToYamlWorkflowParameters(WorkflowParameters):
         ),
     ] = True
     class_colors_mapping: Annotated[
-        Dict, Field(..., description="The mapping of class colors")
+        dict, Field(..., description="The mapping of class colors")
     ] = COLORS_NODES
 
 
@@ -121,8 +121,7 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
         if not asset_url:
             raise ValueError("Asset URL not found in response")
 
-        if asset_url.endswith("/"):
-            asset_url = asset_url[:-1]
+        asset_url = asset_url.removesuffix("/")
 
         # Convert to YAML
         try:
@@ -133,7 +132,7 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
             )
         except Exception as e:
             message = f"Error converting ontology to YAML: {e}"
-            raise e
+            raise
 
         # Initialize parameters
         if yaml_data is not None:

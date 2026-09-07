@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-07-31 11:44",
+  "records": [
+    {
+      "client": "Data warehouse loader",
+      "key_prefix": "fc_live_7f2a••••",
+      "scopes": "read:datasets",
+      "environment": "Production",
+      "rate_limit_per_min": 600,
+      "created_on": "2025-11-03",
+      "last_used": "2026-07-31 15:30",
+      "calls_30d": 182474,
+      "status": "Active"
+    },
+    {
+      "client": "Executive mobile app",
+      "key_prefix": "fc_live_b41c••••",
+      "scopes": "read:datasets, read:entities",
+      "environment": "Production",
+      "rate_limit_per_min": 300,
+      "created_on": "2025-06-08",
+      "last_used": "2026-07-31 09:30",
+      "calls_30d": 118420,
+      "status": "Active"
+    },
+    {
+      "client": "Close automation bot",
+      "key_prefix": "fc_live_c93d••••",
+      "scopes": "read:datasets, write:close",
+      "environment": "Production",
+      "rate_limit_per_min": 120,
+      "created_on": "2026-03-01",
+      "last_used": "2026-07-30 23:30",
+      "calls_30d": 48817,
+      "status": "Active"
+    },
+    {
+      "client": "Budget import job",
+      "key_prefix": "fc_live_1e88••••",
+      "scopes": "write:budget",
+      "environment": "Production",
+      "rate_limit_per_min": 60,
+      "created_on": "2025-08-01",
+      "last_used": "2026-07-31 04:30",
+      "calls_30d": 8174,
+      "status": "Active"
+    },
+    {
+      "client": "Partner sandbox",
+      "key_prefix": "fc_test_a057••••",
+      "scopes": "read:datasets",
+      "environment": "Sandbox",
+      "rate_limit_per_min": 60,
+      "created_on": "2025-08-02",
+      "last_used": "2026-07-31 13:30",
+      "calls_30d": 172101,
+      "status": "Active"
+    },
+    {
+      "client": "Legacy reporting script",
+      "key_prefix": "fc_live_44be••••",
+      "scopes": "read:datasets",
+      "environment": "Production",
+      "rate_limit_per_min": 60,
+      "created_on": "2024-10-26",
+      "last_used": "2026-01-18 09:30",
+      "calls_30d": 0,
+      "status": "Idle"
+    }
+  ]
+}

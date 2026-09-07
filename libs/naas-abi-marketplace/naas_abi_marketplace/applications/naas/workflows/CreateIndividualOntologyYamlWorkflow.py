@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, Any, Union
+from typing import Annotated, Any
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.services.triple_store.TripleStorePorts import (
@@ -78,8 +78,8 @@ class CreateIndividualOntologyYamlWorkflow(Workflow):
 
     def trigger(
         self, event: OntologyEvent, triple: tuple[Any, Any, Any]
-    ) -> Union[str, None]:
-        s, p, o = triple
+    ) -> str | None:
+        s, _p, o = triple
         if (
             str(event) != str(OntologyEvent.INSERT)
             or not str(s).startswith("http://ontology.naas.ai/abi/")
@@ -103,7 +103,7 @@ class CreateIndividualOntologyYamlWorkflow(Workflow):
 
     def graph_to_yaml(
         self, parameters: CreateIndividualOntologyYamlWorkflowParameters
-    ) -> Union[str, None]:
+    ) -> str | None:
         # Create individual graph
         graph = self.__sparql_utils.get_subject_graph(
             parameters.individual_uri, parameters.depth
@@ -180,4 +180,3 @@ class CreateIndividualOntologyYamlWorkflow(Workflow):
     ) -> None:
         if tags is None:
             tags = []
-        return None

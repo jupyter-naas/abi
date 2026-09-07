@@ -1,6 +1,5 @@
-from typing import Optional
 
-from naas_abi_core.models.Model import ChatModel
+from naas_abi_core.models.Model import CanonicalModelId, ChatModel
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
@@ -151,7 +150,7 @@ You are ChatGPT, an agent designed to assist user by performing web search, anal
     ]
 
     @staticmethod
-    def get_tools(cls) -> list:
+    def get_tools() -> list:
         from naas_abi_marketplace.ai.chatgpt import ABIModule
         from naas_abi_marketplace.ai.chatgpt.integrations.OpenAIResponsesIntegration import (
             OpenAIResponsesIntegrationConfiguration,
@@ -175,16 +174,17 @@ You are ChatGPT, an agent designed to assist user by performing web search, anal
         return tools
 
     @staticmethod
-    def get_model(cls) -> ChatModel:
-        from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini import model
+    def get_model() -> ChatModel:
+        from naas_abi_marketplace.ai.chatgpt import ABIModule
 
-        return model
+        abi_module = ABIModule.get_instance()
+        return abi_module.engine.services.model_registry.get_chat_model(CanonicalModelId.GPT_5_2)
 
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
     ) -> IntentAgent:
 
         # Set configuration
@@ -196,8 +196,8 @@ You are ChatGPT, an agent designed to assist user by performing web search, anal
         return ChatGPTAgent(
             name=cls.name,
             description=cls.description,
-            chat_model=cls.get_model(cls=cls),
-            tools=cls.get_tools(cls=cls),
+            chat_model=cls.get_model(),
+            tools=cls.get_tools(),
             intents=cls.intents,
             state=agent_shared_state,
             configuration=agent_configuration,

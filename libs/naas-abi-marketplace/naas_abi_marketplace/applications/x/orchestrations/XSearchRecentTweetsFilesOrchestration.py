@@ -1,11 +1,12 @@
 """Files-reprocessing orchestration for the X application.
 
-One (job, sensor) pair per ``search_recent_tweets_files`` config entry. Each
-sensor wakes every ``interval_seconds`` (default 5400 — every 1 h 30 min) and,
-unless a previous run is still in flight, triggers a job that runs the tweet
-mapping pipeline over the persisted search envelopes under that entry's
-``prefix``. Launch the job manually from the Dagster launchpad to override
-``prefix`` / ``persist`` / ``skip_existing`` / ``graph_name`` per run.
+One (job, trigger) pair per ``search_recent_tweets_files`` config entry — a
+**sensor** when the entry sets ``interval_seconds`` (elapsed-time cadence) or a
+**schedule** when it sets ``cron`` (wall-clock times, UTC). Unless a previous
+run is still in flight, the trigger starts a job that runs the tweet mapping
+pipeline over the persisted search envelopes under that entry's ``prefix``.
+Launch the job manually from the Dagster launchpad to override ``prefix`` /
+``persist`` / ``skip_existing`` / ``max_age_hours`` / ``graph_name`` per run.
 
 Unlike :class:`XSearchRecentTweetsEventOrchestration` (which maps one envelope
 per ObjectPut event as files land), this orchestration sweeps **all** files
@@ -21,9 +22,12 @@ SearchResultSet / SearchRecentTweets / Tweet structure from each new file. Set
 ``skip_existing: false`` to force a full re-run over every file (the pipeline's
 label-based dedupe still makes a re-run a no-op).
 
-All sensors are **disabled by default** (``DefaultSensorStatus.STOPPED``); set
-``enabled: true`` on an entry to create its sensor RUNNING, or enable it from
-the Dagster UI.
+``max_age_hours`` (optional) further limits the sweep to envelopes whose
+filename timestamp (``<iso-ts>_<slug>.json``) falls within the last N hours.
+Age filtering runs while listing keys, then again as a second filename pass.
+
+All triggers start **RUNNING** by default; stop them from the Dagster UI when
+needed.
 
 Launchpad example (for an entry named ``reprocess_envelopes``)::
 
@@ -33,10 +37,13 @@ Launchpad example (for an entry named ``reprocess_envelopes``)::
           prefix: x/search_recent_tweets/ai_llms
           persist: true
           skip_existing: true
+          max_age_hours: 24
           graph_name: http://ontology.naas.ai/graph/x
 """
 
 import posixpath
+import re
+from datetime import UTC, datetime, timedelta
 
 import dagster as dg
 from naas_abi_core import logger
@@ -48,11 +55,15 @@ from naas_abi_marketplace.applications.x import (
 from naas_abi_marketplace.applications.x.orchestrations.utils import (
     has_in_progress_run,
     launchpad_override,
+    republish_x_app_after_pipeline,
     run_search_pipeline_for_file,
     safe_name,
 )
 
 _ENVELOPE_EXTENSIONS = (".json", ".ndjson", ".json.gz", ".ndjson.gz")
+# ``2026-07-23T15:46:04.705264+00:00_<slug>.json`` or underscored older form
+# ``2026-06-29T17_58_45.974146+00_00_<slug>.json``.
+_ENVELOPE_TS_RE = re.compile(r"^(?P<ts>\d{4}-\d{2}-\d{2}T[\d_:.+-]+?)_")
 
 _FILES_CONFIG_SCHEMA = {
     "prefix": dg.Field(
@@ -77,21 +88,96 @@ _FILES_CONFIG_SCHEMA = {
             "Set false to force a full re-run over every file."
         ),
     ),
+    "max_age_hours": dg.Field(
+        int,
+        is_required=False,
+        description=(
+            "Only reprocess envelopes whose filename timestamp is within "
+            "the last N hours. Omit (or leave unset) for no age filter."
+        ),
+    ),
     "graph_name": dg.Field(
         str,
         is_required=False,
         description="Named graph IRI for mapped triples (ABI config default).",
     ),
+    "app_publish": dg.Field(
+        bool,
+        is_required=False,
+        description=(
+            "After reprocessing, republish x/apps/x_proxy/ snapshots (+ web export). "
+            "Defaults to the entry's configured app_publish (itself false "
+            "unless set) — turn on here to force a rebuild for one run."
+        ),
+    ),
 }
 
 
-def _list_envelope_paths(object_storage, prefix: str) -> list[str]:
+def _envelope_path_timestamp(file_path: str) -> datetime | None:
+    """Parse the leading ISO (or underscored-ISO) timestamp from an envelope key.
+
+    Returns an aware UTC datetime, or ``None`` when the basename does not match
+    the ``<ts>_<slug>.json`` convention.
+    """
+    name = posixpath.basename(file_path)
+    match = _ENVELOPE_TS_RE.match(name)
+    if not match:
+        return None
+    stamp = match.group("ts")
+    # Older files used underscores in the time / offset: ``T17_58_45…+00_00``.
+    if "+00_00" in stamp or (stamp.count("_") >= 2 and "T" in stamp):
+        try:
+            date, rest = stamp.split("T", 1)
+            if "+" not in rest:
+                return None
+            time_part, tz = rest.rsplit("+", 1)
+            parsed = datetime.fromisoformat(
+                f"{date}T{time_part.replace('_', ':')}+{tz.replace('_', ':')}"
+            )
+        except ValueError:
+            return None
+    else:
+        try:
+            parsed = datetime.fromisoformat(stamp)
+        except ValueError:
+            return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+def _within_max_age(file_path: str, cutoff: datetime) -> bool:
+    """True iff *file_path*'s filename timestamp is parseable and ``>= cutoff``."""
+    ts = _envelope_path_timestamp(file_path)
+    return ts is not None and ts >= cutoff
+
+
+def _list_envelope_paths(
+    object_storage,
+    prefix: str,
+    *,
+    cutoff: datetime | None = None,
+    _seen: set[str] | None = None,
+) -> tuple[list[str], int]:
     """Full object-storage paths of every envelope file under *prefix*.
 
-    ``list_objects`` returns keys that may already include the prefix; normalise
-    each back to a full ``prefix/key`` path (what the pipeline's ``file_path``
-    mode expects) and keep only the JSON envelope extensions.
+    ``list_objects`` is depth-1 only (direct children). Envelopes live under
+    ``<prefix>/<slug>/<ts>_<slug>.json``, so this walks into subdirectory
+    children (S3 common-prefixes ending in ``/``, or FS directory names)
+    until it finds JSON envelope files. Returned paths are the full
+    ``prefix/…/file`` keys the pipeline's ``file_path`` mode expects.
+
+    When *cutoff* is set, each envelope key is age-checked from its filename
+    timestamp **while listing** (older / unparseable keys are dropped and
+    counted in the returned skip total). Callers that set *cutoff* should still
+    run :func:`_filter_paths_by_max_age` as a second filename pass.
     """
+    prefix = prefix.rstrip("/")
+    seen = _seen if _seen is not None else set()
+    if not prefix or prefix in seen:
+        return [], 0
+    seen.add(prefix)
+
     try:
         all_keys = object_storage.list_objects(prefix) or []
     except Exception as exc:  # noqa: BLE001
@@ -99,15 +185,62 @@ def _list_envelope_paths(object_storage, prefix: str) -> list[str]:
             f"XSearchRecentTweetsFilesOrchestration: list_objects({prefix!r}) "
             f"failed ({exc})"
         )
-        return []
+        return [], 0
 
     paths: list[str] = []
+    skipped_age = 0
     for k in all_keys:
-        if not k or not k.lower().endswith(_ENVELOPE_EXTENSIONS):
+        if not k:
             continue
         full_path = k if k.startswith(prefix) else posixpath.join(prefix, k)
-        paths.append(full_path)
-    return paths
+        base = posixpath.basename(full_path.rstrip("/"))
+        # Nexus folder markers are zero-byte placeholders, not real prefixes.
+        if base == ".nexus_folder":
+            continue
+        if full_path.endswith("/"):
+            child_paths, child_skipped = _list_envelope_paths(
+                object_storage,
+                full_path.rstrip("/"),
+                cutoff=cutoff,
+                _seen=seen,
+            )
+            paths.extend(child_paths)
+            skipped_age += child_skipped
+            continue
+        if full_path.lower().endswith(_ENVELOPE_EXTENSIONS):
+            if cutoff is not None and not _within_max_age(full_path, cutoff):
+                skipped_age += 1
+                continue
+            paths.append(full_path)
+            continue
+        # Non-envelope child with no trailing slash — likely a slug dir (FS
+        # adapter) or an unrelated file. Recurse; empty/missing dirs no-op.
+        child_paths, child_skipped = _list_envelope_paths(
+            object_storage, full_path, cutoff=cutoff, _seen=seen
+        )
+        paths.extend(child_paths)
+        skipped_age += child_skipped
+    return paths, skipped_age
+
+
+def _filter_paths_by_max_age(
+    paths: list[str],
+    *,
+    cutoff: datetime,
+) -> tuple[list[str], int]:
+    """Second-pass filename age filter (same rule as listing-time check).
+
+    Paths with unparseable timestamps or ``ts < cutoff`` are dropped. Kept even
+    after listing already filtered, as a safety net against key-shape edge cases.
+    """
+    kept: list[str] = []
+    skipped = 0
+    for path in paths:
+        if not _within_max_age(path, cutoff):
+            skipped += 1
+            continue
+        kept.append(path)
+    return kept, skipped
 
 
 def _mapped_file_paths(triple_store, graph_name: str, namespace: str) -> set[str]:
@@ -150,11 +283,21 @@ def _reprocess_files(
     prefix = launchpad_override(op_cfg, "prefix", config.prefix)
     persist = launchpad_override(op_cfg, "persist", config.persist)
     skip_existing = launchpad_override(op_cfg, "skip_existing", config.skip_existing)
+    max_age_hours = launchpad_override(op_cfg, "max_age_hours", config.max_age_hours)
     graph_name = launchpad_override(
         op_cfg, "graph_name", module.configuration.graph_name
     )
 
-    paths = _list_envelope_paths(object_storage, prefix)
+    # Shared cutoff so listing-time filter and the second filename pass agree.
+    cutoff: datetime | None = None
+    if max_age_hours is not None:
+        cutoff = datetime.now(UTC) - timedelta(hours=int(max_age_hours))
+
+    paths, skipped_age = _list_envelope_paths(object_storage, prefix, cutoff=cutoff)
+    # Second filename-timestamp check (same rule) after listing.
+    if cutoff is not None:
+        paths, skipped_recheck = _filter_paths_by_max_age(paths, cutoff=cutoff)
+        skipped_age += skipped_recheck
 
     # Reprocess only files not already in the graph: drop every path that is the
     # x:file_path of an x:SearchResultSet already mapped into graph_name.
@@ -169,10 +312,14 @@ def _reprocess_files(
         paths = [p for p in paths if p not in mapped]
         skipped = before - len(paths)
 
+    age_note = (
+        f", {skipped_age} older than {max_age_hours}h skipped" if max_age_hours else ""
+    )
     logger.info(
         f"XSearchRecentTweetsFilesOrchestration[{config.name}]: {len(paths)} "
         f"envelope(s) under {prefix!r} to reprocess via "
-        f"XSearchRecentTweetsPipeline ({skipped} already in graph skipped)"
+        f"XSearchRecentTweetsPipeline ({skipped} already in graph skipped"
+        f"{age_note})"
     )
 
     processed = 0
@@ -195,32 +342,70 @@ def _reprocess_files(
         "prefix": prefix,
         "processed": processed,
         "skipped": skipped,
+        "skipped_age": skipped_age,
+        "max_age_hours": max_age_hours,
         "failed": failed,
     }
+    # Once per sweep rather than once per file: the sweep can map hundreds of
+    # envelopes, and the dataset is rebuilt from the final graph state anyway.
+    summary["app"] = republish_x_app_after_pipeline(
+        module,
+        source=f"XSearchRecentTweetsFilesOrchestration[{config.name}]",
+        app_publish=launchpad_override(op_cfg, "app_publish", config.app_publish),
+        ran=processed > 0,
+    )
     logger.info(
         f"XSearchRecentTweetsFilesOrchestration[{config.name}]: done — {summary}"
     )
     return summary
 
 
-def _build_reprocess_files_job_sensor(
+def _trigger_description(config: XSearchRecentTweetsFilesConfiguration) -> str:
+    """Human-readable summary shown on the entry's sensor / schedule."""
+    cadence = (
+        f"on cron '{config.cron}' (UTC)"
+        if config.cron
+        else f"every {config.interval_seconds}s"
+    )
+    age_note = (
+        f", limited to the last {config.max_age_hours}h" if config.max_age_hours else ""
+    )
+    return (
+        f"Reprocess persisted search_recent_tweets envelopes for filter "
+        f"'{config.name}' {cadence}: list {config.prefix!r}{age_note}, skip every "
+        f"file already mapped as the x:file_path of an x:SearchResultSet, and "
+        f"feed the rest to XSearchRecentTweetsPipeline."
+    )
+
+
+def _build_reprocess_files_definitions(
     config: XSearchRecentTweetsFilesConfiguration,
-) -> tuple[dg.JobDefinition, dg.SensorDefinition]:
-    """Build the (job, sensor) pair that reprocesses the envelopes under
+) -> tuple[
+    dg.JobDefinition,
+    dg.SensorDefinition | None,
+    dg.ScheduleDefinition | None,
+]:
+    """Build the (job, trigger) pair that reprocesses the envelopes under
     *config*'s ``prefix``.
 
-    Job-per-entry so each sensor (which binds to a single job) throttles
+    Job-per-entry so each trigger (which binds to a single job) throttles
     independently. The job is a single op that sweeps the folder and feeds the
     not-yet-mapped envelopes to :class:`XSearchRecentTweetsPipeline` in
     ``file_path`` mode. Same in-process executor argument as the other X jobs:
     share the dagster code-server's warm engine instead of forking a subprocess
     that re-bootstraps and races the api on oxigraph / nexus.db.
+
+    Exactly one of the returned trigger slots is populated: a sensor for an
+    ``interval_seconds`` entry, a schedule for a ``cron`` one (the config model
+    rejects entries that set both).
     """
 
     safe = safe_name(config.name)
     job_name = f"x_search_recent_tweets_files_{safe}"
     op_name = f"x_search_recent_tweets_files_op_{safe}"
     sensor_name = f"x_search_recent_tweets_files_sensor_{safe}"
+    schedule_name = f"x_search_recent_tweets_files_schedule_{safe}"
+    description = _trigger_description(config)
 
     @dg.op(name=op_name, config_schema=_FILES_CONFIG_SCHEMA)
     def reprocess_files_op(context) -> dict:
@@ -230,22 +415,29 @@ def _build_reprocess_files_job_sensor(
     def reprocess_files_job():
         reprocess_files_op()
 
+    if config.cron:
+
+        @dg.schedule(
+            name=schedule_name,
+            description=description,
+            job=reprocess_files_job,
+            cron_schedule=config.cron,
+            execution_timezone="UTC",
+            default_status=dg.DefaultScheduleStatus.RUNNING,
+        )
+        def reprocess_files_schedule(context: dg.ScheduleEvaluationContext):
+            if has_in_progress_run(context, job_name):
+                return dg.SkipReason(f"Job '{job_name}' is already running.")
+            return [dg.RunRequest(run_key=None)]
+
+        return reprocess_files_job, None, reprocess_files_schedule
+
     @dg.sensor(
         name=sensor_name,
-        description=(
-            f"Reprocess persisted search_recent_tweets envelopes for filter "
-            f"'{config.name}' every {config.interval_seconds}s: list "
-            f"{config.prefix!r}, skip every file already mapped as the "
-            f"x:file_path of an x:SearchResultSet, and feed the rest to "
-            f"XSearchRecentTweetsPipeline."
-        ),
+        description=description,
         job=reprocess_files_job,
         minimum_interval_seconds=config.interval_seconds,
-        default_status=(
-            dg.DefaultSensorStatus.RUNNING
-            if config.enabled
-            else dg.DefaultSensorStatus.STOPPED
-        ),
+        default_status=dg.DefaultSensorStatus.RUNNING,
     )
     def reprocess_files_sensor(context: dg.SensorEvaluationContext):
         # One reprocess run at a time: a sweep can outlast the tick, so skip
@@ -254,15 +446,15 @@ def _build_reprocess_files_job_sensor(
             return dg.SkipReason(f"Job '{job_name}' is already running.")
         return [dg.RunRequest(run_key=None)]
 
-    return reprocess_files_job, reprocess_files_sensor
+    return reprocess_files_job, reprocess_files_sensor, None
 
 
 class XSearchRecentTweetsFilesOrchestration(DagsterOrchestration):
-    """One (job, sensor) pair per configured ``search_recent_tweets_files``
-    entry, each sweeping the persisted search envelopes under the entry's
-    ``prefix`` on a fixed cadence and reprocessing only the files not yet mapped
-    into the graph via :class:`XSearchRecentTweetsPipeline`. Sensors disabled by
-    default unless ``enabled: true``.
+    """One (job, trigger) pair per configured ``search_recent_tweets_files``
+    entry — driven by a sensor (``interval_seconds``) or a schedule (``cron``)
+    — each sweeping the persisted search envelopes under the entry's ``prefix``
+    and reprocessing only the files not yet mapped into the graph via
+    :class:`XSearchRecentTweetsPipeline`. Triggers start RUNNING by default.
 
     Launchpad example (replace ``reprocess_envelopes`` with your entry name)::
 
@@ -271,6 +463,7 @@ class XSearchRecentTweetsFilesOrchestration(DagsterOrchestration):
             config:
               prefix: x/search_recent_tweets
               skip_existing: true
+              max_age_hours: 24
     """
 
     @classmethod
@@ -279,6 +472,7 @@ class XSearchRecentTweetsFilesOrchestration(DagsterOrchestration):
 
         jobs: list[dg.JobDefinition] = []
         sensors: list[dg.SensorDefinition] = []
+        schedules: list[dg.ScheduleDefinition] = []
 
         seen_names: set[str] = set()
         for files_config in module.configuration.search_recent_tweets_files:
@@ -290,14 +484,17 @@ class XSearchRecentTweetsFilesOrchestration(DagsterOrchestration):
                 )
                 continue
             seen_names.add(files_config.name)
-            job, sensor = _build_reprocess_files_job_sensor(files_config)
+            job, sensor, schedule = _build_reprocess_files_definitions(files_config)
             jobs.append(job)
-            sensors.append(sensor)
+            if sensor is not None:
+                sensors.append(sensor)
+            if schedule is not None:
+                schedules.append(schedule)
 
         return cls(
             definitions=dg.Definitions(
                 assets=[],
-                schedules=[],
+                schedules=schedules,
                 jobs=jobs,
                 sensors=sensors,
             )

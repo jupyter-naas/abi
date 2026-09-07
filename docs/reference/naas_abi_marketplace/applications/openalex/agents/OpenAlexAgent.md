@@ -1,39 +1,46 @@
 # OpenAlexAgent
 
 ## What it is
-- A thin wrapper around `IntentAgent` that defines an “OpenAlex” agent persona.
-- Provides general guidance about OpenAlex (no tools are configured; it does not fetch real OpenAlex data).
+- An `IntentAgent` specialization that defines an “OpenAlex” agent persona.
+- Provides general guidance about OpenAlex (no tools are configured; it does not retrieve real OpenAlex data).
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Factory to build and return an `OpenAlexAgent` with:
-    - A predefined system prompt (`SYSTEM_PROMPT`)
-    - No tools (`tools = []`)
-    - A small set of RAW intents for informational responses
-    - Optional shared state and configuration (auto-created if not provided)
 - `class OpenAlexAgent(IntentAgent)`
-  - Concrete agent class; currently adds no behavior beyond `IntentAgent` (inherits everything).
+  - Agent configuration via class attributes:
+    - `name = "OpenAlex"`
+    - `description = "Helps you interact with OpenAlex for academic research and publication data."`
+    - `system_prompt` (persona, objectives, constraints)
+    - `suggestions = []`
+- `OpenAlexAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> OpenAlexAgent`
+  - Factory constructor that:
+    - Pulls the default chat and embedding models from the app’s model registry.
+    - Configures:
+      - `tools = []`
+      - Two RAW intents for informational responses.
+    - Creates defaults when not provided:
+      - `AgentConfiguration(system_prompt=OpenAlexAgent.system_prompt)`
+      - `AgentSharedState(thread_id="0")`
 
 ## Configuration/Dependencies
 - Depends on `naas_abi_core.services.agent.IntentAgent` for:
   - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
-- Uses the chat model imported from:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1` (`model.model` passed as `chat_model`)
-- Key constants:
-  - `NAME = "OpenAlex"`
-  - `DESCRIPTION = "Helps you interact with OpenAlex for academic research and publication data."`
-  - `SYSTEM_PROMPT` defines capabilities/constraints (notably: no OpenAlex tools available)
+- Runtime dependency used inside `New()`:
+  - `naas_abi_marketplace.applications.openalex.ABIModule.get_instance()`
+  - Requires `abi_module.engine.services.model_registry` to be initialized.
+- Model selection:
+  - `chat_model = registry.get_default_chat_model()`
+  - `embedding_model = registry.get_default_embedding_model().model`
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.openalex.agents.OpenAlexAgent import create_agent
+from naas_abi_marketplace.applications.openalex.agents.OpenAlexAgent import OpenAlexAgent
 
-agent = create_agent()
+agent = OpenAlexAgent.New()
 
-# Then use the agent via IntentAgent's interface (methods depend on IntentAgent implementation).
+# Use via IntentAgent's interface (method names depend on IntentAgent implementation).
 # Example (placeholder): agent.run("What is OpenAlex?")
 ```
 
 ## Caveats
-- No OpenAlex tools are configured (`tools = []`), so the agent cannot retrieve or search real publication/author data.
-- The defined intents are informational and explicitly state tool access is unavailable.
+- No tools are configured (`tools = []`), so the agent cannot search or fetch OpenAlex data.
+- `New()` asserts the model registry exists; it will fail if the application engine/model registry is not initialized.

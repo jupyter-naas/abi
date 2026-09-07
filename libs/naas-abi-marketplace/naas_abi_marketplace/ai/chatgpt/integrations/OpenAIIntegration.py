@@ -1,7 +1,6 @@
 import os
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Dict, List, Optional
 
 from langchain_core.tools import StructuredTool
 from naas_abi_core.integration.integration import Integration, IntegrationConfiguration
@@ -56,7 +55,7 @@ class OpenAIIntegration(Integration):
     @cache(
         lambda self: "list_models", cache_type=DataType.PICKLE, ttl=timedelta(days=1)
     )
-    def list_models(self) -> Dict:
+    def list_models(self) -> dict:
         """List available models."""
         models = self.__openai.models.list()
         output_dir = os.path.join(self.__configuration.datastore_path, "models", "_all")
@@ -69,7 +68,7 @@ class OpenAIIntegration(Integration):
         cache_type=DataType.PICKLE,
         ttl=timedelta(days=1),
     )
-    def retrieve_model(self, model_id: str) -> Dict:
+    def retrieve_model(self, model_id: str) -> dict:
         """Retrieve a specific model."""
         model = self.__openai.models.retrieve(model_id)
         output_dir = os.path.join(
@@ -92,12 +91,12 @@ class OpenAIIntegration(Integration):
     )
     def create_chat_completion(
         self,
-        prompt: Optional[str] = None,
+        prompt: str | None = None,
         system_prompt: str = "You are a helpful assistant.",
-        messages: List[Dict[str, str]] = [],
+        messages: list[dict[str, str]] | None = None,
         model: str = "o3-mini",
         temperature: float = 0.3,
-    ) -> Dict:
+    ) -> dict:
         """Create a chat completion using OpenAI's API.
 
         Args:
@@ -110,6 +109,8 @@ class OpenAIIntegration(Integration):
         Returns:
             Dict: API response containing the completion
         """
+        if messages is None:
+            messages = []
         if not messages and prompt is not None and system_prompt is not None:
             messages = [
                 {"role": "developer", "content": system_prompt},

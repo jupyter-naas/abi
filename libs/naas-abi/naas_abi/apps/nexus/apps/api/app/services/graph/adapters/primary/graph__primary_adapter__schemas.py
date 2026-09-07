@@ -340,6 +340,8 @@ class GraphKpis(BaseModel):
     relations: int
     properties: int
     classes: int
+    stale: bool = False
+    """Served from an expired cache entry; a refresh is running in the background."""
 
 
 class GraphAnalysis(BaseModel):
@@ -380,6 +382,8 @@ class NetworkSchemaEdge(BaseModel):
 class NetworkSchema(BaseModel):
     nodes: list[NetworkSchemaNode]
     edges: list[NetworkSchemaEdge]
+    stale: bool = False
+    """Served from an expired cache entry; a refresh is running in the background."""
 
 
 # ── Network node schemas ─────────────────────────────────────────────────────

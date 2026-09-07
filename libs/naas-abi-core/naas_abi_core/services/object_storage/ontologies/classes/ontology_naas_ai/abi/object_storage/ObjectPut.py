@@ -8,4 +8,3 @@ class ObjectPut(_ObjectPut):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

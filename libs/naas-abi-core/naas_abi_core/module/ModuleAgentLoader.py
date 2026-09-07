@@ -1,6 +1,5 @@
 import importlib
 import os
-from typing import List
 
 from naas_abi_core.module.ModuleUtils import find_class_module_root_path
 from naas_abi_core.utils.Expose import Expose
@@ -9,8 +8,8 @@ from naas_abi_core.utils.Logger import logger
 
 class ModuleAgentLoader:
     @classmethod
-    def load_agents(cls, class_: type) -> List[type[Expose]]:
-        agents: List[type[Expose]] = []
+    def load_agents(cls, class_: type) -> list[type[Expose]]:
+        agents: list[type[Expose]] = []
         module_root_path = find_class_module_root_path(class_)
 
         agents_path = module_root_path / "agents"
@@ -37,11 +36,7 @@ class ModuleAgentLoader:
                             if not hasattr(key, "New") and hasattr(
                                 agent_module, "create_agent"
                             ):
-                                setattr(
-                                    getattr(agent_module, key),
-                                    "New",
-                                    getattr(agent_module, "create_agent"),
-                                )
+                                getattr(agent_module, key).New = agent_module.create_agent
 
                             agents.append(getattr(agent_module, key))
 

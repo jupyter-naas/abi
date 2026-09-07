@@ -212,7 +212,7 @@ export default function OntologyImportPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <Header />
+      <Header title="Import Ontology" />
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">

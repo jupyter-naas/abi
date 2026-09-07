@@ -1,41 +1,43 @@
-# o4_mini_deep_research
+# O4MiniDeepResearchModel
 
 ## What it is
-- A module-level definition of a `ChatModel` configured for OpenAI’s `o4-mini-deep-research` via `langchain_openai.ChatOpenAI`.
-- Exposes a ready-to-use `model` object preconfigured with:
-  - `model_id="o4-mini-deep-research"`
-  - `provider="openai"`
+- Defines a `ModelDefinition` for OpenAI’s **`o4-mini-deep-research`** model.
+- Exposes a preconfigured `ChatModel` instance (`model`) backed by `langchain_openai.ChatOpenAI` with:
+  - `model="o4-mini-deep-research"`
   - `temperature=0`
-  - API key pulled from `ABIModule` configuration
+  - `api_key` sourced from `ABIModule.get_instance().configuration.openai_api_key`
 
 ## Public API
-- **Constants**
-  - `MODEL_ID: str` — `"o4-mini-deep-research"`
-  - `PROVIDER: str` — `"openai"`
+- **Class**
+  - `O4MiniDeepResearchModel (ModelDefinition)`
+    - `CANONICAL_ID`: `CanonicalModelId.O4_MINI_DEEP_RESEARCH`
+    - `MODEL_ID`: `"o4-mini-deep-research"`
+    - `PROVIDER`: `ModelProvider.OPENAI`
+    - `model: ChatModel` — prebuilt wrapper around a `ChatOpenAI` client
 - **Module variable**
-  - `model: ChatModel` — `naas_abi_core.models.Model.ChatModel` instance wrapping a `ChatOpenAI` client.
+  - `model: ChatModel` — alias for `O4MiniDeepResearchModel.model`
 
 ## Configuration/Dependencies
 - **Dependencies**
   - `langchain_openai.ChatOpenAI`
-  - `naas_abi_core.models.Model.ChatModel`
+  - `naas_abi_core.models.Model`: `ChatModel`, `ModelDefinition`, `CanonicalModelId`, `ModelProvider`
   - `naas_abi_marketplace.ai.chatgpt.ABIModule`
   - `pydantic.SecretStr`
-- **Configuration**
-  - Requires `ABIModule.get_instance().configuration.openai_api_key` to be set; used to build the `ChatOpenAI` client.
+- **Required configuration**
+  - `ABIModule.get_instance().configuration.openai_api_key` must be set (string API key)
 
 ## Usage
 ```python
 from naas_abi_marketplace.ai.chatgpt.models.o4_mini_deep_research import model
 
-# `model` is a ChatModel wrapper; use it according to your ChatModel interface.
+# Metadata from the ChatModel wrapper
 print(model.model_id)   # "o4-mini-deep-research"
-print(model.provider)   # "openai"
+print(model.provider)   # ModelProvider.OPENAI
 
-# Access the underlying LangChain client if needed:
+# Underlying LangChain model/client
 llm = model.model
 ```
 
 ## Caveats
-- Importing the module constructs the `ChatOpenAI` client immediately; it will access `ABIModule` configuration at import time.
-- If `openai_api_key` is missing/invalid, instantiation may fail depending on upstream library behavior.
+- Import-time initialization: the `ChatOpenAI` client is constructed when the module is imported (via the class attribute initialization), and will read `ABIModule` configuration immediately.
+- Missing/invalid `openai_api_key` can cause instantiation or downstream call failures depending on upstream library behavior.

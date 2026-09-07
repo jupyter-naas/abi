@@ -35,17 +35,18 @@ It also covers the full stack from ingestion to UI, so you are not stitching tog
 ### Prerequisites
 
 - Python 3.12+, Git, [uv](https://astral.sh/uv) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- Node.js 18+ and [pnpm](https://pnpm.io/installation) 8.15+ (`npm install -g pnpm`) — for the Nexus web app; required by `abi dev up`, not by the Docker stack
 - [Docker Desktop](https://www.docker.com/products/docker-desktop) (8GB+ RAM for full stack)
 - LLM API keys: any OpenAI-compatible provider (OpenAI, OpenRouter, or equivalent)
 
 ### Get started
 
 ```bash
-uv tool install naas-abi-cli --force --upgrade
+uv tool install naas-abi-cli --force --upgrade --with-executables-from naas-abi-core
 
 abi new project my_ai   # replace "my_ai" with your project name
 cd my_ai
-abi start
+abi dev up
 ```
 
 ### Web UI
@@ -158,14 +159,14 @@ cd abi
 # uv + Python toolchain (skip if you already have uv globally)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Node toolchain for the Nexus web app
+# Node toolchain for the Nexus web app (Node.js 18+, pnpm 8.15+ — required by `abi dev up`)
 brew install pnpm        # or: npm install -g pnpm
 
 # Install all libs in editable mode
 uv sync
 
 # Install the CLI from this repo (editable, picks up your changes)
-uv tool install --editable libs/naas-abi-cli --force --upgrade
+uv tool install --editable libs/naas-abi-cli --force --upgrade --with-executables-from naas-abi-core
 ```
 
 ### Start the dev stack

@@ -8,4 +8,3 @@ class Site(_Site):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

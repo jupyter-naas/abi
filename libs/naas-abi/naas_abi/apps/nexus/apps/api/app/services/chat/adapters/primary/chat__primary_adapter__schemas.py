@@ -31,6 +31,7 @@ class MessageMetadataUpdate(BaseModel):
     execution_time: float | None = None
     steps: list[MessageStep] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
+    llm_model: str | None = None
 
 
 class ExportMessageMetadata(BaseModel):
@@ -61,6 +62,8 @@ class Conversation(BaseModel):
     user_id: str
     title: str = "New Conversation"
     agent: str = "aia"
+    pinned: bool = False
+    archived: bool = False
     messages: list[Message] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -81,6 +84,7 @@ class ProviderConfigRequest(BaseModel):
     api_key: str | None = None
     account_id: str | None = None
     model: str
+    llm_model: str | None = None
 
     def model_post_init(self, __context: Any) -> None:
         if self.type not in VALID_PROVIDER_TYPES:
@@ -105,9 +109,13 @@ class ChatRequest(BaseModel):
     messages: list[MessageRequest] = Field(default_factory=list, max_length=200)
     agent: str = Field(default="aia", min_length=1, max_length=50)
     provider: ProviderConfigRequest | None = None
+    llm_model: str | None = Field(None, max_length=200)
     context: dict[str, Any] | None = None
     system_prompt: str | None = Field(None, max_length=50_000)
     search_enabled: bool = False
+    # Assistant message id being re-run (chat "refresh" action). The prompt is
+    # replayed as a brand new turn; nothing is deleted.
+    regenerate_of: str | None = Field(None, max_length=100)
 
 
 class ChatResponse(BaseModel):
@@ -166,6 +174,8 @@ def to_conversation(row: Any, messages: list[Message] | None = None) -> Conversa
         user_id=row.user_id,
         title=row.title,
         agent=row.agent,
+        pinned=bool(getattr(row, "pinned", False)),
+        archived=bool(getattr(row, "archived", False)),
         messages=messages or [],
         created_at=row.created_at,
         updated_at=row.updated_at,

@@ -18,16 +18,15 @@ Example:
     >>> api_key = secret_service.get("API_KEY", "default_key")
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 from naas_abi_core import logger
-from naas_abi_core.services.secret.SecretPorts import (ISecretAdapter,
-                                                       ISecretService)
 from naas_abi_core.services.secret.ontologies.modules.SecretEventOntology import (
     SecretError,
     SecretRemoved,
     SecretSet,
 )
+from naas_abi_core.services.secret.SecretPorts import ISecretAdapter, ISecretService
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
@@ -46,9 +45,9 @@ class Secret(ServiceBase, ISecretService):
         >>> api_key = secret_service.get("API_KEY")
     """
 
-    __adapters: List[ISecretAdapter]
+    __adapters: list[ISecretAdapter]
 
-    def __init__(self, adapters: List[ISecretAdapter]):
+    def __init__(self, adapters: list[ISecretAdapter]):
         super().__init__()
         self.__adapters = adapters
 
@@ -59,7 +58,7 @@ class Secret(ServiceBase, ISecretService):
             return
         try:
             self.services.events.publish(event)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             # Secret operations are the source of truth; event logging must never break them.
             logger.warning(f"Secret: failed to publish event: {exc}")
 
@@ -145,7 +144,7 @@ class Secret(ServiceBase, ISecretService):
             raise
         self.__publish_event(SecretRemoved(key=key))
 
-    def list(self) -> Dict[str, str | None]:
+    def list(self) -> dict[str, str | None]:
         """Retrieve all secrets from all configured adapters.
 
         Combines secrets from all adapters into a single dictionary. When the same

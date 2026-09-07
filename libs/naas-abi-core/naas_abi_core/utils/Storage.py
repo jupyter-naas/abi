@@ -1,5 +1,6 @@
 import os
 
+
 class NoStorageFolderFound(Exception):
     pass
 

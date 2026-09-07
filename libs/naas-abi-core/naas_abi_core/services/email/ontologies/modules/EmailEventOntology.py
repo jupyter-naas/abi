@@ -2,14 +2,11 @@ from __future__ import annotations
 
 import datetime
 import uuid
+from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
-    Callable,
     ClassVar,
-    Iterable,
-    List,
-    Optional,
     Union,
     get_args,
     get_origin,
@@ -98,7 +95,7 @@ class RDFEntity(BaseModel):
     def _field_expects_list(field_annotation: object) -> bool:
         """Return True when a field annotation contains a list type."""
         origin = get_origin(field_annotation)
-        if origin in (list, List):
+        if origin in (list, list):
             return True
         if origin is Annotated:
             args = get_args(field_annotation)
@@ -330,44 +327,13 @@ class EmailSent(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    to: Optional[
-        Annotated[
-            str,
-            Field(description="Recipient address the message was directed at."),
-        ]
-    ] = None
-    subject: Optional[
-        Annotated[str, Field(description="Subject line of the message.")]
-    ] = None
-    sender: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Sender address used to dispatch the message (the send() from_email)."
-            ),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    to: Annotated[str, Field(description="Recipient address the message was directed at.")] | None = None
+    subject: Annotated[str, Field(description="Subject line of the message.")] | None = None
+    sender: Annotated[str, Field(description="Sender address used to dispatch the message (the send() from_email).")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 class EmailError(LogProcess, RDFEntity):
@@ -389,44 +355,13 @@ class EmailError(LogProcess, RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    to: Optional[
-        Annotated[
-            str,
-            Field(description="Recipient address the message was directed at."),
-        ]
-    ] = None
-    subject: Optional[
-        Annotated[str, Field(description="Subject line of the message.")]
-    ] = None
-    message: Optional[
-        Annotated[
-            str,
-            Field(
-                description="String representation of the exception raised by the adapter."
-            ),
-        ]
-    ] = None
-    created_at: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(
-                description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    to: Annotated[str, Field(description="Recipient address the message was directed at.")] | None = None
+    subject: Annotated[str, Field(description="Subject line of the message.")] | None = None
+    message: Annotated[str, Field(description="String representation of the exception raised by the adapter.")] | None = None
+    created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
 
 # Rebuild models to resolve forward references

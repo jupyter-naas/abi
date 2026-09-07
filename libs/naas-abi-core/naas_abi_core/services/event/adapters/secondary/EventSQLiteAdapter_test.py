@@ -21,7 +21,7 @@ def adapter(tmp_path):
 
 def _ts(offset_seconds: int = 0) -> str:
     return (
-        datetime.datetime(2026, 1, 1, 0, 0, 0)
+        datetime.datetime(2026, 1, 1, 0, 0, 0)  # noqa: DTZ001
         + datetime.timedelta(seconds=offset_seconds)
     ).isoformat()
 
@@ -201,6 +201,23 @@ def test_query_search_escapes_like_wildcards(adapter):
 
 def test_get_cursor_defaults_to_zero(adapter):
     assert adapter.get_cursor("c1", "urn:Type:A") == 0
+
+
+def test_set_cursor_seeks_and_can_move_backward(adapter):
+    adapter.append("urn:e1", "urn:Type:A", _ts(0), b"p1")
+    adapter.append("urn:e2", "urn:Type:A", _ts(1), b"p2")
+    adapter.query_for_consumer("c1", "urn:Type:A")
+    assert adapter.get_cursor("c1", "urn:Type:A") == 2
+
+    adapter.set_cursor("c1", "urn:Type:A", adapter.max_seq("urn:Type:A"))
+    assert adapter.get_cursor("c1", "urn:Type:A") == 2
+    assert adapter.query_for_consumer("c1", "urn:Type:A") == []
+
+    # Repair a stale cursor after seq restart (cursor ahead of max).
+    adapter.set_cursor("c1", "urn:Type:A", 0)
+    assert adapter.get_cursor("c1", "urn:Type:A") == 0
+    rows = adapter.query_for_consumer("c1", "urn:Type:A", limit=1)
+    assert [r.id for r in rows] == ["urn:e1"]
 
 
 def test_query_for_consumer_advances_cursor(adapter):

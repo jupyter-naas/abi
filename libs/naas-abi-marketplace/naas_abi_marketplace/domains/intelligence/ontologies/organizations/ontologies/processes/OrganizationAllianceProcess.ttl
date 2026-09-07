@@ -1,0 +1,181 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/OrganizationAllianceProcess> a owl:Ontology ;
+    # One owl:imports statement per IRI — see the note in
+    # ontologies/modules/OrganizationOntology.ttl.
+    owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl> ;
+    owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+    owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+    owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+    owl:imports <http://ontology.naas.ai/abi/OrganizationOntology> ;
+    rdfs:seeAlso <http://ontology.naas.ai/abi/OrganizationRestructuringProcess> ;
+    abi:pythonPackage "naas_abi_marketplace.domains.intelligence.ontologies.organizations" ;
+    abi:ontologyResource "ontologies/processes/OrganizationAllianceProcess.ttl" ;
+    abi:pythonResource "ontologies/processes/OrganizationAllianceProcess.py" ;
+    dc:title "Organization Alliance Process Ontology"@en ;
+    dc:description "Process ontology for alliances between organizations — cooperation in which every party remains a distinct legal entity. Covers partnership, joint venture, marketing alliance, research collaboration, technology licensing and distribution agreement. Each act is paired with the descriptive information content entity that documents it: the act is the occurrent (it happens over an interval and has organizations as participants), while the record is the continuant that outlives it. Conflating the two is the usual modelling error here, and it makes 'when did we ally' unanswerable, because a document has no duration."@en ;
+    dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+    rdfs:comment "Process ontology for alliances that preserve the independence of every party."@en ;
+    dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
+    dc11:date "2026-04-02"^^xsd:date .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+# WHAT ↔ HOW WE KNOW — the act concretizes its agreement document
+abi:hasAllianceAgreement a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000058 ; # is concretized by
+    owl:inverseOf abi:isAllianceAgreementOf ;
+    rdfs:domain cco:ont00000228 ;
+    rdfs:range abi:StrategicAlliance ;
+    rdfs:label "has alliance agreement"@en ;
+    skos:definition "Relates an act of alliance to the agreement document that records its terms."@en .
+
+abi:isAllianceAgreementOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000059 ; # concretizes
+    owl:inverseOf abi:hasAllianceAgreement ;
+    rdfs:domain abi:StrategicAlliance ;
+    rdfs:range cco:ont00000228 ;
+    rdfs:label "is alliance agreement of"@en ;
+    skos:definition "Relates an alliance agreement document to the act of alliance it records."@en .
+
+# WHAT ↔ WHO — the act has organizations as participants
+abi:hasAllianceParticipant a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ; # has participant
+    owl:inverseOf abi:participatesInAlliance ;
+    rdfs:domain cco:ont00000228 ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "has alliance participant"@en ;
+    skos:definition "Relates an act of alliance to an organization taking part in it. An alliance has two or more participants, none of which loses its separate identity."@en .
+
+abi:participatesInAlliance a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000056 ; # participates in
+    owl:inverseOf abi:hasAllianceParticipant ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range cco:ont00000228 ;
+    rdfs:label "participates in alliance"@en ;
+    skos:definition "Relates an organization to an act of alliance it takes part in."@en .
+
+#################################################################
+#    Classes — WHAT (the acts)
+#################################################################
+
+abi:ActOfPartnership a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 , # Planned Act
+      [ rdf:type owl:Restriction ; owl:onProperty abi:hasAllianceParticipant ; owl:someValuesFrom cco:ont00001180 ] ;
+    rdfs:label "Act of Partnership"@en ;
+    skos:definition "Planned act in which two or more organizations or individuals enter into an agreement to cooperate for mutual benefit, typically to achieve shared objectives."@en ;
+    skos:example "A business partnership between two consulting firms"@en ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ActOfJointVenture a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 , # Planned Act
+      [ rdf:type owl:Restriction ; owl:onProperty abi:hasAllianceParticipant ; owl:someValuesFrom cco:ont00001180 ] ;
+    rdfs:label "Act of Joint Venture"@en ;
+    skos:definition "Planned act wherein two or more organizations come together to undertake a specific project or business activity, sharing resources, risks, and rewards, while maintaining their distinct legal identities."@en ;
+    skos:example "A joint venture between automotive companies to develop electric vehicles"@en ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ActOfMarketingAlliance a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 , # Planned Act
+      [ rdf:type owl:Restriction ; owl:onProperty abi:hasAllianceParticipant ; owl:someValuesFrom cco:ont00001180 ] ;
+    rdfs:label "Act of Marketing Alliance"@en ;
+    skos:definition "Planned act in which two or more organizations enter into a cooperative relationship to promote and distribute products or services to a common audience."@en ;
+    skos:example "A marketing alliance between a sports team and an apparel brand"@en ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ActOfResearchCollaboration a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 , # Planned Act
+      [ rdf:type owl:Restriction ; owl:onProperty abi:hasAllianceParticipant ; owl:someValuesFrom cco:ont00001180 ] ;
+    rdfs:label "Act of Research Collaboration"@en ;
+    skos:definition "Planned act in which two or more organizations enter into a cooperative relationship to conduct research or development projects, sharing resources, expertise, and results."@en ;
+    skos:example "A research collaboration between universities and pharmaceutical companies"@en ;
+    rdfs:comment "Research Collaborations represent formal partnerships focused on research and development activities." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ActOfTechnologyLicensing a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 , # Planned Act
+      [ rdf:type owl:Restriction ; owl:onProperty abi:hasAllianceParticipant ; owl:someValuesFrom cco:ont00001180 ] ;
+    rdfs:label "Act of Technology Licensing"@en ;
+    skos:definition "Planned act in which one organization grants permission to another organization to use its intellectual property, such as patents, trademarks, or proprietary technology, in exchange for a fee or royalty."@en ;
+    skos:example "A technology licensing agreement for patented semiconductor designs"@en ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ActOfDistributionAgreement a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 , # Planned Act
+      [ rdf:type owl:Restriction ; owl:onProperty abi:hasAllianceParticipant ; owl:someValuesFrom cco:ont00001180 ] ;
+    rdfs:label "Act of Distribution Agreement"@en ;
+    skos:definition "Planned act in which one organization agrees to distribute the products or services of another organization, typically in a specific geographic region or market segment."@en ;
+    skos:example "A distribution agreement between a manufacturer and a regional retailer"@en ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes — HOW WE KNOW (the agreements)
+#################################################################
+
+abi:StrategicAlliance a owl:Class ;
+    rdfs:subClassOf cco:ont00000853 ; # Descriptive Information Content Entity
+    rdfs:label "Strategic Alliance"@en ;
+    skos:definition "Describes an agreement between two or more organizations to pursue a set of agreed-upon objectives while remaining independent entities."@en ;
+    skos:example "A memorandum of understanding (MOU) between a technology company and a software provider"@en ,
+                 "A strategic collaboration agreement in the automotive sector"@en ;
+    rdfs:comment "Strategic alliances are typically formalized through documents and agreements, making them apt to be represented as Descriptive Information Content Entities." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:Partnership a owl:Class ;
+    rdfs:subClassOf abi:StrategicAlliance ;
+    rdfs:label "Partnership"@en ;
+    skos:definition "Details a formal agreement between two or more parties to manage and operate a business and share its profits and losses."@en ;
+    skos:example "The partnership agreement document for a law firm, a business plan outlining the roles of partners in a medical practice."@en ;
+    rdfs:comment "A partnership is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:JointVenture a owl:Class ;
+    rdfs:subClassOf abi:StrategicAlliance ;
+    rdfs:label "Joint Venture"@en ;
+    skos:definition "Details a planned act in which two or more organizations come together to undertake a specific project or business activity, sharing resources, risks, and rewards, while maintaining their distinct legal identities."@en ;
+    skos:example "A joint venture between automotive companies to develop electric vehicles"@en ;
+    rdfs:comment "A joint venture is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:MarketingAlliance a owl:Class ;
+    rdfs:subClassOf abi:StrategicAlliance ;
+    rdfs:label "Marketing Alliance"@en ;
+    skos:definition "Details a planned act in which two or more organizations enter into a cooperative relationship to promote and distribute products or services to a common audience."@en ;
+    skos:example "A marketing alliance between a sports team and an apparel brand"@en ;
+    rdfs:comment "A marketing alliance is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ResearchCollaboration a owl:Class ;
+    rdfs:subClassOf abi:StrategicAlliance ;
+    rdfs:label "Research Collaboration"@en ;
+    skos:definition "Details a planned act in which two or more organizations enter into a cooperative relationship to conduct research or development projects, sharing resources, expertise, and results."@en ;
+    skos:example "A research collaboration between universities and pharmaceutical companies"@en ;
+    rdfs:comment "A research collaboration is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:TechnologyLicensing a owl:Class ;
+    rdfs:subClassOf abi:StrategicAlliance ;
+    rdfs:label "Technology Licensing"@en ;
+    skos:definition "Details a planned act in which one organization grants permission to another organization to use its intellectual property, such as patents, trademarks, or proprietary technology, in exchange for a fee or royalty."@en ;
+    skos:example "A technology licensing agreement for patented semiconductor designs"@en ;
+    rdfs:comment "A technology licensing is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:DistributionAgreement a owl:Class ;
+    rdfs:subClassOf abi:StrategicAlliance ;
+    rdfs:label "Distribution Agreement"@en ;
+    skos:definition "Details a planned act in which one organization agrees to distribute the products or services of another organization, typically in a specific geographic region or market segment."@en ;
+    skos:example "A distribution agreement between a manufacturer and a regional retailer"@en ;
+    rdfs:comment "A distribution agreement is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .

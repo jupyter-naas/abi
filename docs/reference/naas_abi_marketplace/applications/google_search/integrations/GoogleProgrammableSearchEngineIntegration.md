@@ -1,61 +1,57 @@
 # GoogleProgrammableSearchEngineIntegration
 
 ## What it is
-- A Google Programmable Search Engine (Custom Search JSON API) integration.
+- Integration for **Google Programmable Search Engine** (Custom Search JSON API).
 - Provides:
-  - Web search with pagination (up to `num_results`).
-  - HTML text extraction from a given URL (via BeautifulSoup).
-- Includes optional conversion to LangChain `StructuredTool` tools.
-- Persists outputs to a configured datastore path and caches results for 1 day (filesystem cache).
+  - Web search via the Google Custom Search API with pagination up to `num_results`.
+  - HTML page text extraction from a URL using **BeautifulSoup**.
+- Saves outputs to a configured datastore path and caches results on filesystem for **1 day**.
 
 ## Public API
+- `GoogleProgrammableSearchEngineIntegrationConfiguration(IntegrationConfiguration)` (dataclass)
+  - Holds configuration:
+    - `api_key: str` — Google API key.
+    - `search_engine_id: str` — Programmable Search Engine ID (`cx`).
+    - `base_url: str = "https://www.googleapis.com/customsearch/v1"` — API endpoint.
+    - `datastore_path: str` — defaults to `ABIModule.get_instance().configuration.datastore_path`.
 
-### `GoogleProgrammableSearchEngineIntegrationConfiguration`
-Dataclass configuration for the integration.
-- `api_key: str` — Google API key.
-- `search_engine_id: str` — Programmable Search Engine (CSE) ID (`cx`).
-- `base_url: str = "https://www.googleapis.com/customsearch/v1"` — API endpoint.
-- `datastore_path: str` — where JSON/text outputs are saved (defaults from `ABIModule` configuration).
+- `GoogleProgrammableSearchEngineIntegration(Integration)`
+  - `__init__(configuration)`
+    - Initializes storage utilities using `ABIModule.get_instance().engine.services.object_storage`.
+  - `query(query: str, num_results: int = 5) -> list[dict]`
+    - Calls Google Custom Search API (`requests.get`) in pages (max 10 results per request).
+    - Returns the API `items` list (dicts) from the final fetched page.
+    - Persists JSON to:  
+      `"{datastore_path}/queries/{clean_query}/{clean_query}.json"`
+    - Cached for 1 day (cache key includes `query` and `num_results`).
+  - `extract_content(url: str) -> str`
+    - Fetches a URL with a browser-like `User-Agent` and `timeout=30`.
+    - Parses HTML, removes `script/style/noscript`, returns cleaned visible text.
+    - Persists text to:  
+      `"{datastore_path}/extracted_content/{clean_url}/{clean_url}.txt"`
+    - Cached for 1 day (cache key includes `url`).
+    - Logs and re-raises exceptions.
 
-### `GoogleProgrammableSearchEngineIntegration`
-Integration class.
-- `__init__(configuration)`
-  - Initializes storage utilities using `ABIModule.get_instance().engine.services.object_storage`.
-- `query(query: str, num_results: int = 5) -> List[dict]`
-  - Calls Google Custom Search API with automatic pagination (max 10 per request).
-  - Returns a list of result item dicts (from API `items`).
-  - Saves results as JSON under:
-    - `"{datastore_path}/queries/{clean_query}/{clean_query}.json"`
-  - Cached (key includes query and num_results) for 1 day.
-- `extract_content(url: str) -> str`
-  - Fetches URL (with a browser-like User-Agent, timeout 30s).
-  - Parses HTML, removes `script`, `style`, `noscript`, returns cleaned visible text.
-  - Saves extracted text under:
-    - `"{datastore_path}/extracted_content/{clean_url}/{clean_url}.txt"`
-  - Cached (key includes URL) for 1 day.
-  - Re-raises exceptions after logging.
-
-### `as_tools(configuration)`
-- Returns a list of LangChain `StructuredTool`:
-  - `googlesearch_query` → calls `integration.query`
-  - `googlesearch_extract_content_from_url` → calls `integration.extract_content`
+- `as_tools(configuration)`
+  - Returns two LangChain `StructuredTool` tools:
+    - `googlesearch_query` → wraps `integration.query`
+    - `googlesearch_extract_content_from_url` → wraps `integration.extract_content`
 
 ## Configuration/Dependencies
-- External dependencies:
+- Requires:
+  - Google API key (`api_key`)
+  - Programmable Search Engine ID (`search_engine_id` / `cx`)
+- Python dependencies:
   - `requests`
   - `beautifulsoup4` (`bs4`)
-  - `naas_abi_core` (logger, Integration base classes, cache, storage utilities)
+  - `naas_abi_core` (integration base classes, logger, cache, storage utilities)
   - `naas_abi_marketplace.applications.google_search.ABIModule`
-- Google Programmable Search Engine requirements:
-  - Valid API key (`api_key`)
-  - Search Engine ID (`search_engine_id`, `cx`)
 - Caching:
-  - Uses a filesystem cache created via `CacheFactory.CacheFS_find_storage(subpath="google_search")`
-  - TTL: 1 day for both search results and extracted content.
+  - Filesystem cache from `CacheFactory.CacheFS_find_storage(subpath="google_search")`
+  - TTL: `datetime.timedelta(days=1)` for both search and extraction.
 
 ## Usage
-
-### Basic integration usage
+### Basic usage
 ```python
 from naas_abi_marketplace.applications.google_search.integrations.GoogleProgrammableSearchEngineIntegration import (
     GoogleProgrammableSearchEngineIntegration,
@@ -94,7 +90,7 @@ tools = as_tools(config)
 ```
 
 ## Caveats
-- `query()` pagination logic overwrites `items` each loop iteration; it does not accumulate results across pages. The returned list (and saved JSON) will reflect only the last fetched page’s `items`.
-- `query()` stops on non-200 responses (logs error and breaks) and still saves whatever `items` currently holds.
-- `extract_content()` may fail on non-HTML pages or blocked sites; it logs and re-raises exceptions.
-- Filenames/folder names are derived from a “cleaned” query/URL (non-word characters removed, spaces → underscores), which may cause collisions for different inputs that clean to the same string.
+- `query()` **does not accumulate** results across pages: it overwrites `items` on each page fetch, so the returned/saved list reflects **only the last fetched page**.
+- On non-200 responses, `query()` logs an error and stops, then saves whatever `items` currently contains.
+- `extract_content()` may fail on non-HTML pages or blocked sites; it logs and **re-raises** exceptions.
+- Saved filenames use a “cleaned” version of query/URL (non-word chars removed, spaces → `_`), which can cause collisions for distinct inputs that clean to the same value.

@@ -1,0 +1,234 @@
+schema_version: "1.0"
+
+# Entities are generated from business_controlling companies + consolidations by:
+# make fin-app-database → storage/.../data/globals/entities.json
+
+# Brand identity — the single source of the product's name/description/assets.
+# Used by lib/brand.ts (logo + login/sidebar name) and the document <head>
+# (title + meta description, see app/layout.tsx).
+#   name:        product name (logo alt, login heading, browser tab title)
+#   description: short tagline / meta description
+#   logo_src:    public path to the logo — the file itself is synced from
+#                assets/logo.png by `npm run sync:brand`
+#   favicon_src: public path to the favicon <link>. NOTE: this only sets the
+#                path; the icon bytes come from assets/favicon.ico → app/icon.png
+#                via sync:brand. Point this elsewhere only if a file exists there.
+brand:
+  name: "naas"
+  description: "Finance & steering dashboard"
+  logo_src: "/logo.png"
+  favicon_src: "/icon.png"
+
+# `app` is behavior only (routing/navigation). Product identity lives in `brand`.
+app:
+  default_page: "treasury"
+  # Perimeter everyone lands on after sign-in (its entity_id). Remove to send
+  # admins to "All entities" and standard users to their assigned default.
+  default_entity: "_demo"
+  pages:
+    # banner (optional): shown below the top bar.
+    #   type: "warning" (yellow) | "info" (blue)
+    #   text: message displayed
+    #   enabled: true | false
+    - page_id: "dashboard"
+      label: "Dashboard"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Is the company healthy today?"
+        enabled: true
+    - page_id: "pnl"
+      label: "Income Statement"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Where does profit come from?"
+        enabled: true
+    - page_id: "balance-sheet"
+      label: "Balance Sheet"
+      enabled: true
+      banner:
+        type: "info"
+        text: "How strong is our financial position?"
+        enabled: true
+    - page_id: "cash-flow"
+      label: "Cash Flow"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Where is cash generated and spent?"
+        enabled: true
+    - page_id: "financial-ratios"
+      label: "Financial Ratios"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Is the company financially healthy?"
+        enabled: true
+    - page_id: "pnl-budget"
+      label: "Budget"
+      enabled: true
+      banner:
+        type: "warning"
+        text: "🚧 Page under construction: the data shown is provisional and may change."
+        enabled: true
+    - page_id: "forecast"
+      label: "Forecast"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Where will we finish the year?"
+        enabled: true
+    - page_id: "scenario-analysis"
+      label: "Scenario Analysis"
+      enabled: true
+      banner:
+        type: "info"
+        text: "What happens if assumptions change?"
+        enabled: true
+    - page_id: "cost-centers"
+      label: "Cost Centers"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Which departments drive performance?"
+        enabled: true
+    - page_id: "cash-position"
+      label: "Cash Position"
+      enabled: true
+      banner:
+        type: "info"
+        text: "How much cash is available today?"
+        enabled: true
+    - page_id: "treasury"
+      label: "Cash Forecast"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Will we have enough cash?"
+        enabled: true
+    - page_id: "financing"
+      label: "Financing"
+      enabled: true
+      banner:
+        type: "info"
+        text: "How is the company financed?"
+        enabled: true
+    - page_id: "customer-invoices"
+      label: "Customers"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Are customers paying on time?"
+        enabled: true
+    - page_id: "supplier-invoices"
+      label: "Suppliers"
+      enabled: true
+      banner:
+        type: "info"
+        text: "What do we owe suppliers?"
+        enabled: true
+    - page_id: "expenses"
+      label: "Expenses"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Where is money being spent?"
+        enabled: true
+    - page_id: "procurement"
+      label: "Procurement"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Are purchases under control?"
+        enabled: true
+    - page_id: "general-ledger"
+      label: "General Ledger"
+      enabled: true
+      banner:
+        type: "info"
+        text: "What happened in the accounting records?"
+        enabled: true
+    - page_id: "journal-entries"
+      label: "Journal Entries"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Which accounting adjustments were made?"
+        enabled: true
+    - page_id: "fixed-assets"
+      label: "Fixed Assets"
+      enabled: true
+      banner:
+        type: "info"
+        text: "How are our assets evolving?"
+        enabled: true
+    - page_id: "financial-close"
+      label: "Financial Close"
+      enabled: true
+      banner:
+        type: "info"
+        text: "Are we ready to close the period?"
+        enabled: true
+    - page_id: "theme"
+      label: "Theme"
+      enabled: true
+  sections:
+    # `direct: true` — no subpages: the rail links straight to the page.
+    - section_id: "dashboard"
+      label: "Dashboard"
+      direct: true
+      page_ids:
+        - "dashboard"
+    - section_id: "performance"
+      label: "Performance"
+      page_ids:
+        - "pnl"
+        - "balance-sheet"
+        - "cash-flow"
+        - "financial-ratios"
+    - section_id: "pilotage"
+      label: "Planning"
+      page_ids:
+        - "pnl-budget"
+        - "forecast"
+        - "scenario-analysis"
+        - "cost-centers"
+    - section_id: "treasury"
+      label: "Cash"
+      page_ids:
+        - "cash-position"
+        - "treasury"
+        - "financing"
+    - section_id: "operations"
+      label: "Operations"
+      page_ids:
+        - "customer-invoices"
+        - "supplier-invoices"
+        - "expenses"
+        - "procurement"
+    - section_id: "comptabilite"
+      label: "Accounting"
+      page_ids:
+        - "general-ledger"
+        - "journal-entries"
+        - "fixed-assets"
+        - "financial-close"
+    - section_id: "administration"
+      label: "Administration"
+      page_ids: []
+
+# Local template sign-in: a single shared root password (ROOT_PASSWORD in .env)
+# grants a full-access owner session — no e-mail / magic link.
+#
+# Only the `owner` lives here: the top role, full access everywhere, and it can
+# never be edited or removed from the app. Everyone else — additional `admin`s
+# (also full access) and scoped viewers — is managed from /admin/users and
+# stored in globals/users.json. Keep exactly one owner as the protected root
+# identity; the demo password login maps to a synthetic session.
+users:
+  - user_id: "00000000-0000-4000-8000-000000000000"
+    name: "Demo Owner"
+    email: "demo@financial-cockpit.local"
+    role: "owner"
+    default_entity_id: "_demo"

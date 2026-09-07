@@ -2,8 +2,8 @@ import hashlib
 import io
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
-from typing import BinaryIO, Dict, List, Optional
+from datetime import UTC, date, datetime, timedelta
+from typing import BinaryIO
 
 import requests
 from naas_abi_core import logger
@@ -27,14 +27,14 @@ PUB_MED_RATE_LIMIT_NUMBER = 3
 PUB_MED_RATE_LIMIT_PERIOD = 1
 
 
-def _clean_optional_str(value: Optional[str]) -> Optional[str]:
+def _clean_optional_str(value: str | None) -> str | None:
     if value is None:
         return None
     cleaned = value.strip()
     return cleaned or None
 
 
-def _parse_publication_date(value: Optional[str]) -> Optional[date]:
+def _parse_publication_date(value: str | None) -> date | None:
     if not value:
         return None
     text = value.strip()
@@ -55,14 +55,14 @@ def _parse_publication_date(value: Optional[str]) -> Optional[date]:
 
     for fmt in date_formats:
         try:
-            parsed = datetime.strptime(text, fmt)
+            parsed = datetime.strptime(text, fmt).replace(tzinfo=UTC)
             return parsed.date()
         except ValueError:
             continue
     return None
 
 
-def _parse_sort_pubdate(value: Optional[str]) -> Optional[datetime]:
+def _parse_sort_pubdate(value: str | None) -> datetime | None:
     if not value:
         return None
     text = value.strip()
@@ -79,7 +79,7 @@ def _parse_sort_pubdate(value: Optional[str]) -> Optional[datetime]:
 
     for fmt in datetime_formats:
         try:
-            return datetime.strptime(text, fmt)
+            return datetime.strptime(text, fmt).replace(tzinfo=UTC)
         except ValueError:
             continue
     return None
@@ -98,7 +98,7 @@ class PubMedAPIConfiguration(IntegrationConfiguration):
     """
 
     base_url: str = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
-    api_key: Optional[str] = None
+    api_key: str | None = None
     retmax: int = 20
     timeout: int = 30
     page_size: int = 200
@@ -117,11 +117,11 @@ class PubMedIntegration(Integration):
     def _make_request(
         self,
         endpoint: str,
-        params: Dict[str, Optional[str]],
+        params: dict[str, str | None],
         *,
         expect_json: bool = True,
         method: str = "GET",
-        data: Optional[Dict] = None,
+        data: dict | None = None,
     ):
         """Low-level HTTP requester to E-utilities.
 
@@ -176,8 +176,8 @@ class PubMedIntegration(Integration):
         return response.text
 
     def _extract_article_id(
-        self, article_ids: List[Dict[str, str]], idtype: str
-    ) -> Optional[str]:
+        self, article_ids: list[dict[str, str]], idtype: str
+    ) -> str | None:
         """Extract a specific identifier value from PubMed ESummary "articleids".
 
         Args:
@@ -192,7 +192,7 @@ class PubMedIntegration(Integration):
                 return article_id["value"]
         return None
 
-    def _extract_pmcid(self, article_ids: List[Dict[str, str]]) -> Optional[str]:
+    def _extract_pmcid(self, article_ids: list[dict[str, str]]) -> str | None:
         """Extract normalized PMCID from ESummary ids, handling common variants."""
         pmcid = self._extract_article_id(article_ids, "pmcid")
         if pmcid:
@@ -206,9 +206,9 @@ class PubMedIntegration(Integration):
 
         return None
 
-    def _build_summary(self, pmid: str, doc: Optional[Dict]) -> PubMedPaperSummary:
+    def _build_summary(self, pmid: str, doc: dict | None) -> PubMedPaperSummary:
         """Build a PubMedPaperSummary from a single ESummary document entry."""
-        article_ids: List[Dict] = doc.get("articleids", []) if doc else []
+        article_ids: list[dict] = doc.get("articleids", []) if doc else []
         doi = self._extract_article_id(article_ids, "doi")
         pmcid = self._extract_pmcid(article_ids)
         url = self._extract_article_id(article_ids, "url") if article_ids else None
@@ -264,7 +264,7 @@ class PubMedIntegration(Integration):
 
         return summary
 
-    def _summaries(self, id_list: List[str]) -> List[PubMedPaperSummary]:
+    def _summaries(self, id_list: list[str]) -> list[PubMedPaperSummary]:
         """
         Retrieve PubMedPaperSummary objects for a list of PubMed IDs, using a caching mechanism.
 
@@ -287,7 +287,7 @@ class PubMedIntegration(Integration):
 
         # Process new IDs in chunks of 200
         chunk_size = 200
-        all_summaries: List[PubMedPaperSummary] = []
+        all_summaries: list[PubMedPaperSummary] = []
 
         for i in range(0, len(new_ids), chunk_size):
             chunk_ids = new_ids[i : i + chunk_size]
@@ -307,7 +307,7 @@ class PubMedIntegration(Integration):
             result = summary_data.get("result", {})
 
             # Computing new summaries for this chunk.
-            chunk_summaries: List[PubMedPaperSummary] = []
+            chunk_summaries: list[PubMedPaperSummary] = []
             for pmid in chunk_ids:
                 doc = result.get(pmid)
                 if not doc:
@@ -343,12 +343,12 @@ class PubMedIntegration(Integration):
         self,
         query: str,
         *,
-        mindate: Optional[str],
-        maxdate: Optional[str],
-        sort: Optional[str] = None,
+        mindate: str | None,
+        maxdate: str | None,
+        sort: str | None = None,
     ) -> int:
         """Return the total ESearch count for a query constrained to a date range."""
-        params: Dict[str, Optional[str]] = {
+        params: dict[str, str | None] = {
             "term": query,
             "retmode": "json",
             "retmax": "0",
@@ -367,9 +367,7 @@ class PubMedIntegration(Integration):
 
     @cache(
         lambda query, mindate, maxdate, sort, page_size, max_records_cap: hashlib.sha1(
-            f"pubmed_ids_{query}_{mindate}_{maxdate}_{sort}_{page_size}_{max_records_cap}".encode(
-                "utf-8"
-            )
+            f"pubmed_ids_{query}_{mindate}_{maxdate}_{sort}_{page_size}_{max_records_cap}".encode()
         ).hexdigest(),
         cache_type=DataType.PICKLE,
     )
@@ -377,24 +375,24 @@ class PubMedIntegration(Integration):
         self,
         query: str,
         *,
-        mindate: Optional[str],
-        maxdate: Optional[str],
-        sort: Optional[str] = None,
+        mindate: str | None,
+        maxdate: str | None,
+        sort: str | None = None,
         page_size: int = 100,
         max_records_cap: int = 9999,
-    ) -> List[str]:
+    ) -> list[str]:
         """Fetch all PubMed IDs for a given date range up to a cap, paging as needed."""
         if page_size <= 0:
             page_size = 100
-        collected_ids: List[str] = []
+        collected_ids: list[str] = []
         retstart = 0
-        total_available: Optional[int] = None
+        total_available: int | None = None
 
         while True:
             if len(collected_ids) >= max_records_cap:
                 break
             current_batch_size = min(page_size, max_records_cap - len(collected_ids))
-            params: Dict[str, Optional[str]] = {
+            params: dict[str, str | None] = {
                 "term": query,
                 "retmode": "json",
                 "retmax": str(current_batch_size),
@@ -434,10 +432,10 @@ class PubMedIntegration(Integration):
         query: str,
         *,
         start_date: str,
-        end_date: Optional[str] = None,
-        sort: Optional[str] = None,
-        max_results: Optional[int] = None,
-    ) -> List[PubMedPaperSummary]:
+        end_date: str | None = None,
+        sort: str | None = None,
+        max_results: int | None = None,
+    ) -> list[PubMedPaperSummary]:
         """Search PubMed over a date range, adaptively splitting windows to avoid the 9,999 cap.
 
         Dates should be in one of the formats accepted by PubMed (e.g., YYYY/MM/DD or YYYY-MM-DD). If end_date is None,
@@ -459,7 +457,7 @@ class PubMedIntegration(Integration):
         start_dt: date = start_dt_opt
 
         if end_date is None:
-            end_dt: date = date.today()
+            end_dt: date = datetime.now(UTC).date()
         else:
             end_dt_opt = _parse_publication_date(end_date) or _parse_publication_date(
                 end_date.replace("-", " ")
@@ -476,8 +474,8 @@ class PubMedIntegration(Integration):
             page_size = 100
 
         # Worklist of (start, end) date windows to process, non-overlapping and inclusive
-        windows: List[tuple[date, date]] = [(start_dt, end_dt)]
-        all_ids: List[str] = []
+        windows: list[tuple[date, date]] = [(start_dt, end_dt)]
+        all_ids: list[str] = []
 
         while windows:
             if max_results is not None and len(all_ids) >= max_results:
@@ -522,8 +520,7 @@ class PubMedIntegration(Integration):
             mid = w_start + timedelta(days=total_days // 2)
             left_end = mid
             right_start = mid + timedelta(days=1)
-            if right_start > w_end:
-                right_start = w_end
+            right_start = min(right_start, w_end)
 
             # Process right then left (stack behavior) to keep chronological-ish accumulation
             windows.append((w_start, left_end))
@@ -531,7 +528,7 @@ class PubMedIntegration(Integration):
 
         # Deduplicate while preserving order
         seen: set[str] = set()
-        unique_ids: List[str] = []
+        unique_ids: list[str] = []
         for _id in all_ids:
             if _id not in seen:
                 seen.add(_id)

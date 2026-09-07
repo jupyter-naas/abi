@@ -9,8 +9,8 @@ from rich.table import Table
 from .stack_runtime import (
     ComposeServiceState,
     compose_logs_follow,
-    compose_service_logs,
     compose_service_list,
+    compose_service_logs,
     compose_service_states,
     run_compose,
 )
@@ -31,7 +31,7 @@ def _secret_service():
         )
 
         return EngineConfiguration.load_configuration().services.secret.load()
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 

@@ -23,6 +23,12 @@ class AgentRecord:
     is_default: bool = False
     suggestions: list[dict] | None = None
     intents: list[dict[str, str]] | None = None
+    # Effective model the agent will actually run with. Populated by the API
+    # layer (not persisted): falls back to a catalog/registry default when the
+    # agent has no explicitly assigned ``model_id``.
+    resolved_model_id: str | None = None
+    # Chat models the agent class can load. Empty/None means a single resolved id.
+    model_ids: list[str] | None = None
 
 
 @dataclass

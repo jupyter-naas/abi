@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class GptAudioMiniModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=128000,
-        name="OpenAI: GPT Audio Mini",
+        name="GPT Audio Mini",
         owner="openai",
         description="A cost-efficient version of GPT Audio. The new snapshot features an upgraded decoder for more natural sounding voices and maintains better voice consistency. Input is priced at $0.60 per million...",
         canonical_slug="openai/gpt-audio-mini",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1768859419),
+        created_at=datetime.fromtimestamp(1768859419, tz=UTC),
         pricing={'prompt': '0.0000006', 'completion': '0.0000024', 'audio': '0.0000006'},
         architecture={'modality': 'text+audio->text+audio', 'input_modalities': ['text', 'audio'], 'output_modalities': ['text', 'audio'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 128000, 'max_completion_tokens': 16384, 'is_moderated': True},

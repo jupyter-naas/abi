@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Annotated, Dict, List, Optional
+from typing import Annotated
+
 import requests
 from naas_abi_core import logger
 from naas_abi_core.integration.integration import (
@@ -69,7 +70,7 @@ class AgicapIntegration(Integration):
         response.raise_for_status()
         return response.json().get("access_token")
 
-    def list_companies(self) -> Dict:
+    def list_companies(self) -> dict:
         """Get list of accessible companies from public API.
 
         Returns:
@@ -85,9 +86,9 @@ class AgicapIntegration(Integration):
             res.raise_for_status()
             return res.json()
         except requests.exceptions.RequestException as e:
-            raise IntegrationConnectionError(f"Agicap API request failed: {str(e)}")
+            raise IntegrationConnectionError(f"Agicap API request failed: {e!s}")
 
-    def get_company_accounts(self, company_id: str) -> Dict:
+    def get_company_accounts(self, company_id: str) -> dict:
         """Get all accounts for a company.
 
         Args:
@@ -107,9 +108,9 @@ class AgicapIntegration(Integration):
             res.raise_for_status()
             return res.json().get("Result")
         except requests.exceptions.RequestException as e:
-            raise IntegrationConnectionError(f"Agicap API request failed: {str(e)}")
+            raise IntegrationConnectionError(f"Agicap API request failed: {e!s}")
 
-    def _flatten_dict(self, d: Dict, parent_key: str = "", sep: str = "_") -> Dict:
+    def _flatten_dict(self, d: dict, parent_key: str = "", sep: str = "_") -> dict:
         """Flatten a nested dictionary.
 
         Args:
@@ -134,7 +135,7 @@ class AgicapIntegration(Integration):
         company_id: str,
         account_id: str,
         limit: int = 100,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Get all transactions for a specific account.
 
         Args:
@@ -147,8 +148,7 @@ class AgicapIntegration(Integration):
         """
         data = []
         take = 100
-        if limit < take:
-            take = limit
+        take = min(take, limit)
         skip = 0
         url = f"{self.__configuration.base_url}/paidtransaction/GetByFilters"
         headers = {
@@ -196,7 +196,7 @@ class AgicapIntegration(Integration):
             skip += 100
         return data
 
-    def get_balance(self, company_id: str, account_id: Optional[str] = None) -> Dict:
+    def get_balance(self, company_id: str, account_id: str | None = None) -> dict:
         """Get account balance information.
 
         Args:
@@ -218,7 +218,7 @@ class AgicapIntegration(Integration):
         res.raise_for_status()
         return res.json()
 
-    def get_debts(self, company_id: str) -> Dict:
+    def get_debts(self, company_id: str) -> dict:
         """Get company debts information.
 
         Args:
@@ -256,13 +256,11 @@ def as_tools(configuration: AgicapIntegrationConfiguration):
     class GetTransactionsSchema(BaseModel):
         company_id: str = Field(..., description="The ID of the company")
         account_id: str = Field(..., description="The ID of the account")
-        limit: Optional[
-            Annotated[int, Field(description="The number of transactions to retrieve")]
-        ] = 10
+        limit: Annotated[int, Field(description="The number of transactions to retrieve")] | None = 10
 
     class GetBalanceSchema(BaseModel):
         company_id: str = Field(..., description="The ID of the company")
-        account_id: Optional[str] = Field(description="The ID of the account")
+        account_id: str | None = Field(description="The ID of the account")
 
     class GetDebtsSchema(BaseModel):
         company_id: str = Field(..., description="The ID of the company")

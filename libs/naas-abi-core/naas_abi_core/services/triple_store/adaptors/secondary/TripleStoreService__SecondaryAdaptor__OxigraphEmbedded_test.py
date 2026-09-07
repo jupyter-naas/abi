@@ -1,14 +1,13 @@
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from rdflib import Graph, Literal, URIRef
-
 from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__OxigraphEmbedded import (
     TripleStoreService__SecondaryAdaptor__OxigraphEmbedded,
 )
 from naas_abi_core.services.triple_store.tests.triple_store__secondary_adapter__generic_test import (
     GenericTripleStoreSecondaryAdapterTest,
 )
+from rdflib import Graph, Literal, URIRef
 
 
 def _build_graph(subject: URIRef, index: int) -> Graph:

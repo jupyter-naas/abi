@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from langchain_openai import ChatOpenAI
 from naas_abi_core.models.Model import (
@@ -30,12 +30,12 @@ class O1ProModel(ModelDefinition):
             base_url=OPENROUTER_BASE_URL,
         ),
         context_window=200000,
-        name="OpenAI: o1-pro",
+        name="o1-pro",
         owner="openai",
         description="The o1 series of models are trained with reinforcement learning to think before they answer and perform complex reasoning. The o1-pro model uses more compute to think harder and provide...",
         canonical_slug="openai/o1-pro",
         hugging_face_id="",
-        created_at=datetime.fromtimestamp(1742423211),
+        created_at=datetime.fromtimestamp(1742423211, tz=UTC),
         pricing={'prompt': '0.00015', 'completion': '0.0006', 'web_search': '0.01'},
         architecture={'modality': 'text+image+file->text', 'input_modalities': ['text', 'image', 'file'], 'output_modalities': ['text'], 'tokenizer': 'GPT', 'instruct_type': None},
         top_provider={'context_length': 200000, 'max_completion_tokens': 100000, 'is_moderated': True},

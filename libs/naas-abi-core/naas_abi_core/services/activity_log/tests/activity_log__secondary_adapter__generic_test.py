@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -53,7 +53,7 @@ class GenericActivityLogSecondaryAdapterTest(ABC):
 
     def test_query_returns_events_ordered_by_timestamp_ascending(self, adapter):
         actor = f"user:{uuid4()}"
-        base = datetime.now(timezone.utc)
+        base = datetime.now(UTC)
         for i in range(5):
             adapter.record(
                 ActivityEvent(
@@ -91,7 +91,7 @@ class GenericActivityLogSecondaryAdapterTest(ABC):
 
     def test_query_filters_by_time_range(self, adapter):
         actor = f"user:{uuid4()}"
-        t0 = datetime.now(timezone.utc)
+        t0 = datetime.now(UTC)
         for i in range(5):
             adapter.record(
                 ActivityEvent(

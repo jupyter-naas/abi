@@ -1,7 +1,7 @@
 [project]
 name = "naas-abi-marketplace"
-version = "3.17.0"
-authors = [{ name = "Maxime Jublou", email = "maxime@naas.ai" },{ name = "Florent Ravenel", email = "florent@naas.ai" }, { name = "Jeremy Ravenel", email = "jeremy@naas.ai" }]
+version = "3.41.0"
+authors = [{ name = "Grace Lambert", email = "maxime@naas.ai" },{ name = "Alice Dupont", email = "florent@naas.ai" }, { name = "Emma Petit", email = "jeremy@naas.ai" }]
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11,<4"
@@ -10,6 +10,7 @@ dependencies = [
     # ijson is used by XFileIngestionPipeline to stream-parse multi-GB
     # JSON tweet dumps without buffering the whole array in memory.
     "ijson>=3.2.0",
+    "pyyaml>=6.0.3",
 ]
 license = { text = "MIT License" }
 
@@ -89,6 +90,13 @@ ai-llama = [
 ai-mistral = [
     "langchain-mistralai>=0.2.11",
 ]
+ai-ollama = [
+    "langchain-ollama>=0.3.4",
+]
+# The openrouter gateway speaks the OpenAI wire protocol, so langchain-openai
+# (already a naas-abi-core dependency) is all it needs. The extra exists so a
+# generated project can name the module it enables.
+ai-openrouter = []
 ai-perplexity = [
     "langchain-perplexity>=0.1.2",
 ]
@@ -155,6 +163,12 @@ applications-twilio = [
     "twilio-stubs>=0.2.0"
 ]
 applications-worldbank = []
+applications-x = [
+    # The X app publishes its dashboard from a Parquet projection of the ingest
+    # envelopes rather than by re-querying the graph; polars is the engine that
+    # builds and reads it.
+    "polars>=1.0.0",
+]
 applications-yahoofinance = [
     "yfinance==0.2.66",
     "yahooquery==2.4.1"
