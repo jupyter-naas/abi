@@ -2,6 +2,45 @@
 
 <!-- version list -->
 
+## v2.32.0 (2026-09-07)
+
+### Bug Fixes
+
+- **agent**: Narrow the tool name so mypy can see it is a str
+  ([`05285e3`](https://github.com/jupyter-naas/abi/commit/05285e3559fc27e55933387dd1fa07dbadd42fd6))
+
+- **agent**: Preserve structured return-direct tool content
+  ([`e8d5aaf`](https://github.com/jupyter-naas/abi/commit/e8d5aafbf23aa92dfa3e83ef4c3e163560a948da))
+
+- **agent**: Surface every return_direct tool output in a turn
+  ([`84ff2f7`](https://github.com/jupyter-naas/abi/commit/84ff2f7c9d9db25889d6034509ad111ff743a3b3))
+
+- **slides**: Recognise a French deck request and keep the brief
+  ([`5ca9942`](https://github.com/jupyter-naas/abi/commit/5ca994279f2934ccd095d1078b5c34a5365b37b5))
+
+- **source-control**: List what is inside a directory, not the directory
+  ([`61bf70c`](https://github.com/jupyter-naas/abi/commit/61bf70c8dc7e4972f820e6460cdd65bb28d73b23))
+
+- **source-control**: Separate revision from path in LocalGitAdapter.list_commits
+  ([`97b9fee`](https://github.com/jupyter-naas/abi/commit/97b9fee1ea223e54a51ec1d37343b2fc6fd26747))
+
+### Features
+
+- **nexus**: Research-first Slides agent with a template rail
+  ([`dd20189`](https://github.com/jupyter-naas/abi/commit/dd201892839edd95fba6015eb27eb89873684b7f))
+
+- **slides**: Let Abi create a deck from the main chat
+  ([`ad90e57`](https://github.com/jupyter-naas/abi/commit/ad90e57f6632e8ec3ba72a03406eb9804bf8f866))
+
+### Testing
+
+- **agent**: Drive the stream loop for a two tool turn
+  ([`70aea80`](https://github.com/jupyter-naas/abi/commit/70aea807423b2477fb9ba7917f927bb44abe084f))
+
+- **agent**: Rename context_test to agent_context_test
+  ([`931dacd`](https://github.com/jupyter-naas/abi/commit/931dacd2911d3032f670617d52ec5a2be087165a))
+
+
 ## v2.31.2 (2026-09-07)
 
 ### Bug Fixes
