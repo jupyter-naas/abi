@@ -2,6 +2,7 @@ import logging
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -34,6 +35,86 @@ from naas_abi_core.services.agent.context import (
 
 def test_default_slides_model_is_claude_sonnet_5() -> None:
     assert DEFAULT_SLIDES_MODEL == "anthropic/claude-sonnet-5"
+
+
+@contextmanager
+def _configured(slides_model: str, agent_model: str) -> Iterator[None]:
+    """Register an ABIModule whose configuration the policy will read.
+
+    ``configured_slides_model`` reads ``ABIModule.get_instance()``, so the
+    fallback cannot be observed without a module registered as the
+    process-wide instance. Constructing one registers it, so the previous
+    instance has to be put back afterwards or every later test in the process
+    inherits this throwaway configuration.
+    """
+    from naas_abi import ABIModule
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        GlobalConfig,
+    )
+    from naas_abi_core.module.Module import BaseModule
+
+    previous = BaseModule._instances.get(ABIModule)
+    ABIModule(
+        SimpleNamespace(),  # type: ignore[arg-type]
+        ABIModule.Configuration(
+            global_config=GlobalConfig(ai_mode="cloud"),
+            abi_agent_model=agent_model,
+            abi_slides_agent_model=slides_model,
+        ),
+    )
+    try:
+        yield
+    finally:
+        if previous is None:
+            BaseModule._instances.pop(ABIModule, None)
+        else:
+            BaseModule._instances[ABIModule] = previous
+
+
+def test_configured_slides_model_falls_back_to_the_general_agent_model() -> None:
+    """With no slides model named, slides run on the model the rest of chat uses.
+
+    The alternative is an id ABI ships but cannot resolve. A slides turn wants
+    a reasoning-capable model and the general default may well not be one, but
+    an operator who never named a slides model is better served by the model
+    their chat already runs on than by a canonical id no loaded module
+    registered.
+    """
+    with _configured(slides_model="", agent_model="claude-sonnet-5"):
+        assert configured_slides_model() == "claude-sonnet-5"
+
+
+def test_configured_slides_model_prefers_the_slides_model_when_it_is_named() -> None:
+    """The fallback must not outrank an explicit setting."""
+    with _configured(
+        slides_model="anthropic/claude-sonnet-5",
+        agent_model="google/gemma-4-26b-a4b-it:free",
+    ):
+        assert configured_slides_model() == "anthropic/claude-sonnet-5"
+
+
+def test_slides_turn_warns_when_the_fallback_overrides_the_selection(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Being overridden by the fallback is still being overridden.
+
+    The warning exists so a user whose model was swapped out finds out, and
+    that is worth exactly as much when the winner is the general agent model
+    as when it is a configured slides model. Muting it on this path would put
+    the quietest branch back where the original bug lived.
+    """
+    with (
+        _configured(slides_model="", agent_model="claude-sonnet-5"),
+        caplog.at_level(logging.WARNING, logger="naas_abi.agents.slides_policy"),
+    ):
+        effective = resolve_slides_llm_model("gpt-4.1-mini")
+
+    assert effective == "claude-sonnet-5"
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert "gpt-4.1-mini" in message
+    assert "claude-sonnet-5" in message
 
 
 def test_openrouter_slides_model_id_keeps_anthropic_prefix() -> None:

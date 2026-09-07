@@ -66,18 +66,26 @@ _SEARCH_BUDGET_MESSAGE = (
 
 
 def configured_slides_model() -> str:
+    """The model a slides turn runs on: the slides model, else the agent model.
+
+    ``abi_slides_agent_model`` is optional. Unset it does not mean "no slides
+    model", it means "no slides-specific model", and the general agent model
+    is the honest answer to that: it is the model the operator's chat already
+    runs on and it is registered, because the engine resolves it in
+    ``validate_defaults``. A slides brief would rather have a reasoning-capable
+    model and the general default may not be one, which is why the setting
+    exists, but a weaker registered model beats an id nothing registered.
+    """
     try:
         from naas_abi import ABIModule
 
-        configured = getattr(
-            ABIModule.get_instance().configuration,
-            "abi_slides_agent_model",
-            None,
-        )
+        configuration = ABIModule.get_instance().configuration
+    except Exception:  # noqa: BLE001
+        return DEFAULT_SLIDES_MODEL
+    for setting in ("abi_slides_agent_model", "abi_agent_model"):
+        configured = getattr(configuration, setting, None)
         if configured and str(configured).strip():
             return str(configured).strip()
-    except Exception:  # noqa: BLE001
-        pass
     return DEFAULT_SLIDES_MODEL
 
 
@@ -158,9 +166,9 @@ def resolve_slides_llm_model(
         import logging
 
         logging.getLogger(__name__).warning(
-            "slides turn overriding the selected model %r with the configured "
-            "slides model %r (abi_slides_agent_model). Slides always run on the "
-            "configured model.",
+            "slides turn overriding the selected model %r with the server's "
+            "slides model %r (abi_slides_agent_model, or abi_agent_model when "
+            "that is unset). Slides always run on the server's model.",
             raw,
             effective,
         )
