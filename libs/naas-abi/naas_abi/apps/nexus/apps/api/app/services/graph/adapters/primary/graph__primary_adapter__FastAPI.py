@@ -13,10 +13,10 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
-from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__dependencies import (
+from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__dependencies import (  # noqa: E501
     get_graph_service,
 )
-from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__schemas import (
+from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__schemas import (  # noqa: E501
     AddDataPropertyRequest,
     AddObjectPropertyRequest,
     DeleteDataPropertyRequest,
@@ -73,7 +73,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphQuerySpecError,
     GraphServiceUnavailableError,
 )
-from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.primary.graph_query__primary_adapter__schemas import (
+from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.primary.graph_query__primary_adapter__schemas import (  # noqa: E501
     GraphColumnsResponse,
     GraphFacetsRequest,
     GraphFacetsResponse,
@@ -81,7 +81,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.primary.grap
     GraphQueryResponse,
     GraphSearchResponse,
 )
-from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.secondary.graph_query__secondary_adapter__triplestore import (
+from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.secondary.graph_query__secondary_adapter__triplestore import (  # noqa: E501
     GraphQueryTripleStoreAdapter,
     resolve_fts_backend,
 )
@@ -128,7 +128,7 @@ class _QueryResultCache(CountCache):
             return self._cache.get(key, ttl=self._ttl)  # hot → cold
         except (CacheNotFoundError, CacheExpiredError):
             return None
-        except Exception:
+        except Exception:  # noqa: BLE001 - cache is best-effort, degrade to a live query
             return None
 
     def store(self, key: str, value: dict) -> None:
@@ -136,7 +136,7 @@ class _QueryResultCache(CountCache):
             self._cache.set_json(key, value)  # cold tier (durable)
             if self._cache.hot_available():
                 self._cache.hot.set_json(key, value)  # hot tier (fast reads)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
 
@@ -152,7 +152,7 @@ def _resolve_query_cache() -> _QueryResultCache | None:
         services = ABIModule.get_instance().engine.services
         if services.cache_available():
             return _QueryResultCache(services.cache, ttl)
-    except Exception:
+    except Exception:  # noqa: BLE001 - engine/cache not available → fall back to local FS
         pass
     return _QueryResultCache(_FALLBACK_QUERY_CACHE, ttl)
 

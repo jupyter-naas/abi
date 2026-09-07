@@ -61,7 +61,7 @@ async def _sync_model_catalog() -> None:
     _log = logging.getLogger(__name__)
     try:
         from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-        from naas_abi.apps.nexus.apps.api.app.services.providers.adapters.secondary.providers__secondary_adapter__postgres import (
+        from naas_abi.apps.nexus.apps.api.app.services.providers.adapters.secondary.providers__secondary_adapter__postgres import (  # noqa: E501
             ModelCatalogSecondaryAdapterPostgres,
         )
         from naas_abi.apps.nexus.apps.api.app.services.providers.service import (

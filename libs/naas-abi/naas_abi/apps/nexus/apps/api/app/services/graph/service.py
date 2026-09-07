@@ -255,7 +255,7 @@ def _refresh_in_background(key: str, builder: Callable[..., Any], **kwargs: Any)
     def _run() -> None:
         try:
             builder(force_cache_refresh=True, **kwargs)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - a failed refresh keeps serving the stale entry
             logger.warning(f"Background refresh of {key!r} failed: {exc}")
         finally:
             with _REBUILDS_LOCK:
@@ -263,7 +263,7 @@ def _refresh_in_background(key: str, builder: Callable[..., Any], **kwargs: Any)
 
     try:
         _REBUILD_EXECUTOR.submit(_run)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - executor shutting down
         logger.warning(f"Could not schedule background refresh of {key!r}: {exc}")
         with _REBUILDS_LOCK:
             _REBUILDS_IN_FLIGHT.discard(key)

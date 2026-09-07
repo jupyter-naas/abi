@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
-from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
+from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (  # noqa: E501
     ObjectStorageSecondaryAdapterFS,
 )
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService

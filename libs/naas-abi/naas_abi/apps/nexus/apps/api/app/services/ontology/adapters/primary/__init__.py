@@ -1,8 +1,8 @@
-from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.primary.ontology__primary_adapter__FastAPI import (
+from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.primary.ontology__primary_adapter__FastAPI import (  # noqa: E501
     OntologyFastAPIPrimaryAdapter,
     router,
 )
-from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.primary.ontology__primary_adapter__schemas import (
+from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.primary.ontology__primary_adapter__schemas import (  # noqa: E501
     EntityCreate,
     ImportRequest,
     OntologyFileItem,

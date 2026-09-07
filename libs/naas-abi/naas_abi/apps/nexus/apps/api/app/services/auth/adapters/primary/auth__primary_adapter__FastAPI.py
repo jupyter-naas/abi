@@ -81,7 +81,7 @@ def _get_object_storage(request: Request) -> ObjectStorageService:
     if storage is not None:
         return storage
     try:
-        from naas_abi import ABIModule
+        from naas_abi import ABIModule  # noqa: PLC0415
 
         module = ABIModule.get_instance()
         storage = module.engine.services.object_storage
@@ -104,7 +104,7 @@ def _get_email_service(request: Request) -> EmailService | None:
     if service is not None:
         return service
     try:
-        from naas_abi import ABIModule
+        from naas_abi import ABIModule  # noqa: PLC0415
 
         service = ABIModule.get_instance().engine.services.email
         request.app.state.email_service = service

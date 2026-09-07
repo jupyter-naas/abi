@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
-from typing import BinaryIO
+from typing import BinaryIO, Optional
 
 import click
 import httpx
@@ -31,7 +31,7 @@ _CHUNK = 1024 * 1024  # 1 MiB
 _PREFIX = "/api/platform"
 
 # Test hook: tests set this to an httpx.MockTransport so no network is needed.
-_TEST_TRANSPORT: httpx.BaseTransport | None = None
+_TEST_TRANSPORT: Optional[httpx.BaseTransport] = None
 
 
 def _client() -> httpx.Client:
@@ -138,7 +138,8 @@ def storage_cp(src: str, dst: str, root: bool) -> None:
                     resp.read()
                     _raise(resp)
                 with open(dst, "wb") as fileobj:
-                    fileobj.writelines(resp.iter_bytes(chunk_size=_CHUNK))
+                    for chunk in resp.iter_bytes(chunk_size=_CHUNK):
+                        fileobj.write(chunk)
             click.echo(f"downloaded remote:{key} -> {dst}")
 
 

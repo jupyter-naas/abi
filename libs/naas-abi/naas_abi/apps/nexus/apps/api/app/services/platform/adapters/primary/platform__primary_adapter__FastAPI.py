@@ -38,18 +38,18 @@ router = APIRouter(dependencies=[Depends(get_current_user_required)])
 _CHUNK = 1024 * 1024  # 1 MiB
 
 
-def _get_object_storage(request: Request):
+def _get_object_storage(request: Request):  # noqa: ANN202 - domain service, dynamically typed
     """Resolve the engine's object-storage service (cached on app state)."""
     svc = getattr(request.app.state, "object_storage", None)
     if svc is not None:
         return svc
     try:
-        from naas_abi import ABIModule
+        from naas_abi import ABIModule  # noqa: PLC0415
 
         svc = ABIModule.get_instance().engine.services.object_storage
         request.app.state.object_storage = svc
         return svc
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=500, detail="Object storage is not initialized."
         ) from exc
@@ -115,7 +115,7 @@ async def storage_ls(
     scoped_prefix = posixpath.join(base, rel).strip("/")  # "" => datastore root
     try:
         keys = await run_in_threadpool(storage.list_objects, scoped_prefix)
-    except Exception:
+    except Exception:  # noqa: BLE001 - absent/empty prefix -> empty listing
         keys = []
     strip = base + "/" if base else ""
     items = [k[len(strip) :] if strip and k.startswith(strip) else k for k in keys]
@@ -142,7 +142,7 @@ async def storage_download(
     # Surface a missing object as a clean 404 *before* the stream starts.
     try:
         await run_in_threadpool(storage.get_object_metadata, obj_prefix, key)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=404, detail=f"Not found: {path}") from exc
 
     def _iter() -> Iterator[bytes]:
