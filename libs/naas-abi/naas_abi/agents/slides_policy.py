@@ -513,6 +513,16 @@ def bind_slides_reasoning(chat_model: Any, model_id: str) -> Any:
         reasoning = lc.model_copy(update={"reasoning_effort": "high"})
     except Exception:  # noqa: BLE001
         return chat_model
+    import logging
+
+    logging.getLogger(__name__).warning(
+        "slides turn supplying reasoning_effort=high to %r, whose registration "
+        "declares no reasoning config. Declare it on that ModelDefinition "
+        "instead: this fallback is invisible from the model catalog and "
+        "applies to slides only, so the same model answers a deck differently "
+        "than it answers anything else.",
+        model_id,
+    )
     if lc is chat_model:
         return reasoning
     # The wrapper is shared too, so hand back a copy of it rather than

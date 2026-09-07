@@ -611,6 +611,34 @@ def test_bind_slides_reasoning_leaves_a_declared_registration_alone() -> None:
     assert bound.model.extra_body == {"reasoning": {"effort": "high"}}
 
 
+def test_bind_slides_reasoning_says_so_when_it_supplies_the_effort(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Supplying effort the registration did not ask for has to be audible.
+
+    While this fires, the model runs on a setting that appears nowhere near
+    its ModelDefinition and applies on no other path. Silent, that is the same
+    model answering a deck differently than it answers anything else, with
+    nothing to read that explains the difference. Naming the model is the
+    point: the fix is to declare reasoning on that registration, and a line
+    that does not say which one sends the reader to look through thirty.
+    """
+    registry = _registry_with_slides_model()
+    shared = registry.get_chat_model("claude-sonnet-5", provider="openrouter")
+
+    token = slides_active_slug.set("iran-now")
+    try:
+        with caplog.at_level(logging.WARNING, logger="naas_abi.agents.slides_policy"):
+            bound = bind_slides_reasoning(shared, "anthropic/claude-sonnet-5")
+    finally:
+        slides_active_slug.reset(token)
+
+    assert bound.model.reasoning_effort == "high"
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert "anthropic/claude-sonnet-5" in warnings[0].getMessage()
+
+
 def test_bind_slides_reasoning_leaves_the_shared_registry_model_clean() -> None:
     """A slides turn must not write reasoning effort into the shared catalog.
 
