@@ -436,7 +436,21 @@ def slides_reasoning_extra_body(model_id: str) -> dict[str, Any] | None:
 
 
 def load_slides_chat_model(model_id: str) -> Any:
-    """Build the slides chat model via OpenRouter, not api.openai.com.
+    """Return the registered chat model for the model this turn was routed to.
+
+    The same lookup ``AbiAgent.New`` does, because it is the same question. The
+    registration owns the endpoint, the key, the timeout and whatever else the
+    model needs; this function's job is to name the model, not to know how to
+    reach it.
+
+    It used to build its own ``ChatOpenAI``: sniff the environment for an
+    ``sk-or-`` key, guess a vendor prefix from the model family, and hardcode
+    the OpenRouter base_url. That was a workaround for a 401, and the 401 was
+    not a key problem. ``OPENAI_BASE_URL`` was set, every OpenAI client in the
+    process inherited it, and requests meant for one endpoint went to another.
+    Building a second client here fixed the symptom for one call site while
+    leaving the cause, and cost the registration's ``extra_body``, retries and
+    context window on every slides turn.
 
     Raises ``ValueError`` on an empty ``model_id``. ``resolve_slides_llm_model``
     reads an empty value as "use the configured slides default", so a caller
@@ -451,33 +465,15 @@ def load_slides_chat_model(model_id: str) -> Any:
             "to. Resolve it with resolve_slides_llm_model first."
         )
 
-    from langchain_openai import ChatOpenAI
     from naas_abi import ABIModule
-    from naas_abi_core.models.Model import ChatModel
-    from pydantic import SecretStr
 
-    resolved = resolve_slides_llm_model(model_id)
-    or_id = openrouter_slides_model_id(resolved)
     abi = ABIModule.get_instance()
-    api_key = _openrouter_api_key(abi)
-    if not api_key:
-        return abi.engine.services.model_registry.get_chat_model(
-            resolved,
-            provider=abi.configuration.abi_agent_provider,
-        )
-    extra = slides_reasoning_extra_body(or_id)
-    chat = ChatModel(
-        model_id=or_id,
-        provider="openrouter",
-        model=ChatOpenAI(
-            model=or_id,
-            api_key=SecretStr(str(api_key)),
-            base_url="https://openrouter.ai/api/v1",
-            timeout=180,
-            **({"extra_body": extra} if extra else {}),
-        ),
+    resolved = resolve_slides_llm_model(model_id)
+    chat = abi.engine.services.model_registry.get_chat_model(
+        resolved,
+        provider=abi.configuration.abi_agent_provider,
     )
-    return bind_slides_reasoning(chat, or_id)
+    return bind_slides_reasoning(chat, resolved)
 
 
 def bind_slides_reasoning(chat_model: Any, model_id: str) -> Any:

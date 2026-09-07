@@ -38,7 +38,12 @@ def test_default_slides_model_is_claude_sonnet_5() -> None:
 
 
 @contextmanager
-def _configured(slides_model: str, agent_model: str) -> Iterator[None]:
+def _configured(
+    slides_model: str,
+    agent_model: str,
+    registry: Any = None,
+    agent_provider: str | None = None,
+) -> Iterator[None]:
     """Register an ABIModule whose configuration the policy will read.
 
     ``configured_slides_model`` reads ``ABIModule.get_instance()``, so the
@@ -55,10 +60,11 @@ def _configured(slides_model: str, agent_model: str) -> Iterator[None]:
 
     previous = BaseModule._instances.get(ABIModule)
     ABIModule(
-        SimpleNamespace(),  # type: ignore[arg-type]
+        SimpleNamespace(services=SimpleNamespace(model_registry=registry)),  # type: ignore[arg-type]
         ABIModule.Configuration(
             global_config=GlobalConfig(ai_mode="cloud"),
             abi_agent_model=agent_model,
+            abi_agent_provider=agent_provider,
             abi_slides_agent_model=slides_model,
         ),
     )
@@ -494,7 +500,76 @@ def test_load_slides_chat_model_rejects_a_missing_model_id() -> None:
             load_slides_chat_model(missing)  # type: ignore[arg-type]
 
 
-def _registry_with_slides_model() -> Any:
+def test_load_slides_chat_model_returns_the_model_the_registry_holds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The registry already holds the slides model. Ask it, do not rebuild it.
+
+    This asserts identity, not shape. A hand-built ChatOpenAI with the same id
+    and the same base_url compares fine on inspection and is still wrong: it
+    drops whatever the registration carries that a constructor call cannot
+    guess, which for this model is extra_body reasoning effort, the retry
+    count and the context window.
+
+    ``OPENROUTER_API_KEY`` is set deliberately. The deleted code sniffed the
+    environment for an ``sk-or-`` key and built its own client whenever it
+    found one, so an ambient key changed which object a slides turn ran on.
+    With the key present the identity assertion is the difference between the
+    two implementations.
+    """
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+
+    registry = _registry_with_slides_model("anthropic/claude-sonnet-5")
+    registered = registry.get_chat_model(
+        "anthropic/claude-sonnet-5",
+        provider="openrouter",
+    )
+
+    with _configured(
+        slides_model="anthropic/claude-sonnet-5",
+        agent_model="google/gemma-4-26b-a4b-it:free",
+        registry=registry,
+        agent_provider="openrouter",
+    ):
+        loaded = load_slides_chat_model("anthropic/claude-sonnet-5")
+
+    assert loaded is registered
+
+
+def test_load_slides_chat_model_raises_when_nothing_registered_the_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unresolvable slides model must fail here, not fall back silently.
+
+    The version this replaces answered a missing registration by constructing
+    a client for the id anyway, so a model nothing had registered still
+    produced an object and failed later at the provider, as an HTTP error with
+    no mention of the registry or of the config key that named the id. A silent
+    fallback at this boundary is the bug class the branch exists to remove, so
+    the registry's error has to reach the caller.
+    """
+    from naas_abi_core.services.model_registry.ModelRegistryPort import (
+        ModelNotFoundError,
+    )
+    from naas_abi_core.services.model_registry.ModelRegistryService import (
+        ModelRegistryService,
+    )
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+
+    with (
+        _configured(
+            slides_model="anthropic/claude-sonnet-5",
+            agent_model="google/gemma-4-26b-a4b-it:free",
+            registry=ModelRegistryService(),
+            agent_provider="openrouter",
+        ),
+        pytest.raises(ModelNotFoundError, match="anthropic/claude-sonnet-5"),
+    ):
+        load_slides_chat_model("anthropic/claude-sonnet-5")
+
+
+def _registry_with_slides_model(canonical_id: str = "claude-sonnet-5") -> Any:
     """A ModelRegistry holding one entry, wrapped the way production wraps it.
 
     A mock cannot show this bug. The leak is a plain attribute write onto the
@@ -510,7 +585,7 @@ def _registry_with_slides_model() -> Any:
 
     registry = ModelRegistryService()
     registry.register(
-        "claude-sonnet-5",
+        canonical_id,
         ChatModel(
             model_id="anthropic/claude-sonnet-5",
             provider="openrouter",
