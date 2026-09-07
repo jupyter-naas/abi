@@ -598,12 +598,19 @@ class ABIModule(BaseModule):
         # whichever provider registered first.
         abi_agent_provider: str | None = None
 
-        # Slides-only override. Nexus Slides briefs use this instead of
-        # ``abi_agent_model`` so general chat can stay on a cheaper default.
+        # Optional slides-only override. Nexus Slides briefs use this instead
+        # of ``abi_agent_model`` so general chat can stay on a cheaper default.
         # It is not a preference: a slides turn runs on this model whatever the
-        # client selected, so it must be a reasoning-capable id that some
-        # loaded module registers. ``on_initialized`` fails the boot if not.
-        abi_slides_agent_model: str = "anthropic/claude-sonnet-5"
+        # client selected, so a value here must be a reasoning-capable id that
+        # some loaded module registers, and ``on_initialized`` fails the boot
+        # if it does not resolve.
+        #
+        # Empty by default because ABI has no id it can ship here. Slides want
+        # a reasoning model, every such id belongs to a marketplace or
+        # downstream module, and naming one made ABI's own boot fail ABI's own
+        # check on an install where that module is not enabled. Unset means
+        # slides follow ``abi_agent_model``, which the engine already resolves.
+        abi_slides_agent_model: str = ""
 
         # Canonical model id used by OntologyEngineerAgent. Same registry
         # semantics as ``abi_agent_model``.

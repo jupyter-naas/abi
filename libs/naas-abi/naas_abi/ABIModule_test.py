@@ -43,6 +43,19 @@ def _restore_module_instance() -> Iterator[None]:
             BaseModule._instances[ABIModule] = previous
 
 
+def _default_module(registry: ModelRegistryService) -> ABIModule:
+    engine = SimpleNamespace(
+        services=SimpleNamespace(
+            model_registry=registry,
+            model_registry_available=lambda: True,
+        )
+    )
+    return ABIModule(
+        engine,  # type: ignore[arg-type]
+        ABIModule.Configuration(global_config=GlobalConfig(ai_mode="cloud")),
+    )
+
+
 def _module(registry: ModelRegistryService, slides_model: str) -> ABIModule:
     engine = SimpleNamespace(
         services=SimpleNamespace(
@@ -73,3 +86,48 @@ def test_boot_refuses_an_unregistered_slides_model(
 
     with pytest.raises(DefaultModelNotResolvedError, match="claude-sonnet-5-typo"):
         module.on_initialized()
+
+
+def test_boot_ships_no_slides_model_of_its_own(
+    _restore_module_instance: None,
+) -> None:
+    """A bare ABI must not fail the check on ABI's own default.
+
+    The default was anthropic/claude-sonnet-5, and the only module that
+    registers that canonical id lives in zen, downstream. So the shipped
+    configuration could not satisfy the shipped check: every ABI boot without
+    zen on the path raised against an empty registry, naming a setting nobody
+    had edited. The registry here is empty on purpose, which is exactly the
+    state an ABI checkout with no model modules enabled boots in.
+    """
+    _default_module(ModelRegistryService()).on_initialized()
+
+
+def test_boot_keeps_a_configured_and_registered_slides_model(
+    _restore_module_instance: None,
+) -> None:
+    """Naming a slides model still routes slides onto it.
+
+    The optional default is only safe if the configured path is untouched:
+    zen sets abi_slides_agent_model and its general agent model is a free
+    Gemma, so a fallback silently winning there would put every deck back on
+    the model that produced template filler.
+    """
+    from langchain_openai import ChatOpenAI
+    from naas_abi_core.models.Model import ChatModel
+
+    from naas_abi.agents.slides_policy import resolve_slides_llm_model
+
+    registry = ModelRegistryService()
+    registry.register(
+        "anthropic/claude-sonnet-5",
+        ChatModel(
+            model_id="anthropic/claude-sonnet-5",
+            provider="openrouter",
+            model=ChatOpenAI(model="anthropic/claude-sonnet-5", api_key="sk-or-test"),  # type: ignore[arg-type]
+        ),
+    )
+    module = _module(registry, "anthropic/claude-sonnet-5")
+    module.on_initialized()
+
+    assert resolve_slides_llm_model("gpt-4.1-mini") == "anthropic/claude-sonnet-5"
