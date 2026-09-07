@@ -3584,7 +3584,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "2.55.2"
+version = "2.61.0"
 source = { editable = "libs/naas-abi" }
 dependencies = [
     { name = "aiosqlite" },
@@ -3666,7 +3666,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-cli"
-version = "2.19.0"
+version = "2.21.0"
 source = { editable = "libs/naas-abi-cli" }
 dependencies = [
     { name = "naas-abi" },
@@ -3692,7 +3692,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "2.28.1"
+version = "2.30.0"
 source = { editable = "libs/naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -3817,6 +3817,7 @@ provides-extras = ["ssh", "aws", "qdrant", "sqlite-vec", "all", "openrouter", "d
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "moto", extras = ["s3"], specifier = ">=5.0.0" },
     { name = "mypy", specifier = ">=1.19.0" },
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "python-semantic-release", specifier = ">=9.21.0" },
@@ -3825,7 +3826,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "3.39.0"
+version = "3.41.0"
 source = { editable = "libs/naas-abi-marketplace" }
 dependencies = [
     { name = "ijson" },

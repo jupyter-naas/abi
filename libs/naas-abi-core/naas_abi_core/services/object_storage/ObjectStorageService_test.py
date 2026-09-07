@@ -129,3 +129,39 @@ def test_event_service_round_trips_via_codec(tmp_path):
     assert reloaded.prefix == "a"
     assert reloaded.key == "b.bin"
     assert reloaded.size_bytes == len(b"payload")
+
+
+def test_list_objects_recursive_walks_the_whole_subtree(tmp_path):
+    storage, _ = _make(tmp_path)
+
+    storage.put_object("papers", "root.pdf", b"root")
+    storage.put_object("papers", "2024/q1/deep.pdf", b"deep")
+
+    found = storage.list_objects_recursive("papers")
+
+    assert {key.rsplit("/", 1)[-1] for key in found} == {"root.pdf", "deep.pdf"}
+
+
+def test_list_objects_still_returns_direct_children_only(tmp_path):
+    storage, _ = _make(tmp_path)
+
+    storage.put_object("papers", "root.pdf", b"root")
+    storage.put_object("papers", "2024/q1/deep.pdf", b"deep")
+
+    shallow = {key.rsplit("/", 1)[-1] for key in storage.list_objects("papers")}
+
+    assert "root.pdf" in shallow
+    assert "deep.pdf" not in shallow
+
+
+def test_list_objects_recursive_strips_the_storage_prefix_like_list_objects(tmp_path):
+    storage, _ = _make(tmp_path)
+
+    storage.put_object("papers", "2024/deep.pdf", b"deep")
+
+    # The service strips a leading "storage/" before reaching the adapter, and
+    # it must do so for both listings or the two disagree on the same input.
+    assert storage.list_objects_recursive(
+        "storage/papers"
+    ) == storage.list_objects_recursive("papers")
+    assert storage.list_objects("storage/papers") == storage.list_objects("papers")
