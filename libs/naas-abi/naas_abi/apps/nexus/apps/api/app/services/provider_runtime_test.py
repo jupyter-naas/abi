@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
+    Message,
     ProviderConfig,
     UnsafeProviderEndpointError,
+    complete_chat,
     redact_url_for_logs,
     validated_provider_endpoint,
 )
@@ -149,6 +151,58 @@ def test_custom_endpoint_still_rejects_private_lan_ip() -> None:
 
     with pytest.raises(UnsafeProviderEndpointError):
         validated_provider_endpoint(config)
+
+
+@pytest.mark.asyncio
+async def test_complete_chat_carries_the_injection_preamble_into_the_abi_agent(
+    monkeypatch,
+) -> None:
+    """The preamble has to arrive on the prompt the agent actually runs.
+
+    ABI agents build their own system prompt and ignore the Nexus
+    ``system_prompt``, so prepending the preamble to the latest user message is
+    the only channel carrying the skills catalog and the user profile. Every
+    other test on this path stops at a double: ``service_test`` asserts
+    ``complete_chat_request`` hands the preamble to the provider function, and
+    the provider function is replaced there. Nothing read it off the prompt the
+    agent received, so ``complete_chat`` could route to ``complete_with_abi``
+    without the argument, or ``complete_with_abi`` could stop prepending, and
+    the suite would stay green while the agent lost the catalog.
+    """
+
+    class _Agent:
+        def __init__(self) -> None:
+            self.prompt: str | None = None
+
+        async def ainvoke(self, prompt: str, thread_id: str | None = None) -> str:
+            self.prompt = prompt
+            return "assistant answer"
+
+    agent = _Agent()
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.provider_runtime._resolve_inprocess_abi_agent",
+        lambda _model: agent,
+    )
+
+    answer = await complete_chat(
+        [Message(role="user", content="brief me on the strait of hormuz")],
+        ProviderConfig(
+            id="p1",
+            name="Abi",
+            type="abi",
+            enabled=True,
+            endpoint="inprocess://abi",
+            api_key=None,
+            account_id=None,
+            model="Abi",
+        ),
+        None,
+        thread_id="conv-1",
+        injection_preamble="You can call create_skill.",
+    )
+
+    assert answer == "assistant answer"
+    assert agent.prompt == "You can call create_skill.\n\nbrief me on the strait of hormuz"
 
 
 def test_redact_url_for_logs_masks_sensitive_query_params() -> None:
