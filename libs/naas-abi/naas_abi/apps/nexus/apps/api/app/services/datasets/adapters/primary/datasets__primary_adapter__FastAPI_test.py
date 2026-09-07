@@ -11,7 +11,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 from naas_abi.apps.nexus.apps.api.app.services.datasets.adapters.primary import (
     datasets__primary_adapter__FastAPI as datasets_api,
 )
-from naas_abi.apps.nexus.apps.api.app.services.datasets.adapters.primary.datasets__primary_adapter__dependencies import (  # noqa: E501
+from naas_abi.apps.nexus.apps.api.app.services.datasets.adapters.primary.datasets__primary_adapter__dependencies import (
     get_datasets_service,
 )
 from naas_abi.apps.nexus.apps.api.app.services.datasets.service import DatasetsService

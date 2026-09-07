@@ -64,7 +64,7 @@ class LegacyStorageMigrator:
 
         try:
             self._move_tree(legacy_root, new_root)
-        except Exception as exc:  # noqa: BLE001 — temporary migration code
+        except Exception as exc:
             logger.warning(
                 "Legacy storage migration failed for %s -> %s: %s",
                 legacy_root,

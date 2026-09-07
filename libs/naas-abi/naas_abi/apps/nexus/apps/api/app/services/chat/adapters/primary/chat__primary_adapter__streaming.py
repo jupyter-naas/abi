@@ -280,7 +280,7 @@ async def stream_chat_response(
                 # Arm the research gate for both surfaces. With no deck open
                 # this also flags a deck requested from the main chat, so the
                 # agent gets a slides-sized step budget.
-                from naas_abi.agents.slides_policy import (  # noqa: PLC0415
+                from naas_abi.agents.slides_policy import (
                     bind_slides_research_policy,
                 )
 
@@ -296,7 +296,7 @@ async def stream_chat_response(
 
                 if open_slug and request.workspace_id:
                     try:
-                        from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__primary_adapter__FastAPI import (  # noqa: PLC0415
+                        from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__primary_adapter__FastAPI import (
                             lookup_slides_sidecar,
                         )
 
@@ -323,7 +323,7 @@ async def stream_chat_response(
                     repo_id = str(coding_ctx.get("repo_id") or "").strip()
                     branch = str(coding_ctx.get("branch") or "").strip()
                     if repo_id:
-                        from naas_abi_core.services.agent.context import (  # noqa: PLC0415
+                        from naas_abi_core.services.agent.context import (
                             coding_active_branch,
                             coding_active_repo,
                         )
@@ -333,11 +333,11 @@ async def stream_chat_response(
                             coding_active_branch.set(branch)
                         if request.workspace_id:
                             try:
-                                from naas_abi import ABIModule  # noqa: PLC0415
-                                from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.primary.coding_environment__primary_adapter__FastAPI import (  # noqa: PLC0415
+                                from naas_abi import ABIModule
+                                from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.primary.coding_environment__primary_adapter__FastAPI import (
                                     lookup_code_bindings,
                                 )
-                                from naas_abi_core.services.agent.context import (  # noqa: PLC0415
+                                from naas_abi_core.services.agent.context import (
                                     coding_harness_base,
                                 )
 

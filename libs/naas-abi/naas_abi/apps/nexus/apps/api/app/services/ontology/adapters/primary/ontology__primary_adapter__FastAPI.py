@@ -12,10 +12,10 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
     workspace_seed_for_slug,
 )
-from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.primary.ontology__primary_adapter__dependencies import (  # noqa: E501
+from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.primary.ontology__primary_adapter__dependencies import (
     get_ontology_service,
 )
-from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.primary.ontology__primary_adapter__schemas import (  # noqa: E501
+from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.primary.ontology__primary_adapter__schemas import (
     EntityCreate,
     ImportRequest,
     OntologyFileItem,

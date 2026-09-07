@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext, TokenData
-from naas_abi.apps.nexus.apps.api.app.services.secrets.adapters.primary.secrets__primary_adapter__FastAPI import (  # noqa: E501
+from naas_abi.apps.nexus.apps.api.app.services.secrets.adapters.primary.secrets__primary_adapter__FastAPI import (
     SecretBulkImport,
     SecretCreate,
     SecretResponse,

@@ -1,8 +1,8 @@
-from naas_abi.apps.nexus.apps.api.app.services.search.adapters.primary.search__primary_adapter__FastAPI import (  # noqa: E501
+from naas_abi.apps.nexus.apps.api.app.services.search.adapters.primary.search__primary_adapter__FastAPI import (
     SearchFastAPIPrimaryAdapter,
     router,
 )
-from naas_abi.apps.nexus.apps.api.app.services.search.adapters.primary.search__primary_adapter__schemas import (  # noqa: E501
+from naas_abi.apps.nexus.apps.api.app.services.search.adapters.primary.search__primary_adapter__schemas import (
     PrivateSearchRequest,
     PrivateSearchResponse,
     SearchRequest,

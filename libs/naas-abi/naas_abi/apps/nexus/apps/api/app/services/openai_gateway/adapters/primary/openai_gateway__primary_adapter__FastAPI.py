@@ -91,7 +91,7 @@ async def _stream_agent_text(
     ws_secret: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Invoke an abi agent in-process and yield text deltas only."""
-    from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (  # noqa: PLC0415
+    from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
         Message,
         ProviderConfig,
         stream_with_abi_inprocess,
@@ -120,7 +120,7 @@ async def _stream_agent_text(
 def _list_agent_model_ids() -> list[str]:
     """Best-effort list of invokable abi agent names (for /v1/models)."""
     try:
-        from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (  # noqa: PLC0415
+        from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
             _build_local_agent_index,
         )
 

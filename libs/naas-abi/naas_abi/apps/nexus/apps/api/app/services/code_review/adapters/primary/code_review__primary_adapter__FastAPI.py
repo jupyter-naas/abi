@@ -69,7 +69,7 @@ def _get_source_control_service(request: Request) -> SourceControlService:
     if service is not None:
         return service
     try:
-        from naas_abi import ABIModule  # noqa: PLC0415
+        from naas_abi import ABIModule
 
         module = ABIModule.get_instance()
         service = module.engine.services.source_control

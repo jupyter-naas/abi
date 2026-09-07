@@ -108,11 +108,19 @@ ignore = [
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]
-# Pre-existing debt, not an endorsement. Inheriting the root config turned on
-# 275 rules this subtree had never been linted against, and they found 395
-# violations that were already in the tree. Suppressing them here is what lets
-# the consolidation land in one commit; every code below is a separate cleanup
-# waiting to happen, and the counts are here so the list can be seen shrinking.
+# Pre-existing debt, not an endorsement, and a burn-down list rather than a
+# settlement. Inheriting the root config turned on 275 rules this subtree had
+# never been linted against, and they found 395 violations that were already in
+# the tree. RUF100 is the first entry retired, and it is gone from this list
+# because the 88 dead `# noqa` directives it named were deleted rather than
+# suppressed. 335 remain across the 30 codes below. Every one is a separate
+# cleanup waiting to happen, and the counts are here so the list can be seen
+# shrinking.
+#
+# BLE001 now reads 139 where 03e82cb recorded 125. Fourteen
+# `except Exception:  # noqa: BLE001` sites landed in between, and each added a
+# violation and a dead directive in the same line, which is also how the 74
+# recorded RUF100 came to measure 88.
 #
 # Four of these are latent bugs rather than style, and are called out so nobody
 # reads the whole block as cosmetic: DTZ* (naive timestamps in a service that
@@ -120,8 +128,7 @@ ignore = [
 # mode that hid the zen import for weeks), ASYNC220/ASYNC230 (blocking
 # subprocess and file IO on the event loop), PLW1510 (unchecked subprocess.run).
 "**/*.py" = [
-    "BLE001",   # 125  blind `except Exception`
-    "RUF100",   #  74  dead `# noqa: E501`, removable with --fix while E501 stays off
+    "BLE001",   # 139  blind `except Exception`
     "DTZ005",   #  41  datetime.now() without tz
     "S110",     #  31  try/except/pass
     "DTZ003",   #  22  datetime.utcnow()

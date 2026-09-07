@@ -84,7 +84,7 @@ def _get_source_control(request: Request) -> SourceControlService:
     if service is not None:
         return service
     try:
-        from naas_abi import ABIModule  # noqa: PLC0415
+        from naas_abi import ABIModule
 
         service = ABIModule.get_instance().engine.services.source_control
         request.app.state.source_control = service
@@ -101,7 +101,7 @@ def _get_coding_environment(request: Request) -> CodingEnvironmentService | None
     if service is not None:
         return service
     try:
-        from naas_abi import ABIModule  # noqa: PLC0415
+        from naas_abi import ABIModule
 
         service = ABIModule.get_instance().engine.services.coding_environment
         request.app.state.coding_environment = service
@@ -740,7 +740,7 @@ def _coder_ui_url(
         return None
     try:
         return build(access_url=access, owner=owner or "me", name=name)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 
@@ -819,7 +819,7 @@ def _sidecar_tool_call(
         )
         with urlopen(req, timeout=timeout_s) as resp:  # nosec B310 - internal docker DNS only
             return json.loads(resp.read().decode("utf-8"))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return {"error": f"sidecar {tool_name} failed: {exc}"}
 
 
@@ -923,7 +923,7 @@ def _git_clone_url(
     try:
         repo = sc.ensure_repo(owner=owner, name=name)
         clone_url = str(getattr(repo, "clone_url", "") or "").strip()
-    except Exception:  # noqa: BLE001
+    except Exception:
         clone_url = ""
     if clone_url.startswith("file://"):
         return clone_url
@@ -941,7 +941,7 @@ def _adapter_get_parameters(coding: CodingEnvironmentService, workspace_id: str)
         return {}
     try:
         result = getter(workspace_id=workspace_id)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return {}
     return result if isinstance(result, dict) else {}
 
@@ -1193,7 +1193,7 @@ async def create_project(
             logger.warning(
                 "slides runtime not ensured for %s: %s", slug, runtime.detail
             )
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("slides runtime ensure failed for %s", slug)
 
     return project
@@ -1500,7 +1500,7 @@ def _adapter_runtime_binding(
         return None
     try:
         binding = getter(workspace_id=environment_id)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
     if not binding:
         return None
@@ -1636,7 +1636,7 @@ async def _ensure_runtime_impl(
                 try:
                     await db.delete(existing)
                     await db.commit()
-                except Exception:  # noqa: BLE001
+                except Exception:
                     await db.rollback()
                 existing = None
         if existing is not None:
@@ -1664,7 +1664,7 @@ async def _ensure_runtime_impl(
                 if db.dirty:
                     try:
                         await db.commit()
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         await db.rollback()
                 has_creds = bool(existing.sidecar_base and existing.sidecar_secret)
                 sidecar_ready = False
@@ -1931,7 +1931,7 @@ async def _ensure_runtime_impl(
                 )
             )
             await db.commit()
-        except Exception:  # noqa: BLE001
+        except Exception:
             await db.rollback()
             logger.exception("Failed to persist slides runtime binding for %s", slug)
 

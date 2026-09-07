@@ -96,7 +96,7 @@ def _get_coding_environment_service(request: Request) -> CodingEnvironmentServic
     if service is not None:
         return service
     try:
-        from naas_abi import ABIModule  # noqa: PLC0415
+        from naas_abi import ABIModule
 
         module = ABIModule.get_instance()
         service = module.engine.services.coding_environment
@@ -119,7 +119,7 @@ def _get_source_control_service(request: Request) -> SourceControlService | None
     if service is not None:
         return service
     try:
-        from naas_abi import ABIModule  # noqa: PLC0415
+        from naas_abi import ABIModule
 
         module = ABIModule.get_instance()
         service = module.engine.services.source_control
@@ -220,7 +220,7 @@ def _continue_agent_ids() -> list[str]:
     default = settings.coding_default_agent
     try:
         # Reuse the gateway's own enumeration so the IDE list mirrors /v1/models.
-        from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.adapters.primary.openai_gateway__primary_adapter__FastAPI import (  # noqa: E501
+        from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.adapters.primary.openai_gateway__primary_adapter__FastAPI import (
             _list_agent_model_ids,
         )
 
@@ -910,7 +910,7 @@ def _wait_for_sidecar(base: str, secret: str, *, timeout_s: float = 15.0) -> boo
 
 
 def _wait_for_harness(base: str, *, timeout_s: float = 15.0) -> bool:
-    from naas_abi_core.services.coding_environment.adapters.secondary.OpencodeHarnessClient import (  # noqa: PLC0415
+    from naas_abi_core.services.coding_environment.adapters.secondary.OpencodeHarnessClient import (
         wait_for_healthy,
     )
 

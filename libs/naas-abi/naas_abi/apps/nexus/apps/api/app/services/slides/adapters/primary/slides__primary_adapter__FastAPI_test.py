@@ -274,7 +274,7 @@ def test_probe_sidecar_requires_base_and_secret() -> None:
 def test_wait_for_sidecar_retries_until_ready(monkeypatch) -> None:
     calls = {"n": 0}
 
-    def fake_probe(base, secret, *, timeout_s=2.0):  # noqa: ANN001
+    def fake_probe(base, secret, *, timeout_s=2.0):
         calls["n"] += 1
         return calls["n"] >= 3
 
@@ -341,7 +341,7 @@ def test_slides_template_names_match_local_directory_adapter(tmp_path) -> None:
     Without this the runtime probe never picks a template and the deck view
     shows a permanent "Coder runtime unavailable" banner.
     """
-    from naas_abi_core.services.coding_environment.adapters.secondary.LocalDirectoryAdapter import (  # noqa: E501
+    from naas_abi_core.services.coding_environment.adapters.secondary.LocalDirectoryAdapter import (
         LocalDirectoryAdapter,
     )
 
@@ -467,7 +467,7 @@ class _FakeLocalCoding:
         return None
 
 
-def _only_the_local_sidecar_answers(base, secret, *, timeout_s=2.0):  # noqa: ANN001
+def _only_the_local_sidecar_answers(base, secret, *, timeout_s=2.0):
     del timeout_s
     return (base, secret) in {
         (_LOCAL_SIDECAR_BASE, _LOCAL_SIDECAR_SECRET),
@@ -519,7 +519,7 @@ def test_runtime_reports_the_adapter_binding_for_lookup(monkeypatch) -> None:
     captured: dict[str, str] = {}
     real_wait = slides_api._wait_for_sidecar
 
-    def _record(base, secret, **kwargs):  # noqa: ANN001
+    def _record(base, secret, **kwargs):
         captured["base"] = str(base)
         captured["secret"] = str(secret)
         return real_wait(base, secret, **kwargs)

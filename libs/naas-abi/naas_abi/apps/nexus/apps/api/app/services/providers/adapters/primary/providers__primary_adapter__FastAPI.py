@@ -3,14 +3,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
-from naas_abi.apps.nexus.apps.api.app.services.providers.adapters.primary.providers__primary_adapter__schemas import (  # noqa: E501
+from naas_abi.apps.nexus.apps.api.app.services.providers.adapters.primary.providers__primary_adapter__schemas import (
     Model,
     ModelUpdate,
     Provider,
     to_model_schema,
     to_provider_schema,
 )
-from naas_abi.apps.nexus.apps.api.app.services.providers.adapters.secondary.providers__secondary_adapter__postgres import (  # noqa: E501
+from naas_abi.apps.nexus.apps.api.app.services.providers.adapters.secondary.providers__secondary_adapter__postgres import (
     ModelCatalogSecondaryAdapterPostgres,
 )
 from naas_abi.apps.nexus.apps.api.app.services.providers.service import ProviderService

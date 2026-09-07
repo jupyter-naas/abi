@@ -13,10 +13,10 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     require_workspace_platform_drive,
     require_workspace_system_drive,
 )
-from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__dependencies import (  # noqa: E501
+from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__dependencies import (
     get_files_service,
 )
-from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__schemas import (  # noqa: E501
+from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__schemas import (
     CreateFileRequest,
     CreateFolderRequest,
     FileContent,

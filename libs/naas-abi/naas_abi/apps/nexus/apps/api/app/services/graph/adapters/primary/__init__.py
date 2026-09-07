@@ -1,8 +1,8 @@
-from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__FastAPI import (  # noqa: E501
+from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__FastAPI import (
     GraphFastAPIPrimaryAdapter,
     router,
 )
-from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__schemas import (  # noqa: E501
+from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__schemas import (
     GraphClear,
     GraphCreate,
     GraphData,

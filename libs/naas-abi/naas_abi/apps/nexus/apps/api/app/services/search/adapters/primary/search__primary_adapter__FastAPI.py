@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
-from naas_abi.apps.nexus.apps.api.app.services.search.adapters.primary.search__primary_adapter__dependencies import (  # noqa: E501
+from naas_abi.apps.nexus.apps.api.app.services.search.adapters.primary.search__primary_adapter__dependencies import (
     get_search_service,
 )
-from naas_abi.apps.nexus.apps.api.app.services.search.adapters.primary.search__primary_adapter__schemas import (  # noqa: E501
+from naas_abi.apps.nexus.apps.api.app.services.search.adapters.primary.search__primary_adapter__schemas import (
     PrivateSearchRequest,
     PrivateSearchResponse,
     SearchRequest,
