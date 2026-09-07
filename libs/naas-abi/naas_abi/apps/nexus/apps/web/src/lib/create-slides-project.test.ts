@@ -1,8 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+
+import type { Agent } from '@/stores/agents';
+import { useAgentsStore } from '@/stores/agents';
+import { useWorkspaceStore } from '@/stores/workspace';
 
 import {
   DEFAULT_SLIDES_TEMPLATE_ID,
-  PREFERRED_SLIDES_CHAT_MODEL,
+  openSlidesAgentPane,
   parseFastApiDetail,
   slidesApiErrorMessage,
   untitledSlidesSlug,
@@ -24,9 +28,55 @@ describe('DEFAULT_SLIDES_TEMPLATE_ID', () => {
   });
 });
 
-describe('PREFERRED_SLIDES_CHAT_MODEL', () => {
-  it('uses the paid OpenRouter model from config', () => {
-    expect(PREFERRED_SLIDES_CHAT_MODEL).toBe('gpt-4.1-mini');
+/**
+ * Opening the slides pane used to write a model into the composer selection.
+ * The server decides the slides model and always has, so the pin was one side
+ * of a negotiation the other side was never having: it picked gpt-4.1-mini,
+ * the backend replaced it, and the two disagreed on every deck.
+ *
+ * These assert the call site stopped writing, not that a constant is gone.
+ * Checking the export would only prove a declaration was deleted, which says
+ * nothing about whether anything still reaches into the store.
+ */
+describe('openSlidesAgentPane', () => {
+  const ABI_ID = 'agent-abi';
+
+  const seedAgent = (): void => {
+    useAgentsStore.setState({
+      agents: [
+        {
+          id: ABI_ID,
+          name: 'Abi',
+          class_name: 'naas_abi.agents/AbiAgent',
+          enabled: true,
+          isDefault: true,
+          modelIds: ['gpt-4.1-mini', 'anthropic/claude-sonnet-5'],
+        } as Agent,
+      ],
+    });
+  };
+
+  beforeEach(() => {
+    seedAgent();
+    useWorkspaceStore.setState({ selectedChatModels: {}, paneAgentExplicitlySelected: false });
+  });
+
+  it('leaves a selected model alone, including the free one the pin replaced', () => {
+    useWorkspaceStore.setState({
+      selectedChatModels: { [ABI_ID]: 'google/gemma-4-26b-a4b-it:free' },
+    });
+
+    openSlidesAgentPane();
+
+    expect(useWorkspaceStore.getState().selectedChatModels[ABI_ID]).toBe(
+      'google/gemma-4-26b-a4b-it:free',
+    );
+  });
+
+  it('does not seed a selection where the user never made one', () => {
+    openSlidesAgentPane();
+
+    expect(useWorkspaceStore.getState().selectedChatModels[ABI_ID]).toBeUndefined();
   });
 });
 

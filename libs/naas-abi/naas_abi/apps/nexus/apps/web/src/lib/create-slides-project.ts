@@ -5,8 +5,6 @@ import { useWorkspaceStore } from '@/stores/workspace';
 
 export const DEFAULT_SLIDES_TEMPLATE_ID = 'minimal-light-v1';
 export const DEFAULT_SLIDES_TITLE = 'Untitled presentation';
-export const PREFERRED_SLIDES_CHAT_MODEL = 'gpt-4.1-mini';
-export const PREFERRED_SLIDES_CHAT_MODELS = ['gpt-4.1-mini', 'openai/gpt-4.1-mini'];
 
 const REPO_ID_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 
@@ -70,27 +68,12 @@ function pickAbiAgentId(): string | null {
   return abi?.id ?? null;
 }
 
-function pinSlidesChatModel(agentId: string): void {
-  const agent = useAgentsStore.getState().agents.find((a) => a.id === agentId);
-  const available = [
-    ...(agent?.modelIds ?? []),
-    agent?.resolvedModelId,
-    agent?.modelId,
-    ...PREFERRED_SLIDES_CHAT_MODELS,
-  ].filter((id): id is string => Boolean(id));
-  const unique = [...new Set(available)];
-  const preferred =
-    unique.find((id) => PREFERRED_SLIDES_CHAT_MODELS.includes(id)) ||
-    unique.find((id) => !id.includes(':free')) ||
-    null;
-  if (!preferred) return;
-  const current = useWorkspaceStore.getState().selectedChatModels[agentId];
-  if (!current || current.includes(':free')) {
-    useWorkspaceStore.getState().setSelectedChatModel(agentId, preferred);
-  }
-}
-
-/** Open the Abi pane beside the deck so the next message can edit it. */
+/** Open the Abi pane beside the deck so the next message can edit it.
+ *
+ * The composer selection is left exactly as the user left it. The server picks
+ * the model for a slides turn and reports it back on the stream's opening
+ * `llm_model` frame, so the footer stays honest without the client guessing.
+ */
 export function openSlidesAgentPane(opts?: { freshChat?: boolean }): void {
   const ws = useWorkspaceStore.getState();
   ws.setContextPanelOpen(true);
@@ -98,9 +81,8 @@ export function openSlidesAgentPane(opts?: { freshChat?: boolean }): void {
     ws.setPaneConversationId(null);
   }
   const abiId = pickAbiAgentId();
-  if (abiId) {
-    if (!ws.paneAgentExplicitlySelected) ws.setPaneAgent(abiId);
-    pinSlidesChatModel(abiId);
+  if (abiId && !ws.paneAgentExplicitlySelected) {
+    ws.setPaneAgent(abiId);
   }
 }
 
