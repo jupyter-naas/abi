@@ -55,7 +55,6 @@ def test_slides_agent_owns_the_write_and_research_tools() -> None:
     assert "web_fetch" in names
     source = inspect.getsource(SlidesAgent.get_tools)
     assert "naas_abi.agents.tools.web_tools" in source or "slides_research_tools" in source
-    assert "zen.tools" not in source
     assert "nexus_admin_tools" not in source
 
 

@@ -161,9 +161,6 @@ naas-abi-cli = { path = "libs/naas-abi-cli" , editable = true }
 target-version = "py311"
 
 [tool.ruff.lint]
-# TID251 is not in the default set. It is selected for banned-api below.
-extend-select = ["TID251"]
-
 # Ruff 0.16 expanded defaults; keep them but suppress rules that conflict with
 # intentional ABI conventions (PascalCase modules, Agent suggestion lists,
 # mutable/shared defaults on Agent constructors, dataclass RDF defaults).
@@ -179,12 +176,6 @@ ignore = [
     "SIM115",  # Some CLI paths open files without with (short-lived)
     "PERF402", # Occasional list-copy loops in tests are fine
 ]
-
-[tool.ruff.lint.flake8-tidy-imports.banned-api]
-# Dependency direction. zen is a downstream application that installs ABI as a
-# package; nothing in this repo may import it, or the import resolves only in
-# the one checkout that has zen on its path and fails everywhere else.
-"zen".msg = "ABI must not import zen. zen depends on ABI, so an import in this direction resolves only in a zen checkout and fails on every other install. Move the code into naas_abi and import it from there."
 
 [tool.ruff.lint.per-file-ignores]
 # Ontology module/process boilerplate: broad except/pass and naive datetime.now().

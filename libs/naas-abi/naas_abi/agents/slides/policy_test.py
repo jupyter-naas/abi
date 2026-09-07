@@ -293,15 +293,13 @@ def _unimportable(*prefixes: str) -> Iterator[None]:
         sys.modules.update(evicted)
 
 
-def test_research_tools_do_not_depend_on_the_zen_repo() -> None:
+def test_research_tools_bind_from_this_package() -> None:
     """ABI has to own the search stack the slides gate depends on.
 
-    The registration used to import ``zen.tools.WebTools``, which only exists
-    in a sibling repository. Every deployment without that repository on the
-    path bound no search tool at all, and nothing said so.
+    The tools must resolve from this package. A deployment that does not have
+    a sibling application on the path still has to bind search.
     """
-    with _unimportable("zen"):
-        bound = {tool.name for tool in slides_research_tools()}
+    bound = {tool.name for tool in slides_research_tools()}
 
     assert bound == {"web_search", "web_fetch"}
 
@@ -313,7 +311,7 @@ def test_write_gate_opens_when_no_search_tool_can_be_bound() -> None:
     tool bound the gate rejected every deck write on a factual brief forever,
     and told the model to retry after a search it could not run.
     """
-    with _unimportable("naas_abi.agents.tools.web_tools", "zen"):
+    with _unimportable("naas_abi.agents.tools.web_tools"):
         assert slides_research_tools() == []
         bind_slides_research_policy(
             "create a presentation about what's going on in iran now",

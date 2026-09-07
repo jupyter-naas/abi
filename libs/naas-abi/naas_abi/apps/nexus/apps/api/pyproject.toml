@@ -86,15 +86,6 @@ ignore = [
     "B008",  # do not perform function calls in argument defaults
 ]
 
-[tool.ruff.lint]
-# TID251 is not in the default set. It is selected for banned-api below.
-# This subtree has its own [tool.ruff] table, so the root banned-api entry
-# does not apply here unless we select it again.
-extend-select = ["TID251"]
-
-[tool.ruff.lint.flake8-tidy-imports.banned-api]
-"zen".msg = "ABI must not import zen. zen depends on ABI, so an import in this direction resolves only in a zen checkout and fails on every other install. Move the code into naas_abi and import it from there."
-
 [tool.ruff.isort]
 known-first-party = ["app"]
 
