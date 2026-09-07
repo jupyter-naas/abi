@@ -41,7 +41,11 @@ dependencies = [
     "python-socketio>=5.16.1",
     "thefuzz>=0.22.1",
     "pymupdf>=1.27.2.2",
-    "pymupdf4llm>=1.27.2.2"
+    "pymupdf4llm>=1.27.2.2",
+    # Backs the web_search tool (naas_abi.agents.tools.web_tools). AbiAgent
+    # binds that tool on every request with no feature flag, so this cannot be
+    # an extra: a default install would advertise a tool it cannot run.
+    "ddgs>=9.0.0"
 ]
 
 license = { text = "MIT License" }
