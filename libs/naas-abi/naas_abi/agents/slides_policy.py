@@ -1,7 +1,11 @@
-"""Slides chat policy: research first, then write; stronger model than mini.
+"""Slides chat policy: research first, then write, on the configured model.
 
 Used by AbiAgent, slides tools, and Nexus chat so a current-events brief cannot
 skip web_search and dump template filler into deck.html.
+
+The server owns the model for a slides turn. Whatever the composer had
+selected, slides run on ``abi_slides_agent_model``, the id is checked at boot,
+and a turn that overrides a selection says so at warning level.
 """
 
 from __future__ import annotations
@@ -22,23 +26,6 @@ from naas_abi_core.services.agent.context import (
 # a native Anthropic / ChatGPT registry id (api.anthropic.com / api.openai.com)
 # 401s. Route slides through OpenRouter instead.
 DEFAULT_SLIDES_MODEL = "anthropic/claude-sonnet-5"
-
-# Mini / free models skip tools and invent filler. Do not use them for slides
-# creation even if the UI still has them selected from an earlier turn.
-_WEAK_SLIDES_MODEL_IDS = frozenset(
-    {
-        "gpt-4.1-mini",
-        "openai/gpt-4.1-mini",
-        "gpt-5-mini",
-        "openai/gpt-5-mini",
-        "gpt-5-nano",
-        "openai/gpt-5-nano",
-        "google/gemma-4-26b-a4b-it:free",
-        "google/gemma-4-31b-it:free",
-        "gemma-4-26b-a4b-it",
-        "gemma-4-31b-it",
-    }
-)
 
 _COPY_EDIT_RE = re.compile(
     r"\b("
@@ -78,17 +65,6 @@ _SEARCH_BUDGET_MESSAGE = (
 )
 
 
-def is_weak_slides_model(model_id: str | None) -> bool:
-    raw = (model_id or "").strip().lower()
-    if not raw:
-        return True
-    if raw in _WEAK_SLIDES_MODEL_IDS:
-        return True
-    if raw.endswith(":free"):
-        return True
-    return raw.endswith("/gpt-4.1-mini")
-
-
 def configured_slides_model() -> str:
     try:
         from naas_abi import ABIModule
@@ -109,12 +85,31 @@ def resolve_slides_llm_model(
     incoming: str | None,
     slides_default: str | None = None,
 ) -> str:
-    """Pick a reasoning model for slides. Ignore mini/free selections."""
-    default = (slides_default or "").strip() or configured_slides_model()
+    """Return the configured slides model. The client's selection never wins.
+
+    This used to hand back ``incoming`` unless it matched a list of weak model
+    ids. That list was an allowlist of one written inside out: every model
+    released after it was written counted as good enough for a deck until
+    someone shipped a deck on it and added it, and it had already grown two
+    Gemma spellings and three GPT variants that way.
+
+    Overriding a user's choice is only acceptable because it is announced.
+    Nothing on this path logged anything, which is how a mini model writing
+    template filler survived long enough to cost a session of debugging.
+    """
+    effective = (slides_default or "").strip() or configured_slides_model()
     raw = (incoming or "").strip()
-    if raw and not is_weak_slides_model(raw):
-        return raw
-    return default
+    if raw and raw != effective:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "slides turn overriding the selected model %r with the configured "
+            "slides model %r (abi_slides_agent_model). Slides always run on the "
+            "configured model.",
+            raw,
+            effective,
+        )
+    return effective
 
 
 def open_slides_slug(client_context: dict | None) -> str:
@@ -131,13 +126,13 @@ def apply_slides_model_override(
     client_context: dict | None,
     message: str | None,
 ) -> str | None:
-    """Force a reasoning model for slides work.
+    """Route slides work onto the configured slides model.
 
     Covers both an open deck and a deck asked for from the main chat, where a
-    mini or free model would skip tools and write template filler.
+    model that skips tools writes template filler into the whole deck.
 
     ``message`` is required rather than defaulting to ``None``. A default let a
-    caller drop the user brief and silently keep the mini model on the
+    caller drop the user brief and silently keep the composer's model on the
     create-from-main-chat turn, which is the turn that writes the whole deck.
     Callers with genuinely no message must pass ``None`` on purpose.
     """

@@ -1,3 +1,4 @@
+import logging
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -11,7 +12,7 @@ from naas_abi.agents.slides_policy import (
     attach_slides_research_note,
     bind_slides_reasoning,
     bind_slides_research_policy,
-    is_weak_slides_model,
+    configured_slides_model,
     load_slides_chat_model,
     note_slides_web_search,
     openrouter_slides_model_id,
@@ -28,18 +29,6 @@ from naas_abi_core.services.agent.context import (
     slides_research_queries,
     slides_research_required,
 )
-
-
-def test_weak_models_include_mini_and_free_gemma() -> None:
-    assert is_weak_slides_model("gpt-4.1-mini")
-    assert is_weak_slides_model("openai/gpt-4.1-mini")
-    assert is_weak_slides_model("google/gemma-4-26b-a4b-it:free")
-    assert is_weak_slides_model("")
-    assert not is_weak_slides_model("gpt-5")
-    assert not is_weak_slides_model("openai/gpt-5")
-    assert not is_weak_slides_model("gpt-5.2")
-    assert not is_weak_slides_model("claude-sonnet-5")
-    assert not is_weak_slides_model("anthropic/claude-sonnet-5")
 
 
 def test_default_slides_model_is_claude_sonnet_5() -> None:
@@ -65,19 +54,75 @@ def test_slides_reasoning_extra_body_for_sonnet_and_gpt5() -> None:
     assert slides_reasoning_extra_body("gpt-4.1-mini") is None
 
 
-def test_resolve_slides_llm_model_upgrades_mini() -> None:
+def test_resolve_slides_llm_model_always_returns_the_configured_model() -> None:
+    """Every incoming selection resolves to the configured slides model.
+
+    The previous version returned the caller's selection unless it appeared in
+    a hand-maintained list of nine weak model ids, which is an allowlist of one
+    written inside out: every model released after the list was written was
+    treated as good enough for a deck until someone shipped a deck on it and
+    added it. A strong-looking selection is checked here alongside the weak
+    ones so the rule is one rule, not a lookup.
+    """
     assert resolve_slides_llm_model("gpt-4.1-mini", slides_default="gpt-5") == "gpt-5"
     assert (
         resolve_slides_llm_model("google/gemma-4-26b-a4b-it:free", slides_default="gpt-5")
         == "gpt-5"
     )
-    assert resolve_slides_llm_model("gpt-5.2", slides_default="gpt-5") == "gpt-5.2"
+    assert resolve_slides_llm_model("gpt-5.2", slides_default="gpt-5") == "gpt-5"
     assert resolve_slides_llm_model(None, slides_default="gpt-5") == "gpt-5"
     assert resolve_slides_llm_model(None, slides_default=None) == DEFAULT_SLIDES_MODEL
 
 
 def test_apply_slides_model_override_when_deck_open() -> None:
+def test_resolve_slides_llm_model_warns_when_it_overrides_the_selection(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Replacing the user's model silently is the bug this design replaces.
+
+    The server now decides the slides model outright, so a user who picks Opus
+    for a deck gets the configured model instead. That is the accepted
+    tradeoff, but only because it is announced. Nothing on this path logged
+    anything before, which is why a mini model writing template filler took a
+    full session to find.
+    """
+    with caplog.at_level(logging.WARNING, logger="naas_abi.agents.slides_policy"):
+        effective = resolve_slides_llm_model("gpt-5.2", slides_default="gpt-5")
+
+    assert effective == "gpt-5"
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert "gpt-5.2" in message
+    assert "gpt-5" in message
+
+
+def test_resolve_slides_llm_model_is_quiet_when_nothing_was_overridden(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A warning on every slides turn is a warning nobody reads.
+
+    Only a genuine substitution is worth a line: the selection already being
+    the slides model, or there being no selection at all, took nothing away
+    from the user.
+    """
+    with caplog.at_level(logging.WARNING, logger="naas_abi.agents.slides_policy"):
+        assert resolve_slides_llm_model("gpt-5", slides_default="gpt-5") == "gpt-5"
+        assert resolve_slides_llm_model(None, slides_default="gpt-5") == "gpt-5"
+        assert resolve_slides_llm_model("", slides_default="gpt-5") == "gpt-5"
+
+    assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+
+
     assert apply_slides_model_override("gpt-4.1-mini", None, None) == "gpt-4.1-mini"
+    """Inverted: a strong selection no longer survives an open deck either.
+
+    This assertion used to read ``== "gpt-5.2"``. The client's selection won
+    whenever it was not on the weak list, so the configured slides model was
+    only ever a fallback, and adding a model to the list was the only way to
+    route a deck onto it. The configured model now owns every slides turn, and
+    the pair of assertions below is the whole behaviour change.
+    """
     assert (
         apply_slides_model_override("gpt-4.1-mini", {"slides": {}}, None) == "gpt-4.1-mini"
     )
@@ -87,7 +132,7 @@ def test_apply_slides_model_override_when_deck_open() -> None:
             {"slides": {"slug": "iran-now"}},
             None,
         )
-        == DEFAULT_SLIDES_MODEL
+        == configured_slides_model()
     )
     assert (
         apply_slides_model_override(
@@ -95,7 +140,7 @@ def test_apply_slides_model_override_when_deck_open() -> None:
             {"slides": {"slug": "iran-now"}},
             None,
         )
-        == "gpt-5.2"
+        == configured_slides_model()
     )
 
 
@@ -451,8 +496,11 @@ def test_bind_slides_reasoning_keeps_the_chat_class_and_shares_the_client() -> N
 
 
 def test_model_override_upgrades_a_deck_request_from_main_chat() -> None:
-    """A weak model invents filler instead of calling tools. Upgrade it even
-    when no deck is open, otherwise chat-created decks are template junk.
+    """The deck request from the main chat is the turn that writes the deck.
+
+    No deck is open on that turn, so the brief is the only signal that the
+    slides model should own it. Without this branch a chat-created deck runs
+    on whatever the composer had selected and comes out as template junk.
     """
     # No deck open and no deck asked for: leave the user's choice alone.
     assert (
