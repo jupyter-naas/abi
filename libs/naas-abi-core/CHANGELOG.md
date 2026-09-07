@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v2.31.0 (2026-09-07)
+
+### Code Style
+
+- **object-storage**: Sort the new tests' imports as ruff expects
+  ([#1244](https://github.com/jupyter-naas/abi/pull/1244),
+  [`f0675f4`](https://github.com/jupyter-naas/abi/commit/f0675f4dfc8a508a9d8ff2f7b851efaa5f8c5a9f))
+
+### Features
+
+- **object-storage**: Add recursive listing to the port and adapters
+  ([#1244](https://github.com/jupyter-naas/abi/pull/1244),
+  [`f0675f4`](https://github.com/jupyter-naas/abi/commit/f0675f4dfc8a508a9d8ff2f7b851efaa5f8c5a9f))
+
+
 ## v2.30.0 (2026-09-03)
 
 ### Bug Fixes
