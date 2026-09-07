@@ -25,6 +25,45 @@ def test_nexus_config_rejects_legacy_cors_origins() -> None:
         NexusConfig(cors_origins='["https://nexus.example.com"]')
 
 
+def test_a_slides_template_source_survives_the_trip_into_nexus_settings() -> None:
+    """The stanza in config.yaml has to arrive at the slides resolver.
+
+    NexusConfig is model_dump'd into the Nexus Settings, and both forbid extra
+    keys, so a field declared on one side and not the other fails the boot on
+    a config file that reads as correct. Walking the actual route is the only
+    way to catch that; asserting the field exists on either model would not.
+    """
+    from naas_abi.apps.nexus.apps.api.app.core.config import Settings
+
+    dumped = NexusConfig(
+        slides_template_sources=[{"namespace": "acme", "path": "src/acme/templates"}]
+    ).model_dump(exclude_none=True)
+
+    settings = Settings(**dumped)
+
+    (source,) = settings.slides_template_sources
+    assert source.namespace == "acme"
+    assert source.path == "src/acme/templates"
+
+
+def test_a_slides_template_source_cannot_claim_the_abi_namespace() -> None:
+    """Refused on the boot, before a picker can serve the wrong deck.
+
+    The reserved name is checked once, in the Nexus Settings, rather than in
+    both models. NexusConfig mirrors the shape of config.yaml and Settings
+    owns what the values may be, so a second copy here would be a second
+    place for the reserved name to drift out of step.
+    """
+    from naas_abi.apps.nexus.apps.api.app.core.config import Settings
+
+    dumped = NexusConfig(
+        slides_template_sources=[{"namespace": "abi", "path": "src/x/templates"}]
+    ).model_dump(exclude_none=True)
+
+    with pytest.raises(ValidationError, match="reserved"):
+        Settings(**dumped)
+
+
 @pytest.fixture
 def _restore_module_instance() -> Iterator[None]:
     """Constructing a module registers it as the process-wide instance.
