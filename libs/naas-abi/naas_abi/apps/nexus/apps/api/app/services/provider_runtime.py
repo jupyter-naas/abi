@@ -696,8 +696,9 @@ async def complete_chat(
     messages: list[Message],
     config: ProviderConfig,
     system_prompt: str | None,
+    *,
     thread_id: str | None = None,
-    injection_preamble: str | None = None,
+    injection_preamble: str | None,
 ) -> str:
     """
     Route chat completion to the appropriate provider.
@@ -731,8 +732,9 @@ async def complete_with_abi(
     messages: list[Message],
     config: ProviderConfig,
     system_prompt: str | None,
+    *,
     thread_id: str | None = None,
-    injection_preamble: str | None = None,
+    injection_preamble: str | None,
 ) -> str:
     del system_prompt
 
