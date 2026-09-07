@@ -1,27 +1,28 @@
 # EmailAddress
 
 ## What it is
-- A thin subclass of `EmailAddress` imported from `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn`.
-- Provides an `actions()` hook intended for custom logic (currently unimplemented).
+- A thin wrapper class that subclasses `EmailAddress` from `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn`.
+- Provides an `actions()` method intended as a customization hook (currently empty).
 
 ## Public API
 - `class EmailAddress(_EmailAddress)`
-  - `actions(self)`
-    - Placeholder method for implementing action logic.
-    - Currently does nothing (`pass`).
+  - Subclasses the upstream `_EmailAddress`.
+- `EmailAddress.actions(self)`
+  - Placeholder method for implementing action logic.
+  - No implementation in this file.
 
 ## Configuration/Dependencies
-- Depends on:
-  - `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.EmailAddress` (imported as `_EmailAddress`)
+- Imports and depends on:
+  - `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.EmailAddress` (aliased as `_EmailAddress`)
 
 ## Usage
 ```python
 from naas_abi_marketplace.applications.linkedin.ontologies.classes.ontology.naas.ai.abi.linkedin.EmailAddress import EmailAddress
 
-email_action = EmailAddress()
-email_action.actions()  # currently no-op
+obj = EmailAddress()
+obj.actions()  # no behavior implemented here
 ```
 
 ## Caveats
-- `actions()` is a no-op; you must implement logic by overriding or editing the method.
-- Any behavior beyond `actions()` comes from the imported base class `_EmailAddress` (not shown here).
+- `actions()` has no body in this file; calling it will not execute any custom logic unless implemented.
+- Any actual behavior/attributes come from the base class `_EmailAddress` (defined in the imported module).

@@ -1,62 +1,58 @@
 # PubMedAgent
 
 ## What it is
-- A thin agent factory for a PubMed-focused `Agent` configured with:
-  - A PubMed search pipeline exposed as tools.
-  - A helper tool to download PubMed Central PDFs by PMCID and store them in object storage.
-- Includes constants for the agent name, description, and system prompt.
+- An `Agent` specialized for searching PubMed, with:
+  - Tools from `PubMedPipeline`.
+  - An additional tool to download PubMed Central PDFs by PMCID and store them in object storage.
+- Provides a built-in system prompt instructing results to be displayed as Markdown tables.
 
 ## Public API
 - **Class `PubMedAgent(Agent)`**
-  - Subclasses `naas_abi_core.services.agent.Agent.Agent`.
-  - No additional methods/attributes (defined as `pass`).
+  - **Class attributes**
+    - `name: str = "PubMedAgent"`
+    - `description: str = "PubMedAgent is an agent that can search for papers in PubMed."`
+    - `system_prompt: str` (includes Markdown-table requirement)
+  - **Class method `New(cls, agent_shared_state=None, agent_configuration=None) -> PubMedAgent`**
+    - Factory that builds and returns a configured `PubMedAgent`.
+    - Initializes:
+      - Chat model from `ABIModule.get_instance().engine.services.model_registry.get_default_chat_model()`.
+      - Tools from `PubMedPipeline(...).as_tools()` plus a `download_pdf` tool (defined inside `New`).
+      - `AgentConfiguration(system_prompt=cls.system_prompt)` if not provided.
+      - `AgentSharedState(thread_id=<uuid hex>)` if not provided.
 
-- **Tool function `download_pdf(pmcids: List[str]) -> str`**
-  - LangChain tool (`@tool`) to download one or more PDFs from PubMed Central using PMCIDs.
-  - Behavior:
-    - For each PMCID:
-      - Downloads PDF bytes via `PubMedIntegration(PubMedAPIConfiguration()).download_pubmed_central_pdf(pmcid)`.
-      - Writes to a temporary file, then uploads to object storage at:
-        - bucket/prefix: `"pubmed/pdfs"`
-        - key: `"{pmcid}.pdf"`
-      - Deletes the temporary file.
-    - Runs downloads concurrently via `ThreadPoolExecutor(max_workers=10)`.
-  - Returns: `"PDFs downloaded and saved."`
-
-- **Factory function `create_agent() -> PubMedAgent`**
-  - Builds a `PubMedPipeline` and converts it to tools via `pipeline.as_tools()`.
-  - Returns a `PubMedAgent` configured with:
-    - `name`, `description`, `system_prompt` constants.
-    - Chat model: `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1.model.model` (cast to `ChatModel`).
-    - Tools: pipeline tools + `download_pdf`.
-    - State: `AgentSharedState(thread_id=<random uuid hex>)`.
-    - `memory=None`, `agents=[]`.
+- **Tool `download_pdf(pmcids: list[str]) -> str`** *(defined inside `PubMedAgent.New`)*  
+  - LangChain tool (`@tool`) with description: `"Download a PDF from PubMed Central using it's PMCID"`.
+  - For each PMCID:
+    - Downloads PDF bytes via `PubMedIntegration(PubMedAPIConfiguration()).download_pubmed_central_pdf(pmcid)`.
+    - Writes to a temporary file, uploads to object storage:
+      - bucket/prefix: `"pubmed/pdfs"`
+      - key: `"{pmcid}.pdf"`
+    - Deletes the temporary file.
+  - Executes downloads concurrently via `ThreadPoolExecutor(max_workers=10)`.
+  - Returns `"PDFs downloaded and saved."`.
 
 ## Configuration/Dependencies
-- **External services**
-  - Object storage is accessed through `ABIModule.get_instance().engine.services.object_storage` and must be available/configured in the runtime.
-
+- **Runtime services (required)**
+  - `ABIModule.get_instance().engine.services.model_registry` must be initialized (asserted).
+  - `ABIModule.get_instance().engine.services.object_storage` must be available for PDF storage uploads.
 - **PubMed integration**
-  - Uses `PubMedIntegration` + `PubMedAPIConfiguration` to download PDFs from PubMed Central.
-
+  - Uses `PubMedIntegration` and `PubMedAPIConfiguration` to fetch PubMed Central PDFs.
 - **Pipeline**
-  - `PubMedPipeline(PubMedPipelineConfiguration())` is used to provide additional tools (not defined in this file).
-
-- **Model**
-  - Uses the `gpt_4_1` chat model wrapper imported as `model`.
+  - Uses `PubMedPipeline` and `PubMedPipelineConfiguration` to provide additional tools.
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.pubmed.agents.PubMedAgent import create_agent, download_pdf
+from naas_abi_marketplace.applications.pubmed.agents.PubMedAgent import PubMedAgent
 
-agent = create_agent()
+agent = PubMedAgent.New()
 
-# Use the tool directly (requires ABIModule/object_storage to be configured in your environment)
-result = download_pdf(["PMC1234567", "PMC7654321"])
-print(result)
+# Agent tools include PubMedPipeline tools plus "download_pdf".
+# How you call tools depends on the Agent runtime in naas_abi_core.
+print(agent.name, agent.description)
 ```
 
 ## Caveats
-- `download_pdf` prints `"Downloading {pmcid}"` to stdout for each PMCID.
-- Files are downloaded concurrently (up to 10 workers); failures/exceptions during download or storage upload are not handled in this function.
-- The agent’s system prompt requires displaying tool results as a Markdown table, but this file does not enforce formatting beyond the prompt text.
+- `download_pdf` is defined inside `PubMedAgent.New`; it is not importable from the module as a top-level function.
+- `download_pdf` prints `Downloading {pmcid}` to stdout for each PMCID.
+- No explicit error handling is implemented for download/upload failures; exceptions will propagate.
+- The system prompt requests Markdown table output, but enforcement is prompt-based (not programmatic).

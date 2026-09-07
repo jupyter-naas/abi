@@ -1,18 +1,18 @@
 # CurrentOrganization
 
 ## What it is
-- A thin subclass wrapper around `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.CurrentOrganization`.
-- Intended as an action class hook point for adding custom logic via `actions()`.
+- A thin subclass of `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.CurrentOrganization`.
+- Provides a hook (`actions`) intended for adding custom logic.
 
 ## Public API
 - `class CurrentOrganization(_CurrentOrganization)`
   - `actions(self)`
-    - Placeholder method for implementing action logic.
-    - Currently does nothing (`pass`).
+    - Stub method intended to contain action logic.
+    - Currently has no implementation and implicitly returns `None`.
 
 ## Configuration/Dependencies
-- Depends on:
-  - `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.CurrentOrganization` (imported as `_CurrentOrganization`).
+- Imports and extends:
+  - `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.CurrentOrganization` (aliased as `_CurrentOrganization`)
 
 ## Usage
 ```python
@@ -20,9 +20,10 @@ from naas_abi_marketplace.applications.linkedin.ontologies.classes.ontology.naas
     CurrentOrganization,
 )
 
-obj = CurrentOrganization()
-obj.actions()  # no-op by default
+co = CurrentOrganization()
+result = co.actions()  # currently a no-op; result is None
+print(result)
 ```
 
 ## Caveats
-- `actions()` is not implemented in this class; calling it has no effect unless overridden or implemented.
+- `actions()` is not implemented in this class; calling it performs no action unless you add logic (e.g., by editing this method or subclassing).

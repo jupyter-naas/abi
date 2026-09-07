@@ -228,6 +228,27 @@ class EventService(ServiceBase, IEventService):
         )
         return [self._reconstruct(row, event_class) for row in rows]
 
+    def seek_consumer_to_end(
+        self, consumer_id: str, event_class: type[LogProcess]
+    ) -> dict[str, Any]:
+        """Jump ``consumer_id`` to the latest seq for ``event_class``.
+
+        Pending events between the previous cursor and now are skipped
+        permanently for this consumer. Returns ``cursor_before`` /
+        ``cursor_after`` so callers can log how far the seek jumped.
+        """
+        event_type = str(event_class._class_uri)
+        before = self._adapter.get_cursor(consumer_id, event_type)
+        mx = self._adapter.max_seq(event_type)
+        if before != mx:
+            self._adapter.set_cursor(consumer_id, event_type, mx)
+        return {
+            "consumer_id": consumer_id,
+            "event_type": event_type,
+            "cursor_before": before,
+            "cursor_after": mx,
+        }
+
     def iter_query_for_consumer(
         self,
         consumer_id: str,

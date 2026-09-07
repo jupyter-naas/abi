@@ -1,9 +1,19 @@
 import io
 from concurrent.futures import ThreadPoolExecutor
 
+import pytest
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
     ObjectStorageSecondaryAdapterFS,
 )
+from naas_abi_core.services.object_storage.tests.object_storage__secondary_adapter__generic_test import (
+    ObjectStorageSecondaryAdapterContract,
+)
+
+
+def test_put_object_creates_nested_key_directories(tmp_path):
+    adapter = ObjectStorageSecondaryAdapterFS(base_path=str(tmp_path / "storage"))
+    adapter.put_object("signals/github/data", "jupyter-naas/repos/stamp.json", b"{}")
+    assert adapter.get_object("signals/github/data", "jupyter-naas/repos/stamp.json") == b"{}"
 
 
 def test_put_object_stream_writes_from_a_stream(tmp_path):
@@ -33,3 +43,9 @@ def test_atomic_concurrent_put(tmp_path):
 
     data = adapter.get_object("objects", "k.bin")
     assert data.startswith(b"value-")
+
+
+class TestObjectStorageSecondaryAdapterFS(ObjectStorageSecondaryAdapterContract):
+    @pytest.fixture
+    def adapter(self, tmp_path) -> ObjectStorageSecondaryAdapterFS:
+        return ObjectStorageSecondaryAdapterFS(base_path=str(tmp_path / "storage"))

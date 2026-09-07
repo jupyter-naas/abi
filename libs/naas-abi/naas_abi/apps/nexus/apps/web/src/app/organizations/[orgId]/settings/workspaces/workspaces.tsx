@@ -98,9 +98,9 @@ export default function OrganizationWorkspacesPage() {
             >
               <div className="mb-4 flex items-start justify-between">
                 {logo ? (
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-transparent">
+                  <div className="relative h-12 w-12 overflow-hidden p-0 ring-2 ring-workspace-accent">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={logo} alt={workspace.name} className="h-12 w-12 rounded-xl object-contain" />
+                    <img src={logo} alt={workspace.name} className="absolute inset-0 h-full w-full object-cover" />
                   </div>
                 ) : (
                   <div className="flex h-12 w-12 items-center justify-center rounded-xl text-2xl" style={{ backgroundColor: '#22c55e20' }}>

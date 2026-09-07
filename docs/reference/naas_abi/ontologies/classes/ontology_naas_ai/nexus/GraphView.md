@@ -17,7 +17,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.GraphView import GraphView
+from naas_abi.ontologies.classes.ontology_demo.nexus.GraphView import GraphView
 
 gv = GraphView()
 gv.actions()  # no-op in this implementation

@@ -3,9 +3,9 @@ name = "abi"
 version = "0.1.0"
 description = "Agentic Brain Infrastructure - AI Operating System"
 authors = [
-    { name = "Maxime Jublou", email = "maxime@naas.ai" },
-    { name = "Florent Ravenel", email = "florent@naas.ai" },
-    { name = "Jeremy Ravenel", email = "jeremy@naas.ai" },
+    { name = "Grace Lambert", email = "maxime@naas.ai" },
+    { name = "Alice Dupont", email = "florent@naas.ai" },
+    { name = "Emma Petit", email = "jeremy@naas.ai" },
 ]
 requires-python = ">=3.11,<4"
 readme = "README.md"
@@ -55,6 +55,7 @@ dependencies = [
     "naas-abi-marketplace[applications-spotify]",
     "naas-abi-marketplace[applications-twilio]",
     "naas-abi-marketplace[applications-worldbank]",
+    "naas-abi-marketplace[applications-x]",
     "naas-abi-marketplace[applications-yahoofinance]",
     "naas-abi-marketplace[domains-ontology-engineer]",
     # "requests[socks]>=2.32.3,<3",

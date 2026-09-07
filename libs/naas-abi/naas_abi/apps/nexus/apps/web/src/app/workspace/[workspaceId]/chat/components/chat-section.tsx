@@ -41,7 +41,6 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
     selectedAgent,
     agentExplicitlySelected,
     setSelectedAgent,
-    clearAgentExplicitSelection,
     togglePinConversation,
     toggleArchiveConversation,
     renameConversation,
@@ -68,10 +67,6 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const isChatRoute = pathname.startsWith(getWorkspacePath(currentWorkspaceId, '/chat'));
   const isNewChatState = isChatRoute && !activeConversationId;
   const isNewChatActive = isNewChatState && !agentExplicitlySelected;
-
-  useEffect(() => {
-    if (!isChatRoute) clearAgentExplicitSelection();
-  }, [isChatRoute, clearAgentExplicitSelection]);
 
   useEffect(() => {
     if (!currentWorkspaceId) return;
@@ -147,22 +142,26 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   }, [conversations, safeProjects]);
 
   const handleNewChat = useCallback(() => {
-    const defaultAgent =
-      safeAgents.find((a) => a.isDefault && a.enabled) ??
-      safeAgents.find((a) => a.enabled);
-    if (defaultAgent) setSelectedAgent(defaultAgent.id);
+    if (!agentExplicitlySelected) {
+      const defaultAgent =
+        safeAgents.find((a) => a.isDefault && a.enabled) ??
+        safeAgents.find((a) => a.enabled);
+      if (defaultAgent) setSelectedAgent(defaultAgent.id);
+    }
     setActiveConversation(null);
     setMobilePendingChatSlug(NEW_CHAT_SLUG);
     router.push(newChatPath(currentWorkspaceId));
-  }, [safeAgents, setSelectedAgent, setActiveConversation, setMobilePendingChatSlug, router, currentWorkspaceId]);
+  }, [safeAgents, agentExplicitlySelected, setSelectedAgent, setActiveConversation, setMobilePendingChatSlug, router, currentWorkspaceId]);
 
   const handleChatHeaderNavigate = useCallback(() => {
-    const defaultAgent =
-      safeAgents.find((a) => a.isDefault && a.enabled) ??
-      safeAgents.find((a) => a.enabled);
-    if (defaultAgent) setSelectedAgent(defaultAgent.id);
+    if (!agentExplicitlySelected) {
+      const defaultAgent =
+        safeAgents.find((a) => a.isDefault && a.enabled) ??
+        safeAgents.find((a) => a.enabled);
+      if (defaultAgent) setSelectedAgent(defaultAgent.id);
+    }
     setActiveConversation(null);
-  }, [safeAgents, setSelectedAgent, setActiveConversation]);
+  }, [safeAgents, agentExplicitlySelected, setSelectedAgent, setActiveConversation]);
 
   const handleSelectConversation = useCallback((id: string) => {
     setMobilePendingChatSlug(id);

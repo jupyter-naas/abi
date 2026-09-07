@@ -2,19 +2,22 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, ChevronLeft, ChevronRight, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
-import { useWorkspaceStore, type AgentType, type Message, type MessageFeedback, type MessageFeedbackDetails, type SidebarSection, type ToolCall } from '@/stores/workspace';
+import { useWorkspaceStore, getModelHistory, type AgentType, type Message, type MessageFeedback, type MessageFeedbackDetails, type SidebarSection, type ToolCall } from '@/stores/workspace';
+import { useSurfaceConversation } from '@/stores/chat-thread-selectors';
 import { nextChatUrl } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
+import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
 import { dispatchSlidesDeckUpdated, useSlidesStore } from '@/stores/slides';
+import { dispatchCodeFileUpdated, useCodeStore } from '@/stores/code';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { useTenant } from '@/contexts/tenant-context';
@@ -24,15 +27,15 @@ import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
+import { getLogoUrl } from '@/lib/logo-url';
+import {
+  activeSuggestions,
+  suggestionRowNavState,
+  suggestionScrollStep,
+  type ChatSuggestion,
+} from '@/lib/suggestion-row';
 
 const getApiBase = () => getApiUrl();
-
-// Helper to get logo URL (prefix relative URLs with API base)
-const getLogoUrl = (url: string | null): string | undefined => {
-  if (!url) return undefined;
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  return `${getApiBase()}${url}`; // Relative URL -> add API base
-};
 
 // Max image size for uploads (5MB)
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -823,7 +826,6 @@ export function ChatInterface({
   const setSelectedAgent = useWorkspaceStore((s) => s.setSelectedAgent);
   const addMessage = useWorkspaceStore((s) => s.addMessage);
   const updateLastMessage = useWorkspaceStore((s) => s.updateLastMessage);
-  const getWorkspaceConversations = useWorkspaceStore((s) => s.getWorkspaceConversations);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const loadConversationMessages = useWorkspaceStore((s) => s.loadConversationMessages);
 
@@ -919,6 +921,31 @@ export function ChatInterface({
       },
     };
   }, [pathname, slidesSlug, slidesTitle, slidesMode]);
+
+  const codeActiveBranch = useCodeStore((s) => s.activeBranch);
+  const codeSelectedRepo = useCodeStore((s) => s.selectedRepoId);
+  const codingChatContext = useMemo(() => {
+    const onCode =
+      typeof pathname === 'string' && pathname.includes('/code/r/');
+    const repoMatch = pathname?.match(/\/code\/r\/([^/]+)\/([^/]+)/);
+    const repoId = repoMatch ? `${repoMatch[1]}/${repoMatch[2]}` : codeSelectedRepo;
+    if (!onCode || !repoId) return null;
+    return {
+      coding: {
+        repo_id: repoId,
+        branch: codeActiveBranch || 'main',
+        path: '.',
+      },
+    };
+  }, [pathname, codeActiveBranch, codeSelectedRepo]);
+
+  const chatRequestContext = useMemo(() => {
+    const merged = {
+      ...(slidesChatContext ?? {}),
+      ...(codingChatContext ?? {}),
+    };
+    return Object.keys(merged).length > 0 ? merged : null;
+  }, [slidesChatContext, codingChatContext]);
 
   useEffect(() => {
     if (!mounted || isPane) return;
@@ -1144,11 +1171,14 @@ export function ChatInterface({
     return () => document.removeEventListener('mousedown', handler);
   }, [showMyDrivePicker]);
 
+  // Reactive subscription — re-renders this thread on every store write that
+  // touches its conversation, which is what keeps streamed tokens and tool-call
+  // steps painting live. Never replace this with a getWorkspaceConversations()
+  // call during render: that subscribes to nothing and freezes the thread until
+  // an unrelated state change repaints it. See stores/chat-thread-selectors.ts.
+  const surfaceConversation = useSurfaceConversation(isPane ? 'pane' : 'main');
   // Use null on server to prevent hydration mismatch
-  const workspaceConversations = mounted ? getWorkspaceConversations() : [];
-  const activeConversation = mounted
-    ? workspaceConversations.find((c) => c.id === activeConversationId)
-    : null;
+  const activeConversation = mounted ? surfaceConversation : null;
   const selectedAgentData = resolveAgent(selectedAgent);
 
   const scrollToBottom = () => {
@@ -1740,7 +1770,11 @@ export function ChatInterface({
     e?: React.FormEvent,
     messageOverride?: string,
     agentOverride?: string,
-    conversationIdOverride?: string
+    conversationIdOverride?: string,
+    // Set when re-running a past answer: the id of the assistant message being
+    // refreshed. The prompt is replayed as a new turn on both sides; the old
+    // answer stays in the database and only leaves the model's context.
+    regenerateOf?: string
   ) => {
     e?.preventDefault();
     if (isSubmittingRef.current) return;
@@ -1882,6 +1916,9 @@ export function ChatInterface({
       content: sourceText.trim() || (attachedImages.length > 0 ? 'What is in this image?' : ''),
       images: currentImages.length > 0 ? currentImages : undefined,
       fileAttachments: currentFileAttachments.length > 0 ? currentFileAttachments : undefined,
+      // Flags the duplicate so later turns don't send the model the same
+      // question twice; it is still shown, stored and exported like any other.
+      ...(regenerateOf ? { replayedPrompt: true, regenerateOf } : {}),
     });
 
     const userMessage = sourceText.trim() || (currentImages.length > 0 ? 'What is in this image?' : '');
@@ -1904,6 +1941,13 @@ export function ChatInterface({
       const token = useAuthStore.getState().token;
       const workspaceId = useWorkspaceStore.getState().currentWorkspaceId;
 
+      const agentDataForModel = getAgent(effectiveAgent);
+      const llmModel =
+        (agentDataForModel && useWorkspaceStore.getState().selectedChatModels[agentDataForModel.id]) ||
+        agentDataForModel?.modelIds?.[0] ||
+        agentDataForModel?.resolvedModelId ||
+        null;
+
       const providerPayload = provider ? {
         id: provider.id,
         name: provider.name,
@@ -1913,6 +1957,7 @@ export function ChatInterface({
         api_key: provider.apiKey,
         account_id: provider.accountId,
         model: provider.model,
+        llm_model: llmModel,
       } : null;
 
       // Get agent's system prompt
@@ -1924,8 +1969,10 @@ export function ChatInterface({
       const currentConversation = freshConversations.find(c => c.id === conversationId);
       const allMessages = currentConversation?.messages || [];
       
-      // Build full message history for the API (including images and agent attribution for multimodal)
-      const fullHistory = allMessages.map(m => ({
+      // Build full message history for the API (including images and agent attribution for multimodal).
+      // Superseded answers and replayed prompts are left out so a refreshed turn
+      // doesn't feed the model the answer it is replacing.
+      const fullHistory = getModelHistory(allMessages).map(m => ({
         role: m.role,
         content: m.content,
         images: m.images || null,
@@ -1952,8 +1999,12 @@ export function ChatInterface({
           content: '▌',
           // content: searchEnabled ? '🌐 Searching the web...' : '▌',
           agent: effectiveAgent,
+          modelId: llmModel,
           activityLine: 'Processing...',
           // activityLine: searchEnabled ? 'Web search in progress' : 'Processing...',
+          // Records which answer this one re-runs, so later turns leave the
+          // superseded answer out of the model's context.
+          ...(regenerateOf ? { regenerateOf } : {}),
         });
         // Capture placeholder message id for controls. We keep it in a local
         // variable AND in React state — the SSE handler runs inside the same
@@ -2060,6 +2111,12 @@ export function ChatInterface({
               /* tool output may be plain text */
             }
             dispatchSlidesDeckUpdated({ slug, source: target.rawName || target.toolName });
+          }
+          if (
+            raw.includes('write_coding') ||
+            raw.includes('run_in_coding')
+          ) {
+            dispatchCodeFileUpdated({ source: target.rawName || target.toolName });
           }
 
           const toolUrls = extractUrlsFromContent(output);
@@ -2205,9 +2262,11 @@ export function ChatInterface({
             messages: fullHistory,
             agent: effectiveAgent,
             provider: providerPayload,
+            llm_model: llmModel,
             system_prompt: systemPrompt,
             search_enabled: false,
-            ...(slidesChatContext ? { context: slidesChatContext } : {}),
+            regenerate_of: regenerateOf ?? null,
+            ...(chatRequestContext ? { context: chatRequestContext } : {}),
             // search_enabled: searchEnabled,
           }),
         });
@@ -2347,11 +2406,15 @@ export function ChatInterface({
           finalToolCalls,
           executionTime,
         );
-        // Persist execution metadata to backend
-        if (streamingMessageId && (finalToolCalls || executionTime !== undefined)) {
+        // Persist execution metadata to backend. Keyed on ``assistantMessageIdRef``
+        // for the same reason as the id swap above: the React state
+        // ``streamingMessageId`` captured in this closure is stale (still null on
+        // the first turn), which silently skipped this PATCH and lost the steps
+        // and execution time on reload.
+        if (assistantMessageIdRef && (finalToolCalls || executionTime !== undefined)) {
           const apiUrl = getApiUrl();
           authFetch(
-            `${apiUrl}/api/chat/conversations/${conversationId}/messages/${streamingMessageId}/metadata`,
+            `${apiUrl}/api/chat/conversations/${conversationId}/messages/${assistantMessageIdRef}/metadata`,
             {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
@@ -2365,6 +2428,7 @@ export function ChatInterface({
                   output: t.output ?? null,
                 })),
                 sources: streamSources,
+                llm_model: llmModel,
               }),
             },
           ).catch(() => { /* non-blocking */ });
@@ -2416,8 +2480,10 @@ export function ChatInterface({
             messages: fullHistory,
             agent: effectiveAgent,
             provider: providerPayload,
+            llm_model: llmModel,
             system_prompt: systemPrompt,
-            ...(slidesChatContext ? { context: slidesChatContext } : {}),
+            regenerate_of: regenerateOf ?? null,
+            ...(chatRequestContext ? { context: chatRequestContext } : {}),
           }),
         });
 
@@ -2432,8 +2498,10 @@ export function ChatInterface({
           role: 'assistant',
           content: data.message.content,
           agent: effectiveAgent,
+          modelId: llmModel,
           thinkingDuration,
           sources: data.context_used?.length > 0 ? data.context_used : undefined,
+          ...(regenerateOf ? { regenerateOf } : {}),
         });
       }
     } catch (error) {
@@ -2531,6 +2599,51 @@ export function ChatInterface({
     }
   };
 
+  // Re-run the prompt that produced a given assistant message. The prompt is
+  // replayed as a new turn appended to the thread — the original question, the
+  // old answer and the replay all stay on screen, in the database and in
+  // exports. Only the model's context skips the answer being re-run, so it
+  // redoes the work instead of repeating itself (see getModelHistory).
+  const handleRegenerate = (assistantMessage: Message) => {
+    if (isLoading || isStreaming || isSubmittingRef.current) return;
+    const conversationId = activeConversation?.id;
+    const messages = activeConversation?.messages ?? [];
+    const index = messages.findIndex((m) => m.id === assistantMessage.id);
+    if (!conversationId || index === -1) return;
+
+    // Walk back to the question this answer replied to.
+    const prompt =
+      messages
+        .slice(0, index)
+        .reverse()
+        .find((m) => m.role === 'user')?.content ?? '';
+    if (!prompt.trim()) return;
+
+    void handleSubmit(
+      undefined,
+      prompt,
+      assistantMessage.agent ?? selectedAgent,
+      conversationId,
+      assistantMessage.id
+    );
+  };
+
+  // The thread now re-renders once per streamed chunk (see useSurfaceConversation),
+  // so MessageBubble's React.memo has to actually hold or every bubble in the
+  // conversation re-parses its markdown on every token. These two callbacks are
+  // the only bubble props that would otherwise get a fresh identity each render;
+  // routing them through refs keeps them stable so only the streaming bubble —
+  // the one whose `message` object really changed — re-renders.
+  const handleRegenerateRef = useRef(handleRegenerate);
+  handleRegenerateRef.current = handleRegenerate;
+  const stableRegenerate = useCallback((message: Message) => {
+    handleRegenerateRef.current(message);
+  }, []);
+
+  const stableStopStream = useCallback(() => {
+    streamControllerRef.current?.abort();
+  }, []);
+
   const handleSubmitRef = useRef(handleSubmit);
   handleSubmitRef.current = handleSubmit;
 
@@ -2565,10 +2678,6 @@ export function ChatInterface({
           <EmptyState
             selectedAgentName={selectedAgentData?.name || selectedAgent}
             logoUrl={selectedAgentData?.logoUrl ?? undefined}
-            suggestions={selectedAgentData?.suggestions}
-            onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
-            onSuggestionHover={(value) => setInput(value)}
-            onSuggestionLeave={() => setInput('')}
           />
         ) : (
           <div className="mx-auto max-w-3xl space-y-6">
@@ -2579,11 +2688,11 @@ export function ChatInterface({
                 currentSelectedAgent={selectedAgent}
                 showConnecting={showConnecting}
                 showStop={Boolean(streamingMessageId)}
-                onStop={() => {
-                  streamControllerRef.current?.abort();
-                }}
+                onStop={stableStopStream}
                 onPreviewUrl={setPreviewUrl}
                 requestSentAt={requestSentAt}
+                onRegenerate={stableRegenerate}
+                regenerateDisabled={isLoading || isStreaming}
               />
             ))}
             {isLoading && !isStreaming && (
@@ -2614,6 +2723,14 @@ export function ChatInterface({
       {/* Composer: flex sibling at column bottom (sticky as safety for scroll parents) */}
       <div className="chat-composer-root mt-auto shrink-0 px-4">
         <div className="mx-auto max-w-3xl">
+          {(!activeConversation || activeConversation.messages.length === 0) && (
+            <SuggestionChipsRow
+              suggestions={selectedAgentData?.suggestions}
+              onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
+              onSuggestionHover={(value) => setInput(value)}
+              onSuggestionLeave={() => setInput('')}
+            />
+          )}
           <form onSubmit={handleSubmit}>
             {/* Image previews */}
             {attachedImages.length > 0 && (
@@ -3093,23 +3210,152 @@ const CTA_SECTION_MAP: Record<string, SidebarSection> = {
   '/apps': 'apps',
 };
 
-function EmptyState({
-  selectedAgentName,
-  logoUrl,
+function EmptyStateLogo({ src, name }: { src?: string; name: string }) {
+  const [imgReady, setImgReady] = useState(false);
+
+  useEffect(() => {
+    setImgReady(false);
+  }, [src]);
+
+  return (
+    <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-xl bg-workspace-accent-10 overflow-hidden">
+      {(!src || !imgReady) && <Bot size={48} className="text-workspace-accent" />}
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt={name}
+          className={imgReady ? 'h-full w-full object-contain p-1' : 'hidden'}
+          onLoad={() => setImgReady(true)}
+          onError={() => setImgReady(false)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function SuggestionChipsRow({
   suggestions,
   onSuggestionClick,
   onSuggestionHover,
   onSuggestionLeave,
 }: {
-  selectedAgentName: string;
-  logoUrl?: string | null;
-  suggestions?: Array<{ label: string; value: string; description?: string; disabled?: boolean; cta?: string }>;
+  suggestions?: ChatSuggestion[];
   onSuggestionClick: (prompt: string) => void;
   onSuggestionHover?: (value: string) => void;
   onSuggestionLeave?: () => void;
 }) {
   const router = useRouter();
   const { setActivePanelSection } = useWorkspaceStore();
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [nav, setNav] = useState({ overflow: false, canPrev: false, canNext: false });
+  const chips = useMemo(() => activeSuggestions(suggestions), [suggestions]);
+
+  const updateNav = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    setNav(suggestionRowNavState(el.scrollLeft, el.clientWidth, el.scrollWidth));
+  }, []);
+
+  useLayoutEffect(() => {
+    updateNav();
+    const el = scrollerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(updateNav);
+    observer.observe(el);
+    el.addEventListener('scroll', updateNav, { passive: true });
+    return () => {
+      observer.disconnect();
+      el.removeEventListener('scroll', updateNav);
+    };
+  }, [updateNav, chips]);
+
+  const scrollByPage = (direction: -1 | 1) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollBy({ left: direction * suggestionScrollStep(el.clientWidth), behavior: 'smooth' });
+  };
+
+  if (chips.length === 0) return null;
+
+  return (
+    <div className="chat-suggestion-row" onMouseLeave={() => onSuggestionLeave?.()}>
+      <button
+        type="button"
+        className="chat-composer-action chat-suggestion-nav"
+        aria-label="Previous suggestions"
+        hidden={!nav.overflow}
+        disabled={!nav.canPrev}
+        onClick={() => scrollByPage(-1)}
+      >
+        <ChevronLeft size={16} />
+      </button>
+      <div ref={scrollerRef} className="chat-suggestion-scroller" aria-label="Suggested questions">
+        {chips.map((suggestion) => {
+          const baseClass =
+            'chat-suggestion-chip glass-card flex min-w-0 items-center px-3 py-1.5 text-left transition-all hover:border-primary/30 hover:glow-primary-sm cursor-pointer';
+
+          const content = (
+            <>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium leading-none">
+                {suggestion.label}
+              </span>
+              <span className="ml-2 shrink-0 text-muted-foreground/40">›</span>
+            </>
+          );
+
+          if (suggestion.cta) {
+            const sectionId = (CTA_SECTION_MAP[suggestion.cta] ?? suggestion.cta.replace(/^\//, '')) as SidebarSection;
+            return (
+              <button
+                key={`${suggestion.label}:${suggestion.value}`}
+                type="button"
+                onMouseEnter={() => onSuggestionHover?.(suggestion.label)}
+                onClick={() => {
+                  setActivePanelSection(sectionId);
+                  router.push(suggestion.cta!);
+                }}
+                className={baseClass}
+              >
+                {content}
+              </button>
+            );
+          }
+
+          return (
+            <button
+              key={`${suggestion.label}:${suggestion.value}`}
+              type="button"
+              onMouseEnter={() => onSuggestionHover?.(suggestion.value)}
+              onClick={() => onSuggestionClick(suggestion.value)}
+              className={baseClass}
+            >
+              {content}
+            </button>
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        className="chat-composer-action chat-suggestion-nav"
+        aria-label="Next suggestions"
+        hidden={!nav.overflow}
+        disabled={!nav.canNext}
+        onClick={() => scrollByPage(1)}
+      >
+        <ChevronRight size={16} />
+      </button>
+    </div>
+  );
+}
+
+function EmptyState({
+  selectedAgentName,
+  logoUrl,
+}: {
+  selectedAgentName: string;
+  logoUrl?: string | null;
+}) {
   const { user } = useAuthStore();
   const resolvedLogoUrl = logoUrl ? getLogoUrl(logoUrl) : undefined;
 
@@ -3117,86 +3363,10 @@ function EmptyState({
   const greeting = firstName ? `Hello, ${firstName}.` : 'Hello.';
   return (
     <div className="flex h-full flex-col items-center justify-center px-4">
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-workspace-accent-10 overflow-hidden">
-        {resolvedLogoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={resolvedLogoUrl}
-            alt={selectedAgentName}
-            className="h-full w-full object-contain p-1"
-          />
-        ) : (
-          <Bot size={24} className="text-workspace-accent" />
-        )}
-      </div>
+      <EmptyStateLogo src={resolvedLogoUrl} name={selectedAgentName} />
       <p className="mb-6 text-center text-muted-foreground">
-        {greeting} Pick a suggestion or type a message to get started.
+        {greeting} {selectedAgentName} here, how can I help?
       </p>
-      {Array.isArray(suggestions) && suggestions.length > 0 && (
-        <div
-          className="flex w-full max-w-lg flex-col gap-1.5"
-          onMouseLeave={() => onSuggestionLeave?.()}
-        >
-          {suggestions.map((suggestion) => {
-            const baseClass = cn(
-              'glass-card flex min-w-0 items-center justify-between px-4 py-2.5 text-left transition-all',
-              suggestion.disabled
-                ? 'opacity-40 cursor-not-allowed'
-                : 'hover:border-primary/30 hover:glow-primary-sm cursor-pointer'
-            );
-
-            const content = (
-              <>
-                <div className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium leading-tight">{suggestion.label}</span>
-                  {suggestion.description && (
-                    <span className="block truncate text-xs text-muted-foreground leading-snug">
-                      {suggestion.description}
-                    </span>
-                  )}
-                  {suggestion.disabled && (
-                    <span className="block text-xs text-muted-foreground/60 italic">
-                      Coming soon
-                    </span>
-                  )}
-                </div>
-                {!suggestion.disabled && (
-                  <span className="ml-3 shrink-0 text-muted-foreground/40">›</span>
-                )}
-              </>
-            );
-
-            if (suggestion.cta && !suggestion.disabled) {
-              const sectionId = (CTA_SECTION_MAP[suggestion.cta] ?? suggestion.cta.replace(/^\//, '')) as SidebarSection;
-              return (
-                <button
-                  key={`${suggestion.label}:${suggestion.value}`}
-                  onMouseEnter={() => onSuggestionHover?.(suggestion.label)}
-                  onClick={() => {
-                    setActivePanelSection(sectionId);
-                    router.push(suggestion.cta!);
-                  }}
-                  className={baseClass}
-                >
-                  {content}
-                </button>
-              );
-            }
-
-            return (
-              <button
-                key={`${suggestion.label}:${suggestion.value}`}
-                onMouseEnter={() => !suggestion.disabled && onSuggestionHover?.(suggestion.value)}
-                onClick={() => !suggestion.disabled && onSuggestionClick(suggestion.value)}
-                disabled={suggestion.disabled}
-                className={baseClass}
-              >
-                {content}
-              </button>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
@@ -3461,6 +3631,17 @@ function ToolCallRow({ tool }: { tool: ToolCall }) {
   );
 }
 
+function formatMessageStamp(value: Date | string | undefined): string {
+  const date = value instanceof Date ? value : value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 // Matches page titles that indicate a soft-404 ("Page Not Found", etc.)
 const NOT_FOUND_TITLE_RE = /\b(404|not found|page not found|introuvable|doesn.t exist|no page)\b/i;
 
@@ -3472,6 +3653,8 @@ const MessageBubble = React.memo(function MessageBubble({
   onStop,
   onPreviewUrl,
   requestSentAt,
+  onRegenerate,
+  regenerateDisabled,
 }: {
   message: Message;
   currentSelectedAgent: string;
@@ -3480,6 +3663,8 @@ const MessageBubble = React.memo(function MessageBubble({
   onStop: () => void;
   onPreviewUrl?: (url: string) => void;
   requestSentAt?: number | null;
+  onRegenerate?: (message: Message) => void;
+  regenerateDisabled?: boolean;
 }) {
   const isUser = message.role === 'user';
   const [showThinking, setShowThinking] = useState(false);
@@ -3499,6 +3684,7 @@ const MessageBubble = React.memo(function MessageBubble({
   // Get user name and agent info for display
   const user = useAuthStore(state => state.user);
   const resolveAgent = useAgentsStore(state => state.resolveAgent);
+  const catalogModels = useModelsStore(state => state.models);
   const agent = resolveAgent(message.agent);
   const isFromDifferentAgent = !isUser && Boolean(message.agent) && message.agent !== currentSelectedAgent;
   
@@ -3888,7 +4074,14 @@ const MessageBubble = React.memo(function MessageBubble({
           )
         ) : agent?.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={getLogoUrl(agent.logoUrl)} alt={agent.name} className="h-full w-full object-cover" />
+          <img
+            src={getLogoUrl(agent.logoUrl)}
+            alt={agent.name}
+            className="h-full w-full object-cover"
+            onError={(event) => {
+              event.currentTarget.style.display = 'none';
+            }}
+          />
         ) : (
           <Bot size={16} />
         )}
@@ -4039,6 +4232,28 @@ const MessageBubble = React.memo(function MessageBubble({
           )}
         </div>
 
+        <div
+          className={cn(
+            'px-1 pt-0.5 text-[10px] leading-4 text-muted-foreground',
+            isUser && 'text-right'
+          )}
+        >
+          {(() => {
+            const when = formatMessageStamp(message.timestamp);
+            if (isUser) return when;
+            const modelRaw =
+              message.modelId ||
+              agent?.modelIds?.[0] ||
+              agent?.resolvedModelId ||
+              agent?.modelId ||
+              null;
+            const modelLabel = modelDisplayName(catalogModels, modelRaw) ?? modelRaw;
+            return [senderName, modelLabel ? `model: ${modelLabel}` : null, when]
+              .filter(Boolean)
+              .join(' · ');
+          })()}
+        </div>
+
         {/* RAG document source pills (filenames only; URLs use the panel below) */}
         {!isUser && message.sources && message.sources.some((src) => !/^https?:\/\//i.test(src)) && (
           <div className="mt-1.5 flex flex-wrap gap-1.5 px-1">
@@ -4133,7 +4348,11 @@ const MessageBubble = React.memo(function MessageBubble({
 
         {/* Per-message actions */}
         {!isUser && !isStillProcessing && (
-          <AssistantMessageActions message={message} />
+          <AssistantMessageActions
+            message={message}
+            onRegenerate={onRegenerate}
+            regenerateDisabled={regenerateDisabled}
+          />
         )}
         {isUser && <UserMessageActions message={message} />}
       </div>
@@ -4461,7 +4680,15 @@ function FeedbackDislikeDialog({
   );
 }
 
-function AssistantMessageActions({ message }: { message: Message }) {
+function AssistantMessageActions({
+  message,
+  onRegenerate,
+  regenerateDisabled,
+}: {
+  message: Message;
+  onRegenerate?: (message: Message) => void;
+  regenerateDisabled?: boolean;
+}) {
   const updateMessageFeedback = useWorkspaceStore((s) => s.updateMessageFeedback);
   const activeConversationId = useWorkspaceStore((s) => s.activeConversationId);
   const [busy, setBusy] = useState<null | 'like' | 'dislike'>(null);
@@ -4567,6 +4794,17 @@ function AssistantMessageActions({ message }: { message: Message }) {
             />
           )}
         </button>
+        {onRegenerate && (
+          <button
+            onClick={() => onRegenerate(message)}
+            disabled={regenerateDisabled}
+            title="Run this request again"
+            aria-label="Run this request again"
+            className="flex h-6 w-6 items-center justify-center rounded border border-transparent transition-colors hover:border-border hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <RefreshCw size={12} />
+          </button>
+        )}
       </div>
       <FeedbackDislikeDialog
         open={dialogOpen}

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import Response
@@ -564,8 +563,12 @@ async def _send_magic_link_email(
     otp_code: str,
     email_service: EmailService | None,
 ) -> None:
-    query = urlencode({"token": token})
-    magic_link_url = f"{settings.frontend_url.rstrip('/')}{settings.magic_link_path}?{query}"
+    from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
+        magic_link_url_for_token,
+        render_sign_in_email,
+    )
+
+    magic_link_url = magic_link_url_for_token(token)
 
     if email_service is None:
         if settings.log_otp_codes_when_email_unavailable:
@@ -583,21 +586,9 @@ async def _send_magic_link_email(
             )
         return
 
-    app_name = settings.magic_link_email_app_name
-    template_values = {
-        "app_name": app_name,
-        "magic_link_url": magic_link_url,
-        "otp_code": otp_code,
-        "expire_minutes": settings.magic_link_expire_minutes,
-    }
-    subject = settings.magic_link_email_subject_template.format_map(
-        _SafeTemplateValues(template_values)
-    )
-    text_body = settings.magic_link_email_text_template.format_map(
-        _SafeTemplateValues(template_values)
-    )
-    html_body = settings.magic_link_email_html_template.format_map(
-        _SafeTemplateValues(template_values)
+    subject, text_body, html_body, attachments = render_sign_in_email(
+        magic_link_url=magic_link_url,
+        otp_code=otp_code,
     )
     email_service.send(
         to_email=to_email,
@@ -606,12 +597,8 @@ async def _send_magic_link_email(
         html_body=html_body,
         from_email=str(settings.email_from_address),
         from_name=settings.email_from_name,
+        attachments=attachments or None,
     )
-
-
-class _SafeTemplateValues(dict[str, object]):
-    def __missing__(self, key: str) -> str:
-        return "{" + key + "}"
 
 
 class AuthFastAPIPrimaryAdapter:

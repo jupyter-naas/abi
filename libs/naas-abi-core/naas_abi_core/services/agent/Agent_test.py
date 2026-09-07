@@ -356,6 +356,51 @@ def test_coerce_tool_args_to_object_handles_common_invalid_shapes():
     assert Agent._coerce_tool_args_to_object({"path": "a.py"}) == {"path": "a.py"}
     assert Agent._coerce_tool_args_to_object("not-json") == {}
     assert Agent._coerce_tool_args_to_object([1, 2]) == {}
+    # gpt-oss on Bedrock emits {"": {}} for zero-arg tools; Converse rejects
+    # empty-string Document keys even though the value is still a JSON object.
+    assert Agent._coerce_tool_args_to_object({"": {}}) == {}
+    assert Agent._coerce_tool_args_to_object({"": {}, "path": "a.py"}) == {
+        "path": "a.py"
+    }
+    assert Agent._coerce_tool_args_to_object('{"": {}}') == {}
+    assert Agent._coerce_tool_args_to_object([{"": {}}]) == {}
+
+    valid = {"path": "a.py"}
+    assert Agent._coerce_tool_args_to_object(valid) is valid
+
+
+def test_normalize_ai_message_tool_inputs_drops_empty_string_keys():
+    """Regression: gpt-oss-120b on Bedrock called git_push with input {"": {}}.
+    Re-sending that history makes Converse raise ValidationException on
+    toolUse.input even though the value is a JSON object."""
+    from langchain_core.messages import AIMessage
+    from naas_abi_core.services.agent.Agent import Agent
+
+    message = AIMessage(
+        content=[
+            {
+                "type": "tool_use",
+                "id": "call-1",
+                "name": "git_push",
+                "input": {"": {}},
+            }
+        ],
+        tool_calls=[
+            {
+                "name": "git_push",
+                "args": {"": {}},
+                "id": "call-1",
+                "type": "tool_call",
+            }
+        ],
+        id="ai1",
+    )
+
+    normalized = Agent._normalize_ai_message_tool_inputs(message)
+
+    assert normalized is not message
+    assert normalized.tool_calls[0]["args"] == {}
+    assert normalized.content[0]["input"] == {}
 
 
 def test_normalize_ai_message_tool_inputs_fixes_empty_list_in_content_blocks():
@@ -486,6 +531,32 @@ def test_normalize_leaves_valid_openai_arguments_string_untouched():
     )
 
 
+def test_normalize_rewrites_openai_arguments_with_empty_string_key():
+    from langchain_core.messages import AIMessage
+    from naas_abi_core.services.agent.Agent import Agent
+
+    message = AIMessage(
+        content="",
+        additional_kwargs={
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {"name": "git_push", "arguments": '{"":{}}'},
+                }
+            ]
+        },
+        id="ai1",
+    )
+
+    normalized = Agent._normalize_ai_message_tool_inputs(message)
+
+    assert normalized is not message
+    assert (
+        normalized.additional_kwargs["tool_calls"][0]["function"]["arguments"] == "{}"
+    )
+
+
 def test_normalize_rewrites_invalid_openai_arguments_string():
     from langchain_core.messages import AIMessage
     from naas_abi_core.services.agent.Agent import Agent
@@ -586,3 +657,95 @@ def test_normalize_coerces_present_but_invalid_input_in_tooluse_block():
 
     assert normalized is not message
     assert normalized.content[0]["toolUse"]["input"] == {}
+
+
+def test_stream_invoke_surfaces_error_containing_braces():
+    """Regression guard: an invoke failure must reach the caller as a message.
+
+    loguru has no ``exc_info`` kwarg — it treats extra kwargs as ``str.format()``
+    arguments. Provider errors embed a JSON body (``- {'error': {...}}``), so
+    logging one with ``exc_info=True`` raised ``KeyError`` from inside the error
+    handler itself: the thread died before queueing a ``FinalStateEvent`` and the
+    stream blew up with "Agent thread has died" instead of reporting the error.
+    """
+    from langchain_core.language_models.fake_chat_models import FakeListChatModel
+    from naas_abi_core.services.agent.Agent import Agent, AgentConfiguration
+
+    agent = Agent(
+        name="Test Agent",
+        description="A test agent",
+        chat_model=FakeListChatModel(responses=["unused"]),
+        tools=[],
+        agents=[],
+        configuration=AgentConfiguration(),
+    )
+
+    provider_error = (
+        "Error code: 402 - {'error': {'message': 'Insufficient credits.', 'code': 402}}"
+    )
+
+    def _raise(_prompt):
+        raise RuntimeError(provider_error)
+
+    agent.invoke = _raise  # type: ignore[method-assign]
+
+    events = list(agent.stream_invoke("hello"))
+
+    text = " ".join(e["data"] for e in events if e["event"] == "message")
+    assert "I encountered an error while processing your request" in text, events
+    assert "Insufficient credits" in text, events
+    assert events[-1] == {"event": "done", "data": "[DONE]"}
+
+
+def test_stream_invoke_reports_dead_thread_instead_of_hanging():
+    """Regression guard: a worker that dies silently must not hang the stream.
+
+    The liveness check used to sit *after* ``self._event_queue.get(timeout=...)``
+    inside the same ``try``. When the worker died without queueing anything the
+    queue stayed empty forever, so ``get`` raised ``Empty`` on every iteration,
+    the handler swallowed it, and the guard it was written for was unreachable —
+    the SSE stream spun forever and the caller never got an answer.
+    """
+    import threading
+
+    from langchain_core.language_models.fake_chat_models import FakeListChatModel
+    from naas_abi_core.services.agent.Agent import Agent, AgentConfiguration
+
+    class _UnformattableError(Exception):
+        """Dies while the error handler is building its message, so the worker
+        thread exits without ever queueing a FinalStateEvent."""
+
+        def __str__(self) -> str:
+            raise ValueError("boom while formatting")
+
+    agent = Agent(
+        name="Test Agent",
+        description="A test agent",
+        chat_model=FakeListChatModel(responses=["unused"]),
+        tools=[],
+        agents=[],
+        configuration=AgentConfiguration(),
+    )
+
+    def _raise(_prompt):
+        raise _UnformattableError()
+
+    agent.invoke = _raise  # type: ignore[method-assign]
+
+    outcome: dict = {}
+
+    def _consume():
+        try:
+            list(agent.stream_invoke("hello"))
+        except BaseException as exc:  # noqa: BLE001
+            outcome["error"] = exc
+        else:
+            outcome["error"] = None
+
+    consumer = threading.Thread(target=_consume, daemon=True)
+    consumer.start()
+    consumer.join(timeout=30)
+
+    assert not consumer.is_alive(), "stream_invoke hung on a dead worker thread"
+    assert isinstance(outcome.get("error"), RuntimeError), outcome
+    assert "Agent thread has died" in str(outcome["error"]), outcome

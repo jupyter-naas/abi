@@ -16,7 +16,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.KnowledgeGraph import KnowledgeGraph
+from naas_abi.ontologies.classes.ontology_demo.nexus.KnowledgeGraph import KnowledgeGraph
 
 kg = KnowledgeGraph()
 kg.actions()  # no-op

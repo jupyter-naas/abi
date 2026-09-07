@@ -881,7 +881,11 @@ function NetworkPane({
     [filteredEdges, visibleBySelection, selectedEdgeIds],
   );
 
-  const tableOpen = selectedClassIds.length > 0;
+  // DISABLED (performance): the node-click table never opens. Clicking a node
+  // still selects it, highlights the chain and focuses its neighbours — it just
+  // no longer triggers the instance/relation fetches described above.
+  // Restore with: const tableOpen = selectedClassIds.length > 0;
+  const tableOpen: boolean = false;
 
   // ── Get class label from nodeId ───────────────────────────────────────────
 
@@ -894,7 +898,23 @@ function NetworkPane({
   );
 
   // ── Fetch instances + properties when selectedClassIds changes ────────────
-
+  //
+  // ┌── DISABLED (performance) ─────────────────────────────────────────────┐
+  // │ Opening the table on a node click is the most expensive interaction   │
+  // │ of this view. For every selected class it issued, sequentially:       │
+  // │   1. POST /api/graph/network/node-properties  (all data properties)   │
+  // │   2. POST /api/graph/network/node-instances   (up to 500 individuals) │
+  // │ and then, per connected class pair, a POST /api/graph/discovery/      │
+  // │ relations carrying every instance URI of both classes (limit 5000),   │
+  // │ whose result is joined client-side in buildChainRows().               │
+  // │                                                                       │
+  // │ To restore: uncomment the two effects below and set `tableOpen` back  │
+  // │ to `selectedClassIds.length > 0` (the "DISABLED" marker just above).  │
+  // │ The table JSX, its state and its memos are left in place — with these │
+  // │ effects off, `nodeInstances`/`pairRelations` stay empty, so the memos │
+  // │ are no-ops and nothing renders.                                       │
+  // └───────────────────────────────────────────────────────────────────────┘
+  /*
   useEffect(() => {
     if (selectedClassIds.length === 0) {
       setNodeInstances({});
@@ -1061,6 +1081,7 @@ function NetworkPane({
 
     return () => { cancelled = true; };
   }, [selectedClassIds, selectedPairs, nodeInstances, workspaceId, activeGraph?.uri]);
+  */
 
   // ── Property change handler ───────────────────────────────────────────────
 

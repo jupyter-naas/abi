@@ -13,6 +13,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
     bind_registry,
     build_provider_messages_with_agents,
     get_or_create_conversation,
+    mark_message_superseded,
     persist_stream_content,
     persist_stream_metadata,
     request_context,
@@ -295,6 +296,56 @@ async def stream_chat_response(
                                     exc_info=True,
                                 )
 
+                coding_ctx = (
+                    client_ctx.get("coding") if isinstance(client_ctx, dict) else None
+                )
+                if isinstance(coding_ctx, dict):
+                    repo_id = str(coding_ctx.get("repo_id") or "").strip()
+                    branch = str(coding_ctx.get("branch") or "").strip()
+                    if repo_id:
+                        from naas_abi_core.services.agent.context import (  # noqa: PLC0415
+                            coding_active_branch,
+                            coding_active_repo,
+                        )
+
+                        coding_active_repo.set(repo_id)
+                        if branch:
+                            coding_active_branch.set(branch)
+                        if request.workspace_id:
+                            try:
+                                from naas_abi import ABIModule  # noqa: PLC0415
+                                from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.primary.coding_environment__primary_adapter__FastAPI import (  # noqa: PLC0415
+                                    lookup_code_bindings,
+                                )
+                                from naas_abi_core.services.agent.context import (  # noqa: PLC0415
+                                    coding_harness_base,
+                                )
+
+                                coding_service = (
+                                    ABIModule.get_instance().engine.services.coding_environment
+                                )
+                                ws_base, ws_secret, harness_base, _env_id = (
+                                    await lookup_code_bindings(
+                                        db,
+                                        workspace_id=str(request.workspace_id),
+                                        user_id=str(current_user.id),
+                                        repo_id=repo_id,
+                                        branch=branch or "main",
+                                        service=coding_service,
+                                    )
+                                )
+                                if ws_base and ws_secret:
+                                    coder_workspace_base.set(ws_base)
+                                    coder_workspace_secret.set(ws_secret)
+                                if harness_base:
+                                    coding_harness_base.set(harness_base)
+                            except Exception:
+                                logger.warning(
+                                    "Failed to bind coding runtime for %s",
+                                    repo_id,
+                                    exc_info=True,
+                                )
+
                 provider_messages = await build_provider_messages_with_agents(
                     request=request,
                     context=request_context(current_user),
@@ -351,6 +402,7 @@ async def stream_chat_response(
         api_key=provider.api_key,
         account_id=provider.account_id,
         model=provider.model,
+        llm_model=getattr(provider, "llm_model", None) or request.llm_model,
     )
 
     assistant_msg_id = ""
@@ -363,6 +415,7 @@ async def stream_chat_response(
                     user_content=request.message,
                     assistant_agent=request.agent,
                     created_at=datetime.now(UTC).replace(tzinfo=None),
+                    regenerate_of=request.regenerate_of,
                 )
             await pre_db.commit()
     except Exception:
@@ -440,6 +493,7 @@ async def stream_chat_response(
                 "execution_time": round(loop.time() - stream_started_at, 3),
                 "steps": _strip_internal_step_keys(steps),
                 "sources": _merge_source_urls(list(context_sources), web_source_urls),
+                "llm_model": request.llm_model,
             }
             try:
                 await persist_stream_metadata(
@@ -522,6 +576,22 @@ async def stream_chat_response(
                 except Exception:
                     logger.error("Failed to finalize stream messages to DB", exc_info=True)
                 await persist_final_metadata()
+                if request.regenerate_of and full_response.strip():
+                    # Only once the refreshed answer actually exists — a failed
+                    # regeneration must leave the original answer on screen.
+                    try:
+                        await mark_message_superseded(
+                            user_id=current_user.id,
+                            conversation_id=conversation_id,
+                            message_id=request.regenerate_of,
+                            superseded_by=assistant_msg_id,
+                        )
+                    except Exception:
+                        logger.warning(
+                            "Failed to mark message %s as superseded",
+                            request.regenerate_of,
+                            exc_info=True,
+                        )
 
             final_sources = _merge_source_urls(list(context_sources), web_source_urls)
             if final_sources:

@@ -1,15 +1,14 @@
 # ActOfConnection
 
 ## What it is
-- A thin subclass wrapper around `ActOfConnection` imported from `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn`.
-- Intended as a place to implement/override action logic for the “ActOfConnection” concept.
+- A thin subclass of `ActOfConnection` imported from `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn`.
+- Provides a local extension point for implementing action logic via `actions()`.
 
 ## Public API
 - `class ActOfConnection(_ActOfConnection)`
   - Inherits all behavior from the imported base class.
   - `actions(self)`
-    - Placeholder method meant to be implemented.
-    - Current implementation: no-op (`pass`).
+    - Stub method intended to be implemented/overridden in this subclass.
 
 ## Configuration/Dependencies
 - Depends on:
@@ -21,15 +20,14 @@ from naas_abi_marketplace.applications.linkedin.ontologies.classes.ontology.naas
     ActOfConnection,
 )
 
-class MyConnectionAction(ActOfConnection):
+class MyActOfConnection(ActOfConnection):
     def actions(self):
-        # implement your logic here
-        return "done"
+        return "implemented"
 
-obj = MyConnectionAction()
+obj = MyActOfConnection()
 print(obj.actions())
 ```
 
 ## Caveats
-- `actions()` in this module does nothing unless you override/implement it.
-- Actual initialization requirements and behavior are defined in the imported base class (`_ActOfConnection`).
+- `actions()` has no implementation in this module; calling it without overriding will not perform any action.
+- Construction/required parameters and runtime behavior are defined by the base class (`_ActOfConnection`).

@@ -1,40 +1,48 @@
 # NaasAgent
 
 ## What it is
-A thin wrapper around the core `Agent` that wires a Naas-specific system prompt and Naas integration tools (via an API key) to manage Naas resources (workspaces, agents, ontologies, users, secrets, storage).
+A Naas-specific `Agent` subclass that preconfigures:
+- A Naas-focused system prompt
+- Naas integration tools (authenticated via a Naas API key)
+- The default chat model from the app’s model registry
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> Agent`
-  - Builds and returns a configured `NaasAgent` instance.
-  - Loads Naas API key from `ABIModule.get_instance().configuration.naas_api_key`.
-  - Uses the `gpt_4_1_mini` chat model.
-  - Attaches tools created from `NaasIntegrationConfiguration` via `as_tools(...)`.
-  - Defaults:
-    - `AgentConfiguration(system_prompt=SYSTEM_PROMPT)` if not provided.
-    - `AgentSharedState(thread_id="0")` if not provided.
-
 - `class NaasAgent(Agent)`
-  - No additional behavior; inherits everything from `naas_abi_core.services.agent.Agent.Agent`.
+  - Metadata (class attributes):
+    - `name = "Naas"`
+    - `description = "Manage all resources on Naas: workspaces, agents, ontologies, users, secrets, storage."`
+    - `avatar_url = "https://raw.githubusercontent.com/.../Naas.png"`
+    - `system_prompt = """..."""` (Naas operating instructions and constraints)
+    - `suggestions: list[str] = []`
+  - Constructors:
+    - `@classmethod New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> NaasAgent`
+      - Builds and returns a configured `NaasAgent`.
+      - Uses the default chat model from `ABIModule.get_instance().engine.services.model_registry`.
+      - Attaches tools from `naas_abi_marketplace.applications.naas.integrations.NaasIntegration.as_tools(...)`.
+      - Defaults:
+        - `AgentConfiguration(system_prompt=cls.system_prompt)` if not provided
+        - `AgentSharedState(thread_id="0")` if not provided
 
 ## Configuration/Dependencies
-- **Naas API key**
-  - Read from: `ABIModule.get_instance().configuration.naas_api_key`
-  - Passed into: `NaasIntegrationConfiguration(api_key=...)`
+- **ABIModule**
+  - Used to access:
+    - `engine.services.model_registry` (must be initialized)
+    - `configuration.naas_api_key`
 - **Model**
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1_mini.model`
+  - Obtained via: `registry.get_default_chat_model()`
 - **Tools**
-  - `naas_abi_marketplace.applications.naas.integrations.NaasIntegration.as_tools`
-- **Core types**
-  - `Agent`, `AgentConfiguration`, `AgentSharedState` from `naas_abi_core.services.agent.Agent`
+  - Created via:
+    - `NaasIntegrationConfiguration(api_key=naas_api_key)`
+    - `as_tools(naas_integration_config)`
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.naas.agents.NaasAgent import create_agent
+from naas_abi_marketplace.applications.naas.agents.NaasAgent import NaasAgent
 
-agent = create_agent()
-# agent can now be used with the underlying Agent interface (methods defined in naas_abi_core)
+agent = NaasAgent.New()
+# Use `agent` via the base `Agent` interface from naas_abi_core.
 ```
 
 ## Caveats
-- If the Naas API key is missing/invalid in `ABIModule` configuration, the integration tools may not function (tool availability depends on correct authentication).
-- `NaasAgent` itself adds no behavior; all runtime capabilities come from the base `Agent`, selected model, and attached tools.
+- `ModelRegistryService` must be initialized; otherwise `NaasAgent.New()` will raise an assertion error.
+- If `ABIModule.get_instance().configuration.naas_api_key` is missing/invalid, the integration tools may not function as expected.

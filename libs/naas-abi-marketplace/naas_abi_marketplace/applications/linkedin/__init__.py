@@ -20,7 +20,7 @@ class _Configuration(ModuleConfiguration):
     config:
         li_at: "{{ secret.li_at }}"
         JSESSIONID: "{{ secret.JSESSIONID }}"
-        linkedin_profile_url: "https://www.linkedin.com/in/your-profile-id/"
+        linkedin_profile_url: "https://demo.example/profiles/demo"
     """
 
     li_at: str

@@ -180,6 +180,35 @@ class EventSQLiteAdapter(IEventAdapter):
             ).fetchone()
         return int(row[0]) if row else 0
 
+    def set_cursor(self, consumer_id: str, event_type: str, last_seq: int) -> None:
+        if last_seq < 0:
+            raise ValueError(f"last_seq must be >= 0, got {last_seq}")
+        with self._lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                self._upsert_cursor(consumer_id, event_type, last_seq)
+                self._conn.execute("COMMIT")
+            except Exception:
+                self._conn.execute("ROLLBACK")
+                raise
+
+    def _upsert_cursor(
+        self, consumer_id: str, event_type: str, last_seq: int
+    ) -> None:
+        self._conn.execute(
+            "INSERT INTO consumer_cursors (consumer_id, event_type, last_seq, updated_at) "
+            "VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(consumer_id, event_type) DO UPDATE SET "
+            "  last_seq = excluded.last_seq, "
+            "  updated_at = excluded.updated_at",
+            (
+                consumer_id,
+                event_type,
+                last_seq,
+                datetime.datetime.now(datetime.UTC).isoformat(),
+            ),
+        )
+
     def query_for_consumer(
         self,
         consumer_id: str,
@@ -236,20 +265,7 @@ class EventSQLiteAdapter(IEventAdapter):
                 rows = self._conn.execute(sql, params).fetchall()
 
                 if rows:
-                    new_seq = rows[-1][2]
-                    self._conn.execute(
-                        "INSERT INTO consumer_cursors (consumer_id, event_type, last_seq, updated_at) "
-                        "VALUES (?, ?, ?, ?) "
-                        "ON CONFLICT(consumer_id, event_type) DO UPDATE SET "
-                        "  last_seq = excluded.last_seq, "
-                        "  updated_at = excluded.updated_at",
-                        (
-                            consumer_id,
-                            event_type,
-                            new_seq,
-                            datetime.datetime.now(datetime.UTC).isoformat(),
-                        ),
-                    )
+                    self._upsert_cursor(consumer_id, event_type, rows[-1][2])
                 self._conn.execute("COMMIT")
             except Exception:
                 self._conn.execute("ROLLBACK")

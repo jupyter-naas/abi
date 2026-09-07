@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { WorkspaceFeatureFlags } from '@/lib/feature-access';
+import { DEFAULT_NAV_ORDER, mergeNavOrder } from '@/lib/sidebar-nav';
+import { clampDockWidth, clampFeatureColumnWidth, DOCK_WIDTH_DEFAULT } from '@/lib/shell-columns';
+import { pushRecentWorkspaceId } from '@/lib/workspace-picker';
 import { useAuthStore } from './auth';
 import { getApiUrl } from '@/lib/config';
 
@@ -72,6 +75,7 @@ export interface Message {
   content: string;
   timestamp: Date;
   agent?: AgentType;
+  modelId?: string | null;
   activityLine?: string; // Single-line live status (legacy, kept for backward compat)
   toolCalls?: ToolCall[]; // Ordered list of tool invocations for this message
   images?: string[]; // Base64-encoded images for multimodal chat
@@ -81,6 +85,11 @@ export interface Message {
   sources?: string[]; // filenames of RAG documents used to answer
   feedback?: MessageFeedback | null; // Reviewer thumbs up/down, persisted on metadata_
   feedbackDetails?: MessageFeedbackDetails | null; // Extended dislike details (type/detail/severity)
+  // Chat "refresh" lineage. Every one of these messages is displayed; the flags
+  // only shape what the model is given on later turns — see getModelHistory().
+  regenerateOf?: string; // Assistant message id this turn re-ran
+  supersededBy?: string; // Newer answer that replaced this one (set server-side)
+  replayedPrompt?: boolean; // Prompt re-sent by a refresh (duplicate of an earlier one)
   // Author attribution (preserved across sessions and users)
   authorId?: string;
   authorName?: string;
@@ -133,6 +142,7 @@ export interface WorkspaceTheme {
   primaryColor: string;
   accentColor?: string;
   backgroundColor?: string;
+  backgroundImageUrl?: string;
   sidebarColor?: string;
   fontFamily?: string;
 }
@@ -183,19 +193,30 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'maps' | 'chat' | 'search' | 'files' | 'lab' | 'code' | 'slides' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings';
+export type SidebarSection = 'home' | 'workspaces' | 'maps' | 'chat' | 'search' | 'files' | 'datasets' | 'lab' | 'code' | 'slides' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings';
+
+/** Home is a full-bleed desk. Workspaces is a mark-owned directory. Neither is a last-panel restore target. */
+export function isTransientPanelSection(section: SidebarSection | null): boolean {
+  return section === 'home' || section === 'workspaces';
+}
 
 export interface OpenAppModule {
   module_path: string;
+  module_name?: string;
   name: string;
   description?: string;
   logo_url: string | null;
+  icon_emoji?: string | null;
   category: string;
   app_url?: string | null;
   demo_login?: string | null;
   demo_password?: string | null;
   maintainer?: string | null;
   tier?: string | null;
+  version?: string | null;
+  author?: string | null;
+  license?: string | null;
+  keywords?: string[];
 }
 
 interface WorkspaceState {
@@ -211,15 +232,25 @@ interface WorkspaceState {
   activePanelSection: SidebarSection | null;
   setActivePanelSection: (section: SidebarSection | null) => void;
   lastActivePanelSection: SidebarSection | null;
+  /** Icon order for the workspace nav. Settings stays pinned and is omitted. */
+  sidebarNavOrder: SidebarSection[];
+  setSidebarNavOrder: (order: SidebarSection[]) => void;
 
   // Currently open app (for Apps section panel detail view)
   openAppModule: OpenAppModule | null;
   setOpenAppModule: (mod: OpenAppModule | null) => void;
+  /** True when the Apps panel shows app metadata instead of the app list.
+   *  Opt-in only: opening an app never sets it. Not persisted. */
+  appDetailOpen: boolean;
+  setAppDetailOpen: (open: boolean) => void;
 
   // Context panel (right AI / compare surface)
   contextPanelOpen: boolean;
   toggleContextPanel: () => void;
-  /** Width of the secondary left section panel (px). Persisted. */
+  /** Width of the dock (icon nav). Persisted. Same default as the feature column. */
+  dockWidth: number;
+  setDockWidth: (width: number) => void;
+  /** Width of the feature column (Chat, Files, ...). Persisted. */
   sectionPanelWidth: number;
   setSectionPanelWidth: (width: number) => void;
   /** Width of the right AI / compare pane (px). Persisted. */
@@ -232,9 +263,11 @@ interface WorkspaceState {
   selectedAgent: AgentType;
   /** True when the user deliberately picked an agent (sidebar or composer),
    *  false when the agent was auto-selected as the workspace default.
-   *  Drives the sidebar highlight: "New Chat" vs a specific agent. Not persisted. */
+   *  Persisted so refresh and new chat keep the last pick. */
   agentExplicitlySelected: boolean;
   setSelectedAgent: (agent: AgentType, explicit?: boolean) => void;
+  selectedChatModels: Record<string, string>;
+  setSelectedChatModel: (agentId: string, modelId: string) => void;
   /** Drop the explicit selection without changing the agent — landing back on
    *  the chat route will then reset to the workspace default. */
   clearAgentExplicitSelection: () => void;
@@ -306,6 +339,8 @@ interface WorkspaceState {
   // ============================================
   workspaces: Workspace[];
   currentWorkspaceId: string | null;
+  /** Previous workspace ids, newest first. Persisted for a future sort; not shown as a section. */
+  recentWorkspaceIds: string[];
   recentCommits: GitCommit[];
 
   // Workspace actions
@@ -357,8 +392,40 @@ type ApiConversation = {
   messages?: ApiChatMessage[];
 };
 
+const isFailedAnswer = (message: Message): boolean => {
+  const body = message.content.replace('▌', '').trim();
+  return !body || body.startsWith('❌ Error:');
+};
+
+/**
+ * The transcript as the model should see it. Every message is rendered in the
+ * chat — this is only about context: a refresh must not hand the model the
+ * answer it is re-running, or it repeats it instead of redoing the work.
+ *
+ * Superseded answers are derived from the turns themselves: a refresh tags its
+ * answer with the one it re-ran, so a completed replacement drops the original.
+ * A refresh that failed or is still empty drops nothing, and the rule re-derives
+ * itself identically after a reload, whatever local state was lost.
+ */
+export const getModelHistory = (messages: Message[]): Message[] => {
+  const replaced = new Set<string>();
+  for (const message of messages) {
+    if (message.role !== 'assistant' || !message.regenerateOf) continue;
+    if (isFailedAnswer(message)) continue;
+    replaced.add(message.regenerateOf);
+  }
+  return messages.filter(
+    (message) =>
+      !message.replayedPrompt &&
+      !replaced.has(message.id) &&
+      typeof message.supersededBy !== 'string',
+  );
+};
+
 const mapApiMessage = (message: ApiChatMessage): Message => {
   const meta = message.metadata ?? {};
+  const supersededBy = meta.superseded_by;
+  const regenerateOf = meta.regenerate_of;
   const fb = meta.feedback;
   const fbType = meta.feedback_type;
   const fbDetail = meta.feedback_detail;
@@ -401,9 +468,20 @@ const mapApiMessage = (message: ApiChatMessage): Message => {
     content: message.content,
     timestamp: new Date(message.created_at || Date.now()),
     agent: message.agent || undefined,
+    modelId:
+      typeof meta.llm_model === 'string' && meta.llm_model.trim()
+        ? meta.llm_model.trim()
+        : typeof meta.model === 'string' && meta.model.trim()
+          ? meta.model.trim()
+          : undefined,
     toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
     sources: sources && sources.length > 0 ? sources : undefined,
     executionTime,
+    // Refresh lineage, rebuilt from server metadata so getModelHistory() reaches
+    // the same verdict after a reload as it did live.
+    ...(typeof regenerateOf === 'string' ? { regenerateOf } : {}),
+    ...(typeof supersededBy === 'string' ? { supersededBy } : {}),
+    ...(meta.regenerate_replay === true ? { replayedPrompt: true } : {}),
     feedback: fb === 'like' || fb === 'dislike' ? fb : null,
     feedbackDetails: hasDetails
       ? {
@@ -427,6 +505,9 @@ const mapApiConversation = (conversation: ApiConversation): Conversation => ({
   archived: Boolean(conversation.archived),
 });
 
+/** In-flight GET /api/workspaces, shared by concurrent fetchWorkspaces() callers. */
+let inFlightWorkspacesFetch: Promise<void> | null = null;
+
 export const useWorkspaceStore = create<WorkspaceState>()(
   persist(
     (set, get) => ({
@@ -447,19 +528,29 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   activePanelSection: null,
   setActivePanelSection: (section) => set((state) => ({
     activePanelSection: section,
-    lastActivePanelSection: section ?? state.lastActivePanelSection,
+    lastActivePanelSection:
+      section && !isTransientPanelSection(section)
+        ? section
+        : state.lastActivePanelSection,
   })),
   lastActivePanelSection: null,
+  sidebarNavOrder: [...DEFAULT_NAV_ORDER],
+  setSidebarNavOrder: (order) => set({ sidebarNavOrder: mergeNavOrder(order) }),
 
   openAppModule: null,
-  setOpenAppModule: (mod) => set({ openAppModule: mod }),
+  // Clearing the open app also drops the detail view: there is nothing to show.
+  setOpenAppModule: (mod) => set(mod ? { openAppModule: mod } : { openAppModule: null, appDetailOpen: false }),
+  appDetailOpen: false,
+  setAppDetailOpen: (open) => set({ appDetailOpen: open }),
 
   // Context panel (right AI / compare surface)
   contextPanelOpen: false,
   toggleContextPanel: () => set((state) => ({ contextPanelOpen: !state.contextPanelOpen })),
+  dockWidth: DOCK_WIDTH_DEFAULT,
+  setDockWidth: (width) => set({ dockWidth: clampDockWidth(width) }),
   sectionPanelWidth: 256,
   setSectionPanelWidth: (width) =>
-    set({ sectionPanelWidth: Math.max(200, Math.min(480, Math.round(width))) }),
+    set({ sectionPanelWidth: clampFeatureColumnWidth(width) }),
   aiPaneWidth: 440,
   setAiPaneWidth: (width) =>
     set({ aiPaneWidth: Math.max(320, Math.min(720, Math.round(width))) }),
@@ -471,6 +562,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   agentExplicitlySelected: false,
   setSelectedAgent: (agent, explicit = false) =>
     set({ selectedAgent: agent, agentExplicitlySelected: explicit }),
+  selectedChatModels: {},
+  setSelectedChatModel: (agentId, modelId) =>
+    set((state) => ({
+      selectedChatModels: { ...state.selectedChatModels, [agentId]: modelId },
+    })),
   clearAgentExplicitSelection: () => set({ agentExplicitlySelected: false }),
   pendingComposerText: null,
   setPendingComposerText: (text) => set({ pendingComposerText: text }),
@@ -567,7 +663,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       return {
         activeConversationId: id,
         ...(conv?.agent
-          ? { selectedAgent: conv.agent, agentExplicitlySelected: false }
+          ? { selectedAgent: conv.agent, agentExplicitlySelected: true }
           : {}),
       };
     }),
@@ -816,6 +912,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   setCurrentWorkspace: (id) => {
     set((state) => ({
       currentWorkspaceId: id,
+      recentWorkspaceIds: pushRecentWorkspaceId(
+        state.recentWorkspaceIds,
+        state.currentWorkspaceId,
+        id,
+      ),
       activeConversationId: null,
       // Pane tabs are workspace-scoped. Leaving paneConversationId on a thread
       // from the previous workspace made send update a hidden conversation while
@@ -968,6 +1069,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   // ============================================
   workspaces: [],
   currentWorkspaceId: null,
+  recentWorkspaceIds: [],
   recentCommits: [],
 
   // Workspace actions
@@ -998,6 +1100,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     set((state) => ({
       workspaces: [...state.workspaces, workspace],
       currentWorkspaceId: workspace.id,
+      recentWorkspaceIds: pushRecentWorkspaceId(
+        state.recentWorkspaceIds,
+        state.currentWorkspaceId,
+        workspace.id,
+      ),
     }));
 
     return workspace;
@@ -1007,11 +1114,19 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     set((state) => ({
       workspaces: state.workspaces.filter((w) => w.id !== id),
       currentWorkspaceId: state.currentWorkspaceId === id ? null : state.currentWorkspaceId,
+      recentWorkspaceIds: state.recentWorkspaceIds.filter((recentId) => recentId !== id),
     }));
   },
 
   selectWorkspace: (id) => {
-    set({ currentWorkspaceId: id });
+    set((state) => ({
+      currentWorkspaceId: id,
+      recentWorkspaceIds: pushRecentWorkspaceId(
+        state.recentWorkspaceIds,
+        state.currentWorkspaceId,
+        id,
+      ),
+    }));
   },
 
   updateWorkspace: (id, updates) => {
@@ -1047,6 +1162,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           primary_color: updates.primaryColor,
           accent_color: updates.accentColor,
           background_color: updates.backgroundColor,
+          background_image_url: updates.backgroundImageUrl,
           sidebar_color: updates.sidebarColor,
           font_family: updates.fontFamily,
         }),
@@ -1076,6 +1192,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
   fetchWorkspaces: async () => {
     if (!useAuthStore.getState().token) return;
+    // Concurrent callers share one request. Three components fetch the workspace
+    // list on mount on every page load (the workspace layout, the shell layout
+    // and the platform status footer), which used to mean three identical
+    // GET /api/workspaces round-trips. Only *overlapping* calls are merged — a
+    // call made after the previous one settles still hits the network, so
+    // post-mutation refreshes (settings pages) keep returning fresh data.
+    if (inFlightWorkspacesFetch) return inFlightWorkspacesFetch;
+    inFlightWorkspacesFetch = (async () => {
     try {
       const { authFetch } = await import('./auth');
       const response = await authFetch('/api/workspaces');
@@ -1105,6 +1229,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           primaryColor: ws.primary_color || DEFAULT_THEME.primaryColor,
           accentColor: ws.accent_color || DEFAULT_THEME.accentColor,
           backgroundColor: ws.background_color || DEFAULT_THEME.backgroundColor,
+          backgroundImageUrl: normalize(ws.background_image_url),
           sidebarColor: ws.sidebar_color || DEFAULT_THEME.sidebarColor,
           fontFamily: ws.font_family,
         },
@@ -1140,6 +1265,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     } catch (error) {
       console.error('Failed to fetch workspaces:', error);
     }
+    })().finally(() => {
+      inFlightWorkspacesFetch = null;
+    });
+    return inFlightWorkspacesFetch;
   },
 
   // Branch actions
@@ -1523,20 +1652,25 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         // Persist these parts of state
         workspaces: state.workspaces,
         currentWorkspaceId: state.currentWorkspaceId,
+        recentWorkspaceIds: state.recentWorkspaceIds,
         conversations: state.conversations,
         activeConversationId: state.activeConversationId,
         projects: state.projects,
         sidebarCollapsed: state.sidebarCollapsed,
         expandedSections: state.expandedSections,
         selectedAgent: state.selectedAgent,
+        agentExplicitlySelected: state.agentExplicitlySelected,
+        selectedChatModels: state.selectedChatModels,
         paneAgent: state.paneAgent,
-        // Do not persist paneAgentExplicitlySelected (same as main chat): a hard
-        // refresh should re-default the right pane to Abi via agents sync.
+        // Do not persist paneAgentExplicitlySelected: a hard refresh should
+        // re-default the right pane to Abi via agents sync.
         paneConversationId: state.paneConversationId,
         paneOpenTabIds: state.paneOpenTabIds,
         activePanelSection: state.activePanelSection,
+        dockWidth: state.dockWidth,
         sectionPanelWidth: state.sectionPanelWidth,
         aiPaneWidth: state.aiPaneWidth,
+        sidebarNavOrder: state.sidebarNavOrder,
       }),
       onRehydrateStorage: () => (state) => {
         // After hydration completes, fetch workspaces from API
@@ -1544,6 +1678,20 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           // Drop legacy persisted paneAgentExplicitlySelected so hard refresh
           // re-defaults the right pane to Abi (agents sync), matching main chat.
           state.paneAgentExplicitlySelected = false;
+          state.sidebarNavOrder = mergeNavOrder(state.sidebarNavOrder);
+          if (isTransientPanelSection(state.activePanelSection)) {
+            state.activePanelSection = null;
+          }
+          if (isTransientPanelSection(state.lastActivePanelSection)) {
+            state.lastActivePanelSection = null;
+          }
+          state.recentWorkspaceIds = Array.isArray(state.recentWorkspaceIds)
+            ? state.recentWorkspaceIds.filter((id) => typeof id === 'string')
+            : [];
+          state.dockWidth = clampDockWidth(
+            typeof state.dockWidth === 'number' ? state.dockWidth : DOCK_WIDTH_DEFAULT,
+          );
+          state.sectionPanelWidth = clampFeatureColumnWidth(state.sectionPanelWidth);
           // Drop pane tabs that belong to another workspace (or missing rows).
           const ws = state.currentWorkspaceId;
           const known = new Set(

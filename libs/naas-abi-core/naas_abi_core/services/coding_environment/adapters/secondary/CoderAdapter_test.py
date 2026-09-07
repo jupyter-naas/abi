@@ -521,11 +521,11 @@ def test_get_workspace_ui_url_uses_access_url_owner_and_name() -> None:
 def test_build_workspace_ui_url() -> None:
     assert (
         CoderAdapter.build_workspace_ui_url(
-            access_url="https://coder.zen.naas.ai/",
+            access_url="https://coder.example.com/",
             owner="jeremy",
             name="slides-quest",
         )
-        == "https://coder.zen.naas.ai/@jeremy/slides-quest"
+        == "https://coder.example.com/@jeremy/slides-quest"
     )
 
 

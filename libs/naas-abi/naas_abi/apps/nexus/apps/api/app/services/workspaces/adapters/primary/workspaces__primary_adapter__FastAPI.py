@@ -46,6 +46,9 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
     WorkspaceService,
     WorkspaceSlugAlreadyExistsError,
 )
+from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
+    resolve_public_module_asset_url,
+)
 from naas_abi_core.services.email.EmailService import EmailService
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -86,6 +89,7 @@ class Workspace(BaseModel):
     primary_color: str | None = "#22c55e"
     accent_color: str | None = None
     background_color: str | None = None
+    background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
     platform_drive_enabled: bool = False
@@ -107,6 +111,7 @@ class WorkspaceCreate(BaseModel):
     primary_color: str | None = "#22c55e"
     accent_color: str | None = None
     background_color: str | None = None
+    background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
 
@@ -118,6 +123,7 @@ class WorkspaceUpdate(BaseModel):
     primary_color: str | None = None
     accent_color: str | None = None
     background_color: str | None = None
+    background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
     platform_drive_enabled: bool | None = None
@@ -204,6 +210,18 @@ async def _load_org_role_overrides(
     }
 
 
+def _workspace_public_asset_url(raw: str | None) -> str | None:
+    """Rewrite module asset paths (``src/external/…/assets/public/…``) to API URLs."""
+    if not raw:
+        return raw
+    if raw.startswith(("http://", "https://", "/uploads/")):
+        return raw
+    try:
+        return resolve_public_module_asset_url(raw, abi_module_path=None)
+    except Exception:
+        return raw
+
+
 def _to_schema(
     record: WorkspaceRecord,
     current_user_role: str | None,
@@ -217,11 +235,12 @@ def _to_schema(
         slug=record.slug,
         owner_id=record.owner_id,
         organization_id=record.organization_id,
-        logo_url=record.logo_url,
+        logo_url=_workspace_public_asset_url(record.logo_url),
         logo_emoji=record.logo_emoji,
         primary_color=record.primary_color,
         accent_color=record.accent_color,
         background_color=record.background_color,
+        background_image_url=_workspace_public_asset_url(record.background_image_url),
         sidebar_color=record.sidebar_color,
         font_family=record.font_family,
         platform_drive_enabled=record.platform_drive_enabled,
@@ -320,6 +339,7 @@ async def create_workspace(
                 primary_color=workspace.primary_color,
                 accent_color=workspace.accent_color,
                 background_color=workspace.background_color,
+                background_image_url=workspace.background_image_url,
                 sidebar_color=workspace.sidebar_color,
                 font_family=workspace.font_family,
             )

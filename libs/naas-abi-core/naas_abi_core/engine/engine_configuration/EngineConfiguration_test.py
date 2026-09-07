@@ -145,6 +145,52 @@ opencode:
     assert configuration.opencode.providers[0].key == "test-opencode"
 
 
+def test_from_yaml_content_does_not_render_jinja_on_yaml_comment_lines(tmp_path):
+    """Commented-out `{{ secret.X }}` must not be resolved (or hard-fail)."""
+    dotenv = tmp_path / ".env.bootstrap"
+    dotenv.write_text("ENV=local\n", encoding="utf-8")
+
+    configuration = EngineConfiguration.from_yaml_content(
+        _configuration_yaml(
+            title="BASE",
+            dotenv_path=str(dotenv),
+            extra_top_level="""
+# default_agent: "{{ secret.THIS_SECRET_MUST_NOT_BE_RESOLVED }}"
+#   api_key: "{{ secret.ALSO_MUST_NOT_BE_RESOLVED }}"
+""".strip(),
+        )
+    )
+
+    assert configuration.default_agent == "naas_abi AbiAgent"
+
+
+def test_from_yaml_content_still_renders_uncommented_jinja_secrets(tmp_path):
+    dotenv = tmp_path / ".env.bootstrap"
+    dotenv.write_text("ENV=local\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="THIS_SECRET_MUST_BE_RESOLVED"):
+        EngineConfiguration.from_yaml_content(
+            _configuration_yaml(
+                title="BASE",
+                dotenv_path=str(dotenv),
+                extra_top_level='default_agent: "{{ secret.THIS_SECRET_MUST_BE_RESOLVED }}"',
+            )
+        )
+
+
+def test_leave_yaml_comments_unrendered_preserves_comment_text():
+    source = (
+        "key: value\n"
+        "  # api_key: \"{{ secret.MISSING }}\"\n"
+        "other: '{{ secret.PRESENT }}'\n"
+    )
+    masked = EngineConfiguration._leave_yaml_comments_unrendered(source)
+
+    assert "{% raw %}  # api_key: \"{{ secret.MISSING }}\"{% endraw %}\n" in masked
+    assert "other: '{{ secret.PRESENT }}'" in masked
+    assert not masked.split("other:", 1)[1].startswith("{% raw %}")
+
+
 # =============================================================================
 # ABI_SKIP_ONTOLOGY_LOADING
 #

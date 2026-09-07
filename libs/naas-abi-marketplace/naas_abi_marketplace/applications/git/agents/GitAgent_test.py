@@ -33,6 +33,44 @@ def test_git_add_tool_registered(agent):
     assert "git_add" in agent._tools_by_name
 
 
+def test_make_check_and_make_fix_tools_registered(agent):
+    assert "make_check" in agent._tools_by_name
+    assert "make_fix" in agent._tools_by_name
+
+
+def test_system_prompt_requires_make_check_before_pr():
+    from naas_abi_marketplace.applications.git.agents.GitAgent import GitAgent
+
+    prompt = GitAgent.system_prompt.lower()
+    assert "make_check" in prompt
+    assert "make check" in prompt or "make_check" in prompt
+    assert "do not create or update a pr until" in prompt or "first call `make_check`" in prompt
+
+
+def test_make_check_reports_failure_without_makefile(agent, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = agent._tools_by_name["make_check"].invoke({})
+    assert result.startswith("MAKE CHECK FAILED"), result
+
+
+def test_make_check_timeout_decodes_bytes_output(agent, monkeypatch):
+    import subprocess
+
+    def _timeout(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(
+            cmd=["make", "check"],
+            timeout=600,
+            output=b"ran ruff\n",
+            stderr=b"still typechecking\n",
+        )
+
+    monkeypatch.setattr(subprocess, "run", _timeout)
+    result = agent._tools_by_name["make_check"].invoke({})
+    assert result.startswith("MAKE CHECK FAILED (timed out"), result
+    assert "ran ruff" in result, result
+    assert "still typechecking" in result, result
+
+
 def test_git_add_empty_paths(agent):
     tool = agent._tools_by_name["git_add"]
     result = tool.invoke({"paths": []})
@@ -124,6 +162,41 @@ def test_git_add_skips_untracked_files(agent, tmp_path, monkeypatch):
     ).stdout
     assert "uv.lock" in staged, staged
     assert "_KICKSTART.md" not in staged, staged
+
+
+def test_git_diff_staged_empty_is_explicit(agent, tmp_path, monkeypatch):
+    _init_git_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    _commit_file(tmp_path, "uv.lock", "locked\n")
+
+    result = agent._tools_by_name["git_diff_staged"].invoke({})
+    assert "STAGED DIFF: empty" in result, result
+    assert "Nothing is staged" in result, result
+
+
+def test_git_diff_staged_lists_staged_files(agent, tmp_path, monkeypatch):
+    _init_git_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    _commit_file(tmp_path, "uv.lock", "locked\n")
+    (tmp_path / "uv.lock").write_text("locked v2\n")
+    agent._tools_by_name["git_add"].invoke({"paths": ["uv.lock"]})
+
+    result = agent._tools_by_name["git_diff_staged"].invoke({})
+    assert "STAGED DIFF: empty" not in result, result
+    assert "ARE staged" in result, result
+    assert "uv.lock" in result, result
+
+
+def test_git_status_summarizes_staged_files(agent, tmp_path, monkeypatch):
+    _init_git_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    _commit_file(tmp_path, "uv.lock", "locked\n")
+    (tmp_path / "uv.lock").write_text("locked v2\n")
+    agent._tools_by_name["git_add"].invoke({"paths": ["uv.lock"]})
+
+    result = agent._tools_by_name["git_status"].invoke({})
+    assert "staged_count=1" in result, result
+    assert "uv.lock" in result, result
 
 
 def test_git_add_skips_unchanged_files(agent, tmp_path, monkeypatch):

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Header } from '@/components/shell/header';
@@ -55,6 +55,11 @@ import {
   filesScopeForSource,
   relativeDrivePath,
 } from '../lib/drive-label';
+import {
+  filesDeepLinkFolderAndPreview,
+  matchListedFile,
+  parseFilesDeepLink,
+} from '../lib/files-route';
 import './browse.css';
 
 type FileWithRelativeDir = { file: File; relativeDir?: string };
@@ -127,6 +132,7 @@ function sortFiles(
 export default function FilesPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const workspaceId = params.workspaceId as string;
   
   const {
@@ -215,6 +221,7 @@ export default function FilesPage() {
   const skipRegularFetchRef = useRef(false);
   // Local path of the file to auto-preview once files finish loading
   const [localPendingPreview, setLocalPendingPreview] = useState<string | null>(null);
+  const deepLinkConsumedRef = useRef(false);
 
   // Helper to open file in Lab
   const handleOpenInLab = (file: FileInfo) => {
@@ -296,10 +303,33 @@ export default function FilesPage() {
     setStarredNavigation(null);
   }, [starredNavigation, setActiveSource, fetchFiles, setStarredNavigation, workspaceId]);
 
+  // Session-authenticated deep link: /workspace/:id/files?source=platform-drive&path=...
+  // Storage keys are not HTTP routes; stay inside the Files UI.
+  useEffect(() => {
+    if (deepLinkConsumedRef.current || starredNavigation) return;
+    const deepLink = parseFilesDeepLink(searchParams?.toString() ?? '');
+    if (!deepLink.source && !deepLink.path) return;
+    deepLinkConsumedRef.current = true;
+    skipRegularFetchRef.current = true;
+    if (deepLink.source) setActiveSource(deepLink.source);
+    setSearchQuery('');
+    setDebouncedSearch('');
+    lastSearchRef.current = '';
+    setCurrentPage(1);
+    const { folderPath, previewPath } = filesDeepLinkFolderAndPreview(deepLink.path || '');
+    fetchFiles(folderPath, {
+      limit: pageSizeRef.current,
+      offset: 0,
+      search: '',
+      workspaceId,
+    });
+    if (previewPath) setLocalPendingPreview(previewPath);
+  }, [searchParams, starredNavigation, setActiveSource, fetchFiles, workspaceId]);
+
   // Once the files list loads, open the pending preview (if any).
   useEffect(() => {
     if (!localPendingPreview || loading) return;
-    const target = files.find((f) => f.path === localPendingPreview);
+    const target = matchListedFile(files, localPendingPreview);
     if (!target) return;
     setLocalPendingPreview(null);
     if (isPdfFile(target)) openPdfViewer(target);
@@ -322,7 +352,7 @@ export default function FilesPage() {
   const relativePath = relativeDrivePath(currentPath, driveRoot, activeSource, workspaceId);
 
   useEffect(() => {
-    // Skip if a starred navigation just updated activeSource — it already called fetchFiles.
+    // Skip if a starred nav or deep link just set the path; it already called fetchFiles.
     if (skipRegularFetchRef.current) {
       skipRegularFetchRef.current = false;
       return;

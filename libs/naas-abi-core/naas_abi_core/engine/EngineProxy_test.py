@@ -92,3 +92,40 @@ def test_engine_proxy_model_registry_available_false_when_engine_lacks_registry(
     )
 
     assert proxy.services.model_registry_available() is False
+
+
+def test_engine_proxy_services_exposes_dataset_service():
+    from unittest.mock import MagicMock
+
+    from naas_abi_core.services.dataset.DatasetService import DatasetService
+
+    dataset_service = DatasetService(adapter=MagicMock())
+    engine = _DummyEngine(services=IEngine.Services(dataset=dataset_service))
+
+    proxy = EngineProxy(
+        engine=engine,
+        module_name="test_module",
+        module_dependencies=ModuleDependencies(modules=[], services=[DatasetService]),
+    )
+
+    assert proxy.services.dataset is dataset_service
+    assert proxy.services.dataset_available() is True
+
+
+def test_engine_proxy_services_denies_dataset_service_when_not_allowed():
+    from unittest.mock import MagicMock
+
+    from naas_abi_core.services.dataset.DatasetService import DatasetService
+
+    dataset_service = DatasetService(adapter=MagicMock())
+    engine = _DummyEngine(services=IEngine.Services(dataset=dataset_service))
+
+    proxy = EngineProxy(
+        engine=engine,
+        module_name="test_module",
+        module_dependencies=ModuleDependencies(modules=[], services=[]),
+    )
+
+    assert proxy.services.dataset_available() is False
+    with pytest.raises(ValueError, match="does not have access"):
+        _ = proxy.services.dataset

@@ -1,9 +1,9 @@
-/** Canonical slide stage used by Zen / Nexus deck seeds. */
+/** Canonical slide stage used by Nexus deck seeds. */
 export const SLIDES_STAGE_WIDTH = 1280;
 export const SLIDES_STAGE_HEIGHT = 720;
 
 /** postMessage channel for sandboxed preview iframes (no allow-same-origin). */
-export const SLIDES_PREVIEW_MESSAGE_SOURCE = 'zen-slides-preview';
+export const SLIDES_PREVIEW_MESSAGE_SOURCE = 'nexus-slides-preview';
 
 export type SlidesPreviewToParentMessage =
   | {
@@ -40,8 +40,8 @@ export function computeSlidesPreviewScale(
 }
 
 /** CSS injected into preview srcDoc so fixed 1280x720 slides fill the stage cleanly. */
-export const SLIDES_PREVIEW_FIT_STYLE_ID = 'zen-slides-preview-fit';
-export const SLIDES_PREVIEW_BRIDGE_SCRIPT_ID = 'zen-slides-preview-bridge';
+export const SLIDES_PREVIEW_FIT_STYLE_ID = 'nexus-slides-preview-fit';
+export const SLIDES_PREVIEW_BRIDGE_SCRIPT_ID = 'nexus-slides-preview-bridge';
 
 const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
 (function () {

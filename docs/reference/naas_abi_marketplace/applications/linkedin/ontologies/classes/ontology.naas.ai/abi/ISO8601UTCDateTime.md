@@ -1,19 +1,19 @@
 # ISO8601UTCDateTime
 
 ## What it is
-- A thin subclass wrapper around `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.ISO8601UTCDateTime`.
-- Provides an `actions()` hook method intended to be overridden with custom logic.
+- A thin subclass of `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.ISO8601UTCDateTime`.
+- Defines an `actions()` hook method intended for custom logic.
 
 ## Public API
 - `class ISO8601UTCDateTime(_ISO8601UTCDateTime)`
-  - Inherits all behavior from the upstream `_ISO8601UTCDateTime` class.
+  - Inherits all behavior from the upstream `_ISO8601UTCDateTime`.
   - `actions(self)`
-    - Placeholder method for action logic.
-    - Currently does nothing (`pass`) and returns `None`.
+    - Hook for implementing action logic.
+    - Declared but has no implementation (no body/return).
 
 ## Configuration/Dependencies
-- Depends on:
-  - `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.ISO8601UTCDateTime`
+- Imports and depends on:
+  - `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.ISO8601UTCDateTime` (aliased as `_ISO8601UTCDateTime`)
 
 ## Usage
 ```python
@@ -22,9 +22,8 @@ from naas_abi_marketplace.applications.linkedin.ontologies.classes.ontology.naas
 )
 
 obj = ISO8601UTCDateTime()
-result = obj.actions()  # currently returns None
-print(result)
+# obj.actions()  # Not usable as-is: method is declared without an implementation.
 ```
 
 ## Caveats
-- `actions()` is a no-op in this implementation; meaningful behavior requires overriding it (or relying on inherited methods from the upstream class).
+- `actions()` is incomplete in this file (no implementation), so calling it as-is will not work. Implement/override `actions()` or rely on inherited methods from the upstream class.

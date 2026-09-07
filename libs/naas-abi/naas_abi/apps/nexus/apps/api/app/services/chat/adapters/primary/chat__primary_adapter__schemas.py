@@ -31,6 +31,7 @@ class MessageMetadataUpdate(BaseModel):
     execution_time: float | None = None
     steps: list[MessageStep] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
+    llm_model: str | None = None
 
 
 class ExportMessageMetadata(BaseModel):
@@ -83,6 +84,7 @@ class ProviderConfigRequest(BaseModel):
     api_key: str | None = None
     account_id: str | None = None
     model: str
+    llm_model: str | None = None
 
     def model_post_init(self, __context: Any) -> None:
         if self.type not in VALID_PROVIDER_TYPES:
@@ -107,6 +109,7 @@ class ChatRequest(BaseModel):
     messages: list[MessageRequest] = Field(default_factory=list, max_length=200)
     agent: str = Field(default="aia", min_length=1, max_length=50)
     provider: ProviderConfigRequest | None = None
+    llm_model: str | None = Field(None, max_length=200)
     context: dict[str, Any] | None = None
     system_prompt: str | None = Field(None, max_length=50_000)
     search_enabled: bool = False

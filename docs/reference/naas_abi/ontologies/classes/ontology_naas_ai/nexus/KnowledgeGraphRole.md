@@ -15,7 +15,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.KnowledgeGraphRole import KnowledgeGraphRole
+from naas_abi.ontologies.classes.ontology_demo.nexus.KnowledgeGraphRole import KnowledgeGraphRole
 
 role = KnowledgeGraphRole()
 role.actions()  # no-op by default

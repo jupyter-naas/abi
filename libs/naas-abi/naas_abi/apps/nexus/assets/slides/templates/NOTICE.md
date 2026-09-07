@@ -1,6 +1,6 @@
 # Third-party notices (Slides templates)
 
-Visual preset ideas (color mood, layout density) were adapted for the Zen
+Visual preset ideas (color mood, layout density) were adapted for the Nexus
 deck contract from the MIT-licensed Frontend Slides skill and style recipes:
 
 https://github.com/zarazhangrui/frontend-slides
@@ -25,5 +25,5 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Zen does not vendor the Frontend Slides skill sources. Seeds here use the Zen
+ABI does not vendor the Frontend Slides skill sources. Seeds here use the Nexus
 HTML contract (`.deck` / `.slide`, menubar, `buildPptx()`).

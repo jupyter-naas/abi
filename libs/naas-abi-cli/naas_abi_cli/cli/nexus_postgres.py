@@ -1,9 +1,9 @@
-"""Break-glass Postgres helpers for Nexus user/workspace ops (Zen VM SOP).
+"""Break-glass Postgres helpers for Nexus user/workspace ops (ops VM SOP).
 
 Preferred path is the authenticated Nexus HTTP API. Use this only when browser
-auth / password registration is unavailable, typically on `abi-naas-app` via:
+auth / password registration is unavailable, typically on an ops host via:
 
-  NEXUS_POSTGRES_COMPOSE_DIR=/opt/zen/zen
+  NEXUS_POSTGRES_COMPOSE_DIR=/opt/abi
   abi user create --via postgres --email ... --name ...
 
 Requires `bcrypt` at runtime for password hashing.
@@ -95,8 +95,8 @@ def run_postgres_sql(sql: str) -> str:
     compose_dir = os.getenv("NEXUS_POSTGRES_COMPOSE_DIR")
     if not compose_dir:
         raise RuntimeError(
-            "Set NEXUS_POSTGRES_COMPOSE_DIR to the Zen compose directory "
-            "(e.g. /opt/zen/zen) before using --via postgres."
+            "Set NEXUS_POSTGRES_COMPOSE_DIR to the deployment compose directory "
+            "(e.g. /opt/abi) before using --via postgres."
         )
     root = Path(compose_dir)
     gcp = root / "docker-compose.gcp.yml"

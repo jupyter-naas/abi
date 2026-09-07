@@ -242,6 +242,7 @@ class WorkspaceModel(Base):
     primary_color = Column(String, nullable=True, default="#22c55e")  # Primary brand color (hex)
     accent_color = Column(String, nullable=True)  # Accent/secondary color (hex)
     background_color = Column(String, nullable=True)  # Custom background color (hex)
+    background_image_url = Column(Text, nullable=True)  # Desktop wallpaper URL
     sidebar_color = Column(String, nullable=True)  # Custom sidebar background color (hex)
     font_family = Column(String, nullable=True)  # Custom font family name
 
@@ -728,7 +729,7 @@ class AppConfigModel(Base):
     # Marketplace app identifier: "<module_path>:<app_name>" (e.g.
     # "naas_abi_marketplace.applications.openrouter:dashboard").
     app_id = Column(String(512), nullable=False, index=True)
-    enabled = Column(Boolean, nullable=False, default=True)
+    enabled = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 

@@ -58,9 +58,9 @@ You have access to profile of the user: [LINKEDIN_PROFILE_URL].
 I found x mutual connections with [person name].
 
 Here are the first 10 profiles:
-- [Profile 1](https://www.linkedin.com/in/profile-1)
-- [Profile 2](https://www.linkedin.com/in/profile-2)
-- [Profile 3](https://www.linkedin.com/in/profile-3)
+- [Profile 1](https://demo.example/profiles/demo
+- [Profile 2](https://demo.example/profiles/demo
+- [Profile 3](https://demo.example/profiles/demo
 
 Would you like to filter the results on their current organization [organization name] to reduce the number of results?
 ...

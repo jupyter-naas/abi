@@ -38,6 +38,7 @@ class PythonAdapter(IKeyValueAdapter):
                 check_same_thread=False,
             )
             self._conn.execute(f"PRAGMA journal_mode={journal_mode}")
+            self._conn.execute(f"PRAGMA busy_timeout={max(0, int(busy_timeout_ms))}")
             self._conn.execute("PRAGMA synchronous=NORMAL")
             self._conn.execute(
                 """
@@ -74,6 +75,9 @@ class PythonAdapter(IKeyValueAdapter):
                 "DELETE FROM kv_store WHERE key = ? AND expires_at IS NOT NULL AND expires_at <= ?",
                 (key, self._now()),
             )
+            # DML opens an implicit transaction; commit so readers do not hold
+            # the write lock until the next set/delete (api + dagster share this file).
+            self._conn.commit()
             return
 
         entry = self._store.get(key)

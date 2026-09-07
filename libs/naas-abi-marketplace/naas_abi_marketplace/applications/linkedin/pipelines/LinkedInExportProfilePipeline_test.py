@@ -19,7 +19,7 @@ def pipeline():
     pipeline_configuration = LinkedInExportProfilePipelineConfiguration(
         triple_store=triple_store_service,
         linkedin_export_configuration=LinkedInExportIntegrationConfiguration(
-            export_file_path="storage/datastore/linkedin/export/florent-ravenel/Complete_LinkedInDataExport_11-06-2025.zip (1).zip"
+            export_file_path="storage/datastore/linkedin/export/alice-dupont/Complete_LinkedInDataExport_11-06-2025.zip (1).zip"
         ),
     )
     return LinkedInExportProfilePipeline(pipeline_configuration)
@@ -27,7 +27,7 @@ def pipeline():
 
 def test_run(pipeline: LinkedInExportProfilePipeline):
     parameters = LinkedInExportProfilePipelineParameters(
-        linkedin_public_url="https://www.linkedin.com/in/florent-ravenel/",
+        linkedin_public_url="https://demo.example/profiles/demo",
         file_name="Profile.csv",
     )
     graph = pipeline.run(parameters)

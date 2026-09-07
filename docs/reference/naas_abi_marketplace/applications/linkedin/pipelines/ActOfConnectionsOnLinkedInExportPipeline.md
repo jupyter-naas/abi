@@ -1,58 +1,55 @@
 # ActOfConnectionsOnLinkedInExportPipeline
 
 ## What it is
-- A pipeline that imports LinkedIn **Connections** data from a LinkedIn export CSV (default: `Connections.csv`) into a triple store as RDF.
-- Creates a set of shared entities (the “owner” person, export file, LinkedIn org, location), then processes each CSV row in parallel, generating RDF entities/relations and inserting each row graph into the triple store.
+- A threaded import pipeline that reads LinkedIn **Connections** data from a LinkedIn export CSV (default `Connections.csv`) and inserts RDF graphs into a triple store.
+- Inserts a **shared** RDF graph once (owner person, export file, LinkedIn org, location), then processes each CSV row in parallel and inserts each row’s RDF graph as it completes.
 
 ## Public API
 
 ### Configuration
-
 - `ActOfConnectionsOnLinkedInExportPipelineConfiguration(PipelineConfiguration)`
-  - `triple_store: ITripleStoreService` — target triple store service (must support `query()` and `insert()`).
-  - `linkedin_export_configuration: LinkedInExportIntegrationConfiguration` — where the export ZIP/path is located.
-  - `linkedin_export_profile_pipeline_configuration: LinkedInExportProfilePipelineConfiguration` — present but not used in this pipeline’s code.
-  - `limit: int | None = None` — optional max number of CSV rows to process.
-  - `workers: int = 20` — thread pool size for row processing.
+  - `triple_store: ITripleStoreService` — target triple store; must support `query()` and `insert()`.
+  - `linkedin_export_configuration: LinkedInExportIntegrationConfiguration` — where the export archive/path is located.
+  - `linkedin_export_profile_pipeline_configuration: LinkedInExportProfilePipelineConfiguration` — required by config, not otherwise used in this pipeline.
+  - `limit: int | None = None` — optional maximum number of rows to process.
+  - `workers: int = 20` — number of thread workers for row processing.
 
 ### Parameters
-
 - `ActOfConnectionsOnLinkedInExportPipelineParameters(PipelineParameters)`
-  - `person_name: str` — used to find an existing `Person` by label substring match (case-insensitive) or create a new one.
-  - `file_name: str = "Connections.csv"` — CSV name to read from the LinkedIn export.
+  - `person_name: str` — used to find (via SPARQL label substring match) or create the “owner” `Person`.
+  - `file_name: str = "Connections.csv"` — CSV file name to read from the LinkedIn export.
 
-### Pipeline
-
+### Pipeline class
 - `ActOfConnectionsOnLinkedInExportPipeline(Pipeline)`
   - `run(parameters: PipelineParameters) -> rdflib.Graph`
-    - Inserts shared entities once.
+    - Inserts shared entities into the triple store.
     - Reads the CSV via `LinkedInExportIntegration.read_csv()`.
-    - Processes each row concurrently, inserting each row’s RDF graph into the triple store as tasks complete.
-    - Returns only the **shared** RDF graph (row graphs are inserted during processing).
+    - Processes rows concurrently via `ThreadPoolExecutor`, inserting each row graph into the triple store.
+    - Returns the shared graph only (row graphs are not returned).
   - `as_tools() -> list[langchain_core.tools.BaseTool]`
-    - Exposes the pipeline as a LangChain `StructuredTool` named `linkedin_export_connections_import_csv`.
+    - Exposes a LangChain `StructuredTool` named `linkedin_export_connections_import_csv`.
   - `as_api(...) -> None`
-    - Declared but does not register any routes (returns `None`).
+    - No routes are registered (method is effectively a no-op).
   - `get_person_entity_from_name(person_name: str) -> Person`
-    - Queries the triple store for a `cco:ont00001262` (Person) whose `rdfs:label` contains `person_name`.
-    - If not found, creates a new `Person` with a generated URI (not inserted until `run()` inserts shared graph).
-  - `generate_graph_date(date: datetime | str, ...) -> ISO8601UTCDateTime`
-    - Builds an `ISO8601UTCDateTime` entity URI/label from a `datetime` or a parsable string.
+    - Queries the triple store for a `cco:ont00001262` Person whose `rdfs:label` contains `person_name` (case-insensitive).
+    - If not found, creates a new `Person` with a generated URI (not inserted until `run()`).
+  - `generate_graph_date(date: datetime | str, date_format: str = "%d %b %Y", target_date_format: str = "%Y-%m-%dT%H:%M:%S.%fZ") -> ISO8601UTCDateTime`
+    - Creates an `ISO8601UTCDateTime` entity from a `datetime` or a parseable string.
   - `_process_row(...) -> rdflib.Graph` (internal)
-    - Converts one CSV row into RDF entities and relationships.
+    - Builds RDF entities and relations for one CSV row.
 
 ## Configuration/Dependencies
-- **Triple store**: `ITripleStoreService`
-  - Must support:
-    - `query(sparql: str)` returning results consumable by `SPARQLUtils.results_to_list()`
+- **Triple store**
+  - Interface: `ITripleStoreService`
+    - `query(sparql: str)` (consumed through `SPARQLUtils.results_to_list`)
     - `insert(graph: rdflib.Graph, graph_name: rdflib.term.URIRef)`
-  - Inserts are written to graph name: `http://ontology.naas.ai/graph/default`.
-- **LinkedIn export input**
-  - `LinkedInExportIntegrationConfiguration.export_file_path` must point to the LinkedIn export archive/path expected by `LinkedInExportIntegration`.
+  - Insert graph name used: `http://ontology.naas.ai/graph/default`
+- **LinkedIn export reader**
+  - `LinkedInExportIntegration` driven by `LinkedInExportIntegrationConfiguration.export_file_path`
 - **Concurrency**
-  - Uses `ThreadPoolExecutor` with configurable `workers`.
+  - Uses `ThreadPoolExecutor(max_workers=workers)`; inserts occur as futures complete.
 - **Ontology entities**
-  - Uses classes from `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn` (e.g., `Person`, `ActOfConnection`, `ConnectionsExportFile`, etc.) and their `.rdf()` graph generation.
+  - Uses classes from `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn` (e.g., `Person`, `ActOfConnection`, `ConnectionsExportFile`, etc.), generating RDF via each entity’s `.rdf()`.
 
 ## Usage
 
@@ -75,18 +72,18 @@ engine = Engine()
 engine.load(module_names=["naas_abi_marketplace.applications.linkedin"])
 module: ABIModule = ABIModule.get_instance()
 
-linkedin_export_configuration = LinkedInExportIntegrationConfiguration(
+export_cfg = LinkedInExportIntegrationConfiguration(
     export_file_path="path/to/Complete_LinkedInDataExport.zip"
 )
 profile_cfg = LinkedInExportProfilePipelineConfiguration(
     triple_store=module.engine.services.triple_store,
-    linkedin_export_configuration=linkedin_export_configuration,
+    linkedin_export_configuration=export_cfg,
 )
 
 pipeline = ActOfConnectionsOnLinkedInExportPipeline(
     ActOfConnectionsOnLinkedInExportPipelineConfiguration(
         triple_store=module.engine.services.triple_store,
-        linkedin_export_configuration=linkedin_export_configuration,
+        linkedin_export_configuration=export_cfg,
         linkedin_export_profile_pipeline_configuration=profile_cfg,
         limit=100,
         workers=10,
@@ -102,8 +99,11 @@ shared_graph = pipeline.run(
 ```
 
 ## Caveats
-- **Return value**: `run()` returns only the graph for shared entities; per-row graphs are inserted during processing and not returned.
-- **Date parsing**: expects `Connected On` formatted like `%d %b %Y` (e.g., `11 Jun 2025`). If parsing fails, it attempts `generate_graph_date()` with the raw string, which may raise if the string does not match the default `date_format`.
-- **Person lookup heuristic**: `get_person_entity_from_name()` uses a substring match on `rdfs:label` and picks the first result only.
-- **Console output**: uses `print()` in multiple places (including per-row worker messages), which can be noisy with many rows/workers.
-- **`as_api()`**: does not expose any HTTP endpoints (no routes are registered).
+- `run()` returns only the **shared** RDF graph; per-row graphs are inserted during execution and not returned.
+- Date handling:
+  - Tries to parse `Connected On` using `"%d %b %Y"`; if parsing fails, it calls `generate_graph_date()` with the raw string, which will raise if it still cannot be parsed.
+- Person lookup:
+  - `get_person_entity_from_name()` uses a case-insensitive substring match on `rdfs:label` and returns the **first** match only.
+- Logging/output:
+  - Uses `print()` in several places, including per-row worker messages, which can be noisy with many rows/workers.
+- `as_api()` does not register any routes.

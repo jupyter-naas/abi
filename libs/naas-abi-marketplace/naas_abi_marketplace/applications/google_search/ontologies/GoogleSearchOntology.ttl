@@ -12,7 +12,7 @@
 <http://ontology.naas.ai/abi/google-search.ttl> rdf:type owl:Ontology ;
     owl:imports <> ;
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/google-search.ttl> ;
-    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc11:contributor "Emma Petit" , "Grace Lambert" , "Alice Dupont" ;
     dc:description "Application ontology for Google Search."@en ;
     dc:license "" ;
     dc:title "Google Search Application Ontology" .

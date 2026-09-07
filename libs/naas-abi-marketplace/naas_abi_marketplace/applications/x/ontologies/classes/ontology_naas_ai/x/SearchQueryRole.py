@@ -1,4 +1,4 @@
-from naas_abi_marketplace.applications.x.ontologies.modules.XOntology import (
+from naas_abi_marketplace.applications.x.ontologies.processes.XSearchRecentTweetsProcess import (
     SearchQueryRole as _SearchQueryRole,
 )
 

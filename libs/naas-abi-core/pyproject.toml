@@ -1,8 +1,8 @@
 [project]
 name = "naas-abi-core"
-version = "2.24.1"
+version = "2.31.2"
 description = "Abi framework allowing you to build your AI system."
-authors = [{ name = "Maxime Jublou", email = "maxime@naas.ai" },{ name = "Florent Ravenel", email = "florent@naas.ai" }, { name = "Jeremy Ravenel", email = "jeremy@naas.ai" }]
+authors = [{ name = "Grace Lambert", email = "maxime@naas.ai" },{ name = "Alice Dupont", email = "florent@naas.ai" }, { name = "Emma Petit", email = "jeremy@naas.ai" }]
 requires-python = ">=3.11,<4"
 readme = "README.md"
 dependencies = [
@@ -39,6 +39,7 @@ dependencies = [
     "dagster-postgres>=0.27.12",
     "dagster-aws>=0.27.12",
     "pyoxigraph>=0.5.5",
+    "duckdb>=1.5.5",
 ]
 license = { text = "MIT License" }
 
@@ -102,6 +103,7 @@ allow-direct-references = true
 
 [dependency-groups]
 dev = [
+    "moto[s3]>=5.0.0",
     "mypy>=1.19.0",
     "pytest>=9.0.1",
     "python-semantic-release>=9.21.0",

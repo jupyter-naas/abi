@@ -1,0 +1,209 @@
+schema_version: "1.0"
+
+# Product identity displayed by the static shell.
+brand:
+  name: "Personnel Cockpit"
+  short_name: "S1 - Personnel"
+  description: "S1 workforce analytics"
+  mark: "C"
+  favicon_src: "/favicon.svg"
+  font_stylesheet_url: "https://fonts.googleapis.com/css2?family=Comfortaa:wght@600&family=Lora:wght@400;600&family=Roboto:wght@400;500;700&display=swap"
+
+# Routing, navigation, visibility, and page-level presentation.
+# `page_id` must have a component registered in web/lib/registry.js.
+# `url` is independently configurable and becomes /{entity}/{url}.
+# This app currently has no authenticated session, so only the `public`
+# permission is granted. Any other permission name is denied server-side.
+app:
+  default_page: "dashboard"
+  banner_restore_label: "Show bookmarked banner"
+  pages:
+    - page_id: "dashboard"
+      url: "dashboard"
+      label: "Dashboard"
+      order: 10
+      enabled: true
+      permissions: ["public"]
+      icon_path: "M8.5 10a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zm7 0a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM3.5 19v-1.2c0-2 2.2-3.3 5-3.3s5 1.3 5 3.3V19M13.5 14.5c1.9 0 5 1.1 5 3.2V19"
+      banner:
+        type: "info"
+        enabled: true
+        text: "Headcount, tenure, and seniority from act-of-working temporal regions in the personnel graph."
+    - page_id: "graph"
+      url: "graph"
+      label: "Graph"
+      order: 20
+      enabled: true
+      permissions: ["public"]
+      icon_path: "M7 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zm10 0a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM12 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM8.8 8.8l2.4 5.4M15.2 8.8l-2.4 5.4M9.5 5.5h5"
+      banner:
+        type: "info"
+        enabled: true
+        text: "Distance counts hops from the selected person. Configure graph defaults and controls below."
+    - page_id: "processes"
+      url: "processes"
+      label: "Processes"
+      order: 30
+      enabled: true
+      permissions: ["public"]
+      icon_path: "M12 3.5l7 4v9l-7 4-7-4v-9l7-4zM12 12V7.5M12 12l4.5 2.5M12 12l-4.5 2.5"
+      banner:
+        type: "info"
+        enabled: true
+        text: "Acts of Working and Studying mapped to the BFO 7 buckets."
+    - page_id: "logs"
+      url: "logs"
+      label: "Logs"
+      order: 40
+      enabled: true
+      permissions: ["public"]
+      icon_path: "M7 3.5h10v17H7v-17zm3 4h4M10 12h4M10 16h3"
+      banner:
+        type: "info"
+        enabled: true
+        text: "Demo graph mutation audit: one mutation row per imported person, with temporal bounds, owner, server, status, changed triples, and target graph."
+
+# Values are applied as CSS custom properties on :root. Add any application
+# token here without changing shell.js.
+theme:
+  css_variables:
+    ink: "#1a1f2b"
+    muted: "#5c6578"
+    paper: "#f4f0e8"
+    panel: "#fffcf7"
+    line: "#d9d2c5"
+    accent: "#0f6b5c"
+    accent-soft: "#d7efe9"
+    warn: "#8a5a12"
+    warn-soft: "#f5e6c8"
+    male: "#2f5d8c"
+    female: "#a3546e"
+    rail-width: "240px"
+    rail-collapsed: "4.25rem"
+    nav-icon-size: "1.15rem"
+    brand-mark-size: "1.9rem"
+    brand-mark-collapsed-size: "1.45rem"
+    chrome-height: "3.25rem"
+    font-display: '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif'
+    font-body: '"Avenir Next", "Segoe UI", Helvetica, Arial, sans-serif'
+    background-glow: "#e7efe8"
+    background-start: "#ebe4d6"
+    background-end: "#e2ddd2"
+    banner-info: "#1d4ed8"
+    banner-warning: "#b45309"
+    banner-error: "#b91c1c"
+    bookmark-color: "#ffffff"
+    bookmark-width: "1.35rem"
+    bookmark-height: "1.2rem"
+    bookmark-overlap: "-1rem"
+    bookmark-right: "1.25rem"
+    bookmark-icon-size: "0.65rem"
+    rail-accent-text: "#f7fff9"
+    panel-gradient-start: "#f7f3eb"
+    muted-surface: "#ece8e0"
+    bar-track: "#ece7dc"
+    graph-node-fill: "#ffffff"
+    graph-node-fill-muted: "rgba(255,255,255,0.82)"
+    slide-border: "#242424"
+    slide-accent: "#34d399"
+    slide-text: "#f8fafc"
+    slide-muted: "#6b7280"
+    subtle-surface: "#faf8f3"
+  banner_icons:
+    info: "M11.25 11.25h.75v4.5h.75M12 8.25h.008M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+    warning: "M12 9v3.75m0 3.75h.008M10.363 3.591 2.257 17.727A1.5 1.5 0 0 0 3.557 20h16.886a1.5 1.5 0 0 0 1.3-2.273L13.637 3.591a1.5 1.5 0 0 0-2.274 0Z"
+    error: "M12 9v3.75m0 3.75h.008M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+    restore: "M7 3.5h10v17l-5-3-5 3v-17z"
+  bfo_buckets:
+    - { uri: "http://purl.obolibrary.org/obo/BFO_0000040", type: "Material Entity", label: "Who", color: "#3b82f6", border: "#2563eb" }
+    - { uri: "http://purl.obolibrary.org/obo/BFO_0000015", type: "Process", label: "What", color: "#22c55e", border: "#16a34a" }
+    - { uri: "http://purl.obolibrary.org/obo/BFO_0000008", type: "Temporal Region", label: "When", color: "#a855f7", border: "#9333ea" }
+    - { uri: "http://purl.obolibrary.org/obo/BFO_0000029", type: "Site", label: "Where", color: "#f97316", border: "#ea580c" }
+    - { uri: "http://purl.obolibrary.org/obo/BFO_0000019", type: "Quality", label: "How it is", color: "#ec4899", border: "#db2777" }
+    - { uri: "http://purl.obolibrary.org/obo/BFO_0000017", type: "Realizable", label: "Why", color: "#eab308", border: "#ca8a04" }
+    - { uri: "http://purl.obolibrary.org/obo/BFO_0000031", type: "GDC", label: "How we know", color: "#06b6d4", border: "#0891b2" }
+    - { uri: "http://purl.obolibrary.org/obo/BFO_0000001", type: "Entity", label: "Entity", color: "#6b7280", border: "#4b5563" }
+    - { uri: "", type: "Unknown", label: "Unknown", color: "#9ca3af", border: "#6b7280" }
+  process_slide:
+    accent: "#34d399"
+    accent_fill: "#10291f"
+    node_stroke: "#3a3a3a"
+    node_fill: "#141414"
+    text: "#f8fafc"
+    muted: "#6b7280"
+    realm_label: "#4b5563"
+    canvas: "#000000"
+    occurrents: "#0d0d0d"
+    continuants: "#0a0a0a"
+    divider: "#242424"
+    font_family: "Roboto, ui-sans-serif, system-ui, sans-serif"
+
+# Graph behavior and design defaults. Session changes made in the parameters
+# panel still override these values for that browser tab.
+graph:
+  default_person_label: "Alice Dupont"
+  default_distance: 2
+  individual_search_min_chars: 3
+  max_processes_per_class: 10
+  scale: { min: 0.25, max: 2.5 }
+  node:
+    radius: 36
+    label_font_size: 11
+    label_line_height: 13
+    process_root_radius: 320
+  camera_distance: 2400
+  default_view: "3d"
+  params_session_key: "cockpit-graph-params-v2"
+  view_labels: { 2d: "2D view", 3d: "3D view" }
+  distance_hint: "Hops out from the selected person. 1 shows what they bear or carry; 2 adds what those acts reach; 3 adds temporal boundary instants."
+  view_defaults:
+    2d: { clusterBy: "bucket", nodeMinGap: 150, zoom: 0.75, legend: false, toolbarLayout: row }
+    3d: { clusterBy: "bucket", linkDistance: 300, repulsion: 4500, nodeMinGap: 150, settleMs: 3000, zoom: 0.6, legend: false, toolbarLayout: row }
+  date_slicer:
+    storage_key: "cockpit-graph-date-slicer-v2"
+  parameters:
+    toolbarLayout:
+      label: "Toolbar layout"
+      type: "select"
+      default: "row"
+      options:
+        - { value: "row", label: "Horizontal" }
+        - { value: "column", label: "Vertical" }
+      hint: "Arrange search and filters in a row or a column."
+    physics: { label: "Physics", type: "toggle", default: true, hint: "Run the force simulation." }
+    clusterBy:
+      label: "Cluster by"
+      type: "select"
+      default: "process"
+      options:
+        - { value: "none", label: "Nothing" }
+        - { value: "process", label: "Act of working" }
+        - { value: "bucket", label: "BFO bucket" }
+      hint: "Pull related nodes into groups."
+    clusterPull: { label: "Cluster pull", min: 0, max: 100, step: 5, default: 50, unit: "%", hint: "How tightly each group is drawn together." }
+    linkDistance: { label: "Link length", min: 80, max: 520, step: 10, default: 260, unit: "px", hint: "Target distance between connected nodes." }
+    repulsion: { label: "Repulsion", min: 200, max: 9000, step: 100, default: 3200, unit: "", hint: "How strongly nodes push away from one another." }
+    nodeMinGap: { label: "Node spacing", min: 0, max: 180, step: 5, default: 60, unit: "px", hint: "Minimum gap between nodes." }
+    settleMs: { label: "Settle time", min: 500, max: 12000, step: 500, default: 3000, unit: "ms", hint: "How long nodes move before the layout freezes." }
+    legend: { label: "BFO legend", type: "toggle", default: false, hint: "Show the BFO colour key." }
+    zoom: { label: "Default zoom", min: 0.25, max: 2.5, step: 0.05, default: 1, unit: "×", hint: "Initial and reset canvas scale." }
+
+# Technical graph-write audit defaults. In production these values should come
+# from the authenticated session and triple-store adapter.
+logs:
+  default_operation: "insert"
+  default_status: "succeeded"
+  process_label: "Graph mutation"
+  target_graph: "http://ontology.naas.ai/graph/personnel"
+  target_graph_label: "Personnel graph"
+  owner:
+    person:
+      entity_id: "http://ontology.naas.ai/abi/Person/alice-dupont"
+      display_name: "Alice Dupont"
+    agent:
+      entity_id: "http://ontology.naas.ai/abi/Agent/demo-agent"
+      display_name: "Demo Agent"
+  server:
+    site_id: "http://ontology.naas.ai/personnel/Site/local-development"
+    display_name: "Local development server"
+    ip_address: "127.0.0.1"

@@ -391,7 +391,7 @@ def test_upsert_file_retries_pushrejected_ref_lock(monkeypatch) -> None:
     race = FakeResponse(
         500,
         {},
-        "PushRejected: cannot lock ref 'refs/heads/slides/naas-ai-deck': "
+        "PushRejected: cannot lock ref 'refs/heads/slides/demo-deck': "
         "is at 4c232bab but expected e621205",
     )
     ok = FakeResponse(
@@ -410,7 +410,7 @@ def test_upsert_file_retries_pushrejected_ref_lock(monkeypatch) -> None:
         [
             (
                 "GET",
-                "/repos/abi/monorepo/contents/slides/naas-ai-deck/deck.html",
+                "/repos/abi/monorepo/contents/slides/demo-deck/deck.html",
                 [
                     FakeResponse(200, {"sha": "blob-old"}),
                     FakeResponse(200, {"sha": "blob-new"}),
@@ -418,17 +418,17 @@ def test_upsert_file_retries_pushrejected_ref_lock(monkeypatch) -> None:
             ),
             (
                 "PUT",
-                "/repos/abi/monorepo/contents/slides/naas-ai-deck/deck.html",
+                "/repos/abi/monorepo/contents/slides/demo-deck/deck.html",
                 [race, ok],
             ),
         ]
     )
     commit = _adapter(session).upsert_file(
         repo_id="abi/monorepo",
-        path="slides/naas-ai-deck/deck.html",
+        path="slides/demo-deck/deck.html",
         content="<html></html>",
         message="Update slides deck",
-        branch="slides/naas-ai-deck",
+        branch="slides/demo-deck",
         author_name="alice",
         author_email="alice@example.com",
     )

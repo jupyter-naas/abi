@@ -17,7 +17,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.Message import Message
+from naas_abi.ontologies.classes.ontology_demo.nexus.Message import Message
 
 msg = Message()
 msg.actions()  # currently no-op

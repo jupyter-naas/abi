@@ -1,4 +1,5 @@
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -67,6 +68,38 @@ def _add_abi_submodule(project_path: str) -> bool:
     # A clone that succeeded but landed an unexpected layout is still unusable
     # as a dependency source, so check for the directory uv will be told about.
     return os.path.isdir(os.path.join(project_path, ABI_SUBMODULE_PATH, "libs"))
+
+
+def _cd_argument(project_path: str) -> str:
+    """The shortest `cd` target that gets the caller from their CWD to the project.
+
+    `abi` runs as a child process, so it cannot change the calling shell's
+    working directory — the best it can do is hand back a line to paste. A
+    relative path is what the caller would have typed themselves, so prefer it
+    when the project sits under the CWD; anything else (a sibling, an absolute
+    `project-path` argument) is clearer spelled out in full.
+    """
+    try:
+        relative = os.path.relpath(project_path, os.getcwd())
+    except ValueError:
+        # Windows: no relative path exists across drives.
+        return shlex.quote(project_path)
+
+    # `..`-prefixed paths are not more readable than the absolute one.
+    if relative == os.curdir or relative.startswith(os.pardir):
+        return shlex.quote(project_path)
+    return shlex.quote(relative)
+
+
+def _print_next_steps(project_path: str) -> None:
+    """Report where the project landed and how to start it."""
+    click.echo()
+    click.secho(f"✓ Project created at {project_path}", fg="green", bold=True)
+    click.echo()
+    click.secho("Next steps:", bold=True)
+    click.echo(f"  cd {_cd_argument(project_path)}")
+    click.echo("  abi dev up")
+    click.echo()
 
 
 @new.command("project")
@@ -198,3 +231,5 @@ def new_project(
         cwd=project_path,
         check=True,
     )
+
+    _print_next_steps(project_path)

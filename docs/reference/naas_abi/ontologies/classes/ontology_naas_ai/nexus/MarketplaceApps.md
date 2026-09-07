@@ -16,7 +16,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.MarketplaceApps import MarketplaceApps
+from naas_abi.ontologies.classes.ontology_demo.nexus.MarketplaceApps import MarketplaceApps
 
 class MyMarketplaceApps(MarketplaceApps):
     def actions(self):

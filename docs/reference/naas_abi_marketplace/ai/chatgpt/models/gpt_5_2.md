@@ -1,36 +1,41 @@
-# gpt_5_2
+# Gpt52Model
 
 ## What it is
-- A module-level definition of a `ChatModel` configured to use OpenAI’s `gpt-5.2` via `langchain_openai.ChatOpenAI`.
-- Exposes a ready-to-use `model` object with deterministic settings (`temperature=0`).
+- Defines a `ModelDefinition` for OpenAI’s `gpt-5.2` using `langchain_openai.ChatOpenAI`.
+- Exposes a ready-to-use `ChatModel` instance (`model`) configured with `temperature=0`.
 
 ## Public API
-- **Constants**
-  - `MODEL_ID: str` — Model identifier (`"gpt-5.2"`).
-  - `PROVIDER: str` — Provider name (`"openai"`).
-- **Variables**
-  - `model: naas_abi_core.models.Model.ChatModel` — Preconfigured chat model wrapper:
-    - `model_id=MODEL_ID`
-    - `provider=PROVIDER`
-    - `model=ChatOpenAI(model=MODEL_ID, temperature=0, api_key=SecretStr(...))`
+- **Class: `Gpt52Model (ModelDefinition)`**
+  - `CANONICAL_ID` — `CanonicalModelId.GPT_5_2`
+  - `MODEL_ID` — `"gpt-5.2"`
+  - `PROVIDER` — `ModelProvider.OPENAI`
+  - `model: ChatModel` — Preconfigured wrapper containing:
+    - `model_id="gpt-5.2"`
+    - `provider=ModelProvider.OPENAI`
+    - `model=ChatOpenAI(model="gpt-5.2", temperature=0, api_key=SecretStr(...))`
+
+- **Module variable: `model: ChatModel`**
+  - Alias to `Gpt52Model.model`.
 
 ## Configuration/Dependencies
 - **Dependencies**
   - `langchain_openai.ChatOpenAI`
-  - `naas_abi_core.models.Model.ChatModel`
+  - `naas_abi_core.models.Model`: `ChatModel`, `ModelDefinition`, `CanonicalModelId`, `ModelProvider`
   - `naas_abi_marketplace.ai.chatgpt.ABIModule`
   - `pydantic.SecretStr`
+
 - **Configuration**
-  - Requires `ABIModule.get_instance().configuration.openai_api_key` to be set; it is wrapped in `SecretStr` and passed to `ChatOpenAI` as `api_key`.
+  - Requires `ABIModule.get_instance().configuration.openai_api_key`.
+  - The key is wrapped in `SecretStr` and passed to `ChatOpenAI` as `api_key`.
 
 ## Usage
 ```python
 from naas_abi_marketplace.ai.chatgpt.models.gpt_5_2 import model
 
-# Use the underlying LangChain chat model
+# Access the underlying LangChain model
 llm = model.model  # ChatOpenAI instance
 ```
 
 ## Caveats
-- This module only defines configuration and a `model` instance; it does not implement invocation helpers. How you call `ChatOpenAI` depends on your LangChain version and calling conventions.
-- Importing this module will access `ABIModule` configuration; missing/invalid `openai_api_key` will fail at import-time.
+- Importing this module reads `ABIModule` configuration at import time; a missing/invalid `openai_api_key` will raise an error during import.
+- This module only provides a configured model object; invocation depends on your LangChain usage/version.

@@ -4,64 +4,71 @@
 A Naas ABI `Integration` that calls the OpenAI **Responses API** to:
 - run web search via the `web_search_preview` tool,
 - analyze images from URLs,
-- analyze PDFs by downloading and extracting text, then sending it to the model.
+- analyze PDFs by downloading them, extracting text, and sending the extracted text to the model.
 
-Each call stores the raw JSON response to a local/object storage-backed datastore path.
+Each call persists the raw JSON response under `datastore_path/responses/...`.
 
 ## Public API
 
-### `OpenAIResponsesIntegrationConfiguration`
-Dataclass configuration for the integration.
-- `api_key: str` (required): OpenAI API key.
-- `model: str = "gpt-4.1-mini"`: Model name sent in the payload.
-- `base_url: str = "https://api.openai.com/v1/responses"`: Responses API endpoint base.
+### `OpenAIResponsesIntegrationConfiguration` (dataclass)
+Configuration for the integration.
+- `api_key: str` (**required**): OpenAI API key used for `Authorization: Bearer ...`.
+- `model: str = "gpt-4.1-mini"`: Model name sent in requests.
+- `base_url: str = "https://api.openai.com/v1/responses"`: Responses API endpoint.
 - `datastore_path: str`: Defaults to `ABIModule.get_instance().configuration.datastore_path`.
 
 ### `OpenAIResponsesIntegration`
 Integration implementation.
 
-#### `search_web(query: str, search_context_size: str = "medium", return_text: bool = False) -> Dict`
-- Sends a Responses API request using the `web_search_preview` tool.
-- Persists the JSON response under:
-  - `{datastore_path}/responses/web_search/{model}/...json`
-- If `return_text=True`, attempts to extract the first `output_text` from the first `message` in `response["output"]` and returns `{"content": <text>}` (or a fallback message).
+#### `search_web(query: str, search_context_size: str = "medium", return_text: bool = False) -> dict`
+- Sends a `POST` to the Responses API using tool:
+  - `{"type": "web_search_preview", "search_context_size": ...}`
+- Saves response JSON to:
+  - `{datastore_path}/responses/web_search/{model}/{timestamp}_{model}_{search_context_size}.json`
+- If `return_text=True`:
+  - scans `response["output"]` for the first `message` item containing `output_text`
+  - returns **either** a string (when there are no annotations) **or** `{"content": <text>}`
+  - if nothing found, returns `{"content": "No valid text content found in response"}`
 
-#### `analyze_image(image_urls: list[str], user_prompt: str = "Describe this image:", detail: str = "auto", return_text: bool = False) -> Dict`
-- Sends one user message containing:
-  - an `input_text` prompt and one or more `input_image` entries (URLs).
-- Persists the JSON response under:
-  - `{datastore_path}/responses/analyze_image/{model}/...json`
-- If `return_text=True`, returns `{"content": <first text found>}` or a fallback message.
+#### `analyze_image(image_urls: list[str], user_prompt: str = "Describe this image:", detail: str = "auto", return_text: bool = False) -> dict`
+- Sends a user message with:
+  - an `input_text` prompt
+  - one `input_image` per URL: `{"image": {"url": ..., "detail": ...}}`
+- Saves response JSON to:
+  - `{datastore_path}/responses/analyze_image/{model}/{timestamp}_{model}_{detail}.json`
+- If `return_text=True`:
+  - returns `{"content": <first text found>}` or a fallback `{"content": "No valid text content found in response"}`
+  - on parsing error returns `{"error": "...", "content": None}`
 
-#### `analyze_pdf(pdf_url: str, user_prompt: str = "Describe this PDF document:", system_prompt: str = "...", return_text: bool = False) -> Dict | str`
-- Downloads the PDF from `pdf_url`, extracts text via `pdfplumber`, then sends extracted text as `input_text`.
-- Persists the JSON response under:
-  - `{datastore_path}/responses/analyze_pdf/{model}/...json`
-- If `return_text=True`, returns `{"content": <text>}` and may append an “Annotations” section if `url_citation` items are found in message content.
+#### `analyze_pdf(pdf_url: str, user_prompt: str = "Describe this PDF document:", system_prompt: str = "...", return_text: bool = False) -> dict | str`
+- Downloads the PDF from `pdf_url` and extracts text using `pdfplumber`.
+- Sends extracted text as `input_text` along with `user_prompt`; optionally includes a `system` message.
+- Saves response JSON to:
+  - `{datastore_path}/responses/analyze_pdf/{model}/{timestamp}_{model}.json`
+- If `return_text=True`:
+  - extracts `output_text` from message content
+  - also collects `url_citation` items in message content and appends an `Annotations:` list (deduped by URL)
+  - returns `{"content": <text>}`; if no text, returns a string `"No text content found in output"`
 - On PDF download/extraction error, returns the error as a string.
 
-### `as_tools(configuration: OpenAIResponsesIntegrationConfiguration)`
-Returns a list of LangChain `StructuredTool` objects wired to an `OpenAIResponsesIntegration` instance:
-- `chatgpt_search_web` → `search_web`
-- `chatgpt_analyze_image` → `analyze_image`
-- `chatgpt_analyze_pdf` → `analyze_pdf`
+### `as_tools(configuration: OpenAIResponsesIntegrationConfiguration) -> list`
+Returns LangChain `StructuredTool` wrappers around the integration:
+- `chatgpt_search_web` → `OpenAIResponsesIntegration.search_web`
+- `chatgpt_analyze_image` → `OpenAIResponsesIntegration.analyze_image`
+- `chatgpt_analyze_pdf` → `OpenAIResponsesIntegration.analyze_pdf`
 
 ## Configuration/Dependencies
-- External libs:
-  - `requests` (HTTP calls)
-  - `pdfplumber` (PDF text extraction)
-  - `pydantic` (tool schemas)
-  - `langchain_core.tools.StructuredTool` (only used by `as_tools`)
-- Naas ABI components:
-  - `Integration`, `IntegrationConfiguration`
-  - `StorageUtils` and `ABIModule` for saving responses
-  - Filesystem cache via `CacheFactory.CacheFS_find_storage(...)`
+- HTTP: `requests`
+- PDF extraction: `pdfplumber`
+- Tool schemas: `pydantic`, `langchain_core.tools.StructuredTool` (only for `as_tools`)
+- Naas ABI: `Integration`, `IntegrationConfiguration`, `StorageUtils`, `ABIModule`
 - Caching:
-  - `_make_request(...)` is cached for **1 day** (pickle), keyed by `(method, endpoint, params, json)`.
+  - `_make_request(...)` is filesystem-cached (pickle) for **1 day** via `CacheFactory.CacheFS_find_storage(subpath="openai_responses")`
+  - cache key includes `(method, endpoint, params, json)` stringified
 
 ## Usage
 
-### Direct integration usage
+### Direct usage
 ```python
 from naas_abi_marketplace.ai.chatgpt.integrations.OpenAIResponsesIntegration import (
     OpenAIResponsesIntegration,
@@ -71,25 +78,9 @@ from naas_abi_marketplace.ai.chatgpt.integrations.OpenAIResponsesIntegration imp
 cfg = OpenAIResponsesIntegrationConfiguration(api_key="YOUR_OPENAI_API_KEY")
 client = OpenAIResponsesIntegration(cfg)
 
-# Web search
-result = client.search_web("Latest Python release notes", return_text=True)
-print(result)  # {"content": "..."} or full response if return_text=False
-
-# Image analysis
-img = client.analyze_image(
-    image_urls=["https://example.com/image.jpg"],
-    user_prompt="What is shown in this image?",
-    return_text=True,
-)
-print(img)
-
-# PDF analysis
-pdf = client.analyze_pdf(
-    pdf_url="https://example.com/file.pdf",
-    user_prompt="Summarize this document",
-    return_text=True,
-)
-print(pdf)
+print(client.search_web("Naas ABI marketplace", return_text=True))
+print(client.analyze_image(["https://example.com/image.jpg"], return_text=True))
+print(client.analyze_pdf("https://example.com/file.pdf", return_text=True))
 ```
 
 ### LangChain tools
@@ -99,11 +90,10 @@ from naas_abi_marketplace.ai.chatgpt.integrations.OpenAIResponsesIntegration imp
 )
 
 tools = as_tools(OpenAIResponsesIntegrationConfiguration(api_key="YOUR_OPENAI_API_KEY"))
-# tools is a list of StructuredTool instances
 ```
 
 ## Caveats
-- `_make_request(...)` uses mutable default arguments (`params={}`, `json={}`); avoid mutating these externally.
-- `search_web(return_text=True)` returns a `dict` with `{"content": ...}` in most cases, but may return a raw string in one branch when no annotations exist.
-- PDF analysis sends **extracted text only** (no images/pages), so results depend on extraction quality.
-- API errors are returned as `{"error": "...", "text": response.text}` (when available) rather than raising.
+- `search_web(return_text=True)` may return either a `str` or a `dict` depending on whether annotations are present.
+- API errors are returned as `{"error": "...", "text": ...}` from `_make_request` (no exception raised).
+- PDF analysis sends extracted text only; output quality depends on `pdfplumber` extraction.
+- `_make_request` caches responses for 1 day; repeated identical calls may return cached data.

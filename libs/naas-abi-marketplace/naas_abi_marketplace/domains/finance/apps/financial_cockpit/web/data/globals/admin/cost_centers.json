@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-07-31 11:44",
+  "records": [
+    {
+      "code": "CC-1000",
+      "label": "Customer Success",
+      "business_unit": "Commercial",
+      "owner": "Léa Moreau",
+      "headcount": 24,
+      "annual_budget": 1242279.51,
+      "annual_actual": 1340680.44,
+      "fiscal_year": "2026",
+      "status": "Active"
+    },
+    {
+      "code": "CC-1010",
+      "label": "Engineering",
+      "business_unit": "Product & Technology",
+      "owner": "Adrien Lemaitre",
+      "headcount": 90,
+      "annual_budget": 4515017.79,
+      "annual_actual": 4573511.8,
+      "fiscal_year": "2026",
+      "status": "Active"
+    },
+    {
+      "code": "CC-1020",
+      "label": "Finance",
+      "business_unit": "Corporate",
+      "owner": "Hélène Vasseur",
+      "headcount": 12,
+      "annual_budget": 947471.94,
+      "annual_actual": 929691.4,
+      "fiscal_year": "2026",
+      "status": "Active"
+    },
+    {
+      "code": "CC-1030",
+      "label": "Infrastructure",
+      "business_unit": "Product & Technology",
+      "owner": "Thomas Klein",
+      "headcount": 11,
+      "annual_budget": 1683921.78,
+      "annual_actual": 1863212.07,
+      "fiscal_year": "2026",
+      "status": "Active"
+    },
+    {
+      "code": "CC-1040",
+      "label": "Legal & Compliance",
+      "business_unit": "Corporate",
+      "owner": "Julien Perrot",
+      "headcount": 5,
+      "annual_budget": 487342.16,
+      "annual_actual": 487397.05,
+      "fiscal_year": "2026",
+      "status": "Active"
+    },
+    {
+      "code": "CC-1050",
+      "label": "Marketing",
+      "business_unit": "Commercial",
+      "owner": "Yanis Roux",
+      "headcount": 20,
+      "annual_budget": 1664499.17,
+      "annual_actual": 1650121.66,
+      "fiscal_year": "2026",
+      "status": "Active"
+    },
+    {
+      "code": "CC-1060",
+      "label": "Operations",
+      "business_unit": "Operations",
+      "owner": "Nadia Berger",
+      "headcount": 31,
+      "annual_budget": 1998024.94,
+      "annual_actual": 2217944.14,
+      "fiscal_year": "2026",
+      "status": "Active"
+    },
+    {
+      "code": "CC-1070",
+      "label": "People & Culture",
+      "business_unit": "Corporate",
+      "owner": "Inès Bakker",
+      "headcount": 8,
+      "annual_budget": 583631.3,
+      "annual_actual": 612012.68,
+      "fiscal_year": "2026",
+      "status": "Active"
+    },
+    {
+      "code": "CC-1080",
+      "label": "Product",
+      "business_unit": "Product & Technology",
+      "owner": "Sofia Marchetti",
+      "headcount": 19,
+      "annual_budget": 1328459.46,
+      "annual_actual": 1449043.51,
+      "fiscal_year": "2026",
+      "status": "Active"
+    },
+    {
+      "code": "CC-1090",
+      "label": "Sales",
+      "business_unit": "Commercial",
+      "owner": "Camille Fournier",
+      "headcount": 48,
+      "annual_budget": 2847839.35,
+      "annual_actual": 3039228.55,
+      "fiscal_year": "2026",
+      "status": "Active"
+    },
+    {
+      "code": "CC-1100",
+      "label": "Supply Chain",
+      "business_unit": "Operations",
+      "owner": "Marc Delaunay",
+      "headcount": 13,
+      "annual_budget": 1208071.44,
+      "annual_actual": 1263960.7,
+      "fiscal_year": "2026",
+      "status": "Active"
+    }
+  ]
+}

@@ -15,14 +15,34 @@ interface CodeState {
   coderPhase: string | null;
   /** Coder dashboard URL for the focused workspace (new tab). */
   coderUiUrl: string | null;
+  /** Local sandbox runtime (Slides-parity). */
+  sandboxRuntimeStatus: 'idle' | 'ensuring' | 'ready' | 'degraded' | 'error';
+  refreshToken: number;
   setSelectedRepoId: (repoId: string) => void;
   setRuntimeMeta: (meta: {
     activeBranch?: string | null;
     coderWorkspace?: string | null;
     coderPhase?: string | null;
     coderUiUrl?: string | null;
+    sandboxRuntimeStatus?: CodeState['sandboxRuntimeStatus'];
   }) => void;
+  bumpRefreshToken: () => void;
   clearRuntimeMeta: () => void;
+}
+
+export const CODE_FILE_UPDATED_EVENT = 'code-file-updated';
+
+export type CodeFileUpdatedDetail = {
+  repoId?: string;
+  path?: string;
+  source?: string;
+};
+
+export function dispatchCodeFileUpdated(detail: CodeFileUpdatedDetail = {}) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(
+    new CustomEvent<CodeFileUpdatedDetail>(CODE_FILE_UPDATED_EVENT, { detail }),
+  );
 }
 
 export const useCodeStore = create<CodeState>()(
@@ -33,6 +53,8 @@ export const useCodeStore = create<CodeState>()(
       coderWorkspace: null,
       coderPhase: null,
       coderUiUrl: null,
+      sandboxRuntimeStatus: 'idle',
+      refreshToken: 0,
       setSelectedRepoId: (repoId) => set({ selectedRepoId: repoId }),
       setRuntimeMeta: (meta) =>
         set({
@@ -46,13 +68,20 @@ export const useCodeStore = create<CodeState>()(
             meta.coderPhase !== undefined ? meta.coderPhase : get().coderPhase,
           coderUiUrl:
             meta.coderUiUrl !== undefined ? meta.coderUiUrl : get().coderUiUrl,
+          sandboxRuntimeStatus:
+            meta.sandboxRuntimeStatus !== undefined
+              ? meta.sandboxRuntimeStatus
+              : get().sandboxRuntimeStatus,
         }),
+      bumpRefreshToken: () =>
+        set((state) => ({ refreshToken: state.refreshToken + 1 })),
       clearRuntimeMeta: () =>
         set({
           activeBranch: null,
           coderWorkspace: null,
           coderPhase: null,
           coderUiUrl: null,
+          sandboxRuntimeStatus: 'idle',
         }),
     }),
     {

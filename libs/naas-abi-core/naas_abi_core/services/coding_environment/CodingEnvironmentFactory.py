@@ -51,3 +51,22 @@ class CodingEnvironmentFactory:
         return CodingEnvironmentService(
             InMemoryAdapter(polls_until_ready=polls_until_ready)
         )
+
+    @staticmethod
+    def CodingEnvironmentServiceLocalDirectory(
+        *,
+        workspaces_root: str,
+        sidecar_port_start: int = 18000,
+        sidecar_port_end: int = 18100,
+    ) -> CodingEnvironmentService:
+        from naas_abi_core.services.coding_environment.adapters.secondary.LocalDirectoryAdapter import (
+            LocalDirectoryAdapter,
+        )
+
+        return CodingEnvironmentService(
+            LocalDirectoryAdapter(
+                workspaces_root=workspaces_root,
+                sidecar_port_start=sidecar_port_start,
+                sidecar_port_end=sidecar_port_end,
+            )
+        )

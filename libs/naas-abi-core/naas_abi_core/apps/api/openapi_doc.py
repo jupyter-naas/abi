@@ -84,6 +84,13 @@ API endpoints for interacting with ABI's pipelines.
 API endpoints for interacting with ABI's workflows.
         """,
     },
+    {
+        "name": "Tools",
+        "description": """
+API endpoints for module tools that implement Expose.as_api (or a live run()).
+LangChain-only tools stay agent-internal and are not listed here.
+        """,
+    },
 ]
 
 API_LANDING_HTML = """

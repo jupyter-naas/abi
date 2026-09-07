@@ -139,13 +139,13 @@ async def test_ensure_user_for_invite_creates_user_without_workspace() -> None:
     service = AuthService(adapter=adapter)
 
     user, created = await service.ensure_user_for_invite(
-        "NEW@example.com", name="Jeremy Ravenel"
+        "NEW@example.com", name="Emma Petit"
     )
 
     assert created is True
     assert user.id == "user-new"
     adapter.create_user.assert_awaited_once()
-    assert adapter.create_user.await_args.kwargs["name"] == "Jeremy Ravenel"
+    assert adapter.create_user.await_args.kwargs["name"] == "Emma Petit"
     adapter.create_user_with_default_workspace.assert_not_called()
     adapter.commit.assert_awaited_once()
 

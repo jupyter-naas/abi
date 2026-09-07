@@ -2,6 +2,182 @@
 
 <!-- version list -->
 
+## v2.21.1 (2026-09-07)
+
+### Bug Fixes
+
+- **cli**: Snapshot storage/ via the root helper to fix root-owned files on Linux
+  ([`0b3d358`](https://github.com/jupyter-naas/abi/commit/0b3d358275e8ef816d93266845ce4bd6ab76b55f))
+
+
+## v2.21.0 (2026-09-03)
+
+### Bug Fixes
+
+- **dataset**: Address DuckLake review feedback
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Isolate storage and supported schemes
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Migrate DuckLake catalog on connect
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Validate S3 endpoint transport
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+### Documentation
+
+- **dataset**: Document the object store data path, and type the factory
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+### Features
+
+- **dataset**: Adopt DuckLake backend ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Let DuckLake write its data to an object store
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+
+## v2.20.0 (2026-09-02)
+
+### Bug Fixes
+
+- Update versions and platform markers in uv.lock and fix datetime usage in CacheService_test.py
+  ([`5a116a2`](https://github.com/jupyter-naas/abi/commit/5a116a2f1b70fcdb65bd7e3fb15332f393a7aa1c))
+
+- **x-orchestrations**: Update versions and import order in orchestration
+  ([`bf70a40`](https://github.com/jupyter-naas/abi/commit/bf70a404e8aad3bd7b45a39e63cba0fd13b4aa41))
+
+### Features
+
+- **x-orchestrations**: Update default trigger status to RUNNING
+  ([`0d88489`](https://github.com/jupyter-naas/abi/commit/0d884891270ebfd8fe52a8d4daf905f349c14d9c))
+
+
+## v2.19.0 (2026-08-28)
+
+### Features
+
+- Add DatasetService and Nexus Datasets UI ([#1213](https://github.com/jupyter-naas/abi/pull/1213),
+  [`ab82d5c`](https://github.com/jupyter-naas/abi/commit/ab82d5c7feff1cb90ef6572f0da226d86bbdd5b8))
+
+
+## v2.18.1 (2026-08-25)
+
+### Bug Fixes
+
+- **nexus**: Point module asset URLs at the live API port
+  ([`e47fc0d`](https://github.com/jupyter-naas/abi/commit/e47fc0d7a2543950a9b985bd40b1ea422c95254e))
+
+- **nexus**: Resolve module asset URLs from the live API port
+  ([`d3b02f2`](https://github.com/jupyter-naas/abi/commit/d3b02f2f5555907a482555a2df3e54c9191cf131))
+
+
+## v2.18.0 (2026-08-20)
+
+### Bug Fixes
+
+- **api**: Satisfy mypy on process API mounts
+  ([#1203](https://github.com/jupyter-naas/abi/pull/1203),
+  [`19d538d`](https://github.com/jupyter-naas/abi/commit/19d538d7fec8b24d262c5f90b1416a6963c0a234))
+
+### Features
+
+- **api**: Mount module workflows, pipelines, and Expose tools
+  ([#1203](https://github.com/jupyter-naas/abi/pull/1203),
+  [`19d538d`](https://github.com/jupyter-naas/abi/commit/19d538d7fec8b24d262c5f90b1416a6963c0a234))
+
+
+## v2.17.2 (2026-08-18)
+
+### Bug Fixes
+
+- Bump uv.lock libs
+  ([`ef92f2c`](https://github.com/jupyter-naas/abi/commit/ef92f2c380878e8525ad7edb2f6009abd71dbd6f))
+
+
+## v2.17.1 (2026-08-14)
+
+
+## v2.17.0 (2026-08-11)
+
+### Features
+
+- **app-html**: Add ABI API key and JWT auth for /app-html/ assets
+  ([`1ec9534`](https://github.com/jupyter-naas/abi/commit/1ec953401d55525a7fa5f88c686beb070da080cf))
+
+
+## v2.16.3 (2026-08-10)
+
+### Bug Fixes
+
+- Improv loading time -n
+  ([`cd8d456`](https://github.com/jupyter-naas/abi/commit/cd8d456cfddb05fd9910323a2b9936d20f7fcbef))
+
+
+## v2.16.2 (2026-08-07)
+
+### Bug Fixes
+
+- Bump uv lock cli
+  ([`9a64a4a`](https://github.com/jupyter-naas/abi/commit/9a64a4a7ffc0cc6b9ee342d64feca4e96c82a3ef))
+
+
+## v2.16.1 (2026-08-04)
+
+### Bug Fixes
+
+- **workflows**: Improve configuration initialization in XCountRecentTweetsWorkflow tests
+  ([`c8295ef`](https://github.com/jupyter-naas/abi/commit/c8295ef5ae1c80686a77ec0cd65783798f7dcd78))
+
+### Chores
+
+- Bump versions in uv.lock files
+  ([`7d2aa69`](https://github.com/jupyter-naas/abi/commit/7d2aa693179263e6ba77113c92aac51796ec8e1d))
+
+
+## v2.16.0 (2026-08-03)
+
+### Bug Fixes
+
+- **cli**: Print `abi dev up`, not `uv run abi dev up`
+  ([#1162](https://github.com/jupyter-naas/abi/pull/1162),
+  [`8fc275c`](https://github.com/jupyter-naas/abi/commit/8fc275c4aca05ec5d18f84b288a1dddcbfac96ea))
+
+### Chores
+
+- Remove Zen product coupling from ABI
+  ([`09a7d17`](https://github.com/jupyter-naas/abi/commit/09a7d1749feb7b7df1ba764eeb7bd5c088ff60cd))
+
+### Features
+
+- **cli**: Make scaffolded default admin a superadmin
+  ([#1164](https://github.com/jupyter-naas/abi/pull/1164),
+  [`8bd3eb3`](https://github.com/jupyter-naas/abi/commit/8bd3eb3adc976a67a05d4260a95d7b12b407a8b5))
+
+- **cli**: Make the scaffolded default admin a superadmin
+  ([#1164](https://github.com/jupyter-naas/abi/pull/1164),
+  [`8bd3eb3`](https://github.com/jupyter-naas/abi/commit/8bd3eb3adc976a67a05d4260a95d7b12b407a8b5))
+
+- **cli**: Report where `abi new project` landed and how to start it
+  ([#1162](https://github.com/jupyter-naas/abi/pull/1162),
+  [`8fc275c`](https://github.com/jupyter-naas/abi/commit/8fc275c4aca05ec5d18f84b288a1dddcbfac96ea))
+
+### Testing
+
+- **cli**: Assert the scaffolded admin is a superadmin
+  ([#1164](https://github.com/jupyter-naas/abi/pull/1164),
+  [`8bd3eb3`](https://github.com/jupyter-naas/abi/commit/8bd3eb3adc976a67a05d4260a95d7b12b407a8b5))
+
+
 ## v2.15.1 (2026-08-03)
 
 ### Bug Fixes

@@ -2,26 +2,25 @@
 
 ## What it is
 - A minimal base class for LinkedIn application pipelines.
-- Provides ready-to-use helpers for:
-  - SPARQL/triple-store access (`SPARQLUtils`)
-  - Object storage access (`StorageUtils`)
-- Initializes these utilities using the current `ABIModule` engine services.
+- Instantiates and exposes:
+  - `SPARQLUtils` for triple-store access
+  - `StorageUtils` for object storage access
+- Wires utilities using the current `ABIModule` engine services.
 
 ## Public API
 - `class BasePipeline`
   - `__init__(self) -> None`
-    - Fetches `ABIModule.get_instance()`
-    - Instantiates:
+    - Retrieves the module singleton via `ABIModule.get_instance()`.
+    - Initializes:
       - `self.sparql_utils = SPARQLUtils(module.engine.services.triple_store)`
       - `self.storage_utils = StorageUtils(module.engine.services.object_storage)`
 
 ## Configuration/Dependencies
-- Depends on:
-  - `naas_abi_marketplace.applications.linkedin.ABIModule` being properly initialized and accessible via `ABIModule.get_instance()`.
-  - Engine services exposed on the module instance:
-    - `module.engine.services.triple_store`
-    - `module.engine.services.object_storage`
-- External utilities:
+- Requires `naas_abi_marketplace.applications.linkedin.ABIModule` to be initialized and accessible via `ABIModule.get_instance()`.
+- Expects the module to expose engine services:
+  - `module.engine.services.triple_store`
+  - `module.engine.services.object_storage`
+- Uses:
   - `naas_abi_core.utils.SPARQL.SPARQLUtils`
   - `naas_abi_core.utils.StorageUtils.StorageUtils`
 
@@ -31,12 +30,13 @@ from naas_abi_marketplace.applications.linkedin.pipelines.BasePipeline import Ba
 
 class MyPipeline(BasePipeline):
     def run(self):
-        # Use self.sparql_utils and self.storage_utils here
-        pass
+        # Access configured utilities
+        _sparql = self.sparql_utils
+        _storage = self.storage_utils
 
 pipeline = MyPipeline()
 pipeline.run()
 ```
 
 ## Caveats
-- `BasePipeline` assumes `ABIModule.get_instance()` is available and its `engine.services` are configured; otherwise initialization may fail.
+- Initialization will fail if `ABIModule.get_instance()` is unavailable or if `module.engine.services.triple_store` / `object_storage` are not configured.

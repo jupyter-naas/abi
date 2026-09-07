@@ -26,7 +26,9 @@ class GetSubjectGraphWorkflowParameters(WorkflowParameters):
         Field(
             ...,
             description="URI of the individual/instance to get the subject graph of.",
-            example="http://ontology.naas.ai/abi/a25ef0cc-56cf-458a-88c0-fabccb69e9b7",
+            json_schema_extra={
+                "example": "http://ontology.naas.ai/abi/a25ef0cc-56cf-458a-88c0-fabccb69e9b7"
+            },
             pattern=URI_REGEX,
         ),
     ]
@@ -35,7 +37,7 @@ class GetSubjectGraphWorkflowParameters(WorkflowParameters):
         Field(
             2,
             description="Depth of the subject graph to get. 1 means the individual and its direct properties, 2 means the individual and its direct properties and the properties of the properties, etc.",
-            example=2,
+            json_schema_extra={"example": 2},
         ),
     ] = 2
 

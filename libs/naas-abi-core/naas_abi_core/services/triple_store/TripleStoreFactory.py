@@ -19,6 +19,7 @@ from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__
 from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__OxigraphEmbedded import (
     TripleStoreService__SecondaryAdaptor__OxigraphEmbedded,
 )
+from naas_abi_core.services.triple_store.resolve import resolve_local_http_url
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 
 
@@ -113,7 +114,11 @@ class TripleStoreFactory:
             TripleStoreService: Configured triple store service using Oxigraph
         """
         if oxigraph_url is None:
-            oxigraph_url = os.environ.get("OXIGRAPH_URL", "http://localhost:7878")
+            oxigraph_url = resolve_local_http_url(
+                "oxigraph",
+                env_var="OXIGRAPH_URL",
+                default_url="http://localhost:7878",
+            )
 
         return TripleStoreService(
             Oxigraph(

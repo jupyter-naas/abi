@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 /** Maps-owned upstream identity (NWS and similar require a contactable UA). */
 export const MAPS_USER_AGENT =
-  'NexusMaps/1.0 (+https://zen.naas.ai; maps@naas.ai)';
+  'NexusMaps/1.0 (+https://naas.ai; maps@naas.ai)';
 
 export function mapsJson(
   body: unknown,

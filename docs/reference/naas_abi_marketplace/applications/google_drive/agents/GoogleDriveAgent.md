@@ -1,43 +1,45 @@
 # GoogleDriveAgent
 
 ## What it is
-A minimal `IntentAgent` wrapper configured to provide **general guidance** about Google Drive (features, file/folder management). It defines **no tools**, so it cannot access or modify Google Drive—only respond with informational guidance.
+An `IntentAgent` specialization that provides **general guidance** about Google Drive (features, file/folder management, storage best practices). It is configured with **no tools**, so it cannot access or modify real Google Drive content.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Factory that builds and returns a configured `GoogleDriveAgent`.
-  - Sets:
-    - `name`: `"Google_Drive"`
-    - `description`: guidance-focused description
-    - `system_prompt`: guidance-only constraints
-    - `tools`: `[]` (none)
-    - `intents`: two RAW intents providing canned guidance responses
-    - `state`: provided or new `AgentSharedState()`
-    - `configuration`: provided or `AgentConfiguration(system_prompt=SYSTEM_PROMPT)`
-    - `chat_model`: imported from `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1`
-
 - `class GoogleDriveAgent(IntentAgent)`
-  - No additional behavior beyond `IntentAgent` (empty subclass).
+  - Agent class with predefined:
+    - `name = "Google_Drive"`
+    - `description`
+    - `system_prompt` (explicitly states no tool access; guidance only)
+    - `suggestions = []`
+
+- `GoogleDriveAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> GoogleDriveAgent`
+  - Factory constructor that:
+    - Retrieves default chat and embedding models from the ABI module model registry.
+    - Configures `tools` as an empty list.
+    - Registers two RAW `Intent` entries with canned guidance responses.
+    - Creates defaults when not provided:
+      - `AgentConfiguration(system_prompt=GoogleDriveAgent.system_prompt)`
+      - `AgentSharedState(thread_id="0")`
 
 ## Configuration/Dependencies
-- Depends on `naas_abi_core.services.agent.IntentAgent` for:
+- Depends on `naas_abi_core.services.agent.IntentAgent`:
   - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
-- Uses chat model:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1` (imports `model`, uses `model.model`)
-- Key module constants:
-  - `SYSTEM_PROMPT`: explicitly states *no access to Google Drive tools* and restricts actions to general guidance.
-  - `SUGGESTIONS`: empty list.
+- Requires `naas_abi_marketplace.applications.google_drive.ABIModule`:
+  - Uses `ABIModule.get_instance().engine.services.model_registry`
+  - Must have a non-`None` model registry (`assert registry is not None`)
+- Model selection:
+  - `chat_model = registry.get_default_chat_model()`
+  - `embedding_model = registry.get_default_embedding_model().model`
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.google_drive.agents.GoogleDriveAgent import create_agent
+from naas_abi_marketplace.applications.google_drive.agents.GoogleDriveAgent import GoogleDriveAgent
 
-agent = create_agent()
+agent = GoogleDriveAgent.New()
 
-# The returned object is an IntentAgent (GoogleDriveAgent) configured with no tools.
-print(agent.name)         # "Google_Drive"
-print(agent.description)  # Helps you interact with Google Drive...
+print(agent.name)         # Google_Drive
+print(agent.description)  # Helps you interact with Google Drive for file storage and management.
 ```
 
 ## Caveats
-- No tools are configured (`tools = []`), so the agent **cannot** list/upload/download/manage real Drive files; it can only provide general information and guidance as defined in `SYSTEM_PROMPT`.
+- `tools` is always configured as `[]`; the agent **cannot** perform Drive operations (list/upload/download/share). It can only provide informational guidance.
+- Requires the ABI module engine/model registry to be initialized; otherwise it raises an assertion error (`ModelRegistryService not initialized`).

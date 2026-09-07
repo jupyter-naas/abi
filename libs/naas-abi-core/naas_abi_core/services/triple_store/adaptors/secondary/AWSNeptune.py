@@ -58,7 +58,7 @@ Dependencies:
     - paramiko: SSH client (for tunnel support)
     - sshtunnel: SSH tunnel management (for tunnel support)
 
-Author: Maxime Jublou <maxime@naas.ai>
+Author: Grace Lambert <maxime@naas.ai>
 License: MIT
 """
 

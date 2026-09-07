@@ -57,6 +57,7 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
         with self._lock:
             self.__create_path(prefix)
             target_path = os.path.join(self.base_path, prefix, key)
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
             with tempfile.NamedTemporaryFile(
                 mode="wb",
                 dir=os.path.join(self.base_path, prefix),
@@ -71,6 +72,7 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
         with self._lock:
             self.__create_path(prefix)
             target_path = os.path.join(self.base_path, prefix, key)
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
             with tempfile.NamedTemporaryFile(
                 mode="wb",
                 dir=os.path.join(self.base_path, prefix),
@@ -97,6 +99,25 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
                 os.path.join(prefix, f)
                 for f in os.listdir(os.path.join(self.base_path, prefix))
             ]
+            if queue:
+                for obj in objects:
+                    queue.put(obj)
+            return objects
+
+    def list_objects_recursive(
+        self, prefix: str, queue: Queue | None = None
+    ) -> list[str]:
+        with self._lock:
+            self.__path_exists(prefix)
+            root = os.path.join(self.base_path, prefix)
+            objects = []
+            for dirpath, _dirnames, filenames in os.walk(root):
+                for filename in filenames:
+                    absolute = os.path.join(dirpath, filename)
+                    objects.append(
+                        os.path.join(prefix, os.path.relpath(absolute, root))
+                    )
+            objects.sort()
             if queue:
                 for obj in objects:
                     queue.put(obj)

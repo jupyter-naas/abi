@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import { Header } from '@/components/shell/header';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
+import { ontologyApiParams, ontologyApiQuery } from '@/lib/ontology-query';
 import {
   Network,
   Plus,
@@ -151,9 +152,7 @@ export default function OntologyPage() {
       setOverviewGraphError(null);
       try {
         const baseUrl = getApiUrl();
-        const query = selectedOntologyPath
-          ? `?ontology_path=${encodeURIComponent(selectedOntologyPath)}`
-          : '';
+        const query = ontologyApiQuery({ ontology_path: selectedOntologyPath });
         const response = await authFetch(`${baseUrl}/api/ontology/overview/graph${query}`);
         if (!response.ok) throw new Error(`Failed to fetch overview graph: status=${response.status}`);
         const graphData = await response.json();
@@ -219,9 +218,7 @@ export default function OntologyPage() {
     let cancelled = false;
     setLoadingSubclassOptions(true);
     const baseUrl = getApiUrl();
-    const url = selectedOntologyPath
-      ? `${baseUrl}/api/ontology/classes?ontology_path=${encodeURIComponent(selectedOntologyPath)}`
-      : `${baseUrl}/api/ontology/classes`;
+    const url = `${baseUrl}/api/ontology/classes${ontologyApiQuery({ ontology_path: selectedOntologyPath })}`;
     authFetch(url)
       .then((res) => res.json())
       .then((data: { items?: Array<{ id?: string; name?: string }> }) => {
@@ -252,9 +249,7 @@ export default function OntologyPage() {
     let cancelled = false;
     setLoadingSubpropertyOptions(true);
     const baseUrl = getApiUrl();
-    const url = selectedOntologyPath
-      ? `${baseUrl}/api/ontology/relationships?ontology_path=${encodeURIComponent(selectedOntologyPath)}`
-      : `${baseUrl}/api/ontology/relationships`;
+    const url = `${baseUrl}/api/ontology/relationships${ontologyApiQuery({ ontology_path: selectedOntologyPath })}`;
     authFetch(url)
       .then((res) => res.json())
       .then((data: { items?: Array<{ id?: string; name?: string }> }) => {
@@ -1024,8 +1019,8 @@ function OntologyOverviewView({
       try {
         const baseUrl = getApiUrl();
         const endpoint = ontologyPath
-          ? `${baseUrl}/api/ontology/overview/stats?ontology_path=${encodeURIComponent(ontologyPath)}`
-          : `${baseUrl}/api/ontology/overview/stats/all`;
+          ? `${baseUrl}/api/ontology/overview/stats${ontologyApiQuery({ ontology_path: ontologyPath })}`
+          : `${baseUrl}/api/ontology/overview/stats/all${ontologyApiQuery()}`;
         const response = await authFetch(endpoint);
         if (!response.ok) {
           throw new Error(`Failed to fetch overview items: status=${response.status}`);
@@ -1740,7 +1735,7 @@ function OntologyNetworkView({
     setLoadingSubclassOfHierarchy(true);
     try {
       const baseUrl = getApiUrl();
-      const params = new URLSearchParams({ ontology_path: ontologyPath });
+      const params = ontologyApiParams({ ontology_path: ontologyPath });
       subclassOfFrontierForHierarchy.forEach((n) => params.append('class_iris', n.id));
 
       const response = await authFetch(`${baseUrl}/api/ontology/overview/hierarchy?${params.toString()}`);

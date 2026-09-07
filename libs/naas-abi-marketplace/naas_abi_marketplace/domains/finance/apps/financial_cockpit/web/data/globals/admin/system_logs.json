@@ -1,0 +1,1446 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-07-31 11:44",
+  "records": [
+    {
+      "timestamp": "2026-07-31 18:30",
+      "level": "INFO",
+      "component": "close",
+      "event": "period.locked",
+      "message": "Accounting period locked",
+      "actor": "integration",
+      "duration_ms": 8425
+    },
+    {
+      "timestamp": "2026-07-31 18:11",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'financial_close/financial_close' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 7219
+    },
+    {
+      "timestamp": "2026-07-31 16:26",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "demo@financial-cockpit.local",
+      "duration_ms": 220
+    },
+    {
+      "timestamp": "2026-07-31 15:06",
+      "level": "ERROR",
+      "component": "connector",
+      "event": "sync.failed",
+      "message": "Connector 'Bank statement import' failed: upstream returned 502",
+      "actor": "system",
+      "duration_ms": 1329
+    },
+    {
+      "timestamp": "2026-07-31 14:08",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 8196
+    },
+    {
+      "timestamp": "2026-07-31 13:41",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'accounting/general_ledger' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 4895
+    },
+    {
+      "timestamp": "2026-07-31 12:46",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'Cockpit → Data warehouse' completed",
+      "actor": "system",
+      "duration_ms": 3106
+    },
+    {
+      "timestamp": "2026-07-31 10:04",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 8512
+    },
+    {
+      "timestamp": "2026-07-31 07:43",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 4246
+    },
+    {
+      "timestamp": "2026-07-31 07:30",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "system",
+      "duration_ms": 4364
+    },
+    {
+      "timestamp": "2026-07-31 07:08",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'NetSuite — Fixed assets' completed",
+      "actor": "system",
+      "duration_ms": 7813
+    },
+    {
+      "timestamp": "2026-07-31 06:36",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 1303
+    },
+    {
+      "timestamp": "2026-07-31 03:54",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "integration",
+      "duration_ms": 5408
+    },
+    {
+      "timestamp": "2026-07-31 01:51",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'cash_flow/cash_flow' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 3750
+    },
+    {
+      "timestamp": "2026-07-31 01:36",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'accounting/general_ledger' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 6581
+    },
+    {
+      "timestamp": "2026-07-31 01:04",
+      "level": "ERROR",
+      "component": "connector",
+      "event": "sync.failed",
+      "message": "Connector 'Cockpit → Data warehouse' failed: upstream returned 502",
+      "actor": "system",
+      "duration_ms": 7750
+    },
+    {
+      "timestamp": "2026-07-30 22:39",
+      "level": "WARN",
+      "component": "connector",
+      "event": "sync.retried",
+      "message": "Connector 'Pennylane — General ledger' retried after a timeout",
+      "actor": "system",
+      "duration_ms": 3104
+    },
+    {
+      "timestamp": "2026-07-30 20:58",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'balance_sheet/balance_sheet' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 6696
+    },
+    {
+      "timestamp": "2026-07-30 19:04",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'financial_close/financial_close' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 4810
+    },
+    {
+      "timestamp": "2026-07-30 18:31",
+      "level": "INFO",
+      "component": "api",
+      "event": "request.served",
+      "message": "GET /api/entities/demo/data served",
+      "actor": "helene.vasseur@demo.local",
+      "duration_ms": 1238
+    },
+    {
+      "timestamp": "2026-07-30 15:28",
+      "level": "INFO",
+      "component": "api",
+      "event": "request.served",
+      "message": "GET /api/entities/demo/data served",
+      "actor": "system",
+      "duration_ms": 4446
+    },
+    {
+      "timestamp": "2026-07-30 14:31",
+      "level": "ERROR",
+      "component": "connector",
+      "event": "sync.failed",
+      "message": "Connector 'Pennylane — General ledger' failed: upstream returned 502",
+      "actor": "system",
+      "duration_ms": 3574
+    },
+    {
+      "timestamp": "2026-07-30 13:58",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 8092
+    },
+    {
+      "timestamp": "2026-07-30 10:59",
+      "level": "INFO",
+      "component": "theme",
+      "event": "theme.saved",
+      "message": "Theme configuration saved by system",
+      "actor": "system",
+      "duration_ms": 8131
+    },
+    {
+      "timestamp": "2026-07-30 09:50",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "integration",
+      "duration_ms": 410
+    },
+    {
+      "timestamp": "2026-07-30 06:41",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'financial_close/financial_close' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 7096
+    },
+    {
+      "timestamp": "2026-07-30 05:40",
+      "level": "WARN",
+      "component": "connector",
+      "event": "sync.retried",
+      "message": "Connector 'NetSuite — Fixed assets' retried after a timeout",
+      "actor": "system",
+      "duration_ms": 3721
+    },
+    {
+      "timestamp": "2026-07-30 04:04",
+      "level": "INFO",
+      "component": "theme",
+      "event": "theme.saved",
+      "message": "Theme configuration saved by demo@financial-cockpit.local",
+      "actor": "demo@financial-cockpit.local",
+      "duration_ms": 2537
+    },
+    {
+      "timestamp": "2026-07-30 02:05",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'General ledger export' completed",
+      "actor": "system",
+      "duration_ms": 5034
+    },
+    {
+      "timestamp": "2026-07-30 01:47",
+      "level": "ERROR",
+      "component": "connector",
+      "event": "sync.failed",
+      "message": "Connector 'Bank statement import' failed: upstream returned 502",
+      "actor": "system",
+      "duration_ms": 6653
+    },
+    {
+      "timestamp": "2026-07-29 22:56",
+      "level": "INFO",
+      "component": "auth",
+      "event": "session.created",
+      "message": "Session opened for camille.fournier@demo.local",
+      "actor": "camille.fournier@demo.local",
+      "duration_ms": 504
+    },
+    {
+      "timestamp": "2026-07-29 22:38",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'financial_close/financial_close' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 7733
+    },
+    {
+      "timestamp": "2026-07-29 20:03",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 7942
+    },
+    {
+      "timestamp": "2026-07-29 18:14",
+      "level": "WARN",
+      "component": "connector",
+      "event": "sync.retried",
+      "message": "Connector 'Bank statement import' retried after a timeout",
+      "actor": "system",
+      "duration_ms": 9108
+    },
+    {
+      "timestamp": "2026-07-29 17:26",
+      "level": "WARN",
+      "component": "connector",
+      "event": "sync.retried",
+      "message": "Connector 'Payfit — Payroll journal' retried after a timeout",
+      "actor": "system",
+      "duration_ms": 3801
+    },
+    {
+      "timestamp": "2026-07-29 14:27",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "demo@financial-cockpit.local",
+      "duration_ms": 8691
+    },
+    {
+      "timestamp": "2026-07-29 12:56",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'financial_close/financial_close' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 2007
+    },
+    {
+      "timestamp": "2026-07-29 10:49",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'General ledger export' completed",
+      "actor": "system",
+      "duration_ms": 4323
+    },
+    {
+      "timestamp": "2026-07-29 07:42",
+      "level": "INFO",
+      "component": "theme",
+      "event": "theme.saved",
+      "message": "Theme configuration saved by system",
+      "actor": "system",
+      "duration_ms": 1390
+    },
+    {
+      "timestamp": "2026-07-29 06:11",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "camille.fournier@demo.local",
+      "duration_ms": 8003
+    },
+    {
+      "timestamp": "2026-07-29 04:09",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'accounting/general_ledger' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 4708
+    },
+    {
+      "timestamp": "2026-07-29 03:41",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "helene.vasseur@demo.local",
+      "duration_ms": 3472
+    },
+    {
+      "timestamp": "2026-07-29 00:44",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "integration",
+      "duration_ms": 453
+    },
+    {
+      "timestamp": "2026-07-28 23:24",
+      "level": "ERROR",
+      "component": "connector",
+      "event": "sync.failed",
+      "message": "Connector 'General ledger export' failed: upstream returned 502",
+      "actor": "system",
+      "duration_ms": 6378
+    },
+    {
+      "timestamp": "2026-07-28 22:43",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 2921
+    },
+    {
+      "timestamp": "2026-07-28 20:14",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 4202
+    },
+    {
+      "timestamp": "2026-07-28 19:28",
+      "level": "INFO",
+      "component": "api",
+      "event": "request.served",
+      "message": "GET /api/entities/demo/data served",
+      "actor": "system",
+      "duration_ms": 5509
+    },
+    {
+      "timestamp": "2026-07-28 16:41",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 8360
+    },
+    {
+      "timestamp": "2026-07-28 16:09",
+      "level": "WARN",
+      "component": "connector",
+      "event": "sync.retried",
+      "message": "Connector 'Cockpit → Data warehouse' retried after a timeout",
+      "actor": "system",
+      "duration_ms": 5074
+    },
+    {
+      "timestamp": "2026-07-28 15:07",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'Pennylane — General ledger' completed",
+      "actor": "system",
+      "duration_ms": 8490
+    },
+    {
+      "timestamp": "2026-07-28 13:40",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 401
+    },
+    {
+      "timestamp": "2026-07-28 11:53",
+      "level": "INFO",
+      "component": "auth",
+      "event": "session.created",
+      "message": "Session opened for demo@financial-cockpit.local",
+      "actor": "demo@financial-cockpit.local",
+      "duration_ms": 353
+    },
+    {
+      "timestamp": "2026-07-28 11:06",
+      "level": "INFO",
+      "component": "theme",
+      "event": "theme.saved",
+      "message": "Theme configuration saved by integration",
+      "actor": "integration",
+      "duration_ms": 1378
+    },
+    {
+      "timestamp": "2026-07-28 10:53",
+      "level": "INFO",
+      "component": "close",
+      "event": "period.locked",
+      "message": "Accounting period locked",
+      "actor": "demo@financial-cockpit.local",
+      "duration_ms": 8732
+    },
+    {
+      "timestamp": "2026-07-28 10:34",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 218
+    },
+    {
+      "timestamp": "2026-07-28 09:39",
+      "level": "INFO",
+      "component": "auth",
+      "event": "session.created",
+      "message": "Session opened for demo@financial-cockpit.local",
+      "actor": "demo@financial-cockpit.local",
+      "duration_ms": 346
+    },
+    {
+      "timestamp": "2026-07-28 08:13",
+      "level": "INFO",
+      "component": "api",
+      "event": "request.served",
+      "message": "GET /api/entities/demo/data served",
+      "actor": "helene.vasseur@demo.local",
+      "duration_ms": 6470
+    },
+    {
+      "timestamp": "2026-07-28 07:41",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'financial_close/financial_close' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 5610
+    },
+    {
+      "timestamp": "2026-07-28 07:18",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'Pennylane — General ledger' completed",
+      "actor": "system",
+      "duration_ms": 6273
+    },
+    {
+      "timestamp": "2026-07-28 06:17",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'Bank statement import' completed",
+      "actor": "system",
+      "duration_ms": 2354
+    },
+    {
+      "timestamp": "2026-07-28 04:57",
+      "level": "INFO",
+      "component": "close",
+      "event": "period.locked",
+      "message": "Accounting period locked",
+      "actor": "helene.vasseur@demo.local",
+      "duration_ms": 7039
+    },
+    {
+      "timestamp": "2026-07-28 03:57",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 1054
+    },
+    {
+      "timestamp": "2026-07-28 02:22",
+      "level": "INFO",
+      "component": "close",
+      "event": "period.locked",
+      "message": "Accounting period locked",
+      "actor": "demo@financial-cockpit.local",
+      "duration_ms": 2892
+    },
+    {
+      "timestamp": "2026-07-28 00:28",
+      "level": "INFO",
+      "component": "theme",
+      "event": "theme.saved",
+      "message": "Theme configuration saved by integration",
+      "actor": "integration",
+      "duration_ms": 3536
+    },
+    {
+      "timestamp": "2026-07-27 21:48",
+      "level": "INFO",
+      "component": "close",
+      "event": "period.locked",
+      "message": "Accounting period locked",
+      "actor": "camille.fournier@demo.local",
+      "duration_ms": 3408
+    },
+    {
+      "timestamp": "2026-07-27 20:10",
+      "level": "INFO",
+      "component": "theme",
+      "event": "theme.saved",
+      "message": "Theme configuration saved by helene.vasseur@demo.local",
+      "actor": "helene.vasseur@demo.local",
+      "duration_ms": 36
+    },
+    {
+      "timestamp": "2026-07-27 19:02",
+      "level": "ERROR",
+      "component": "connector",
+      "event": "sync.failed",
+      "message": "Connector 'Bank statement import' failed: upstream returned 502",
+      "actor": "system",
+      "duration_ms": 659
+    },
+    {
+      "timestamp": "2026-07-27 15:58",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'balance_sheet/balance_sheet' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 750
+    },
+    {
+      "timestamp": "2026-07-27 13:16",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "demo@financial-cockpit.local",
+      "duration_ms": 7934
+    },
+    {
+      "timestamp": "2026-07-27 11:21",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'balance_sheet/balance_sheet' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 5548
+    },
+    {
+      "timestamp": "2026-07-27 08:44",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'Cockpit → Data warehouse' completed",
+      "actor": "system",
+      "duration_ms": 382
+    },
+    {
+      "timestamp": "2026-07-27 07:09",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "demo@financial-cockpit.local",
+      "duration_ms": 4539
+    },
+    {
+      "timestamp": "2026-07-27 04:57",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'accounting/general_ledger' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 3414
+    },
+    {
+      "timestamp": "2026-07-27 04:23",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'Pennylane — General ledger' completed",
+      "actor": "system",
+      "duration_ms": 7683
+    },
+    {
+      "timestamp": "2026-07-27 03:28",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "system",
+      "duration_ms": 6164
+    },
+    {
+      "timestamp": "2026-07-27 03:05",
+      "level": "INFO",
+      "component": "api",
+      "event": "request.served",
+      "message": "GET /api/entities/demo/data served",
+      "actor": "integration",
+      "duration_ms": 9192
+    },
+    {
+      "timestamp": "2026-07-27 00:00",
+      "level": "INFO",
+      "component": "theme",
+      "event": "theme.saved",
+      "message": "Theme configuration saved by helene.vasseur@demo.local",
+      "actor": "helene.vasseur@demo.local",
+      "duration_ms": 5609
+    },
+    {
+      "timestamp": "2026-07-26 22:09",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 300
+    },
+    {
+      "timestamp": "2026-07-26 21:09",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "system",
+      "duration_ms": 4844
+    },
+    {
+      "timestamp": "2026-07-26 20:33",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'Cockpit → Data warehouse' completed",
+      "actor": "system",
+      "duration_ms": 1914
+    },
+    {
+      "timestamp": "2026-07-26 18:40",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'cost_centers/cost_centers' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 4763
+    },
+    {
+      "timestamp": "2026-07-26 17:57",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "camille.fournier@demo.local",
+      "duration_ms": 9181
+    },
+    {
+      "timestamp": "2026-07-26 14:49",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 4373
+    },
+    {
+      "timestamp": "2026-07-26 14:30",
+      "level": "WARN",
+      "component": "connector",
+      "event": "sync.retried",
+      "message": "Connector 'Cockpit → Data warehouse' retried after a timeout",
+      "actor": "system",
+      "duration_ms": 793
+    },
+    {
+      "timestamp": "2026-07-26 12:30",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'General ledger export' completed",
+      "actor": "system",
+      "duration_ms": 4997
+    },
+    {
+      "timestamp": "2026-07-26 10:44",
+      "level": "INFO",
+      "component": "api",
+      "event": "request.served",
+      "message": "GET /api/entities/demo/data served",
+      "actor": "system",
+      "duration_ms": 4403
+    },
+    {
+      "timestamp": "2026-07-26 09:45",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'General ledger export' completed",
+      "actor": "system",
+      "duration_ms": 3755
+    },
+    {
+      "timestamp": "2026-07-26 06:35",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 1647
+    },
+    {
+      "timestamp": "2026-07-26 05:11",
+      "level": "INFO",
+      "component": "api",
+      "event": "request.served",
+      "message": "GET /api/entities/demo/data served",
+      "actor": "camille.fournier@demo.local",
+      "duration_ms": 7422
+    },
+    {
+      "timestamp": "2026-07-26 03:10",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'cost_centers/cost_centers' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 7932
+    },
+    {
+      "timestamp": "2026-07-26 00:52",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'Payfit — Payroll journal' completed",
+      "actor": "system",
+      "duration_ms": 7490
+    },
+    {
+      "timestamp": "2026-07-25 22:04",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'balance_sheet/balance_sheet' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 9364
+    },
+    {
+      "timestamp": "2026-07-25 18:54",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "demo@financial-cockpit.local",
+      "duration_ms": 7124
+    },
+    {
+      "timestamp": "2026-07-25 17:48",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'cash_flow/cash_flow' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 6224
+    },
+    {
+      "timestamp": "2026-07-25 16:47",
+      "level": "INFO",
+      "component": "api",
+      "event": "request.served",
+      "message": "GET /api/entities/demo/data served",
+      "actor": "system",
+      "duration_ms": 5155
+    },
+    {
+      "timestamp": "2026-07-25 14:06",
+      "level": "WARN",
+      "component": "connector",
+      "event": "sync.retried",
+      "message": "Connector 'Payfit — Payroll journal' retried after a timeout",
+      "actor": "system",
+      "duration_ms": 596
+    },
+    {
+      "timestamp": "2026-07-25 12:32",
+      "level": "INFO",
+      "component": "close",
+      "event": "period.locked",
+      "message": "Accounting period locked",
+      "actor": "camille.fournier@demo.local",
+      "duration_ms": 7976
+    },
+    {
+      "timestamp": "2026-07-25 10:31",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 2790
+    },
+    {
+      "timestamp": "2026-07-25 08:47",
+      "level": "ERROR",
+      "component": "connector",
+      "event": "sync.failed",
+      "message": "Connector 'General ledger export' failed: upstream returned 502",
+      "actor": "system",
+      "duration_ms": 4246
+    },
+    {
+      "timestamp": "2026-07-25 06:01",
+      "level": "INFO",
+      "component": "theme",
+      "event": "theme.saved",
+      "message": "Theme configuration saved by integration",
+      "actor": "integration",
+      "duration_ms": 8171
+    },
+    {
+      "timestamp": "2026-07-25 04:37",
+      "level": "INFO",
+      "component": "auth",
+      "event": "session.created",
+      "message": "Session opened for integration",
+      "actor": "integration",
+      "duration_ms": 955
+    },
+    {
+      "timestamp": "2026-07-25 03:43",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 6381
+    },
+    {
+      "timestamp": "2026-07-25 03:06",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'accounting/general_ledger' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 8729
+    },
+    {
+      "timestamp": "2026-07-25 02:39",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'General ledger export' completed",
+      "actor": "system",
+      "duration_ms": 5462
+    },
+    {
+      "timestamp": "2026-07-25 01:27",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "helene.vasseur@demo.local",
+      "duration_ms": 9080
+    },
+    {
+      "timestamp": "2026-07-24 23:38",
+      "level": "WARN",
+      "component": "connector",
+      "event": "sync.retried",
+      "message": "Connector 'Bank statement import' retried after a timeout",
+      "actor": "system",
+      "duration_ms": 7750
+    },
+    {
+      "timestamp": "2026-07-24 21:28",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 7775
+    },
+    {
+      "timestamp": "2026-07-24 21:03",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 2537
+    },
+    {
+      "timestamp": "2026-07-24 20:47",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 3152
+    },
+    {
+      "timestamp": "2026-07-24 18:53",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'cost_centers/cost_centers' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 2867
+    },
+    {
+      "timestamp": "2026-07-24 18:03",
+      "level": "INFO",
+      "component": "close",
+      "event": "period.locked",
+      "message": "Accounting period locked",
+      "actor": "helene.vasseur@demo.local",
+      "duration_ms": 200
+    },
+    {
+      "timestamp": "2026-07-24 16:05",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 8988
+    },
+    {
+      "timestamp": "2026-07-24 14:04",
+      "level": "ERROR",
+      "component": "connector",
+      "event": "sync.failed",
+      "message": "Connector 'Pennylane — General ledger' failed: upstream returned 502",
+      "actor": "system",
+      "duration_ms": 4905
+    },
+    {
+      "timestamp": "2026-07-24 12:33",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "system",
+      "duration_ms": 8780
+    },
+    {
+      "timestamp": "2026-07-24 10:53",
+      "level": "INFO",
+      "component": "theme",
+      "event": "theme.saved",
+      "message": "Theme configuration saved by demo@financial-cockpit.local",
+      "actor": "demo@financial-cockpit.local",
+      "duration_ms": 2712
+    },
+    {
+      "timestamp": "2026-07-24 08:42",
+      "level": "INFO",
+      "component": "theme",
+      "event": "theme.saved",
+      "message": "Theme configuration saved by system",
+      "actor": "system",
+      "duration_ms": 3795
+    },
+    {
+      "timestamp": "2026-07-24 06:52",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 2384
+    },
+    {
+      "timestamp": "2026-07-24 03:52",
+      "level": "INFO",
+      "component": "api",
+      "event": "request.served",
+      "message": "GET /api/entities/demo/data served",
+      "actor": "demo@financial-cockpit.local",
+      "duration_ms": 2110
+    },
+    {
+      "timestamp": "2026-07-24 02:34",
+      "level": "INFO",
+      "component": "theme",
+      "event": "theme.saved",
+      "message": "Theme configuration saved by demo@financial-cockpit.local",
+      "actor": "demo@financial-cockpit.local",
+      "duration_ms": 6331
+    },
+    {
+      "timestamp": "2026-07-24 00:50",
+      "level": "INFO",
+      "component": "api",
+      "event": "request.served",
+      "message": "GET /api/entities/demo/data served",
+      "actor": "camille.fournier@demo.local",
+      "duration_ms": 2512
+    },
+    {
+      "timestamp": "2026-07-23 23:30",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'financial_close/financial_close' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 5813
+    },
+    {
+      "timestamp": "2026-07-23 22:39",
+      "level": "INFO",
+      "component": "close",
+      "event": "period.locked",
+      "message": "Accounting period locked",
+      "actor": "demo@financial-cockpit.local",
+      "duration_ms": 2973
+    },
+    {
+      "timestamp": "2026-07-23 20:24",
+      "level": "INFO",
+      "component": "auth",
+      "event": "session.created",
+      "message": "Session opened for system",
+      "actor": "system",
+      "duration_ms": 5535
+    },
+    {
+      "timestamp": "2026-07-23 17:54",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'General ledger export' completed",
+      "actor": "system",
+      "duration_ms": 3064
+    },
+    {
+      "timestamp": "2026-07-23 16:08",
+      "level": "WARN",
+      "component": "connector",
+      "event": "sync.retried",
+      "message": "Connector 'General ledger export' retried after a timeout",
+      "actor": "system",
+      "duration_ms": 6363
+    },
+    {
+      "timestamp": "2026-07-23 13:02",
+      "level": "INFO",
+      "component": "theme",
+      "event": "theme.saved",
+      "message": "Theme configuration saved by demo@financial-cockpit.local",
+      "actor": "demo@financial-cockpit.local",
+      "duration_ms": 2027
+    },
+    {
+      "timestamp": "2026-07-23 11:48",
+      "level": "WARN",
+      "component": "connector",
+      "event": "sync.retried",
+      "message": "Connector 'NetSuite — Fixed assets' retried after a timeout",
+      "actor": "system",
+      "duration_ms": 1148
+    },
+    {
+      "timestamp": "2026-07-23 11:23",
+      "level": "INFO",
+      "component": "close",
+      "event": "period.locked",
+      "message": "Accounting period locked",
+      "actor": "demo@financial-cockpit.local",
+      "duration_ms": 217
+    },
+    {
+      "timestamp": "2026-07-23 08:22",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'financial_close/financial_close' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 2172
+    },
+    {
+      "timestamp": "2026-07-23 07:36",
+      "level": "INFO",
+      "component": "api",
+      "event": "request.served",
+      "message": "GET /api/entities/demo/data served",
+      "actor": "helene.vasseur@demo.local",
+      "duration_ms": 220
+    },
+    {
+      "timestamp": "2026-07-23 05:52",
+      "level": "INFO",
+      "component": "api",
+      "event": "request.served",
+      "message": "GET /api/entities/demo/data served",
+      "actor": "helene.vasseur@demo.local",
+      "duration_ms": 3342
+    },
+    {
+      "timestamp": "2026-07-23 04:20",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'accounting/general_ledger' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 6540
+    },
+    {
+      "timestamp": "2026-07-23 03:53",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 6896
+    },
+    {
+      "timestamp": "2026-07-23 01:16",
+      "level": "INFO",
+      "component": "api",
+      "event": "request.served",
+      "message": "GET /api/entities/demo/data served",
+      "actor": "system",
+      "duration_ms": 3523
+    },
+    {
+      "timestamp": "2026-07-22 23:22",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "camille.fournier@demo.local",
+      "duration_ms": 8432
+    },
+    {
+      "timestamp": "2026-07-22 21:16",
+      "level": "INFO",
+      "component": "api",
+      "event": "request.served",
+      "message": "GET /api/entities/demo/data served",
+      "actor": "helene.vasseur@demo.local",
+      "duration_ms": 5387
+    },
+    {
+      "timestamp": "2026-07-22 19:46",
+      "level": "INFO",
+      "component": "theme",
+      "event": "theme.saved",
+      "message": "Theme configuration saved by camille.fournier@demo.local",
+      "actor": "camille.fournier@demo.local",
+      "duration_ms": 9093
+    },
+    {
+      "timestamp": "2026-07-22 17:49",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'Bank statement import' completed",
+      "actor": "system",
+      "duration_ms": 5534
+    },
+    {
+      "timestamp": "2026-07-22 15:27",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "integration",
+      "duration_ms": 5210
+    },
+    {
+      "timestamp": "2026-07-22 12:17",
+      "level": "ERROR",
+      "component": "connector",
+      "event": "sync.failed",
+      "message": "Connector 'Pennylane — General ledger' failed: upstream returned 502",
+      "actor": "system",
+      "duration_ms": 4843
+    },
+    {
+      "timestamp": "2026-07-22 10:25",
+      "level": "INFO",
+      "component": "theme",
+      "event": "theme.saved",
+      "message": "Theme configuration saved by camille.fournier@demo.local",
+      "actor": "camille.fournier@demo.local",
+      "duration_ms": 2180
+    },
+    {
+      "timestamp": "2026-07-22 09:52",
+      "level": "INFO",
+      "component": "close",
+      "event": "period.locked",
+      "message": "Accounting period locked",
+      "actor": "system",
+      "duration_ms": 594
+    },
+    {
+      "timestamp": "2026-07-22 08:53",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'cost_centers/cost_centers' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 8173
+    },
+    {
+      "timestamp": "2026-07-22 06:07",
+      "level": "WARN",
+      "component": "auth",
+      "event": "login.rejected",
+      "message": "Rejected sign-in attempt",
+      "actor": "system",
+      "duration_ms": 531
+    },
+    {
+      "timestamp": "2026-07-22 05:47",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'cost_centers/cost_centers' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 6275
+    },
+    {
+      "timestamp": "2026-07-22 04:03",
+      "level": "ERROR",
+      "component": "connector",
+      "event": "sync.failed",
+      "message": "Connector 'General ledger export' failed: upstream returned 502",
+      "actor": "system",
+      "duration_ms": 544
+    },
+    {
+      "timestamp": "2026-07-22 02:39",
+      "level": "INFO",
+      "component": "close",
+      "event": "period.locked",
+      "message": "Accounting period locked",
+      "actor": "demo@financial-cockpit.local",
+      "duration_ms": 3941
+    },
+    {
+      "timestamp": "2026-07-22 01:04",
+      "level": "INFO",
+      "component": "theme",
+      "event": "theme.saved",
+      "message": "Theme configuration saved by helene.vasseur@demo.local",
+      "actor": "helene.vasseur@demo.local",
+      "duration_ms": 8640
+    },
+    {
+      "timestamp": "2026-07-21 22:52",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'Cockpit → Data warehouse' completed",
+      "actor": "system",
+      "duration_ms": 8235
+    },
+    {
+      "timestamp": "2026-07-21 21:52",
+      "level": "ERROR",
+      "component": "connector",
+      "event": "sync.failed",
+      "message": "Connector 'Cockpit → Data warehouse' failed: upstream returned 502",
+      "actor": "system",
+      "duration_ms": 6393
+    },
+    {
+      "timestamp": "2026-07-21 21:29",
+      "level": "ERROR",
+      "component": "connector",
+      "event": "sync.failed",
+      "message": "Connector 'Pennylane — General ledger' failed: upstream returned 502",
+      "actor": "system",
+      "duration_ms": 8758
+    },
+    {
+      "timestamp": "2026-07-21 18:46",
+      "level": "WARN",
+      "component": "connector",
+      "event": "sync.retried",
+      "message": "Connector 'Pennylane — General ledger' retried after a timeout",
+      "actor": "system",
+      "duration_ms": 6269
+    },
+    {
+      "timestamp": "2026-07-21 15:37",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'Pennylane — General ledger' completed",
+      "actor": "system",
+      "duration_ms": 4739
+    },
+    {
+      "timestamp": "2026-07-21 15:04",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 6262
+    },
+    {
+      "timestamp": "2026-07-21 12:44",
+      "level": "INFO",
+      "component": "api",
+      "event": "request.served",
+      "message": "GET /api/entities/demo/data served",
+      "actor": "camille.fournier@demo.local",
+      "duration_ms": 8947
+    },
+    {
+      "timestamp": "2026-07-21 10:13",
+      "level": "INFO",
+      "component": "api",
+      "event": "request.served",
+      "message": "GET /api/entities/demo/data served",
+      "actor": "camille.fournier@demo.local",
+      "duration_ms": 7660
+    },
+    {
+      "timestamp": "2026-07-21 07:41",
+      "level": "INFO",
+      "component": "theme",
+      "event": "theme.saved",
+      "message": "Theme configuration saved by camille.fournier@demo.local",
+      "actor": "camille.fournier@demo.local",
+      "duration_ms": 9089
+    },
+    {
+      "timestamp": "2026-07-21 06:41",
+      "level": "WARN",
+      "component": "datastore",
+      "event": "cache.miss",
+      "message": "Manifest cache miss for perimeter demo",
+      "actor": "system",
+      "duration_ms": 9112
+    },
+    {
+      "timestamp": "2026-07-21 05:36",
+      "level": "INFO",
+      "component": "scheduler",
+      "event": "job.completed",
+      "message": "Scheduled job 'Cockpit → Data warehouse' completed",
+      "actor": "system",
+      "duration_ms": 3299
+    },
+    {
+      "timestamp": "2026-07-21 05:21",
+      "level": "INFO",
+      "component": "datastore",
+      "event": "dataset.published",
+      "message": "Dataset 'financial_close/financial_close' published for perimeter demo",
+      "actor": "system",
+      "duration_ms": 4196
+    }
+  ]
+}

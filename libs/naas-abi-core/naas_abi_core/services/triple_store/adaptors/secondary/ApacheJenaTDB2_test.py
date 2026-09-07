@@ -1,3 +1,5 @@
+import threading
+import time
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -179,6 +181,73 @@ def test_list_graphs_returns_graph_uris_from_query_rows():
         graphs = adapter.list_graphs()
 
     assert graphs == [graph_name]
+
+
+def test_list_graphs_filters_catalog_to_iri_graph_names():
+    """Jena DISTINCT over GRAPH ?g NPEs on a null/dangling graph node.
+
+    Listing the named-graph catalog with FILTER(isIRI(?g)) skips that node
+    instead of streaming truncated SPARQL JSON (HTTP 200 + Java NPE).
+    """
+    adapter = _build_adapter()
+    graph_name = URIRef("http://example.org/graphs/g1")
+
+    query_result = rdflib.query.Result("SELECT")
+    query_result.vars = [Variable("g")]
+    query_result.bindings = [{Variable("g"): graph_name}]
+
+    with patch.object(adapter, "query", return_value=query_result) as mock_query:
+        adapter.list_graphs()
+
+    sparql = mock_query.call_args.args[0]
+    assert "FILTER(isIRI(?g))" in sparql
+    assert "GRAPH ?g { }" in sparql
+
+
+_TRUNCATED_SPARQL_JSON = """{ "head": {
+    "vars": [ "g" ]
+  } ,
+  "results": {
+    "bindings": [
+      {
+        "g": { "type": "uri" , "value": "http://ontology.naas.ai/graph/nexus" }
+      } ,
+      {
+        "g": { "type": "uri" , "value": "http://ontology.naas.ai/graph/schema" }
+      }Cannot invoke "org.apache.jena.graph.Node.hashCode()" because "node" is null
+"""
+
+
+def test_parse_sparql_results_json_recovers_truncated_bindings():
+    from naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2 import (
+        _parse_sparql_results_json,
+    )
+
+    parsed = _parse_sparql_results_json(_TRUNCATED_SPARQL_JSON)
+
+    values = [row["g"]["value"] for row in parsed["results"]["bindings"]]
+    assert values == [
+        "http://ontology.naas.ai/graph/nexus",
+        "http://ontology.naas.ai/graph/schema",
+    ]
+
+
+def test_query_recovers_truncated_sparql_json_without_retrying():
+    adapter = _build_adapter()
+    adapter.max_retries = 3
+
+    response = _ok_response()
+    response.headers = {"Content-Type": "application/sparql-results+json"}
+    response.text = _TRUNCATED_SPARQL_JSON
+    adapter._session.post.return_value = response
+
+    result = list(adapter.query("SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } }"))
+
+    assert [str(row.g) for row in result] == [
+        "http://ontology.naas.ai/graph/nexus",
+        "http://ontology.naas.ai/graph/schema",
+    ]
+    assert adapter._session.post.call_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -364,6 +433,42 @@ def test_distributed_lock_acquired_and_released_on_insert():
     acquire_token = mock_kv.set_if_not_exists.call_args.args[1]
     release_token = mock_kv.delete_if_value_matches.call_args.args[1]
     assert acquire_token == release_token
+
+
+def test_distributed_writes_are_also_serialized_within_process():
+    adapter, _mock_kv = _build_adapter_with_kv()
+    active = 0
+    max_active = 0
+    state_lock = threading.Lock()
+
+    def slow_post(*_args, **_kwargs):
+        nonlocal active, max_active
+        with state_lock:
+            active += 1
+            max_active = max(max_active, active)
+        time.sleep(0.02)
+        with state_lock:
+            active -= 1
+        return _ok_response()
+
+    adapter._session.post.side_effect = slow_post
+    graph = Graph()
+    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+    barrier = threading.Barrier(3)
+
+    def insert() -> None:
+        barrier.wait()
+        adapter.insert(graph)
+
+    threads = [threading.Thread(target=insert) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        thread.join(timeout=1)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert max_active == 1
 
 
 @patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")

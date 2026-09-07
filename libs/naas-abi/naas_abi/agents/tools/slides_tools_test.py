@@ -38,17 +38,15 @@ _SAMPLE = """<!DOCTYPE html>
 </body></html>
 """
 
-_TEMPLATE_CANDIDATES = (
+_TEMPLATE = (
     Path(__file__).resolve().parents[2]
     / "apps"
     / "nexus"
     / "assets"
     / "slides"
     / "templates"
-    / "minimal-light-v1.html",
-    Path("/Users/jrvmac/abi-naas/src/zen/assets/slides/templates/minimal-light-v1.html"),
+    / "minimal-light-v1.html"
 )
-_TEMPLATE = next((p for p in _TEMPLATE_CANDIDATES if p.is_file()), _TEMPLATE_CANDIDATES[0])
 
 
 def test_redact_data_urls_shrinks_payload_and_counts():

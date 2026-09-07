@@ -17,7 +17,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.WorkspaceRole import WorkspaceRole
+from naas_abi.ontologies.classes.ontology_demo.nexus.WorkspaceRole import WorkspaceRole
 
 role = WorkspaceRole()
 role.actions()  # no-op by default

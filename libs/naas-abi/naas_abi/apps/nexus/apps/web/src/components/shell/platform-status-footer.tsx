@@ -82,7 +82,7 @@ function Slot({
  * Left: User / Business workspace / Repo / Branch / Code workspace [/ dirty]
  * Right: Refresh + API health
  *
- * Terminology: see Zen docs/ux/business-vs-code-workspace.md
+ * Terminology: see parent-app docs/ux/business-vs-code-workspace.md
  */
 export function PlatformStatusFooter() {
   const pathname = usePathname() || '';

@@ -21,6 +21,7 @@ from naas_abi.apps.nexus.apps.api.app.services.providers.providers__schema impor
     ProviderInfo,
     ProviderModelInfo,
 )
+from naas_abi.apps.nexus.apps.api.app.utils.public_urls import public_api_host
 
 logger = logging.getLogger(__name__)
 
@@ -33,23 +34,6 @@ def _provider_display_name(provider: ProviderCatalogEntry) -> str:
     if provider.name:
         return provider.name
     return provider.provider_id.replace("_", " ").title()
-
-
-def _public_api_host() -> str | None:
-    """Resolve the configured public API host.
-
-    Same source the agent service uses for logo URLs
-    (``_public_modules_url``): ``global_config.public_api_host`` on the running
-    ABIModule instance. Returns None when the instance isn't initialized (e.g.
-    in unit tests), in which case callers fall back to a relative path.
-    """
-    try:
-        from naas_abi import ABIModule
-
-        host = ABIModule.get_instance().configuration.global_config.public_api_host
-    except Exception:
-        return None
-    return host if isinstance(host, str) and host else None
 
 
 def _provider_logo_url(provider: ProviderCatalogEntry) -> str | None:
@@ -74,9 +58,9 @@ def _provider_logo_url(provider: ProviderCatalogEntry) -> str | None:
     if path is None:
         return None
 
-    host = _public_api_host()
+    host = public_api_host()
     if host:
-        return f"{host.rstrip('/')}/{path.lstrip('/')}"
+        return f"{host}/{path.lstrip('/')}"
     return path
 
 

@@ -1,44 +1,41 @@
-# gpt_4_1
+# Gpt41Model
 
 ## What it is
-- A module-level `ChatModel` definition for OpenAI’s `gpt-4.1`, implemented via `langchain_openai.ChatOpenAI`.
-- Intended to be imported and used as a preconfigured chat model within the `naas_abi_marketplace` ChatGPT integration.
+- Defines a `gpt-4.1` chat model configuration for use in `naas_abi_marketplace`.
+- Wraps a `langchain_openai.ChatOpenAI` instance inside `naas_abi_core.models.Model.ChatModel`.
+- Exposes a module-level `model` alias for convenient import.
 
 ## Public API
-- `MODEL_ID: str`
-  - Constant model identifier: `"gpt-4.1"`.
-- `PROVIDER: str`
-  - Constant provider name: `"openai"`.
-- `model: naas_abi_core.models.Model.ChatModel`
-  - Preconfigured chat model wrapper with:
-    - `model_id="gpt-4.1"`
-    - `provider="openai"`
-    - `model=ChatOpenAI(...)` configured with temperature, timeout, retries, and API key.
+- `class Gpt41Model(ModelDefinition)`
+  - `CANONICAL_ID = CanonicalModelId.GPT_4_1`
+  - `MODEL_ID = "gpt-4.1"`
+  - `PROVIDER = ModelProvider.OPENAI`
+  - `model: ChatModel`
+    - Preconfigured `ChatModel`:
+      - `model_id="gpt-4.1"`
+      - `provider=ModelProvider.OPENAI`
+      - `model=ChatOpenAI(model="gpt-4.1", temperature=0, timeout=180, max_retries=3, api_key=SecretStr(...))`
+- `model: ChatModel`
+  - Module-level alias: `Gpt41Model.model`
 
 ## Configuration/Dependencies
 - Dependencies:
   - `langchain_openai.ChatOpenAI`
-  - `naas_abi_core.models.Model.ChatModel`
+  - `naas_abi_core.models.Model`: `CanonicalModelId`, `ChatModel`, `ModelDefinition`, `ModelProvider`
   - `naas_abi_marketplace.ai.chatgpt.ABIModule`
   - `pydantic.SecretStr`
 - Configuration source:
-  - OpenAI API key is pulled from:
+  - OpenAI API key is read at import time from:
     - `ABIModule.get_instance().configuration.openai_api_key`
-  - Wrapped as `SecretStr` and passed to `ChatOpenAI(api_key=...)`.
-- Fixed runtime parameters:
-  - `temperature=0`
-  - `timeout=180`
-  - `max_retries=3`
+  - Wrapped as `SecretStr` and passed to `ChatOpenAI(api_key=...)`
 
 ## Usage
 ```python
 from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model
 
-# Pass `model` into the rest of your ABI pipeline where a ChatModel is expected.
-# (Exact invocation depends on the consumer of `naas_abi_core.models.Model.ChatModel`.)
-print(model.model_id)  # "gpt-4.1"
+print(model.model_id)   # "gpt-4.1"
+print(model.provider)   # ModelProvider.OPENAI
 ```
 
 ## Caveats
-- This module does not define any functions or classes; it only instantiates a configured `ChatModel` at import time.
-- Importing the module requires `ABIModule.get_instance().configuration.openai_api_key` to be available and valid.
+- The `ChatModel` is instantiated at import time; importing this module requires `ABIModule.get_instance().configuration.openai_api_key` to be available.

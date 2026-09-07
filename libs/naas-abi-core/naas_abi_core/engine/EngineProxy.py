@@ -12,6 +12,7 @@ from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
+from naas_abi_core.services.dataset.DatasetService import DatasetService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
@@ -80,6 +81,17 @@ class ServicesProxy:
         self.__ensure_access(ObjectStorageService)
 
         return self.__engine.services.object_storage
+
+    @property
+    def dataset(self) -> DatasetService:
+        self.__ensure_access(DatasetService)
+
+        return self.__engine.services.dataset
+
+    def dataset_available(self) -> bool:
+        if not self.__unlocked and DatasetService not in self.__module_dependencies.services:
+            return False
+        return self.__engine.services.dataset_available()
 
     @property
     def triple_store(self) -> TripleStoreService:

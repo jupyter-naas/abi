@@ -2,6 +2,205 @@
 
 <!-- version list -->
 
+## v2.31.2 (2026-09-07)
+
+### Bug Fixes
+
+- **core,abi,marketplace**: Pass json_schema_extra instead of Field(example=)
+  ([`ec8f6fd`](https://github.com/jupyter-naas/abi/commit/ec8f6fda79fa3e47cddfff0736f6590068a98fac))
+
+
+## v2.31.1 (2026-09-07)
+
+### Bug Fixes
+
+- **agent**: Align loguru comment with #1157 to merge cleanly
+  ([#1158](https://github.com/jupyter-naas/abi/pull/1158),
+  [`9ea2efe`](https://github.com/jupyter-naas/abi/commit/9ea2efe52fab7f245aeb991483adb8c671a757ec))
+
+- **agent**: Survive embedding-provider failures instead of hanging the chat
+  ([#1158](https://github.com/jupyter-naas/abi/pull/1158),
+  [`9ea2efe`](https://github.com/jupyter-naas/abi/commit/9ea2efe52fab7f245aeb991483adb8c671a757ec))
+
+
+## v2.31.0 (2026-09-07)
+
+### Code Style
+
+- **object-storage**: Sort the new tests' imports as ruff expects
+  ([#1244](https://github.com/jupyter-naas/abi/pull/1244),
+  [`f0675f4`](https://github.com/jupyter-naas/abi/commit/f0675f4dfc8a508a9d8ff2f7b851efaa5f8c5a9f))
+
+### Features
+
+- **object-storage**: Add recursive listing to the port and adapters
+  ([#1244](https://github.com/jupyter-naas/abi/pull/1244),
+  [`f0675f4`](https://github.com/jupyter-naas/abi/commit/f0675f4dfc8a508a9d8ff2f7b851efaa5f8c5a9f))
+
+
+## v2.30.0 (2026-09-03)
+
+### Bug Fixes
+
+- **dataset**: Address DuckLake review feedback
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Isolate storage and supported schemes
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Migrate DuckLake catalog on connect
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Validate S3 endpoint transport
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+### Documentation
+
+- **dataset**: Document the object store data path, and type the factory
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+### Features
+
+- **dataset**: Adopt DuckLake backend ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Let DuckLake write its data to an object store
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+
+## v2.29.0 (2026-09-03)
+
+### Features
+
+- **code**: Add local git and sandbox runtime for Slides-parity dev
+  ([#1242](https://github.com/jupyter-naas/abi/pull/1242),
+  [`c9beaae`](https://github.com/jupyter-naas/abi/commit/c9beaae75563d8ac0e137ec8da81a48d4472bcaa))
+
+- **code**: Local git + sandbox runtime (Slides-parity)
+  ([#1242](https://github.com/jupyter-naas/abi/pull/1242),
+  [`c9beaae`](https://github.com/jupyter-naas/abi/commit/c9beaae75563d8ac0e137ec8da81a48d4472bcaa))
+
+
+## v2.28.3 (2026-09-02)
+
+### Bug Fixes
+
+- Update versions and platform markers in uv.lock and fix datetime usage in CacheService_test.py
+  ([`5a116a2`](https://github.com/jupyter-naas/abi/commit/5a116a2f1b70fcdb65bd7e3fb15332f393a7aa1c))
+
+
+## v2.28.2 (2026-09-01)
+
+### Bug Fixes
+
+- **cache**: Handle naive datetime in TTL cache expiry check
+  ([`13bceb0`](https://github.com/jupyter-naas/abi/commit/13bceb07c20fdf06742692e0d36b18c9a373509f))
+
+
+## v2.28.1 (2026-08-28)
+
+
+## v2.28.0 (2026-08-28)
+
+### Bug Fixes
+
+- **agent**: Coerce empty-string keys from tool call args to avoid Bedrock validation errors
+  ([`8cc30a6`](https://github.com/jupyter-naas/abi/commit/8cc30a6de4339706ef5b0e4f7d618c45e5526ea2))
+
+- **triple_store**: Add noqa to exception handling
+  ([`d7b7f07`](https://github.com/jupyter-naas/abi/commit/d7b7f07a9f770a22d16da39ee9e53641713426ac))
+
+### Chores
+
+- **deps**: Bump naas-abi and related packages versions
+  ([`d7b7f07`](https://github.com/jupyter-naas/abi/commit/d7b7f07a9f770a22d16da39ee9e53641713426ac))
+
+### Features
+
+- Add DatasetService and Nexus Datasets UI ([#1213](https://github.com/jupyter-naas/abi/pull/1213),
+  [`ab82d5c`](https://github.com/jupyter-naas/abi/commit/ab82d5c7feff1cb90ef6572f0da226d86bbdd5b8))
+
+- **triple-store**: Add schema graph bootstrap check and insert
+  ([`16d9dd9`](https://github.com/jupyter-naas/abi/commit/16d9dd95e8e32d62ae0b26e18e0496ca4e48c4e1))
+
+
+## v2.27.2 (2026-08-20)
+
+### Bug Fixes
+
+- Ruff errors
+  ([`7f992f4`](https://github.com/jupyter-naas/abi/commit/7f992f45eda9d1994840e7975c4010bffdf8f8ed))
+
+
+## v2.27.1 (2026-08-20)
+
+### Bug Fixes
+
+- Resolve triplestore url in local
+  ([`a078140`](https://github.com/jupyter-naas/abi/commit/a07814087ed6ce4415edbf38311076092398d36e))
+
+
+## v2.27.0 (2026-08-20)
+
+### Bug Fixes
+
+- **api**: Satisfy mypy on process API mounts
+  ([#1203](https://github.com/jupyter-naas/abi/pull/1203),
+  [`19d538d`](https://github.com/jupyter-naas/abi/commit/19d538d7fec8b24d262c5f90b1416a6963c0a234))
+
+### Features
+
+- **api**: Mount module workflows, pipelines, and Expose tools
+  ([#1203](https://github.com/jupyter-naas/abi/pull/1203),
+  [`19d538d`](https://github.com/jupyter-naas/abi/commit/19d538d7fec8b24d262c5f90b1416a6963c0a234))
+
+
+## v2.26.2 (2026-08-18)
+
+### Bug Fixes
+
+- **rabbitmq**: Add thread-safe locking to publish calls
+  ([`005efa3`](https://github.com/jupyter-naas/abi/commit/005efa3e0f7659a258c02a441d872923a2499f7c))
+
+- **triple_store**: Clarify and improve distributed write lock
+  ([`005efa3`](https://github.com/jupyter-naas/abi/commit/005efa3e0f7659a258c02a441d872923a2499f7c))
+
+
+## v2.26.1 (2026-08-17)
+
+### Bug Fixes
+
+- Make it possible to comment in yaml config and discard required secrets
+  ([`9b38d61`](https://github.com/jupyter-naas/abi/commit/9b38d616e0518db381c97aeea64020b5e27ab79a))
+
+
+## v2.26.0 (2026-08-17)
+
+### Features
+
+- **event**: Add cursor seeking and setting functionality for event consumers
+  ([`37b424d`](https://github.com/jupyter-naas/abi/commit/37b424d69099114e57e3597656756ad0b20a70f6))
+
+
+## v2.25.0 (2026-08-11)
+
+### Chores
+
+- Remove Zen product coupling from ABI
+  ([`09a7d17`](https://github.com/jupyter-naas/abi/commit/09a7d1749feb7b7df1ba764eeb7bd5c088ff60cd))
+
+### Features
+
+- **app-html**: Add ABI API key and JWT auth for /app-html/ assets
+  ([`1ec9534`](https://github.com/jupyter-naas/abi/commit/1ec953401d55525a7fa5f88c686beb070da080cf))
+
+
 ## v2.24.1 (2026-08-03)
 
 ### Bug Fixes
@@ -164,7 +363,7 @@
 
 - **agent**: Coerce non-object tool call args to `{}` before Bedrock Converse
   re-sends history (fixes ValidationException on `toolUse.input` for models
-  like `gpt-oss-120b` that emit `[]`/`""` for zero-arg tools)
+  like `gpt-oss-120b` that emit `[]`/`""`/`{"": {}}` for zero-arg tools)
 
 
 ## v2.19.2 (2026-07-21)

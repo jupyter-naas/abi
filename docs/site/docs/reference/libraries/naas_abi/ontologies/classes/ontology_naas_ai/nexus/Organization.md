@@ -17,7 +17,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.Organization import Organization
+from naas_abi.ontologies.classes.ontology_demo.nexus.Organization import Organization
 
 org = Organization()
 org.actions()  # currently no-op

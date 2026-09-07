@@ -16,7 +16,7 @@ A thin subclass of `naas_abi.ontologies.modules.NexusPlatformOntology.OntologyOb
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.OntologyObjectProperty import (
+from naas_abi.ontologies.classes.ontology_demo.nexus.OntologyObjectProperty import (
     OntologyObjectProperty,
 )
 

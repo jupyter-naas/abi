@@ -1,42 +1,54 @@
 # SearchLinkedInOrganizationPageWorkflow
 
 ## What it is
-A workflow that uses **Google Programmable Search Engine** results to find and extract **LinkedIn organization page URLs** (company/school/showcase), then stores each matched page as JSON in object storage.
+A workflow that queries Google Programmable Search Engine for an organization name, filters results to LinkedIn organization pages (`company`, `school`, `showcase`), saves matched pages as JSON to object storage, and returns the matched page metadata.
 
 ## Public API
-- `SearchLinkedInOrganizationPageWorkflowConfiguration`
-  - Workflow configuration:
-    - `integration_config`: `GoogleProgrammableSearchEngineIntegrationConfiguration` used to query Google.
-    - `pattern`: regex used to match LinkedIn organization URLs (default: `https://.+\.linkedin\.com/(company|school|showcase)/[^?]+`).
-    - `datastore_path`: base storage path (defaults under `ABIModule.get_instance().configuration.datastore_path/linkedin_organization_pages`).
+- `SearchLinkedInOrganizationPageWorkflowConfiguration` (dataclass)
+  - Purpose: Configure integration, matching pattern, and storage path.
+  - Fields:
+    - `integration_config: GoogleProgrammableSearchEngineIntegrationConfiguration` — Google PSE integration config.
+    - `pattern: str` — regex used to match LinkedIn org URLs (default: `r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+"`).
+    - `datastore_path: str` — base path for saving results (default: `<ABIModule datastore_path>/linkedin_organization_pages`).
 
-- `SearchLinkedInOrganizationPageWorkflowParameters`
-  - Input parameters:
-    - `organization_name: str`: organization name to search for.
+- `SearchLinkedInOrganizationPageWorkflowParameters` (Pydantic/WorkflowParameters)
+  - Purpose: Input parameters for execution.
+  - Fields:
+    - `organization_name: str` — organization name to search for.
 
-- `SearchLinkedInOrganizationPageWorkflow`
-  - `__init__(configuration)`
-    - Instantiates Google search integration and storage utility.
-  - `search_linkedin_organization_page(parameters) -> Any`
-    - Builds query: `"{organization_name}+site:linkedin.com"` (spaces replaced by `+`).
-    - Filters results by `configuration.pattern`.
-    - Detects LinkedIn org type by URL path: `/company/`, `/school/`, `/showcase/`.
-    - Extracts `organization_id` from the URL segment after the type.
-    - Persists a JSON document per match via `StorageUtils.save_json(...)`.
-    - Returns a list of dicts with keys:
-      - `title`, `link`, `description`, `cse_image`.
+- `SearchLinkedInOrganizationPageWorkflow` (Workflow)
+  - `__init__(configuration: SearchLinkedInOrganizationPageWorkflowConfiguration)`
+    - Purpose: Instantiate the Google search integration and storage utility.
+  - `search_linkedin_organization_page(parameters: SearchLinkedInOrganizationPageWorkflowParameters) -> Any`
+    - Purpose: Search for LinkedIn organization pages and persist each match as JSON.
+    - Behavior:
+      - Query: `"{organization_name_with_+}+site:linkedin.com"`.
+      - For each result whose `link` matches `configuration.pattern`:
+        - Detect org type by URL containing `/company/`, `/school/`, or `/showcase/`.
+        - Extract `organization_id` from the URL segment after the org type.
+        - Build `page_data` with:
+          - `title` (from result)
+          - `link` (result URL)
+          - `description` (from `pagemap.metatags[0]["og:description"]` else `snippet`)
+          - `cse_image` (from `pagemap.cse_image[0]["src"]` else `None`)
+        - Save JSON to:  
+          `configuration.datastore_path` with `"organization"` replaced by the detected type, then `/<organization_id>/<organization_id>.json`.
+      - Returns: `list[dict]` of `page_data`.
   - `as_tools() -> list[BaseTool]`
-    - Exposes a LangChain `StructuredTool` named `googlesearch_search_linkedin_organization_page`.
+    - Purpose: Expose a LangChain `StructuredTool` named `googlesearch_search_linkedin_organization_page`.
   - `as_api(...) -> None`
-    - Present but does not register routes (returns `None`).
+    - Purpose: API wiring stub; does not add routes in the shown code.
 
 ## Configuration/Dependencies
-- Depends on:
-  - `GoogleProgrammableSearchEngineIntegration` (requires `integration_config`).
-  - `ABIModule.get_instance()` for datastore path and object storage service.
-  - `StorageUtils` for persisting JSON outputs.
-- Storage layout:
-  - Saves under `datastore_path` with `"organization"` replaced by the detected type (`company`, `school`, or `showcase`), then `/<organization_id>/<organization_id>.json`.
+- Dependencies:
+  - `GoogleProgrammableSearchEngineIntegration` (uses `integration_config`; called via `.query(query)`).
+  - `ABIModule.get_instance()`:
+    - `configuration.datastore_path` used for default `datastore_path`.
+    - `engine.services.object_storage` used by `StorageUtils`.
+  - `StorageUtils.save_json(...)` writes matched page data to object storage.
+- URL matching:
+  - Regex: `SearchLinkedInOrganizationPageWorkflowConfiguration.pattern`
+  - Org type detection is based on substring presence in the URL (`/company/`, `/school/`, `/showcase/`).
 
 ## Usage
 ```python
@@ -49,19 +61,20 @@ from naas_abi_marketplace.applications.google_search.integrations.GoogleProgramm
     GoogleProgrammableSearchEngineIntegrationConfiguration,
 )
 
-config = SearchLinkedInOrganizationPageWorkflowConfiguration(
+cfg = SearchLinkedInOrganizationPageWorkflowConfiguration(
     integration_config=GoogleProgrammableSearchEngineIntegrationConfiguration(
-        # provide required integration fields here
+        # fill required integration fields
     )
 )
 
-wf = SearchLinkedInOrganizationPageWorkflow(config)
-results = wf.search_linkedin_organization_page(
+wf = SearchLinkedInOrganizationPageWorkflow(cfg)
+out = wf.search_linkedin_organization_page(
     SearchLinkedInOrganizationPageWorkflowParameters(organization_name="OpenAI")
 )
-print(results)
+print(out)
 ```
 
 ## Caveats
-- Only URLs matching the configured regex and containing one of `/company/`, `/school/`, `/showcase/` are returned/saved.
-- `as_api()` does not expose any HTTP endpoints.
+- Only results whose URL matches the regex **and** includes one of `/company/`, `/school/`, or `/showcase/` are saved/returned.
+- Storage path uses `datastore_path.replace("organization", organization_type)`; ensure your base path naming aligns with this replacement behavior.
+- `as_api()` is incomplete in the provided code and does not register endpoints.

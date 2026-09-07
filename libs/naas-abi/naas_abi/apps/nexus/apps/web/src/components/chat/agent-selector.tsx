@@ -8,16 +8,7 @@ import { useAgentsStore, type Agent } from '@/stores/agents';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useAgentList } from '@/components/ui/dialogs';
-import { getApiUrl } from '@/lib/config';
-
-const getApiBase = () => getApiUrl();
-
-// Helper to get logo URL (prefix relative URLs with API base)
-const getLogoUrl = (url: string | null): string | undefined => {
-  if (!url) return undefined;
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  return `${getApiBase()}${url}`; // Relative URL -> add API base
-};
+import { getLogoUrl } from '@/lib/logo-url';
 
 const iconComponents = {
   user: User,
@@ -36,17 +27,28 @@ function AgentIcon({ icon, size = 16 }: { icon: Agent['icon']; size?: number }) 
 }
 
 export function AgentAvatar({ agent, size = 16 }: { agent: Agent; size?: number }) {
-  if (agent.logoUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img 
-        src={getLogoUrl(agent.logoUrl)} 
-        alt={agent.name} 
-        className="h-full w-full object-cover" 
-      />
-    );
-  }
-  return <AgentIcon icon={agent.icon} size={size} />;
+  const src = getLogoUrl(agent.logoUrl);
+  const [imgReady, setImgReady] = useState(false);
+
+  useEffect(() => {
+    setImgReady(false);
+  }, [src]);
+
+  return (
+    <>
+      {(!src || !imgReady) && <AgentIcon icon={agent.icon} size={size} />}
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt={agent.name}
+          className={imgReady ? 'h-full w-full object-cover' : 'hidden'}
+          onLoad={() => setImgReady(true)}
+          onError={() => setImgReady(false)}
+        />
+      ) : null}
+    </>
+  );
 }
 
 export function AgentSelector({ compact = false }: { compact?: boolean }) {

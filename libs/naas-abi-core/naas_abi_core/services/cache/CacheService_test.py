@@ -338,6 +338,26 @@ def test_decorator_ttl_expiry() -> None:
     assert get_text("test") == "data_test_bad"   # expired, recomputed
 
 
+def test_ttl_accepts_naive_created_at() -> None:
+    """Older cache files stored naive ISO timestamps; TTL must still compare."""
+    cache = _single_cold()
+    cache.set_text("k", "v")
+    adapter = cache.cold.adapter
+    cached = adapter.get("k")
+    adapter.set(
+        "k",
+        CachedData(
+            key="k",
+            data=cached.data,
+            data_type=cached.data_type,
+            created_at=datetime.datetime.now(datetime.UTC)
+            .replace(tzinfo=None)
+            .isoformat(),
+        ),
+    )
+    assert cache.get("k", ttl=datetime.timedelta(days=1)) == "v"
+
+
 def test_decorator_force_refresh() -> None:
     cache = _single_cold()
     counter = [0]

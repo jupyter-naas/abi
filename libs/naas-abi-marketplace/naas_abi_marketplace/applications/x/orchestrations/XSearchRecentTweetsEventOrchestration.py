@@ -7,16 +7,16 @@ written under that entry's ``prefix`` (the JSON files
 :class:`XSearchRecentTweetsPipeline` in ``file_path`` mode to map the full
 SearchQuery / SearchResultSet / SearchRecentTweets structure into the graph.
 This is the event-system pay-off: the search workflow only fetches and saves;
-the put event then drives all graph mapping here, with no polling. After each
-successful map the Recent Tweets app (``x/apps/x/``) is republished so the
-dashboard reflects the newly ingested tweets.
+the put event then drives all graph mapping here, with no polling. Set
+``app_publish: true`` on an entry to also republish the Recent Tweets app
+(``x/apps/x_proxy/``) after each successful map; it is off by default and the hourly
+``x_build_app_x_proxy`` schedule keeps the dashboard fresh instead.
 
 Each entry's sensor, watched prefix and ingestion knobs (persist, events drained
 per tick, evaluation interval) come from the ``search_recent_tweets_event`` list
 in the module config. The config defaults to an empty list (no sensors); add
-entries to create them. Sensors are **disabled by default**
-(``DefaultSensorStatus.STOPPED``); set ``enabled: true`` on an entry to create
-its sensor RUNNING, or enable it from the Dagster UI.
+entries to create them. Triggers start **RUNNING** by default; stop them from
+the Dagster UI when needed.
 
 Launch manually from the Dagster launchpad to replay a single envelope: set
 ``prefix`` and ``key`` on the entry's pipeline op (required). Optional fields
@@ -80,8 +80,9 @@ _PIPELINE_CONFIG_SCHEMA = {
         bool,
         is_required=False,
         description=(
-            "After mapping, republish x/apps/x/ snapshots (+ web export). "
-            "Defaults to the entry's configured app_publish."
+            "After mapping, republish x/apps/x_proxy/ snapshots (+ web export). "
+            "Defaults to the entry's configured app_publish (itself false "
+            "unless set) — turn on here to force a rebuild for one run."
         ),
     ),
 }
@@ -102,17 +103,50 @@ def _is_search_recent_tweets_put(
     return key.lower().endswith(_TWEET_FILE_EXTENSIONS)
 
 
+def _envelope_query(module, file_path: str) -> str | None:
+    """The configured query an envelope belongs to, or ``None``.
+
+    Envelopes live under ``…/search_recent_tweets/<slug>/<ts>_<slug>.json``
+    where ``<slug>`` is ``slugify_query(query)``, so the owning filter is
+    recoverable from the path — no envelope read needed. Only filters that opted
+    into ``count_recent_tweets`` are returned; the rest are not followed.
+    """
+    from naas_abi_marketplace.applications.x.integrations.XIntegration import (
+        slugify_query,
+    )
+
+    slug = posixpath.basename(posixpath.dirname(file_path))
+    if not slug:
+        return None
+    for flt in getattr(module.configuration, "search_recent_tweets_workflow", []) or []:
+        if not getattr(flt, "count_recent_tweets", False):
+            continue
+        if slugify_query(flt.query) == slug:
+            return str(flt.query)
+    return None
+
+
 def _map_search_envelope(
     op_cfg: dict, event_cfg: XSearchRecentTweetsEventConfiguration
-) -> None:
+) -> dict:
     """Map one persisted search envelope into the graph via the search pipeline.
 
-    After a successful map, republish the Recent Tweets app when
-    ``app_publish`` is true (config or launchpad override) — independent of
-    this sensor's YAML ``enabled`` / Dagster UI start state.
+    Counts are followed **after** the map, so the count window is resolved from
+    a graph that already contains this envelope's tweets — the newest
+    ``tweet_created_at`` is what decides which clock hours are countable. The
+    workflow throttles its own partial refresh, so this runs per envelope
+    without hitting the counts endpoint per envelope.
+
+    A pipeline run rebuilds the app dataset only when ``app_publish`` is turned
+    on (per entry, or per run from the launchpad) — off by default, since a
+    rebuild reads the whole graph and every envelope would pay for it. The web
+    app serves that dataset straight from object storage and runs no queries of
+    its own, so with ``app_publish`` off the dashboard follows the hourly
+    ``x_build_app_x_proxy`` schedule instead of each envelope.
     """
     from naas_abi_marketplace.applications.x.orchestrations.utils import (
-        publish_x_app,
+        republish_x_app_after_pipeline,
+        run_count_for_query,
     )
 
     module = ABIModule.get_instance()
@@ -132,27 +166,30 @@ def _map_search_envelope(
         ),
     )
 
-    app_publish = launchpad_override(op_cfg, "app_publish", event_cfg.app_publish)
-    if not app_publish:
-        logger.info(
-            f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
-            f"app_publish=false; skipped republish after mapping {file_path}"
-        )
-        return
+    count_query = _envelope_query(module, file_path)
+    if count_query:
+        try:
+            counts = run_count_for_query(module, count_query)
+            logger.info(
+                f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
+                f"followed counts after mapping {file_path} ({counts})"
+            )
+        except Exception as exc:  # noqa: BLE001 — counts must never fail ingestion
+            logger.warning(
+                f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
+                f"count follow-up failed after mapping {file_path} ({exc}); "
+                f"tweets were still mapped"
+            )
 
-    try:
-        publish = publish_x_app(module, enabled=True)
-        logger.info(
-            f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
-            f"republished X app after mapping {file_path} "
-            f"({publish.get('queries_published') or publish.get('queries')})"
-        )
-    except Exception as exc:  # noqa: BLE001 — never fail mapping on publish
-        logger.warning(
-            f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
-            f"app republish failed after mapping {file_path} ({exc}); "
-            f"envelope was still mapped into the graph"
-        )
+    app = republish_x_app_after_pipeline(
+        module,
+        source=(
+            f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}] "
+            f"after mapping {file_path}"
+        ),
+        app_publish=launchpad_override(op_cfg, "app_publish", event_cfg.app_publish),
+    )
+    return {"file_path": file_path, "app": app}
 
 
 def _build_search_recent_tweets_event_sensor(
@@ -187,8 +224,8 @@ def _build_search_recent_tweets_event_sensor(
     sensor_name = f"x_search_recent_tweets_put_sensor_{safe}"
 
     @dg.op(name=pipeline_op_name, config_schema=_PIPELINE_CONFIG_SCHEMA)
-    def search_pipeline_op(context) -> None:
-        _map_search_envelope(context.op_config or {}, event_cfg)
+    def search_pipeline_op(context) -> dict:
+        return _map_search_envelope(context.op_config or {}, event_cfg)
 
     @dg.job(name=job_name, executor_def=dg.in_process_executor)
     def search_ingestion_job():
@@ -206,11 +243,7 @@ def _build_search_recent_tweets_event_sensor(
         ),
         job=search_ingestion_job,
         minimum_interval_seconds=event_cfg.interval_seconds,
-        default_status=(
-            dg.DefaultSensorStatus.RUNNING
-            if event_cfg.enabled
-            else dg.DefaultSensorStatus.STOPPED
-        ),
+        default_status=dg.DefaultSensorStatus.RUNNING,
     )
     def search_ingestion_sensor(context: dg.SensorEvaluationContext):
         from naas_abi_core.services.object_storage.ontologies.modules.ObjectStorageEventOntology import (
@@ -321,9 +354,7 @@ def _build_search_recent_tweets_event_sensor(
                     run_key=f"{job_name}:{prefix}:{key}",
                     run_config={
                         "ops": {
-                            pipeline_op_name: {
-                                "config": {"prefix": prefix, "key": key}
-                            }
+                            pipeline_op_name: {"config": {"prefix": prefix, "key": key}}
                         }
                     },
                 )
@@ -343,8 +374,8 @@ class XSearchRecentTweetsEventOrchestration(DagsterOrchestration):
     """One event-driven (job, sensor) pair per configured
     ``search_recent_tweets_event`` entry, each subscribing to ``ObjectPut``
     events and mapping every new envelope written under the entry's ``prefix``
-    into the graph via :class:`XSearchRecentTweetsPipeline`. Sensors disabled by
-    default unless ``enabled: true``.
+    into the graph via :class:`XSearchRecentTweetsPipeline`. Triggers start RUNNING
+    by default.
 
     Launchpad example (manual replay of one envelope, filter ``search_envelopes``)::
 

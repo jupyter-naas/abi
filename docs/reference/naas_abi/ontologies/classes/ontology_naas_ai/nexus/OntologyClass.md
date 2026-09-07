@@ -16,7 +16,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.OntologyClass import OntologyClass
+from naas_abi.ontologies.classes.ontology_demo.nexus.OntologyClass import OntologyClass
 
 class MyOntologyClass(OntologyClass):
     def actions(self):

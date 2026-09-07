@@ -123,3 +123,14 @@ class TestPythonAdapter(GenericKVSecondaryAdapterTest):
             list(executor.map(_writer, values))
 
         assert adapter.get(key) in values
+
+    def test_read_releases_sqlite_lock_for_other_connection(self, tmp_path):
+        db_path = tmp_path / "kv-lock.sqlite3"
+        first = PythonAdapter(persistence_path=str(db_path), busy_timeout_ms=1000)
+        second = PythonAdapter(persistence_path=str(db_path), busy_timeout_ms=1000)
+        key = f"naas-abi-core:kv:lock:{uuid4()}"
+        first.set(key, b"held")
+        assert first.get(key) == b"held"
+        assert first.exists(key) is True
+        second.set(f"{key}-other", b"ok")
+        assert second.get(f"{key}-other") == b"ok"

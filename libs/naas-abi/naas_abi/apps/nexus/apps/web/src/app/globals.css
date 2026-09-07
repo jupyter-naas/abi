@@ -265,6 +265,11 @@ html {
   @apply ring-0;
 }
 
+/* Rail icons use fill, not a ring. Kill the global :focus-visible square. */
+aside.glass :focus-visible {
+  @apply ring-0;
+}
+
 /* Subtle focus for glass cards */
 .glass-card:focus-within {
   border-color: var(--border-hex);

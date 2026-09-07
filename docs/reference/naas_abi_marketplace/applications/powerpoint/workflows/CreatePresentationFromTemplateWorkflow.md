@@ -1,56 +1,74 @@
 # CreatePresentationFromTemplateWorkflow
 
 ## What it is
-A workflow that generates a new PowerPoint presentation from a `.pptx` template plus JSON-like slide instructions (duplicate specific template slides, update shapes’ text, and write sources into slide notes). It saves the resulting file to object storage, uploads a public asset to Naas, and registers both the template and generated presentation in a triple store.
+A workflow that builds a new `.pptx` from an existing PowerPoint template and a list of slide instructions. It:
+- duplicates specified template slides into a new presentation,
+- updates shapes’ text,
+- writes slide sources into notes,
+- saves the result to object storage,
+- uploads the `.pptx` as a public Naas asset,
+- registers the template and generated presentation in a triple store via a pipeline.
 
 ## Public API
-- **`CreatePresentationFromTemplateWorkflowConfiguration`** (`WorkflowConfiguration`)
-  - Holds dependencies and settings:
+- **`CreatePresentationFromTemplateWorkflowConfiguration`** (`WorkflowConfiguration`, `@dataclass`)
+  - Holds dependencies and runtime settings:
     - `triple_store: ITripleStoreService`
     - `powerpoint_configuration: PowerPointIntegrationConfiguration`
     - `naas_configuration: NaasIntegrationConfiguration`
     - `pipeline_configuration: AddPowerPointPresentationPipelineConfiguration`
     - `datastore_path: str = "datastore/powerpoint/presentations"`
-    - `workspace_id` (defaults from `ABIModule` configuration)
-    - `storage_name` (defaults from `ABIModule` configuration)
+    - `workspace_id: str` (default from `ABIModule.get_instance().configuration.workspace_id`)
+    - `storage_name: str` (default from `ABIModule.get_instance().configuration.storage_name`)
 
 - **`CreatePresentationFromTemplateWorkflowParameters`** (`WorkflowParameters`)
-  - Execution inputs:
-    - `presentation_name: str` (without extension; `.pptx` is enforced)
-    - `slides_data: List[Dict]` (per-slide instructions)
-    - `template_path: str` (path to `.pptx` template)
+  - Inputs:
+    - `presentation_name: str` (if missing `.pptx`, it is appended)
+    - `slides_data: list[dict]` (per-slide instructions; see below)
+    - `template_path: str` (path to `.pptx` template file)
 
 - **`CreatePresentationFromTemplateWorkflow`** (`Workflow`)
-  - `create_presentation(parameters) -> Dict[str, Any]`
-    - Creates the presentation, saves it, uploads it publicly, and registers metadata in a triple store.
+  - **`create_presentation(parameters) -> dict[str, Any]`**
+    - Generates the presentation, saves it, uploads it to Naas, and registers both template and output via `AddPowerPointPresentationPipeline`.
     - Returns:
-      - `presentation_name` (ensured to end with `.pptx`)
-      - `storage_path` (datastore path where saved)
-      - `download_url` (public asset URL from Naas)
-      - `presentation_uri` (triple store URI if available)
-      - `template_uri` (template triple store URI if available)
-  - `as_tools() -> list[BaseTool]`
-    - Exposes the workflow as a LangChain `StructuredTool` named `create_presentation_from_template`.
-  - `as_api(...) -> None`
-    - Present but not implemented (returns `None` and does not register routes).
+      - `presentation_name`: ensured to end with `.pptx`
+      - `storage_path`: `<datastore_path>/<presentation_name>`
+      - `download_url`: returned from Naas upload (`asset["asset_url"]`)
+      - `presentation_uri`: URI from pipeline graph (first `OWL.NamedIndividual`), or `None`
+      - `template_uri`: URI from template pipeline graph, or `None`
+  - **`as_tools() -> list[BaseTool]`**
+    - Exposes a LangChain `StructuredTool` named `create_presentation_from_template` that calls `self.run(...)` with `CreatePresentationFromTemplateWorkflowParameters`.
+  - **`as_api(...) -> None`**
+    - Present but does not register any routes (method body ends without implementation).
+
+### `slides_data` expected keys
+Each item is a `dict` where the workflow reads:
+- `template_slide_number` *(required)*: index of the slide in the template to duplicate
+- `shapes` *(optional, default `[]`)*: list of dicts with:
+  - `shape_id`
+  - `text`
+- `sources` *(optional, default `[]`)*: list of strings to write into slide notes
 
 ## Configuration/Dependencies
-- **Integrations used internally**
-  - `PowerPointIntegration` (created from `powerpoint_configuration`)
-    - Used to load template, remove slides, duplicate slides, update shapes, and update notes.
-  - `NaasIntegration` (created from `naas_configuration`)
-    - Used to upload the resulting `.pptx` as a public asset and return a URL.
+- **PowerPoint**
+  - Uses `PowerPointIntegration` constructed with `powerpoint_configuration` for:
+    - `create_presentation(template_path)`
+    - `remove_all_slides(presentation)`
+    - `duplicate_slide(template_presentation, template_slide_number, presentation)`
+    - `update_shape(presentation, slide_idx, shape_id, text)`
+    - `update_notes(presentation, slide_idx, sources)`
+- **Naas**
+  - Uses `NaasIntegration` constructed with `naas_configuration`:
+    - `upload_asset(... visibility="public", return_url=True)` to obtain `asset_url`
 - **Storage**
-  - `StorageUtils` initialized from `ABIModule.get_instance().engine.services.object_storage`
-  - Saves presentations under `datastore_path`.
-- **Triple store**
-  - `AddPowerPointPresentationPipeline` is run twice:
-    - Once for the template (to get `template_uri`)
-    - Once for the generated presentation (includes `download_url` and `template_uri`)
+  - Uses `StorageUtils(ABIModule.get_instance().engine.services.object_storage)`
+  - Persists via `save_powerpoint_presentation(..., copy=False)` into `datastore_path`
+- **Triple store / pipeline**
+  - Runs `AddPowerPointPresentationPipeline` twice:
+    - once for the template (`presentation_name=os.path.basename(template_path)`, `storage_path=template_path`)
+    - once for the generated presentation (includes `download_url` and `template_uri`)
+  - Extracts the first subject with `(RDF.type, OWL.NamedIndividual)` as the URI (or `None`).
 
 ## Usage
-Minimal example (requires valid integration configurations and ABIModule engine context):
-
 ```python
 from naas_abi_marketplace.applications.powerpoint.workflows.CreatePresentationFromTemplateWorkflow import (
     CreatePresentationFromTemplateWorkflow,
@@ -58,14 +76,19 @@ from naas_abi_marketplace.applications.powerpoint.workflows.CreatePresentationFr
     CreatePresentationFromTemplateWorkflowParameters,
 )
 
-# You must provide real implementations/configs for these:
-from naas_abi_marketplace.applications.powerpoint.integrations.PowerPointIntegration import PowerPointIntegrationConfiguration
-from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import NaasIntegrationConfiguration
-from naas_abi_marketplace.applications.powerpoint.pipelines.AddPowerPointPresentationPipeline import AddPowerPointPresentationPipelineConfiguration
+# Provide these from your environment/runtime
+from naas_abi_marketplace.applications.powerpoint.integrations.PowerPointIntegration import (
+    PowerPointIntegrationConfiguration,
+)
+from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
+    NaasIntegrationConfiguration,
+)
+from naas_abi_marketplace.applications.powerpoint.pipelines.AddPowerPointPresentationPipeline import (
+    AddPowerPointPresentationPipelineConfiguration,
+)
 
-# triple_store: ITripleStoreService must be provided by your runtime/container.
 cfg = CreatePresentationFromTemplateWorkflowConfiguration(
-    triple_store=triple_store,
+    triple_store=triple_store,  # ITripleStoreService
     powerpoint_configuration=PowerPointIntegrationConfiguration(...),
     naas_configuration=NaasIntegrationConfiguration(...),
     pipeline_configuration=AddPowerPointPresentationPipelineConfiguration(...),
@@ -75,34 +98,36 @@ wf = CreatePresentationFromTemplateWorkflow(cfg)
 
 result = wf.create_presentation(
     CreatePresentationFromTemplateWorkflowParameters(
-        presentation_name="my_deck",
-        template_path="templates/base_template.pptx",
+        presentation_name="deck",
+        template_path="templates/base.pptx",
         slides_data=[
             {
                 "template_slide_number": 0,
-                "shapes": [{"shape_id": "Title 1", "text": "New Title"}],
-                "sources": ["https://example.com/source1"],
+                "shapes": [{"shape_id": "Title 1", "text": "Updated title"}],
+                "sources": ["https://example.com"],
             }
         ],
     )
 )
 
+print(result["storage_path"])
 print(result["download_url"])
 ```
 
 Using as a LangChain tool:
-
 ```python
-tool = CreatePresentationFromTemplateWorkflow(cfg).as_tools()[0]
-out = tool.run({
-    "presentation_name": "my_deck",
-    "template_path": "templates/base_template.pptx",
-    "slides_data": [],
-})
+tool = wf.as_tools()[0]
+out = tool.run(
+    {
+        "presentation_name": "deck",
+        "template_path": "templates/base.pptx",
+        "slides_data": [],
+    }
+)
 ```
 
 ## Caveats
-- `slides_data` items **must** include `template_slide_number`; otherwise that slide is skipped (logged as error).
-- Shape updates and notes updates are wrapped in `try/except`; failures are logged and processing continues.
-- `as_api()` does not expose any FastAPI routes (no API endpoint is created here).
-- `workspace_id` and `storage_name` default from `ABIModule` configuration; the workflow assumes `ABIModule` is initialized and provides an object storage service.
+- If a `slides_data` item lacks `template_slide_number`, it is skipped (an error is logged).
+- Shape updates and notes updates are individually wrapped in `try/except`; failures log errors and the workflow continues.
+- `as_api()` does not expose endpoints in its current form.
+- `workspace_id` and `storage_name` default from `ABIModule`; the workflow assumes `ABIModule.get_instance()` and its `engine.services.object_storage` are available.

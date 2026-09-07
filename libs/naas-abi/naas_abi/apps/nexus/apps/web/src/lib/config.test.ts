@@ -40,8 +40,8 @@ describe('getApiUrl public-origin fallback', () => {
       configurable: true,
       value: {
         location: {
-          hostname: 'zen.naas.ai',
-          origin: 'https://zen.naas.ai',
+          hostname: 'app.example.com',
+          origin: 'https://app.example.com',
           protocol: 'https:',
         },
         __NEXUS_RUNTIME_CONFIG__: undefined,
@@ -52,7 +52,7 @@ describe('getApiUrl public-origin fallback', () => {
     const { getApiUrl, getEnvironment } = await import('./config');
 
     expect(getEnvironment()).toBe('cloudflare');
-    expect(getApiUrl()).toBe('https://api.zen.naas.ai');
+    expect(getApiUrl()).toBe('https://api.app.example.com');
     expect(warn).toHaveBeenCalled();
   });
 
@@ -61,19 +61,19 @@ describe('getApiUrl public-origin fallback', () => {
       configurable: true,
       value: {
         location: {
-          hostname: 'zen.naas.ai',
-          origin: 'https://zen.naas.ai',
+          hostname: 'app.example.com',
+          origin: 'https://app.example.com',
           protocol: 'https:',
         },
         __NEXUS_RUNTIME_CONFIG__: {
-          apiUrl: 'https://api.zen.naas.ai',
+          apiUrl: 'https://api.app.example.com',
           env: 'cloudflare',
         },
       },
     });
 
     const { getApiUrl } = await import('./config');
-    expect(getApiUrl()).toBe('https://api.zen.naas.ai');
+    expect(getApiUrl()).toBe('https://api.app.example.com');
   });
 
   it('keeps localhost defaults for local browser origins', async () => {

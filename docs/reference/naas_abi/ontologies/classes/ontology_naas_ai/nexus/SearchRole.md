@@ -16,7 +16,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.SearchRole import SearchRole
+from naas_abi.ontologies.classes.ontology_demo.nexus.SearchRole import SearchRole
 
 class MySearchRole(SearchRole):
     def actions(self):

@@ -1,41 +1,49 @@
 # NewsAPIAgent
 
 ## What it is
-- An `IntentAgent` wrapper configured to provide **general guidance** about NewsAPI (features, search concepts, media monitoring).
-- Ships with **no tools** for actually calling NewsAPI; it only returns predefined informational intents.
+- An `IntentAgent` implementation for the NewsAPI application.
+- Provides **guidance-only** information about NewsAPI (features, search concepts, media monitoring).
+- **No NewsAPI tools are configured**, so it cannot retrieve live articles/headlines.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Factory that builds and returns a configured `NewsAPIAgent`.
-  - Sets:
-    - `name="NewsAPI"`, `description=...`
-    - `system_prompt` (guidance-only; explicitly states tools are unavailable)
-    - `tools=[]` (no integrations)
-    - two RAW intents (feature info; search/retrieval concepts)
-    - shared state and configuration (creates defaults if not provided)
 - `class NewsAPIAgent(IntentAgent)`
-  - Concrete agent type (no additional behavior; `pass`).
+  - Agent definition with:
+    - `name = "NewsAPI"`
+    - `description = "Helps you interact with NewsAPI for news articles and headlines."`
+    - `system_prompt` describing guidance-only behavior and constraints
+    - `suggestions = []`
+
+- `NewsAPIAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> NewsAPIAgent` (classmethod)
+  - Factory that:
+    - Loads the application `ABIModule` singleton.
+    - Pulls the default chat model and default embedding model from the engine’s model registry.
+    - Configures:
+      - `tools = []`
+      - Two informational `IntentType.RAW` intents:
+        - “Get information about NewsAPI features”
+        - “Understand news search and article retrieval”
+    - Creates defaults when not provided:
+      - `AgentConfiguration(system_prompt=cls.system_prompt)`
+      - `AgentSharedState(thread_id="0")`
 
 ## Configuration/Dependencies
 - Depends on `naas_abi_core.services.agent.IntentAgent`:
   - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
-- Uses chat model import:
-  - `from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model`
-- Key module constants:
-  - `SYSTEM_PROMPT`: instructs the agent to provide guidance only and not retrieve content.
-  - `SUGGESTIONS`: empty list.
+- Requires the NewsAPI application module:
+  - `naas_abi_marketplace.applications.newsapi.ABIModule.get_instance()`
+- Requires an initialized model registry service:
+  - Uses `abi_module.engine.services.model_registry`
+  - Asserts registry is initialized (`assert registry is not None`)
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.newsapi.agents.NewsAPIAgent import create_agent
+from naas_abi_marketplace.applications.newsapi.agents.NewsAPIAgent import NewsAPIAgent
 
-agent = create_agent()
-
-# The agent is configured with no tools; it can only provide general guidance via its intents/system prompt.
+agent = NewsAPIAgent.New()
 print(agent.name)
 print(agent.description)
 ```
 
 ## Caveats
-- No NewsAPI tools are configured (`tools=[]`), so the agent **cannot** fetch live articles or headlines.
-- The built-in intents are informational (`IntentType.RAW`) and do not trigger external operations.
+- `tools` is an empty list, so the agent **cannot** call NewsAPI or fetch real articles/headlines.
+- Requires a functioning `ABIModule` and initialized model registry; otherwise `New()` will assert/fail.

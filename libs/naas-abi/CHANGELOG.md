@@ -2,6 +2,289 @@
 
 <!-- version list -->
 
+## v2.61.1 (2026-09-07)
+
+### Bug Fixes
+
+- **core,abi,marketplace**: Pass json_schema_extra instead of Field(example=)
+  ([`ec8f6fd`](https://github.com/jupyter-naas/abi/commit/ec8f6fda79fa3e47cddfff0736f6590068a98fac))
+
+
+## v2.61.0 (2026-09-03)
+
+### Bug Fixes
+
+- **dataset**: Address DuckLake review feedback
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Isolate storage and supported schemes
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Migrate DuckLake catalog on connect
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Validate S3 endpoint transport
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+### Documentation
+
+- **dataset**: Document the object store data path, and type the factory
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+### Features
+
+- **dataset**: Adopt DuckLake backend ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+- **dataset**: Let DuckLake write its data to an object store
+  ([#1241](https://github.com/jupyter-naas/abi/pull/1241),
+  [`427e1ec`](https://github.com/jupyter-naas/abi/commit/427e1ec8f78f7032ac0f0c71d6a1bdc1c86c5c30))
+
+
+## v2.60.0 (2026-09-03)
+
+### Features
+
+- **code**: Add local git and sandbox runtime for Slides-parity dev
+  ([#1242](https://github.com/jupyter-naas/abi/pull/1242),
+  [`c9beaae`](https://github.com/jupyter-naas/abi/commit/c9beaae75563d8ac0e137ec8da81a48d4472bcaa))
+
+- **code**: Local git + sandbox runtime (Slides-parity)
+  ([#1242](https://github.com/jupyter-naas/abi/pull/1242),
+  [`c9beaae`](https://github.com/jupyter-naas/abi/commit/c9beaae75563d8ac0e137ec8da81a48d4472bcaa))
+
+
+## v2.59.0 (2026-09-02)
+
+### Features
+
+- **nexus**: Filter Ontology catalog to workspace seed
+  ([`5fe204b`](https://github.com/jupyter-naas/abi/commit/5fe204b30eca3af75f55955c3ba71b330e6ccacf))
+
+
+## v2.58.0 (2026-08-31)
+
+### Features
+
+- **nexus**: Unify the workspace Header across Home and app embed
+  ([`7a8aba3`](https://github.com/jupyter-naas/abi/commit/7a8aba3819a4d7f9f2739c7d62e7f08c79ee5a53))
+
+
+## v2.57.0 (2026-08-29)
+
+### Features
+
+- **nexus**: Prefix sign-in email subjects on .dev frontends
+  ([`28ae377`](https://github.com/jupyter-naas/abi/commit/28ae377b0043b452ff2d5d8f7e0665ddec54d6c9))
+
+
+## v2.56.3 (2026-08-29)
+
+### Bug Fixes
+
+- **nexus**: Greet the current agent on empty chat
+  ([`4ecad11`](https://github.com/jupyter-naas/abi/commit/4ecad119bfe188111fe4d1d20d3857e745b9a36b))
+
+- **nexus**: Hide inactive chat suggestion chips
+  ([`7671ee1`](https://github.com/jupyter-naas/abi/commit/7671ee1455f7aacac1a856a642b2a907bcfc4a54))
+
+- **nexus**: Put chat suggestions in one row above the composer
+  ([`49b6bae`](https://github.com/jupyter-naas/abi/commit/49b6baeca3a3eb0ca2967d28d9f2377ed3b01a29))
+
+
+## v2.56.2 (2026-08-29)
+
+### Bug Fixes
+
+- **nexus**: Keep current workspace in Recents with checkmark
+  ([`52800bb`](https://github.com/jupyter-naas/abi/commit/52800bb6435a0a6d24eb644053ce4ac2f2590d4e))
+
+- **nexus**: Show workspaces as one alphabetical list
+  ([`b858efa`](https://github.com/jupyter-naas/abi/commit/b858efa156d1f53f35e831185f98e39fe2002473))
+
+
+## v2.56.1 (2026-08-29)
+
+### Bug Fixes
+
+- **nexus**: Drop Apps logo rings and document default-only roster
+  ([`daad6c4`](https://github.com/jupyter-naas/abi/commit/daad6c4d32b06d374655844b924324ac38d5ae10))
+
+- **nexus**: Keep workspace catalogs isolated and drop desk rings
+  ([`ebdbee6`](https://github.com/jupyter-naas/abi/commit/ebdbee6c6ae37ebc448d70e54390a81b08c5871a))
+
+
+## v2.56.0 (2026-08-28)
+
+### Features
+
+- **nexus**: Give the workspace a dock, Home desk, and mark switcher
+  ([`6e6e65d`](https://github.com/jupyter-naas/abi/commit/6e6e65de5de1d05a03df453098c68f935e56a1f6))
+
+
+## v2.55.3 (2026-08-28)
+
+### Bug Fixes
+
+- **nexus**: Honor source and path query params on Files
+  ([`f87d511`](https://github.com/jupyter-naas/abi/commit/f87d5116e9d8bc0279064abe451839fd5ad6c32a))
+
+
+## v2.55.2 (2026-08-28)
+
+### Bug Fixes
+
+- **nexus**: Let env PAGES_SSO_SECRET win over empty yaml
+  ([`8ff064e`](https://github.com/jupyter-naas/abi/commit/8ff064e6bf522294eb058d1361cbdf5404df4d94))
+
+
+## v2.55.1 (2026-08-28)
+
+
+## v2.55.0 (2026-08-28)
+
+### Bug Fixes
+
+- **nexus**: Serve colocated JSON assets under /app-html
+  ([`045db96`](https://github.com/jupyter-naas/abi/commit/045db9661f5679b1194e1e9b0e804e4df79e7bb4))
+
+- **nexus-web**: Drop accidental Pages SSO handshake from Apps embed
+  ([`6e5b10f`](https://github.com/jupyter-naas/abi/commit/6e5b10f11e2a172e9628c714edf799233f694565))
+
+- **nexus-web**: Keep the current section when switching workspaces
+  ([`9f6191e`](https://github.com/jupyter-naas/abi/commit/9f6191e26db116e4ce1c738d5c0f47096efc5f9f))
+
+- **nexus-web**: Keep the workspace shell mounted across switches
+  ([`129afde`](https://github.com/jupyter-naas/abi/commit/129afdeff67fe0a1290edbcb430e2df2900e9f08))
+
+- **nexus-web**: Skip agent sync and unused catalog fetches on Apps switch
+  ([`4236f0b`](https://github.com/jupyter-naas/abi/commit/4236f0bfa87d2e07f0b531f59c5e7dc149f65c0a))
+
+- **nexus-web**: Stop last-open restore from reverting a workspace switch
+  ([`3c4efa6`](https://github.com/jupyter-naas/abi/commit/3c4efa6d21efee337386f47a84fa9c96657cb42f))
+
+### Features
+
+- Add DatasetService and Nexus Datasets UI ([#1213](https://github.com/jupyter-naas/abi/pull/1213),
+  [`ab82d5c`](https://github.com/jupyter-naas/abi/commit/ab82d5c7feff1cb90ef6572f0da226d86bbdd5b8))
+
+- **nexus**: Default workspace apps off and seed catalog roster
+  ([`0db5a6e`](https://github.com/jupyter-naas/abi/commit/0db5a6e9725fb26695d8a63ecf6ffe7f57871516))
+
+- **nexus**: Mint a Pages SSO handshake token from Apps
+  ([`9fdbd0a`](https://github.com/jupyter-naas/abi/commit/9fdbd0a388138ddd957b694d36fcfffb946dece3))
+
+
+## v2.54.3 (2026-08-25)
+
+### Bug Fixes
+
+- **nexus**: Point module asset URLs at the live API port
+  ([`e47fc0d`](https://github.com/jupyter-naas/abi/commit/e47fc0d7a2543950a9b985bd40b1ea422c95254e))
+
+- **nexus**: Resolve module asset URLs from the live API port
+  ([`d3b02f2`](https://github.com/jupyter-naas/abi/commit/d3b02f2f5555907a482555a2df3e54c9191cf131))
+
+
+## v2.54.2 (2026-08-20)
+
+### Bug Fixes
+
+- Error loading app html
+  ([`4f84087`](https://github.com/jupyter-naas/abi/commit/4f8408731bbb30711d0512ea8f907f65130975aa))
+
+
+## v2.54.1 (2026-08-18)
+
+### Bug Fixes
+
+- **nexus**: Show letter when workspace logo fails to load
+  ([`e731463`](https://github.com/jupyter-naas/abi/commit/e731463e84443a838be80a8886a4ac5c95f85210))
+
+
+## v2.54.0 (2026-08-17)
+
+### Features
+
+- **nexus**: Let ABI agents declare multiple chat models
+  ([`0851d13`](https://github.com/jupyter-naas/abi/commit/0851d13e875c71987eede88b5a409c58d7edb3d0))
+
+
+## v2.53.0 (2026-08-11)
+
+### Features
+
+- **app-html**: Add ABI API key and JWT auth for /app-html/ assets
+  ([`1ec9534`](https://github.com/jupyter-naas/abi/commit/1ec953401d55525a7fa5f88c686beb070da080cf))
+
+
+## v2.52.5 (2026-08-11)
+
+### Bug Fixes
+
+- Email login + tenant favicon and title display
+  ([`56dec68`](https://github.com/jupyter-naas/abi/commit/56dec68006280bf651a3de64747cd593265a8a76))
+
+- Ruff errors
+  ([`bd2907c`](https://github.com/jupyter-naas/abi/commit/bd2907c88e1647f27f72f3a239a683d6a73bddcd))
+
+
+## v2.52.4 (2026-08-10)
+
+### Bug Fixes
+
+- Improv loading time -n
+  ([`cd8d456`](https://github.com/jupyter-naas/abi/commit/cd8d456cfddb05fd9910323a2b9936d20f7fcbef))
+
+- Loading graph
+  ([`32b496b`](https://github.com/jupyter-naas/abi/commit/32b496b9c9f4aef9c05fcb220949d295e24b7817))
+
+- Loading graph
+  ([`ebca0ad`](https://github.com/jupyter-naas/abi/commit/ebca0add13a4186987ee8a12cbf45c50ec846f27))
+
+
+## v2.52.3 (2026-08-07)
+
+### Bug Fixes
+
+- Refactor apps section
+  ([`634c2df`](https://github.com/jupyter-naas/abi/commit/634c2df5b2b19e3d48d36200bd7f88351b723318))
+
+
+## v2.52.2 (2026-08-07)
+
+### Bug Fixes
+
+- Chat thread not updating live during streaming, plus restoring the deleted regenerate button
+  ([`8ef16ff`](https://github.com/jupyter-naas/abi/commit/8ef16ffcb69bf3a4957a00792d070b7a962c46de))
+
+
+## v2.52.1 (2026-08-04)
+
+### Bug Fixes
+
+- Resolve public urls asset in app and agent
+  ([`54a8327`](https://github.com/jupyter-naas/abi/commit/54a83278ef48cd715b6a639e4ebfe18e9397e12f))
+
+
+## v2.52.0 (2026-08-03)
+
+### Chores
+
+- Remove Zen product coupling from ABI
+  ([`09a7d17`](https://github.com/jupyter-naas/abi/commit/09a7d1749feb7b7df1ba764eeb7bd5c088ff60cd))
+
+### Features
+
+- **nexus**: Use PanelRight icon for Abi chat toggle
+  ([`2e28727`](https://github.com/jupyter-naas/abi/commit/2e287270e803e6d1dfedc771d06379fcb0409c4a))
+
+
 ## v2.51.5 (2026-08-03)
 
 ### Bug Fixes

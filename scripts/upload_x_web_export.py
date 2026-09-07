@@ -7,10 +7,10 @@ from pathlib import Path
 
 EXPORT_DIR = Path(
     "/app/.abi/libs/naas-abi-marketplace/naas_abi_marketplace"
-    "/applications/x/apps/x/web/out"
+    "/applications/x/apps/x_proxy/web/out"
 )
-LOCAL_MIRROR = Path("/app/.abi/storage/datastore/x/apps/x")
-APP_PREFIX = "x/apps/x"
+LOCAL_MIRROR = Path("/app/.abi/storage/datastore/x/apps/x_proxy")
+APP_PREFIX = "x/apps/x_proxy"
 
 
 def main() -> int:

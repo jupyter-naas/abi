@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-07-31 11:44",
+  "records": [
+    {
+      "job": "Budget import",
+      "direction": "Import",
+      "format": "Excel (.xlsx)",
+      "target": "Budget lines",
+      "schedule": "On demand",
+      "last_run": "2026-07-31 02:30",
+      "rows": 3773,
+      "duration_s": 40.9,
+      "status": "Succeeded"
+    },
+    {
+      "job": "Adjustment entries import",
+      "direction": "Import",
+      "format": "CSV",
+      "target": "Income statement adjustments",
+      "schedule": "On demand",
+      "last_run": "2026-07-28 23:30",
+      "rows": 5848,
+      "duration_s": 27.5,
+      "status": "Succeeded"
+    },
+    {
+      "job": "Bank statement import",
+      "direction": "Import",
+      "format": "CAMT.053",
+      "target": "Bank accounts",
+      "schedule": "Daily at 07:00",
+      "last_run": "2026-07-30 03:30",
+      "rows": 8346,
+      "duration_s": 15.2,
+      "status": "Succeeded"
+    },
+    {
+      "job": "Supplier master import",
+      "direction": "Import",
+      "format": "CSV",
+      "target": "Suppliers referential",
+      "schedule": "Weekly on Monday",
+      "last_run": "2026-07-27 21:30",
+      "rows": 1316,
+      "duration_s": 28.4,
+      "status": "Failed"
+    },
+    {
+      "job": "General ledger export",
+      "direction": "Export",
+      "format": "CSV",
+      "target": "Data warehouse",
+      "schedule": "Daily at 05:00",
+      "last_run": "2026-07-30 22:30",
+      "rows": 5264,
+      "duration_s": 84.5,
+      "status": "Succeeded"
+    },
+    {
+      "job": "Trial balance export",
+      "direction": "Export",
+      "format": "Excel (.xlsx)",
+      "target": "Statutory auditor",
+      "schedule": "Monthly on the 5th",
+      "last_run": "2026-07-29 21:30",
+      "rows": 5788,
+      "duration_s": 18.8,
+      "status": "Succeeded"
+    },
+    {
+      "job": "FEC export",
+      "direction": "Export",
+      "format": "FEC (tax authority)",
+      "target": "Statutory archive",
+      "schedule": "Yearly",
+      "last_run": "2026-07-31 13:30",
+      "rows": 1509,
+      "duration_s": 49.8,
+      "status": "Succeeded"
+    },
+    {
+      "job": "Management report pack",
+      "direction": "Export",
+      "format": "PDF",
+      "target": "Executive committee",
+      "schedule": "Monthly on the 5th",
+      "last_run": "2026-07-31 09:30",
+      "rows": 4449,
+      "duration_s": 22.5,
+      "status": "Succeeded"
+    }
+  ]
+}

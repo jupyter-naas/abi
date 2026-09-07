@@ -630,7 +630,7 @@ if __name__ == "__main__":
     module: ABIModule = ABIModule.get_instance()
 
     linkedin_export_configuration = LinkedInExportIntegrationConfiguration(
-        export_file_path="storage/datastore/linkedin/export/florent-ravenel/Complete_LinkedInDataExport_11-06-2025.zip (1).zip"
+        export_file_path="storage/datastore/linkedin/export/alice-dupont/Complete_LinkedInDataExport_11-06-2025.zip (1).zip"
     )
     linkedin_export_profile_pipeline_configuration = (
         LinkedInExportProfilePipelineConfiguration(
@@ -638,7 +638,7 @@ if __name__ == "__main__":
             linkedin_export_configuration=linkedin_export_configuration,
         )
     )
-    linkedin_public_url = "https://www.linkedin.com/in/florent-ravenel/"
+    linkedin_public_url = "https://demo.example/profiles/demo"
     limit = None
 
     pipeline = LinkedInExportConnectionsPipeline(

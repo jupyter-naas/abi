@@ -16,7 +16,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.OntologyModuleRole import OntologyModuleRole
+from naas_abi.ontologies.classes.ontology_demo.nexus.OntologyModuleRole import OntologyModuleRole
 
 role = OntologyModuleRole()
 role.actions()  # no-op; meant to be implemented

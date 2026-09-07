@@ -30,6 +30,9 @@ _TEMPLATE = os.path.join(_TEMPLATES_DIR, "config.local.yaml")
 _DEFAULT_CHAT_MODEL = "gemma-4-26b-a4b-it"
 _DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 _ALL_CONFIGS = ("config.yaml", "config.local.yaml", "config.remote.yaml")
+# config.remote.yaml seeds no users — it expects them to be created by an
+# operator, so only these two carry the bootstrap admin.
+_CONFIGS_SEEDING_USERS = ("config.yaml", "config.local.yaml")
 
 _BASE_VALUES = {
     "project_name": "Demo",
@@ -98,6 +101,24 @@ def test_model_registry_defaults_are_the_cheap_openrouter_pair(filename: str) ->
     assert registry["default_embedding_model"] == _DEFAULT_EMBEDDING_MODEL
 
 
+@pytest.mark.parametrize("filename", _CONFIGS_SEEDING_USERS)
+def test_seeded_admin_is_a_superadmin(filename: str) -> None:
+    """The bootstrap admin owns the seeded org and workspace, but org/workspace
+    ownership does not grant platform-wide admin (admin console, live event
+    stream) — that is the separate ``is_superadmin`` flag, and without it a new
+    project has no account that can reach those screens."""
+    nexus_config = next(
+        m for m in _render(filename)["modules"] if m["module"] == "naas_abi"
+    )["config"]["nexus_config"]
+    users = nexus_config["users"]
+
+    assert users, f"{filename} seeds no users"
+    assert all(u["is_superadmin"] for u in users)
+    # The seeded admin is also the org/workspace owner; the two must not drift.
+    org = nexus_config["organizations"][0]
+    assert org["owner_email"] in {u["email"] for u in users}
+
+
 @pytest.mark.parametrize("filename", _ALL_CONFIGS)
 def test_tool_binding_agents_are_pinned_to_the_default_chat_model(
     filename: str,
@@ -111,3 +132,23 @@ def test_tool_binding_agents_are_pinned_to_the_default_chat_model(
 
     assert naas_abi["abi_agent_model"] == _DEFAULT_CHAT_MODEL
     assert naas_abi["ontology_engineer_model"] == _DEFAULT_CHAT_MODEL
+
+
+def test_default_config_uses_sqlite_ducklake() -> None:
+    dataset = _render("config.yaml")["services"]["dataset"]["dataset_adapter"]
+
+    assert dataset == {
+        "adapter": "ducklake",
+        "config": {
+            "catalog": "sqlite:storage/datasets.sqlite",
+            "data_path": "storage/datasets/",
+        },
+    }
+
+
+def test_local_config_uses_dedicated_postgres_ducklake_catalog() -> None:
+    dataset = _render("config.local.yaml")["services"]["dataset"]["dataset_adapter"]
+
+    assert dataset["adapter"] == "ducklake"
+    assert dataset["config"]["catalog"].endswith("@postgres:5432/ducklake")
+    assert dataset["config"]["data_path"] == "storage/datasets/"

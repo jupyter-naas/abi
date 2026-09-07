@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-07-31 11:44",
+  "records": [
+    {
+      "flow": "Supplier invoice approval",
+      "object": "Supplier invoice",
+      "trigger": "Invoice received",
+      "threshold": 5000,
+      "steps": 2,
+      "approvers": "Cost center owner → Finance Manager",
+      "sla_days": 3,
+      "auto_escalation": "Yes",
+      "status": "Active"
+    },
+    {
+      "flow": "Supplier invoice — high value",
+      "object": "Supplier invoice",
+      "trigger": "Amount above threshold",
+      "threshold": 50000,
+      "steps": 3,
+      "approvers": "Cost center owner → Finance Manager → CFO",
+      "sla_days": 5,
+      "auto_escalation": "Yes",
+      "status": "Active"
+    },
+    {
+      "flow": "Purchase order release",
+      "object": "Purchase order",
+      "trigger": "Order submitted",
+      "threshold": 10000,
+      "steps": 2,
+      "approvers": "Business unit manager → Procurement",
+      "sla_days": 2,
+      "auto_escalation": "Yes",
+      "status": "Active"
+    },
+    {
+      "flow": "Expense claim",
+      "object": "Expense claim",
+      "trigger": "Claim submitted",
+      "threshold": 0,
+      "steps": 1,
+      "approvers": "Line manager",
+      "sla_days": 5,
+      "auto_escalation": "No",
+      "status": "Active"
+    },
+    {
+      "flow": "Manual journal entry",
+      "object": "Journal entry",
+      "trigger": "Entry prepared",
+      "threshold": 0,
+      "steps": 1,
+      "approvers": "Finance Manager",
+      "sla_days": 1,
+      "auto_escalation": "Yes",
+      "status": "Active"
+    },
+    {
+      "flow": "Payment run release",
+      "object": "Payment run",
+      "trigger": "Run prepared",
+      "threshold": 0,
+      "steps": 2,
+      "approvers": "Treasurer → CFO",
+      "sla_days": 1,
+      "auto_escalation": "No",
+      "status": "Active"
+    },
+    {
+      "flow": "Budget revision",
+      "object": "Budget",
+      "trigger": "Revision submitted",
+      "threshold": 25000,
+      "steps": 2,
+      "approvers": "Controller → CFO",
+      "sla_days": 5,
+      "auto_escalation": "No",
+      "status": "Active"
+    },
+    {
+      "flow": "Period lock",
+      "object": "Accounting period",
+      "trigger": "Close checklist complete",
+      "threshold": 0,
+      "steps": 1,
+      "approvers": "Finance Manager",
+      "sla_days": 2,
+      "auto_escalation": "No",
+      "status": "Draft"
+    }
+  ]
+}

@@ -115,7 +115,7 @@ These are distinct mental models. Do not conflate them in UI copy.
 | Lifetime | Long-lived | Often ephemeral |
 | Auth / access | Org RBAC | Repo tokens / SSH; tied to branches, folders, containers |
 
-Footer labels must say **Business workspace** and **Code workspace**. Canonical UX note (Zen): `docs/ux/business-vs-code-workspace.md`.
+Footer labels must say **Business workspace** and **Code workspace**. Canonical UX note: parent-app `docs/ux/business-vs-code-workspace.md` (or equivalent).
 
 ### Platform status footer
 
@@ -157,7 +157,7 @@ Each migrated route uses three files so structure, routing, and style stay separ
 
 Example: `src/app/account/api-keys/page.tsx` re-exports from `./api-keys`, which imports `./api-keys.css`.
 
-This yields reviewable diffs, cherry-pick friendly commits to upstream ABI (`integrate/zen-july` unpacks into small PRs to jupyter-naas/abi main), and clear ownership: routing vs component vs CSS.
+This yields reviewable diffs, cherry-pick friendly commits to upstream ABI (product integration branches unpack into small PRs to jupyter-naas/abi main), and clear ownership: routing vs component vs CSS.
 
 ### Why `{surface}-{region}-{element}` class names
 
@@ -353,7 +353,7 @@ Maps is a **dataset loader**, not the Knowledge Graph. Graph stays under `/graph
 
 **Ownership rule:** Nexus Maps owns situation-awareness Public layers as first-class product code under `apps/web/src/app/workspace/[workspaceId]/maps/` plus Maps API proxies under `apps/web/src/app/api/maps/`. Do **not** import from `naas_abi_marketplace/.../wsr`. World Situation Room is a legacy marketplace demo; do not couple Maps to it.
 
-The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom** groups with `active/total` counts, icon + label rows, and `org-border-radius` via `maps-*` CSS. Empty buckets (including Custom upstream) are hidden. Maps in ABI is generic: product-specific datasets (for example Zen World Organization Graph) are registered by the deployment through the Custom bucket contract below, never hard-coded into upstream ABI.
+The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom** groups with `active/total` counts, icon + label rows, and `org-border-radius` via `maps-*` CSS. Empty buckets (including Custom upstream) are hidden. Maps in ABI is generic: product-specific datasets (for example a parent-app World Organization Graph) are registered by the deployment through the Custom bucket contract below, never hard-coded into upstream ABI.
 
 | Bucket | Dataset | Route | Role |
 |---|---|---|---|
@@ -414,7 +414,7 @@ src/app/workspace/[workspaceId]/maps/
 src/app/api/maps/                 # Maps-owned proxies (gdacs, nws, nhc, flights, gulf-strikes, news, …)
 ```
 
-Sidebar expand state: `stores/maps.ts` (`nexus-maps` persist). Feature flag: `maps` (enabled by default for owner/admin/member/viewer baselines). Mobile: `/maps` = library list, `/maps/{id}` = canvas detail. Maps is first in the workspace sidebar (before Search); app landing (middleware `/`, login, workspace switch) remains Chat (`/chat`).
+Sidebar expand state: `stores/maps.ts` (`nexus-maps` persist). Feature flag: `maps` (enabled by default for owner/admin/member/viewer baselines). Mobile: `/maps` = library list, `/maps/{id}` = canvas detail. Workspace nav default order is Home, Apps, Lab, Files (then Chat, Search, Maps, ...). Icons reorder by drag; Settings stays pinned. The left nav is the dock: default width matches the feature column (256px), drag the dotted handle to resize (down to icon-only). The workspace mark at the top of the dock opens the Workspaces column (search, recents, full list). The profile at the bottom of the dock (below Settings) opens the account menu; it is session chrome, not a feature column. Desktop header does not show a user avatar. Home (`/home`) is the desktop canvas: no column. `background_image_url` on the workspace theme (module public asset, rewritten to `/modules/...`) paints the desk. When that URL is missing, the desk is `#0a0a0a`. White theme color is never the desk. The hero overlay sits on the photo only. Icons: Chat and Files when those features are on, then enabled installed apps and starred files. App landing (middleware `/`, login, workspace switch) remains Chat (`/chat`).
 
 ## Files UI module
 
@@ -467,6 +467,33 @@ Each route segment keeps three files where applicable:
 Semantic class prefix: `files-browse-*` for route layout and desktop chrome, `files-mobile-*` / `files-add-sheet-*` for shared mobile chrome. Use `var(--space-*)`, hex tokens from `globals.css`, and `var(--org-border-radius, 0px)` on buttons and cards.
 
 Pilot reference for desktop chrome: `files/browse/browse.css` + `browse.tsx`. Mobile chrome: `files/components/` + `files/browse/browse.css`.
+
+## Datasets UI module
+
+Datasets is the tabular warehouse, not Files (blobs) and not Maps (GIS layers). It sits next to Files in the primary nav. The engine `DatasetService` stores named, partitioned SQL tables; Nexus is a read-only primary adapter: list, describe, preview, guarded SQL.
+
+```
+src/app/workspace/[workspaceId]/datasets/
+├── page.tsx                      → export { default } from './datasets';
+├── datasets.tsx                  # Desktop catalog
+├── datasets.css
+├── [namespace]/[name]/
+│   ├── page.tsx                  → export { default } from './table';
+│   ├── table.tsx                 # Schema + preview + SQL
+│   └── table.css
+├── lib/
+│   ├── datasets-route.ts
+│   └── datasets-route.test.ts
+└── components/
+    ├── datasets-section.tsx      # Sidebar + mobile list
+    └── datasets-components.css
+
+apps/api/app/services/datasets/   # Hexagonal domain wrapping DatasetService
+```
+
+HTTP: `GET /api/datasets`, `GET /api/datasets/{namespace}/{name}`, `GET .../preview`, `POST /api/datasets/{namespace}/query`. Feature flag: `datasets` (on for owner/admin/member/viewer). The warehouse is process-global; workspace membership is required but tables are not isolated per workspace. Write/drop is not exposed.
+
+Mobile: `/datasets` = namespace list, `/datasets/{namespace}/{name}` = table detail.
 
 ## Chat UI module
 

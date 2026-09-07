@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
+import { ontologyApiQuery } from '@/lib/ontology-query';
 import { authFetch } from '@/stores/auth';
 import { useOntologyStore } from '@/stores/ontology';
 import { KpiCard } from '@/app/analytics/components/kpi-card';
@@ -66,7 +67,7 @@ export default function OntologyExportPage() {
     setFilesLoading(true);
     setFilesError(null);
     try {
-      const res = await authFetch(`${getApiUrl()}/api/ontology/ontologies`);
+      const res = await authFetch(`${getApiUrl()}/api/ontology/ontologies${ontologyApiQuery()}`);
       if (!res.ok) throw new Error(`Failed to load ontologies (${res.status})`);
       const data = (await res.json()) as { items?: OntologyFileApiItem[] };
       const items = Array.isArray(data.items) ? data.items : [];
@@ -129,7 +130,7 @@ export default function OntologyExportPage() {
     void (async () => {
       try {
         const res = await authFetch(
-          `${getApiUrl()}/api/ontology/overview/stats?ontology_path=${encodeURIComponent(activePath)}`,
+          `${getApiUrl()}/api/ontology/overview/stats${ontologyApiQuery({ ontology_path: activePath })}`,
         );
         if (!res.ok) throw new Error(`Failed to load ontology stats (${res.status})`);
         const data = (await res.json()) as OntologyStats;
@@ -151,7 +152,7 @@ export default function OntologyExportPage() {
     setExportError(null);
     try {
       const res = await authFetch(
-        `${getApiUrl()}/api/ontology/export?ontology_path=${encodeURIComponent(activePath)}`,
+        `${getApiUrl()}/api/ontology/export${ontologyApiQuery({ ontology_path: activePath })}`,
       );
       if (!res.ok) throw new Error(`Failed to export ontology (${res.status})`);
 

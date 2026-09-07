@@ -91,7 +91,7 @@ pipeline = LinkedInExportConnectionsPipeline(
 
 graph = pipeline.run(
     LinkedInExportConnectionsPipelineParameters(
-        linkedin_public_url="https://www.linkedin.com/in/someone/",
+        linkedin_public_url="https://demo.example/profiles/demo",
         file_name="Connections.csv",
     )
 )

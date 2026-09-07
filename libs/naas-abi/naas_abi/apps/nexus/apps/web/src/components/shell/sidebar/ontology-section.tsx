@@ -12,6 +12,7 @@ import { useOntologyStore } from '@/stores/ontology';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
+import { ontologyApiQuery } from '@/lib/ontology-query';
 import { CollapsibleSection } from './collapsible-section';
 import { SidebarToolbar, SidebarToolbarButton } from './sidebar-toolbar';
 import { getWorkspacePath } from './utils';
@@ -115,7 +116,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
       setLoadingOntologyFiles(true);
       try {
         const apiUrl = getApiUrl();
-        const response = await authFetch(`${apiUrl}/api/ontology/ontologies`);
+        const response = await authFetch(`${apiUrl}/api/ontology/ontologies${ontologyApiQuery()}`);
         if (!response.ok) {
           throw new Error(`Failed to fetch ontology files: ${response.status}`);
         }
@@ -139,13 +140,17 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
           );
         setOntologyFiles(normalizedFiles);
 
-        // Auto-select and navigate to the first ontology when none is selected.
-        // Read from getState() so we see the post-hydration value.
-        if (!useOntologyStore.getState().selectedOntologyPath && normalizedFiles.length > 0) {
+        const selected = useOntologyStore.getState().selectedOntologyPath;
+        const stillValid = Boolean(
+          selected && normalizedFiles.some((file) => file.path === selected)
+        );
+        if (!stillValid && normalizedFiles.length > 0) {
           const firstPath = normalizedFiles[0].path;
           setSelectedOntologyPath(firstPath);
           const params = new URLSearchParams({ view: 'network', ontology: firstPath });
           router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
+        } else if (!stillValid) {
+          setSelectedOntologyPath(null);
         }
 
         setExpandedOntologyModules(
@@ -171,8 +176,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
     };
 
     fetchOntologyFiles();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentWorkspaceId, router, setSelectedOntologyPath]);
 
   return (
     <CollapsibleSection

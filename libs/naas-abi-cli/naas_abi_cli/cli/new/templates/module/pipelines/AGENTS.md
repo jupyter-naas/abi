@@ -96,10 +96,11 @@ uv run pytest {{module_name_snake}}/pipelines/<Name>Pipeline_test.py -v
 ## Wiring into the module
 
 1. Declare `TripleStoreService` in `ABIModule.dependencies.services`.
-2. Expose `pipeline.as_tools()` from an agent in `../agents/`, **or** invoke the pipeline from an orchestration that batches runs and persists results.
+2. Expose `pipeline.as_tools()` from an agent in `../agents/`, or invoke the pipeline from an orchestration that batches runs and persists results.
+3. HTTP: the kernel calls `as_api` and mounts live pipelines under `/pipelines`. A stub with a typed `run(parameters)` gets a default POST. A stub without `run()` stays unpublished.
 
 ## See also
 
 - Triple store service (insert / query / subscribe / views): [`.abi/libs/naas-abi-core/.../services/triple_store/AGENTS.md`](../../../.abi/libs/naas-abi-core/naas_abi_core/services/triple_store/AGENTS.md)
 - Module ontologies (TTL files this pipeline emits against): [`../ontologies/AGENTS.md`](../ontologies/AGENTS.md)
-- Reference patterns: [`.abi/libs/naas-abi-marketplace/.../domains/ontology_engineer/pipelines/`](../../../.abi/libs/naas-abi-marketplace/naas_abi_marketplace/domains/ontology_engineer/pipelines)
+- Reference patterns: [`.abi/libs/naas-abi-marketplace/.../domains/operations/modules/ontology_engineer/pipelines/`](../../../.abi/libs/naas-abi-marketplace/naas_abi_marketplace/domains/operations/modules/ontology_engineer/pipelines)

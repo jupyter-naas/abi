@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, ChevronDown, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -8,6 +8,7 @@ import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useAgentList } from '@/components/ui/dialogs';
 import { useWorkspaceStore } from '@/stores/workspace';
 import type { Agent } from '@/stores/agents';
+import { useModelsStore, modelDisplayName } from '@/stores/models';
 import './chat-agent-selector.css';
 
 function AutoToggle({
@@ -40,7 +41,8 @@ export type ChatAgentSelectorSource = 'chat' | 'pane';
 
 /**
  * Compact agent picker for the chat composer.
- * Panel = Search + Auto toggle + agents list (no dual-panel / model drill-down).
+ * Panel = Search + Auto toggle + agents list. Agents that declare more than
+ * one ``modelIds`` expand in place so you pick the model without leaving.
  * Mobile: bottom sheet. Desktop: compact popover above the trigger.
  *
  * `source="pane"` binds to the right AI / compare surface (paneAgent).
@@ -53,6 +55,7 @@ export function ChatAgentSelector({
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
@@ -70,6 +73,10 @@ export function ChatAgentSelector({
   const clearAgentExplicitSelection = useWorkspaceStore((s) =>
     isPane ? s.clearPaneAgentExplicitSelection : s.clearAgentExplicitSelection
   );
+  const selectedChatModels = useWorkspaceStore((s) => s.selectedChatModels);
+  const setSelectedChatModel = useWorkspaceStore((s) => s.setSelectedChatModel);
+  const catalogModels = useModelsStore((s) => s.models);
+  const fetchModels = useModelsStore((s) => s.fetchModels);
   const { defaultAgents, customAgents, filteredAgents } = useAgentList(searchQuery);
 
   const enabledAgents = useMemo(
@@ -101,9 +108,14 @@ export function ChatAgentSelector({
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    fetchModels();
+  }, [fetchModels]);
+
   const closePicker = useCallback(() => {
     setOpen(false);
     setSearchQuery('');
+    setExpandedAgentId(null);
   }, []);
 
   useEffect(() => {
@@ -159,7 +171,14 @@ export function ChatAgentSelector({
     };
   }, [open, isMobile]);
 
+  const selectableModels = (agent: Agent | undefined): string[] =>
+    (agent?.modelIds || []).map((id) => id.trim()).filter(Boolean);
+
   const openPicker = () => {
+    const current = enabledAgents.find((a) => a.id === selectedAgent);
+    setExpandedAgentId(
+      current && selectableModels(current).length > 1 ? current.id : null
+    );
     setOpen(true);
   };
 
@@ -173,18 +192,53 @@ export function ChatAgentSelector({
     }
   };
 
+  const defaultModelFor = (agent: Agent): string | null => {
+    const models = selectableModels(agent);
+    if (models.length === 0) return null;
+    return (
+      selectedChatModels[agent.id] ||
+      (models.includes(agent.resolvedModelId || '') ? agent.resolvedModelId : null) ||
+      models[0]
+    );
+  };
+
+  const pinDefaultModel = (agent: Agent) => {
+    const next = defaultModelFor(agent);
+    if (next && !selectedChatModels[agent.id]) {
+      setSelectedChatModel(agent.id, next);
+    }
+  };
+
   const selectAgent = (agent: Agent) => {
     setSelectedAgent(agent.id, true);
+    const models = selectableModels(agent);
+    if (models.length > 1) {
+      pinDefaultModel(agent);
+      setExpandedAgentId((current) => (current === agent.id ? null : agent.id));
+      return;
+    }
     closePicker();
   };
 
+  const selectAgentModel = (agent: Agent, modelId: string) => {
+    setSelectedAgent(agent.id, true);
+    setSelectedChatModel(agent.id, modelId);
+    closePicker();
+  };
+
+  const activeModelId = activeAgent ? defaultModelFor(activeAgent) : null;
+  const activeModelLabel = modelDisplayName(catalogModels, activeModelId) ?? activeModelId;
+
   // Pane surface: always show the resolved agent name (Abi by default).
-  // Main chat keeps Cursor-style "Auto" until the user picks an agent.
+  // After an explicit pick, show the agent (and model). Auto is only the
+  // workspace default before the user chooses.
   const triggerLabel = isPane
     ? activeAgent?.name ?? 'Abi'
     : autoMode
       ? 'Auto'
-      : activeAgent?.name ?? 'Agent';
+      : activeAgent && activeModelLabel && selectableModels(activeAgent).length > 1
+        ? `${activeAgent.name} · ${activeModelLabel}`
+        : activeAgent?.name ?? 'Agent';
 
   if (!mounted || !activeAgent) {
     return null;
@@ -192,19 +246,67 @@ export function ChatAgentSelector({
 
   const renderAgentRow = (agent: Agent) => {
     const isSelected = selectedAgent === agent.id && !autoMode;
+    const models = selectableModels(agent);
+    const hasModels = models.length > 1;
+    const isExpanded = expandedAgentId === agent.id;
+    const activeModel =
+      selectedChatModels[agent.id] ||
+      (models.includes(agent.resolvedModelId || '') ? agent.resolvedModelId : null) ||
+      models[0] ||
+      null;
 
     return (
-      <button
-        key={agent.id}
-        type="button"
-        className={cn('chat-agent-selector-row', isSelected && 'is-active')}
-        onClick={() => selectAgent(agent)}
-      >
-        <div className="chat-agent-selector-row-body">
-          <div className="chat-agent-selector-row-title">{agent.name}</div>
-        </div>
-        {isSelected ? <Check size={14} className="chat-agent-selector-check" /> : null}
-      </button>
+      <div key={agent.id} className="chat-agent-selector-agent">
+        <button
+          type="button"
+          className={cn('chat-agent-selector-row', isSelected && 'is-active')}
+          onClick={() => selectAgent(agent)}
+        >
+          <div className="chat-agent-selector-row-body">
+            <div className="chat-agent-selector-row-title">{agent.name}</div>
+            {hasModels ? (
+              <div className="chat-agent-selector-row-meta">
+                {modelDisplayName(catalogModels, activeModel) ?? activeModel}
+              </div>
+            ) : null}
+          </div>
+          {hasModels ? (
+            <ChevronRight
+              size={14}
+              className={cn(
+                'chat-agent-selector-chevron',
+                isExpanded && 'is-open'
+              )}
+            />
+          ) : isSelected ? (
+            <Check size={14} className="chat-agent-selector-check" />
+          ) : null}
+        </button>
+        {hasModels && isExpanded
+          ? models.map((modelId) => {
+              const modelSelected = isSelected && modelId === activeModel;
+              const label = modelDisplayName(catalogModels, modelId) ?? modelId;
+              return (
+                <button
+                  key={modelId}
+                  type="button"
+                  className={cn(
+                    'chat-agent-selector-row is-nested',
+                    modelSelected && 'is-active'
+                  )}
+                  onClick={() => selectAgentModel(agent, modelId)}
+                >
+                  <div className="chat-agent-selector-row-body">
+                    <div className="chat-agent-selector-row-title">{label}</div>
+                  </div>
+                  {modelSelected ? (
+                    <Check size={14} className="chat-agent-selector-check" />
+                  ) : null}
+                </button>
+              );
+            })
+          : null}
+      </div>
     );
   };
 
@@ -295,8 +397,8 @@ export function ChatAgentSelector({
           isPane
             ? activeAgent.name
             : autoMode
-              ? 'Auto agent selection'
-              : activeAgent.name
+              ? 'Auto: workspace default agent'
+              : triggerLabel
         }
       >
         <span className="chat-agent-selector-trigger-label">{triggerLabel}</span>

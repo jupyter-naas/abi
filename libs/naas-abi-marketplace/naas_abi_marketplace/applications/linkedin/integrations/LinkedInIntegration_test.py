@@ -5,8 +5,8 @@ from naas_abi_marketplace.applications.linkedin.integrations.LinkedInIntegration
     LinkedInIntegrationConfiguration,
 )
 
-DEFAULT_COMPANY_URL = "https://www.linkedin.com/company/naas-ai/"
-DEFAULT_PROFILE_URL = "https://www.linkedin.com/in/jeremyravenel/"
+DEFAULT_COMPANY_URL = "https://www.linkedin.com/company/demo/"
+DEFAULT_PROFILE_URL = "https://demo.example/profiles/emma-petit"
 DEFAULT_POST_URL = "https://www.linkedin.com/posts/jeremyravenel_do-you-know-that-one-of-the-most-impactful-activity-7244092056774610944-_5eh?utm_source=share&utm_medium=member_desktop&rcm=ACoAABCNSioBW3YZHc2lBHVG0E_TXYWitQkmwog"
 DEFAULT_MUTUAL_CONNECTIONS_PROFILE_ID = "ACoAAAJHE7sB5OxuKHuzguZ9L6lfDHqw--cdnJg"
 
@@ -76,7 +76,7 @@ def test_get_organization_public_id(integration: LinkedInIntegration):
     """Test extracting organization public ID from LinkedIn URL."""
     # Test company URL
     result = integration.get_organization_id_from_url(DEFAULT_COMPANY_URL)
-    assert result == "naas-ai", result
+    assert result == "demo", result
 
 
 def test_get_organization_id(integration: LinkedInIntegration):

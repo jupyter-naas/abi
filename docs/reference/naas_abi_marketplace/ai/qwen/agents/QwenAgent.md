@@ -1,49 +1,46 @@
 # QwenAgent
 
 ## What it is
-A thin wrapper that constructs an `IntentAgent` configured for the local **Qwen3 8B** chat model (via Ollama) with a predefined system prompt and a set of intents focused on coding, privacy/local usage, multilingual help, and reasoning.
+A small factory and wrapper around `IntentAgent` that creates an agent named **Qwen**, configured to use a locally-registered Qwen chat model (`CanonicalModelId.QWEN_3_6`) and a predefined system prompt focused on privacy, coding, multilingual help, and reasoning.
 
 ## Public API
+
 - **Constants**
-  - `NAME`: Agent display name (`"Qwen"`).
-  - `DESCRIPTION`: Human-readable description of the agent.
-  - `AVATAR_URL`: URL to an avatar image.
-  - `SYSTEM_PROMPT`: Default system prompt describing capabilities and response style.
-  - `SUGGESTIONS`: Empty list (no default suggestions).
+  - `NAME`: `"Qwen"`
+  - `DESCRIPTION`: Agent description string.
+  - `AVATAR_URL`: Avatar image URL.
+  - `SYSTEM_PROMPT`: Default system prompt used when no configuration is provided.
+  - `SUGGESTIONS`: Empty list (`[]`).
 
-- **Functions**
-  - `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-    - Creates and returns a configured `QwenAgent`.
-    - Loads the chat model from `naas_abi_marketplace.ai.qwen.models.qwen3_8b`.
-    - Defines a list of `Intent` objects targeting `"call_model"`.
+- **Function**
+  - `create_agent(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> IntentAgent`
+    - Builds and returns a `QwenAgent` (an `IntentAgent` subclass).
+    - Retrieves the chat model from the ABI module model registry using `CanonicalModelId.QWEN_3_6`.
+    - Registers a fixed list of `Intent` items with `intent_type=IntentType.AGENT` and `intent_target="call_model"`.
     - If not provided:
-      - Creates `AgentConfiguration(system_prompt=SYSTEM_PROMPT)`
-      - Creates `AgentSharedState(thread_id="0")`
+      - `agent_configuration` defaults to `AgentConfiguration(system_prompt=SYSTEM_PROMPT)`
+      - `agent_shared_state` defaults to `AgentSharedState(thread_id="0")`
+    - Creates the agent with `tools=[]`, `agents=[]`, and `memory=None`.
 
-- **Classes**
+- **Class**
   - `class QwenAgent(IntentAgent)`
-    - No additional behavior beyond `IntentAgent` (empty subclass).
+    - Empty subclass; adds no additional behavior beyond `IntentAgent`.
 
 ## Configuration/Dependencies
-- Depends on `naas_abi_core.services.agent.IntentAgent`:
-  - `IntentAgent`, `Intent`, `IntentType`, `AgentConfiguration`, `AgentSharedState`
-- Loads the model dynamically inside `create_agent`:
-  - `from naas_abi_marketplace.ai.qwen.models.qwen3_8b import model`
-- Tools and sub-agents are currently empty lists (`tools = []`, `agents = []`).
+- Depends on `naas_abi_core`:
+  - `CanonicalModelId`
+  - `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentAgent`, `IntentType`
+- Requires `naas_abi_marketplace.ai.qwen.ABIModule`:
+  - Used to access `abi_module.engine.services.model_registry.get_chat_model(CanonicalModelId.QWEN_3_6)`.
 
 ## Usage
 ```python
 from naas_abi_marketplace.ai.qwen.agents.QwenAgent import create_agent
 
 agent = create_agent()
-
-# The returned object is an IntentAgent (specifically QwenAgent) configured with:
-# - system prompt (SYSTEM_PROMPT)
-# - chat model (qwen3_8b model)
-# - a predefined set of intents targeting "call_model"
-print(type(agent).__name__)
+print(agent.name)  # "Qwen"
 ```
 
 ## Caveats
-- `QwenAgent` itself adds no methods; all behavior comes from `IntentAgent`.
-- The function assumes `naas_abi_marketplace.ai.qwen.models.qwen3_8b.model` is importable and correctly configured.
+- `QwenAgent` adds no methods; all runtime behavior comes from `IntentAgent`.
+- `create_agent()` assumes `ABIModule.get_instance()` is available and that the model registry can resolve `CanonicalModelId.QWEN_3_6`.

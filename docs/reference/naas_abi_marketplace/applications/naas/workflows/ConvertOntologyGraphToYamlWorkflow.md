@@ -4,8 +4,8 @@
 A workflow that:
 - Parses an ontology graph provided as a Turtle (`.ttl`) string into an RDFLib `Graph`
 - Uploads the Turtle content as a public asset to Naas storage
-- Converts the RDF graph to a YAML representation via `OntologyYaml.rdf_to_yaml`
-- Creates or updates an ontology in Naas using the generated YAML and uploaded asset URL
+- Converts the RDF graph to a YAML structure via `OntologyYaml.rdf_to_yaml`
+- Creates or updates a Naas ontology using the generated YAML and uploaded asset URL
 - Returns the resulting ontology ID
 
 ## Public API
@@ -13,63 +13,73 @@ A workflow that:
 ### Classes
 
 - `ConvertOntologyGraphToYamlWorkflowConfiguration(WorkflowConfiguration)`
-  - Holds configuration required to initialize the workflow.
-  - **Field**: `naas_integration_config: NaasIntegrationConfiguration`
+  - Workflow configuration container.
+  - Fields:
+    - `naas_integration_config: NaasIntegrationConfiguration` — configuration used to instantiate `NaasIntegration`.
 
 - `ConvertOntologyGraphToYamlWorkflowParameters(WorkflowParameters)`
-  - Input parameters for a conversion run.
-  - **Fields**:
-    - `graph: str` (required): Graph serialized in Turtle format.
-    - `ontology_id: Optional[str]`: Optional ontology ID to update (if not provided, workflow may resolve by label or create new).
-    - `label: str` (default `"New Ontology"`): Ontology label.
-    - `description: str` (default `"New Ontology Description"`): Ontology description.
-    - `logo_url: Optional[str]` (default provided): Ontology logo URL.
-    - `level: str` (default `"USE_CASE"`): Ontology level.
-    - `display_relations_names: bool` (default `True`): Controls relation name display in YAML conversion.
-    - `class_colors_mapping: Dict` (default `COLORS_NODES`): Class-to-color mapping used in YAML conversion.
+  - Input parameters for a run.
+  - Fields:
+    - `graph: str` — ontology graph serialized in Turtle format.
+    - `ontology_id: str | None = None` — optional ID of an ontology to update.
+    - `label: str = "New Ontology"` — ontology label.
+    - `description: str = "New Ontology Description"` — ontology description.
+    - `logo_url: str | None = <default URL>` — ontology logo URL.
+    - `level: str = "USE_CASE"` — ontology level.
+    - `display_relations_names: bool = True` — forwarded to YAML conversion.
+    - `class_colors_mapping: dict = COLORS_NODES` — forwarded to YAML conversion.
 
 - `ConvertOntologyGraphToYamlWorkflow(Workflow)`
   - Main workflow implementation.
 
 ### Methods
 
-- `ConvertOntologyGraphToYamlWorkflow.__init__(configuration)`
-  - Creates a `NaasIntegration` from `naas_integration_config`.
-  - Creates an `OntologyYaml` converter using the module triple store service.
+- `__init__(configuration: ConvertOntologyGraphToYamlWorkflowConfiguration)`
+  - Creates:
+    - `NaasIntegration` using `naas_integration_config`
+    - `OntologyYaml` using `NaasABIModule.get_instance().engine.services.triple_store`
 
 - `graph_to_yaml(parameters: ConvertOntologyGraphToYamlWorkflowParameters) -> str`
-  - Converts Turtle graph to YAML, uploads the Turtle as an asset, then creates/updates a Naas ontology.
-  - **Returns**: `ontology_id` (string).
-  - **Raises**:
-    - `ValueError` if asset upload fails, asset URL missing, or ontology creation/update ultimately fails.
-    - Re-raises exceptions from RDF-to-YAML conversion.
+  - End-to-end conversion + upload + ontology create/update.
+  - Behavior:
+    - Parses Turtle to `rdflib.Graph`.
+    - Uploads Turtle as a public asset (prefix `assets`, object name `<label>.ttl`).
+    - Converts RDF graph to YAML data (`OntologyYaml.rdf_to_yaml`).
+    - Resolves ontology ID by label if one exists in the workspace (overrides `ontology_id` if label matches).
+    - Creates ontology if no ID found; otherwise updates.
+  - Returns: `ontology_id` (string)
+  - Raises:
+    - `ValueError` if asset upload fails, asset URL missing, or final ontology ID is not resolved.
+    - RDF parsing / conversion errors are not wrapped (conversion block builds a message but re-raises the original exception).
 
 - `as_tools() -> list[BaseTool]`
-  - Exposes the workflow as a LangChain `StructuredTool` named `convert_graph_to_yaml`.
+  - Exposes a LangChain `StructuredTool`:
+    - name: `convert_graph_to_yaml`
+    - args schema: `ConvertOntologyGraphToYamlWorkflowParameters`
+    - returns: ontology ID as a string
 
 - `as_api(...) -> None`
-  - Present but not implemented (`pass`).
+  - Declared but not implemented (`pass`).
 
 ## Configuration/Dependencies
 
 - External libraries:
-  - `rdflib.Graph` for parsing Turtle.
-  - `yaml` for dumping YAML content (`yaml.dump(..., Dumper=Dumper)`).
-  - `pydash.get` for safe response access.
-  - `langchain_core.tools.StructuredTool` for tool exposure.
+  - `rdflib.Graph` — parsing Turtle strings.
+  - `yaml.dump(..., Dumper=Dumper)` — serializing the YAML payload to send to Naas.
+  - `pydash.get` — extracting `ontology.id` from create responses.
+  - `langchain_core.tools.StructuredTool` — tool exposure.
 
-- Internal dependencies/services:
-  - `NaasIntegration` is used to:
+- Internal dependencies:
+  - `NaasIntegration`:
     - `upload_asset(...)`
     - `list_ontologies(workspace_id)`
     - `create_ontology(...)`
     - `update_ontology(...)`
-  - `NaasABIModule.get_instance()` is used to access:
+  - `NaasABIModule.get_instance()` provides:
     - `configuration.workspace_id`
     - `configuration.storage_name`
-    - `engine.services.triple_store` (passed into `OntologyYaml`)
-  - `OntologyYaml.rdf_to_yaml(...)` performs RDF graph → YAML conversion.
-  - Default `class_colors_mapping` comes from `COLORS_NODES`.
+    - `engine.services.triple_store` (used by `OntologyYaml`)
+  - `COLORS_NODES` default color mapping.
 
 ## Usage
 
@@ -83,8 +93,7 @@ from naas_abi_marketplace.applications.naas.workflows.ConvertOntologyGraphToYaml
     ConvertOntologyGraphToYamlWorkflowParameters,
 )
 
-# Configure Naas integration (fields depend on NaasIntegrationConfiguration definition)
-naas_cfg = NaasIntegrationConfiguration(...)  # fill with your integration settings
+naas_cfg = NaasIntegrationConfiguration(...)  # provide required integration settings
 
 workflow = ConvertOntologyGraphToYamlWorkflow(
     ConvertOntologyGraphToYamlWorkflowConfiguration(naas_integration_config=naas_cfg)
@@ -111,21 +120,16 @@ print(ontology_id)
 
 ```python
 tools = workflow.as_tools()
-result = tools[0].invoke(
-    {
-        "graph": ttl,
-        "label": "Example Ontology",
-        "description": "Example description",
-        "level": "USE_CASE",
-    }
+ontology_id = tools[0].invoke(
+    {"graph": ttl, "label": "Example Ontology", "description": "Example description"}
 )
-print(result)  # ontology_id
+print(ontology_id)
 ```
 
 ## Caveats
-
-- `graph` must be valid Turtle; invalid content will fail during `Graph.parse(...)`.
-- Ontology selection logic:
-  - If an existing ontology in the workspace has the same `label`, its `id` is used (even if `ontology_id` was not provided).
-- `as_api(...)` is not implemented; no HTTP endpoints are registered by this workflow.
-- Asset upload is required; the workflow fails if `upload_asset` returns no asset or no URL.
+- `graph` must be valid Turtle; invalid input will fail during `Graph.parse(..., format="turtle")`.
+- Ontology selection uses label matching:
+  - If an ontology in the workspace has the same `label`, its `id` is used (even if `ontology_id` was provided).
+- Asset upload is mandatory:
+  - The workflow raises if `upload_asset` returns `None` or if the returned payload lacks `asset.asset.url`.
+- `as_api` is not implemented; this workflow does not register HTTP routes.

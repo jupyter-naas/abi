@@ -17,7 +17,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.GraphFilterRole import GraphFilterRole
+from naas_abi.ontologies.classes.ontology_demo.nexus.GraphFilterRole import GraphFilterRole
 
 class MyGraphFilterRole(GraphFilterRole):
     def actions(self):

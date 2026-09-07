@@ -149,6 +149,15 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
 
         return self.__s3_adapter.list_objects(prefix, queue)
 
+    def list_objects_recursive(
+        self, prefix: str, queue: Queue | None = None
+    ) -> list[str]:
+        self.ensure_credentials()
+
+        assert self.__s3_adapter is not None
+
+        return self.__s3_adapter.list_objects_recursive(prefix, queue)
+
     def get_object_metadata(self, prefix: str, key: str) -> ObjectMetaData:
         self.ensure_credentials()
 

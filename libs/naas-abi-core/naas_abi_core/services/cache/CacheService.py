@@ -220,14 +220,14 @@ class SingleTierCacheService:
         except Exception:  # noqa: BLE001
             raise CacheNotFoundError(f"Cache not found: {key}")
 
-        if (
-            ttl
-            and datetime.datetime.fromisoformat(cached_data.created_at) + ttl
-            < datetime.datetime.now(datetime.UTC)
-        ):
-            raise CacheExpiredError(
-                f"Cache expired: {key}. TTL={ttl}. created_at={cached_data.created_at}"
-            )
+        if ttl:
+            created_at = datetime.datetime.fromisoformat(cached_data.created_at)
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=datetime.UTC)
+            if created_at + ttl < datetime.datetime.now(datetime.UTC):
+                raise CacheExpiredError(
+                    f"Cache expired: {key}. TTL={ttl}. created_at={cached_data.created_at}"
+                )
         return cached_data
 
     @staticmethod

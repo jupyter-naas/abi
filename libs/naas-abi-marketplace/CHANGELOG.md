@@ -2,6 +2,351 @@
 
 <!-- version list -->
 
+## v3.41.1 (2026-09-07)
+
+### Bug Fixes
+
+- **core,abi,marketplace**: Pass json_schema_extra instead of Field(example=)
+  ([`ec8f6fd`](https://github.com/jupyter-naas/abi/commit/ec8f6fda79fa3e47cddfff0736f6590068a98fac))
+
+
+## v3.41.0 (2026-09-03)
+
+### Features
+
+- **code**: Add local git and sandbox runtime for Slides-parity dev
+  ([#1242](https://github.com/jupyter-naas/abi/pull/1242),
+  [`c9beaae`](https://github.com/jupyter-naas/abi/commit/c9beaae75563d8ac0e137ec8da81a48d4472bcaa))
+
+- **code**: Local git + sandbox runtime (Slides-parity)
+  ([#1242](https://github.com/jupyter-naas/abi/pull/1242),
+  [`c9beaae`](https://github.com/jupyter-naas/abi/commit/c9beaae75563d8ac0e137ec8da81a48d4472bcaa))
+
+### Testing
+
+- **x_build_app_x_proxy**: Add test for runtime ABIModule resolution in build cycle
+  ([`0509911`](https://github.com/jupyter-naas/abi/commit/050991114d7c90ff64c463fe13d28a7ad9ccddde))
+
+
+## v3.40.0 (2026-09-02)
+
+### Bug Fixes
+
+- Update versions and platform markers in uv.lock and fix datetime usage in CacheService_test.py
+  ([`5a116a2`](https://github.com/jupyter-naas/abi/commit/5a116a2f1b70fcdb65bd7e3fb15332f393a7aa1c))
+
+- **x-orchestrations**: Update versions and import order in orchestration
+  ([`bf70a40`](https://github.com/jupyter-naas/abi/commit/bf70a404e8aad3bd7b45a39e63cba0fd13b4aa41))
+
+### Features
+
+- **x-orchestrations**: Update default trigger status to RUNNING
+  ([`0d88489`](https://github.com/jupyter-naas/abi/commit/0d884891270ebfd8fe52a8d4daf905f349c14d9c))
+
+
+## v3.39.0 (2026-08-28)
+
+### Features
+
+- **proxy-app**: Add 'all time' scenario window and adjust aggregations accordingly
+  ([`a34c437`](https://github.com/jupyter-naas/abi/commit/a34c4376ee593f9f91bc85d6f97541eb19d36eea))
+
+
+## v3.38.0 (2026-08-28)
+
+### Bug Fixes
+
+- **x_proxy**: Rename x_build_app to x_build_app_x_proxy and update related orchestration and routes
+  ([`703325d`](https://github.com/jupyter-naas/abi/commit/703325d937483dbbfffbc1c415f74762e5f90583))
+
+### Features
+
+- **x_proxy**: Add build.sh and update manifest for rebuild hook
+  ([`c4536f5`](https://github.com/jupyter-naas/abi/commit/c4536f547e31521844a95862c1c44a6928c5b2dc))
+
+
+## v3.37.2 (2026-08-28)
+
+### Bug Fixes
+
+- Rename orchestations x
+  ([`16ed753`](https://github.com/jupyter-naas/abi/commit/16ed7535b0052740a62896e952a2c77846b6fabe))
+
+
+## v3.37.1 (2026-08-28)
+
+### Chores
+
+- Update GitAgent tools and bump versions in uv.lock
+  ([`4dfc106`](https://github.com/jupyter-naas/abi/commit/4dfc1065591e4c40b72bbd2b0eb7592dd60f6af3))
+
+
+## v3.37.0 (2026-08-28)
+
+### Bug Fixes
+
+- **agent**: Coerce empty-string keys from tool call args to avoid Bedrock validation errors
+  ([`8cc30a6`](https://github.com/jupyter-naas/abi/commit/8cc30a6de4339706ef5b0e4f7d618c45e5526ea2))
+
+### Features
+
+- Add DatasetService and Nexus Datasets UI ([#1213](https://github.com/jupyter-naas/abi/pull/1213),
+  [`ab82d5c`](https://github.com/jupyter-naas/abi/commit/ab82d5c7feff1cb90ef6572f0da226d86bbdd5b8))
+
+
+## v3.36.4 (2026-08-20)
+
+
+## v3.36.3 (2026-08-19)
+
+
+## v3.36.2 (2026-08-19)
+
+### Bug Fixes
+
+- **sanax**: Restore LinkedIn profile URL construction after lint cleanup.
+  ([`00cd7ca`](https://github.com/jupyter-naas/abi/commit/00cd7cab03ae51af4fc2a73fbb322f83367942c2))
+
+
+## v3.36.1 (2026-08-18)
+
+### Bug Fixes
+
+- Bump uv.lock libs
+  ([`ef92f2c`](https://github.com/jupyter-naas/abi/commit/ef92f2c380878e8525ad7edb2f6009abd71dbd6f))
+
+
+## v3.36.0 (2026-08-17)
+
+### Features
+
+- **x**: Add support for scheduled files-reprocessing triggers with cron
+  ([`0f625fe`](https://github.com/jupyter-naas/abi/commit/0f625fe39f22fe239c1348dc57919e4a38092fe2))
+
+
+## v3.35.2 (2026-08-17)
+
+### Bug Fixes
+
+- **naas_abi_marketplace**: Remove unused import field_validator from pydantic
+  ([`fb2c548`](https://github.com/jupyter-naas/abi/commit/fb2c548dcff47b6bcddf686ef0be2c51bd618972))
+
+
+## v3.35.1 (2026-08-17)
+
+### Bug Fixes
+
+- Remove orchestration count recents tweets not used
+  ([`fdd7fc4`](https://github.com/jupyter-naas/abi/commit/fdd7fc471500d5a2be971ed43553d2ff05ff1506))
+
+
+## v3.35.0 (2026-08-17)
+
+### Chores
+
+- **x/orchestrations**: Update orchestration config schema
+  ([`c7da479`](https://github.com/jupyter-naas/abi/commit/c7da4797ab310bc48d8b45d6871641eb03d8f142))
+
+### Features
+
+- **x/cache**: Improve watermark handling and batch processing
+  ([`c7da479`](https://github.com/jupyter-naas/abi/commit/c7da4797ab310bc48d8b45d6871641eb03d8f142))
+
+### Testing
+
+- **x/cache**: Add tests for Redis watermark fallback and manifest rebuild
+  ([`c7da479`](https://github.com/jupyter-naas/abi/commit/c7da4797ab310bc48d8b45d6871641eb03d8f142))
+
+
+## v3.34.6 (2026-08-14)
+
+### Bug Fixes
+
+- Refactor posts search page
+  ([`86fe1f6`](https://github.com/jupyter-naas/abi/commit/86fe1f6162a74dcb389d9760633b6b19d152a9bb))
+
+- Ruff errors
+  ([`c816229`](https://github.com/jupyter-naas/abi/commit/c816229ad4c8274d2f5034d4e959b897659e1b02))
+
+### Refactoring
+
+- X user page & posts
+  ([`5f2f2c2`](https://github.com/jupyter-naas/abi/commit/5f2f2c265d2241fb67f89534d7a1073f76790f26))
+
+
+## v3.34.5 (2026-08-14)
+
+
+## v3.34.4 (2026-08-14)
+
+### Bug Fixes
+
+- Search username on x app
+  ([`1739501`](https://github.com/jupyter-naas/abi/commit/1739501c5fbdf427e3c09efeb7e9252a7fee92ff))
+
+
+## v3.34.3 (2026-08-14)
+
+
+## v3.34.2 (2026-08-14)
+
+### Bug Fixes
+
+- Display referenced tweets in author page
+  ([`87f84be`](https://github.com/jupyter-naas/abi/commit/87f84beaf838f28d7ebef072268d0e8ac913fc39))
+
+
+## v3.34.1 (2026-08-14)
+
+### Bug Fixes
+
+- Rename x app
+  ([`686cba0`](https://github.com/jupyter-naas/abi/commit/686cba08d7fa5278aec9f12fe49754cc5fd3b026))
+
+
+## v3.34.0 (2026-08-14)
+
+### Bug Fixes
+
+- **cache**: Update import paths for x app cache modules
+  ([`8534b01`](https://github.com/jupyter-naas/abi/commit/8534b01cffbd42a638ff1a35adb703eb93148546))
+
+- **x-app**: Update cache handling and schema version
+  ([`65d54b0`](https://github.com/jupyter-naas/abi/commit/65d54b0f6947962c3a6e65f3fdddd24ca7dcc540))
+
+### Features
+
+- **x**: Add banded aggregates for efficient scenario window queries
+  ([`34a66e6`](https://github.com/jupyter-naas/abi/commit/34a66e64506f957e5c4d4fe7fe54537c09fd284d))
+
+- **x**: Add Parquet projection cache for X app ingest envelopes
+  ([`c025c07`](https://github.com/jupyter-naas/abi/commit/c025c07676fba2c1592df7c9034d3b0f0d9920d9))
+
+- **x-app**: Add projection routing for query caching
+  ([`cdde220`](https://github.com/jupyter-naas/abi/commit/cdde220bc36936741988e103ab707faef4a3a0a3))
+
+
+## v3.33.6 (2026-08-10)
+
+### Bug Fixes
+
+- Add media in table
+  ([`84e98ce`](https://github.com/jupyter-naas/abi/commit/84e98ce4fad942dab5d9f43936dc249949c4dc3f))
+
+
+## v3.33.5 (2026-08-04)
+
+
+## v3.33.4 (2026-08-04)
+
+
+## v3.33.3 (2026-08-04)
+
+
+## v3.33.2 (2026-08-04)
+
+
+## v3.33.1 (2026-08-04)
+
+
+## v3.33.0 (2026-08-04)
+
+### Bug Fixes
+
+- Bump uv lock
+  ([`0a82147`](https://github.com/jupyter-naas/abi/commit/0a82147b04ab30fbc98f5011ed6d25cf30b40887))
+
+- Count page remove barchart
+  ([`4d7917e`](https://github.com/jupyter-naas/abi/commit/4d7917e9ee25a1cb3ecc9b77486fd63d7e843f2d))
+
+- Display media in table
+  ([`ce0d341`](https://github.com/jupyter-naas/abi/commit/ce0d3419c930a9b93afd34e6653999aa06853476))
+
+- Rename app + add favicon + users
+  ([`77ccc93`](https://github.com/jupyter-naas/abi/commit/77ccc938bdee29ca4c2971e0f85fca4daedd0a71))
+
+- **workflows**: Improve configuration initialization in XCountRecentTweetsWorkflow tests
+  ([`c8295ef`](https://github.com/jupyter-naas/abi/commit/c8295ef5ae1c80686a77ec0cd65783798f7dcd78))
+
+### Features
+
+- Create user page
+  ([`e6ddd21`](https://github.com/jupyter-naas/abi/commit/e6ddd212c98ce68ad5278f30e12bdde92fca3548))
+
+- **x**: Add configurable scheduling for recent tweets workflows
+  ([`6ebdf58`](https://github.com/jupyter-naas/abi/commit/6ebdf58819d462292bed86e2a802d8080095049b))
+
+- **x**: Add scheduled orchestration to rebuild X app dashboard hourly
+  ([`e9bec96`](https://github.com/jupyter-naas/abi/commit/e9bec967bf5d9e2a5795a033410f1c738b120a7a))
+
+- **x-app**: Add live tweet search with column filters
+  ([`e0d6407`](https://github.com/jupyter-naas/abi/commit/e0d6407da63343a72920f0fd9ef4327daed6d9e5))
+
+- **x-app**: Add support for extrapolating in-progress hour counts with J-1 pro-rated estimates
+  ([`e5ddc7f`](https://github.com/jupyter-naas/abi/commit/e5ddc7fb92b34e2143c61d2b71bada8f1df64570))
+
+### Refactoring
+
+- Search user
+  ([`d0e8868`](https://github.com/jupyter-naas/abi/commit/d0e88684f64e7ddb67483b22feb86ed73a21469c))
+
+
+## v3.32.0 (2026-08-03)
+
+### Bug Fixes
+
+- Remove adjust entries
+  ([`e3f1d42`](https://github.com/jupyter-naas/abi/commit/e3f1d428a01cc4d96ad09f15d4d8a39b4ac7f598))
+
+- Remove refs
+  ([`ca9d679`](https://github.com/jupyter-naas/abi/commit/ca9d679c1d71724d5b7bd331b1e9795c50edca17))
+
+- Treasury section pages
+  ([`c146948`](https://github.com/jupyter-naas/abi/commit/c146948c1dabd4eff373742e8ccc4c740a385c3e))
+
+- **auth**: Update root password naming and session role
+  ([`532bbf8`](https://github.com/jupyter-naas/abi/commit/532bbf8f27f57751aeeed187b5117366255ff2b9))
+
+### Chores
+
+- Update lockfile and wrangler.toml auth secret comment
+  ([`49ade07`](https://github.com/jupyter-naas/abi/commit/49ade07f9c8621af848f1e9dd15dcb8c758df205))
+
+### Features
+
+- Add accounting pages
+  ([`6183fd6`](https://github.com/jupyter-naas/abi/commit/6183fd616a0516a06f118c09d7fe29c736664171))
+
+- Admin section pages
+  ([`dedc701`](https://github.com/jupyter-naas/abi/commit/dedc701f35ba748a61c46d392c752dba6b34980a))
+
+- Pages operations
+  ([`afbffce`](https://github.com/jupyter-naas/abi/commit/afbffce4bef4fb0c4d987ea36127dabf4189934c))
+
+- Update financial cockpit app with English translations and new dashboard section
+  ([`5f4b42f`](https://github.com/jupyter-naas/abi/commit/5f4b42f855684ddf4d00d9ecf922b5a44d258ef6))
+
+- **balance-sheet**: Add balance sheet demo dataset and UI components
+  ([`ed3d5e0`](https://github.com/jupyter-naas/abi/commit/ed3d5e071df9db16c85eea4d6cb71e2215d8f014))
+
+- **financial-cockpit**: Add cash flow and financial ratios pages
+  ([`759e4f5`](https://github.com/jupyter-naas/abi/commit/759e4f5265a9a151ec1bb475a32e403adc0adc08))
+
+- **financial-cockpit**: Add new demo data generators and dashboard sections
+  ([`8daf268`](https://github.com/jupyter-naas/abi/commit/8daf2684cbab1d7b1ee6b51c97503ec4966eb23c))
+
+- **financial-cockpit**: Add revenue and COGS breakdown tables and KPIs
+  ([`45a5693`](https://github.com/jupyter-naas/abi/commit/45a5693a32513e63f9624f3359967f6f4640c82e))
+
+### Refactoring
+
+- Code structure
+  ([`0a83fb5`](https://github.com/jupyter-naas/abi/commit/0a83fb59f5cabe8107bd87af8ae9c26f4dd5ef93))
+
+- Scripts structure
+  ([`08d8103`](https://github.com/jupyter-naas/abi/commit/08d8103eb85161d709ea5f1d95b193941d1ee717))
+
+
 ## v3.31.0 (2026-08-03)
 
 ### Features

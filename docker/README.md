@@ -58,6 +58,24 @@ docker-compose -f docker-compose.yml --profile local up -d
 docker-compose -f docker-compose.yml up oxigraph
 ```
 
+### Existing PostgreSQL volumes
+
+New volumes create the dedicated DuckLake catalog database automatically. Init
+scripts do not run again for an existing volume, so apply the idempotent script
+once after upgrading:
+
+```bash
+docker compose exec -T postgres psql -U "${POSTGRES_USER:-abi}" -d postgres \
+  -f /docker-entrypoint-initdb.d/005-create-ducklake-db.sql
+```
+
+This script only provisions the PostgreSQL database and grants. The dataset
+adapter initializes and migrates DuckLake metadata when it connects.
+
+The DuckLake catalog and `storage/datasets/` must be backed up and
+restored at the same point in time. `abi stack snapshot create` does this by
+stopping the stack before it archives both PostgreSQL and `storage/`.
+
 ### Cleanup
 ```bash
 # Run comprehensive cleanup

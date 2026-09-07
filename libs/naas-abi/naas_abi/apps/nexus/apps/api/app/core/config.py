@@ -170,6 +170,7 @@ FeatureKey = Literal[
     "search",
     "ontology",
     "graph",
+    "datasets",
     "settings",
     "code",
     "slides",
@@ -193,6 +194,7 @@ class FeatureFlagsConfig(BaseModel):
             "search",
             "ontology",
             "graph",
+            "datasets",
             "settings",
             "slides",
         ]
@@ -210,6 +212,7 @@ class FeatureFlagsConfig(BaseModel):
                 "search",
                 "ontology",
                 "graph",
+                "datasets",
                 "settings",
                 "slides",
             ],
@@ -224,11 +227,12 @@ class FeatureFlagsConfig(BaseModel):
                 "search",
                 "ontology",
                 "graph",
+                "datasets",
                 "settings",
                 "slides",
             ],
-            "member": ["maps", "chat", "files", "skills", "slides"],
-            "viewer": ["maps", "chat", "files", "skills", "slides"],
+            "member": ["maps", "chat", "files", "datasets", "skills", "slides"],
+            "viewer": ["maps", "chat", "files", "datasets", "skills", "slides"],
         }
     )
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
@@ -287,8 +291,16 @@ class WorkspaceSeedConfig(BaseModel):
     primary_color: str | None = "#22c55e"
     accent_color: str | None = None
     background_color: str | None = None
+    background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    default_agent: str | None = None
+    agents: list[str] | None = None
+    apps: list[str] | None = None
+    # Ontology catalog ids (``module:filename.ttl``). Exclusive when a list
+    # is set: listed on, others off. ``None`` keeps the full engine listing.
+    # An empty list shows none. owl:imports are not implied; name every file.
+    ontologies: list[str] | None = None
 
 
 class OrganizationSeedConfig(BaseModel):
@@ -394,6 +406,11 @@ class Settings(BaseSettings):
     magic_link_allow_signup: bool = False
     access_token_expire_minutes: int = 30  # 30 minutes (short-lived)
     refresh_token_expire_days: int = 30  # 30 days (long-lived)
+    # Short-lived JWT for opening /app-html apps (Bearer or ?token=).
+    app_html_access_token_expire_minutes: int = Field(default=60, ge=1, le=24 * 60)
+    # HMAC secret for opening Cloudflare Pages portals from Nexus (empty = off).
+    pages_sso_secret: str = ""
+    pages_sso_expire_seconds: int = Field(default=300, ge=30, le=15 * 60)
     magic_link_expire_minutes: int = 15
     magic_link_max_active: int = 5
     magic_link_path: str = "/auth/magic-link"
@@ -408,12 +425,41 @@ class Settings(BaseSettings):
         "Or use this magic link:\n{magic_link_url}\n\n"
         "This code and link expire in {expire_minutes} minutes."
     )
+    # Placeholders: app_name, otp_code, magic_link_url, expire_minutes,
+    # primary_color, accent_color, background_color, login_card_color,
+    # login_border_radius, logo_html, logo_url, login_footer_text, tab_title.
+    # Use only inline styles (no CSS {{ }} blocks) — templates use str.format_map.
     magic_link_email_html_template: str = (
-        "<p>Your {app_name} sign-in code is:</p>"
-        '<p style="font-size:28px;letter-spacing:6px;font-weight:700;">{otp_code}</p>'
-        "<p>Enter this code in the app to continue.</p>"
-        '<p>Or <a href="{magic_link_url}">sign in with this magic link</a>.</p>'
-        "<p>This code and link expire in {expire_minutes} minutes.</p>"
+        '<!DOCTYPE html><html><body style="margin:0;padding:0;'
+        'background-color:{background_color};'
+        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="background-color:{background_color};padding:48px 16px;">'
+        '<tr><td align="center">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="max-width:440px;background-color:{login_card_color};'
+        'padding:40px 48px;border-radius:{login_border_radius}px;">'
+        '<tr><td align="center" style="padding-bottom:24px;">{logo_html}</td></tr>'
+        '<tr><td align="center" style="padding-bottom:24px;">'
+        '<p style="margin:0;font-size:28px;font-weight:600;color:#1a1a1a;">Welcome</p>'
+        '<p style="margin:8px 0 0;font-size:14px;color:#737373;">Sign in to continue</p>'
+        "</td></tr>"
+        '<tr><td align="center" style="padding-bottom:8px;">'
+        '<p style="margin:0;font-size:14px;color:#737373;">Your sign-in code</p>'
+        '<p style="margin:12px 0 0;font-size:28px;letter-spacing:6px;'
+        'font-weight:700;color:#1a1a1a;">{otp_code}</p>'
+        "</td></tr>"
+        '<tr><td align="center" style="padding:24px 0;">'
+        '<a href="{magic_link_url}" style="display:inline-block;background-color:{primary_color};'
+        "color:#ffffff;text-decoration:none;padding:12px 24px;font-size:14px;"
+        'font-weight:500;border-radius:{login_border_radius}px;">Sign in</a>'
+        "</td></tr>"
+        '<tr><td align="center">'
+        '<p style="margin:0;font-size:12px;color:#737373;">'
+        "This code and link expire in {expire_minutes} minutes.</p>"
+        "</td></tr></table>"
+        '<p style="margin:24px 0 0;font-size:12px;color:#737373;">{login_footer_text}</p>'
+        "</td></tr></table></body></html>"
     )
 
     # Outgoing email "From" metadata. Transport details (host, credentials,

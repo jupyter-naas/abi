@@ -8,6 +8,7 @@ from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
+from naas_abi_core.services.dataset.DatasetService import DatasetService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
@@ -36,6 +37,7 @@ class ServicesAware(Protocol):
 class IEngine:
     class Services:
         __object_storage: ObjectStorageService | None
+        __dataset: DatasetService | None
         __triple_store: TripleStoreService | None
         __vector_store: VectorStoreService | None
         __secret: Secret | None
@@ -52,6 +54,7 @@ class IEngine:
         def __init__(
             self,
             object_storage: ObjectStorageService | None = None,
+            dataset: DatasetService | None = None,
             triple_store: TripleStoreService | None = None,
             vector_store: VectorStoreService | None = None,
             secret: Secret | None = None,
@@ -66,6 +69,7 @@ class IEngine:
             source_control: SourceControlService | None = None,
         ):
             self.__object_storage = object_storage
+            self.__dataset = dataset
             self.__triple_store = triple_store
             self.__vector_store = vector_store
             self.__secret = secret
@@ -90,6 +94,14 @@ class IEngine:
                 "Object storage service is not initialized"
             )
             return self.__object_storage
+
+        @property
+        def dataset(self) -> DatasetService:
+            assert self.__dataset is not None, "Dataset service is not initialized"
+            return self.__dataset
+
+        def dataset_available(self) -> bool:
+            return self.__dataset is not None
 
         @property
         def triple_store(self) -> TripleStoreService:
@@ -177,10 +189,11 @@ class IEngine:
         def all(
             self,
         ) -> list[
-            ObjectStorageService | None | TripleStoreService | VectorStoreService | Secret | BusService | KeyValueService | EmailService | CacheService | EventService | ActivityLogService | ModelRegistryService | CodingEnvironmentService | SourceControlService
+            ObjectStorageService | None | DatasetService | TripleStoreService | VectorStoreService | Secret | BusService | KeyValueService | EmailService | CacheService | EventService | ActivityLogService | ModelRegistryService | CodingEnvironmentService | SourceControlService
         ]:
             return [
                 self.__object_storage,
+                self.__dataset,
                 self.__triple_store,
                 self.__vector_store,
                 self.__secret,

@@ -17,7 +17,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.Files import Files
+from naas_abi.ontologies.classes.ontology_demo.nexus.Files import Files
 
 files = Files()
 files.actions()  # no-op

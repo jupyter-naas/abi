@@ -290,6 +290,20 @@ def test_iter_query_limit_zero_yields_nothing(tmp_path):
     assert list(service.iter_query(event_class=UserAuthenticated, limit=0)) == []
 
 
+def test_seek_consumer_to_end_skips_pending_events(tmp_path):
+    service, adapter, _ = _make_service(tmp_path)
+    for i in range(5):
+        service.publish(UserAuthenticated(user_id=f"u{i}"))
+    first = service.query_for_consumer("worker-1", UserAuthenticated, limit=2)
+    assert [e.user_id for e in first] == ["u0", "u1"]
+    assert adapter.get_cursor("worker-1", UserAuthenticated._class_uri) == 2
+
+    result = service.seek_consumer_to_end("worker-1", UserAuthenticated)
+    assert result["cursor_before"] == 2
+    assert result["cursor_after"] == adapter.max_seq(UserAuthenticated._class_uri)
+    assert service.query_for_consumer("worker-1", UserAuthenticated) == []
+
+
 def test_iter_query_for_consumer_respects_limit(tmp_path):
     service, adapter, _ = _make_service(tmp_path)
     for i in range(10):

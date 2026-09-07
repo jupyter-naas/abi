@@ -1,45 +1,45 @@
 # StripeAgent
 
 ## What it is
-A minimal `IntentAgent` factory and agent class for providing **general guidance about Stripe** (payments, subscriptions, features). This agent is explicitly configured with **no Stripe tools**, so it cannot perform real Stripe operations.
+A Stripe-focused `IntentAgent` implementation that provides **general guidance** about Stripe (payments, subscriptions, financial operations). It is configured with **no Stripe tools**, so it cannot perform real Stripe actions.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Builds and returns a configured `StripeAgent` instance.
-  - Sets:
-    - `name`: `"Stripe"`
-    - `description`: Stripe guidance focus
-    - `system_prompt`: explains tool unavailability and guidance-only constraints
-    - `tools`: empty list
-    - `intents`: two RAW intents for common Stripe questions
-    - `chat_model`: imported from `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1`
-
 - `class StripeAgent(IntentAgent)`
-  - Concrete agent type; no additional behavior beyond `IntentAgent` (inherits everything).
+  - Agent definition with default metadata:
+    - `name = "Stripe"`
+    - `description = "Helps you interact with Stripe for payment processing and financial operations."`
+    - `system_prompt`: guidance-only prompt (explicitly states tools are unavailable)
+    - `suggestions = []`
+- `StripeAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> StripeAgent`
+  - Factory constructor that:
+    - Retrieves default chat and embedding models from the application `ModelRegistryService`.
+    - Configures:
+      - `tools = []`
+      - `intents`: two `IntentType.RAW` intents for common Stripe questions
+    - Applies defaults when not provided:
+      - `agent_configuration = AgentConfiguration(system_prompt=StripeAgent.system_prompt)`
+      - `agent_shared_state = AgentSharedState(thread_id="0")`
 
 ## Configuration/Dependencies
 - Depends on `naas_abi_core.services.agent.IntentAgent`:
   - `IntentAgent`, `Intent`, `IntentType`, `AgentConfiguration`, `AgentSharedState`
-- Uses chat model from:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1`
-- Configuration:
-  - `SYSTEM_PROMPT` is used by default if no `AgentConfiguration` is provided.
-  - `SUGGESTIONS` is defined but unused.
+- Depends on application module:
+  - `from naas_abi_marketplace.applications.stripe import ABIModule`
+  - Uses `ABIModule.get_instance().engine.services.model_registry`:
+    - `get_default_chat_model()`
+    - `get_default_embedding_model().model`
+- Requires `ModelRegistryService` to be initialized; otherwise raises via:
+  - `assert registry is not None, "ModelRegistryService not initialized"`
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.stripe.agents.StripeAgent import create_agent
+from naas_abi_marketplace.applications.stripe.agents.StripeAgent import StripeAgent
 
-agent = create_agent()
-
-# The returned object is an IntentAgent/StripeAgent instance configured for guidance-only.
-# Interact with it using the IntentAgent interfaces available in your runtime.
-print(agent.name)         # "Stripe"
-print(agent.description)  # Helps you interact with Stripe...
+agent = StripeAgent.New()
+print(agent.name)         # Stripe
+print(agent.description)  # Helps you interact with Stripe for payment processing...
 ```
 
 ## Caveats
-- No Stripe tools are configured (`tools = []`), so the agent:
-  - cannot process payments,
-  - cannot query customers/subscriptions,
-  - can only provide general information and best-practice guidance.
+- No tools are configured (`tools = []`), so the agent cannot execute Stripe operations (e.g., create charges, manage customers/subscriptions). It can only provide informational guidance.
+- `StripeAgent.New()` requires the Stripe `ABIModule` engine and model registry to be initialized; otherwise initialization will fail with an assertion error.

@@ -1,39 +1,43 @@
 # YouTubeAgent
 
 ## What it is
-A minimal `IntentAgent` implementation for YouTube-related guidance. It provides predefined informational intents and explicitly has **no YouTube tools configured**, so it can only offer general guidance (not perform actions).
+A minimal `IntentAgent` implementation for YouTube-related guidance. It defines a YouTube-focused system prompt and two static informational intents, but configures **no tools**, so it cannot perform YouTube actions.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Factory that builds and returns a configured `YouTubeAgent`.
-  - Sets:
-    - `name`: `"YouTube"`
-    - `description`: `"Helps you interact with YouTube for video management and channel operations."`
-    - `system_prompt`: `SYSTEM_PROMPT` (unless a configuration is provided)
-    - `tools`: empty list (`[]`)
-    - `intents`: two raw informational intents
-    - `state`: provided `AgentSharedState` or a new one
-    - `memory`: `None`
-
 - `class YouTubeAgent(IntentAgent)`
-  - Concrete agent class (no additional behavior beyond `IntentAgent`).
+  - Agent class with predefined:
+    - `name = "YouTube"`
+    - `description = "Helps you interact with YouTube for video management and channel operations."`
+    - `system_prompt` describing guidance-only behavior (no tool access)
+    - `suggestions = []`
+
+- `YouTubeAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> YouTubeAgent`
+  - Factory constructor that:
+    - Retrieves default chat and embedding models from the marketplace engine model registry.
+    - Sets `tools = []`.
+    - Sets `intents` to two `IntentType.RAW` intents with static guidance strings.
+    - Defaults:
+      - `agent_configuration = AgentConfiguration(system_prompt=YouTubeAgent.system_prompt)`
+      - `agent_shared_state = AgentSharedState(thread_id="0")`
+    - Returns a configured `YouTubeAgent` with `memory=None`.
 
 ## Configuration/Dependencies
 - Depends on `naas_abi_core.services.agent.IntentAgent`:
   - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
-- Uses ChatGPT model from:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model`
-- Constants:
-  - `NAME`, `DESCRIPTION`, `SYSTEM_PROMPT`, `SUGGESTIONS` (empty)
+- Requires marketplace module initialization:
+  - `from naas_abi_marketplace.applications.youtube import ABIModule`
+  - Uses `ABIModule.get_instance().engine.services.model_registry`
+  - Assumes registry is initialized (`assert registry is not None`)
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.youtube.agents.YouTubeAgent import create_agent
+from naas_abi_marketplace.applications.youtube.agents.YouTubeAgent import YouTubeAgent
 
-agent = create_agent()
-# agent is an IntentAgent (YouTubeAgent) configured with a system prompt and two intents.
+agent = YouTubeAgent.New()
+print(agent.name)  # "YouTube"
 ```
 
 ## Caveats
-- No tools are configured (`tools = []`), so the agent **cannot** access YouTube, manage videos, playlists, or channel data.
-- The provided intents are informational only (`IntentType.RAW`) and return static guidance strings.
+- No tools are configured (`tools = []`), so the agent cannot upload/manage videos, playlists, or channels.
+- Requires a configured/initialized engine `model_registry`; otherwise `assert registry is not None` will fail.
+- Intents are `IntentType.RAW` and provide static text responses only.

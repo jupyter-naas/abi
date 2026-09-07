@@ -1,0 +1,164 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/OrganizationRestructuringProcess> a owl:Ontology ;
+    # One owl:imports statement per IRI — see the note in
+    # ontologies/modules/OrganizationOntology.ttl.
+    owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl> ;
+    owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+    owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+    owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+    owl:imports <http://ontology.naas.ai/abi/OrganizationOntology> ;
+    rdfs:seeAlso <http://ontology.naas.ai/abi/OrganizationAllianceProcess> ;
+    abi:pythonPackage "naas_abi_marketplace.domains.intelligence.ontologies.organizations" ;
+    abi:ontologyResource "ontologies/processes/OrganizationRestructuringProcess.ttl" ;
+    abi:pythonResource "ontologies/processes/OrganizationRestructuringProcess.py" ;
+    dc:title "Organization Restructuring Process Ontology"@en ;
+    dc:description "Process ontology for acts that change which organizations exist, or who controls whom: merger, acquisition and subsidiary establishment. This is the line separating it from OrganizationAllianceProcess — an alliance leaves every party a distinct entity, whereas restructuring alters the set of organizations or the control relation between them. Merger and acquisition are kept apart rather than lumped as 'M&A': a merger's participants are symmetric and typically cease to exist as separate entities, while an acquisition is directional and the acquirer survives, so a query asking 'who bought whom' has no answer over a symmetric relation."@en ;
+    dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+    rdfs:comment "Process ontology for merger, acquisition and subsidiary establishment."@en ;
+    dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
+    dc11:date "2026-04-02"^^xsd:date .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+# WHAT ↔ HOW WE KNOW — the act concretizes its record
+abi:hasRestructuringRecord a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000058 ; # is concretized by
+    owl:inverseOf abi:isRestructuringRecordOf ;
+    rdfs:domain cco:ont00000228 ;
+    rdfs:range cco:ont00000853 ;
+    rdfs:label "has restructuring record"@en ;
+    skos:definition "Relates an act of organizational restructuring to the document that records its terms."@en .
+
+abi:isRestructuringRecordOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000059 ; # concretizes
+    owl:inverseOf abi:hasRestructuringRecord ;
+    rdfs:domain cco:ont00000853 ;
+    rdfs:range cco:ont00000228 ;
+    rdfs:label "is restructuring record of"@en ;
+    skos:definition "Relates a restructuring document to the act it records."@en .
+
+# WHAT ↔ WHO — merger participants are symmetric
+abi:hasMergingOrganization a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ; # has participant
+    owl:inverseOf abi:mergesIn ;
+    rdfs:domain abi:ActOfOrganizationalMerger ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "has merging organization"@en ;
+    skos:definition "Relates an act of merger to one of the organizations uniting in it. Symmetric in role: no participant is privileged, which is exactly what distinguishes a merger from an acquisition."@en .
+
+abi:mergesIn a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000056 ; # participates in
+    owl:inverseOf abi:hasMergingOrganization ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:ActOfOrganizationalMerger ;
+    rdfs:label "merges in"@en ;
+    skos:definition "Relates an organization to an act of merger it unites in."@en .
+
+# WHAT ↔ WHO — acquisition is directional
+abi:hasAcquiringOrganization a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ; # has participant
+    owl:inverseOf abi:acquiresIn ;
+    rdfs:domain abi:ActOfOrganizationalAcquisition ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "has acquiring organization"@en ;
+    skos:definition "Relates an act of acquisition to the organization gaining control. Kept distinct from abi:hasAcquiredOrganization so that 'who bought whom' is answerable."@en .
+
+abi:acquiresIn a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000056 ; # participates in
+    owl:inverseOf abi:hasAcquiringOrganization ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:ActOfOrganizationalAcquisition ;
+    rdfs:label "acquires in"@en ;
+    skos:definition "Relates an organization to an act of acquisition in which it is the acquirer."@en .
+
+abi:hasAcquiredOrganization a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ; # has participant
+    owl:inverseOf abi:isAcquiredIn ;
+    rdfs:domain abi:ActOfOrganizationalAcquisition ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "has acquired organization"@en ;
+    skos:definition "Relates an act of acquisition to the organization whose assets, operations and management pass under the acquirer's control."@en .
+
+abi:isAcquiredIn a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000056 ; # participates in
+    owl:inverseOf abi:hasAcquiredOrganization ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:ActOfOrganizationalAcquisition ;
+    rdfs:label "is acquired in"@en ;
+    skos:definition "Relates an organization to an act of acquisition in which it is the target."@en .
+
+# WHO ↔ WHO — the control relation restructuring establishes
+abi:hasSubsidiaryOrganization a owl:ObjectProperty ;
+    owl:inverseOf abi:hasParentOrganization ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "has subsidiary organization"@en ;
+    skos:definition "Relates an organization to another organization it controls and owns a significant share of."@en .
+
+abi:hasParentOrganization a owl:ObjectProperty ;
+    owl:inverseOf abi:hasSubsidiaryOrganization ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "has parent organization"@en ;
+    skos:definition "Relates an organization to the organization that controls it."@en .
+
+#################################################################
+#    Classes — WHAT (the acts)
+#################################################################
+
+abi:ActOfOrganizationalMerger a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 , # Planned Act
+      [ rdf:type owl:Restriction ; owl:onProperty abi:hasMergingOrganization ; owl:someValuesFrom cco:ont00001180 ] ;
+    rdfs:label "Act of Organizational Merger"@en ;
+    skos:definition "An Act of Association in which two or more independent organizations unite to form a single entity, typically to enhance operational efficiency, market reach, or competitive advantage."@en ;
+    skos:example "The merger of Company A and Company B to form a new entity, AB Corporation, for the purpose of expanding their market presence and combining resources."@en ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ActOfOrganizationalAcquisition a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 , # Planned Act
+      [ rdf:type owl:Restriction ; owl:onProperty abi:hasAcquiringOrganization ; owl:someValuesFrom cco:ont00001180 ] ,
+      [ rdf:type owl:Restriction ; owl:onProperty abi:hasAcquiredOrganization ; owl:someValuesFrom cco:ont00001180 ] ;
+    rdfs:label "Act of Organizational Acquisition"@en ;
+    skos:definition "An Act of Possession in which one organization gains control over another organization, acquiring its assets, operations, and management to expand its operations or market share."@en ;
+    skos:example "Company X acquires Company Y, taking control of its operations and integrating Company Y's products into its own product line."@en ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ActOfSubsidiaryEstablishment a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 , # Planned Act
+      [ rdf:type owl:Restriction ; owl:onProperty bfo:BFO_0000057 ; owl:someValuesFrom cco:ont00001180 ] ;
+    rdfs:label "Act of Subsidiary Establishment"@en ;
+    skos:definition "An Act of Association in which an organization creates and establishes a new legal entity, known as a subsidiary, over which it retains significant control and ownership."@en ;
+    skos:example "Global Corp establishes a new subsidiary, Tech Innovations Inc., to focus on research and development in the technology sector."@en ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Classes — HOW WE KNOW (the records)
+#################################################################
+
+abi:OrganizationMerger a owl:Class ;
+    rdfs:subClassOf cco:ont00000853 ; # Descriptive Information Content Entity
+    rdfs:label "Organization Merger"@en ;
+    skos:definition "Details a planned act in which two or more organizations unite to form a single entity, typically to enhance operational efficiency, market reach, or competitive advantage."@en ;
+    skos:example "The merger of Company A and Company B to form a new entity, AB Corporation, for the purpose of expanding their market presence and combining resources."@en ;
+    rdfs:comment "A merger is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:OrganizationAcquisition a owl:Class ;
+    rdfs:subClassOf cco:ont00000853 ; # Descriptive Information Content Entity
+    rdfs:label "Organization Acquisition"@en ;
+    skos:definition "Details a planned act in which one organization gains control over another organization, acquiring its assets, operations, and management to expand its operations or market share."@en ;
+    skos:example "Company X acquires Company Y, taking control of its operations and integrating Company Y's products into its own product line."@en ;
+    rdfs:comment "An organization acquisition is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .

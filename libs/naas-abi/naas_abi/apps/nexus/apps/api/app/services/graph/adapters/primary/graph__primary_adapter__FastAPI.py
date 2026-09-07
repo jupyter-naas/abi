@@ -586,7 +586,12 @@ async def get_graph_kpis(
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> GraphKpis:
-    """Return Individuals / Relations / Properties KPI counts for a graph (cached 5 min)."""
+    """Return Individuals / Relations / Properties KPI counts for a graph.
+
+    Cached for 1 hour and invalidated on every write. An expired entry is served
+    immediately with ``stale: true`` while it is rebuilt in the background, so
+    only the first request for a graph ever waits on the count queries.
+    """
     await require_workspace_access(current_user.id, workspace_id)
     try:
         kpis = await graph_service.get_graph_kpis(workspace_id=workspace_id, graph_uri=graph_uri)
@@ -597,6 +602,7 @@ async def get_graph_kpis(
         relations=kpis.relations,
         properties=kpis.properties,
         classes=kpis.classes,
+        stale=kpis.stale,
     )
 
 
@@ -607,7 +613,13 @@ async def get_network_schema(
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> NetworkSchema:
-    """Return class-level nodes and edges for the network schema view (cached 5 min)."""
+    """Return class-level nodes and edges for the network schema view.
+
+    Cached for 1 hour and invalidated on every write. An expired entry is served
+    immediately with ``stale: true`` while it is rebuilt in the background — the
+    edge aggregation scans every object-property triple in the graph, which on a
+    multi-million-triple graph takes seconds and must never block a response.
+    """
     await require_workspace_access(current_user.id, workspace_id)
     try:
         schema = await graph_service.get_network_schema(
@@ -616,6 +628,7 @@ async def get_network_schema(
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return NetworkSchema(
+        stale=schema.stale,
         nodes=[
             NetworkSchemaNode(
                 class_uri=n.class_uri,

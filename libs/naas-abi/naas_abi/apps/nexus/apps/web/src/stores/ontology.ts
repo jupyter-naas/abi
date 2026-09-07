@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { useWorkspaceStore } from './workspace';
 import { getApiUrl } from '@/lib/config';
+import { ontologyApiQuery } from '@/lib/ontology-query';
 import { authFetch } from './auth';
 
 // Helper to get current workspace ID
@@ -261,8 +262,8 @@ export const useOntologyStore = create<OntologyState>()(
           const baseUrl = getApiUrl();
           const workspaceId = getCurrentWorkspaceId() || 'default';
           const [classesResponse, relationshipsResponse] = await Promise.all([
-            authFetch(`${baseUrl}/api/ontology/classes`),
-            authFetch(`${baseUrl}/api/ontology/relationships`),
+            authFetch(`${baseUrl}/api/ontology/classes${ontologyApiQuery()}`),
+            authFetch(`${baseUrl}/api/ontology/relationships${ontologyApiQuery()}`),
           ]);
 
           if (!classesResponse.ok) {
@@ -343,11 +344,8 @@ export const useOntologyStore = create<OntologyState>()(
           const workspaceId = getCurrentWorkspaceId() || 'default';
           const isClassesView = view === 'classes';
           const pathSuffix = isClassesView ? '/api/ontology/classes' : '/api/ontology/relationships';
-          const query = ontologyPath
-            ? `?ontology_path=${encodeURIComponent(ontologyPath)}`
-            : '';
           const response = await authFetch(
-            `${baseUrl}${pathSuffix}${query}`
+            `${baseUrl}${pathSuffix}${ontologyApiQuery({ ontology_path: ontologyPath })}`
           );
 
           if (!response.ok) {

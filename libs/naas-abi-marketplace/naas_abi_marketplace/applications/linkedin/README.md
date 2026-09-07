@@ -25,7 +25,7 @@ Configure your environment variables in `.env`:
 ```bash
 li_at=your_li_at_cookie_here
 JSESSIONID=your_jsessionid_cookie_here
-LINKEDIN_PROFILE_URL=https://www.linkedin.com/in/your-profile-id/
+LINKEDIN_PROFILE_URL=https://demo.example/profiles/demo
 ```
 
 ### Usage
@@ -50,7 +50,7 @@ config = LinkedInIntegrationConfiguration(
 integration = LinkedInIntegration(config)
 
 # Extract company information
-company_data = integration.get_organization_info("https://www.linkedin.com/company/naas-ai/")
+company_data = integration.get_organization_info("https://www.linkedin.com/company/demo/")
 ```
 
 ## Architecture
@@ -91,11 +91,11 @@ An AI-powered conversational agent that provides natural language access to Link
 "Search for John Doe on LinkedIn"
 
 # Profile analysis
-"Analyze https://www.linkedin.com/in/florent-ravenel/"
+"Analyze https://demo.example/profiles/demo"
 "What are the skills of this profile?"
 
 # Organization insights
-"Get information about https://www.linkedin.com/company/naas-ai/"
+"Get information about https://www.linkedin.com/company/demo/"
 "What does this company do?"
 
 # Post analytics
@@ -113,7 +113,7 @@ An AI-powered conversational agent that provides natural language access to Link
 |------|-------------|-------|
 | `linkedin_get_organization_id` | Get LinkedIn organization ID from URL | Organization identification, API calls |
 | `linkedin_get_organization_info` | Extract comprehensive company data | Organization analysis, competitive research |
-| `linkedin_get_profile_public_id` | Get LinkedIn public profile ID (e.g., "florent-ravenel") | Profile identification, URL parsing |
+| `linkedin_get_profile_public_id` | Get LinkedIn public profile ID (e.g., "alice-dupont") | Profile identification, URL parsing |
 | `linkedin_get_profile_id` | Get LinkedIn unique profile ID (starts with AcoAA) | Profile identification, API calls |
 | `linkedin_get_profile_view` | Retrieve detailed profile information | Professional background analysis |
 | `linkedin_get_profile_top_card` | Get profile top card information | Quick profile overview |
@@ -152,7 +152,7 @@ Core integration providing authenticated access to LinkedIn's internal APIs thro
 |--------|------------|---------|-------------|
 | `get_organization_id(linkedin_url)` | Company/school/showcase URL | Organization ID string | LinkedIn organization ID for API calls |
 | `get_organization_info(linkedin_url)` | Company/school/showcase URL | Organization data | Comprehensive company information |
-| `get_profile_public_id(linkedin_url)` | Profile URL | Public ID string | LinkedIn public profile identifier (e.g., "florent-ravenel") |
+| `get_profile_public_id(linkedin_url)` | Profile URL | Public ID string | LinkedIn public profile identifier (e.g., "alice-dupont") |
 | `get_profile_id(linkedin_url)` | Profile URL | Profile ID string | LinkedIn unique profile ID (starts with AcoAA) |
 | `get_profile_view(linkedin_url)` | Profile URL | Profile data | Detailed profile with experience/education |
 | `get_profile_top_card(linkedin_url)` | Profile URL | Profile card data | Quick profile overview information |

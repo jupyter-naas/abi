@@ -10,8 +10,9 @@ What is captured:
     ``fuseki_data``, ``qdrant_storage``, ``redis_data``, ``rabbitmq_data``,
     ``headscale_data``) -- copied cold as zstd-compressed tarballs so each
     engine's on-disk state is consistent;
-  * the host ``storage/`` directory (the durable SQLite event log + local
-    datastore files).
+  * the host ``storage/`` directory (the durable SQLite event log, the SQLite
+    DuckLake catalog, and DuckLake data files). Because the stack is stopped,
+    this is coherent with a PostgreSQL DuckLake catalog in ``postgres_data``.
 
 Transient volumes (caddy certs, dagster run history, build/model caches, and
 the headscale ``headscale_run`` socket dir) are skipped -- they rebuild
@@ -172,11 +173,7 @@ def detect_drift(
 ) -> list[str]:
     """Human-readable warnings when code/config differs from snapshot time."""
     messages: list[str] = []
-    if (
-        manifest.git_commit
-        and current_commit
-        and manifest.git_commit != current_commit
-    ):
+    if manifest.git_commit and current_commit and manifest.git_commit != current_commit:
         messages.append(
             f"git commit differs: snapshot {manifest.git_commit} vs current "
             f"{current_commit}"
@@ -403,6 +400,19 @@ def volume_exists(name: str) -> bool:
     )
 
 
+def _chown_to_host(target: str) -> str:
+    """Shell fragment handing helper-written output back to the host user.
+
+    The helper runs as root so it can read arbitrary volume/app-written files;
+    on Linux bind mounts that makes its output root-owned and unreadable to the
+    non-root host user running the CLI, which would break a later host-side
+    export/read. chown fixes it. No-op where the platform has no uid concept.
+    """
+    if hasattr(os, "getuid"):
+        return f" && chown -R {os.getuid()}:{os.getgid()} {target}"
+    return ""
+
+
 def archive_volumes(volumes: dict[str, str], dest_dir: Path) -> None:
     """Archive every volume in ``volumes`` in a single helper container.
 
@@ -432,6 +442,8 @@ def archive_volumes(volumes: dict[str, str], dest_dir: Path) -> None:
         f"tar cf - -C /from/{key} . | zstd -q -T0 -{ZSTD_LEVEL} -o /to/{volume_archive_name(key)}"
         for key in volumes
     )
+    # Hand every archive back to the host user for later export/read on Linux.
+    steps += _chown_to_host("/to")
     args += [SNAPSHOT_HELPER_IMAGE, "sh", "-c", f"set -eo pipefail; {steps}"]
     run_docker(args)
 
@@ -481,10 +493,25 @@ def reset_volume(volume: str) -> None:
 # --------------------------------------------------------------------------- #
 def archive_storage(root: Path, dest_file: Path) -> None:
     storage_dir = root / STORAGE_DIRNAME
-    # Resolve a symlinked storage/ so we capture its contents, not the bare link.
-    source = storage_dir.resolve() if storage_dir.is_symlink() else storage_dir
-    with tarfile.open(dest_file, "w:gz") as tar:
-        tar.add(source, arcname=STORAGE_DIRNAME)
+    # Tar storage/ inside the root helper, not host-side Python: the app container
+    # writes files here as root, which the non-root host user often cannot read.
+    # `.resolve()` follows a symlinked storage/ so we capture its contents.
+    source = storage_dir.resolve()
+    out = f"/out/{dest_file.name}"
+    run_docker(
+        [
+            "run",
+            "--rm",
+            "--mount",
+            f"type=bind,source={source},destination=/data/{STORAGE_DIRNAME},readonly",
+            "--mount",
+            f"type=bind,source={dest_file.parent.resolve()},destination=/out",
+            HELPER_IMAGE,
+            "sh",
+            "-c",
+            f"tar czf {out} -C /data {STORAGE_DIRNAME}" + _chown_to_host(out),
+        ]
+    )
 
 
 def _assert_safe_members(tar: tarfile.TarFile, dest: Path) -> None:
@@ -537,17 +564,28 @@ def _safe_extract(tar: tarfile.TarFile, dest: Path) -> None:
 
 
 def extract_storage(root: Path, src_file: Path) -> None:
-    # Clear the destination first so restore is a faithful point-in-time copy:
-    # otherwise files created after the snapshot (e.g. a stale SQLite -wal or an
-    # extra events db) survive and leave storage/ inconsistent with the volumes.
-    storage_dir = root / STORAGE_DIRNAME
-    if storage_dir.is_symlink():
-        # rmtree() raises on a symlink; unlink it so the extract lands a real dir.
-        storage_dir.unlink()
-    elif storage_dir.exists():
-        shutil.rmtree(storage_dir)
+    # Validate member paths (and link targets) on the host first -- the guard
+    # `_safe_extract` would otherwise apply -- then clear + extract inside the
+    # root helper. The helper is needed because storage/ can contain root-owned
+    # files/dirs the host user cannot remove. Clearing first keeps restore a
+    # faithful point-in-time copy (no stale post-snapshot files survive).
     with tarfile.open(src_file, "r:gz") as tar:
-        _safe_extract(tar, root)
+        _assert_safe_members(tar, root)
+    dest_storage = f"/dest/{STORAGE_DIRNAME}"
+    run_docker(
+        [
+            "run",
+            "--rm",
+            "--mount",
+            f"type=bind,source={root.resolve()},destination=/dest",
+            "--mount",
+            f"type=bind,source={src_file.parent.resolve()},destination=/in,readonly",
+            HELPER_IMAGE,
+            "sh",
+            "-c",
+            f"rm -rf {dest_storage} && tar xzf /in/{src_file.name} -C /dest",
+        ]
+    )
 
 
 def _snapshot_artifacts_ok(snap_dir: Path, manifest: SnapshotManifest) -> list[str]:
@@ -558,7 +596,9 @@ def _snapshot_artifacts_ok(snap_dir: Path, manifest: SnapshotManifest) -> list[s
         if not tarball.exists():
             problems.append(f"missing volume archive for '{key}' ({tarball.name})")
     if manifest.storage_included and not (snap_dir / "storage.tar.gz").exists():
-        problems.append("manifest says storage was captured but storage.tar.gz is missing")
+        problems.append(
+            "manifest says storage was captured but storage.tar.gz is missing"
+        )
     return problems
 
 
@@ -646,8 +686,7 @@ def import_snapshot(src: Path, root: Path | None = None, force: bool = False) ->
     if unknown:
         shutil.rmtree(dest_dir, ignore_errors=True)
         raise click.ClickException(
-            "Imported archive lists volumes ABI does not manage: "
-            + ", ".join(unknown)
+            "Imported archive lists volumes ABI does not manage: " + ", ".join(unknown)
         )
     return snapshot_id
 

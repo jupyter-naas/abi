@@ -13,6 +13,11 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
     require_workspace_access,
 )
+from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
+    resolve_agent_ref,
+    resolve_agent_refs,
+    workspace_seed_for_slug,
+)
 from naas_abi.apps.nexus.apps.api.app.services.agents import (
     AgentCreateInput,
     AgentRecord,
@@ -24,8 +29,14 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
     get_service_registry,
 )
+from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
+    public_modules_url,
+    resolve_abi_module_path,
+    resolve_module_public_asset_path,
+)
 from naas_abi_core import logger
 from naas_abi_core.services.agent.Agent import Agent
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -138,11 +149,22 @@ def request_context(current_user: User) -> RequestContext:
     )
 
 
+async def _workspace_slug(workspace_id: str) -> str | None:
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(WorkspaceModel.slug).where(WorkspaceModel.id == workspace_id)
+        )
+        return result.scalar_one_or_none()
+
+
 def _get_engine_default_agent_class_name() -> str | None:
-    """Resolve engine ``default_agent`` (e.g. ``zen ZenAgent``) to a registry key.
+    """Resolve engine ``default_agent`` (e.g. ``myapp MyAgent``) to a registry key.
 
     Registry keys are ``{python_module}/{ClassName}`` (for example
-    ``zen.agents.ZenAgent/ZenAgent``). The config form is ``{module} {AgentName}``,
+    ``myapp.agents.MyAgent/MyAgent``). The config form is ``{module} {AgentName}``,
     so we match by scanning the live class registry rather than inventing a path.
     """
     try:
@@ -174,22 +196,18 @@ def _get_engine_default_agent_class_name() -> str | None:
     return None
 
 
-def _agent_enabled_by_default(
-    agent_cls: type[Agent],
-    *,
-    name: str | None,
-    class_name: str,
+def _workspace_agent_roster(
+    seeded_class_names: set[str] | None,
     default_class_name: str | None,
-) -> bool:
-    """Whether a newly discovered agent should be enabled in the workspace picker."""
-    if default_class_name is not None and class_name == default_class_name:
-        return True
-    if default_class_name is None and name == "Abi":
-        return True
-    flag = getattr(agent_cls, "enabled_by_default", None)
-    if flag is None:
-        flag = getattr(agent_cls, "ENABLED_BY_DEFAULT", False)
-    return bool(flag)
+) -> set[str]:
+    """Explicit ``agents:`` list, or the engine default only.
+
+    A missing seed is not a wildcard. Class ``enabled_by_default`` must not
+    enable agents in a workspace that never declared a roster.
+    """
+    if seeded_class_names is not None:
+        return set(seeded_class_names)
+    return {default_class_name} if default_class_name else set()
 
 
 def _extract_agent_suggestions(agent_cls: type) -> list[dict] | None:
@@ -270,40 +288,6 @@ def _extract_agent_intents(agent_cls: type) -> list[dict[str, str]] | None:
     return output if output else None
 
 
-def _module_name_from_module_path(module_path: str | None) -> str | None:
-    if not module_path:
-        return None
-    # module_path is a Python module path, module "name" is the top-level package
-    # (e.g. naas_abi_marketplace from naas_abi_marketplace.applications.openrouter)
-    return module_path.split(".", 1)[0] or None
-
-
-def _normalize_logo_path_for_module(logo_url: str, module_name: str) -> str:
-    """
-    Convert absolute/container paths like:
-      /app/libs/.../naas_abi_marketplace/.../logo.png
-    into module-relative paths like:
-      naas_abi_marketplace/.../logo.png
-    """
-    if logo_url.startswith(f"{module_name}/"):
-        return logo_url
-    if logo_url.startswith(f"/{module_name}/"):
-        return logo_url.lstrip("/")
-    idx = logo_url.find(f"{module_name}/")
-    if idx >= 0:
-        return logo_url[idx:]
-    return logo_url.lstrip("/")
-
-
-def _public_modules_url(path: str) -> str:
-    from naas_abi import ABIModule
-
-    public_api_host = ABIModule.get_instance().configuration.global_config.public_api_host
-    if not public_api_host.startswith("https://"):
-        public_api_host = f"https://{public_api_host}"
-    return f"{public_api_host}/modules/{path.lstrip('/')}"
-
-
 def _default_chat_model_id() -> str | None:
     """Canonical id of the engine's default chat model, or None.
 
@@ -356,6 +340,25 @@ def _catalog_model_id_for_provider(provider: str) -> str | None:
     except Exception:
         return None
     return None
+
+
+def _class_declared_model_ids(agent_cls: type | None) -> list[str]:
+    """Chat model ids the agent class can load (``get_chat_model_ids`` / ``MODEL_IDS``)."""
+    if agent_cls is None:
+        return []
+    getter = getattr(agent_cls, "get_chat_model_ids", None)
+    if callable(getter):
+        try:
+            ids = getter()
+        except Exception:
+            ids = None
+        if isinstance(ids, (list, tuple)):
+            return [str(item).strip() for item in ids if str(item).strip()]
+    attr = getattr(agent_cls, "MODEL_IDS", None)
+    if isinstance(attr, (list, tuple)):
+        return [str(item).strip() for item in attr if str(item).strip()]
+    single = _class_declared_model_id(agent_cls)
+    return [single] if single else []
 
 
 def _class_declared_model_id(agent_cls: type | None) -> str | None:
@@ -436,14 +439,13 @@ def _enrich_agent(
 
     # Normalize logo_url to be module-relative, then convert to public /modules URL.
     if isinstance(logo_url, str) and logo_url:
-        module_name = _module_name_from_module_path(module_path)
-        if (
-            module_name
-            and module_name in logo_url
-            and not (logo_url.startswith("http://") or logo_url.startswith("https://"))
-        ):
-            normalized_path = _normalize_logo_path_for_module(logo_url, module_name)
-            logo_url = _public_modules_url(normalized_path)
+        if not (logo_url.startswith("http://") or logo_url.startswith("https://")):
+            abi_module_path = resolve_abi_module_path(module_path)
+            normalized_path = resolve_module_public_asset_path(
+                logo_url,
+                abi_module_path=abi_module_path,
+            )
+            logo_url = public_modules_url(normalized_path)
 
     return replace(
         agent,
@@ -452,6 +454,7 @@ def _enrich_agent(
         logo_url=logo_url,
         intents=intents,
         resolved_model_id=_resolve_agent_model_id(agent, resolved_cls),
+        model_ids=_class_declared_model_ids(resolved_cls) or None,
     )
 
 
@@ -511,6 +514,8 @@ async def _reconcile_workspace_agents(
     * **Create** records for newly discovered agent classes (idempotent under
       the partial unique index on workspace_id + class_name).
     * **Backfill** a missing ``module_path`` on existing records.
+    * **Align** ``enabled`` to the workspace roster on every sync: the
+      ``agents:`` seed when present, otherwise the engine default only.
 
     Returns the reconciled agent list (deleted records removed, created ones
     appended, backfilled ones refreshed).
@@ -535,7 +540,20 @@ async def _reconcile_workspace_agents(
         stale_ids = {agent.id for agent in stale_agents}
         agent_list = [agent for agent in agent_list if agent.id not in stale_ids]
 
-    default_class_name = _get_engine_default_agent_class_name()
+    seed = workspace_seed_for_slug(await _workspace_slug(workspace_id))
+    seeded_class_names: set[str] | None = None
+    if seed is not None and seed.agents is not None:
+        seeded_class_names = resolve_agent_refs(seed.agents, class_name_to_agent_class)
+
+    default_class_name: str | None = None
+    if seed is not None and seed.default_agent:
+        default_class_name = resolve_agent_ref(
+            seed.default_agent, class_name_to_agent_class
+        )
+    if default_class_name is None:
+        default_class_name = _get_engine_default_agent_class_name()
+
+    roster = _workspace_agent_roster(seeded_class_names, default_class_name)
 
     # Persist any newly discovered agent classes to the database.
     for class_name, agent_cls in class_name_to_agent_class.items():
@@ -544,15 +562,7 @@ async def _reconcile_workspace_agents(
 
         name = _get_agent_class_name(agent_cls)
         description = _get_agent_class_description(agent_cls)
-        # Enable engine default (or Abi fallback) plus agents that opt in via
-        # ENABLED_BY_DEFAULT / enabled_by_default. The chat/pane pickers only
-        # list enabled agents, so product agents must opt in or stay invisible.
-        enabled = _agent_enabled_by_default(
-            agent_cls,
-            name=name,
-            class_name=class_name,
-            default_class_name=default_class_name,
-        )
+        enabled = class_name in roster
 
         logger.debug("Creating agent in nexus backend: {}", name)
         system_prompt = _get_agent_system_prompt(agent_cls)
@@ -620,7 +630,24 @@ async def _reconcile_workspace_agents(
                     continue
         reconciled.append(agent)
 
-    # Ensure the engine default agent is enabled and marked as workspace default.
+    aligned: list[AgentRecord] = []
+    for agent in reconciled:
+        if not agent.class_name:
+            aligned.append(agent)
+            continue
+        should_enable = agent.class_name in roster
+        if agent.enabled == should_enable:
+            aligned.append(agent)
+            continue
+        updated = await agent_service.update_agent(
+            context=context,
+            agent_id=agent.id,
+            updates=AgentUpdateInput(enabled=should_enable),
+        )
+        aligned.append(updated if updated is not None else agent)
+    reconciled = aligned
+
+    # Ensure the workspace (or engine) default agent is enabled and marked.
     if default_class_name:
         default_agent = next(
             (agent for agent in reconciled if agent.class_name == default_class_name),

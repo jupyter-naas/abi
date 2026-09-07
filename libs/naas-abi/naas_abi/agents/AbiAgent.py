@@ -171,6 +171,14 @@ Respond only based on what your available agents and tools can actually deliver.
             logger = __import__("logging").getLogger(__name__)
             logger.debug("slides tools unavailable: %s", exc)
 
+        try:
+            from naas_abi.agents.tools.coding_tools import coding_tools
+
+            tools += coding_tools()
+        except Exception as exc:  # noqa: BLE001
+            logger = __import__("logging").getLogger(__name__)
+            logger.debug("coding tools unavailable: %s", exc)
+
         # NOTE: coding-workspace filesystem tools (write_file/read_file/list_dir)
         # are injected generically for every agent via default_tools, so the
         # supervisor and all sub-agents can act on the caller's workspace.

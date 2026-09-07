@@ -21,7 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
-import { useCodeStore } from '@/stores/code';
+import { CODE_FILE_UPDATED_EVENT, useCodeStore } from '@/stores/code';
 
 function timeAgo(iso: string | null | undefined): string {
   if (!iso) return '';
@@ -125,8 +125,40 @@ export default function RepoCodePage() {
   // Publish the browsed ref to the shell status footer (real Forgejo branch).
   useEffect(() => {
     if (!ref) return;
+    useCodeStore.getState().setSelectedRepoId(repoId);
     useCodeStore.getState().setRuntimeMeta({ activeBranch: ref });
-  }, [ref]);
+  }, [ref, repoId]);
+
+  // Ensure local sandbox + sidecar for Abi coding tools (Slides-parity).
+  useEffect(() => {
+    if (!workspaceId || !repoId || !ref) return;
+    useCodeStore.getState().setRuntimeMeta({ sandboxRuntimeStatus: 'ensuring' });
+    void (async () => {
+      try {
+        const res = await authFetch(
+          `/api/coding-environments/sandbox/runtime?workspace_id=${encodeURIComponent(workspaceId)}&repo_id=${encodeURIComponent(repoId)}&branch=${encodeURIComponent(ref)}`,
+          { method: 'POST' },
+        );
+        const data = res.ok
+          ? ((await res.json()) as { sidecar_ready?: boolean; ensured?: boolean })
+          : null;
+        const ready = Boolean(data?.sidecar_ready);
+        useCodeStore.getState().setRuntimeMeta({
+          sandboxRuntimeStatus: ready ? 'ready' : data?.ensured ? 'degraded' : 'error',
+        });
+      } catch {
+        useCodeStore.getState().setRuntimeMeta({ sandboxRuntimeStatus: 'error' });
+      }
+    })();
+  }, [workspaceId, repoId, ref]);
+
+  useEffect(() => {
+    const onUpdated = () => {
+      useCodeStore.getState().bumpRefreshToken();
+    };
+    window.addEventListener(CODE_FILE_UPDATED_EVENT, onUpdated);
+    return () => window.removeEventListener(CODE_FILE_UPDATED_EVENT, onUpdated);
+  }, []);
 
   const loadDir = useCallback(
     async (dirPath: string, atRef: string) => {
@@ -160,6 +192,12 @@ export default function RepoCodePage() {
     if (ref) void loadDir(path, ref);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ref, path]);
+
+  const refreshToken = useCodeStore((s) => s.refreshToken);
+  useEffect(() => {
+    if (!ref || refreshToken === 0) return;
+    void loadDir(path, ref);
+  }, [refreshToken, ref, path, loadDir]);
 
   // Dismiss the clone dropdown with Escape.
   useEffect(() => {

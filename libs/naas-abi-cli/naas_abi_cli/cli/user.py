@@ -99,7 +99,7 @@ def user() -> None:
     type=click.Choice(["api", "postgres"], case_sensitive=False),
     default="api",
     show_default=True,
-    help="api: POST /api/auth/register. postgres: break-glass SQL (Zen ops only).",
+    help="api: POST /api/auth/register. postgres: break-glass SQL (ops VM only).",
 )
 @common_api_options
 def user_create(
@@ -122,7 +122,7 @@ def user_create(
     """Create a user.
 
     API path uses `/api/auth/register` (requires password auth enabled on the
-    Nexus instance). On production Zen where password auth is disabled, use
+    Nexus instance). On production deployments where password auth is disabled, use
     magic-link signup or `--via postgres` on the VM (documented break-glass).
     """
     password_value = user_password or secrets.token_urlsafe(18)

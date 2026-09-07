@@ -1,50 +1,62 @@
 # GoogleSearchAgent
 
 ## What it is
-A thin `IntentAgent` wrapper plus a `create_agent()` factory that builds an agent configured to search the web via **Google Programmable Search Engine**, with additional tools to find **LinkedIn profile** and **LinkedIn organization** pages.
+An `IntentAgent` specialized for web search using **Google Programmable Search Engine**, with additional tools for finding **LinkedIn profile** and **LinkedIn organization** pages. It builds a tool list and intent routing, and injects available tools into its system prompt.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Creates and returns a configured `GoogleSearchAgent`.
-  - Wires up:
-    - Gemini chat model (`google_gemini_2_5_flash`)
-    - Google Programmable Search Engine tools
-    - LinkedIn search workflow tools (profile + organization)
-    - Intent routing to the appropriate tool targets
-  - Applies a system prompt that lists available tools.
-
 - `class GoogleSearchAgent(IntentAgent)`
-  - Concrete agent type returned by `create_agent()`.
-  - No additional behavior beyond `IntentAgent` (empty subclass).
+  - Agent metadata:
+    - `name = "Google_Search"`
+    - `description = "Search the web using Google Programmable Search Engine."`
+    - `avatar_url = "..."`
+    - `system_prompt`: instructions including tool usage rules and result formatting expectations
+    - `suggestions`: UI prompt suggestions for common searches
+  - `@classmethod New(cls, agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> GoogleSearchAgent`
+    - Creates and returns a configured `GoogleSearchAgent`.
+    - Resolves default chat and embedding models from the module engine’s model registry.
+    - Builds tools:
+      - Google Programmable Search Engine integration tools
+      - LinkedIn profile search workflow tools
+      - LinkedIn organization search workflow tools
+    - Configures `Intent` routes to specific tool targets:
+      - Web search → `googlesearch_query`
+      - LinkedIn profile search → `googlesearch_search_linkedin_profile_page`
+      - LinkedIn organization search → `googlesearch_search_linkedin_organization_page`
+    - Replaces `[TOOLS]` in `system_prompt` with a bullet list of `tool.name: tool.description`.
+    - Defaults:
+      - `AgentConfiguration(system_prompt=...)` if not provided
+      - `AgentSharedState(thread_id="0")` if not provided
 
 ## Configuration/Dependencies
-- **Module configuration** (read from `ABIModule.get_instance().configuration`):
+- **Module singleton**
+  - `naas_abi_marketplace.applications.google_search.ABIModule.get_instance()`
+- **Required configuration values** (read from `ABIModule.get_instance().configuration`)
   - `google_custom_search_api_key`
   - `google_custom_search_engine_id`
-
-- **Tools/Workflows instantiated**
-  - `GoogleProgrammableSearchEngineIntegrationConfiguration(api_key, search_engine_id)` via `as_tools(...)`
+- **Model registry dependency**
+  - `abi_module.engine.services.model_registry` must be initialized (asserted)
+  - Uses:
+    - `registry.get_default_chat_model()`
+    - `registry.get_default_embedding_model().model`
+- **Tools and workflows**
+  - `GoogleProgrammableSearchEngineIntegrationConfiguration(api_key, search_engine_id)`
+  - `as_tools(google_programmable_search_engine_integration_config)`
   - `SearchLinkedInProfilePageWorkflow(...).as_tools()`
   - `SearchLinkedInOrganizationPageWorkflow(...).as_tools()`
 
-- **Model**
-  - `naas_abi_marketplace.ai.gemini.models.google_gemini_2_5_flash.model`
-
-- **Intent routing**
-  - Web search intents target tool: `googlesearch_query`
-  - LinkedIn profile search intents target tool: `googlesearch_search_linkedin_profile_page`
-  - LinkedIn organization search intents target tool: `googlesearch_search_linkedin_organization_page`
-
 ## Usage
 ```python
-from naas_abi_marketplace.applications.google_search.agents.GoogleSearchAgent import create_agent
+from naas_abi_marketplace.applications.google_search.agents.GoogleSearchAgent import (
+    GoogleSearchAgent,
+)
 
-agent = create_agent()
+agent = GoogleSearchAgent.New()
 
-# Interact using the IntentAgent interface provided by naas_abi_core.
-# (Exact call methods depend on IntentAgent implementation.)
+# Interact with the agent via the IntentAgent interface (methods depend on naas_abi_core).
+# For example, pass a user message into whatever runner/chat loop your platform provides.
 ```
 
 ## Caveats
-- Requires valid `google_custom_search_api_key` and `google_custom_search_engine_id` in the `ABIModule` configuration; otherwise tool configuration will be incomplete.
-- `GoogleSearchAgent` itself adds no new methods; all behavior comes from `IntentAgent` and the configured tools/intents.
+- `ABIModule.engine.services.model_registry` must be available; otherwise `New()` raises an assertion error.
+- Missing/invalid `google_custom_search_api_key` or `google_custom_search_engine_id` will lead to improperly configured search tools (no validation is performed here).
+- This module defines `New()` (factory) but does not define a `create_agent()` function.

@@ -143,8 +143,6 @@ class Base(DeclarativeBase):
 
 # ============ Async Engine & Session ============
 
-print(f"Database URL: {settings.database_url}")
-
 _is_sqlite = settings.database_url.startswith("sqlite")
 
 _engine_kwargs: dict = {"echo": False, "pool_pre_ping": True}

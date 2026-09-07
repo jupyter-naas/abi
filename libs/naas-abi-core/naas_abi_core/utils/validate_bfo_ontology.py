@@ -630,13 +630,41 @@ _VOCAB_PREFIXES_FOR_RESTRICTIONS = (
 )
 
 
+def _own_namespaces(g: Graph) -> set[str]:
+    """Namespaces of the owl:Ontology subjects declared in this file.
+
+    A module is routinely split across several TTLs in one namespace — a shared
+    vocabulary plus per-process slices that restrict its classes. Each slice is
+    checked on its own, so a class its sibling declares is not in this graph.
+    Those references are reported, but as warnings: an ERROR would block
+    codegen for a file that is in fact well formed.
+    """
+    namespaces = set()
+    for subject in g.subjects(RDF.type, OWL.Ontology):
+        if not isinstance(subject, URIRef):
+            continue
+        text = str(subject)
+        cut = max(text.rfind("/"), text.rfind("#"))
+        if cut > 0:
+            namespaces.add(text[: cut + 1])
+    return namespaces
+
+
 def check_restriction_references(g: Graph) -> list[dict]:
     issues = []
+    own_namespaces = _own_namespaces(g)
     declared_classes = set(_named_classes(g))
     declared_properties = set(_named_object_properties(g))
     declared_data_properties = {
         s for s in g.subjects(RDF.type, OWL.DatatypeProperty) if isinstance(s, URIRef)
     }
+
+    def _severity(iri: URIRef) -> str:
+        """ERROR for a dangling reference, WARNING for a sibling-file one."""
+        text = str(iri)
+        if any(text.startswith(ns) for ns in own_namespaces):
+            return "WARNING"
+        return "ERROR"
 
     def _is_known(iri: URIRef) -> bool:
         s = str(iri)
@@ -657,7 +685,7 @@ def check_restriction_references(g: Graph) -> list[dict]:
                 continue
             issues.append(
                 {
-                    "severity": "ERROR",
+                    "severity": _severity(on_prop),
                     "category": "RESTRICTION_REF",
                     "subject": _short(owner, g) if owner else "unknown",
                     "message": (
@@ -675,7 +703,7 @@ def check_restriction_references(g: Graph) -> list[dict]:
                     continue
                 issues.append(
                     {
-                        "severity": "ERROR",
+                        "severity": _severity(filler),
                         "category": "RESTRICTION_REF",
                     "subject": _short(owner, g) if owner else "unknown",
                     "message": (

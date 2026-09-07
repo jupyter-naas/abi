@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter
 
-if TYPE_CHECKING:    
+if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
 
 
@@ -26,7 +26,6 @@ class Expose(ABC):
         """
         raise NotImplementedError()
 
-    @abstractmethod
     def as_api(
         self,
         router: APIRouter,
@@ -36,20 +35,21 @@ class Expose(ABC):
         description_stream: str = "",
         tags: list[str | Enum] | None = None,
     ) -> None:
-        """Registers API routes for the class's functionality on the provided FastAPI router.
+        """Register HTTP routes on ``router``.
 
-        This method should be implemented by concrete classes to expose their functionality
-        via HTTP endpoints using FastAPI. The method should register routes on the provided
-        router that allow accessing the class's functionality through HTTP requests.
-
-        Args:
-            router (APIRouter): The FastAPI router on which to register the routes
-
-        Returns:
-            None
-
-        Raises:
-            NotImplementedError: If the concrete class does not implement this method
+        The default implementation posts ``run(parameters)`` when that method
+        is a real override with a Pydantic body. Subclasses that need a
+        custom surface override this. Stubs that return None are treated as
+        empty; the kernel then tries the same default and skips if ``run``
+        is not live. See ``naas_abi_core.utils.process_api``.
         """
-        raise NotImplementedError()
-        raise NotImplementedError()
+        from naas_abi_core.utils.process_api import register_run_route
+
+        register_run_route(
+            self,
+            router,
+            route_name=route_name,
+            name=name,
+            description=description,
+            tags=tags,
+        )

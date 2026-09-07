@@ -1,40 +1,40 @@
 # SearchLinkedInProfilePageWorkflow
 
 ## What it is
-A workflow that queries Google Programmable Search Engine for LinkedIn profile page URLs, extracts matching `/in/` profile links via regex, and persists each found profile page record as JSON in object storage.
+A workflow that uses Google Programmable Search Engine to find LinkedIn `/in/` profile page URLs for a given name (optionally scoped by organization), extracts matching links via regex, and saves each found profile page record as JSON in object storage.
 
 ## Public API
-- **`SearchLinkedInProfilePageWorkflowConfiguration` (dataclass)**
+- **`SearchLinkedInProfilePageWorkflowConfiguration` (dataclass, `WorkflowConfiguration`)**
   - Holds workflow configuration:
-    - `integration_config`: `GoogleProgrammableSearchEngineIntegrationConfiguration`
-    - `pattern`: regex used to validate/extract LinkedIn profile URLs (default: `r"https://.+\.linkedin\.[^/]+/in/[^?]+"`)
-    - `datastore_path`: storage path for saved profile JSON files (defaults under `.../linkedin_profile_pages`)
+    - `integration_config`: `GoogleProgrammableSearchEngineIntegrationConfiguration` (required)
+    - `pattern`: regex used to match LinkedIn profile URLs (default: `r"https://.+\.linkedin\.[^/]+/in/[^?]+"`)
+    - `datastore_path`: base path where profile JSON files are saved (defaults to `<ABIModule datastore_path>/linkedin_profile_pages`)
 
-- **`SearchLinkedInProfilePageWorkflowParameters` (pydantic)**
+- **`SearchLinkedInProfilePageWorkflowParameters` (`WorkflowParameters`)**
   - Execution parameters:
-    - `profile_name` (str, required): profile name to search
-    - `organization_name` (str, optional): organization name to include in query
+    - `profile_name` (str, required): name to search for
+    - `organization_name` (str, optional): organization to include in the query
 
-- **`SearchLinkedInProfilePageWorkflow` (class)**
-  - `__init__(configuration)`: builds the Google search integration and storage utility.
+- **`SearchLinkedInProfilePageWorkflow` (`Workflow`)**
+  - `__init__(configuration)`: initializes the Google search integration and `StorageUtils`.
   - `search_linkedin_profile_page(parameters) -> list[dict]`:
-    - Builds a search query from `profile_name` (+ optional `organization_name`) with `LinkedIn profile site:linkedin.com`
-    - Calls the integration query
-    - Filters results matching `configuration.pattern`
-    - Extracts `profile_id` from the `/in/{profile_id}` URL segment
-    - Persists each result as `{profile_id}.json` under `datastore_path/{profile_id}/`
-    - Returns a list of page records with keys: `title`, `link`, `description`, `cse_image`
+    - Builds a Google query from `profile_name` and optional `organization_name`
+    - Calls `GoogleProgrammableSearchEngineIntegration.query(query)`
+    - Filters results whose `link` matches `configuration.pattern`
+    - Extracts `profile_id` from the URL segment after `/in/`
+    - Saves a JSON file at: `datastore_path/<profile_id>/<profile_id>.json`
+    - Returns a list of dicts: `title`, `link`, `description`, `cse_image`
   - `as_tools() -> list[BaseTool]`:
-    - Exposes the workflow as a LangChain `StructuredTool` named `googlesearch_search_linkedin_profile_page`
-  - `as_api(...) -> None`:
-    - Present but does not register any routes (no-op)
+    - Exposes a LangChain `StructuredTool` named `googlesearch_search_linkedin_profile_page`.
+  - `as_api(router, ...) -> None`:
+    - Present but does not register routes (no implementation beyond defaulting `tags`).
 
 ## Configuration/Dependencies
-- **Integration**
-  - `GoogleProgrammableSearchEngineIntegration` configured via `GoogleProgrammableSearchEngineIntegrationConfiguration`
-- **Storage**
-  - Uses `StorageUtils` backed by `ABIModule.get_instance().engine.services.object_storage`
-  - Default `datastore_path` derives from `ABIModule.get_instance().configuration.datastore_path`
+- **Google search integration**
+  - `GoogleProgrammableSearchEngineIntegration` configured by `GoogleProgrammableSearchEngineIntegrationConfiguration`.
+- **Object storage**
+  - Uses `StorageUtils` backed by `ABIModule.get_instance().engine.services.object_storage`.
+  - Default `datastore_path` uses `ABIModule.get_instance().configuration.datastore_path`.
 
 ## Usage
 ```python
@@ -48,24 +48,25 @@ from naas_abi_marketplace.applications.google_search.integrations.GoogleProgramm
 )
 
 integration_config = GoogleProgrammableSearchEngineIntegrationConfiguration(
-    # fill with required integration settings
+    # provide required integration settings
 )
 
-wf = SearchLinkedInProfilePageWorkflow(
+workflow = SearchLinkedInProfilePageWorkflow(
     SearchLinkedInProfilePageWorkflowConfiguration(integration_config=integration_config)
 )
 
-results = wf.search_linkedin_profile_page(
+pages = workflow.search_linkedin_profile_page(
     SearchLinkedInProfilePageWorkflowParameters(
         profile_name="Ada Lovelace",
         organization_name="Example Corp",
     )
 )
 
-print(results)
+print(pages)
 ```
 
 ## Caveats
-- Only URLs matching the configured regex `pattern` are returned and saved.
-- `as_api(...)` is a no-op; this workflow does not expose HTTP endpoints via FastAPI in its current implementation.
-- Saving depends on `ABIModule` being initialized with a working object storage service and datastore path.
+- Only results whose URL matches `configuration.pattern` are returned/saved.
+- `profile_id` is parsed from the URL using `url.split("/in/")[-1]...`; unexpected LinkedIn URL formats may not parse as intended.
+- Persistence requires `ABIModule` to be initialized with a working object storage service and configured `datastore_path`.
+- `as_api(...)` does not currently expose any HTTP endpoints.

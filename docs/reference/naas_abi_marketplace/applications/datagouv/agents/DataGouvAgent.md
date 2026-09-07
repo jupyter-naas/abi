@@ -1,45 +1,50 @@
 # DataGouvAgent
 
 ## What it is
-- An `IntentAgent` wrapper configured to provide **general guidance** about DataGouv (French open data platform) and dataset discovery.
-- Ships with **no tools** configured; it cannot fetch datasets or perform actions.
+- An `IntentAgent` specialized for **general guidance** about DataGouv (open data/public datasets) and dataset discovery.
+- **No tools are configured**, so it cannot retrieve datasets or perform external actions.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Factory that builds and returns a configured `DataGouvAgent`.
-  - Sets:
-    - `name`: `"DataGouv"`
-    - `description`: guidance-focused description
-    - `system_prompt`: constraints and operating guidelines
-    - `tools`: empty list
-    - `intents`: two RAW intents (feature info; open data/dataset discovery)
-    - `state`: provided or new `AgentSharedState`
-    - `configuration`: provided or new `AgentConfiguration(system_prompt=SYSTEM_PROMPT)`
-    - `memory`: `None`
-
 - `class DataGouvAgent(IntentAgent)`
-  - Concrete agent type; does not add behavior beyond `IntentAgent`.
+  - Agent definition with built-in:
+    - `name = "DataGouv"`
+    - `description = "Helps you interact with DataGouv for open data and public datasets."`
+    - `system_prompt` describing scope/constraints (guidance only; no tools)
+    - `suggestions = []`
+
+- `DataGouvAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> DataGouvAgent`
+  - Factory method that:
+    - Resolves default models via the application `ABIModule` model registry:
+      - `chat_model = registry.get_default_chat_model()`
+      - `embedding_model = registry.get_default_embedding_model().model`
+    - Sets `tools = []` (no tool access)
+    - Configures two RAW intents:
+      - “Get information about DataGouv features”
+      - “Understand open data and dataset discovery”
+    - Defaults:
+      - `AgentConfiguration(system_prompt=DataGouvAgent.system_prompt)` if not provided
+      - `AgentSharedState(thread_id="0")` if not provided
+    - Returns an initialized `DataGouvAgent` with `memory=None`
 
 ## Configuration/Dependencies
 - Depends on `naas_abi_core.services.agent.IntentAgent`:
   - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
-- Chat model dependency:
-  - `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1.model` (used as `model.model`)
-- Agent constants:
-  - `NAME`, `DESCRIPTION`, `SYSTEM_PROMPT`, `SUGGESTIONS` (empty list)
+- Depends on the DataGouv application module:
+  - `from naas_abi_marketplace.applications.datagouv import ABIModule`
+  - Requires `ABIModule.get_instance().engine.services.model_registry` to be initialized
+  - Raises via `assert` if the model registry is missing: `"ModelRegistryService not initialized"`
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.datagouv.agents.DataGouvAgent import create_agent
+from naas_abi_marketplace.applications.datagouv.agents.DataGouvAgent import DataGouvAgent
 
-agent = create_agent()
-
+agent = DataGouvAgent.New()
 # Use `agent` with your host framework's execution/chat loop for IntentAgent instances.
-# Note: no tools are configured, so it will only provide general guidance.
 ```
 
 ## Caveats
-- No DataGouv tools are configured (`tools = []`), so the agent:
-  - cannot retrieve datasets,
-  - cannot perform external actions,
-  - can only provide general information and guidance per `SYSTEM_PROMPT`.
+- `tools` is an empty list, so the agent:
+  - cannot fetch DataGouv datasets,
+  - cannot perform external operations,
+  - must remain within guidance-only constraints defined in `system_prompt`.
+- `DataGouvAgent.New()` requires a properly initialized `ABIModule` engine/model registry; otherwise it will assert.

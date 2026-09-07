@@ -107,6 +107,7 @@ services:
       - NEXUS_INTERNAL_API_URL=http://abi:9879
       - NEXT_PUBLIC_SITE_URL=https://${PUBLIC_WEB_HOST}
       - NEXT_PUBLIC_WS_PATH=/ws/socket.io
+      - ABI_API_KEY=${ABI_API_KEY}
     networks:
       - abi-network
 
@@ -122,6 +123,7 @@ services:
       - PUBLIC_API_HOST=${PUBLIC_API_HOST:-api.localhost}
 
       - HEADSCALE_SERVER_URL=${HEADSCALE_SERVER_URL:-headscale.localhost}
+      - ABI_API_KEY=${ABI_API_KEY}
 
     volumes:
       - ./.deploy/docker/Caddyfile:/etc/caddy/Caddyfile:ro

@@ -1,87 +1,103 @@
 # ontology_interface
 
 ## What it is
-A Streamlit app that discovers Turtle (`.ttl`) files in the repository, parses them with `rdflib`, and renders an interactive knowledge-graph visualization using NetworkX + PyVis (VisJS).
+A Streamlit app that:
+- Discovers Turtle (`.ttl`) files under the project root.
+- Parses selected files with `rdflib`.
+- Builds a graph (NetworkX) and renders an interactive visualization using PyVis/VisJS.
+
+The module is primarily a Streamlit script; UI code runs at import/run time.
 
 ## Public API
-This module is primarily a Streamlit script (executed on import/run). It exposes these reusable functions:
+Reusable functions defined in this module:
 
 - `discover_ttl_files() -> list[dict]`
-  - Recursively finds `*.ttl` files under the project root (relative to this file), skipping hidden paths.
-  - Returns file metadata: `path`, `full_path`, `name`, `module`, `category`, `size`.
+  - Recursively finds `*.ttl` under the computed project root (`Path(__file__).parent.parent.parent.parent`).
+  - Skips any hidden path segments (parts starting with `.`).
+  - Returns sorted metadata dicts: `path`, `full_path`, `name`, `module`, `category`, `size`.
 
 - `get_module_from_path(path: str) -> str`
-  - Extracts the module name from a path containing `modules/<module>/...`; otherwise returns `"core"`.
+  - Extracts module name from paths containing `modules/<module>/...`.
+  - Returns `"core"` if no module segment is found.
 
 - `get_category_from_path(path: str) -> str`
-  - Categorizes TTL files based on path patterns:
-    - `"domain-experts"` → `Domain Experts`
-    - `"core/modules"` → `Core Modules`
-    - `"marketplace"` → `Marketplace`
-    - else → `Other`
+  - Categorizes a TTL file by substring checks:
+    - contains `"domain-experts"` → `Domain Experts`
+    - contains `"core/modules"` → `Core Modules`
+    - contains `"marketplace"` → `Marketplace`
+    - otherwise → `Other`
 
-- `parse_ttl_file(file_path: str) -> dict` *(cached via `@st.cache_data`)*
-  - Parses a Turtle file and returns:
-    - `triples`: list of dicts with `subject`, `predicate`, `object`, `subject_type`, `object_type`
-    - `namespaces`: namespace prefix map
-    - `count`: triple count
-  - On error, returns `error` plus empty results.
+- `parse_ttl_file(file_path: str) -> dict` (cached via `@st.cache_data`)
+  - Parses a Turtle file into:
+    - `triples`: list of `{subject, predicate, object, subject_type, object_type}`
+    - `namespaces`: `dict` of parsed namespaces (`Graph().namespaces()`)
+    - `count`: number of triples
+  - On exception returns: `error`, and empty `triples/namespaces`, `count=0`.
 
 - `get_node_type(node) -> str`
-  - Classifies RDF nodes: `URI`, `Literal`, `BlankNode`, or `Unknown`.
+  - Classifies RDF nodes as: `URI`, `Literal`, `BlankNode`, or `Unknown`.
 
 - `create_knowledge_graph(selected_files: list[dict], max_nodes: int = 500) -> tuple`
-  - Builds a NetworkX graph from parsed triples (skips triples whose object is a `Literal`).
-  - Limits processing roughly to `max_nodes * 3` triples and stops when nodes exceed `max_nodes`.
+  - Parses selected TTL files (using `parse_ttl_file`) until a rough triple limit (`max_nodes * 3`).
+  - Builds a NetworkX `nx.Graph()` from triples:
+    - Skips triples where `object_type == "Literal"`.
+    - Adds edges with `label=get_short_name(predicate)`.
+    - Stops adding when node count exceeds `max_nodes`.
+  - Produces a `pyvis.network.Network(directed=True)` with physics options and node styling.
   - Returns `(net, file_stats, node_count, edge_count)` where:
-    - `net` is a `pyvis.network.Network` ready to export to HTML
-    - `file_stats` maps file name → `{triples, category}`
+    - `file_stats[file_name] = {"triples": parsed_count, "category": file_category}`
 
 - `get_short_name(uri: str) -> str`
-  - Shortens a URI by taking the fragment after `#` or the last path segment after `/`.
+  - Shortens by fragment (`#...`) or last path segment (`/...`), else truncates to 50 chars.
 
 - `get_node_color(uri: str, category_colors: dict) -> str`
-  - Returns a hex color based on simple substring checks for namespaces (e.g., `abi:`, `rdf:`, `owl:`).
-  - Note: `category_colors` is accepted but not used in the current implementation.
+  - Returns a hex color based on substring matches in the URI:
+    - contains `abi:` or `abi.com` → red
+    - contains `rdfs:` or `rdf:` → teal
+    - contains `owl:` → blue
+    - contains `foaf:` → green
+    - otherwise → light salmon
+  - Note: `category_colors` is accepted but not used.
 
 ## Configuration/Dependencies
-- Runtime environment:
-  - `streamlit`
-  - `pandas`
-  - `rdflib`
-  - `networkx`
-  - `pyvis`
+- Python packages:
+  - `streamlit`, `pandas`, `rdflib`, `networkx`, `pyvis`
 - Filesystem assumptions:
-  - The “project root” is computed as `Path(__file__).parent.parent.parent.parent` and scanned recursively for `*.ttl`.
-  - Optional `SOP.md` is expected alongside this script for the SOP page.
-- Streamlit settings:
-  - `st.set_page_config(page_title="ABI Ontology Explorer", layout="wide")`
-  - Session keys used: `ontology_data`, `selected_files`, `graph_html`, `page`.
+  - Project root is computed relative to this file and scanned recursively for `*.ttl`.
+  - Optional `SOP.md` is expected in the same directory for the SOP page.
+- Streamlit behavior:
+  - `st.set_page_config(page_title="ABI Ontology Explorer", page_icon="🕸️", layout="wide")`
+  - Session state keys used: `ontology_data`, `selected_files`, `graph_html`, `page`
 
 ## Usage
-### Run as a Streamlit app
-From the repository context, run Streamlit pointing at this file:
 
+### Run the Streamlit app
 ```bash
 streamlit run libs/naas-abi-marketplace/naas_abi_marketplace/__demo__/apps/ontology-mode/ontology_interface.py
 ```
 
-### Reuse core functions (non-UI)
-You can import and call functions, but note that importing executes Streamlit UI code in this module.
+### Reuse functions (non-UI)
+Importing this module will execute Streamlit UI code; reuse is best done in a Streamlit context.
 
 ```python
 from naas_abi_marketplace.__demo__.apps.ontology_mode.ontology_interface import (
-    discover_ttl_files, create_knowledge_graph
+    discover_ttl_files,
+    create_knowledge_graph,
 )
 
 ttl_files = discover_ttl_files()
 net, file_stats, node_count, edge_count = create_knowledge_graph(ttl_files[:2], max_nodes=100)
+
 net.save_graph("graph.html")
-print(node_count, edge_count, file_stats)
+print(node_count, edge_count)
+print(file_stats)
 ```
 
 ## Caveats
-- This file is a Streamlit script; importing it will run UI setup and page logic.
-- Visualization omits triples where the object is a `Literal` (for a “cleaner” graph).
-- Graph size is bounded by `max_nodes` and an internal triple processing limit (`max_nodes * 3`), which may truncate larger ontologies.
-- `Network(directed=True)` is set, but the underlying NetworkX graph is `nx.Graph()` (undirected), so directionality is not represented in the NetworkX structure.
+- This is a Streamlit script: importing it triggers UI initialization and page logic.
+- Literal objects are excluded from the visualization (`object_type == "Literal"`).
+- Graph size is bounded:
+  - Only up to ~`max_nodes * 3` triples are processed.
+  - Node insertion stops when node count exceeds `max_nodes`.
+- Directionality mismatch:
+  - PyVis network is created with `directed=True`, but the underlying NetworkX graph is `nx.Graph()` (undirected).

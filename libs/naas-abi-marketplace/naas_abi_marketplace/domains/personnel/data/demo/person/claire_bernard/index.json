@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-08-19 17:25",
+  "person": {
+    "first_name": "Claire",
+    "last_name": "Bernard",
+    "full_name": "Claire Bernard",
+    "linkedin_profile_url": "https://demo.example/profiles/claire_bernard"
+  },
+  "records": [
+    {
+      "process_type": "ActOfWorking",
+      "organization": "Demo",
+      "title": "CTO",
+      "contract_type": null,
+      "site": "France",
+      "start": "2023-04-01",
+      "end": null,
+      "duration": "3 yrs",
+      "mission_label": "Own platform architecture and engineering for Demo.",
+      "mission": "Own platform architecture and engineering for Demo.",
+      "skills": [
+        "Kubernetes",
+        "Python"
+      ],
+      "source": "https://demo.example/profiles/claire_bernard"
+    },
+    {
+      "process_type": "ActOfWorking",
+      "organization": "Nexus Labs",
+      "title": "CTO",
+      "contract_type": null,
+      "site": "France",
+      "start": "2021-06-01",
+      "end": "2023-04-30",
+      "duration": "2 yrs",
+      "mission_label": "Led engineering for an automation services startup.",
+      "mission": "Led engineering for an automation services startup.",
+      "skills": [
+        "DevOps",
+        "Python"
+      ],
+      "source": "https://demo.example/profiles/claire_bernard"
+    },
+    {
+      "process_type": "ActOfWorking",
+      "organization": "Cloud Partners",
+      "title": "Cloud Engineer",
+      "contract_type": "Freelance",
+      "site": "Paris",
+      "start": "2020-02-01",
+      "end": "2021-06-30",
+      "duration": "1 yr",
+      "mission_label": "Consulted on Kubernetes and CI/CD implementations.",
+      "mission": "Consulted on Kubernetes and CI/CD implementations.",
+      "skills": [
+        "Kubernetes",
+        "Terraform"
+      ],
+      "source": "https://demo.example/profiles/claire_bernard"
+    }
+  ]
+}

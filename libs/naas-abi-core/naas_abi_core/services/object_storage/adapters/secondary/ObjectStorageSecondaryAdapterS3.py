@@ -229,6 +229,41 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
                             queue.put(prefix_key)
         return objects
 
+    def list_objects_recursive(
+        self, prefix: str, queue: Queue | None = None
+    ) -> list[str]:
+        """List every object at or beneath *prefix*, at any nesting depth.
+
+        Args:
+            prefix (str): Prefix/folder path to walk
+
+        Returns:
+            list[str]: Object keys at any depth. No ``Delimiter`` is sent, so S3
+                returns the flattened subtree and never a CommonPrefixes entry,
+                which is why no directory placeholders can appear here.
+        """
+        self.__object_exists(prefix)
+
+        objects = []
+        paginator = self.s3_client.get_paginator("list_objects_v2")
+
+        for page in paginator.paginate(
+            Bucket=self.bucket_name,
+            Prefix=self.__get_full_key(prefix),
+        ):
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                if self.base_prefix:
+                    key = key.replace(f"{self.base_prefix}/", "", 1)
+                # A zero-byte marker object whose key ends in "/" is how some
+                # tools represent a folder; it is not a retrievable object.
+                if key == "" or key.endswith("/"):
+                    continue
+                objects.append(key)
+                if queue:
+                    queue.put(key)
+        return objects
+
     def get_object_metadata(self, prefix: str, key: str) -> ObjectMetaData:
         """Get object metadata from S3.
 

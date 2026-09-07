@@ -25,7 +25,7 @@ _UNSET: Any = object()
 
 # Dedicated named graph for the recent-posts count triples (mirrors
 # XCountRecentTweetsPipeline). Kept here so the count helpers below stay in one
-# place shared by the count schedule and the search orchestration's count opt-in.
+# place shared by search/event orchestrations when count_recent_tweets is enabled.
 _COUNT_GRAPH_NAME = "http://ontology.naas.ai/graph/x_recent_posts_count"
 
 # Dagster run statuses that mean "a run is still pending or in flight". Used to
@@ -53,13 +53,16 @@ def launchpad_override(op_cfg: dict, key: str, default_value):
     return value
 
 
-def has_in_progress_run(context: dg.SensorEvaluationContext, job_name: str) -> bool:
+def has_in_progress_run(
+    context: dg.SensorEvaluationContext | dg.ScheduleEvaluationContext,
+    job_name: str,
+) -> bool:
     """True iff a run for *job_name* is still queued/starting/running."""
     return count_in_progress_runs(context, job_name, limit=1) > 0
 
 
 def count_in_progress_runs(
-    context: dg.SensorEvaluationContext,
+    context: dg.SensorEvaluationContext | dg.ScheduleEvaluationContext,
     job_name: str,
     *,
     limit: int | None = None,
@@ -68,6 +71,7 @@ def count_in_progress_runs(
 
     Pass *limit* to short-circuit once enough in-flight runs are found (e.g.
     stop after ``max_concurrent_runs`` when only checking capacity).
+    Accepts either evaluation context — both expose ``.instance``.
     """
     runs = context.instance.get_runs(
         filters=dg.RunsFilter(
@@ -192,8 +196,9 @@ def run_search_workflow_for_filter(
     graph mapping is **not** done here — each saved envelope's ObjectPut event
     drives XSearchRecentTweetsEventOrchestration to map it (or a caller maps them
     inline via :func:`run_search_and_map_for_query`). When ``count_recent_tweets``
-    is set on the filter (or the launchpad), the recent-post count is followed and
-    the Recent Tweets dashboard republished on the same tick.
+    is set on the filter (or the launchpad), the recent-post count is followed on
+    the same tick; the Recent Tweets dashboard is republished only when
+    ``app_publish`` is set (off by default — ``x_build_app_x_proxy`` owns that).
 
     Pass ``max_pages`` explicitly (including ``None`` for an unbounded sweep) to
     override the filter/launchpad value — ``launchpad_override`` coerces a ``None``
@@ -304,22 +309,33 @@ def run_search_workflow_for_filter(
                 f"follow-up failed ({exc}); search envelopes were still saved"
             )
 
-    try:
-        publish = publish_x_app(module)
-        if publish.get("skipped"):
-            logger.debug(
-                f"run_search_workflow_for_filter[{filter_config.name}]: "
-                f"app publish skipped ({publish.get('reason')})"
+    # Republishing the app reads the whole graph and re-renders every snapshot,
+    # so it dominates the tick and grows with the graph — opt-in per filter, and
+    # off by default. The hourly x_build_app_x_proxy schedule publishes from the same
+    # state, so leaving this off costs at most an hour of dashboard staleness.
+    app_publish = launchpad_override(op_cfg, "app_publish", filter_config.app_publish)
+    if app_publish:
+        try:
+            publish = publish_x_app(module, enabled=True)
+            if publish.get("skipped"):
+                logger.debug(
+                    f"run_search_workflow_for_filter[{filter_config.name}]: "
+                    f"app publish skipped ({publish.get('reason')})"
+                )
+            else:
+                logger.info(
+                    f"run_search_workflow_for_filter[{filter_config.name}]: "
+                    f"republished X app ({publish.get('queries') or publish.get('queries_published')})"
+                )
+        except Exception as exc:  # noqa: BLE001 — never fail the search on publish
+            logger.warning(
+                f"run_search_workflow_for_filter[{filter_config.name}]: app "
+                f"republish failed ({exc}); search envelopes were still saved"
             )
-        else:
-            logger.info(
-                f"run_search_workflow_for_filter[{filter_config.name}]: "
-                f"republished X app ({publish.get('queries') or publish.get('queries_published')})"
-            )
-    except Exception as exc:  # noqa: BLE001 — never fail the search on publish
-        logger.warning(
-            f"run_search_workflow_for_filter[{filter_config.name}]: app "
-            f"republish failed ({exc}); search envelopes were still saved"
+    else:
+        logger.debug(
+            f"run_search_workflow_for_filter[{filter_config.name}]: app publish "
+            f"skipped (app_publish=false); x_build_app_x_proxy republishes on its schedule"
         )
 
     return file_paths
@@ -363,7 +379,7 @@ def run_search_and_map_for_query(
     }
 
 
-# ----- Recent-post COUNT helpers (shared by both orchestrations) -------------
+# ----- Recent-post COUNT helpers ---------------------------------------------
 
 
 def followed_count_entries(module) -> list[dict]:
@@ -371,9 +387,8 @@ def followed_count_entries(module) -> list[dict]:
 
     The union of enabled ``count_recent_tweets_workflow`` entries and any
     ``search_recent_tweets_workflow`` filter that opts in via
-    ``count_recent_tweets: true`` — deduped by query string. Both the count
-    schedule and the search orchestration publish this same full list so the
-    app catalog stays complete regardless of which one runs.
+    ``count_recent_tweets: true`` — deduped by query string. Search and event
+    orchestrations publish this same full list so the app catalog stays complete.
     """
     entries: list[dict] = []
     seen: set[str] = set()
@@ -425,6 +440,10 @@ def run_count_for_query(module, query: str) -> dict:
         XCountRecentTweetsWorkflowConfiguration(
             x_integration=x_integration,
             object_storage=module.engine.services.object_storage,
+            # Required: the fetch window is resolved from graph state (newest
+            # mapped tweet + the hours already counted). Without it the
+            # workflow has no ingestion front to follow and counts nothing.
+            triple_store=module.engine.services.triple_store,
         )
     )
     pipeline = XCountRecentTweetsPipeline(
@@ -445,7 +464,36 @@ def run_count_for_query(module, query: str) -> dict:
             logger.warning(
                 f"run_count_for_query[{query!r}]: failed to map {file_path!r} ({exc})"
             )
-    return {"query": query, "buckets": output.get("total_buckets", 0), "mapped": mapped}
+
+    # The in-progress hour goes through the pipeline's partial slot, which the
+    # refresh overwrites. Routing it through the loop above would park a
+    # non-final count in that hour's deduped IRI and freeze it there.
+    partial_mapped = 0
+    for entry in output.get("partial_file_paths", []):
+        file_path = entry.get("file_path")
+        if not file_path:
+            continue
+        try:
+            pipeline.run(
+                XCountRecentTweetsPipelineParameters(
+                    file_path=file_path,
+                    partial=True,
+                    partial_end=entry.get("window_end"),
+                )
+            )
+            partial_mapped += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"run_count_for_query[{query!r}]: failed to map partial "
+                f"{file_path!r} ({exc})"
+            )
+
+    return {
+        "query": query,
+        "buckets": output.get("total_buckets", 0),
+        "mapped": mapped,
+        "partial_mapped": partial_mapped,
+    }
 
 
 def x_app_publish_enabled(module) -> bool:
@@ -456,28 +504,105 @@ def x_app_publish_enabled(module) -> bool:
     return bool(getattr(app_cfg, "publish", True))
 
 
-def publish_x_app(module, *, enabled: bool | None = None) -> dict:
+def publish_x_app(
+    module, *, enabled: bool | None = None, full_users: bool = False
+) -> dict:
     """(Re)publish the X app dashboard + snapshots for all followed queries.
 
     When *enabled* is set (event/files ``app_publish``), that value wins.
     When *enabled* is ``None`` (count / search workflow), module
     ``app.publish`` applies (default true).
+
+    *full_users* forces a complete rebuild of the Users dataset instead of only
+    the shards whose authors changed since the last publish.
     """
     allow = bool(enabled) if enabled is not None else x_app_publish_enabled(module)
     if not allow:
-        reason = (
-            "app_publish=false"
-            if enabled is not None
-            else "app.publish=false"
-        )
+        reason = "app_publish=false" if enabled is not None else "app.publish=false"
         logger.info(f"publish_x_app: skipped ({reason})")
         return {"skipped": True, "reason": reason}
 
-    from naas_abi_marketplace.applications.x.apps.x.hub import XAppHubBuilder
+    from naas_abi_marketplace.applications.x.apps.x_proxy.hub import XAppHubBuilder
+
+    # Bring the columnar projection level with the envelope archive first, so the
+    # snapshots below read a view that includes this tick's ingest.
+    projection = refresh_x_cache(module)
 
     hub = XAppHubBuilder(
         module.engine.services.object_storage,
         module.engine.services.triple_store,
         namespace=module.configuration.ontology_namespace,
     )
-    return hub.publish(followed_count_entries(module))
+    published = hub.publish(followed_count_entries(module), full_users=full_users)
+    if projection is not None:
+        published = {**published, "projection": projection}
+    return published
+
+
+def refresh_x_cache(module, *, full: bool = False) -> dict | None:
+    """Update the Parquet projection from any envelopes written since last time.
+
+    Returns the refresh summary, or ``None`` when the projection is unavailable
+    (polars not installed, object storage unreachable). A failure here must never
+    fail the publish: the snapshots fall back to SPARQL, which is what ran before
+    the projection existed.
+    """
+    try:
+        from naas_abi_marketplace.applications.x.apps.x_proxy.cache import refresh
+    except ImportError as exc:
+        logger.info(f"refresh_x_cache: projection unavailable ({exc})")
+        return None
+    try:
+        kv = getattr(module.engine.services, "kv", None)
+    except Exception:  # noqa: BLE001 — kv is optional; the watermark degrades to a rescan
+        kv = None
+    try:
+        return refresh(module.engine.services.object_storage, kv, full=full)
+    except Exception as exc:  # noqa: BLE001 — degrade to the SPARQL path
+        logger.warning(
+            f"refresh_x_cache: refresh failed ({exc}) — snapshots use SPARQL"
+        )
+        return None
+
+
+def republish_x_app_after_pipeline(
+    module,
+    *,
+    source: str,
+    app_publish: bool,
+    ran: bool = True,
+) -> dict:
+    """Rebuild the X app dataset after a XSearchRecentTweetsPipeline run.
+
+    Every orchestration that maps envelopes into the graph calls this, so the
+    published dataset the app serves is refreshed on the same tick the graph
+    changed — the app does no SPARQL of its own, so an un-run publish is the
+    only way the dashboard can go stale.
+
+    Never raises: a failed publish is logged and reported in the returned
+    summary, but ingestion is what the run is for and must not be undone by a
+    storage hiccup. *ran* false means the pipeline was not invoked at all (an
+    empty sweep), in which case there is nothing new to publish.
+    """
+    if not ran:
+        logger.info(f"{source}: pipeline did not run; no republish needed")
+        return {"skipped": True, "reason": "pipeline did not run"}
+    if not app_publish:
+        logger.info(f"{source}: app_publish=false; skipped republish")
+        return {"skipped": True, "reason": "app_publish=false"}
+    try:
+        publish = publish_x_app(module, enabled=True)
+    except Exception as exc:  # noqa: BLE001 — never fail ingestion on publish
+        logger.warning(
+            f"{source}: app republish failed ({exc}); the graph was still "
+            f"updated, so the next run will pick this up"
+        )
+        return {"failed": True, "error": str(exc)}
+    if publish.get("skipped"):
+        logger.info(f"{source}: app publish skipped ({publish.get('reason')})")
+    else:
+        logger.info(
+            f"{source}: republished X app "
+            f"({publish.get('queries') or publish.get('queries_published')})"
+        )
+    return publish

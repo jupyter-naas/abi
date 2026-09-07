@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-07-31 11:44",
+  "records": [
+    {
+      "notification": "Invoice awaiting approval",
+      "event": "Approval requested",
+      "channel": "Email",
+      "recipients": "Assigned approver",
+      "frequency": "Immediate",
+      "status": "Active"
+    },
+    {
+      "notification": "Approval overdue",
+      "event": "SLA breached",
+      "channel": "Email + in-app",
+      "recipients": "Approver, Finance Manager",
+      "frequency": "Daily at 08:00",
+      "status": "Active"
+    },
+    {
+      "notification": "Payment run released",
+      "event": "Payment run approved",
+      "channel": "Email",
+      "recipients": "Treasury team",
+      "frequency": "Immediate",
+      "status": "Active"
+    },
+    {
+      "notification": "Bank feed failure",
+      "event": "Synchronization failed",
+      "channel": "Email + in-app",
+      "recipients": "Administrators",
+      "frequency": "Immediate",
+      "status": "Active"
+    },
+    {
+      "notification": "Period ready to close",
+      "event": "Close checklist complete",
+      "channel": "In-app",
+      "recipients": "Finance Manager",
+      "frequency": "Immediate",
+      "status": "Active"
+    },
+    {
+      "notification": "Close deadline approaching",
+      "event": "Two business days to deadline",
+      "channel": "Email",
+      "recipients": "Close owners",
+      "frequency": "Daily at 08:00",
+      "status": "Active"
+    },
+    {
+      "notification": "Unbalanced entry rejected",
+      "event": "Validation rule blocked a posting",
+      "channel": "In-app",
+      "recipients": "Preparer",
+      "frequency": "Immediate",
+      "status": "Active"
+    },
+    {
+      "notification": "Weekly cash digest",
+      "event": "Scheduled report",
+      "channel": "Email",
+      "recipients": "CFO, Treasury team",
+      "frequency": "Monday at 07:00",
+      "status": "Active"
+    },
+    {
+      "notification": "Monthly management report",
+      "event": "Scheduled report",
+      "channel": "Email",
+      "recipients": "Executive committee",
+      "frequency": "5th business day",
+      "status": "Active"
+    },
+    {
+      "notification": "New user invited",
+      "event": "User created",
+      "channel": "Email",
+      "recipients": "Invited user",
+      "frequency": "Immediate",
+      "status": "Active"
+    },
+    {
+      "notification": "Role changed",
+      "event": "Permissions updated",
+      "channel": "In-app",
+      "recipients": "Administrators",
+      "frequency": "Immediate",
+      "status": "Paused"
+    }
+  ]
+}

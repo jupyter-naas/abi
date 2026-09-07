@@ -67,7 +67,7 @@ function isBrowserPublicOrigin(): boolean {
 
 /**
  * Last-resort API URL when runtime-config and NEXT_PUBLIC_* are missing on a
- * public origin. Matches Zen / Nexus hostname convention: api.<frontend-host>.
+ * public origin. Matches Nexus hostname convention: api.<frontend-host>.
  */
 function derivePublicApiUrl(): string {
   const { protocol, hostname } = window.location;
@@ -87,7 +87,7 @@ function getResolvedApiUrl(defaultValue: string): string {
 
   // Next.js can evaluate client modules before /runtime-config.js runs. On a
   // public origin, never use loopback or another product's baked default
-  // (e.g. api.nexus.naas.ai while serving zen.naas.ai).
+  // (e.g. api.other.example.com while serving app.example.com).
   if (isBrowserPublicOrigin()) {
     const derived = derivePublicApiUrl();
     if (defaultValue !== derived) {

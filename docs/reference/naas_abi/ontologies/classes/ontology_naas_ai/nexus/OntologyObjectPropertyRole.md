@@ -16,7 +16,7 @@
 
 ## Usage
 ```python
-from naas_abi.ontologies.classes.ontology_naas_ai.nexus.OntologyObjectPropertyRole import (
+from naas_abi.ontologies.classes.ontology_demo.nexus.OntologyObjectPropertyRole import (
     OntologyObjectPropertyRole,
 )
 

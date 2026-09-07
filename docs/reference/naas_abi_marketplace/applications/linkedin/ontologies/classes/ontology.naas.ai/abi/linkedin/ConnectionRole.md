@@ -1,19 +1,19 @@
 # ConnectionRole
 
 ## What it is
-- A thin subclass wrapper around `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.ConnectionRole`.
-- Provides an `actions()` hook intended for custom logic (currently unimplemented).
+- A thin subclass of the upstream LinkedIn ontology class `ConnectionRole`.
+- Provides an `actions()` hook method intended for custom logic.
 
 ## Public API
 - `class ConnectionRole(_ConnectionRole)`
-  - Subclasses the imported LinkedIn ontology `ConnectionRole`.
+  - Inherits from `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.ConnectionRole`.
   - `actions(self)`
-    - Placeholder method for implementing action logic.
-    - Currently does nothing (`pass`).
+    - Hook for implementing action logic.
+    - **No implementation in this file** (method body is empty).
 
 ## Configuration/Dependencies
 - Depends on:
-  - `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.ConnectionRole` (imported as `_ConnectionRole`).
+  - `naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn.ConnectionRole` (imported as `_ConnectionRole`)
 
 ## Usage
 ```python
@@ -22,9 +22,9 @@ from naas_abi_marketplace.applications.linkedin.ontologies.classes.ontology.naas
 )
 
 role = ConnectionRole()
-role.actions()  # no-op by default
+role.actions()  # implement in subclass or edit method to do something
 ```
 
 ## Caveats
-- `actions()` is a no-op and must be implemented to provide behavior.
-- The usable constructor/signature and inherited behavior depend entirely on the upstream `_ConnectionRole` implementation.
+- `actions()` is not implemented in this module; calling it will not execute any custom logic unless you add it.
+- Constructor/signature and behavior come entirely from the upstream `_ConnectionRole` class.

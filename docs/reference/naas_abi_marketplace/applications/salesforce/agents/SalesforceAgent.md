@@ -1,44 +1,49 @@
 # SalesforceAgent
 
 ## What it is
-- A minimal `IntentAgent` wrapper configured to provide **general guidance** about Salesforce CRM and sales operations.
-- Ships with **no tools**; it cannot access Salesforce data or perform actions.
+- An `IntentAgent` specialization for providing **general guidance** on Salesforce CRM, sales pipeline management, and best practices.
+- **No tools are configured**, so it cannot access or mutate real Salesforce data.
 
 ## Public API
-- `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
-  - Builds and returns a configured `SalesforceAgent` instance.
-  - Sets:
-    - `name`: `"Salesforce"`
-    - `description`: `"Helps you interact with Salesforce for CRM and sales operations."`
-    - `system_prompt`: `SYSTEM_PROMPT` (if no configuration provided)
-    - `tools`: `[]` (no tools)
-    - `intents`: two `IntentType.RAW` intents for informational guidance
-    - `state`: provided or new `AgentSharedState()`
-    - `memory`: `None`
-    - `chat_model`: imported from `naas_abi_marketplace.ai.chatgpt.models.gpt_4_1`
-
 - `class SalesforceAgent(IntentAgent)`
-  - No additional behavior beyond `IntentAgent` (`pass`).
+  - Agent defaults:
+    - `name = "Salesforce"`
+    - `description = "Helps you interact with Salesforce for CRM and sales operations."`
+    - `system_prompt`: guidance-oriented prompt explicitly stating no tool access
+    - `suggestions = []`
+- `SalesforceAgent.New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> SalesforceAgent`
+  - Creates and returns a configured `SalesforceAgent`.
+  - Initializes:
+    - `tools`: `[]`
+    - `intents`: two `IntentType.RAW` intents (Salesforce features; CRM/pipeline concepts)
+    - `agent_configuration`: defaults to `AgentConfiguration(system_prompt=cls.system_prompt)` if not provided
+    - `agent_shared_state`: defaults to `AgentSharedState(thread_id="0")` if not provided
+    - `chat_model` / `embedding_model`: pulled from the application `ModelRegistryService` defaults
 
 ## Configuration/Dependencies
-- Depends on:
-  - `naas_abi_core.services.agent.IntentAgent`:
-    - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
-  - Chat model import inside `create_agent`:
-    - `from naas_abi_marketplace.ai.chatgpt.models.gpt_4_1 import model`
-- Configuration:
-  - `SYSTEM_PROMPT` defines role/objective/context and explicitly states **no Salesforce tools are available**.
+- Depends on `naas_abi_core.services.agent.IntentAgent`:
+  - `IntentAgent`, `AgentConfiguration`, `AgentSharedState`, `Intent`, `IntentType`
+- Depends on Salesforce application module wiring:
+  - `from naas_abi_marketplace.applications.salesforce import ABIModule`
+  - Uses `ABIModule.get_instance().engine.services.model_registry`
+    - Requires the model registry service to be initialized (`assert registry is not None`)
+    - Uses:
+      - `registry.get_default_chat_model()`
+      - `registry.get_default_embedding_model().model`
 
 ## Usage
 ```python
-from naas_abi_marketplace.applications.salesforce.agents.SalesforceAgent import create_agent
+from naas_abi_marketplace.applications.salesforce.agents.SalesforceAgent import SalesforceAgent
+from naas_abi_core.services.agent.IntentAgent import AgentSharedState
 
-agent = create_agent()
-# Use `agent` according to the IntentAgent interface provided by naas_abi_core.
+agent = SalesforceAgent.New(agent_shared_state=AgentSharedState(thread_id="1"))
+
+# Interact with `agent` using the IntentAgent interface provided by naas_abi_core.
 ```
 
 ## Caveats
-- No tools are configured (`tools = []`), so the agent:
+- No Salesforce tools are registered (`tools = []`), so the agent:
   - cannot connect to Salesforce,
   - cannot read/write CRM objects (leads, accounts, opportunities),
-  - only provides general information and best-practice guidance.
+  - only provides general, non-data-backed guidance.
+- Creation requires a properly initialized `ABIModule` and `model_registry`; otherwise, instantiation will fail on the registry assertion.

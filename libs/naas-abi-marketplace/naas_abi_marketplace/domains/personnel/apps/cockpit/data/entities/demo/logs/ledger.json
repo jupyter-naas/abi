@@ -1,0 +1,1642 @@
+{
+  "schema_version": "1.0",
+  "data_version": "2026-08-19 19:05",
+  "entity_id": "demo",
+  "source": "graphs/demo/personnel.ttl",
+  "records": [
+    {
+      "process_id": "http://ontology.naas.ai/personnel/GraphMutation/e4af03dd-2789-5c6a-87f7-1ef8be62c701",
+      "process_label": "Graph mutation",
+      "type": "insert",
+      "status": "succeeded",
+      "triples_added": [
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/grace-lambert",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/abi/Person"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/grace-lambert",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Grace Lambert"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/grace-lambert",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-demo-board-advisor"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-demo-board-advisor",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-demo-board-advisor",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Board Advisor @ Demo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-demo-board-advisor",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/demo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-demo-board-advisor",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/paris"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-demo-board-advisor",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-demo-board-advisor-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-demo-board-advisor",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-demo-board-advisor"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-demo-board-advisor-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-demo-board-advisor-working-start-2022-01-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-demo-board-advisor",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/grace-lambert-demo-board-advisor"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-demo-board-advisor",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/grace-lambert-demo-board-advisor"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/grace-lambert-demo-board-advisor",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/grace-lambert-linkedin"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/grace-lambert",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-streamcorp-head-of-partner-experiences"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-streamcorp-head-of-partner-experiences",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-streamcorp-head-of-partner-experiences",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Head of Partner Experiences @ StreamCorp"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-streamcorp-head-of-partner-experiences",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/streamcorp"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-streamcorp-head-of-partner-experiences",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/california"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-streamcorp-head-of-partner-experiences",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-streamcorp-head-of-partner-experiences-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-streamcorp-head-of-partner-experiences",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-streamcorp-head-of-partner-experiences"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-streamcorp-head-of-partner-experiences-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-streamcorp-head-of-partner-experiences-working-start-2015-02-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-streamcorp-head-of-partner-experiences-working",
+          "predicate": "http://ontology.naas.ai/abi/hasLastInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-streamcorp-head-of-partner-experiences-working-end-2023-09-30"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-streamcorp-head-of-partner-experiences",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/grace-lambert-streamcorp-head-of-partner-experiences"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-streamcorp-head-of-partner-experiences",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/grace-lambert-streamcorp-head-of-partner-experiences"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/grace-lambert-streamcorp-head-of-partner-experiences",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/grace-lambert-linkedin"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/grace-lambert",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-deviceworks-cto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-deviceworks-cto",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-deviceworks-cto",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "CTO @ DeviceWorks"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-deviceworks-cto",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/deviceworks"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-deviceworks-cto",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/toronto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-deviceworks-cto",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-deviceworks-cto-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-deviceworks-cto",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-deviceworks-cto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-deviceworks-cto-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-deviceworks-cto-working-start-2011-10-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-deviceworks-cto-working",
+          "predicate": "http://ontology.naas.ai/abi/hasLastInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-deviceworks-cto-working-end-2015-01-31"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-deviceworks-cto",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/grace-lambert-deviceworks-cto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-deviceworks-cto",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/grace-lambert-deviceworks-cto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/grace-lambert-deviceworks-cto",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/grace-lambert-linkedin"
+        }
+      ],
+      "triples_deleted": [],
+      "started_at": "2026-08-19T19:05:59.091146+00:00",
+      "completed_at": "2026-08-19T19:05:59.091165+00:00",
+      "owners": [
+        {
+          "entity_id": "http://ontology.naas.ai/abi/Person/alice-dupont",
+          "label": "Alice Dupont",
+          "entity_type": "Person"
+        },
+        {
+          "entity_id": "http://ontology.naas.ai/abi/Agent/demo-agent",
+          "label": "Demo Agent",
+          "entity_type": "Agent"
+        }
+      ],
+      "server_site_id": "http://ontology.naas.ai/personnel/Site/local-development",
+      "server_label": "Local development server",
+      "server_ip": "127.0.0.1",
+      "target_graph": "http://ontology.naas.ai/graph/personnel",
+      "target_graph_label": "Personnel graph"
+    },
+    {
+      "process_id": "http://ontology.naas.ai/personnel/GraphMutation/9e8c8358-7037-5f80-99fc-ccd7439fd7d8",
+      "process_label": "Graph mutation",
+      "type": "insert",
+      "status": "succeeded",
+      "triples_added": [
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/alice-dupont",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/abi/Person"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/alice-dupont",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Alice Dupont"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/alice-dupont",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-demo-coo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-demo-coo",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-demo-coo",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "COO @ Demo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-demo-coo",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/demo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-demo-coo",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/world"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-demo-coo",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-demo-coo-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-demo-coo",
+          "predicate": "http://ontology.naas.ai/personnel/hasContract",
+          "object": "http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont-demo-coo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-demo-coo",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-demo-coo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-demo-coo-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-demo-coo-working-start-2023-04-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-demo-coo",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/alice-dupont-demo-coo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-demo-coo",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/alice-dupont-demo-coo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/alice-dupont-demo-coo",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/alice-dupont-linkedin"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/alice-dupont",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-acme-consulting-data-ai-engineer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-acme-consulting-data-ai-engineer",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-acme-consulting-data-ai-engineer",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Data & AI Engineer @ Acme Consulting"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-acme-consulting-data-ai-engineer",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/acme-consulting"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-acme-consulting-data-ai-engineer",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/france-remote"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-acme-consulting-data-ai-engineer",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-acme-consulting-data-ai-engineer-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-acme-consulting-data-ai-engineer",
+          "predicate": "http://ontology.naas.ai/personnel/hasContract",
+          "object": "http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont-acme-consulting-data-ai-engineer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-acme-consulting-data-ai-engineer",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-acme-consulting-data-ai-engineer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-acme-consulting-data-ai-engineer-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-acme-consulting-data-ai-engineer-working-start-2019-10-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-acme-consulting-data-ai-engineer",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/alice-dupont-acme-consulting-data-ai-engineer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-acme-consulting-data-ai-engineer",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/alice-dupont-acme-consulting-data-ai-engineer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/alice-dupont-acme-consulting-data-ai-engineer",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/alice-dupont-linkedin"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/alice-dupont",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-nexus-labs-co-founder"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-nexus-labs-co-founder",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-nexus-labs-co-founder",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Co-Founder @ Nexus Labs"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-nexus-labs-co-founder",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/nexus-labs"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-nexus-labs-co-founder",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/remote"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-nexus-labs-co-founder",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-nexus-labs-co-founder-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-nexus-labs-co-founder",
+          "predicate": "http://ontology.naas.ai/personnel/hasContract",
+          "object": "http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont-nexus-labs-co-founder"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-nexus-labs-co-founder",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-nexus-labs-co-founder"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-nexus-labs-co-founder-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-nexus-labs-co-founder-working-start-2018-10-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-nexus-labs-co-founder-working",
+          "predicate": "http://ontology.naas.ai/abi/hasLastInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-nexus-labs-co-founder-working-end-2022-12-31"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-nexus-labs-co-founder",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/alice-dupont-nexus-labs-co-founder"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-nexus-labs-co-founder",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/alice-dupont-nexus-labs-co-founder"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/alice-dupont-nexus-labs-co-founder",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/alice-dupont-linkedin"
+        }
+      ],
+      "triples_deleted": [],
+      "started_at": "2026-08-19T19:05:59.091146+00:00",
+      "completed_at": "2026-08-19T19:05:59.091165+00:00",
+      "owners": [
+        {
+          "entity_id": "http://ontology.naas.ai/abi/Person/alice-dupont",
+          "label": "Alice Dupont",
+          "entity_type": "Person"
+        },
+        {
+          "entity_id": "http://ontology.naas.ai/abi/Agent/demo-agent",
+          "label": "Demo Agent",
+          "entity_type": "Agent"
+        }
+      ],
+      "server_site_id": "http://ontology.naas.ai/personnel/Site/local-development",
+      "server_label": "Local development server",
+      "server_ip": "127.0.0.1",
+      "target_graph": "http://ontology.naas.ai/graph/personnel",
+      "target_graph_label": "Personnel graph"
+    },
+    {
+      "process_id": "http://ontology.naas.ai/personnel/GraphMutation/9dc2a534-e424-5dc6-a496-acf9b36d9f76",
+      "process_label": "Graph mutation",
+      "type": "insert",
+      "status": "succeeded",
+      "triples_added": [
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/frank-moreau",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/abi/Person"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/frank-moreau",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Frank Moreau"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/frank-moreau",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-salesplatform-account-executive"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-salesplatform-account-executive",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-salesplatform-account-executive",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Account Executive @ SalesPlatform"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-salesplatform-account-executive",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/salesplatform"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-salesplatform-account-executive",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/remote"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-salesplatform-account-executive",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/frank-moreau-salesplatform-account-executive-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-salesplatform-account-executive",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-salesplatform-account-executive"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/frank-moreau-salesplatform-account-executive-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-salesplatform-account-executive-working-start-2023-01-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/frank-moreau-salesplatform-account-executive-working",
+          "predicate": "http://ontology.naas.ai/abi/hasLastInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-salesplatform-account-executive-working-end-2024-12-31"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-salesplatform-account-executive",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/frank-moreau-salesplatform-account-executive"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-salesplatform-account-executive",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/frank-moreau-salesplatform-account-executive"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/frank-moreau-salesplatform-account-executive",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/frank-moreau-linkedin"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/frank-moreau",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-demo-head-of-growth"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-demo-head-of-growth",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-demo-head-of-growth",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Head of Growth @ Demo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-demo-head-of-growth",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/demo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-demo-head-of-growth",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/france"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-demo-head-of-growth",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/frank-moreau-demo-head-of-growth-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-demo-head-of-growth",
+          "predicate": "http://ontology.naas.ai/personnel/hasContract",
+          "object": "http://ontology.naas.ai/personnel/EmploymentContract/frank-moreau-demo-head-of-growth"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-demo-head-of-growth",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-demo-head-of-growth"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/frank-moreau-demo-head-of-growth-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-demo-head-of-growth-working-start-2020-01-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/frank-moreau-demo-head-of-growth-working",
+          "predicate": "http://ontology.naas.ai/abi/hasLastInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-demo-head-of-growth-working-end-2022-12-31"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-demo-head-of-growth",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/frank-moreau-demo-head-of-growth"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-demo-head-of-growth",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/frank-moreau-demo-head-of-growth"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/frank-moreau-demo-head-of-growth",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/frank-moreau-linkedin"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/frank-moreau",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-translation-corp-account-manager"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-translation-corp-account-manager",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-translation-corp-account-manager",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Account Manager @ Translation Corp"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-translation-corp-account-manager",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/translation-corp"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-translation-corp-account-manager",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/paris"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-translation-corp-account-manager",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/frank-moreau-translation-corp-account-manager-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-translation-corp-account-manager",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-translation-corp-account-manager"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/frank-moreau-translation-corp-account-manager-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-translation-corp-account-manager-working-start-2017-02-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/frank-moreau-translation-corp-account-manager-working",
+          "predicate": "http://ontology.naas.ai/abi/hasLastInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-translation-corp-account-manager-working-end-2019-12-31"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-translation-corp-account-manager",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/frank-moreau-translation-corp-account-manager"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-translation-corp-account-manager",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/frank-moreau-translation-corp-account-manager"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/frank-moreau-translation-corp-account-manager",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/frank-moreau-linkedin"
+        }
+      ],
+      "triples_deleted": [],
+      "started_at": "2026-08-19T19:05:59.091146+00:00",
+      "completed_at": "2026-08-19T19:05:59.091165+00:00",
+      "owners": [
+        {
+          "entity_id": "http://ontology.naas.ai/abi/Person/alice-dupont",
+          "label": "Alice Dupont",
+          "entity_type": "Person"
+        },
+        {
+          "entity_id": "http://ontology.naas.ai/abi/Agent/demo-agent",
+          "label": "Demo Agent",
+          "entity_type": "Agent"
+        }
+      ],
+      "server_site_id": "http://ontology.naas.ai/personnel/Site/local-development",
+      "server_label": "Local development server",
+      "server_ip": "127.0.0.1",
+      "target_graph": "http://ontology.naas.ai/graph/personnel",
+      "target_graph_label": "Personnel graph"
+    },
+    {
+      "process_id": "http://ontology.naas.ai/personnel/GraphMutation/97c47c98-cd88-5d83-9817-a0c98a45cc87",
+      "process_label": "Graph mutation",
+      "type": "insert",
+      "status": "succeeded",
+      "triples_added": [
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/david-leroy",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/abi/Person"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/david-leroy",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "David Leroy"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/david-leroy",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-demo-lead-developer-frontend"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-demo-lead-developer-frontend",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-demo-lead-developer-frontend",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Lead Developer Frontend @ Demo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-demo-lead-developer-frontend",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/demo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-demo-lead-developer-frontend",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/remote"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-demo-lead-developer-frontend",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/david-leroy-demo-lead-developer-frontend-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-demo-lead-developer-frontend",
+          "predicate": "http://ontology.naas.ai/personnel/hasContract",
+          "object": "http://ontology.naas.ai/personnel/EmploymentContract/david-leroy-demo-lead-developer-frontend"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-demo-lead-developer-frontend",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/david-leroy-demo-lead-developer-frontend"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/david-leroy-demo-lead-developer-frontend-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/david-leroy-demo-lead-developer-frontend-working-start-2024-02-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/david-leroy-demo-lead-developer-frontend-working",
+          "predicate": "http://ontology.naas.ai/abi/hasLastInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/david-leroy-demo-lead-developer-frontend-working-end-2026-03-31"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/david-leroy-demo-lead-developer-frontend",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/david-leroy-demo-lead-developer-frontend"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/david-leroy-demo-lead-developer-frontend",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/david-leroy-demo-lead-developer-frontend"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/david-leroy-demo-lead-developer-frontend",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/david-leroy-linkedin"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/david-leroy",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-legaltech-co-fullstack-developer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-legaltech-co-fullstack-developer",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-legaltech-co-fullstack-developer",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Fullstack Developer @ LegalTech Co"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-legaltech-co-fullstack-developer",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/legaltech-co"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-legaltech-co-fullstack-developer",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/lyon-france"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-legaltech-co-fullstack-developer",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/david-leroy-legaltech-co-fullstack-developer-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-legaltech-co-fullstack-developer",
+          "predicate": "http://ontology.naas.ai/personnel/hasContract",
+          "object": "http://ontology.naas.ai/personnel/EmploymentContract/david-leroy-legaltech-co-fullstack-developer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-legaltech-co-fullstack-developer",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/david-leroy-legaltech-co-fullstack-developer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/david-leroy-legaltech-co-fullstack-developer-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/david-leroy-legaltech-co-fullstack-developer-working-start-2017-07-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/david-leroy-legaltech-co-fullstack-developer-working",
+          "predicate": "http://ontology.naas.ai/abi/hasLastInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/david-leroy-legaltech-co-fullstack-developer-working-end-2023-11-30"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/david-leroy-legaltech-co-fullstack-developer",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/david-leroy-legaltech-co-fullstack-developer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/david-leroy-legaltech-co-fullstack-developer",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/david-leroy-legaltech-co-fullstack-developer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/david-leroy-legaltech-co-fullstack-developer",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/david-leroy-linkedin"
+        }
+      ],
+      "triples_deleted": [],
+      "started_at": "2026-08-19T19:05:59.091146+00:00",
+      "completed_at": "2026-08-19T19:05:59.091165+00:00",
+      "owners": [
+        {
+          "entity_id": "http://ontology.naas.ai/abi/Person/alice-dupont",
+          "label": "Alice Dupont",
+          "entity_type": "Person"
+        },
+        {
+          "entity_id": "http://ontology.naas.ai/abi/Agent/demo-agent",
+          "label": "Demo Agent",
+          "entity_type": "Agent"
+        }
+      ],
+      "server_site_id": "http://ontology.naas.ai/personnel/Site/local-development",
+      "server_label": "Local development server",
+      "server_ip": "127.0.0.1",
+      "target_graph": "http://ontology.naas.ai/graph/personnel",
+      "target_graph_label": "Personnel graph"
+    },
+    {
+      "process_id": "http://ontology.naas.ai/personnel/GraphMutation/64d3aa6d-b0e7-5383-ace2-7f831689f23e",
+      "process_label": "Graph mutation",
+      "type": "insert",
+      "status": "succeeded",
+      "triples_added": [
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/hugo-girard",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/abi/Person"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/hugo-girard",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Hugo Girard"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/hugo-girard",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-leadership-co-co-founder"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-leadership-co-co-founder",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-leadership-co-co-founder",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Co-Founder @ Leadership Co"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-leadership-co-co-founder",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/leadership-co"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-leadership-co-co-founder",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/remote"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-leadership-co-co-founder",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/hugo-girard-leadership-co-co-founder-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-leadership-co-co-founder",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-leadership-co-co-founder"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/hugo-girard-leadership-co-co-founder-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/hugo-girard-leadership-co-co-founder-working-start-2023-11-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-leadership-co-co-founder",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/hugo-girard-leadership-co-co-founder"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-leadership-co-co-founder",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/hugo-girard-leadership-co-co-founder"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/hugo-girard-leadership-co-co-founder",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/hugo-girard-linkedin"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/hugo-girard",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-demo-advisor"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-demo-advisor",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-demo-advisor",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Advisor @ Demo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-demo-advisor",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/demo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-demo-advisor",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/remote"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-demo-advisor",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/hugo-girard-demo-advisor-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-demo-advisor",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-demo-advisor"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/hugo-girard-demo-advisor-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/hugo-girard-demo-advisor-working-start-2022-01-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-demo-advisor",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/hugo-girard-demo-advisor"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-demo-advisor",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/hugo-girard-demo-advisor"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/hugo-girard-demo-advisor",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/hugo-girard-linkedin"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/hugo-girard",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-agile-partners-chief-agility-officer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-agile-partners-chief-agility-officer",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-agile-partners-chief-agility-officer",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Chief Agility Officer @ Agile Partners"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-agile-partners-chief-agility-officer",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/agile-partners"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-agile-partners-chief-agility-officer",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/paris"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-agile-partners-chief-agility-officer",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/hugo-girard-agile-partners-chief-agility-officer-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-agile-partners-chief-agility-officer",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-agile-partners-chief-agility-officer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/hugo-girard-agile-partners-chief-agility-officer-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/hugo-girard-agile-partners-chief-agility-officer-working-start-2013-09-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/hugo-girard-agile-partners-chief-agility-officer-working",
+          "predicate": "http://ontology.naas.ai/abi/hasLastInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/hugo-girard-agile-partners-chief-agility-officer-working-end-2015-02-28"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-agile-partners-chief-agility-officer",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/hugo-girard-agile-partners-chief-agility-officer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-agile-partners-chief-agility-officer",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/hugo-girard-agile-partners-chief-agility-officer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/hugo-girard-agile-partners-chief-agility-officer",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/hugo-girard-linkedin"
+        }
+      ],
+      "triples_deleted": [],
+      "started_at": "2026-08-19T19:05:59.091146+00:00",
+      "completed_at": "2026-08-19T19:05:59.091165+00:00",
+      "owners": [
+        {
+          "entity_id": "http://ontology.naas.ai/abi/Person/alice-dupont",
+          "label": "Alice Dupont",
+          "entity_type": "Person"
+        },
+        {
+          "entity_id": "http://ontology.naas.ai/abi/Agent/demo-agent",
+          "label": "Demo Agent",
+          "entity_type": "Agent"
+        }
+      ],
+      "server_site_id": "http://ontology.naas.ai/personnel/Site/local-development",
+      "server_label": "Local development server",
+      "server_ip": "127.0.0.1",
+      "target_graph": "http://ontology.naas.ai/graph/personnel",
+      "target_graph_label": "Personnel graph"
+    },
+    {
+      "process_id": "http://ontology.naas.ai/personnel/GraphMutation/38821bb1-741a-5fa6-8a5f-ba39c79812b0",
+      "process_label": "Graph mutation",
+      "type": "insert",
+      "status": "succeeded",
+      "triples_added": [
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/emma-petit",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/abi/Person"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/emma-petit",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Emma Petit"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/emma-petit",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-launchpad-solo-maker"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-launchpad-solo-maker",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-launchpad-solo-maker",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Solo Maker @ LaunchPad"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-launchpad-solo-maker",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/launchpad"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-launchpad-solo-maker",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/remote"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-launchpad-solo-maker",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/emma-petit-launchpad-solo-maker-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-launchpad-solo-maker",
+          "predicate": "http://ontology.naas.ai/personnel/hasContract",
+          "object": "http://ontology.naas.ai/personnel/EmploymentContract/emma-petit-launchpad-solo-maker"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-launchpad-solo-maker",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/emma-petit-launchpad-solo-maker"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/emma-petit-launchpad-solo-maker-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/emma-petit-launchpad-solo-maker-working-start-2021-12-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/emma-petit-launchpad-solo-maker",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/emma-petit-launchpad-solo-maker"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/emma-petit-launchpad-solo-maker",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/emma-petit-launchpad-solo-maker"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/emma-petit-launchpad-solo-maker",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/emma-petit-linkedin"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/emma-petit",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-demo-cto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-demo-cto",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-demo-cto",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "CTO @ Demo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-demo-cto",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/demo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-demo-cto",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/remote"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-demo-cto",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/emma-petit-demo-cto-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-demo-cto",
+          "predicate": "http://ontology.naas.ai/personnel/hasContract",
+          "object": "http://ontology.naas.ai/personnel/EmploymentContract/emma-petit-demo-cto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-demo-cto",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/emma-petit-demo-cto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/emma-petit-demo-cto-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/emma-petit-demo-cto-working-start-2020-12-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/emma-petit-demo-cto-working",
+          "predicate": "http://ontology.naas.ai/abi/hasLastInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/emma-petit-demo-cto-working-end-2024-12-31"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/emma-petit-demo-cto",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/emma-petit-demo-cto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/emma-petit-demo-cto",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/emma-petit-demo-cto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/emma-petit-demo-cto",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/emma-petit-linkedin"
+        }
+      ],
+      "triples_deleted": [],
+      "started_at": "2026-08-19T19:05:59.091146+00:00",
+      "completed_at": "2026-08-19T19:05:59.091165+00:00",
+      "owners": [
+        {
+          "entity_id": "http://ontology.naas.ai/abi/Person/alice-dupont",
+          "label": "Alice Dupont",
+          "entity_type": "Person"
+        },
+        {
+          "entity_id": "http://ontology.naas.ai/abi/Agent/demo-agent",
+          "label": "Demo Agent",
+          "entity_type": "Agent"
+        }
+      ],
+      "server_site_id": "http://ontology.naas.ai/personnel/Site/local-development",
+      "server_label": "Local development server",
+      "server_ip": "127.0.0.1",
+      "target_graph": "http://ontology.naas.ai/graph/personnel",
+      "target_graph_label": "Personnel graph"
+    },
+    {
+      "process_id": "http://ontology.naas.ai/personnel/GraphMutation/3431a21d-4805-5d65-9122-af4074179732",
+      "process_label": "Graph mutation",
+      "type": "insert",
+      "status": "succeeded",
+      "triples_added": [
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/bob-martin",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/abi/Person"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/bob-martin",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Bob Martin"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/bob-martin",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-global-advisors-senior-advisor-data-ai"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-global-advisors-senior-advisor-data-ai",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-global-advisors-senior-advisor-data-ai",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Senior Advisor, Data & AI @ Global Advisors"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-global-advisors-senior-advisor-data-ai",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/global-advisors"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-global-advisors-senior-advisor-data-ai",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/remote"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-global-advisors-senior-advisor-data-ai",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/bob-martin-global-advisors-senior-advisor-data-ai-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-global-advisors-senior-advisor-data-ai",
+          "predicate": "http://ontology.naas.ai/personnel/hasContract",
+          "object": "http://ontology.naas.ai/personnel/EmploymentContract/bob-martin-global-advisors-senior-advisor-data-ai"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-global-advisors-senior-advisor-data-ai",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-global-advisors-senior-advisor-data-ai"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/bob-martin-global-advisors-senior-advisor-data-ai-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/bob-martin-global-advisors-senior-advisor-data-ai-working-start-2024-11-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-global-advisors-senior-advisor-data-ai",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/bob-martin-global-advisors-senior-advisor-data-ai"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-global-advisors-senior-advisor-data-ai",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/bob-martin-global-advisors-senior-advisor-data-ai"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/bob-martin-global-advisors-senior-advisor-data-ai",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/bob-martin-linkedin"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/bob-martin",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-demo-ceo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-demo-ceo",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-demo-ceo",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "CEO @ Demo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-demo-ceo",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/demo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-demo-ceo",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/world"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-demo-ceo",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/bob-martin-demo-ceo-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-demo-ceo",
+          "predicate": "http://ontology.naas.ai/personnel/hasContract",
+          "object": "http://ontology.naas.ai/personnel/EmploymentContract/bob-martin-demo-ceo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-demo-ceo",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-demo-ceo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/bob-martin-demo-ceo-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/bob-martin-demo-ceo-working-start-2023-04-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-demo-ceo",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/bob-martin-demo-ceo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-demo-ceo",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/bob-martin-demo-ceo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/bob-martin-demo-ceo",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/bob-martin-linkedin"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/bob-martin",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-nexus-labs-founder"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-nexus-labs-founder",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-nexus-labs-founder",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Founder @ Nexus Labs"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-nexus-labs-founder",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/nexus-labs"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-nexus-labs-founder",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/paris"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-nexus-labs-founder",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/bob-martin-nexus-labs-founder-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-nexus-labs-founder",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-nexus-labs-founder"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/bob-martin-nexus-labs-founder-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/bob-martin-nexus-labs-founder-working-start-2016-11-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/bob-martin-nexus-labs-founder-working",
+          "predicate": "http://ontology.naas.ai/abi/hasLastInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/bob-martin-nexus-labs-founder-working-end-2023-04-30"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-nexus-labs-founder",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/bob-martin-nexus-labs-founder"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-nexus-labs-founder",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/bob-martin-nexus-labs-founder"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/bob-martin-nexus-labs-founder",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/bob-martin-linkedin"
+        }
+      ],
+      "triples_deleted": [],
+      "started_at": "2026-08-19T19:05:59.091146+00:00",
+      "completed_at": "2026-08-19T19:05:59.091165+00:00",
+      "owners": [
+        {
+          "entity_id": "http://ontology.naas.ai/abi/Person/alice-dupont",
+          "label": "Alice Dupont",
+          "entity_type": "Person"
+        },
+        {
+          "entity_id": "http://ontology.naas.ai/abi/Agent/demo-agent",
+          "label": "Demo Agent",
+          "entity_type": "Agent"
+        }
+      ],
+      "server_site_id": "http://ontology.naas.ai/personnel/Site/local-development",
+      "server_label": "Local development server",
+      "server_ip": "127.0.0.1",
+      "target_graph": "http://ontology.naas.ai/graph/personnel",
+      "target_graph_label": "Personnel graph"
+    },
+    {
+      "process_id": "http://ontology.naas.ai/personnel/GraphMutation/188c5c67-4e70-5c25-a4b6-14946678080e",
+      "process_label": "Graph mutation",
+      "type": "insert",
+      "status": "succeeded",
+      "triples_added": [
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/claire-bernard",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/abi/Person"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/claire-bernard",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Claire Bernard"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/claire-bernard",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-demo-cto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-demo-cto",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-demo-cto",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "CTO @ Demo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-demo-cto",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/demo"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-demo-cto",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/france"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-demo-cto",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/claire-bernard-demo-cto-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-demo-cto",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-demo-cto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/claire-bernard-demo-cto-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-demo-cto-working-start-2023-04-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-demo-cto",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/claire-bernard-demo-cto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-demo-cto",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/claire-bernard-demo-cto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/claire-bernard-demo-cto",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/claire-bernard-linkedin"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/claire-bernard",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-nexus-labs-cto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-nexus-labs-cto",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-nexus-labs-cto",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "CTO @ Nexus Labs"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-nexus-labs-cto",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/nexus-labs"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-nexus-labs-cto",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/france"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-nexus-labs-cto",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/claire-bernard-nexus-labs-cto-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-nexus-labs-cto",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-nexus-labs-cto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/claire-bernard-nexus-labs-cto-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-nexus-labs-cto-working-start-2021-06-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/claire-bernard-nexus-labs-cto-working",
+          "predicate": "http://ontology.naas.ai/abi/hasLastInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-nexus-labs-cto-working-end-2023-04-30"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-nexus-labs-cto",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/claire-bernard-nexus-labs-cto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-nexus-labs-cto",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/claire-bernard-nexus-labs-cto"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/claire-bernard-nexus-labs-cto",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/claire-bernard-linkedin"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/Person/claire-bernard",
+          "predicate": "http://ontology.naas.ai/personnel/hasActOfWorking",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-cloud-partners-cloud-engineer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-cloud-partners-cloud-engineer",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "object": "http://ontology.naas.ai/personnel/ActOfWorking"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-cloud-partners-cloud-engineer",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "object": "Cloud Engineer @ Cloud Partners"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-cloud-partners-cloud-engineer",
+          "predicate": "http://ontology.naas.ai/personnel/forOrganization",
+          "object": "http://ontology.naas.ai/abi/Organization/cloud-partners"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-cloud-partners-cloud-engineer",
+          "predicate": "http://ontology.naas.ai/abi/occursIn",
+          "object": "http://ontology.naas.ai/personnel/Site/paris"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-cloud-partners-cloud-engineer",
+          "predicate": "http://ontology.naas.ai/abi/occupiesTemporalRegion",
+          "object": "http://ontology.naas.ai/abi/TemporalRegion/claire-bernard-cloud-partners-cloud-engineer-working"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-cloud-partners-cloud-engineer",
+          "predicate": "http://ontology.naas.ai/personnel/hasContract",
+          "object": "http://ontology.naas.ai/personnel/EmploymentContract/claire-bernard-cloud-partners-cloud-engineer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-cloud-partners-cloud-engineer",
+          "predicate": "http://ontology.naas.ai/abi/realizes",
+          "object": "http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-cloud-partners-cloud-engineer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/claire-bernard-cloud-partners-cloud-engineer-working",
+          "predicate": "http://ontology.naas.ai/abi/hasFirstInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-cloud-partners-cloud-engineer-working-start-2020-02-01"
+        },
+        {
+          "subject": "http://ontology.naas.ai/abi/TemporalRegion/claire-bernard-cloud-partners-cloud-engineer-working",
+          "predicate": "http://ontology.naas.ai/abi/hasLastInstant",
+          "object": "http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-cloud-partners-cloud-engineer-working-end-2021-06-30"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-cloud-partners-cloud-engineer",
+          "predicate": "http://ontology.naas.ai/personnel/hasJobPosition",
+          "object": "http://ontology.naas.ai/personnel/JobPosition/claire-bernard-cloud-partners-cloud-engineer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-cloud-partners-cloud-engineer",
+          "predicate": "http://ontology.naas.ai/personnel/hasMission",
+          "object": "http://ontology.naas.ai/personnel/Mission/claire-bernard-cloud-partners-cloud-engineer"
+        },
+        {
+          "subject": "http://ontology.naas.ai/personnel/Mission/claire-bernard-cloud-partners-cloud-engineer",
+          "predicate": "http://ontology.naas.ai/personnel/isSourcedFrom",
+          "object": "http://ontology.naas.ai/personnel/ProfileDocument/claire-bernard-linkedin"
+        }
+      ],
+      "triples_deleted": [],
+      "started_at": "2026-08-19T19:05:59.091146+00:00",
+      "completed_at": "2026-08-19T19:05:59.091165+00:00",
+      "owners": [
+        {
+          "entity_id": "http://ontology.naas.ai/abi/Person/alice-dupont",
+          "label": "Alice Dupont",
+          "entity_type": "Person"
+        },
+        {
+          "entity_id": "http://ontology.naas.ai/abi/Agent/demo-agent",
+          "label": "Demo Agent",
+          "entity_type": "Agent"
+        }
+      ],
+      "server_site_id": "http://ontology.naas.ai/personnel/Site/local-development",
+      "server_label": "Local development server",
+      "server_ip": "127.0.0.1",
+      "target_graph": "http://ontology.naas.ai/graph/personnel",
+      "target_graph_label": "Personnel graph"
+    }
+  ]
+}
