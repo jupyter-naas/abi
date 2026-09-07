@@ -1,5 +1,6 @@
 import tomllib
 import urllib.error
+import urllib.request
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -7,6 +8,7 @@ import pytest
 from naas_abi.agents.tools.web_tools import (
     _ddgs_search,
     _html_to_text,
+    _http_only_opener,
     make_web_fetch_tool,
     make_web_search_tool,
 )
@@ -49,24 +51,97 @@ def test_web_search_empty_and_caps() -> None:
         mock.assert_called_with("q", 20)
 
 
+def _mock_opener(response: MagicMock) -> MagicMock:
+    opener = MagicMock()
+    opener.open.return_value = response
+    return opener
+
+
+def _html_response(body: bytes, content_type: str = "text/html; charset=utf-8") -> MagicMock:
+    resp = MagicMock()
+    resp.read.return_value = body
+    resp.headers.get.return_value = content_type
+    resp.__enter__.return_value = resp
+    resp.__exit__.return_value = False
+    return resp
+
+
 def test_web_fetch_rejects_non_http_and_strips_html() -> None:
     tool = make_web_fetch_tool()
     assert tool.name == "web_fetch"
     assert "Error" in tool.invoke({"url": "ftp://example.com/file"})
 
-    html = b"<html><body><p>Hello world</p></body></html>"
-    mock_resp = MagicMock()
-    mock_resp.read.return_value = html
-    mock_resp.headers.get.return_value = "text/html; charset=utf-8"
-    mock_resp.__enter__.return_value = mock_resp
-    mock_resp.__exit__.return_value = False
+    resp = _html_response(b"<html><body><p>Hello world</p></body></html>")
     with patch(
-        "naas_abi.agents.tools.web_tools.urllib.request.urlopen",
-        return_value=mock_resp,
+        "naas_abi.agents.tools.web_tools._http_only_opener",
+        return_value=_mock_opener(resp),
     ):
         result = tool.invoke({"url": "https://example.com"})
     assert "Hello world" in result
     assert "<p>" not in result
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "file:///etc/passwd",
+        "file://localhost/etc/shadow",
+        "ftp://internal.example.com/secrets",
+        "data:text/plain;base64,aGVsbG8=",
+        "gopher://example.com/",
+        "jar:file:///etc/passwd!/",
+    ],
+)
+def test_web_fetch_refuses_every_scheme_but_http_and_https(url: str) -> None:
+    """The URL is model output, so the scheme is attacker-reachable.
+
+    web_fetch is bound into every agent, and its argument comes from whatever
+    the model decided to read: a link off a search result, a URL quoted in a
+    page it just fetched, or an instruction planted in either. `file:///etc/passwd`
+    is a one-line prompt injection away from being read out into the transcript,
+    and urllib opens it without complaint because the default opener registers
+    a FileHandler.
+    """
+    tool = make_web_fetch_tool()
+    opener = MagicMock()
+
+    with patch(
+        "naas_abi.agents.tools.web_tools._http_only_opener",
+        return_value=opener,
+    ):
+        result = tool.invoke({"url": url})
+
+    assert "Error" in result
+    assert "http" in result
+    opener.open.assert_not_called()
+
+
+def test_web_fetch_accepts_an_uppercase_scheme() -> None:
+    """Scheme comparison is case-insensitive per RFC 3986, unlike startswith."""
+    resp = _html_response(b"<p>ok</p>")
+    with patch(
+        "naas_abi.agents.tools.web_tools._http_only_opener",
+        return_value=_mock_opener(resp),
+    ):
+        assert "ok" in make_web_fetch_tool().invoke({"url": "HTTPS://example.com"})
+
+
+def test_web_fetch_opener_cannot_speak_a_non_http_scheme() -> None:
+    """Validating the URL the model gave is not enough on its own.
+
+    urllib follows redirects, and HTTPRedirectHandler permits ftp:// as a
+    redirect target, so an approved https:// URL can hand the fetch a scheme
+    the guard never saw. Registering only the http/https handlers means there
+    is nothing left in the opener that could serve one: no FileHandler, no
+    FTPHandler, no DataHandler. Asserting on handle_open rather than on a live
+    redirect keeps this a unit test.
+    """
+    opener = _http_only_opener()
+
+    assert set(opener.handle_open) <= {"http", "https", "unknown"}
+    assert "file" not in opener.handle_open
+    assert "ftp" not in opener.handle_open
+    assert "data" not in opener.handle_open
 
 
 def test_web_search_reaches_the_ddgs_backend() -> None:
@@ -160,15 +235,11 @@ def test_web_search_truncates_snippets_and_tolerates_other_key_names() -> None:
 
 def test_web_fetch_marks_truncated_pages() -> None:
     tool = make_web_fetch_tool()
-    mock_resp = MagicMock()
-    mock_resp.read.return_value = b"A" * 10_000
-    mock_resp.headers.get.return_value = "text/plain"
-    mock_resp.__enter__.return_value = mock_resp
-    mock_resp.__exit__.return_value = False
+    resp = _html_response(b"A" * 10_000, content_type="text/plain")
 
     with patch(
-        "naas_abi.agents.tools.web_tools.urllib.request.urlopen",
-        return_value=mock_resp,
+        "naas_abi.agents.tools.web_tools._http_only_opener",
+        return_value=_mock_opener(resp),
     ):
         result = tool.invoke({"url": "https://x.com", "max_length": 100})
 
@@ -182,9 +253,13 @@ def test_web_fetch_reports_transport_failures_as_text() -> None:
     http_error = urllib.error.HTTPError(
         url="https://x.com", code=404, msg="Not Found", hdrs=MagicMock(), fp=None
     )
-    with patch("urllib.request.urlopen", side_effect=http_error):
+    with patch.object(
+        urllib.request.OpenerDirector, "open", side_effect=http_error, autospec=True
+    ):
         assert "404" in tool.invoke({"url": "https://x.com/missing"})
 
     unreachable = urllib.error.URLError("Name not resolved")
-    with patch("urllib.request.urlopen", side_effect=unreachable):
+    with patch.object(
+        urllib.request.OpenerDirector, "open", side_effect=unreachable, autospec=True
+    ):
         assert "Could not reach" in tool.invoke({"url": "https://nonexistent.invalid"})
