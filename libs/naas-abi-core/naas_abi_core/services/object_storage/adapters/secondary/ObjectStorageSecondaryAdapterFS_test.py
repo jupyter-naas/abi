@@ -2,7 +2,6 @@ import io
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
     ObjectStorageSecondaryAdapterFS,
 )

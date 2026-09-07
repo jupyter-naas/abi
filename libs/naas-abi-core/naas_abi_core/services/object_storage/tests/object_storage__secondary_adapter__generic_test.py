@@ -12,7 +12,6 @@ from abc import ABC, abstractmethod
 from queue import Queue
 
 import pytest
-
 from naas_abi_core.services.object_storage.ObjectStoragePort import (
     Exceptions,
     IObjectStorageAdapter,

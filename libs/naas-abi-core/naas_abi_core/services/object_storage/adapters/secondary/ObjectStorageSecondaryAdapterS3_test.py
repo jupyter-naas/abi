@@ -1,7 +1,6 @@
 import boto3
 import pytest
 from moto import mock_aws
-
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterS3 import (
     ObjectStorageSecondaryAdapterS3,
 )
