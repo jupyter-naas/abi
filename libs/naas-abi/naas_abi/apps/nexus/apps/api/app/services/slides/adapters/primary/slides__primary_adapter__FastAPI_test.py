@@ -9,6 +9,9 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary import (
+    slides__primary_adapter__FastAPI as slides_api,
+)
 from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__primary_adapter__FastAPI import (
     _assets_dir,
     _assets_gitkeep_path,
@@ -37,9 +40,6 @@ from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__p
     _source_control_http_error,
     _wait_for_sidecar,
     _write_deck_via_sidecar,
-)
-from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary import (
-    slides__primary_adapter__FastAPI as slides_api,
 )
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     WorkspaceNameConflictError,
