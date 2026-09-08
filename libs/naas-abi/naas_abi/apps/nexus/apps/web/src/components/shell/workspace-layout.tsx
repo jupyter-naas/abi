@@ -3,16 +3,14 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
+import dynamic from 'next/dynamic';
 import { Sidebar } from './sidebar';
 import { SectionPanel } from './sidebar/section-panel';
-import { ChatSection } from '@/app/workspace/[workspaceId]/chat/components/chat-section';
-import { AIPane } from './ai-pane';
 import { PlatformStatusFooter } from './platform-status-footer';
 import { MobileBottomNav } from './mobile/mobile-bottom-nav';
 import { MobileMoreSheet } from './mobile/mobile-more-sheet';
 import { MobileTopBar } from './mobile/mobile-top-bar';
 import { ChatExportButton } from '@/components/chat/chat-export-button';
-import { ChatInterface } from '@/components/chat/chat-interface';
 import {
   isMobileChatThreadOpen,
   parseChatRoute,
@@ -21,14 +19,31 @@ import {
 import { parseFilesRoute } from '@/app/workspace/[workspaceId]/files/lib/files-route';
 import { parseMapsRoute } from '@/app/workspace/[workspaceId]/maps/lib/maps-route';
 import { parseDatasetsRoute } from '@/app/workspace/[workspaceId]/datasets/lib/datasets-route';
-import { FilesSection } from './sidebar/files-section';
-import { MapsSection } from './sidebar/maps-section';
-import { DatasetsSection } from './sidebar/datasets-section';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { PresenceIndicator } from '@/components/presence-indicator';
 import { getWorkspacePath } from './sidebar/utils';
 import { pathNeedsAgentCatalog } from '@/lib/feature-access';
+
+const AIPane = dynamic(() => import('./ai-pane').then((m) => m.AIPane), { ssr: false });
+const ChatSection = dynamic(
+  () => import('@/app/workspace/[workspaceId]/chat/components/chat-section').then((m) => m.ChatSection),
+  { ssr: false },
+);
+const ChatInterface = dynamic(
+  () => import('@/components/chat/chat-interface').then((m) => m.ChatInterface),
+  { ssr: false },
+);
+const FilesSection = dynamic(() => import('./sidebar/files-section').then((m) => m.FilesSection), {
+  ssr: false,
+});
+const MapsSection = dynamic(() => import('./sidebar/maps-section').then((m) => m.MapsSection), {
+  ssr: false,
+});
+const DatasetsSection = dynamic(
+  () => import('./sidebar/datasets-section').then((m) => m.DatasetsSection),
+  { ssr: false },
+);
 
 interface WorkspaceLayoutProps {
   children: React.ReactNode;
@@ -151,7 +166,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkspaceId]);
 
-  // Agents/skills belong to chat, lab, agent settings, and the open AI pane.
+  // Agents/skills belong to chat, agent settings, and the open AI pane.
   // Fetching them on every workspace switch (including Apps) POSTed
   // /agents/sync and starved GET /api/apps.
   useEffect(() => {
@@ -376,8 +391,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
         </div>
       </main>
 
-      {/* Right AI pane */}
-      <AIPane />
+      {contextPanelOpen && <AIPane />}
     </div>
   );
 }

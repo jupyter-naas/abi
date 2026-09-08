@@ -2,7 +2,7 @@
 
 import { createPortal } from 'react-dom';
 import {
-  Search, BrainCircuit, Waypoints, Database, Map, Code, Store, Settings, Activity, Boxes, X, Home,
+  Search, BrainCircuit, Waypoints, Database, Map, Presentation, Store, Settings, Activity, Boxes, X, Home,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -19,7 +19,7 @@ type MoreItem = {
   icon: React.ReactNode;
   href: string;
   section?: SidebarSection | null;
-  feature?: 'maps' | 'search' | 'ontology' | 'graph' | 'datasets' | 'code' | 'marketplace' | 'settings.workspace';
+  feature?: 'maps' | 'search' | 'ontology' | 'graph' | 'datasets' | 'slides' | 'marketplace' | 'settings.workspace';
   superadmin?: boolean;
 };
 
@@ -30,7 +30,7 @@ const MORE_ITEMS: MoreItem[] = [
   { id: 'ontology', label: 'Ontology', icon: <BrainCircuit size={18} />, href: '/ontology', section: 'ontology', feature: 'ontology' },
   { id: 'graph', label: 'Knowledge Graph', icon: <Waypoints size={18} />, href: '/graph/network', section: 'graph', feature: 'graph' },
   { id: 'datasets', label: 'Datasets', icon: <Database size={18} />, href: '/datasets', section: 'datasets', feature: 'datasets' },
-  { id: 'code', label: 'Code', icon: <Code size={18} />, href: '/code/workspaces', section: 'code', feature: 'code' },
+  { id: 'slides', label: 'Slides', icon: <Presentation size={18} />, href: '/slides', section: 'slides', feature: 'slides' },
   { id: 'marketplace', label: 'Marketplace', icon: <Store size={18} />, href: '/marketplace', section: 'marketplace', feature: 'marketplace' },
   { id: 'settings', label: 'Settings', icon: <Settings size={18} />, href: '/settings', section: 'settings', feature: 'settings.workspace' },
   { id: 'admin-events', label: 'Events', icon: <Activity size={18} />, href: '/admin/events', section: null, superadmin: true },
@@ -54,7 +54,7 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
   const canOntology = useFeature('ontology');
   const canGraph = useFeature('graph');
   const canDatasets = useFeature('datasets');
-  const canCode = useFeature('code');
+  const canSlides = useFeature('slides');
   const canMarketplace = useFeature('marketplace');
   const canSettings = useFeature('settings.workspace');
 
@@ -79,7 +79,7 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
     if (item.feature === 'ontology') return !!canOntology;
     if (item.feature === 'graph') return !!canGraph;
     if (item.feature === 'datasets') return !!canDatasets;
-    if (item.feature === 'code') return !!canCode;
+    if (item.feature === 'slides') return !!canSlides;
     if (item.feature === 'marketplace') return !!canMarketplace;
     if (item.feature === 'settings.workspace') return !!canSettings;
     return true;

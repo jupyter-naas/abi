@@ -150,6 +150,12 @@ export default function WorkspaceShellLayout({
     const runAuth = async () => {
       if (started) return;
       started = true;
+      // Persist already has the token. Paint the shell now; /me validates in
+      // the background so every workspace page is not gated on that round-trip.
+      // No token yet: wait for checkAuth in case a refresh cookie can recover.
+      if (useAuthStore.getState().token && !cancelled) {
+        setAuthReady(true);
+      }
       await useAuthStore.getState().checkAuth();
       if (!cancelled) setAuthReady(true);
     };

@@ -4,6 +4,9 @@ const path = require('path');
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@nexus/ui', '@embedpdf/snippet'],
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+  },
   webpack(config) {
     // pnpm's strict package isolation stops webpack from resolving this ESM-only
     // package through normal module lookup; point it directly to the bundle file.

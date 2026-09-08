@@ -26,7 +26,6 @@ import {
   Grid,
   List,
   Search,
-  FlaskConical,
   Eye,
   Code,
   Star,
@@ -223,12 +222,6 @@ export default function FilesPage() {
   const [localPendingPreview, setLocalPendingPreview] = useState<string | null>(null);
   const deepLinkConsumedRef = useRef(false);
 
-  // Helper to open file in Lab
-  const handleOpenInLab = (file: FileInfo) => {
-    openFile(file.path);
-    router.push(`/workspace/${workspaceId}/lab`);
-  };
-  
   // Close context menu when clicking outside
   useEffect(() => {
     const handleClickOutside = () => {
@@ -1219,20 +1212,6 @@ export default function FilesPage() {
         </button>
         {activeContextMenu === file.path && (
           <div className="files-browse-row-context-menu">
-            {file.type === 'file' && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveContextMenu(null);
-                  handleOpenInLab(file);
-                }}
-                className="files-browse-row-context-item"
-              >
-                <FlaskConical size={14} />
-                Open in Lab
-              </button>
-            )}
             {isOfficeFile(file) && (
               <button
                 type="button"

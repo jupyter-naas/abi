@@ -1,25 +1,25 @@
 'use client';
 
-import { FlaskConical, Folder, LayoutGrid, MessageSquare, MoreHorizontal } from 'lucide-react';
+import { Code, Folder, LayoutGrid, MessageSquare, MoreHorizontal } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { getWorkspacePath } from '../sidebar/utils';
 
-type MobileTab = 'apps' | 'lab' | 'files' | 'chat' | 'more';
+type MobileTab = 'apps' | 'code' | 'files' | 'chat' | 'more';
 
 type TabDef = {
   id: MobileTab;
   label: string;
   icon: React.ReactNode;
   href?: string;
-  feature?: 'apps' | 'agents' | 'files' | 'chat';
+  feature?: 'apps' | 'code' | 'files' | 'chat';
 };
 
 const TABS: TabDef[] = [
   { id: 'apps', label: 'Apps', icon: <LayoutGrid size={20} />, href: '/apps', feature: 'apps' },
-  { id: 'lab', label: 'Lab', icon: <FlaskConical size={20} />, href: '/lab', feature: 'agents' },
+  { id: 'code', label: 'Code', icon: <Code size={20} />, href: '/code', feature: 'code' },
   { id: 'files', label: 'Files', icon: <Folder size={20} />, href: '/files', feature: 'files' },
   { id: 'chat', label: 'Chat', icon: <MessageSquare size={20} />, href: '/chat', feature: 'chat' },
   { id: 'more', label: 'More', icon: <MoreHorizontal size={20} /> },
@@ -39,14 +39,14 @@ export function MobileBottomNav({ moreOpen, onMoreToggle }: MobileBottomNavProps
   const setMobilePendingChatSlug = useWorkspaceStore((s) => s.setMobilePendingChatSlug);
 
   const canApps = useFeature('apps');
-  const canAgents = useFeature('agents');
+  const canCode = useFeature('code');
   const canFiles = useFeature('files');
   const canChat = useFeature('chat');
 
   const enabled = (feature?: TabDef['feature']) => {
     if (!feature) return true;
     if (feature === 'apps') return !!canApps;
-    if (feature === 'agents') return !!canAgents;
+    if (feature === 'code') return !!canCode;
     if (feature === 'files') return !!canFiles;
     if (feature === 'chat') return !!canChat;
     return true;
@@ -55,7 +55,7 @@ export function MobileBottomNav({ moreOpen, onMoreToggle }: MobileBottomNavProps
   const isTabActive = (tab: TabDef) => {
     if (tab.id === 'more') return moreOpen;
     if (tab.id === 'apps') return pathname.includes('/apps');
-    if (tab.id === 'lab') return pathname.includes('/lab');
+    if (tab.id === 'code') return pathname.includes('/code') || pathname.includes('/lab');
     if (tab.id === 'files') return pathname.includes('/files');
     if (tab.id === 'chat') return pathname.includes('/chat');
     return false;
@@ -73,9 +73,9 @@ export function MobileBottomNav({ moreOpen, onMoreToggle }: MobileBottomNavProps
       router.push(getWorkspacePath(currentWorkspaceId, '/apps'));
       return;
     }
-    if (tab.id === 'lab') {
-      setActivePanelSection('lab');
-      router.push(getWorkspacePath(currentWorkspaceId, '/lab'));
+    if (tab.id === 'code') {
+      setActivePanelSection('code');
+      router.push(getWorkspacePath(currentWorkspaceId, '/code'));
       return;
     }
     if (tab.id === 'files') {

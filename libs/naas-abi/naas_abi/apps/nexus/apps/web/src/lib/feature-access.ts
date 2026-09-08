@@ -53,7 +53,7 @@ const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
   maps: '/maps/presence',
   chat: '/chat',
   files: '/files',
-  agents: '/lab',
+  agents: '/settings/agents',
   skills: '/chat',
   apps: '/apps',
   marketplace: '/marketplace',
@@ -131,7 +131,7 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   if (firstSegment === 'datasets') {
     return 'datasets';
   }
-  if (firstSegment === 'code' || firstSegment === 'ide') {
+  if (firstSegment === 'code' || firstSegment === 'ide' || firstSegment === 'lab') {
     return 'code';
   }
   if (firstSegment === 'slides') {
@@ -143,10 +143,7 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   if (firstSegment === 'marketplace') {
     return 'marketplace';
   }
-  if (
-    firstSegment === 'lab' ||
-    (firstSegment === 'settings' && parts[workspaceIndex + 3] === 'agents')
-  ) {
+  if (firstSegment === 'settings' && parts[workspaceIndex + 3] === 'agents') {
     return 'agents';
   }
   if (firstSegment === 'settings' && parts[workspaceIndex + 3] === 'skills') {
@@ -165,7 +162,7 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   return null;
 }
 
-/** Surfaces that need the agent catalog (chat, lab, agent settings). Apps does not. */
+/** Surfaces that need the agent catalog (chat and agent settings). Apps does not. */
 export function pathNeedsAgentCatalog(pathname: string | null | undefined): boolean {
   const feature = getFeatureForWorkspacePath(pathname || '');
   return feature === 'chat' || feature === 'agents';
