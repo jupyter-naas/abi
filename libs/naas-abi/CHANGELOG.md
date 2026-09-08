@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.63.0 (2026-09-08)
+
+### Features
+
+- **nexus**: Retire Lab and cut first-paint JS on the workspace shell
+  ([`40a4c09`](https://github.com/jupyter-naas/abi/commit/40a4c0917193283293195acfa42a663644faa2cc))
+
+
 ## v2.62.0 (2026-09-07)
 
 ### Bug Fixes
