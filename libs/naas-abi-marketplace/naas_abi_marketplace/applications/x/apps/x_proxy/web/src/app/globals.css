@@ -783,6 +783,9 @@ a {
 }
 
 .detail-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 30px;
   height: 30px;
   border: 1px solid var(--border);
@@ -791,6 +794,7 @@ a {
   color: var(--muted);
   font: inherit;
   line-height: 1;
+  text-decoration: none;
   cursor: pointer;
 }
 
@@ -813,11 +817,6 @@ a {
   padding: 16px 18px;
   background: var(--panel);
   border: 1px solid var(--border);
-}
-
-/* The post `?post=` names - the one open on its own page. */
-.user-post.selected {
-  border-color: var(--accent);
 }
 
 /* Expanded: the post alone on the page, so it gets room to breathe and its

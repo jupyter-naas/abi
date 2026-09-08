@@ -186,9 +186,6 @@ export function UserDetail({
   return (
     <div className="detail">
       <div className="detail-head">
-        <button type="button" className="detail-back" onClick={onClose}>
-          ◂ Back to search
-        </button>
         <div className="detail-actions">
           {/* The author's page on its own - same control, same `expand=1`, as
               a post's page. It is a URL, so it can be linked to directly. */}

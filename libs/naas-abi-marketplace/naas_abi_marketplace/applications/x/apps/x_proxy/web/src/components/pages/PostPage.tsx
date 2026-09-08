@@ -88,6 +88,10 @@ export function PostPage({
 
   // Opened from the Search Tweets results: back belongs to that search.
   const toSearch = from === "tweets";
+  const backHref =
+    toSearch || !author
+      ? hrefFor("tweets", { q: toSearch ? needle : undefined })
+      : hrefFor("users", { user: author });
   // The same post, with and without the app around it.
   const selfHref = (expand: boolean) =>
     hrefFor("post", {
@@ -116,25 +120,6 @@ export function PostPage({
   return (
     <div className={`detail${expanded ? " post-full" : ""}`}>
       <div className="detail-head">
-        {/* Back goes where the reader came from: the search that found the
-            post, or the author whose feed it was expanded in. The other one is
-            still on the page, as a link of its own. */}
-        {toSearch ? (
-          <Link
-            className="detail-back"
-            href={hrefFor("tweets", { q: needle })}
-          >
-            ◂ Back to Search Tweets
-          </Link>
-        ) : author ? (
-          <Link className="detail-back" href={hrefFor("users", { user: author })}>
-            ◂ Back to @{author}
-          </Link>
-        ) : (
-          <Link className="detail-back" href={hrefFor("tweets", {})}>
-            ◂ Back to Search Tweets
-          </Link>
-        )}
         <div className="detail-actions">
           {/* Top right: the post with nothing around it, and the way back from
               it. It is a URL, so a full view can be linked to directly. */}
@@ -183,16 +168,14 @@ export function PostPage({
               @{author}&apos;s feed
             </Link>
           ) : null}
-          {post?.url ? (
-            <a
-              className="result-open"
-              href={post.url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              ↗ On X
-            </a>
-          ) : null}
+          <Link
+            className="detail-close"
+            href={backHref}
+            title="Close this post"
+            aria-label="Close this post"
+          >
+            ✕
+          </Link>
         </div>
       </div>
 
