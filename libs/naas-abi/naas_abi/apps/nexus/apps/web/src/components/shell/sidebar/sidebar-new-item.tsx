@@ -27,7 +27,7 @@ export type SidebarNewItemMenuOption = {
   /** Small colour chip, e.g. a template accent. */
   swatch?: string;
   disabled?: boolean;
-  /** Non-interactive section label (ABI, Forvis Mazars). */
+  /** Non-interactive section label (ABI, a configured source). */
   heading?: boolean;
   onSelect?: () => void;
 };

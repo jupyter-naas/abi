@@ -88,19 +88,19 @@ describe('SlidesTemplateStrip', () => {
       createElement(SlidesTemplateStrip, {
         templates: [
           {
-            id: 'forvis-mazars/fm-slides-v1',
-            name: 'Forvis Mazars AI',
+            id: 'acme/house-style-v1',
+            name: 'House style',
             description: '',
             preview_bg: '#f4f4f4',
             preview_panel: '#ffffff',
             preview_accent: '#0072ce',
             preview_ink: '#464b4b',
-            slides: [{ index: 0, eyebrow: 'Cover', title: 'Forvis Mazars AI' }],
+            slides: [{ index: 0, eyebrow: 'Cover', title: 'House style' }],
             assets: [],
           },
           {
-            id: 'forvis-mazars/financial-services-v2',
-            name: 'Financial services',
+            id: 'acme/industry-v2',
+            name: 'Industry',
             description: '',
             preview_bg: '#111111',
             preview_panel: '#ffffff',
@@ -116,12 +116,12 @@ describe('SlidesTemplateStrip', () => {
     expect(html).toContain('data-testid="slides-template-strip"');
     expect(html).toContain('Start a new presentation');
     expect(html).toContain('Blank');
-    expect(html).toContain('Forvis Mazars AI');
-    expect(html).toContain('Financial services');
+    expect(html).toContain('House style');
+    expect(html).toContain('Industry');
     expect(html).toContain('data-template-id="abi/minimal-light-v1"');
     expect(html).toContain('data-testid="slides-template-blank-thumb"');
     expect(html).not.toContain('>abi/');
     expect(html).not.toContain('/api/slides/projects');
-    expect(html.indexOf('Blank')).toBeLessThan(html.indexOf('Forvis Mazars AI'));
+    expect(html.indexOf('Blank')).toBeLessThan(html.indexOf('House style'));
   });
 });

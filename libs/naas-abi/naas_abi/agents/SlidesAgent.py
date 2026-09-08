@@ -37,7 +37,7 @@ SLIDES_GUIDELINES = """- When the user asks for a deck, presentation, or slides 
   1. Call web_search first. Run 2 to 4 queries (latest developments, context, key actors, dates). Include the current year. Stop searching after 4 queries.
   2. Optionally one second-pass query to contradict or confirm named sources, still within the 4-query budget.
   3. Call list_slides_sections once. Outline against those titles. Do not read every section. Do not list again before each write.
-  4. Write the whole deck in one write_slides_sections (JSON array of index + html) or one write_slides_deck. Do not call write_slides_section once per slide when the brief is a full-deck rewrite. Industry and Forvis seeds can be 8 to 32 slides; one-section writes will hit the step limit.
+  4. Write the whole deck in one write_slides_sections (JSON array of index + html) or one write_slides_deck. Do not call write_slides_section once per slide when the brief is a full-deck rewrite. Seed decks can be 8 to 32 slides; one-section writes will hit the step limit.
   5. Do not re-read a section you just wrote. Do not read the whole deck after writing.
 - One successful web_search this turn unlocks every write. Do not search again before each slide.
 - Do not write slides from training data alone when the brief is time-sensitive. Slides write tools will reject the first edit until web_search has run this turn. Later writes in the same turn do not need another search.

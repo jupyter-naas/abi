@@ -103,14 +103,11 @@ def test_pick_workspace_slides_agent_prefers_enabled_office_slides() -> None:
         name="Slides",
         class_name="naas_abi.agents.SlidesAgent/SlidesAgent",
     )
-    market = _agent(
-        agent_id="mi",
+    other = _agent(
+        agent_id="sheet",
         enabled=True,
-        name="Market Intelligence Slides Agent",
-        class_name=(
-            "intelligence.market_intelligence.agents."
-            "MarketIntelligenceSlidesAgent/MarketIntelligenceSlidesAgent"
-        ),
+        name="Office Slides",
+        class_name="acme.office.agents.SheetSlidesAgent/SheetSlidesAgent",
     )
     disabled = _agent(
         agent_id="off",
@@ -119,6 +116,6 @@ def test_pick_workspace_slides_agent_prefers_enabled_office_slides() -> None:
         class_name="naas_abi.agents.SlidesAgent/SlidesAgent",
     )
 
-    assert pick_workspace_slides_agent_id([default, market, slides]) == "slides"
-    assert pick_workspace_slides_agent_id([default, market, disabled]) is None
-    assert pick_workspace_slides_agent_id([default, market]) is None
+    assert pick_workspace_slides_agent_id([default, other, slides]) == "slides"
+    assert pick_workspace_slides_agent_id([default, other, disabled]) is None
+    assert pick_workspace_slides_agent_id([default, other]) is None

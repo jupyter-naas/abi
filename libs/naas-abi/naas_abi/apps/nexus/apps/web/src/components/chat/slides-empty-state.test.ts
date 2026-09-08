@@ -3,8 +3,8 @@ import { slidesEmptyStateCopy } from './slides-empty-state';
 
 describe('slidesEmptyStateCopy', () => {
   it('names the pane agent and omits an unknown template', () => {
-    expect(slidesEmptyStateCopy({ firstName: 'Admin', agentName: 'Bob' })).toBe(
-      'Hello, Admin. I am Bob. Tell me the topic and I will write the slides.',
+    expect(slidesEmptyStateCopy({ firstName: 'Admin', agentName: 'Abi' })).toBe(
+      'Hello, Admin. I am Abi. Tell me the topic and I will write the slides.',
     );
   });
 
@@ -12,11 +12,11 @@ describe('slidesEmptyStateCopy', () => {
     expect(
       slidesEmptyStateCopy({
         firstName: 'Admin',
-        agentName: 'Bob',
-        templateName: 'Forvis Mazars AI',
+        agentName: 'Abi',
+        templateName: 'Consulting',
       }),
     ).toBe(
-      'Hello, Admin. I am Bob. This is a Forvis Mazars AI deck. Tell me the topic and I will write the slides.',
+      'Hello, Admin. I am Abi. This is a Consulting deck. Tell me the topic and I will write the slides.',
     );
   });
 

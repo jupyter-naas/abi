@@ -217,7 +217,7 @@ def pick_workspace_chat_agent_id(
 
 
 def _is_nexus_slides_agent(agent: AgentRecord) -> bool:
-    """True for the office Slides agent, not market-intel or brief-to-deck variants."""
+    """True for the Nexus office Slides agent, not other office writers."""
     if agent.name == "Slides":
         return True
     class_name = agent.class_name or ""

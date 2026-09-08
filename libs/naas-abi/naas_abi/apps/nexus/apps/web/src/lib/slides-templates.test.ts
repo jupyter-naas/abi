@@ -78,7 +78,7 @@ describe('templateNamespacesAreAmbiguous', () => {
 describe('templateNamespaceLabel', () => {
   it('uses the known source names', () => {
     expect(templateNamespaceLabel('abi')).toBe('ABI');
-    expect(templateNamespaceLabel('forvis-mazars')).toBe('Forvis Mazars');
+    expect(templateNamespaceLabel('acme')).toBe('Acme');
   });
 
   it('title-cases an unknown slug', () => {
@@ -94,21 +94,19 @@ describe('slidesHomeTemplateCards', () => {
     expect(SLIDES_HOME_BLANK_TEMPLATE_ID).toBe(DEFAULT_SLIDES_TEMPLATE_ID);
   });
 
-  it('puts Forvis Mazars AI second, then the remaining human names', () => {
+  it('puts Blank first, then catalog names in source order', () => {
     const cards = slidesHomeTemplateCards([
-      { id: 'forvis-mazars/financial-services-v2', name: 'Financial services' },
-      { id: 'forvis-mazars/fm-slides-v1', name: 'Forvis Mazars AI' },
+      { id: 'acme/industry-v2', name: 'Industry' },
       { id: 'abi/minimal-light-v1', name: 'Minimal Light' },
       { id: 'abi/pitch-dark-v1', name: 'Pitch Dark' },
     ]);
     expect(cards.map((card) => card.label)).toEqual([
       'Blank',
-      'Forvis Mazars AI',
-      'Financial services',
+      'Industry',
       'Pitch Dark',
     ]);
     expect(cards[0]?.id).toBe('abi/minimal-light-v1');
-    expect(cards[1]?.id).toBe('forvis-mazars/fm-slides-v1');
+    expect(cards[1]?.id).toBe('acme/industry-v2');
     expect(cards.every((card) => !card.label.includes('/'))).toBe(true);
   });
 });
@@ -129,20 +127,20 @@ describe('slidesTemplateMenuRows', () => {
     const rows = slidesTemplateMenuRows([
       { id: 'abi/minimal-light-v1', source: 'abi', name: 'Minimal Light' },
       {
-        id: 'forvis-mazars/financial-services-v2',
-        source: 'forvis-mazars',
-        name: 'Financial services',
+        id: 'acme/industry-v2',
+        source: 'acme',
+        name: 'Industry',
       },
     ]);
     expect(rows.map((row) => row.label)).toEqual([
       'ABI',
       'Minimal Light',
-      'Forvis Mazars',
-      'Financial services',
+      'Acme',
+      'Industry',
     ]);
     expect(rows.every((row) => !row.label.includes('/'))).toBe(true);
-    expect(rows.find((row) => row.kind === 'template' && row.label === 'Financial services')?.id).toBe(
-      'forvis-mazars/financial-services-v2',
+    expect(rows.find((row) => row.kind === 'template' && row.label === 'Industry')?.id).toBe(
+      'acme/industry-v2',
     );
   });
 });
@@ -172,12 +170,12 @@ describe('templatePreviewColors', () => {
 describe('templateDisplayName', () => {
   const catalog = [
     { id: 'abi/minimal-light-v1', name: 'Minimal Light' },
-    { id: 'forvis-mazars/fm-slides-v1', name: 'Forvis Mazars AI' },
+    { id: 'acme/industry-v2', name: 'Industry' },
   ];
 
   it('resolves a namespaced id or a bare stem', () => {
-    expect(templateDisplayName('forvis-mazars/fm-slides-v1', catalog)).toBe('Forvis Mazars AI');
-    expect(templateDisplayName('fm-slides-v1', catalog)).toBe('Forvis Mazars AI');
+    expect(templateDisplayName('acme/industry-v2', catalog)).toBe('Industry');
+    expect(templateDisplayName('industry-v2', catalog)).toBe('Industry');
   });
 
   it('omits unknown or empty ids instead of inventing a name', () => {

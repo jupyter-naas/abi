@@ -45,7 +45,7 @@ export function templateNamespace(template: Pick<SlidesSeedTemplate, 'id' | 'sou
  * Whether the catalog draws on more than one source.
  *
  * The picker uses this to decide whether to insert section headings (ABI,
- * Forvis Mazars). It does not prefix each row with `source/`.
+ * then each configured source). It does not prefix each row with `source/`.
  */
 export function templateNamespacesAreAmbiguous(
   templates: Pick<SlidesSeedTemplate, 'id' | 'source'>[],
@@ -56,7 +56,6 @@ export function templateNamespacesAreAmbiguous(
 
 const NAMESPACE_HEADINGS: Record<string, string> = {
   abi: 'ABI',
-  'forvis-mazars': 'Forvis Mazars',
 };
 
 /** Human heading for a source slug. Unknown slugs are title-cased. */
@@ -77,7 +76,6 @@ export type SlidesTemplateMenuRow =
   | { kind: 'template'; id: string; label: string; swatch?: string };
 
 export const SLIDES_HOME_BLANK_TEMPLATE_ID = 'abi/minimal-light-v1';
-const SLIDES_HOME_FM_TEMPLATE_STEM = 'fm-slides-v1';
 
 export type SlidesHomeTemplateCard = {
   id: string;
@@ -86,7 +84,7 @@ export type SlidesHomeTemplateCard = {
 };
 
 /**
- * Home-page template strip: Blank and Forvis Mazars AI first, then the rest.
+ * Home-page template strip: Blank first, then the catalog in source order.
  *
  * Blank always creates the default seed, even if that id is missing from the
  * catalog payload. Labels stay human names; no `source/` prefixes.
@@ -101,13 +99,6 @@ export function slidesHomeTemplateCards(
   const cards: SlidesHomeTemplateCard[] = [
     { id: SLIDES_HOME_BLANK_TEMPLATE_ID, label: 'Blank', blank: true },
   ];
-
-  const fm = templates.find((template) => templateStem(template.id) === SLIDES_HOME_FM_TEMPLATE_STEM);
-  if (fm) {
-    cards.push({ id: fm.id, label: fm.name });
-    seen.add(fm.id);
-    seen.add(templateStem(fm.id));
-  }
 
   for (const template of templates) {
     const stem = templateStem(template.id);
@@ -124,7 +115,7 @@ export function slidesHomeTemplateCards(
  *
  * When more than one source is present, a heading is inserted ahead of each
  * group. Template ids stay on the row so create still sends the real catalog
- * id (`forvis-mazars/financial-services-v2`).
+ * id (`acme/industry-v2`).
  */
 export function slidesTemplateMenuRows(
   templates: Array<

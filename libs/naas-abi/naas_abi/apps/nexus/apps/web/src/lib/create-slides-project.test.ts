@@ -76,17 +76,16 @@ describe('pickSlidesOfficeAgent', () => {
     expect(pickSlidesOfficeAgent([abi, orchestrator])?.id).toBe('default');
   });
 
-  it('ignores market-intelligence sheet agents', () => {
+  it('ignores an office agent that is not Nexus Slides', () => {
     const orchestrator = { id: 'default', enabled: true, isDefault: true, name: 'Orchestrator' };
-    const market = {
-      id: 'mi',
+    const other = {
+      id: 'sheet',
       enabled: true,
       isDefault: false,
-      name: 'Market Intelligence Slides Agent',
-      class_name:
-        'intelligence.market_intelligence.agents.MarketIntelligenceSlidesAgent/MarketIntelligenceSlidesAgent',
+      name: 'Office Slides',
+      class_name: 'acme.office.agents.SheetSlidesAgent/SheetSlidesAgent',
     };
-    expect(pickSlidesOfficeAgent([orchestrator, market])?.id).toBe('default');
+    expect(pickSlidesOfficeAgent([orchestrator, other])?.id).toBe('default');
   });
 });
 
@@ -187,7 +186,7 @@ describe('openSlidesAgentPane', () => {
     expect(useWorkspaceStore.getState().paneAgent).toBe(ABI_ID);
   });
 
-  it('binds Slides on an open deck even if Bob was picked', () => {
+  it('binds Slides on an open deck even if another agent was picked', () => {
     seedAgents(true);
     useWorkspaceStore.setState({
       paneAgent: ABI_ID,

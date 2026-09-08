@@ -212,7 +212,7 @@ def _render_slides_context_block(client_context: dict | None) -> str:
         "Do not re-read a slide you just wrote.\n"
         "3. Write the whole deck in one write_slides_sections or write_slides_deck. "
         "Do not write one section per tool call when the brief is a full-deck rewrite. "
-        "Industry and Forvis seeds can be 8 to 32 slides.\n"
+        "Seed decks can be 8 to 32 slides.\n"
         "4. After that write, report what changed. Do not list or read the "
         "whole deck again. No lorem. No Context / Approach / Plan filler when "
         "the user asked for a situation brief.\n"

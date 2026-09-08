@@ -110,8 +110,9 @@ export function openSlidesAgentPane(opts?: {
   const currentStillValid = Boolean(
     ws.paneAgent && agents.some((a) => a.enabled && a.id === ws.paneAgent),
   );
-  // An open deck always binds Slides. Bob has no write_slides_* tools;
-  // keeping an explicit Bob pick burns the step budget on transfers.
+  // An open deck always binds Slides. The workspace default has no
+  // write_slides_* tools; keeping an explicit pick burns the step budget
+  // on transfers.
   if (slug || opts?.freshChat || !ws.paneAgentExplicitlySelected || !currentStillValid) {
     ws.setPaneAgent(defaultId);
   }
