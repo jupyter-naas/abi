@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v2.64.0 (2026-09-08)
+
+### Bug Fixes
+
+- **slides**: Keep catalog headings and fixtures tenant-agnostic
+  ([`b5fa830`](https://github.com/jupyter-naas/abi/commit/b5fa8300d61fe1235e93ae25825048a8a0bca820))
+
+- **slides**: Print one 16:9 page per slide
+  ([`daf8ec7`](https://github.com/jupyter-naas/abi/commit/daf8ec7a496dbf3c3053247d8e3cc81934a5beb5))
+
+- **slides**: Sort slides_tools_test imports for ruff I001
+  ([`782ea04`](https://github.com/jupyter-naas/abi/commit/782ea048a32305c74c069bfa3b36124aca61e406))
+
+### Features
+
+- **slides**: Composer, cover gallery, and pane-bound deck threads
+  ([`30ffacd`](https://github.com/jupyter-naas/abi/commit/30ffacd04d923167df57ec0a01c204a0af37eab8))
+
+
 ## v2.63.0 (2026-09-08)
 
 ### Features
