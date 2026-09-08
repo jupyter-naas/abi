@@ -57,8 +57,25 @@ export type SlidesTreeDeckNode = {
  */
 export const SLIDES_TREE_ROOT_LABEL = 'slides';
 
+/** First sidebar row: cover gallery, same idea as Apps' "All apps". */
+export const SLIDES_ALL_ROW_LABEL = 'All slides';
+
 /** The file a deck opens in the Slides pane. */
 export const SLIDES_DECK_FILE_NAME = 'deck.html';
+
+/** True on `/workspace/{id}/slides` with no deck slug. */
+export function isSlidesGalleryPath(pathname: string | undefined, galleryHref: string): boolean {
+  if (!pathname) return false;
+  const path = pathname.split('?')[0] ?? '';
+  return path === galleryHref || path === `${galleryHref}/`;
+}
+
+/** True on a deck (or `/slides/new`), not the gallery. */
+export function isSlidesNestedPath(pathname: string | undefined, galleryHref: string): boolean {
+  if (!pathname) return false;
+  const path = pathname.split('?')[0] ?? '';
+  return path.startsWith(`${galleryHref}/`);
+}
 
 export function slidesTreeDeckLabel(project: Pick<SlidesProject, 'slug' | 'title'>): string {
   return (project.title || '').trim() || project.slug;
@@ -117,23 +134,42 @@ export function slidesTreeFileNodes(
 }
 
 /**
- * Decks as tree nodes, sorted by their display name.
- *
- * Abi renames a deck from the brief on its first write, so the label has to
- * come from the server project list rather than the slug.
+ * Keep the open deck in the explorer even when GET /projects omitted it
+ * (list race, Forgejo down, or a silent fetch miss).
  */
+function withOpenProject(
+  projects: SlidesProject[],
+  openSlug?: string | null,
+  openTitle?: string | null,
+): SlidesProject[] {
+  const listed = projects.filter((project) => Boolean(project?.slug));
+  if (!openSlug || listed.some((project) => project.slug === openSlug)) {
+    return listed;
+  }
+  return [
+    ...listed,
+    {
+      slug: openSlug,
+      title: (openTitle || '').trim() || openSlug,
+      branch: `slides/${openSlug}`,
+      deck_path: `slides/${openSlug}/deck.html`,
+      template_id: '',
+    },
+  ];
+}
+
 export function buildSlidesTree(
   projects: SlidesProject[],
   opts: {
     workspaceId: string;
     openSlug?: string | null;
+    openTitle?: string | null;
     /** Fetched per deck; a deck with no entry here renders unexpanded. */
     trees?: Record<string, SlidesProjectTree | undefined>;
   },
 ): SlidesTreeDeckNode[] {
   const trees = opts.trees ?? {};
-  return [...projects]
-    .filter((project) => Boolean(project?.slug))
+  return withOpenProject(projects, opts.openSlug, opts.openTitle)
     .map((project) => {
       const active = Boolean(opts.openSlug) && project.slug === opts.openSlug;
       const tree = trees[project.slug];

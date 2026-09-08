@@ -335,6 +335,7 @@ def test_list_and_create_projects_seed_in_memory_repo(monkeypatch) -> None:
     body = created.json()
     assert body["slug"] == "untitled-local"
     assert body["deck_path"] == "slides/ws-test/untitled-local/deck.html"
+    assert body["archived"] is False
     listed2 = client.get("/slides/projects", params={"workspace_id": "ws-test"})
     assert listed2.status_code == 200, listed2.text
     assert "untitled-local" in [p["slug"] for p in listed2.json()]
@@ -379,6 +380,68 @@ def test_list_and_create_projects_seed_in_memory_repo(monkeypatch) -> None:
     )
     assert namespaced.status_code == 200, namespaced.text
     assert namespaced.json()["template_id"] == "abi/executive-v1"
+
+
+def test_patch_project_renames_and_archives_without_changing_slug(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Untitled presentation",
+            "slug": "untitled-patch",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+    slug = created.json()["slug"]
+    assert slug == "untitled-patch"
+
+    empty = client.patch(
+        f"/slides/projects/{slug}",
+        json={"workspace_id": "ws-test"},
+    )
+    assert empty.status_code == 422
+
+    renamed = client.patch(
+        f"/slides/projects/{slug}",
+        json={"workspace_id": "ws-test", "title": "Board update"},
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["slug"] == slug
+    assert renamed.json()["title"] == "Board update"
+    assert renamed.json()["archived"] is False
+    assert renamed.json()["deck_path"] == "slides/ws-test/untitled-patch/deck.html"
+
+    archived = client.patch(
+        f"/slides/projects/{slug}",
+        json={"workspace_id": "ws-test", "archived": True},
+    )
+    assert archived.status_code == 200, archived.text
+    assert archived.json()["archived"] is True
+    assert archived.json()["slug"] == slug
+    assert archived.json()["title"] == "Board update"
+
+    listed = client.get("/slides/projects", params={"workspace_id": "ws-test"})
+    assert listed.status_code == 200, listed.text
+    row = next(p for p in listed.json() if p["slug"] == slug)
+    assert row["archived"] is True
+    assert row["title"] == "Board update"
+
+    restored = client.patch(
+        f"/slides/projects/{slug}",
+        json={"workspace_id": "ws-test", "archived": False},
+    )
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["archived"] is False
+    assert restored.json()["slug"] == slug
+
+    missing = client.patch(
+        "/slides/projects/no-such-deck",
+        json={"workspace_id": "ws-test", "title": "Nope"},
+    )
+    assert missing.status_code == 404
 
 
 def test_friendly_git_detail_hides_pushrejected_dump() -> None:

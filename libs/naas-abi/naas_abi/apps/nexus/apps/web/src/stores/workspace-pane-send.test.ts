@@ -10,6 +10,7 @@ describe('pane send workspace scoping', () => {
       activeConversationId: null,
       paneConversationId: null,
       paneOpenTabIds: [],
+      slidesPaneConversationByKey: {},
       selectedAgent: 'agent-main',
       paneAgent: 'agent-pane',
     });
@@ -32,6 +33,19 @@ describe('pane send workspace scoping', () => {
     const paneId = useWorkspaceStore.getState().createConversation(undefined, { surface: 'pane' });
     useWorkspaceStore.getState().setCurrentWorkspace('ws-a');
     expect(useWorkspaceStore.getState().paneConversationId).toBe(paneId);
+  });
+
+  it('stamps a pane draft with the open slides slug', () => {
+    useWorkspaceStore.setState({
+      slidesPaneConversationByKey: {},
+    });
+    const id = useWorkspaceStore.getState().createConversation(undefined, {
+      surface: 'pane',
+      slidesSlug: 'deck-a',
+    });
+    const conv = useWorkspaceStore.getState().conversations.find((c) => c.id === id);
+    expect(conv?.slidesSlug).toBe('deck-a');
+    expect(useWorkspaceStore.getState().slidesPaneConversationByKey['ws-a::deck-a']).toBe(id);
   });
 
   it('creates pane drafts in the current workspace so send can find them', () => {

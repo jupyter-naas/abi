@@ -196,6 +196,46 @@ def _get_engine_default_agent_class_name() -> str | None:
     return None
 
 
+def pick_workspace_chat_agent_id(
+    agents: list[AgentRecord],
+    requested_id: str | None,
+) -> str | None:
+    """Use the requested agent only if it belongs to this workspace and is on.
+
+    A leftover picker id from another workspace (or a disabled row) must not
+    run. Fall back to the workspace default, then the first enabled agent.
+    """
+    if requested_id:
+        requested = next((agent for agent in agents if agent.id == requested_id), None)
+        if requested is not None and requested.enabled:
+            return requested.id
+    default = next((agent for agent in agents if agent.is_default), None)
+    if default is not None:
+        return default.id
+    enabled = next((agent for agent in agents if agent.enabled), None)
+    return enabled.id if enabled else None
+
+
+def _is_nexus_slides_agent(agent: AgentRecord) -> bool:
+    """True for the Nexus office Slides agent, not other office writers."""
+    if agent.name == "Slides":
+        return True
+    class_name = agent.class_name or ""
+    return class_name.endswith("/SlidesAgent") and "naas_abi" in class_name
+
+
+def pick_workspace_slides_agent_id(agents: list[AgentRecord]) -> str | None:
+    """Enabled Nexus Slides row, or None when the workspace did not list it.
+
+    Open-deck turns bind this agent. The workspace default stays the
+    orchestrator for ordinary chat. A missing row is not a fallback to Abi.
+    """
+    for agent in agents:
+        if agent.enabled and _is_nexus_slides_agent(agent):
+            return agent.id
+    return None
+
+
 def _workspace_agent_roster(
     seeded_class_names: set[str] | None,
     default_class_name: str | None,
@@ -554,6 +594,11 @@ async def _reconcile_workspace_agents(
         default_class_name = _get_engine_default_agent_class_name()
 
     roster = _workspace_agent_roster(seeded_class_names, default_class_name)
+    # An empty roster from a missing seed plus a failed default resolve must
+    # not disable every row. That is how a workspace that exists in the DB
+    # but is absent from the loaded config lost its default and kept a leftover
+    # picker id from another workspace.
+    align_enabled_to_roster = bool(roster) or seeded_class_names is not None
 
     # Persist any newly discovered agent classes to the database.
     for class_name, agent_cls in class_name_to_agent_class.items():
@@ -632,7 +677,7 @@ async def _reconcile_workspace_agents(
 
     aligned: list[AgentRecord] = []
     for agent in reconciled:
-        if not agent.class_name:
+        if not align_enabled_to_roster or not agent.class_name:
             aligned.append(agent)
             continue
         should_enable = agent.class_name in roster

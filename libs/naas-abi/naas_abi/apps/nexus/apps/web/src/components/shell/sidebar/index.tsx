@@ -22,6 +22,7 @@ import {
   shiftForReorder,
 } from '@/lib/sidebar-nav';
 import { requestQuickOpen } from '@/lib/quick-open';
+import { isSlidesNestedPath } from './slides-tree';
 import { getWorkspacePath } from './utils';
 import { WorkspaceMark, WorkspaceMarkFrame } from '../workspace-mark';
 import { clearAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
@@ -246,6 +247,13 @@ export function Sidebar() {
       return;
     }
     if (activePanelSection === section.id) {
+      if (section.id === 'slides') {
+        const gallery = getDefaultPath('slides');
+        if (isSlidesNestedPath(pathname, gallery)) {
+          router.push(gallery);
+          return;
+        }
+      }
       setActivePanelSection(null);
       return;
     }

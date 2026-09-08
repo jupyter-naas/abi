@@ -2,13 +2,26 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Loader2, Presentation } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Header } from '@/components/shell/header';
+import { SlidesIndexGallery, SlidesTemplateStrip } from '@/components/slides/slides-index-gallery';
+import { invalidateSlidesCover } from '@/components/slides/slides-cover-thumb';
 import { SlidesMenuBar } from '@/components/slides/slides-menu-bar';
 import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
-import { slidesApiErrorMessage, startNewPresentation } from '@/lib/create-slides-project';
+import {
+  openSlidesAgentPane,
+  slidesApiErrorMessage,
+  startNewPresentation,
+} from '@/lib/create-slides-project';
+import { partitionSlidesProjects, patchSlidesProject } from '@/lib/slides-project-actions';
+import type { SlidesSeedTemplate } from '@/lib/slides-templates';
 import { authFetch } from '@/stores/auth';
-import { useSlidesStore, type SlidesProject } from '@/stores/slides';
+import {
+  SLIDES_DECK_UPDATED_EVENT,
+  useSlidesStore,
+  type SlidesProject,
+} from '@/stores/slides';
+import '@/app/workspace/[workspaceId]/chat/components/chat-components.css';
 
 export default function SlidesIndexPage() {
   const params = useParams();
@@ -16,52 +29,124 @@ export default function SlidesIndexPage() {
   const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
   const base = `/workspace/${workspaceId}/slides`;
   const [projects, setProjects] = useState<SlidesProject[]>([]);
+  const [templates, setTemplates] = useState<SlidesSeedTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const setSelectedSlug = useSlidesStore((s) => s.setSelectedSlug);
+  const setSelectedTitle = useSlidesStore((s) => s.setSelectedTitle);
+  const { active, archived } = partitionSlidesProjects(projects);
+  const visibleProjects = showArchived ? archived : active;
 
-  const onNewPresentation = useCallback(async () => {
-    if (!workspaceId || creating) return;
-    setCreating(true);
-    setError(null);
-    try {
-      await startNewPresentation(workspaceId, (href) => router.push(href));
-    } catch (e) {
-      setError(slidesApiErrorMessage((e as Error).message, 'Could not create the deck.'));
-      setCreating(false);
-    }
-  }, [workspaceId, creating, router]);
-
-  const load = useCallback(async () => {
-    if (!workspaceId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await authFetch(
-        `/api/slides/projects?workspace_id=${encodeURIComponent(workspaceId)}`,
-      );
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
-        throw new Error(slidesApiErrorMessage(body.detail, `Failed (${res.status})`));
+  const onCreateFromTemplate = useCallback(
+    async (templateId?: string) => {
+      if (!workspaceId || creating) return;
+      setCreating(true);
+      setError(null);
+      try {
+        await startNewPresentation(workspaceId, (href) => router.push(href), templateId);
+      } catch (e) {
+        setError(slidesApiErrorMessage((e as Error).message, 'Could not create the deck.'));
+        setCreating(false);
       }
-      setProjects((await res.json()) as SlidesProject[]);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, [workspaceId]);
+    },
+    [workspaceId, creating, router],
+  );
+
+  const load = useCallback(
+    async (opts?: { quiet?: boolean }) => {
+      if (!workspaceId) return;
+      const quiet = Boolean(opts?.quiet);
+      if (!quiet) {
+        setLoading(true);
+        setError(null);
+      }
+      try {
+        const [projRes, tmplRes] = await Promise.all([
+          authFetch(`/api/slides/projects?workspace_id=${encodeURIComponent(workspaceId)}`),
+          authFetch(`/api/slides/templates?workspace_id=${encodeURIComponent(workspaceId)}`),
+        ]);
+        if (!projRes.ok) {
+          const body = (await projRes.json().catch(() => ({}))) as { detail?: unknown };
+          throw new Error(slidesApiErrorMessage(body.detail, `Failed (${projRes.status})`));
+        }
+        setProjects((await projRes.json()) as SlidesProject[]);
+        if (tmplRes.ok) {
+          const body = (await tmplRes.json()) as SlidesSeedTemplate[];
+          setTemplates(
+            body.map((row) => ({
+              ...row,
+              slides: row.slides ?? [],
+              assets: row.assets ?? [],
+            })),
+          );
+        }
+      } catch (e) {
+        if (!quiet) setError((e as Error).message);
+      } finally {
+        if (!quiet) setLoading(false);
+      }
+    },
+    [workspaceId],
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (archived.length === 0 && showArchived) setShowArchived(false);
+  }, [archived.length, showArchived]);
+
+  useEffect(() => {
+    const onUpdated = (event: Event) => {
+      const slug = (event as CustomEvent<{ slug?: string }>).detail?.slug;
+      invalidateSlidesCover(workspaceId, slug);
+      void load({ quiet: true });
+    };
+    window.addEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
+    return () => window.removeEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
+  }, [load, workspaceId]);
+
+  const renameProject = useCallback(
+    async (project: SlidesProject, title: string) => {
+      setProjects((current) =>
+        current.map((row) => (row.slug === project.slug ? { ...row, title } : row)),
+      );
+      try {
+        await patchSlidesProject(workspaceId, project.slug, { title });
+      } catch (e) {
+        setError((e as Error).message);
+        void load({ quiet: true });
+      }
+    },
+    [workspaceId, load],
+  );
+
+  const archiveProject = useCallback(
+    async (project: SlidesProject) => {
+      const nextArchived = !project.archived;
+      setProjects((current) =>
+        current.map((row) =>
+          row.slug === project.slug ? { ...row, archived: nextArchived } : row,
+        ),
+      );
+      try {
+        await patchSlidesProject(workspaceId, project.slug, { archived: nextArchived });
+      } catch (e) {
+        setError((e as Error).message);
+        void load({ quiet: true });
+      }
+    },
+    [workspaceId, load],
+  );
+
   return (
     <div className="flex h-full flex-col">
       <Header
         title="Slides"
-        nav={<SlidesMenuBar onNewPresentation={() => void onNewPresentation()} />}
+        nav={<SlidesMenuBar onNewPresentation={() => void onCreateFromTemplate()} />}
       />
 
       {error && (
@@ -70,45 +155,65 @@ export default function SlidesIndexPage() {
         </div>
       )}
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto">
         {loading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 size={16} className="animate-spin" />
-            Loading projects…
-          </div>
-        ) : projects.length === 0 ? (
-          <div className="mx-auto max-w-lg space-y-3 pt-16 text-center">
-            <Presentation size={32} className="mx-auto text-muted-foreground" />
-            <h2 className="text-base font-medium">Create your first deck</h2>
-            <p className="text-sm text-muted-foreground">
-              Use File → New or New in the Slides column. That opens Minimal Light and
-              Abi. Talk through the deck; the preview updates as tools run. File →
-              Export PPTX rebuilds the current HTML at 1280x720 (closest fit, not
-              pixel-perfect).
-            </p>
+          <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
+            <Loader2 size={16} className="mr-2 animate-spin" />
+            Loading decks…
           </div>
         ) : (
-          <div className="mx-auto grid max-w-3xl gap-2">
-            {projects.map((p) => (
-              <button
-                key={p.slug}
-                type="button"
-                onClick={() => {
-                  setSelectedSlug(p.slug);
-                  router.push(`${base}/${p.slug}`);
-                }}
-                className="flex w-full items-center justify-between rounded-md border border-border px-4 py-3 text-left transition-colors hover:bg-workspace-accent-5"
-              >
-                <div>
-                  <div className="text-sm font-medium">{p.title}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {p.branch} · {p.deck_path}
+          <>
+            <SlidesTemplateStrip
+              templates={templates}
+              creating={creating}
+              onSelect={(templateId) => void onCreateFromTemplate(templateId)}
+            />
+            <div className="p-6">
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <h2 className="text-sm font-medium text-foreground">
+                  {showArchived ? 'Archived' : 'Your decks'}
+                </h2>
+                {archived.length > 0 ? (
+                  <div className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      className={`chat-section-label${!showArchived ? '' : ' is-link'}`}
+                      onClick={() => setShowArchived(false)}
+                    >
+                      Slides
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="slides-archived-filter"
+                      className={`chat-section-label${showArchived ? '' : ' is-link'}`}
+                      onClick={() => setShowArchived(true)}
+                    >
+                      Archived
+                    </button>
                   </div>
-                </div>
-                <span className="text-xs text-muted-foreground">{p.slug}</span>
-              </button>
-            ))}
-          </div>
+                ) : null}
+              </div>
+              {visibleProjects.length === 0 ? (
+                <p className="py-12 text-center text-sm text-muted-foreground">
+                  {showArchived ? 'No archived presentations.' : 'No presentations yet.'}
+                </p>
+              ) : (
+                <SlidesIndexGallery
+                  projects={visibleProjects}
+                  workspaceId={workspaceId}
+                  templates={templates}
+                  onOpen={(project) => {
+                    setSelectedSlug(project.slug);
+                    setSelectedTitle(project.title);
+                    openSlidesAgentPane({ slug: project.slug, title: project.title });
+                    router.push(`${base}/${project.slug}`);
+                  }}
+                  onRename={(project, title) => void renameProject(project, title)}
+                  onArchive={(project) => void archiveProject(project)}
+                />
+              )}
+            </div>
+          </>
         )}
       </div>
       <SlidesStatusBar />

@@ -1182,7 +1182,8 @@ async def test_build_abi_injection_preamble_includes_open_slides_deck() -> None:
     assert "Do not ask which deck" in preamble
     assert "Edit HTML sections only" in preamble
     assert "buildPptx" in preamble
-    assert "Research first, then write" in preamble
+    assert "Plan, then write" in preamble
+    assert "write_slides_sections" in preamble
     assert "web_search" in preamble
     assert "start editing immediately" not in preamble
     assert "today:" in preamble

@@ -57,10 +57,12 @@ from langgraph.graph.message import MessagesState
 from langgraph.types import Command
 from naas_abi_core.engine.context import get_default_event_service
 from naas_abi_core.services.agent.context import (
+    SLIDES_RECURSION_LIMIT,
     agent_chat_id,
     agent_user_id,
     agent_workspace_id,
     coder_workspace_base,
+    slides_step_limit_message,
     slides_turn_active,
 )
 from naas_abi_core.services.agent.ontologies.modules.AgentEventOntology import (
@@ -126,9 +128,11 @@ def _friendly_model_invoke_error(exc: BaseException) -> str:
     text = str(exc or "").strip()
     lowered = text.lower()
     if "recursion limit" in lowered:
+        if slides_turn_active():
+            return slides_step_limit_message()
         return (
             "The agent hit its step limit before finishing. "
-            "Open the deck and send the brief again."
+            "Try a smaller request, or continue from what already landed."
         )
     if (
         "429" in text
@@ -1656,6 +1660,31 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             # Check if tool is a handoff tool
             is_handoff = tool_call["name"].startswith("transfer_to_")
             if is_handoff is True:
+                if any(self._command_sets_active_agent(cmd) for cmd in results):
+                    # Qwen often emits the same transfer_to_* twice in one
+                    # turn. A second Command that writes current_active_agent
+                    # crashes LangGraph (INVALID_CONCURRENT_GRAPH_UPDATE).
+                    logger.debug(
+                        f"Skipping duplicate handoff '{tool_name}': "
+                        "current_active_agent already set this step"
+                    )
+                    results.append(
+                        Command(
+                            update={
+                                "messages": [
+                                    ToolMessage(
+                                        content=(
+                                            f"__handoff_duplicate__:{tool_name}"
+                                        ),
+                                        name=tool_name,
+                                        tool_call_id=tool_call["id"],
+                                        additional_kwargs={"internal": True},
+                                    )
+                                ]
+                            }
+                        )
+                    )
+                    continue
                 args = {"state": state, "tool_call": {**tool_call, "role": "tool_call"}}
 
             # Try to invoke the tool.
@@ -1792,7 +1821,35 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 )
 
         logger.debug(f"✅ Tool results: {results}")
-        return results
+        return self._one_routing_write_per_step(results)
+
+    @staticmethod
+    def _command_sets_active_agent(cmd: Command) -> bool:
+        update = getattr(cmd, "update", None)
+        return isinstance(update, dict) and "current_active_agent" in update
+
+    @staticmethod
+    def _one_routing_write_per_step(results: list[Command]) -> list[Command]:
+        """Keep a single current_active_agent write per LangGraph step.
+
+        LastValue channels reject two values. Parallel transfer_to_* calls
+        from one model turn used to crash the invoke thread.
+        """
+        seen = False
+        collapsed: list[Command] = []
+        for cmd in results:
+            if not Agent._command_sets_active_agent(cmd):
+                collapsed.append(cmd)
+                continue
+            if not seen:
+                seen = True
+                collapsed.append(cmd)
+                continue
+            update = cmd.update or {}
+            messages = update.get("messages")
+            if messages:
+                collapsed.append(Command(update={"messages": messages}))
+        return collapsed
 
     @property
     def workflow(self) -> StateGraph:
@@ -2048,12 +2105,12 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         stream_config: RunnableConfig = {
             "configurable": {"thread_id": self._state.thread_id}
         }
-        # Default LangGraph limit is 25. A slides research loop (search, then
-        # write 6-8 sections) needs more steps than a normal chat turn. This
-        # also covers a deck requested from the main chat, where no deck is
-        # open yet at the start of the turn.
+        # Default LangGraph limit is 25. A slides turn (search, then one
+        # batched deck write) needs more. 160 is the slides-specific budget
+        # (see SLIDES_RECURSION_LIMIT). This also covers a deck requested from
+        # the main chat, where no deck is open yet at the start of the turn.
         if slides_turn_active():
-            stream_config["recursion_limit"] = 80
+            stream_config["recursion_limit"] = SLIDES_RECURSION_LIMIT
         for chunk in self.graph.stream(
             {"messages": [human_message]},
             config=stream_config,

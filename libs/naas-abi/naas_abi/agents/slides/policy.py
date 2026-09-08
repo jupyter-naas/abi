@@ -28,6 +28,7 @@ from naas_abi_core.services.agent.context import (
     slides_creation_intent,
     slides_research_queries,
     slides_research_required,
+    slides_writes_completed,
 )
 
 # Last resort for callers that reach these helpers with no ABIModule
@@ -74,8 +75,8 @@ _UNRESEARCHED_WRITE_ERROR = (
 MAX_SLIDES_SEARCHES = 4
 _SEARCH_BUDGET_MESSAGE = (
     "Search budget reached (4 queries). Do not call web_search or web_fetch "
-    "again. Outline 6-8 slides against the open template and write the open "
-    "deck.html now with researched claims, dates, actors, and sources."
+    "again. Call list_slides_sections once, then write the open deck.html in "
+    "one write_slides_sections or write_slides_deck. Do not read every section."
 )
 
 
@@ -281,12 +282,14 @@ def bind_slides_research_policy(
         if not creating:
             slides_research_required.set(False)
             return False
+        slides_writes_completed.set([])
         required = slides_brief_requires_research(message, has_prior_assistant)
         slides_research_required.set(required)
         if required:
             slides_research_queries.set([])
         return required
     slides_active_slug.set(slug)
+    slides_writes_completed.set([])
     required = slides_brief_requires_research(message, has_prior_assistant)
     slides_research_required.set(required)
     if required:

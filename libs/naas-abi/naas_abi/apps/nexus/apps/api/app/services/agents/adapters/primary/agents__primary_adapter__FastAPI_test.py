@@ -8,6 +8,8 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__p
     _canonical_agent_sort_key,
     _class_declared_model_ids,
     _workspace_agent_roster,
+    pick_workspace_chat_agent_id,
+    pick_workspace_slides_agent_id,
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents.port import AgentRecord
 
@@ -18,16 +20,18 @@ def _agent(
     is_default: bool = False,
     enabled: bool = False,
     created_offset_s: int = 0,
+    name: str = "Abi",
+    class_name: str = "naas_abi.agents.AbiAgent/AbiAgent",
 ) -> AgentRecord:
     base = datetime(2026, 7, 31, 10, 0, 0)
     return AgentRecord(
         id=agent_id,
         workspace_id="ws-test",
-        name="Abi",
+        name=name,
         description="",
         enabled=enabled,
-        class_name="naas_abi.agents.AbiAgent/AbiAgent",
-        module_path="naas_abi.agents.AbiAgent",
+        class_name=class_name,
+        module_path=class_name.split("/", 1)[0] if "/" in class_name else class_name,
         system_prompt=None,
         model_id=None,
         provider="abi",
@@ -78,4 +82,40 @@ def test_workspace_agent_roster_uses_seed_when_present() -> None:
 
 def test_workspace_agent_roster_unseeded_is_default_only() -> None:
     assert _workspace_agent_roster(None, "mod/Default") == {"mod/Default"}
+
+
+def test_pick_workspace_chat_agent_rejects_foreign_and_disabled_ids() -> None:
+    default = _agent(agent_id="default", is_default=True, enabled=False)
+    local = _agent(agent_id="local", enabled=True)
+    agents = [default, local]
+
+    assert pick_workspace_chat_agent_id(agents, "local") == "local"
+    assert pick_workspace_chat_agent_id(agents, "stale-from-other-ws") == "default"
+    assert pick_workspace_chat_agent_id(agents, None) == "default"
     assert _workspace_agent_roster(None, None) == set()
+
+
+def test_pick_workspace_slides_agent_prefers_enabled_office_slides() -> None:
+    default = _agent(agent_id="default", is_default=True, enabled=True, name="Orchestrator")
+    slides = _agent(
+        agent_id="slides",
+        enabled=True,
+        name="Slides",
+        class_name="naas_abi.agents.SlidesAgent/SlidesAgent",
+    )
+    other = _agent(
+        agent_id="sheet",
+        enabled=True,
+        name="Office Slides",
+        class_name="acme.office.agents.SheetSlidesAgent/SheetSlidesAgent",
+    )
+    disabled = _agent(
+        agent_id="off",
+        enabled=False,
+        name="Slides",
+        class_name="naas_abi.agents.SlidesAgent/SlidesAgent",
+    )
+
+    assert pick_workspace_slides_agent_id([default, other, slides]) == "slides"
+    assert pick_workspace_slides_agent_id([default, other, disabled]) is None
+    assert pick_workspace_slides_agent_id([default, other]) is None

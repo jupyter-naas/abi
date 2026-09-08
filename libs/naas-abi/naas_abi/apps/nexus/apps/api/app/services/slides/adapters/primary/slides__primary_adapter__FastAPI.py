@@ -766,6 +766,13 @@ class ProjectResponse(BaseModel):
     template_id: str = _DEFAULT_TEMPLATE
     updated_at: str | None = None
     commit_sha: str | None = None
+    archived: bool = False
+
+
+class ProjectUpdateRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    archived: bool | None = None
 
 
 class DeckResponse(BaseModel):
@@ -1084,6 +1091,10 @@ class ProjectTreeResponse(BaseModel):
     assets_note: str | None = None
 
 
+def _meta_archived(meta: dict) -> bool:
+    return bool(meta.get("archived"))
+
+
 def _project_from_meta(
     *,
     workspace_id: str,
@@ -1093,6 +1104,7 @@ def _project_from_meta(
     commit_sha: str | None = None,
     updated_at: str | None = None,
     legacy: bool = False,
+    archived: bool = False,
 ) -> ProjectResponse:
     paths = _paths_for(workspace_id, slug, legacy=legacy)
     return ProjectResponse(
@@ -1103,6 +1115,7 @@ def _project_from_meta(
         template_id=template_id,
         commit_sha=commit_sha,
         updated_at=updated_at,
+        archived=bool(archived),
     )
 
 
@@ -1156,6 +1169,7 @@ async def list_projects(
                     commit_sha=branch.commit_sha,
                     updated_at=meta.get("updated_at"),
                     legacy=legacy,
+                    archived=_meta_archived(meta),
                 )
             )
         out.sort(key=lambda p: (p.updated_at or "", p.slug), reverse=True)
@@ -1233,6 +1247,7 @@ async def create_project(
             "workspace_id": body.workspace_id,
             "title": body.title,
             "template_id": body.template_id,
+            "archived": False,
             "updated_at": None,
             "embedded_images": embedded,
             "assets_note": (
@@ -1353,10 +1368,83 @@ async def get_project(
             commit_sha=branches[paths["branch"]].commit_sha,
             updated_at=meta.get("updated_at"),
             legacy=paths.get("legacy") == "1",
+            archived=_meta_archived(meta),
         )
 
     try:
         return await run_in_threadpool(_get)
+    except RepoNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SourceControlError as exc:
+        raise _source_control_http_error(exc) from exc
+
+
+@router.patch("/projects/{slug}", response_model=ProjectResponse)
+async def update_project(
+    slug: str,
+    body: ProjectUpdateRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+) -> ProjectResponse:
+    """Rename (title) and/or archive a deck. Slug and git folder stay put."""
+    await require_workspace_access(current_user.id, body.workspace_id)
+    if not _SLUG_RE.match(slug):
+        raise HTTPException(status_code=422, detail="Invalid slug")
+    if body.title is None and body.archived is None:
+        raise HTTPException(status_code=422, detail="Provide title and/or archived")
+    sc, repo_id = _slides_sc(request)
+    username = _forge_username(current_user.name or "", str(current_user.email))
+    author_name = current_user.name or username
+    author_email = str(current_user.email)
+
+    def _update() -> ProjectResponse:
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=body.workspace_id, slug=slug
+        )
+        if paths is None:
+            raise RepoNotFoundError(f"slides project {slug}")
+        meta = _load_project_meta(
+            sc, repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
+        )
+        if meta is None:
+            raise RepoNotFoundError(f"slides project {slug}")
+        if body.title is not None:
+            meta["title"] = body.title.strip()
+        if body.archived is not None:
+            meta["archived"] = bool(body.archived)
+        from datetime import UTC, datetime
+
+        meta["workspace_id"] = body.workspace_id
+        meta["slug"] = meta.get("slug") or slug
+        meta["updated_at"] = datetime.now(UTC).isoformat()
+        sc.ensure_user(
+            external_id=current_user.id,
+            email=author_email,
+            username=username,
+        )
+        sc.upsert_file(
+            repo_id=repo_id,
+            path=paths["project_path"],
+            content=json.dumps(meta, indent=2) + "\n",
+            message=f"Update slides project {slug}",
+            branch=paths["branch"],
+            author_name=author_name,
+            author_email=author_email,
+        )
+        branches = {b.name: b for b in sc.list_branches(repo_id=repo_id)}
+        return _project_from_meta(
+            workspace_id=body.workspace_id,
+            slug=slug,
+            title=str(meta.get("title") or slug.replace("-", " ").title()),
+            template_id=str(meta.get("template_id") or _DEFAULT_TEMPLATE),
+            commit_sha=branches[paths["branch"]].commit_sha,
+            updated_at=meta.get("updated_at"),
+            legacy=paths.get("legacy") == "1",
+            archived=_meta_archived(meta),
+        )
+
+    try:
+        return await run_in_threadpool(_update)
     except RepoNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SourceControlError as exc:

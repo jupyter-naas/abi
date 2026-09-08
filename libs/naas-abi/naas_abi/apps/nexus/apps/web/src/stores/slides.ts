@@ -11,6 +11,7 @@ export interface SlidesProject {
   template_id: string;
   updated_at?: string | null;
   commit_sha?: string | null;
+  archived?: boolean;
 }
 
 export type SlidesEditorMode = 'preview' | 'code';

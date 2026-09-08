@@ -2,15 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
-import { Presentation } from 'lucide-react';
+import { ChevronRight, Presentation } from 'lucide-react';
 import {
   DEFAULT_SLIDES_TEMPLATE_ID,
+  openSlidesAgentPane,
   slidesApiErrorMessage,
   startNewPresentation,
 } from '@/lib/create-slides-project';
+import { partitionSlidesProjects, patchSlidesProject } from '@/lib/slides-project-actions';
+import '@/app/workspace/[workspaceId]/chat/components/chat-components.css';
 import {
-  templateNamespace,
-  templateNamespacesAreAmbiguous,
+  slidesTemplateMenuRows,
   type SlidesSeedTemplate,
 } from '@/lib/slides-templates';
 import { authFetch } from '@/stores/auth';
@@ -30,12 +32,10 @@ import { SlidesTreeView } from './slides-tree-view';
 import { getWorkspacePath } from './utils';
 
 /**
- * Slides sidebar: a create action and a file tree, nothing else.
+ * Slides sidebar: create and the file tree.
  *
- * Templates used to own a section here, which meant browsing them was a
- * separate step from making a deck. They now hang off New Slides, so picking
- * one is part of creating. What is left below is a plain explorer over the
- * decks that exist in the workspace repo.
+ * Templates hang off the New Slides caret. The home gallery is the main
+ * template surface. The tree below is the decks in the workspace repo.
  */
 export function SlidesSection({
   collapsed,
@@ -59,7 +59,10 @@ export function SlidesSection({
   const [creating, setCreating] = useState(false);
   const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [renamingSlug, setRenamingSlug] = useState<string | null>(null);
   const selectedSlug = useSlidesStore((s) => s.selectedSlug);
+  const selectedTitle = useSlidesStore((s) => s.selectedTitle);
   const setSelectedSlug = useSlidesStore((s) => s.setSelectedSlug);
   const setSelectedTitle = useSlidesStore((s) => s.setSelectedTitle);
 
@@ -154,9 +157,60 @@ export function SlidesSection({
     }
   }, [expandedDecks, trees, fetchTree]);
 
+  const { active, archived } = useMemo(() => partitionSlidesProjects(projects), [projects]);
+  const openIsArchived = Boolean(openSlug && archived.some((row) => row.slug === openSlug));
+
   const decks = useMemo(
-    () => buildSlidesTree(projects, { workspaceId, openSlug, trees }),
-    [projects, workspaceId, openSlug, trees],
+    () =>
+      buildSlidesTree(active, {
+        workspaceId,
+        openSlug: openIsArchived ? null : openSlug,
+        openTitle: openIsArchived ? null : selectedTitle,
+        trees,
+      }),
+    [active, workspaceId, openSlug, openIsArchived, selectedTitle, trees],
+  );
+
+  const archivedDecks = useMemo(
+    () =>
+      buildSlidesTree(archived, {
+        workspaceId,
+        openSlug: openIsArchived ? openSlug : null,
+        openTitle: openIsArchived ? selectedTitle : null,
+        trees,
+      }),
+    [archived, workspaceId, openSlug, openIsArchived, selectedTitle, trees],
+  );
+
+  const renameDeck = useCallback(
+    async (slug: string, title: string) => {
+      setProjects((current) =>
+        current.map((row) => (row.slug === slug ? { ...row, title } : row)),
+      );
+      if (selectedSlug === slug) setSelectedTitle(title);
+      try {
+        await patchSlidesProject(workspaceId, slug, { title });
+      } catch (e) {
+        setActionError((e as Error).message);
+        void fetchProjects();
+      }
+    },
+    [workspaceId, selectedSlug, setSelectedTitle, fetchProjects],
+  );
+
+  const archiveDeck = useCallback(
+    async (slug: string, archivedFlag: boolean) => {
+      setProjects((current) =>
+        current.map((row) => (row.slug === slug ? { ...row, archived: archivedFlag } : row)),
+      );
+      try {
+        await patchSlidesProject(workspaceId, slug, { archived: archivedFlag });
+      } catch (e) {
+        setActionError((e as Error).message);
+        void fetchProjects();
+      }
+    },
+    [workspaceId, fetchProjects],
   );
 
   const createDeck = useCallback(
@@ -180,15 +234,17 @@ export function SlidesSection({
     [workspaceId, creating, router, fetchProjects],
   );
 
-  // Only worth the width when the rows do not all say the same thing.
-  const showNamespace = templateNamespacesAreAmbiguous(templates);
-  const templateOptions: SidebarNewItemMenuOption[] = templates.map((template) => ({
-    id: template.id,
-    label: template.name,
-    prefix: showNamespace ? templateNamespace(template) : undefined,
-    swatch: template.preview_accent || template.preview_bg,
-    onSelect: () => createDeck(template.id),
-  }));
+  const templateOptions: SidebarNewItemMenuOption[] = slidesTemplateMenuRows(templates).map(
+    (row) =>
+      row.kind === 'heading'
+        ? { id: row.id, label: row.label, heading: true }
+        : {
+            id: row.id,
+            label: row.label,
+            swatch: row.swatch,
+            onSelect: () => createDeck(row.id),
+          },
+  );
 
   return (
     <CollapsibleSection
@@ -234,8 +290,70 @@ export function SlidesSection({
         onOpenDeck={(deck) => {
           setSelectedSlug(deck.slug);
           setSelectedTitle(deck.label);
+          openSlidesAgentPane({ slug: deck.slug, title: deck.label });
         }}
+        renamingSlug={renamingSlug}
+        onStartRename={(slug) => setRenamingSlug(slug)}
+        onRename={(slug, title) => {
+          void renameDeck(slug, title);
+          setRenamingSlug(null);
+        }}
+        onCancelRename={() => setRenamingSlug(null)}
+        onArchive={(slug) => void archiveDeck(slug, true)}
       />
+
+      {archived.length > 0 ? (
+        <div className="chat-section-group">
+          <button
+            type="button"
+            data-testid="slides-archived-toggle"
+            onClick={() => setShowArchived((open) => !open)}
+            className="chat-section-show-more"
+          >
+            <ChevronRight
+              size={12}
+              className={`chat-section-show-more-chevron${showArchived ? ' is-expanded' : ''}`}
+            />
+            <span>Archived</span>
+          </button>
+          {showArchived ? (
+            <SlidesTreeView
+              decks={archivedDecks}
+              rootHref={slidesBase}
+              currentPath={pathname}
+              rootExpanded
+              onToggleRoot={() => {}}
+              hideRoot
+              emptyLabel="No archived presentations"
+              expandedDecks={expandedDecks}
+              onToggleDeck={(slug) =>
+                setExpandedDecks((current) =>
+                  current.includes(slug) ? current.filter((s) => s !== slug) : [...current, slug],
+                )
+              }
+              expandedDirs={expandedDirs}
+              onToggleDir={(path) =>
+                setExpandedDirs((current) =>
+                  current.includes(path) ? current.filter((p) => p !== path) : [...current, path],
+                )
+              }
+              onOpenDeck={(deck) => {
+                setSelectedSlug(deck.slug);
+                setSelectedTitle(deck.label);
+                openSlidesAgentPane({ slug: deck.slug, title: deck.label });
+              }}
+              renamingSlug={renamingSlug}
+              onStartRename={(slug) => setRenamingSlug(slug)}
+              onRename={(slug, title) => {
+                void renameDeck(slug, title);
+                setRenamingSlug(null);
+              }}
+              onCancelRename={() => setRenamingSlug(null)}
+              onArchive={(slug) => void archiveDeck(slug, false)}
+            />
+          ) : null}
+        </div>
+      ) : null}
     </CollapsibleSection>
   );
 }

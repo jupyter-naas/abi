@@ -86,10 +86,24 @@ slides_brief: ContextVar[str | None] = ContextVar("slides_brief", default=None)
 
 # The user asked for a deck from a surface with no deck open (main chat). Set at
 # the chat stream boundary so the agent budgets a slides-sized run (create,
-# research, then one write per slide) instead of a normal chat turn.
+# research, then one batched write) instead of a normal chat turn.
 slides_creation_intent: ContextVar[bool] = ContextVar(
     "slides_creation_intent", default=False
 )
+
+# Successful deck writes this turn (section indexes, "full deck", replace notes).
+# The step-limit message uses this so the user hears what finished vs what did not.
+slides_writes_completed: ContextVar[list[str] | None] = ContextVar(
+    "slides_writes_completed", default=None
+)
+
+# LangGraph counts every node visit (IntentAgent setup plus call_model +
+# call_tools per hop). Default LangGraph is 25. 80 was too low for an 8-32
+# slide industry rewrite that listed, read, and wrote one section at a time.
+# 160 is ~70 tool hops after IntentAgent overhead: enough for search + one
+# batched write, and a thin margin if the model still writes a few sections.
+# A 32-slide per-section rewrite can still need a second turn.
+SLIDES_RECURSION_LIMIT = 160
 
 
 def slides_turn_active() -> bool:
@@ -97,3 +111,43 @@ def slides_turn_active() -> bool:
     if (slides_active_slug.get() or "").strip():
         return True
     return bool(slides_creation_intent.get())
+
+
+def note_slides_write(label: str) -> None:
+    """Record a successful deck write so a step-limit error can name it."""
+    text = (label or "").strip()
+    if not text:
+        return
+    bucket = slides_writes_completed.get()
+    if bucket is None:
+        slides_writes_completed.set([text])
+        return
+    bucket.append(text)
+
+
+def slides_step_limit_message() -> str:
+    """User-facing cap text: what finished vs what did not."""
+    writes = [item for item in (slides_writes_completed.get() or []) if item]
+    queries = slides_research_queries.get() or []
+    finished: list[str] = []
+    if queries:
+        finished.append(
+            f"{len(queries)} web search{'es' if len(queries) != 1 else ''}"
+        )
+    if writes:
+        finished.append("wrote " + ", ".join(writes))
+    done = (
+        "Finished: " + "; ".join(finished) + "."
+        if finished
+        else "Finished: no searches and no slides written."
+    )
+    leftover = (
+        "The remaining slides were not written."
+        if writes
+        else "The deck was not written."
+    )
+    return (
+        f"The agent hit its {SLIDES_RECURSION_LIMIT}-step limit before finishing. "
+        f"{done} {leftover} "
+        "Open the deck and ask it to continue from the next unwritten slide."
+    )

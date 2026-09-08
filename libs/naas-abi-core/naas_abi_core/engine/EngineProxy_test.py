@@ -33,6 +33,7 @@ class _DummyEngine:
     def __init__(self, services: IEngine.Services) -> None:
         self.services = services
         self.modules: dict[str, object] = {}
+        self.configuration = type("Cfg", (), {"default_agent": "core CoreAgent"})()
 
 
 def test_engine_proxy_services_exposes_email_service():
@@ -46,6 +47,7 @@ def test_engine_proxy_services_exposes_email_service():
     )
 
     assert proxy.services.email is email_service
+    assert proxy.configuration.default_agent == "core CoreAgent"
 
 
 def test_engine_proxy_services_denies_email_service_when_not_allowed():

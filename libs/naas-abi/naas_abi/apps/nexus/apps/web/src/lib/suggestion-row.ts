@@ -8,12 +8,23 @@ export type ChatSuggestion = {
   cta?: string;
 };
 
-/** Active chips only. Drop grayed / coming-soon items so the row stays one line. */
+/** Active suggestions only. Drop grayed / coming-soon items. */
 export function activeSuggestions<T extends { disabled?: boolean }>(
   suggestions: T[] | undefined | null,
 ): T[] {
   if (!Array.isArray(suggestions)) return [];
   return suggestions.filter((suggestion) => !suggestion.disabled);
+}
+
+/** One-line hint under the suggestion name. Prefer description; else the prompt. */
+export function suggestionHint(suggestion: {
+  description?: string;
+  value: string;
+}): string {
+  const description = suggestion.description?.trim();
+  if (description) return description.replace(/\s+/g, ' ');
+  const firstLine = suggestion.value.trim().split(/\r?\n/)[0] ?? '';
+  return firstLine.replace(/\s+/g, ' ');
 }
 
 export function suggestionRowNavState(

@@ -27,7 +27,9 @@ export type SidebarNewItemMenuOption = {
   /** Small colour chip, e.g. a template accent. */
   swatch?: string;
   disabled?: boolean;
-  onSelect: () => void;
+  /** Non-interactive section label (ABI, a configured source). */
+  heading?: boolean;
+  onSelect?: () => void;
 };
 
 export function SidebarNewItem({
@@ -122,39 +124,52 @@ export function SidebarNewItem({
           {(menuOptions ?? []).length === 0 ? (
             <p className="px-3 py-1.5 text-xs text-muted-foreground">{menuEmptyLabel}</p>
           ) : (
-            (menuOptions ?? []).map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                role="menuitem"
-                disabled={option.disabled}
-                onClick={() => {
-                  if (option.disabled) return;
-                  option.onSelect();
-                  onMenuOpenChange?.(false);
-                }}
-                className={cn(
-                  'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors',
-                  option.disabled
-                    ? 'cursor-not-allowed text-muted-foreground/50'
-                    : 'hover:bg-muted',
-                )}
-              >
-                {option.swatch ? (
-                  <span
-                    aria-hidden
-                    className="h-2.5 w-2.5 flex-shrink-0 rounded-sm border border-border/70"
-                    style={{ background: option.swatch }}
-                  />
-                ) : null}
-                {option.prefix ? (
-                  <span className="flex-shrink-0 font-mono text-[10px] text-muted-foreground">
-                    {option.prefix}/
-                  </span>
-                ) : null}
-                <span className="min-w-0 flex-1 truncate">{option.label}</span>
-              </button>
-            ))
+            (menuOptions ?? []).map((option, index) =>
+              option.heading ? (
+                <div
+                  key={option.id}
+                  role="presentation"
+                  className={cn(
+                    'px-3 pb-0.5 text-[10px] font-medium text-muted-foreground',
+                    index === 0 ? 'pt-1' : 'pt-2',
+                  )}
+                >
+                  {option.label}
+                </div>
+              ) : (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="menuitem"
+                  disabled={option.disabled}
+                  onClick={() => {
+                    if (option.disabled) return;
+                    option.onSelect?.();
+                    onMenuOpenChange?.(false);
+                  }}
+                  className={cn(
+                    'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors',
+                    option.disabled
+                      ? 'cursor-not-allowed text-muted-foreground/50'
+                      : 'hover:bg-muted',
+                  )}
+                >
+                  {option.swatch ? (
+                    <span
+                      aria-hidden
+                      className="h-2.5 w-2.5 flex-shrink-0 rounded-sm border border-border/70"
+                      style={{ background: option.swatch }}
+                    />
+                  ) : null}
+                  {option.prefix ? (
+                    <span className="flex-shrink-0 font-mono text-[10px] text-muted-foreground">
+                      {option.prefix}/
+                    </span>
+                  ) : null}
+                  <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                </button>
+              ),
+            )
           )}
         </div>
       ) : null}

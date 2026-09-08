@@ -99,6 +99,20 @@ describe('SidebarNewItem template picker', () => {
     expect(html).not.toContain('one/');
   });
 
+  it('renders a heading as a label, not a menu item', () => {
+    const html = markup({
+      menuOpen: true,
+      menuOptions: [
+        { id: 'heading:abi', label: 'ABI', heading: true },
+        { id: 'abi/minimal-light-v1', label: 'Minimal Light', onSelect: () => {} },
+      ],
+    });
+    expect(html).toContain('ABI');
+    expect(html).toContain('Minimal Light');
+    expect((html.match(/role="menuitem"/g) ?? []).length).toBe(1);
+    expect(html).not.toContain('abi/');
+  });
+
   it('says so when no template came back from the server', () => {
     const html = markup({ menuOpen: true, menuOptions: [] });
     expect(html).toContain('No templates loaded');

@@ -10,7 +10,7 @@ from naas_abi.agents.SlidesAgent import SLIDES_GUIDELINES, SlidesAgent
 def test_slides_agent_is_first_class() -> None:
     assert SlidesAgent.__name__ == "SlidesAgent"
     assert SlidesAgent.name == "Slides"
-    assert SlidesAgent.recursion_limit == 80
+    assert SlidesAgent.recursion_limit == 160
     assert "model_id" in inspect.signature(SlidesAgent.New).parameters
     assert hasattr(SlidesAgent, "get_tools")
     assert hasattr(SlidesAgent, "get_chat_model_id")
@@ -20,6 +20,9 @@ def test_slides_agent_prompt_requires_research_then_write() -> None:
     prompt = SlidesAgent.system_prompt
     assert "web_search" in prompt
     assert "Research loop" in prompt
+    assert "Plan, then write" in prompt
+    assert "write_slides_sections" in prompt
+    assert "Do not re-read" in prompt
     assert "start writing immediately" not in prompt
     assert "Context / Approach / Plan" in prompt
     assert "deck.html" in prompt
@@ -50,6 +53,7 @@ def test_slides_agent_owns_the_write_and_research_tools() -> None:
     assert "create_slides_project" in names
     assert "write_slides_deck" in names
     assert "write_slides_section" in names
+    assert "write_slides_sections" in names
     assert "replace_in_slides_deck" in names
     assert "web_search" in names
     assert "web_fetch" in names

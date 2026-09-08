@@ -13,6 +13,10 @@ import { useSurfaceConversation } from '@/stores/chat-thread-selectors';
 import { nextChatUrl } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
+import {
+  pickSlidesOfficeAgent,
+  pickWorkspaceDefaultAgent,
+} from '@/lib/pick-workspace-default-agent';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
@@ -22,6 +26,9 @@ import {
   slidesDeckTitleFromToolOutput,
 } from '@/components/slides/slides-deck-card';
 import { SlidesDeckCardView } from '@/components/slides/slides-deck-card-view';
+import { SlidesComposerContext, SlidesComposerTabs } from './slides-composer-chrome';
+import { slidesEmptyStateCopy } from './slides-empty-state';
+import { templateDisplayName } from '@/lib/slides-templates';
 import { dispatchCodeFileUpdated, useCodeStore } from '@/stores/code';
 import { useAuthStore, authFetch } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
@@ -850,8 +857,14 @@ export function ChatInterface({
   }, [isPane]);
 
   const createSurfaceConversation = useCallback(
-    (projectId?: string) => createConversation(projectId, { surface }),
-    [createConversation, surface]
+    (projectId?: string) =>
+      createConversation(projectId, {
+        surface,
+        slidesSlug: isPane
+          ? useSlidesStore.getState().selectedSlug ?? undefined
+          : undefined,
+      }),
+    [createConversation, surface, isPane]
   );
 
   const { socket, startTyping, stopTyping, onMessage } = useWebSocket();
@@ -913,6 +926,7 @@ export function ChatInterface({
   const slidesSlug = useSlidesStore((s) => s.selectedSlug);
   const slidesTitle = useSlidesStore((s) => s.selectedTitle);
   const slidesMode = useSlidesStore((s) => s.editorMode);
+  const slidesRuntimeStatus = useSlidesStore((s) => s.runtimeStatus);
   const slidesChatContext = useMemo(() => {
     const onSlides =
       typeof pathname === 'string' && pathname.includes('/slides') && Boolean(slidesSlug);
@@ -1788,27 +1802,28 @@ export function ChatInterface({
     if ((!sourceText.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading) return;
     isSubmittingRef.current = true;
     let effectiveAgent = agentOverride ?? selectedAgent;
-    // Pane can hydrate with paneAgent="" before agents sync; resolve Abi/default
-    // so stream has a real agent id (selector label may already show Abi).
+    // Pane can hydrate with paneAgent="" before agents sync; resolve the
+    // workspace default so the stream has a real agent id.
     if (!effectiveAgent) {
       const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
-      const resolved =
-        (isPane
-          ? agents.find(
-              (a) =>
-                a.name === 'Abi' ||
-                (typeof a.class_name === 'string' &&
-                  a.class_name.toLowerCase().includes('abiagent'))
-            )
-          : null) ??
-        agents.find((a) => a.isDefault) ??
-        agents[0];
+      const resolved = slidesChatContext
+        ? (pickSlidesOfficeAgent(agents) ?? pickWorkspaceDefaultAgent(agents))
+        : pickWorkspaceDefaultAgent(agents);
       if (resolved) {
         effectiveAgent = resolved.id;
         if (isPane) {
           useWorkspaceStore.getState().setPaneAgent(resolved.id);
         } else {
           useWorkspaceStore.getState().setSelectedAgent(resolved.id);
+        }
+      }
+    } else if (slidesChatContext) {
+      const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const slides = pickSlidesOfficeAgent(agents);
+      if (slides) {
+        effectiveAgent = slides.id;
+        if (isPane && useWorkspaceStore.getState().paneAgent !== slides.id) {
+          useWorkspaceStore.getState().setPaneAgent(slides.id);
         }
       }
     }
@@ -2758,13 +2773,25 @@ export function ChatInterface({
       {/* Composer: flex sibling at column bottom (sticky as safety for scroll parents) */}
       <div className="chat-composer-root mt-auto shrink-0 px-4">
         <div className="mx-auto max-w-3xl">
-          {(!activeConversation || activeConversation.messages.length === 0) && (
-            <SuggestionChipsRow
+          {isPane && slidesChatContext ? (
+            <SlidesComposerTabs
+              slug={slidesChatContext.slides.slug}
+              path={slidesChatContext.slides.path}
+              workspaceId={currentWorkspaceId}
               suggestions={selectedAgentData?.suggestions}
               onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
               onSuggestionHover={(value) => setInput(value)}
               onSuggestionLeave={() => setInput('')}
             />
+          ) : (
+            (!activeConversation || activeConversation.messages.length === 0) && (
+              <SuggestionChipsRow
+                suggestions={selectedAgentData?.suggestions}
+                onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
+                onSuggestionHover={(value) => setInput(value)}
+                onSuggestionLeave={() => setInput('')}
+              />
+            )
           )}
           <form onSubmit={handleSubmit}>
             {/* Image previews */}
@@ -2898,6 +2925,14 @@ export function ChatInterface({
                   <X size={12} />
                 </button>
               </div>
+            )}
+
+            {isPane && slidesChatContext && (
+              <SlidesComposerContext
+                title={slidesChatContext.slides.title}
+                path={slidesChatContext.slides.path}
+                runtime={slidesRuntimeStatus}
+              />
             )}
 
             {voiceMode === 'idle' ? (
@@ -3400,16 +3435,51 @@ function EmptyState({
   slidesOpen?: boolean;
 }) {
   const { user } = useAuthStore();
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const slug = useSlidesStore((s) => s.selectedSlug);
   const resolvedLogoUrl = logoUrl ? getLogoUrl(logoUrl) : undefined;
+  const [templateName, setTemplateName] = useState<string | null>(null);
 
   const firstName = user?.name?.split(' ')[0];
   const greeting = firstName ? `Hello, ${firstName}.` : 'Hello.';
+
+  useEffect(() => {
+    if (!slidesOpen || !workspaceId || !slug) {
+      setTemplateName(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const qs = `workspace_id=${encodeURIComponent(workspaceId)}`;
+        const [projRes, tplRes] = await Promise.all([
+          authFetch(`/api/slides/projects/${encodeURIComponent(slug)}?${qs}`),
+          authFetch(`/api/slides/templates?${qs}`),
+        ]);
+        if (!projRes.ok || !tplRes.ok) return;
+        const proj = (await projRes.json()) as { template_id?: string };
+        const templates = (await tplRes.json()) as Array<{ id: string; name: string }>;
+        const name = templateDisplayName(proj.template_id, templates);
+        if (!cancelled) setTemplateName(name);
+      } catch {
+        if (!cancelled) setTemplateName(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [slidesOpen, workspaceId, slug]);
+
   return (
     <div className="flex h-full flex-col items-center justify-center px-4">
       <EmptyStateLogo src={resolvedLogoUrl} name={selectedAgentName} />
       <p className="mb-6 text-center text-muted-foreground">
         {slidesOpen
-          ? `${greeting} This is a Minimal Light deck. Tell me the topic and I will write the slides.`
+          ? slidesEmptyStateCopy({
+              firstName,
+              agentName: selectedAgentName,
+              templateName,
+            })
           : `${greeting} ${selectedAgentName} here, how can I help?`}
       </p>
     </div>

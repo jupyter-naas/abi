@@ -1,0 +1,38 @@
+/* Hover overflow on gallery cards and tree rows. Menu chrome is chat's. */
+
+.slides-overflow-host {
+  position: relative;
+}
+
+.slides-overflow-host .chat-list-row-menu-trigger {
+  opacity: 0;
+}
+
+.slides-overflow-host:hover .chat-list-row-menu-trigger,
+.slides-overflow-host.is-menu-open .chat-list-row-menu-trigger {
+  opacity: 1;
+}
+
+@media (max-width: 767px) {
+  .slides-overflow-host .chat-list-row-menu-trigger {
+    opacity: 1;
+  }
+}
+
+/* Portaled panel: escape card/pane overflow and sit above the status footer. */
+.slides-project-menu-backdrop {
+  z-index: 399;
+}
+
+.slides-project-menu-panel {
+  position: fixed;
+  right: auto;
+  margin-top: 0;
+  z-index: 400;
+}
+
+.slides-project-menu-panel.is-measuring {
+  visibility: hidden;
+  top: 0;
+  left: 0;
+}

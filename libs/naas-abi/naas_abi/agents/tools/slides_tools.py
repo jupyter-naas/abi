@@ -37,6 +37,7 @@ from naas_abi_core.services.agent.context import (
     agent_user_id,
     agent_workspace_id,
     coder_workspace_base,
+    note_slides_write,
     slides_active_mode,
     slides_active_slug,
     slides_active_title,
@@ -931,6 +932,70 @@ def _resolve_section_index(
     return index
 
 
+def _parse_section_writes(raw: Any) -> list[dict[str, Any]] | dict[str, str]:
+    """Parse write_slides_sections payload: JSON array or already-decoded list."""
+    payload = raw
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            return {"error": "sections must be a non-empty JSON array"}
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError as exc:
+            return {"error": f"sections is not valid JSON: {exc}"}
+    if not isinstance(payload, list) or not payload:
+        return {"error": "sections must be a non-empty JSON array of {index or section_id, html}"}
+    parsed: list[dict[str, Any]] = []
+    for i, item in enumerate(payload):
+        if not isinstance(item, dict):
+            return {"error": f"sections[{i}] must be an object with html and index or section_id"}
+        html = item.get("html")
+        if not isinstance(html, str) or not html.strip():
+            return {"error": f"sections[{i}].html must be a non-empty string"}
+        if "<section" not in html.lower():
+            return {"error": f"sections[{i}].html must include a <section>...</section> block"}
+        index = item.get("index")
+        section_id = item.get("section_id") or item.get("id")
+        if index is None and not section_id:
+            return {"error": f"sections[{i}] needs index or section_id"}
+        if index is not None:
+            try:
+                index = int(index)
+            except (TypeError, ValueError):
+                return {"error": f"sections[{i}].index must be an integer"}
+        parsed.append(
+            {
+                "html": html,
+                "index": index,
+                "section_id": str(section_id).strip() if section_id else None,
+            }
+        )
+    return parsed
+
+
+def _apply_section_writes(
+    original: str,
+    items: list[dict[str, Any]],
+) -> tuple[str, list[int]] | dict[str, str]:
+    """Replace several sections in one pass. Returns (html, written indexes)."""
+    prefix, sections, suffix = _split_sections(original)
+    written: list[int] = []
+    for item in items:
+        resolved_idx = _resolve_section_index(
+            sections, item.get("index"), item.get("section_id")
+        )
+        if isinstance(resolved_idx, dict):
+            return resolved_idx
+        sections[resolved_idx] = _restore_redacted_data_urls(
+            str(item["html"]).strip(), sections[resolved_idx]
+        )
+        written.append(resolved_idx)
+    new_html = prefix + "".join(sections) + suffix
+    if _MAIN_RE.search(original) and not _MAIN_RE.search(new_html):
+        return {"error": "Refusing to write: reconstructed HTML lost <main>."}
+    return new_html, written
+
+
 def _restore_redacted_data_urls(new_html: str, original_html: str) -> str:
     """If the model writes back redacted placeholders, reinstate originals in order."""
     originals = _DATA_URL_RE.findall(original_html)
@@ -1116,9 +1181,10 @@ def slides_tools() -> list[BaseTool]:
 
     @tool
     def list_slides_sections(slug: str = "") -> dict[str, Any]:
-        """List ``<section>`` slides in a deck (index, id, title). Prefer this over reading the full HTML.
+        """List ``<section>`` slides in a deck (index, id, title). Call once per turn.
 
         Omit slug when a deck is open in the Slides UI; the open deck is used.
+        Do not list again before each write. After this, write the deck.
         """
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
@@ -1177,8 +1243,9 @@ def slides_tools() -> list[BaseTool]:
                 "html": redacted,
                 "note": (
                     f"Redacted {n_assets} embedded data-URL asset(s). "
-                    "Use replace_in_slides_deck for text edits; "
-                    "use write_slides_section to replace this section only."
+                    "Do not re-read this section after you write it. "
+                    "For a full-deck rewrite, use write_slides_sections instead of "
+                    "reading every slide."
                 ),
             }
         except Exception as exc:  # noqa: BLE001
@@ -1192,14 +1259,14 @@ def slides_tools() -> list[BaseTool]:
         section_id: str | None = None,
         message: str = "Update slides section via Abi",
     ) -> dict[str, Any]:
-        """Replace one slide ``<section>`` by index or id. Prefer over rewriting the whole deck.
+        """Replace one slide. For a full-deck rewrite, use write_slides_sections.
 
         Omit slug when a deck is open. Pass the full ``<section>...</section>``
         for that slide. If html still contains ``[REDACTED_DATA_URL]`` placeholders
         from a prior read, original embedded assets are restored automatically.
 
-        For news, current events, or factual briefs: call web_search first.
-        This tool rejects the write until search has run this turn.
+        For news, current events, or factual briefs: call web_search once this
+        turn first. Later writes in the same turn do not need another search.
         """
         blocked = reject_unresearched_slides_write()
         if blocked:
@@ -1217,19 +1284,66 @@ def slides_tools() -> list[BaseTool]:
             original, _source = _load_deck_text(resolved)
             if isinstance(original, dict):
                 return original
-            prefix, sections, suffix = _split_sections(original)
-            resolved_idx = _resolve_section_index(sections, index, section_id)
-            if isinstance(resolved_idx, dict):
-                return resolved_idx
-            restored = _restore_redacted_data_urls(html.strip(), sections[resolved_idx])
-            sections[resolved_idx] = restored
-            new_html = prefix + "".join(sections) + suffix
-            if _MAIN_RE.search(original) and not _MAIN_RE.search(new_html):
-                return {"error": "Refusing to write: reconstructed HTML lost <main>."}
+            applied = _apply_section_writes(
+                original, [{"html": html, "index": index, "section_id": section_id}]
+            )
+            if isinstance(applied, dict):
+                return applied
+            new_html, written = applied
             result = _persist_deck(
                 resolved, new_html, message or "Update slides section via Abi"
             )
-            result["section_index"] = resolved_idx
+            if "error" not in result and written:
+                result["section_index"] = written[0]
+                note_slides_write(f"slide {written[0] + 1}")
+            result.update(_open_deck_note(resolved))
+            return result
+        except Exception as exc:  # noqa: BLE001
+            return _tool_error(exc)
+
+    @tool
+    def write_slides_sections(
+        sections: str,
+        slug: str = "",
+        message: str = "Update slides sections via Abi",
+    ) -> dict[str, Any]:
+        """Replace several slides in one persist. Use this for a full-deck rewrite.
+
+        ``sections`` is a JSON array of objects:
+        ``[{"index": 0, "html": "<section>...</section>"}, ...]``
+        ``section_id`` may replace ``index``. One persist for the whole batch.
+        Do not list or re-read after this call.
+
+        For news or factual briefs: call web_search once this turn first.
+        Later writes in the same turn do not need another search.
+        """
+        blocked = reject_unresearched_slides_write()
+        if blocked:
+            return blocked
+        if not agent_user_id.get():
+            return {"error": "No authenticated user on this agent session."}
+        resolved = _resolve_slug(slug)
+        if isinstance(resolved, dict):
+            return resolved
+        parsed = _parse_section_writes(sections)
+        if isinstance(parsed, dict) and "error" in parsed:
+            return parsed
+        try:
+            original, _source = _load_deck_text(resolved)
+            if isinstance(original, dict):
+                return original
+            applied = _apply_section_writes(original, parsed)
+            if isinstance(applied, dict):
+                return applied
+            new_html, written = applied
+            result = _persist_deck(
+                resolved, new_html, message or "Update slides sections via Abi"
+            )
+            if "error" not in result and written:
+                labels = [f"slide {idx + 1}" for idx in written]
+                note_slides_write(", ".join(labels))
+                result["section_indexes"] = written
+                result["sections_written"] = len(written)
             result.update(_open_deck_note(resolved))
             return result
         except Exception as exc:  # noqa: BLE001
@@ -1260,8 +1374,8 @@ def slides_tools() -> list[BaseTool]:
         ``cover_subtitle_updated`` in the tool result before claiming Preview
         and PPTX changed.
 
-        For news, current events, or factual briefs: call web_search first.
-        This tool rejects the write until search has run this turn.
+        For news, current events, or factual briefs: call web_search once this
+        turn first. Later writes in the same turn do not need another search.
         """
         blocked = reject_unresearched_slides_write()
         if blocked:
@@ -1296,6 +1410,13 @@ def slides_tools() -> list[BaseTool]:
             result = _persist_deck(
                 resolved, updated, message or "Replace text in slides deck via Abi"
             )
+            if "error" not in result:
+                label = (
+                    f"slide {resolved_section + 1} text"
+                    if resolved_section >= 0
+                    else "deck text"
+                )
+                note_slides_write(label)
             cover_after = _cover_h1_text(updated)
             subtitle_after = _cover_subtitle_text(updated)
             result["matches_found"] = count
@@ -1391,13 +1512,13 @@ def slides_tools() -> list[BaseTool]:
         slug: str = "",
         message: str = "Update slides deck via Abi",
     ) -> dict[str, Any]:
-        """Write the full HTML deck. Avoid for small edits.
+        """Write the full HTML deck. Prefer this or write_slides_sections for a whole-deck brief.
 
-        Omit slug when a deck is open. Prefer replace_in_slides_deck or
-        write_slides_section.
+        Omit slug when a deck is open. Do not follow with per-section writes.
+        For a single copy edit, use replace_in_slides_deck instead.
 
-        For news, current events, or factual briefs: call web_search first.
-        This tool rejects the write until search has run this turn.
+        For news, current events, or factual briefs: call web_search once this
+        turn first. Later writes in the same turn do not need another search.
         """
         blocked = reject_unresearched_slides_write()
         if blocked:
@@ -1431,6 +1552,8 @@ def slides_tools() -> list[BaseTool]:
             result = _persist_deck(
                 resolved, content, message or "Update slides deck via Abi"
             )
+            if "error" not in result:
+                note_slides_write("full deck")
             result.update(_open_deck_note(resolved))
             return result
         except Exception as exc:  # noqa: BLE001
@@ -1474,6 +1597,7 @@ def slides_tools() -> list[BaseTool]:
         list_slides_sections,
         read_slides_section,
         write_slides_section,
+        write_slides_sections,
         replace_in_slides_deck,
         read_slides_deck,
         write_slides_deck,

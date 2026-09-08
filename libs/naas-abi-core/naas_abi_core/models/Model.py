@@ -128,6 +128,7 @@ class CanonicalModelId(StrEnum):
     GPT_OSS_SAFEGUARD_20B = "gpt-oss-safeguard-20b"
 
     # Chat - Qwen family
+    QWEN_3_8 = "qwen-3.8"
     QWEN_3_6 = "qwen-3.6"
     QWEN_2_5_3B = "qwen-2.5-3b"
 

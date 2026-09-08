@@ -4,6 +4,10 @@ import type { WorkspaceFeatureFlags } from '@/lib/feature-access';
 import { DEFAULT_NAV_ORDER, mergeNavOrder } from '@/lib/sidebar-nav';
 import { clampDockWidth, clampFeatureColumnWidth, DOCK_WIDTH_DEFAULT } from '@/lib/shell-columns';
 import { pushRecentWorkspaceId } from '@/lib/workspace-picker';
+import {
+  dropSlidesPaneConversationKeys,
+  slidesPaneConversationKey,
+} from '@/lib/slides-pane-conversation';
 import { useAuthStore } from './auth';
 import { getApiUrl } from '@/lib/config';
 
@@ -109,6 +113,8 @@ export interface Conversation {
   // to the backend. Cleared once a message is sent or the conversation is
   // confirmed via syncWorkspaceConversations / loadConversationMessages.
   isDraft?: boolean;
+  /** Slides deck this pane thread is bound to. Client-only; API has no field. */
+  slidesSlug?: string;
 }
 
 export interface Project {
@@ -280,7 +286,7 @@ interface WorkspaceState {
   /** Mobile list→thread navigation in flight (conversation id or "new"). Not persisted. */
   mobilePendingChatSlug: string | null;
   setMobilePendingChatSlug: (slug: string | null) => void;
-  paneAgent: AgentType; // AI Pane agent selection (defaults to Abi)
+  paneAgent: AgentType; // AI Pane agent selection (workspace default after sync)
   /** True when the user picked an AI Pane agent from the menu. */
   paneAgentExplicitlySelected: boolean;
   setPaneAgent: (agent: AgentType, explicit?: boolean) => void;
@@ -288,6 +294,13 @@ interface WorkspaceState {
   /** Independent conversation bound to the right AI / compare pane. */
   paneConversationId: string | null;
   setPaneConversationId: (id: string | null) => void;
+  /** workspaceId::slug -> pane conversation id. Survives refresh. */
+  slidesPaneConversationByKey: Record<string, string>;
+  rememberSlidesPaneConversation: (
+    workspaceId: string,
+    slug: string,
+    conversationId: string,
+  ) => void;
   /** Open conversation tabs in the right chat pane (Cursor-style). */
   paneOpenTabIds: string[];
   /** Open (or focus) a conversation as a pane tab. */
@@ -296,7 +309,7 @@ interface WorkspaceState {
   closePaneTab: (id: string) => void;
   createConversation: (
     projectId?: string,
-    options?: { surface?: 'main' | 'pane' },
+    options?: { surface?: 'main' | 'pane'; slidesSlug?: string },
   ) => string;
   setActiveConversation: (id: string | null) => void;
   /** Record the latest agent used in a conversation (mirrors the backend,
@@ -580,13 +593,30 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   setPendingComposerText: (text) => set({ pendingComposerText: text }),
   mobilePendingChatSlug: null,
   setMobilePendingChatSlug: (slug) => set({ mobilePendingChatSlug: slug }),
-  paneAgent: '', // Resolved to Abi after agents sync (see agents store)
+  paneAgent: '', // Resolved to workspace default after agents sync (see agents store)
   paneAgentExplicitlySelected: false,
   setPaneAgent: (agent, explicit = false) =>
     set({ paneAgent: agent, paneAgentExplicitlySelected: explicit }),
   clearPaneAgentExplicitSelection: () => set({ paneAgentExplicitlySelected: false }),
   paneConversationId: null,
   paneOpenTabIds: [],
+  slidesPaneConversationByKey: {},
+  rememberSlidesPaneConversation: (workspaceId, slug, conversationId) => {
+    const ws = workspaceId.trim();
+    const deck = slug.trim();
+    const id = conversationId.trim();
+    if (!ws || !deck || !id) return;
+    const key = slidesPaneConversationKey(ws, deck);
+    set((state) => ({
+      slidesPaneConversationByKey: {
+        ...state.slidesPaneConversationByKey,
+        [key]: id,
+      },
+      conversations: state.conversations.map((conv) =>
+        conv.id === id && conv.slidesSlug !== deck ? { ...conv, slidesSlug: deck } : conv,
+      ),
+    }));
+  },
   setPaneConversationId: (id) =>
     set((state) => {
       const conv = id ? state.conversations.find((c) => c.id === id) : null;
@@ -596,7 +626,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           : state.paneOpenTabIds;
       // Opening a history tab syncs the composer agent for that thread, but must
       // NOT mark paneAgentExplicitlySelected. That flag is only for picker choices;
-      // treating tabs as explicit locked non-Abi agents across New chat / refresh.
+      // treating tabs as explicit locked non-default agents across New chat / refresh.
       if (!id) {
         return {
           paneConversationId: null,
@@ -629,7 +659,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       };
     }),
 
-  createConversation: (projectId?: string, options?: { surface?: 'main' | 'pane' }) => {
+  createConversation: (projectId?: string, options?: { surface?: 'main' | 'pane'; slidesSlug?: string }) => {
     const id = generateConversationId();
     const workspaceId = get().currentWorkspaceId;
     const surface = options?.surface ?? 'main';
@@ -638,6 +668,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       return id;
     }
     const agent = surface === 'pane' ? get().paneAgent : get().selectedAgent;
+    const slidesSlug = options?.slidesSlug?.trim() || undefined;
     const newConversation: Conversation = {
       id,
       workspaceId,
@@ -649,7 +680,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       pinned: false,
       projectId,
       isDraft: true,
+      slidesSlug,
     };
+    const slidesKey =
+      slidesSlug && surface === 'pane'
+        ? slidesPaneConversationKey(workspaceId, slidesSlug)
+        : null;
     set((state) => ({
       conversations: [newConversation, ...state.conversations],
       ...(surface === 'pane'
@@ -660,6 +696,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               : [...state.paneOpenTabIds, id],
           }
         : { activeConversationId: id }),
+      ...(slidesKey
+        ? {
+            slidesPaneConversationByKey: {
+              ...state.slidesPaneConversationByKey,
+              [slidesKey]: id,
+            },
+          }
+        : {}),
     }));
     return id;
   },
@@ -907,6 +951,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
         paneOpenTabIds,
         paneConversationId,
+        slidesPaneConversationByKey: dropSlidesPaneConversationKeys(
+          state.slidesPaneConversationByKey,
+          id,
+        ),
       };
     });
     
@@ -982,6 +1030,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             ...apiConv,
             // Preserve loaded message history if we already have it in memory.
             messages: existing.messages.length > 0 ? existing.messages : apiConv.messages,
+            slidesSlug: existing.slidesSlug ?? apiConv.slidesSlug,
             isDraft: false,
           };
         });
@@ -1059,6 +1108,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               : localOnly.length > 0
                 ? [...mapped.messages, ...localOnly]
                 : mapped.messages,
+          slidesSlug: existing?.slidesSlug ?? mapped.slidesSlug,
           isDraft: false,
         };
         const conversations = existing
@@ -1689,9 +1739,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         selectedChatModels: state.selectedChatModels,
         paneAgent: state.paneAgent,
         // Do not persist paneAgentExplicitlySelected: a hard refresh should
-        // re-default the right pane to Abi via agents sync.
+        // re-default the right pane to the workspace default via agents sync.
         paneConversationId: state.paneConversationId,
         paneOpenTabIds: state.paneOpenTabIds,
+        slidesPaneConversationByKey: state.slidesPaneConversationByKey,
         activePanelSection: state.activePanelSection,
         dockWidth: state.dockWidth,
         sectionPanelWidth: state.sectionPanelWidth,
@@ -1702,7 +1753,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         // After hydration completes, fetch workspaces from API
         if (state) {
           // Drop legacy persisted paneAgentExplicitlySelected so hard refresh
-          // re-defaults the right pane to Abi (agents sync), matching main chat.
+          // re-defaults the right pane to the workspace default (agents sync).
           state.paneAgentExplicitlySelected = false;
           state.sidebarNavOrder = mergeNavOrder(state.sidebarNavOrder);
           if (Array.isArray(state.expandedSections)) {
@@ -1740,6 +1791,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           if (state.paneConversationId && !known.has(state.paneConversationId)) {
             state.paneConversationId = null;
           }
+          state.slidesPaneConversationByKey =
+            state.slidesPaneConversationByKey &&
+            typeof state.slidesPaneConversationByKey === 'object'
+              ? state.slidesPaneConversationByKey
+              : {};
           // Use setTimeout to ensure we're outside the hydration cycle
           setTimeout(() => {
             state.fetchWorkspaces();
