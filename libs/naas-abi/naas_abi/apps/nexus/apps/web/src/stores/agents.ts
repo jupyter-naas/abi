@@ -80,7 +80,7 @@ const AGENTS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 // Workspaces reconciled with the backend code class registry this session.
 // GET /agents is read-only. POST /agents/sync is only sent when fetchAgents
-// is called with force=true (chat, lab, agent settings). Module-level so it
+// is called with force=true (chat, agent settings). Module-level so it
 // resets on a full page reload; we still guard against parallel POSTs.
 const syncedWorkspaces = new Set<string>();
 
@@ -153,7 +153,7 @@ export const useAgentsStore = create<AgentsState>()(
           // Reconcile the DB with the code class registry (POST /sync) only when
           // the caller asks (`force`). A workspace switch used to POST /sync on
           // the first GET, which blocks the API (Python agent imports + DB
-          // writes) while Apps is still loading. Chat/lab/settings pass force.
+          // writes) while Apps is still loading. Chat and agent settings pass force.
           const shouldSync = force;
           if (shouldSync) syncedWorkspaces.add(workspaceId);
           let response: Response;
@@ -232,9 +232,11 @@ export const useAgentsStore = create<AgentsState>()(
             // Pick the best agent to surface in the chat UI.
             // Priority: workspace default → first enabled.
             const pickPreferred = (): Agent | undefined => {
-              const defaultAgent = formattedAgents.find(a => a.isDefault && a.enabled);
-              if (defaultAgent) return defaultAgent;
-              return formattedAgents.find(a => a.enabled);
+              const defaultEnabled = formattedAgents.find((a) => a.isDefault && a.enabled);
+              if (defaultEnabled) return defaultEnabled;
+              const defaultAny = formattedAgents.find((a) => a.isDefault);
+              if (defaultAny) return defaultAny;
+              return formattedAgents.find((a) => a.enabled);
             };
 
             const { useWorkspaceStore } = await import('./workspace');
@@ -242,33 +244,30 @@ export const useAgentsStore = create<AgentsState>()(
             const currentSelected = ws.selectedAgent;
             const preferred = pickPreferred();
             if (!preferred) return;
+            const inRoster = (id: string) =>
+              Boolean(id && formattedAgents.some((a) => a.id === id));
 
-            if (!ws.agentExplicitlySelected) {
-              ws.setSelectedAgent(preferred.id);
-            } else if (currentSelected && !formattedAgents.find(a => a.id === currentSelected)) {
-              ws.setSelectedAgent(preferred.id);
-            } else if (!currentSelected) {
+            if (!ws.agentExplicitlySelected || !inRoster(currentSelected)) {
               ws.setSelectedAgent(preferred.id);
             }
 
-            // Right AI pane always prefers Abi unless the user picked another agent.
-            // Keep explicit=false so ChatAgentSelector can still show the Abi name
-            // (pane trigger bypasses "Auto") while New chat / refresh can re-apply.
-            const abiAgent =
-              formattedAgents.find(
-                (a) =>
-                  a.enabled &&
-                  (a.name === 'Abi' ||
-                    (typeof a.class_name === 'string' &&
-                      a.class_name.toLowerCase().includes('abiagent')))
-              ) ?? null;
-            const panePreferred = abiAgent ?? preferred;
+            // Right AI pane pins the workspace default unless the user picked
+            // another agent still in this workspace. A leftover id from
+            // another workspace must not stick.
+            const { pickSlidesOfficeAgent } = await import(
+              '@/lib/pick-workspace-default-agent'
+            );
+            const { useSlidesStore } = await import('./slides');
+            const onSlides = Boolean(useSlidesStore.getState().selectedSlug);
+            const panePreferred = onSlides
+              ? (pickSlidesOfficeAgent(formattedAgents) ?? preferred)
+              : preferred;
             const currentPane = ws.paneAgent;
-            if (!ws.paneAgentExplicitlySelected) {
-              ws.setPaneAgent(panePreferred.id);
-            } else if (currentPane && !formattedAgents.find((a) => a.id === currentPane)) {
-              ws.setPaneAgent(panePreferred.id);
-            } else if (!currentPane) {
+            if (
+              onSlides ||
+              !ws.paneAgentExplicitlySelected ||
+              !inRoster(currentPane)
+            ) {
               ws.setPaneAgent(panePreferred.id);
             }
           }

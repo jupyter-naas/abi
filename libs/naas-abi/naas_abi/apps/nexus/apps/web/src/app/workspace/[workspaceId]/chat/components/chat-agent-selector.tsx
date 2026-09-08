@@ -85,21 +85,8 @@ export function ChatAgentSelector({
   );
 
   const defaultAgent = useMemo(() => {
-    if (isPane) {
-      return (
-        enabledAgents.find(
-          (a) =>
-            a.enabled &&
-            (a.name === 'Abi' ||
-              (typeof a.class_name === 'string' &&
-                a.class_name.toLowerCase().includes('abiagent')))
-        ) ??
-        enabledAgents.find((a) => a.isDefault) ??
-        enabledAgents[0]
-      );
-    }
     return enabledAgents.find((a) => a.isDefault) ?? enabledAgents[0];
-  }, [enabledAgents, isPane]);
+  }, [enabledAgents]);
   const activeAgent =
     enabledAgents.find((a) => a.id === selectedAgent) || defaultAgent;
   const autoMode = !agentExplicitlySelected;
@@ -229,11 +216,11 @@ export function ChatAgentSelector({
   const activeModelId = activeAgent ? defaultModelFor(activeAgent) : null;
   const activeModelLabel = modelDisplayName(catalogModels, activeModelId) ?? activeModelId;
 
-  // Pane surface: always show the resolved agent name (Abi by default).
+  // Pane surface: always show the resolved agent name (workspace default).
   // After an explicit pick, show the agent (and model). Auto is only the
   // workspace default before the user chooses.
   const triggerLabel = isPane
-    ? activeAgent?.name ?? 'Abi'
+    ? activeAgent?.name ?? 'Agent'
     : autoMode
       ? 'Auto'
       : activeAgent && activeModelLabel && selectableModels(activeAgent).length > 1

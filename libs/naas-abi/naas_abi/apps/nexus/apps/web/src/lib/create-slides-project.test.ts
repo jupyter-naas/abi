@@ -2,8 +2,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { Agent } from '@/stores/agents';
 import { useAgentsStore } from '@/stores/agents';
+import { useSlidesStore } from '@/stores/slides';
 import { useWorkspaceStore } from '@/stores/workspace';
 
+import {
+  pickSlidesOfficeAgent,
+  pickWorkspaceDefaultAgent,
+} from './pick-workspace-default-agent';
 import {
   DEFAULT_SLIDES_TEMPLATE_ID,
   openSlidesAgentPane,
@@ -38,10 +43,60 @@ describe('DEFAULT_SLIDES_TEMPLATE_ID', () => {
  * Checking the export would only prove a declaration was deleted, which says
  * nothing about whether anything still reaches into the store.
  */
+describe('pickWorkspaceDefaultAgent', () => {
+  it('prefers the workspace default over Abi', () => {
+    const orchestrator = { id: 'default', enabled: true, isDefault: true };
+    const abi = { id: 'abi', enabled: true, isDefault: false };
+    expect(pickWorkspaceDefaultAgent([abi, orchestrator])?.id).toBe('default');
+  });
+
+  it('still picks the workspace default when sync left it disabled', () => {
+    const orchestrator = { id: 'default', enabled: false, isDefault: true };
+    const abi = { id: 'abi', enabled: false, isDefault: false };
+    expect(pickWorkspaceDefaultAgent([abi, orchestrator])?.id).toBe('default');
+  });
+});
+
+describe('pickSlidesOfficeAgent', () => {
+  it('prefers enabled Nexus Slides over the workspace default', () => {
+    const orchestrator = { id: 'default', enabled: true, isDefault: true, name: 'Orchestrator' };
+    const slides = {
+      id: 'slides',
+      enabled: true,
+      isDefault: false,
+      name: 'Slides',
+      class_name: 'naas_abi.agents.SlidesAgent/SlidesAgent',
+    };
+    expect(pickSlidesOfficeAgent([orchestrator, slides])?.id).toBe('slides');
+  });
+
+  it('falls back to the workspace default when Slides is not on the roster', () => {
+    const orchestrator = { id: 'default', enabled: true, isDefault: true, name: 'Orchestrator' };
+    const abi = { id: 'abi', enabled: true, isDefault: false, name: 'Abi' };
+    expect(pickSlidesOfficeAgent([abi, orchestrator])?.id).toBe('default');
+  });
+
+  it('ignores market-intelligence sheet agents', () => {
+    const orchestrator = { id: 'default', enabled: true, isDefault: true, name: 'Orchestrator' };
+    const market = {
+      id: 'mi',
+      enabled: true,
+      isDefault: false,
+      name: 'Market Intelligence Slides Agent',
+      class_name:
+        'intelligence.market_intelligence.agents.MarketIntelligenceSlidesAgent/MarketIntelligenceSlidesAgent',
+    };
+    expect(pickSlidesOfficeAgent([orchestrator, market])?.id).toBe('default');
+  });
+});
+
 describe('openSlidesAgentPane', () => {
   const ABI_ID = 'agent-abi';
+  const DEFAULT_ID = 'agent-default';
+  const SLIDES_ID = 'agent-slides';
+  const STALE_ID = 'agent-stale';
 
-  const seedAgent = (): void => {
+  const seedAgents = (withSlides = false): void => {
     useAgentsStore.setState({
       agents: [
         {
@@ -49,16 +104,45 @@ describe('openSlidesAgentPane', () => {
           name: 'Abi',
           class_name: 'naas_abi.agents/AbiAgent',
           enabled: true,
-          isDefault: true,
+          isDefault: false,
           modelIds: ['gpt-4.1-mini', 'anthropic/claude-sonnet-5'],
         } as Agent,
+        {
+          id: DEFAULT_ID,
+          name: 'Orchestrator',
+          class_name: 'demo.agents/OrchestratorAgent',
+          enabled: true,
+          isDefault: true,
+          modelIds: ['gpt-4.1-mini'],
+        } as Agent,
+        ...(withSlides
+          ? [
+              {
+                id: SLIDES_ID,
+                name: 'Slides',
+                class_name: 'naas_abi.agents.SlidesAgent/SlidesAgent',
+                enabled: true,
+                isDefault: false,
+                modelIds: ['qwen-3.8'],
+              } as Agent,
+            ]
+          : []),
       ],
     });
   };
 
   beforeEach(() => {
-    seedAgent();
-    useWorkspaceStore.setState({ selectedChatModels: {}, paneAgentExplicitlySelected: false });
+    seedAgents();
+    useWorkspaceStore.setState({
+      selectedChatModels: {},
+      paneAgent: '',
+      paneAgentExplicitlySelected: false,
+      currentWorkspaceId: 'ws-1',
+      conversations: [],
+      paneConversationId: null,
+      slidesPaneConversationByKey: {},
+    });
+    useSlidesStore.setState({ selectedSlug: null, selectedTitle: null });
   });
 
   it('leaves a selected model alone, including the free one the pin replaced', () => {
@@ -77,6 +161,111 @@ describe('openSlidesAgentPane', () => {
     openSlidesAgentPane();
 
     expect(useWorkspaceStore.getState().selectedChatModels[ABI_ID]).toBeUndefined();
+  });
+
+  it('pins the workspace default when Slides is not on the roster', () => {
+    openSlidesAgentPane();
+
+    expect(useWorkspaceStore.getState().paneAgent).toBe(DEFAULT_ID);
+  });
+
+  it('pins Nexus Slides when the workspace enabled it', () => {
+    seedAgents(true);
+    openSlidesAgentPane();
+
+    expect(useWorkspaceStore.getState().paneAgent).toBe(SLIDES_ID);
+  });
+
+  it('keeps an explicit picker choice when no deck is open', () => {
+    useWorkspaceStore.setState({
+      paneAgent: ABI_ID,
+      paneAgentExplicitlySelected: true,
+    });
+
+    openSlidesAgentPane();
+
+    expect(useWorkspaceStore.getState().paneAgent).toBe(ABI_ID);
+  });
+
+  it('binds Slides on an open deck even if Bob was picked', () => {
+    seedAgents(true);
+    useWorkspaceStore.setState({
+      paneAgent: ABI_ID,
+      paneAgentExplicitlySelected: true,
+    });
+
+    openSlidesAgentPane({ slug: 'deck-a' });
+
+    expect(useWorkspaceStore.getState().paneAgent).toBe(SLIDES_ID);
+  });
+
+  it('resets a leftover picker choice when opening a new deck', () => {
+    useWorkspaceStore.setState({
+      paneAgent: STALE_ID,
+      paneAgentExplicitlySelected: true,
+    });
+
+    openSlidesAgentPane({ freshChat: true });
+
+    expect(useWorkspaceStore.getState().paneAgent).toBe(DEFAULT_ID);
+    expect(useWorkspaceStore.getState().paneAgentExplicitlySelected).toBe(false);
+    expect(useWorkspaceStore.getState().paneConversationId).toBeNull();
+  });
+
+  it('opens the thread bound to that deck and does not keep the previous one', () => {
+    const now = new Date();
+    useWorkspaceStore.setState({
+      paneConversationId: 'conv-a',
+      slidesPaneConversationByKey: { 'ws-1::deck-b': 'conv-b' },
+      conversations: [
+        {
+          id: 'conv-a',
+          workspaceId: 'ws-1',
+          title: 'Deck A thread',
+          messages: [],
+          agent: SLIDES_ID,
+          createdAt: now,
+          updatedAt: now,
+          slidesSlug: 'deck-a',
+        },
+        {
+          id: 'conv-b',
+          workspaceId: 'ws-1',
+          title: 'Deck B thread',
+          messages: [],
+          agent: SLIDES_ID,
+          createdAt: now,
+          updatedAt: now,
+          slidesSlug: 'deck-b',
+        },
+      ],
+    });
+
+    openSlidesAgentPane({ slug: 'deck-b', title: 'Deck B' });
+
+    expect(useWorkspaceStore.getState().paneConversationId).toBe('conv-b');
+  });
+
+  it('starts a fresh pane thread when the deck has no conversation', () => {
+    useWorkspaceStore.setState({
+      paneConversationId: 'conv-a',
+      conversations: [
+        {
+          id: 'conv-a',
+          workspaceId: 'ws-1',
+          title: 'Deck A thread',
+          messages: [],
+          agent: SLIDES_ID,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          slidesSlug: 'deck-a',
+        },
+      ],
+    });
+
+    openSlidesAgentPane({ slug: 'deck-b', title: 'Deck B' });
+
+    expect(useWorkspaceStore.getState().paneConversationId).toBeNull();
   });
 });
 

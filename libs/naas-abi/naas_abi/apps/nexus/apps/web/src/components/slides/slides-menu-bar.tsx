@@ -96,7 +96,12 @@ export interface SlidesMenuBarProps {
   /** File → Save (git commit under the hood). Omit on index/new pages. */
   onCommit?: () => void;
   commitDisabled?: boolean;
-  /** File → Export PPTX. Omit when not on an open deck. */
+  /** File → Save to My Drive (MinIO copy). Omit when not on an open deck. */
+  onSaveToMyDrive?: () => void;
+  saveToMyDriveDisabled?: boolean;
+  /** File → Export to PDF. Omit when not on an open deck. */
+  onExportPdf?: () => void;
+  /** File → Export to PPTX. Omit when not on an open deck. */
   onExportPptx?: () => void;
   exportDisabled?: boolean;
   /** View → Preview / Code / Refresh. Omit on index/new pages. */
@@ -117,6 +122,9 @@ export function SlidesMenuBar({
   onNewPresentation,
   onCommit,
   commitDisabled,
+  onSaveToMyDrive,
+  saveToMyDriveDisabled,
+  onExportPdf,
   onExportPptx,
   exportDisabled,
   mode,
@@ -155,10 +163,26 @@ export function SlidesMenuBar({
       onSelect: onCommit,
     });
   }
+  if (onSaveToMyDrive) {
+    fileItems.push({
+      id: 'save-to-my-drive',
+      label: 'Save to My Drive',
+      disabled: saveToMyDriveDisabled,
+      onSelect: onSaveToMyDrive,
+    });
+  }
+  if (onExportPdf) {
+    fileItems.push({
+      id: 'export-pdf',
+      label: 'Print / Save as PDF',
+      disabled: exportDisabled,
+      onSelect: onExportPdf,
+    });
+  }
   if (onExportPptx) {
     fileItems.push({
-      id: 'export',
-      label: 'Export PPTX',
+      id: 'export-pptx',
+      label: 'Export to PPTX',
       disabled: exportDisabled,
       onSelect: onExportPptx,
     });
@@ -204,7 +228,7 @@ export function SlidesMenuBar({
         : null;
 
   return (
-    <div ref={rootRef} className="flex items-center gap-1">
+    <div ref={rootRef} className="flex min-w-0 items-center gap-1">
       <span className="mr-1 hidden text-xs font-semibold text-foreground sm:inline">Slides</span>
       <MenuDropdown
         label="File"

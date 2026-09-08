@@ -1,10 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeSlidesPreviewScale,
+  coverHeroCss,
+  deckBufferHasCover,
+  extractFirstSlideHtml,
+  prepareSlidesCoverHtml,
   prepareSlidesPreviewHtml,
+  readDeckCoverHtml,
+  SLIDES_COVER_FIT_STYLE_ID,
+  SLIDES_INDUSTRY_STAGE_SCALE,
+  SLIDES_PDF_EXPORT_ACK_MS,
   SLIDES_PREVIEW_BRIDGE_SCRIPT_ID,
   SLIDES_PREVIEW_FIT_STYLE_ID,
   SLIDES_PREVIEW_MESSAGE_SOURCE,
+  SLIDES_PREVIEW_PRINT_CSS,
+  SLIDES_PRINT_PAGE_HEIGHT_IN,
+  SLIDES_PRINT_PAGE_WIDTH_IN,
   SLIDES_STAGE_HEIGHT,
   SLIDES_STAGE_WIDTH,
 } from './slides-preview-fit';
@@ -38,6 +49,26 @@ describe('prepareSlidesPreviewHtml', () => {
     expect(once).toContain(SLIDES_PREVIEW_MESSAGE_SOURCE);
     expect(once).toContain(`${SLIDES_STAGE_WIDTH}px`);
     expect(once).toContain('deck-menubar');
+    expect(once).toContain('export-pdf');
+    expect(once).toContain('window.print');
+    expect(once).toContain('@media print');
+    expect(once).toContain(`size: ${SLIDES_PRINT_PAGE_WIDTH_IN} ${SLIDES_PRINT_PAGE_HEIGHT_IN} landscape`);
+    expect(once).toContain('display: block !important');
+    expect(once).toContain('.slide-index');
+    expect(once).toContain('.industry-stage');
+    expect(once).toContain(`transform: scale(${SLIDES_INDUSTRY_STAGE_SCALE})`);
+    expect(once).toContain('print-color-adjust: exact');
+    expect(once).toContain('page-break-after: always');
+    expect(once).toContain('beforeprint');
+    const ackAt = once.indexOf("type: 'export-pdf-result', ok: true");
+    const printAt = once.lastIndexOf('window.print()');
+    const timeoutAt = once.indexOf('setTimeout(function ()');
+    expect(ackAt).toBeGreaterThan(-1);
+    expect(printAt).toBeGreaterThan(ackAt);
+    expect(timeoutAt).toBeGreaterThan(ackAt);
+    expect(timeoutAt).toBeLessThan(printAt);
+    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('@media print');
+    expect(SLIDES_PDF_EXPORT_ACK_MS).toBeGreaterThan(0);
     const twice = prepareSlidesPreviewHtml(once);
     expect(twice).toBe(once);
   });
@@ -59,5 +90,80 @@ describe('prepareSlidesPreviewHtml', () => {
     const out = prepareSlidesPreviewHtml(src);
     expect(out.startsWith(`<style id="${SLIDES_PREVIEW_FIT_STYLE_ID}">`)).toBe(true);
     expect(out).toContain(`id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}"`);
+  });
+});
+
+const TWO_SLIDE_DECK = `<!doctype html><html><head>
+<title>Deck</title>
+<style>.slide { background: #fff; }</style>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+</head><body>
+<main class="deck">
+<section id="slide-cover" class="slide cover"><h1>Cover Title</h1></section>
+<section class="slide"><h1>Agenda</h1></section>
+</main>
+<script>const IMG = { hero: "data:image/svg+xml,hero" };</script>
+</body></html>`;
+
+describe('prepareSlidesCoverHtml', () => {
+  it('keeps the first slide and drops the rest', () => {
+    const cover = prepareSlidesCoverHtml(TWO_SLIDE_DECK);
+    expect(cover).toContain('Cover Title');
+    expect(cover).toContain('id="slide-cover"');
+    expect(cover).not.toContain('Agenda');
+    expect(cover).toContain(`id="${SLIDES_COVER_FIT_STYLE_ID}"`);
+    expect(cover).toContain('.industry-stage');
+    expect(cover).toContain(`transform: scale(${SLIDES_INDUSTRY_STAGE_SCALE})`);
+    expect(cover).not.toContain('pptxgen');
+    expect(cover).not.toContain('export-pdf');
+  });
+
+  it('returns null when no slide section exists', () => {
+    expect(prepareSlidesCoverHtml('<html><body>no slides</body></html>')).toBeNull();
+  });
+
+  it('reads a small hero data URL for the cover band', () => {
+    expect(coverHeroCss(TWO_SLIDE_DECK)).toContain('data:image/svg+xml,hero');
+  });
+});
+
+describe('deckBufferHasCover', () => {
+  it('waits for a complete first slide', () => {
+    expect(deckBufferHasCover('<head></head><section class="slide"><h1>x')).toBe(false);
+    expect(deckBufferHasCover(TWO_SLIDE_DECK)).toBe(true);
+  });
+});
+
+describe('extractFirstSlideHtml', () => {
+  it('skips a section that is not a slide', () => {
+    const html =
+      '<section class="notes">skip</section><section class="slide cover"><h1>Keep</h1></section>';
+    expect(extractFirstSlideHtml(html)).toContain('Keep');
+    expect(extractFirstSlideHtml(html)).not.toContain('skip');
+  });
+});
+
+describe('readDeckCoverHtml', () => {
+  it('stops after the first slide in a streamed body', async () => {
+    const late = '<section class="slide"><h1>Should not be needed</h1></section>';
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(TWO_SLIDE_DECK));
+        controller.enqueue(new TextEncoder().encode(late));
+        controller.close();
+      },
+    });
+    const cover = await readDeckCoverHtml(new Response(stream));
+    expect(cover).toContain('Cover Title');
+    expect(cover).not.toContain('Should not be needed');
+  });
+
+  it('reads html from the slides deck JSON envelope', async () => {
+    const res = new Response(JSON.stringify({ html: TWO_SLIDE_DECK, slug: 'deck-one' }), {
+      headers: { 'content-type': 'application/json' },
+    });
+    const cover = await readDeckCoverHtml(res);
+    expect(cover).toContain('Cover Title');
+    expect(cover).not.toContain('Agenda');
   });
 });

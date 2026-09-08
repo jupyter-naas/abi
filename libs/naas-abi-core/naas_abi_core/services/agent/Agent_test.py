@@ -749,3 +749,33 @@ def test_stream_invoke_reports_dead_thread_instead_of_hanging():
     assert not consumer.is_alive(), "stream_invoke hung on a dead worker thread"
     assert isinstance(outcome.get("error"), RuntimeError), outcome
     assert "Agent thread has died" in str(outcome["error"]), outcome
+
+
+def test_one_routing_write_per_step_keeps_first_handoff():
+    """Qwen 3.8 emitted transfer_to_Web_Search_Agent twice in one turn.
+
+    Both Commands wrote current_active_agent. LangGraph LastValue then raised
+    INVALID_CONCURRENT_GRAPH_UPDATE and the slides chat died.
+    """
+    from langgraph.types import Command
+    from naas_abi_core.services.agent.Agent import Agent
+
+    file_result = Command(update={"messages": ["deck"]})
+    first = Command(
+        goto="Web_Search_Agent",
+        update={"current_active_agent": "Web_Search_Agent", "messages": ["h1"]},
+    )
+    second = Command(
+        goto="Web_Search_Agent",
+        update={"current_active_agent": "Web_Search_Agent", "messages": ["h2"]},
+    )
+
+    out = Agent._one_routing_write_per_step([file_result, first, second])
+    routing = [
+        cmd
+        for cmd in out
+        if Agent._command_sets_active_agent(cmd)
+    ]
+    assert routing == [first]
+    assert any((cmd.update or {}).get("messages") == ["h2"] for cmd in out)
+    assert any((cmd.update or {}).get("messages") == ["deck"] for cmd in out)

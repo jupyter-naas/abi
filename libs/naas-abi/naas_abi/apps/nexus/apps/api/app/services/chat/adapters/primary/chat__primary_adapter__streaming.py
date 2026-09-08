@@ -195,6 +195,39 @@ async def stream_chat_response(
         "None" if not request.provider else request.provider.type,
     )
 
+    if request.workspace_id:
+        from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
+            pick_workspace_chat_agent_id,
+            pick_workspace_slides_agent_id,
+        )
+
+        async with AsyncSessionLocal() as db:
+            with bind_registry(db) as registry:
+                workspace_agents = await registry.agents.list_workspace_agents(
+                    context=request_context(current_user),
+                    workspace_id=request.workspace_id,
+                )
+        resolved_agent = pick_workspace_chat_agent_id(
+            workspace_agents, request.agent
+        )
+        from naas_abi.agents.slides.policy import open_slides_slug
+
+        slides_agent = None
+        if open_slides_slug(
+            request.context if isinstance(request.context, dict) else None
+        ):
+            slides_agent = pick_workspace_slides_agent_id(workspace_agents)
+        if slides_agent:
+            resolved_agent = slides_agent
+        if resolved_agent and resolved_agent != request.agent:
+            logger.info(
+                "Rewriting chat agent %s -> %s for workspace %s",
+                request.agent,
+                resolved_agent,
+                request.workspace_id,
+            )
+            request.agent = resolved_agent
+
     has_images = bool(request.images) or any(m.images for m in request.messages if m.images)
     provider = await resolve_provider(
         request_context(current_user),

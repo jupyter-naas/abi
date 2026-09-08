@@ -16,6 +16,7 @@ import {
   slidesApiErrorMessage,
   startNewPresentation,
 } from '@/lib/create-slides-project';
+import { copyDeckToMyDrive } from '@/lib/slides-my-drive';
 import { authFetch } from '@/stores/auth';
 import {
   SLIDES_DECK_UPDATED_EVENT,
@@ -179,6 +180,7 @@ export default function SlidesEditorPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingToDrive, setSavingToDrive] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -193,8 +195,9 @@ export default function SlidesEditorPage() {
   const refreshRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
-    openSlidesAgentPane();
-  }, []);
+    if (!slug) return;
+    openSlidesAgentPane({ slug });
+  }, [slug]);
 
   useEffect(() => {
     dirtyRef.current = dirty;
@@ -411,6 +414,26 @@ export default function SlidesEditorPage() {
     }
   }, [workspaceId, slug, html]);
 
+  const saveToMyDrive = useCallback(async () => {
+    if (!slug || !html) return;
+    setSavingToDrive(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const { relativePath } = await copyDeckToMyDrive({
+        slug,
+        html,
+        title,
+        workspaceId,
+      });
+      setStatus(`Copied to My Drive: ${relativePath}`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSavingToDrive(false);
+    }
+  }, [slug, html, title, workspaceId]);
+
   useEffect(() => {
     saveRef.current = save;
   }, [save]);
@@ -462,6 +485,23 @@ export default function SlidesEditorPage() {
     }
   };
 
+  const exportPdf = async () => {
+    if (!previewRef.current) {
+      setError('Preview is not ready for PDF export.');
+      return;
+    }
+    setExporting(true);
+    setError(null);
+    setStatus(null);
+    try {
+      await previewRef.current.exportPdf();
+    } catch (e) {
+      setError(`PDF export failed: ${(e as Error).message}`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const menuBar = (
     <SlidesMenuBar
       onNewPresentation={() => {
@@ -472,6 +512,9 @@ export default function SlidesEditorPage() {
       }}
       onCommit={() => void save()}
       commitDisabled={saving || !dirty || loading}
+      onSaveToMyDrive={() => void saveToMyDrive()}
+      saveToMyDriveDisabled={savingToDrive || loading || !html}
+      onExportPdf={() => void exportPdf()}
       onExportPptx={() => void exportPptx()}
       exportDisabled={exporting || loading}
       mode={mode}
@@ -479,11 +522,15 @@ export default function SlidesEditorPage() {
       onRefresh={() => void refresh()}
       refreshDisabled={loading || refreshing}
       trailing={
-        status || dirty || saving || refreshing ? (
+        status || dirty || saving || savingToDrive || refreshing ? (
           <div className="ml-2 flex items-center gap-2 border-l border-border pl-2">
-            {status && <span className="text-xs text-muted-foreground">{status}</span>}
+            {status && (
+              <span className="max-w-[28rem] truncate text-xs text-muted-foreground" title={status}>
+                {status}
+              </span>
+            )}
             {dirty && <span className="text-xs text-amber-600">Unsaved</span>}
-            {(saving || refreshing) && (
+            {(saving || savingToDrive || refreshing) && (
               <Loader2 size={14} className="animate-spin text-muted-foreground" />
             )}
           </div>

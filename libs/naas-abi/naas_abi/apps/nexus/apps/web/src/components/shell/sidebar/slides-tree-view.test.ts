@@ -107,10 +107,28 @@ describe('SlidesTreeView', () => {
 
   it('does not claim a deck is the current page from the slides index', () => {
     const html = markup({ currentPath: '/workspace/ws-1/slides' });
-    expect(html).not.toContain('aria-current');
+    const decks = html.match(/<a[^>]*data-testid="slides-tree-deck"[^>]*>/g) ?? [];
+    expect(decks.some((row) => row.includes('aria-current'))).toBe(false);
     // The last deck opened still reads as selected, the way an editor keeps
     // showing which file you were in.
     expect(html).toContain('bg-workspace-accent-15');
+  });
+
+  it('puts All slides first and marks it current on the gallery', () => {
+    const html = markup({ currentPath: '/workspace/ws-1/slides' });
+    expect(html).toContain('>All slides</span>');
+    expect(html.indexOf('slides-tree-all')).toBeLessThan(html.indexOf('slides-tree-root'));
+    expect(html).toMatch(
+      /data-testid="slides-tree-all"[^>]*aria-current="page"|aria-current="page"[^>]*data-testid="slides-tree-all"/,
+    );
+    expect(html).toContain('href="/workspace/ws-1/slides"');
+  });
+
+  it('does not highlight All slides on an open deck', () => {
+    const html = markup();
+    const all = html.match(/<a[^>]*data-testid="slides-tree-all"[^>]*>/g) ?? [];
+    expect(all.length).toBe(1);
+    expect(all[0]).not.toContain('aria-current');
   });
 
   it('shows selection on the open deck and not on the others', () => {
@@ -160,5 +178,23 @@ describe('SlidesTreeView', () => {
 
   it('says so when the workspace has no deck yet', () => {
     expect(markup({ decks: [] })).toContain('No presentations yet');
+  });
+
+  it('puts Rename and Archive on a deck row when the chat actions are wired', () => {
+    const html = markup({
+      onStartRename: () => {},
+      onRename: () => {},
+      onCancelRename: () => {},
+      onArchive: () => {},
+    });
+    expect(html).toContain('data-testid="slides-project-menu"');
+  });
+
+  it('lists archived decks without a second slides root', () => {
+    const html = markup({ hideRoot: true, emptyLabel: 'No archived presentations' });
+    expect(html).toContain('data-testid="slides-tree-archived"');
+    expect(html).not.toContain('data-testid="slides-tree-root"');
+    expect(html).not.toContain('data-testid="slides-tree-all"');
+    expect(html).toContain('Matériaux de construction');
   });
 });

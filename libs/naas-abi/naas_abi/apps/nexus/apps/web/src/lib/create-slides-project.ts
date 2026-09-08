@@ -2,6 +2,11 @@ import { authFetch } from '@/stores/auth';
 import { useAgentsStore } from '@/stores/agents';
 import { dispatchSlidesDeckUpdated, useSlidesStore } from '@/stores/slides';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { pickSlidesOfficeAgent } from '@/lib/pick-workspace-default-agent';
+import {
+  findSlidesPaneConversationId,
+  slidesPaneConversationKey,
+} from '@/lib/slides-pane-conversation';
 
 export const DEFAULT_SLIDES_TEMPLATE_ID = 'abi/minimal-light-v1';
 export const DEFAULT_SLIDES_TITLE = 'Untitled presentation';
@@ -54,35 +59,61 @@ export type CreatedSlidesProject = {
   title: string;
 };
 
-function pickAbiAgentId(): string | null {
-  const agents = useAgentsStore.getState().agents;
-  const abi =
-    agents.find(
-      (a) =>
-        a.enabled &&
-        (a.name === 'Abi' ||
-          (typeof a.class_name === 'string' && a.class_name.toLowerCase().includes('abiagent'))),
-    ) ??
-    agents.find((a) => a.isDefault && a.enabled) ??
-    agents.find((a) => a.enabled);
-  return abi?.id ?? null;
+function pickSlidesPaneAgentId(): string | null {
+  return pickSlidesOfficeAgent(useAgentsStore.getState().agents)?.id ?? null;
 }
 
-/** Open the Abi pane beside the deck so the next message can edit it.
+/** Open the Slides pane beside the deck so the next message can edit it.
  *
- * The composer selection is left exactly as the user left it. The server picks
- * the model for a slides turn and reports it back on the stream's opening
+ * Binds Nexus Slides when that agent is enabled in this workspace. Falls
+ * back to the workspace default only when Slides is not on the roster.
+ * A new deck always resets so a leftover picker choice cannot ride in.
+ *
+ * The composer model selection is left exactly as the user left it. The server
+ * picks the model for a slides turn and reports it back on the stream's opening
  * `llm_model` frame, so the footer stays honest without the client guessing.
  */
-export function openSlidesAgentPane(opts?: { freshChat?: boolean }): void {
+export function openSlidesAgentPane(opts?: {
+  freshChat?: boolean;
+  slug?: string | null;
+  title?: string | null;
+}): void {
   const ws = useWorkspaceStore.getState();
   ws.setContextPanelOpen(true);
+  const slug = (opts?.slug ?? useSlidesStore.getState().selectedSlug ?? '').trim();
+  const title = opts?.title ?? useSlidesStore.getState().selectedTitle;
   if (opts?.freshChat) {
     ws.setPaneConversationId(null);
+    ws.clearPaneAgentExplicitSelection();
+  } else if (slug) {
+    const workspaceId = ws.currentWorkspaceId || '';
+    const boundId = workspaceId
+      ? (ws.slidesPaneConversationByKey || {})[
+          slidesPaneConversationKey(workspaceId, slug)
+        ] ?? null
+      : null;
+    const found = findSlidesPaneConversationId({
+      workspaceId,
+      slug,
+      conversations: ws.conversations,
+      boundId,
+      deckTitle: title,
+    });
+    ws.setPaneConversationId(found);
+    if (found && workspaceId) {
+      ws.rememberSlidesPaneConversation(workspaceId, slug, found);
+    }
   }
-  const abiId = pickAbiAgentId();
-  if (abiId && !ws.paneAgentExplicitlySelected) {
-    ws.setPaneAgent(abiId);
+  const defaultId = pickSlidesPaneAgentId();
+  if (!defaultId) return;
+  const agents = useAgentsStore.getState().agents;
+  const currentStillValid = Boolean(
+    ws.paneAgent && agents.some((a) => a.enabled && a.id === ws.paneAgent),
+  );
+  // An open deck always binds Slides. Bob has no write_slides_* tools;
+  // keeping an explicit Bob pick burns the step budget on transfers.
+  if (slug || opts?.freshChat || !ws.paneAgentExplicitlySelected || !currentStillValid) {
+    ws.setPaneAgent(defaultId);
   }
 }
 
@@ -119,7 +150,7 @@ export async function createUntitledSlidesProject(
   throw new Error(lastError);
 }
 
-/** One click: seed a template (default Minimal Light), open the deck, open Abi. */
+/** One click: seed a template (default Minimal Light), open the deck, open the pane. */
 export async function startNewPresentation(
   workspaceId: string,
   navigate: (href: string) => void,

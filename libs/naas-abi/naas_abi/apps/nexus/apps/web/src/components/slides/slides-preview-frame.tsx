@@ -14,6 +14,7 @@ import {
   computeSlidesPreviewScale,
   isSlidesPreviewMessage,
   prepareSlidesPreviewHtml,
+  SLIDES_PDF_EXPORT_ACK_MS,
   SLIDES_PREVIEW_MESSAGE_SOURCE,
   SLIDES_STAGE_HEIGHT,
   SLIDES_STAGE_WIDTH,
@@ -22,6 +23,7 @@ import {
 
 export interface SlidesPreviewFrameHandle {
   exportPptx: () => Promise<void>;
+  exportPdf: () => Promise<void>;
 }
 
 export interface SlidesPreviewFrameProps {
@@ -36,8 +38,9 @@ export interface SlidesPreviewFrameProps {
  * the same scale so no slide content is clipped horizontally.
  *
  * Sandbox omits allow-same-origin so deck scripts cannot touch Nexus storage
- * or make credentialed same-origin requests. Height and PPTX export use a
- * constrained postMessage bridge injected into srcDoc.
+ * or make credentialed same-origin requests. Height, PPTX, and PDF export use
+ * a constrained postMessage bridge injected into srcDoc. allow-modals is
+ * required so File → Export to PDF can open the browser print dialog.
  */
 export const SlidesPreviewFrame = forwardRef<
   SlidesPreviewFrameHandle,
@@ -53,6 +56,7 @@ export const SlidesPreviewFrame = forwardRef<
     Array<{
       resolve: () => void;
       reject: (error: Error) => void;
+      timer: number;
     }>
   >([]);
 
@@ -86,12 +90,20 @@ export const SlidesPreviewFrame = forwardRef<
         }
         return;
       }
-      if (event.data.type === 'export-pptx-result') {
+      if (
+        event.data.type === 'export-pptx-result' ||
+        event.data.type === 'export-pdf-result'
+      ) {
         const waiters = exportWaiters.current.splice(0);
+        waiters.forEach((w) => window.clearTimeout(w.timer));
         if (event.data.ok) {
           waiters.forEach((w) => w.resolve());
         } else {
-          const err = new Error(event.data.error || 'PPTX export failed');
+          const fallback =
+            event.data.type === 'export-pdf-result'
+              ? 'PDF export failed'
+              : 'PPTX export failed';
+          const err = new Error(event.data.error || fallback);
           waiters.forEach((w) => w.reject(err));
         }
       }
@@ -115,19 +127,50 @@ export const SlidesPreviewFrame = forwardRef<
             reject(new Error('Preview is not ready for PPTX export.'));
             return;
           }
-          exportWaiters.current.push({ resolve, reject });
+          const waiter = {
+            resolve,
+            reject,
+            timer: window.setTimeout(() => {
+              const idx = exportWaiters.current.indexOf(waiter);
+              if (idx >= 0) {
+                exportWaiters.current.splice(idx, 1);
+                reject(new Error('PPTX export timed out'));
+              }
+            }, 15000),
+          };
+          exportWaiters.current.push(waiter);
           const msg: SlidesPreviewFromParentMessage = {
             source: SLIDES_PREVIEW_MESSAGE_SOURCE,
             type: 'export-pptx',
           };
           win.postMessage(msg, '*');
-          window.setTimeout(() => {
-            const idx = exportWaiters.current.findIndex((w) => w.resolve === resolve);
-            if (idx >= 0) {
-              exportWaiters.current.splice(idx, 1);
-              reject(new Error('PPTX export timed out'));
-            }
-          }, 15000);
+        }),
+      exportPdf: () =>
+        new Promise<void>((resolve, reject) => {
+          const win = iframeRef.current?.contentWindow;
+          if (!win) {
+            reject(new Error('Preview is not ready for PDF export.'));
+            return;
+          }
+          // Timeout only if the iframe never acks that print() was invoked.
+          // Success is "print dialog opened", not "user finished Save as PDF".
+          const waiter = {
+            resolve,
+            reject,
+            timer: window.setTimeout(() => {
+              const idx = exportWaiters.current.indexOf(waiter);
+              if (idx >= 0) {
+                exportWaiters.current.splice(idx, 1);
+                reject(new Error('PDF export timed out'));
+              }
+            }, SLIDES_PDF_EXPORT_ACK_MS),
+          };
+          exportWaiters.current.push(waiter);
+          const msg: SlidesPreviewFromParentMessage = {
+            source: SLIDES_PREVIEW_MESSAGE_SOURCE,
+            type: 'export-pdf',
+          };
+          win.postMessage(msg, '*');
         }),
     }),
     [],
@@ -156,7 +199,7 @@ export const SlidesPreviewFrame = forwardRef<
         <iframe
           ref={iframeRef}
           title={title}
-          sandbox="allow-scripts allow-downloads"
+          sandbox="allow-scripts allow-downloads allow-modals"
           srcDoc={previewHtml}
           className="block border-0 bg-black"
           style={{

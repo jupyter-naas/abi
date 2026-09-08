@@ -11,6 +11,8 @@ from naas_abi.agents.tools.slides_tools import (
     _WIPED_DECK_ERROR,
     _apply_replacements,
     _apply_replacements_in_section,
+    _apply_section_writes,
+    _parse_section_writes,
     _cover_h1_text,
     _cover_subtitle_text,
     _deck_path,
@@ -703,5 +705,88 @@ def test_create_slides_project_rejects_an_empty_title(monkeypatch):
     try:
         create = next(t for t in slides_tools() if t.name == "create_slides_project")
         assert "error" in create.invoke({"title": "   "})
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_parse_section_writes_accepts_json_array():
+    parsed = _parse_section_writes(
+        '[{"index": 0, "html": "<section>A</section>"}, '
+        '{"section_id": "slide-agenda", "html": "<section id=\\"slide-agenda\\">B</section>"}]'
+    )
+    assert isinstance(parsed, list)
+    assert parsed[0]["index"] == 0
+    assert parsed[1]["section_id"] == "slide-agenda"
+
+
+def test_apply_section_writes_replaces_two_slides_in_one_pass():
+    applied = _apply_section_writes(
+        _SAMPLE,
+        [
+            {
+                "index": 0,
+                "section_id": None,
+                "html": '<section id="slide-cover" class="slide cover"><h1>Iran now</h1></section>',
+            },
+            {
+                "index": 1,
+                "section_id": None,
+                "html": '<section id="slide-agenda" class="slide"><h1>What changed</h1></section>',
+            },
+        ],
+    )
+    assert not isinstance(applied, dict)
+    html, written = applied
+    assert written == [0, 1]
+    assert "Iran now" in html
+    assert "What changed" in html
+    assert "Presentation Title" not in html
+    assert "<!-- gap -->" in html or "<main" in html
+
+
+def test_write_slides_sections_persists_once(monkeypatch):
+    sc = _bind_in_memory_git(monkeypatch)
+    sc.upsert_file(
+        repo_id="abi/monorepo",
+        path="slides/ws-test/untitled-local/deck.html",
+        content=_SAMPLE,
+        message="Seed deck",
+        branch="slides/ws-test/untitled-local",
+    )
+    tokens = _slides_context()
+    try:
+        write = next(t for t in slides_tools() if t.name == "write_slides_sections")
+        result = write.invoke(
+            {
+                "sections": json.dumps(
+                    [
+                        {
+                            "index": 0,
+                            "html": (
+                                '<section id="slide-cover" class="slide cover">'
+                                "<h1>Iran briefing</h1></section>"
+                            ),
+                        },
+                        {
+                            "index": 1,
+                            "html": (
+                                '<section id="slide-agenda" class="slide">'
+                                "<h1>Actors</h1></section>"
+                            ),
+                        },
+                    ]
+                )
+            }
+        )
+        assert "error" not in result, result
+        assert result["sections_written"] == 2
+        assert result["section_indexes"] == [0, 1]
+        deck = sc.get_file(
+            repo_id="abi/monorepo",
+            path="slides/ws-test/untitled-local/deck.html",
+            ref="slides/ws-test/untitled-local",
+        )
+        assert "Iran briefing" in (deck.text or "")
+        assert "Actors" in (deck.text or "")
     finally:
         _reset_tokens(tokens)

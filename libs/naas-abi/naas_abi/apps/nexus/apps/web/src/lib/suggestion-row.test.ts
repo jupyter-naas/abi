@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { activeSuggestions, suggestionRowNavState, suggestionScrollStep } from './suggestion-row';
+import {
+  activeSuggestions,
+  suggestionHint,
+  suggestionRowNavState,
+  suggestionScrollStep,
+} from './suggestion-row';
 
 describe('activeSuggestions', () => {
   it('returns an empty list when the input is missing', () => {
@@ -19,6 +24,25 @@ describe('activeSuggestions', () => {
       { label: 'Ask', value: 'ask' },
       { label: 'Apps', value: 'apps', disabled: false },
     ]);
+  });
+});
+
+describe('suggestionHint', () => {
+  it('prefers a trimmed description', () => {
+    expect(
+      suggestionHint({
+        description: '  2 to 4 web searches, then 6-8 researched slides  ',
+        value: 'Create a briefing on what is going on now.',
+      }),
+    ).toBe('2 to 4 web searches, then 6-8 researched slides');
+  });
+
+  it('falls back to the first line of the prompt', () => {
+    expect(
+      suggestionHint({
+        value: 'Write a 6-slide company briefing.\nKeep the template CSS.',
+      }),
+    ).toBe('Write a 6-slide company briefing.');
   });
 });
 

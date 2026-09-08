@@ -236,8 +236,15 @@ class EngineProxy:
         return self.__services_proxy
 
     @property
-    def api_configuration(self) -> ApiConfiguration:
+    def configuration(self):
         configuration = getattr(self.__engine, "configuration", None)
-        if configuration is None or not hasattr(configuration, "api"):
+        if configuration is None:
+            raise RuntimeError("Engine configuration is not available")
+        return configuration
+
+    @property
+    def api_configuration(self) -> ApiConfiguration:
+        configuration = self.configuration
+        if not hasattr(configuration, "api"):
             raise RuntimeError("Engine configuration API is not available")
         return configuration.api

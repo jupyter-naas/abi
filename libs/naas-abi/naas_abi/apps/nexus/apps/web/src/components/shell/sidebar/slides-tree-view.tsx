@@ -1,12 +1,16 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, File, FileCode2, Folder, Image as ImageIcon } from 'lucide-react';
+import { ChevronRight, File, FileCode2, Folder, Image as ImageIcon, Presentation } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SlidesProjectOverflowMenu } from '@/components/slides/slides-project-menu';
 import { shellTokens } from '../tokens';
 import {
+  SLIDES_ALL_ROW_LABEL,
   SLIDES_DECK_FILE_NAME,
   SLIDES_TREE_ROOT_LABEL,
+  isSlidesGalleryPath,
   type SlidesTreeDeckNode,
   type SlidesTreeFileNode,
 } from './slides-tree';
@@ -64,6 +68,107 @@ function FileIcon({ node }: { node: SlidesTreeFileNode }) {
     return <ImageIcon size={11} className="flex-shrink-0 text-muted-foreground" />;
   }
   return <File size={11} className="flex-shrink-0 text-muted-foreground" />;
+}
+
+function DeckRow({
+  deck,
+  currentPath,
+  expanded,
+  onToggleDeck,
+  onOpenDeck,
+  renaming,
+  onStartRename,
+  onRename,
+  onCancelRename,
+  onArchive,
+}: {
+  deck: SlidesTreeDeckNode;
+  currentPath?: string;
+  expanded: boolean;
+  onToggleDeck: (slug: string) => void;
+  onOpenDeck: (deck: SlidesTreeDeckNode) => void;
+  renaming?: boolean;
+  onStartRename?: (slug: string) => void;
+  onRename?: (slug: string, title: string) => void;
+  onCancelRename?: () => void;
+  onArchive?: (slug: string) => void;
+}) {
+  const [showMenu, setShowMenu] = useState(false);
+  const [editValue, setEditValue] = useState(deck.label);
+  const canAct = Boolean(onStartRename && onRename && onArchive);
+
+  const submitRename = () => {
+    const next = editValue.trim();
+    if (next && next !== deck.label) onRename?.(deck.slug, next);
+    onCancelRename?.();
+  };
+
+  return (
+    <div
+      className={`slides-overflow-host flex items-center${showMenu ? ' is-menu-open' : ''}`}
+      onContextMenu={(event) => {
+        if (!canAct || renaming) return;
+        event.preventDefault();
+        setShowMenu(true);
+      }}
+    >
+      <Twisty
+        expanded={expanded}
+        label={`${expanded ? 'Collapse' : 'Expand'} ${deck.label}`}
+        onToggle={() => onToggleDeck(deck.slug)}
+      />
+      {renaming ? (
+        <div className="chat-rename-row min-w-0 flex-1">
+          <Folder size={11} className="flex-shrink-0 text-muted-foreground" />
+          <input
+            type="text"
+            value={editValue}
+            onChange={(event) => setEditValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') submitRename();
+              else if (event.key === 'Escape') onCancelRename?.();
+            }}
+            onBlur={submitRename}
+            autoFocus
+            className="chat-rename-input"
+            data-testid="slides-rename-input"
+          />
+        </div>
+      ) : (
+        <>
+          <Link
+            href={deck.href}
+            onClick={() => onOpenDeck(deck)}
+            title={deck.label}
+            aria-current={deck.href === currentPath ? 'page' : undefined}
+            data-testid="slides-tree-deck"
+            data-slug={deck.slug}
+            className={cn(
+              ROW_CLASS,
+              shellTokens.sidebar.listRow,
+              deck.active
+                ? 'bg-workspace-accent-15 font-medium text-workspace-accent'
+                : 'text-foreground',
+            )}
+          >
+            <Folder size={11} className="flex-shrink-0 text-muted-foreground" />
+            <span className="truncate">{deck.label}</span>
+          </Link>
+          {canAct ? (
+            <SlidesProjectOverflowMenu
+              open={showMenu}
+              onOpenChange={setShowMenu}
+              onRename={() => {
+                setEditValue(deck.label);
+                onStartRename?.(deck.slug);
+              }}
+              onArchive={() => onArchive?.(deck.slug)}
+            />
+          ) : null}
+        </>
+      )}
+    </div>
+  );
 }
 
 function FileRows({
@@ -145,6 +250,89 @@ function FileRows({
   );
 }
 
+function DeckList({
+  decks,
+  currentPath,
+  expandedDecks,
+  onToggleDeck,
+  expandedDirs,
+  onToggleDir,
+  onOpenDeck,
+  emptyLabel,
+  renamingSlug,
+  onStartRename,
+  onRename,
+  onCancelRename,
+  onArchive,
+}: {
+  decks: SlidesTreeDeckNode[];
+  currentPath?: string;
+  expandedDecks: string[];
+  onToggleDeck: (slug: string) => void;
+  expandedDirs: string[];
+  onToggleDir: (path: string) => void;
+  onOpenDeck: (deck: SlidesTreeDeckNode) => void;
+  emptyLabel: string;
+  renamingSlug?: string | null;
+  onStartRename?: (slug: string) => void;
+  onRename?: (slug: string, title: string) => void;
+  onCancelRename?: () => void;
+  onArchive?: (slug: string) => void;
+}) {
+  if (decks.length === 0) {
+    return (
+      <li>
+        <p className={cn('px-2 py-1 text-muted-foreground', shellTokens.sidebar.listRow)}>
+          {emptyLabel}
+        </p>
+      </li>
+    );
+  }
+  return (
+    <>
+      {decks.map((deck) => {
+        const expanded = expandedDecks.includes(deck.slug);
+        return (
+          <li key={deck.slug}>
+            <DeckRow
+              deck={deck}
+              currentPath={currentPath}
+              expanded={expanded}
+              onToggleDeck={onToggleDeck}
+              onOpenDeck={onOpenDeck}
+              renaming={renamingSlug === deck.slug}
+              onStartRename={onStartRename}
+              onRename={onRename}
+              onCancelRename={onCancelRename}
+              onArchive={onArchive}
+            />
+            {expanded ? (
+              deck.filesLoaded ? (
+                <FileRows
+                  nodes={deck.files}
+                  deckHref={deck.href}
+                  onOpenDeck={() => onOpenDeck(deck)}
+                  expandedDirs={expandedDirs}
+                  onToggleDir={onToggleDir}
+                />
+              ) : (
+                <p
+                  className={cn(
+                    'ml-3 px-2 py-1 pl-6 text-muted-foreground',
+                    shellTokens.sidebar.listRow,
+                  )}
+                >
+                  Loading
+                </p>
+              )
+            ) : null}
+          </li>
+        );
+      })}
+    </>
+  );
+}
+
 export function SlidesTreeView({
   decks,
   rootHref,
@@ -157,6 +345,12 @@ export function SlidesTreeView({
   onToggleDir,
   onOpenDeck,
   emptyLabel = 'No presentations yet',
+  hideRoot = false,
+  renamingSlug,
+  onStartRename,
+  onRename,
+  onCancelRename,
+  onArchive,
 }: {
   decks: SlidesTreeDeckNode[];
   /** Root row links to the Slides index. */
@@ -175,9 +369,61 @@ export function SlidesTreeView({
   onToggleDir: (path: string) => void;
   onOpenDeck: (deck: SlidesTreeDeckNode) => void;
   emptyLabel?: string;
+  /** Archived list: deck rows only, no second `slides` root. */
+  hideRoot?: boolean;
+  renamingSlug?: string | null;
+  onStartRename?: (slug: string) => void;
+  onRename?: (slug: string, title: string) => void;
+  onCancelRename?: () => void;
+  onArchive?: (slug: string) => void;
 }) {
+  const list = (
+    <DeckList
+      decks={decks}
+      currentPath={currentPath}
+      expandedDecks={expandedDecks}
+      onToggleDeck={onToggleDeck}
+      expandedDirs={expandedDirs}
+      onToggleDir={onToggleDir}
+      onOpenDeck={onOpenDeck}
+      emptyLabel={emptyLabel}
+      renamingSlug={renamingSlug}
+      onStartRename={onStartRename}
+      onRename={onRename}
+      onCancelRename={onCancelRename}
+      onArchive={onArchive}
+    />
+  );
+
+  if (hideRoot) {
+    return (
+      <ul className="list-none space-y-0.5 p-0" data-testid="slides-tree-archived">
+        {list}
+      </ul>
+    );
+  }
+
+  const onGallery = isSlidesGalleryPath(currentPath, rootHref);
+
   return (
     <ul className="list-none space-y-0.5 p-0" data-testid="slides-tree">
+      <li>
+        <Link
+          href={rootHref}
+          data-testid="slides-tree-all"
+          aria-current={onGallery ? 'page' : undefined}
+          className={cn(
+            ROW_CLASS,
+            shellTokens.sidebar.listRow,
+            onGallery
+              ? 'bg-muted font-medium text-foreground'
+              : 'text-muted-foreground',
+          )}
+        >
+          <Presentation size={12} className="flex-shrink-0 text-muted-foreground" />
+          <span className="truncate">{SLIDES_ALL_ROW_LABEL}</span>
+        </Link>
+      </li>
       <li>
         <div className="flex items-center">
           <Twisty
@@ -195,72 +441,7 @@ export function SlidesTreeView({
           </Link>
         </div>
 
-        {rootExpanded ? (
-          <ul className="ml-3 list-none space-y-0.5 p-0">
-            {decks.length === 0 ? (
-              <li>
-                <p
-                  className={cn('px-2 py-1 text-muted-foreground', shellTokens.sidebar.listRow)}
-                >
-                  {emptyLabel}
-                </p>
-              </li>
-            ) : (
-              decks.map((deck) => {
-                const expanded = expandedDecks.includes(deck.slug);
-                return (
-                  <li key={deck.slug}>
-                    <div className="flex items-center">
-                      <Twisty
-                        expanded={expanded}
-                        label={`${expanded ? 'Collapse' : 'Expand'} ${deck.label}`}
-                        onToggle={() => onToggleDeck(deck.slug)}
-                      />
-                      <Link
-                        href={deck.href}
-                        onClick={() => onOpenDeck(deck)}
-                        title={deck.label}
-                        aria-current={deck.href === currentPath ? 'page' : undefined}
-                        data-testid="slides-tree-deck"
-                        data-slug={deck.slug}
-                        className={cn(
-                          ROW_CLASS,
-                          shellTokens.sidebar.listRow,
-                          deck.active
-                            ? 'bg-workspace-accent-15 font-medium text-workspace-accent'
-                            : 'text-foreground',
-                        )}
-                      >
-                        <Folder size={11} className="flex-shrink-0 text-muted-foreground" />
-                        <span className="truncate">{deck.label}</span>
-                      </Link>
-                    </div>
-                    {expanded ? (
-                      deck.filesLoaded ? (
-                        <FileRows
-                          nodes={deck.files}
-                          deckHref={deck.href}
-                          onOpenDeck={() => onOpenDeck(deck)}
-                          expandedDirs={expandedDirs}
-                          onToggleDir={onToggleDir}
-                        />
-                      ) : (
-                        <p
-                          className={cn(
-                            'ml-3 px-2 py-1 pl-6 text-muted-foreground',
-                            shellTokens.sidebar.listRow,
-                          )}
-                        >
-                          Loading
-                        </p>
-                      )
-                    ) : null}
-                  </li>
-                );
-              })
-            )}
-          </ul>
-        ) : null}
+        {rootExpanded ? <ul className="ml-3 list-none space-y-0.5 p-0">{list}</ul> : null}
       </li>
     </ul>
   );
