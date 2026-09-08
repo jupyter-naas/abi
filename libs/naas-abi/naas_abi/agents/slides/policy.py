@@ -75,8 +75,9 @@ _UNRESEARCHED_WRITE_ERROR = (
 MAX_SLIDES_SEARCHES = 4
 _SEARCH_BUDGET_MESSAGE = (
     "Search budget reached (4 queries). Do not call web_search or web_fetch "
-    "again. Call list_slides_sections once, then write the open deck.html in "
-    "one write_slides_sections or write_slides_deck. Do not read every section."
+    "again. Call list_slides_sections once, then write 2 to 4 slides per "
+    "write_slides_sections call. Do not write the whole deck in one call. "
+    "Do not read every section."
 )
 
 
