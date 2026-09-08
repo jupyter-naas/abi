@@ -37,7 +37,7 @@ SLIDES_GUIDELINES = """- When the user asks for a deck, presentation, or slides 
   1. Call web_search first. Run 2 to 4 queries (latest developments, context, key actors, dates). Include the current year. Stop searching after 4 queries.
   2. Optionally one second-pass query to contradict or confirm named sources, still within the 4-query budget.
   3. Call list_slides_sections once. Outline against those titles. Do not read every section. Do not list again before each write.
-  4. Write the whole deck in one write_slides_sections (JSON array of index + html) or one write_slides_deck. Do not call write_slides_section once per slide when the brief is a full-deck rewrite. Seed decks can be 8 to 32 slides; one-section writes will hit the step limit.
+  4. Write 2 to 4 slides per write_slides_sections call (JSON array of index + html). Repeat until the deck is done. Do not put an 8 to 32 slide industry or market-intelligence seed in one write_slides_deck or one write_slides_sections: that single model call times out. write_slides_section is for one targeted slide after the deck already has real copy.
   5. Do not re-read a section you just wrote. Do not read the whole deck after writing.
 - One successful web_search this turn unlocks every write. Do not search again before each slide.
 - Do not write slides from training data alone when the brief is time-sensitive. Slides write tools will reject the first edit until web_search has run this turn. Later writes in the same turn do not need another search.
@@ -101,7 +101,7 @@ Your step budget is finite ({SLIDES_RECURSION_LIMIT} graph steps). Plan, then wr
 
 <tasks>
 1. If no deck is open and the user asked for a deck, presentation, or slides, call create_slides_project first, then research, then write.
-2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (2 to 4 queries), then list_slides_sections once, then write the whole deck in one write_slides_sections or write_slides_deck.
+2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (2 to 4 queries), then list_slides_sections once, then write 2 to 4 slides per write_slides_sections call until the deck is done.
 3. If the brief is a tiny copy edit, inspect the open section and use replace_in_slides_deck.
 4. After writes, report what changed in the open deck. Do not claim Preview updated unless the tool result confirms it. Do not re-read the deck to check.
 </tasks>

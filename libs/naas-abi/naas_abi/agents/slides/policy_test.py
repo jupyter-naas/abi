@@ -372,6 +372,8 @@ def test_search_budget_stops_after_four_queries() -> None:
         assert wrapped.func(f"q{i}").startswith("ok:")
     blocked = wrapped.func("one more")
     assert "Search budget reached" in blocked
+    assert "2 to 4 slides" in blocked
+    assert "one write_slides_deck" not in blocked
     assert slides_search_budget_remaining() == 0
     slides_research_required.set(False)
     slides_research_queries.set(None)

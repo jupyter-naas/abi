@@ -22,6 +22,8 @@ def test_slides_agent_prompt_requires_research_then_write() -> None:
     assert "Research loop" in prompt
     assert "Plan, then write" in prompt
     assert "write_slides_sections" in prompt
+    assert "2 to 4 slides" in prompt
+    assert "Write the whole deck in one" not in prompt
     assert "Do not re-read" in prompt
     assert "start writing immediately" not in prompt
     assert "Context / Approach / Plan" in prompt

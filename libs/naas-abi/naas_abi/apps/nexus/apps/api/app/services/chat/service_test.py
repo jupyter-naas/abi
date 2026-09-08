@@ -1184,9 +1184,22 @@ async def test_build_abi_injection_preamble_includes_open_slides_deck() -> None:
     assert "buildPptx" in preamble
     assert "Plan, then write" in preamble
     assert "write_slides_sections" in preamble
+    assert "2 to 4 slides" in preamble
+    assert "Write the whole deck in one" not in preamble
     assert "web_search" in preamble
     assert "start editing immediately" not in preamble
     assert "today:" in preamble
+
+
+def test_open_slides_preamble_asks_for_batched_section_writes() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.chat.service import (
+        _render_slides_context_block,
+    )
+
+    text = _render_slides_context_block({"slides": {"slug": "q3-br"}})
+    assert "2 to 4 slides" in text
+    assert "Write the whole deck in one" not in text
+    assert "write_slides_sections" in text
 
 
 @pytest.mark.asyncio
