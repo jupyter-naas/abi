@@ -1244,7 +1244,7 @@ def slides_tools() -> list[BaseTool]:
                 "note": (
                     f"Redacted {n_assets} embedded data-URL asset(s). "
                     "Do not re-read this section after you write it. "
-                    "For a full-deck rewrite, use write_slides_sections instead of "
+                    "Write 2 to 4 slides with write_slides_sections instead of "
                     "reading every slide."
                 ),
             }
@@ -1259,7 +1259,9 @@ def slides_tools() -> list[BaseTool]:
         section_id: str | None = None,
         message: str = "Update slides section via Abi",
     ) -> dict[str, Any]:
-        """Replace one slide. For a full-deck rewrite, use write_slides_sections.
+        """Replace one slide after the deck already has real copy.
+
+        For several slides, use write_slides_sections (2 to 4 per call).
 
         Omit slug when a deck is open. Pass the full ``<section>...</section>``
         for that slide. If html still contains ``[REDACTED_DATA_URL]`` placeholders
@@ -1307,12 +1309,12 @@ def slides_tools() -> list[BaseTool]:
         slug: str = "",
         message: str = "Update slides sections via Abi",
     ) -> dict[str, Any]:
-        """Replace several slides in one persist. Use this for a full-deck rewrite.
+        """Replace 2 to 4 slides in one persist. Repeat for the rest of the deck.
 
         ``sections`` is a JSON array of objects:
         ``[{"index": 0, "html": "<section>...</section>"}, ...]``
-        ``section_id`` may replace ``index``. One persist for the whole batch.
-        Do not list or re-read after this call.
+        ``section_id`` may replace ``index``. Do not send an 8 to 32 slide
+        industry seed in one call. Do not list or re-read after this call.
 
         For news or factual briefs: call web_search once this turn first.
         Later writes in the same turn do not need another search.
@@ -1512,10 +1514,11 @@ def slides_tools() -> list[BaseTool]:
         slug: str = "",
         message: str = "Update slides deck via Abi",
     ) -> dict[str, Any]:
-        """Write the full HTML deck. Prefer this or write_slides_sections for a whole-deck brief.
+        """Write a short new deck (about 6 to 8 slides) as one HTML file.
 
-        Omit slug when a deck is open. Do not follow with per-section writes.
-        For a single copy edit, use replace_in_slides_deck instead.
+        Omit slug when a deck is open. Do not use this on an industry or
+        market-intelligence seed. Prefer write_slides_sections in 2 to 4 slide
+        batches. For a single copy edit, use replace_in_slides_deck instead.
 
         For news, current events, or factual briefs: call web_search once this
         turn first. Later writes in the same turn do not need another search.
