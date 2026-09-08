@@ -41,6 +41,7 @@ rebuild. Accounts are re-ingested whenever the author tweets again, and
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from naas_abi_core import logger
@@ -377,3 +378,87 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
     }
     logger.info(f"X app users dataset: {summary}")
     return summary
+
+
+def warm_usernames(
+    ctx: SnapshotContext, usernames: Iterable[str]
+) -> dict[str, Any]:
+    """Refresh ``search_users/posts/<shard>.json`` for report-linked authors.
+
+    Merges into any existing shard payload so unrelated authors in the same
+    shard are preserved. Best-effort: when no dataset has been published yet,
+    returns ``skipped`` without raising.
+    """
+    wanted = sorted(
+        {
+            str(raw).strip().lstrip("@")
+            for raw in usernames
+            if str(raw or "").strip()
+        }
+    )
+    if not wanted:
+        return {"warmed_usernames": 0, "shards_touched": 0}
+
+    previous_doc = ctx.read_json("search_users", "shards.json") or {}
+    previous_shards = previous_doc.get("shards") or {}
+    if not previous_shards:
+        logger.info("X app users dataset: warm_usernames skipped (no published dataset)")
+        return {"warmed_usernames": 0, "shards_touched": 0, "skipped": True}
+
+    cache = getattr(ctx, "cache", None)
+    if cache is not None:
+        author_index = {a["username"]: a for a in cache.author_index()}
+        accounts = cache.accounts_by_username()
+        posts_by_user = cache.posts_by_username(wanted)
+    else:
+        author_index = {}
+        accounts = ctx.accounts_for_usernames(wanted)
+        posts_by_user = ctx.posts_for_usernames(wanted)
+
+    by_shard: dict[str, dict[str, Any]] = {}
+    for username in wanted:
+        shard = user_shard(username)
+        author = author_index.get(username) or {
+            "username": username,
+            "posts": len(posts_by_user.get(username, [])),
+        }
+        by_shard.setdefault(shard, {})[username] = {
+            "profile": _profile(author, accounts.get(username, {})),
+            "posts": posts_by_user.get(username, []),
+        }
+
+    touched = 0
+    for shard, authors in by_shard.items():
+        existing = ctx.read_json("search_users/posts", f"{shard}.json") or {}
+        merged_authors = dict(existing.get("authors") or {})
+        merged_authors.update(authors)
+        payload = encode_compact(
+            {
+                "format": DATASET_FORMAT,
+                "shard": shard,
+                "authors": merged_authors,
+            }
+        )
+        digest = content_digest(payload)
+        ctx.save_bytes("search_users/posts", f"{shard}.json", payload)
+        entry = dict(previous_shards.get(shard) or {})
+        entry.update(
+            {
+                "hash": digest,
+                "authors": len(merged_authors),
+                "posts": sum(
+                    len(a.get("posts") or []) for a in merged_authors.values()
+                ),
+                "bytes": len(payload),
+            }
+        )
+        previous_shards[shard] = entry
+        touched += 1
+
+    previous_doc["shards"] = previous_shards
+    previous_doc["updated_at"] = ctx.built_at.isoformat()
+    ctx.save_json_compact("search_users", "shards.json", previous_doc)
+    return {
+        "warmed_usernames": len(wanted),
+        "shards_touched": touched,
+    }
