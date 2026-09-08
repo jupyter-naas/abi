@@ -8,7 +8,12 @@ import { downloadConversationTranscript } from '@/lib/chat-transcript-export';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
 import { useSlidesStore } from '@/stores/slides';
-import { ChatInterface } from '@/components/chat/chat-interface';
+import dynamic from 'next/dynamic';
+
+const ChatInterface = dynamic(
+  () => import('@/components/chat/chat-interface').then((m) => m.ChatInterface),
+  { ssr: false },
+);
 
 /**
  * Right chat pane: same ChatInterface as the central panel, with Cursor-like

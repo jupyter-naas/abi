@@ -71,7 +71,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
 
   useEffect(() => {
     if (!currentWorkspaceId) return;
-    void fetchAgents(currentWorkspaceId, true);
+    void fetchAgents(currentWorkspaceId);
   }, [currentWorkspaceId, fetchAgents]);
 
   // Warm thread routes while the mobile list is visible so the first open feels instant.

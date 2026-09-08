@@ -1,24 +1,69 @@
 'use client';
 
+import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFeature } from '@/hooks/use-feature';
 import { ColumnResizeHandle, useColumnResize } from '../column-resize-handle';
+import { getWorkspacePath } from './utils';
 
-import { ChatSection } from '@/app/workspace/[workspaceId]/chat/components/chat-section';
-import { MapsSection } from './maps-section';
-import { SearchSection } from './search-section';
-import { FilesSection } from './files-section';
-import { DatasetsSection } from './datasets-section';
-import { LabSection } from './lab-section';
-import { OntologySection } from './ontology-section';
-import { KnowledgeGraphSection } from './knowledge-graph-section';
-import { CodeSection } from './code-section';
-import { SlidesSection } from './slides-section';
-import { MarketplaceSection } from './marketplace-section';
-import { AppsSection } from './apps-section';
-import { SettingsSection } from './settings-section';
-import { WorkspacesSection } from './workspaces-section';
+const sectionLoading = () => (
+  <div className="px-2 py-3 text-xs text-muted-foreground">Loading…</div>
+);
+
+const ChatSection = dynamic(
+  () => import('@/app/workspace/[workspaceId]/chat/components/chat-section').then((m) => m.ChatSection),
+  { ssr: false, loading: sectionLoading },
+);
+const MapsSection = dynamic(() => import('./maps-section').then((m) => m.MapsSection), {
+  ssr: false,
+  loading: sectionLoading,
+});
+const SearchSection = dynamic(() => import('./search-section').then((m) => m.SearchSection), {
+  ssr: false,
+  loading: sectionLoading,
+});
+const FilesSection = dynamic(() => import('./files-section').then((m) => m.FilesSection), {
+  ssr: false,
+  loading: sectionLoading,
+});
+const DatasetsSection = dynamic(() => import('./datasets-section').then((m) => m.DatasetsSection), {
+  ssr: false,
+  loading: sectionLoading,
+});
+const OntologySection = dynamic(() => import('./ontology-section').then((m) => m.OntologySection), {
+  ssr: false,
+  loading: sectionLoading,
+});
+const KnowledgeGraphSection = dynamic(
+  () => import('./knowledge-graph-section').then((m) => m.KnowledgeGraphSection),
+  { ssr: false, loading: sectionLoading },
+);
+const CodeSection = dynamic(() => import('./code-section').then((m) => m.CodeSection), {
+  ssr: false,
+  loading: sectionLoading,
+});
+const SlidesSection = dynamic(() => import('./slides-section').then((m) => m.SlidesSection), {
+  ssr: false,
+  loading: sectionLoading,
+});
+const MarketplaceSection = dynamic(
+  () => import('./marketplace-section').then((m) => m.MarketplaceSection),
+  { ssr: false, loading: sectionLoading },
+);
+const AppsSection = dynamic(() => import('./apps-section').then((m) => m.AppsSection), {
+  ssr: false,
+  loading: sectionLoading,
+});
+const SettingsSection = dynamic(() => import('./settings-section').then((m) => m.SettingsSection), {
+  ssr: false,
+  loading: sectionLoading,
+});
+const WorkspacesSection = dynamic(
+  () => import('./workspaces-section').then((m) => m.WorkspacesSection),
+  { ssr: false, loading: sectionLoading },
+);
 
 const SECTION_LABELS: Record<SidebarSection, string> = {
   home: 'Home',
@@ -30,7 +75,6 @@ const SECTION_LABELS: Record<SidebarSection, string> = {
   graph: 'Knowledge Graph',
   files: 'Files',
   datasets: 'Datasets',
-  lab: 'Lab',
   code: 'Code',
   slides: 'Slides',
   apps: 'Apps',
@@ -38,12 +82,16 @@ const SECTION_LABELS: Record<SidebarSection, string> = {
   settings: 'Settings',
 };
 
+/** Panel titles that open the section home. Slides goes to the cover gallery. */
+const SECTION_HOME_HREF: Partial<Record<SidebarSection, string>> = {
+  slides: '/slides',
+};
+
 function SectionContent({ section }: { section: SidebarSection }) {
   const canMaps = useFeature('maps');
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
   const canDatasets = useFeature('datasets');
-  const canAgents = useFeature('agents');
   const canApps = useFeature('apps');
   const canMarketplace = useFeature('marketplace');
   const canSearch = useFeature('search');
@@ -58,7 +106,6 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'graph' && canGraph) return <KnowledgeGraphSection collapsed={false} detailOnly />;
   if (section === 'files' && canFiles) return <FilesSection collapsed={false} detailOnly />;
   if (section === 'datasets' && canDatasets) return <DatasetsSection collapsed={false} detailOnly />;
-  if (section === 'lab' && canAgents) return <LabSection collapsed={false} detailOnly />;
   if (section === 'code') return <CodeSection collapsed={false} detailOnly />;
   if (section === 'slides' && canSlides) return <SlidesSection collapsed={false} detailOnly />;
   if (section === 'apps' && canApps) return <AppsSection collapsed={false} detailOnly />;
@@ -70,10 +117,15 @@ function SectionContent({ section }: { section: SidebarSection }) {
 
 export function SectionPanel() {
   const activePanelSection = useWorkspaceStore((s) => s.activePanelSection);
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const sectionPanelWidth = useWorkspaceStore((s) => s.sectionPanelWidth);
   const setSectionPanelWidth = useWorkspaceStore((s) => s.setSectionPanelWidth);
   const isOpen = activePanelSection !== null;
   const panelTitle = activePanelSection ? SECTION_LABELS[activePanelSection] : '';
+  const panelHref =
+    activePanelSection && SECTION_HOME_HREF[activePanelSection]
+      ? getWorkspacePath(currentWorkspaceId, SECTION_HOME_HREF[activePanelSection])
+      : null;
   const { isDragging, handleDragStart } = useColumnResize(sectionPanelWidth, setSectionPanelWidth);
 
   return (
@@ -90,7 +142,17 @@ export function SectionPanel() {
         {isOpen && activePanelSection && (
           <>
             <div className="flex h-14 flex-shrink-0 items-center border-b border-border/50 pl-8 pr-4">
-              <span className="text-sm font-semibold">{panelTitle}</span>
+              {panelHref ? (
+                <Link
+                  href={panelHref}
+                  data-testid="section-panel-title"
+                  className="text-sm font-semibold hover:text-workspace-accent"
+                >
+                  {panelTitle}
+                </Link>
+              ) : (
+                <span className="text-sm font-semibold">{panelTitle}</span>
+              )}
             </div>
             <nav className="flex-1 overflow-y-auto p-2">
               <SectionContent section={activePanelSection} />

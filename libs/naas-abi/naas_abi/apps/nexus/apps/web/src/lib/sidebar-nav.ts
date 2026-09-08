@@ -1,7 +1,6 @@
 export const DEFAULT_NAV_ORDER = [
   'home',
   'apps',
-  'lab',
   'files',
   'chat',
   'search',

@@ -39,7 +39,7 @@ async function fetchTenantBranding(): Promise<{
     'http://localhost:9879';
 
   try {
-    const res = await fetch(`${apiBase}/api/tenant`, { cache: 'no-store' });
+    const res = await fetch(`${apiBase}/api/tenant`, { next: { revalidate: 60 } });
     if (!res.ok) {
       return { title: DEFAULT_TITLE, description: null, ogImageUrl: null, faviconUrl: null };
     }

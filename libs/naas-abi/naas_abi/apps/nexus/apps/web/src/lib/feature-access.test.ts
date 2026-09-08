@@ -68,13 +68,14 @@ describe('getFeatureForWorkspacePath', () => {
 
   it('supports org-scoped rewritten routes', () => {
     expect(getFeatureForWorkspacePath('/org/acme/workspace/ws1/chat')).toBe('chat');
-    expect(getFeatureForWorkspacePath('/org/acme/workspace/ws1/lab')).toBe('agents');
+    expect(getFeatureForWorkspacePath('/org/acme/workspace/ws1/lab')).toBe('code');
   });
 
-  it('maps code and ide paths to the code feature', () => {
+  it('maps code, ide, and retired lab paths to the code feature', () => {
     expect(getFeatureForWorkspacePath('/workspace/ws1/code')).toBe('code');
     expect(getFeatureForWorkspacePath('/workspace/ws1/code/workspaces')).toBe('code');
     expect(getFeatureForWorkspacePath('/workspace/ws1/ide')).toBe('code');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/lab')).toBe('code');
   });
 
   it('maps slides paths to the slides feature', () => {
@@ -163,6 +164,17 @@ describe('getWorkspaceSwitchPath', () => {
     ).toBe('/workspace/ws-other/maps/presence');
   });
 
+  it('sends retired lab routes to code when the target has code', () => {
+    expect(
+      getWorkspaceSwitchPath({
+        pathname: '/workspace/ws-next-gen/lab',
+        targetWorkspaceId: 'ws-other',
+        role: 'owner',
+        workspaceFlags: { code: true },
+      }),
+    ).toBe('/workspace/ws-other/code');
+  });
+
   it('falls back when the target workspace lacks the section', () => {
     expect(
       getWorkspaceSwitchPath({
@@ -195,11 +207,11 @@ describe('getWorkspaceSwitchPath', () => {
 });
 
 describe('pathNeedsAgentCatalog', () => {
-  it('is true on chat, lab, and agent settings', () => {
+  it('is true on chat and agent settings', () => {
     expect(pathNeedsAgentCatalog('/workspace/ws1/chat')).toBe(true);
     expect(pathNeedsAgentCatalog('/workspace/ws1/chat/conv-1')).toBe(true);
-    expect(pathNeedsAgentCatalog('/workspace/ws1/lab')).toBe(true);
     expect(pathNeedsAgentCatalog('/workspace/ws1/settings/agents')).toBe(true);
+    expect(pathNeedsAgentCatalog('/workspace/ws1/lab')).toBe(false);
   });
 
   it('is false on apps and other sections', () => {

@@ -15,38 +15,39 @@ describe('mergeNavOrder', () => {
   });
 
   it('keeps a custom order and inserts new catalog ids at catalog position', () => {
-    const persisted: NavSectionId[] = ['files', 'apps', 'lab', 'chat'];
+    const persisted: NavSectionId[] = ['files', 'apps', 'chat'];
     const merged = mergeNavOrder(persisted);
     expect(merged[0]).toBe('home');
-    expect(merged.slice(1, 5)).toEqual(['files', 'apps', 'lab', 'chat']);
+    expect(merged.slice(1, 4)).toEqual(['files', 'apps', 'chat']);
     expect(merged).toContain('marketplace');
+    expect(merged).not.toContain('lab');
     expect(new Set(merged)).toEqual(new Set(DEFAULT_NAV_ORDER));
   });
 
-  it('drops unknown and duplicate ids', () => {
+  it('drops unknown and duplicate ids, including retired lab', () => {
     const persisted = ['apps', 'apps', 'not-a-section', 'lab'];
     const merged = mergeNavOrder(persisted);
     expect(merged.filter((id) => id === 'apps')).toHaveLength(1);
     expect(merged[0]).toBe('home');
     expect(merged[1]).toBe('apps');
-    expect(merged[2]).toBe('lab');
+    expect(merged).not.toContain('lab');
   });
 });
 
 describe('moveNavItem', () => {
-  const order: NavSectionId[] = ['apps', 'lab', 'files'];
+  const order: NavSectionId[] = ['apps', 'slides', 'files'];
 
   it('moves the first item to the end', () => {
-    expect(moveNavItem(order, 'apps', 3)).toEqual(['lab', 'files', 'apps']);
+    expect(moveNavItem(order, 'apps', 3)).toEqual(['slides', 'files', 'apps']);
   });
 
   it('moves the last item to the front', () => {
-    expect(moveNavItem(order, 'files', 0)).toEqual(['files', 'apps', 'lab']);
+    expect(moveNavItem(order, 'files', 0)).toEqual(['files', 'apps', 'slides']);
   });
 
   it('is a no-op when the slot is the item itself', () => {
-    expect(moveNavItem(order, 'lab', 1)).toEqual(order);
-    expect(moveNavItem(order, 'lab', 2)).toEqual(order);
+    expect(moveNavItem(order, 'slides', 1)).toEqual(order);
+    expect(moveNavItem(order, 'slides', 2)).toEqual(order);
   });
 
   it('ignores ids that are not in the list', () => {

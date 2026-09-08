@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Folder, Database, FlaskConical, Code, Presentation, LayoutGrid, Store, Settings, Activity, Boxes, Home,
+  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Folder, Database, Code, Presentation, LayoutGrid, Store, Settings, Activity, Boxes, Home,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -34,14 +34,13 @@ type SectionDef = {
   icon: React.ReactNode;
   label: string;
   href: string;
-  feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'agents' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'settings.workspace';
+  feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'settings.workspace';
   extraHref?: string;
 };
 
 const SECTIONS: SectionDef[] = [
   { id: 'home',        icon: <Home size={18} />,          label: 'Home',        href: '/home' },
   { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        href: '/apps',        feature: 'apps' },
-  { id: 'lab',         icon: <FlaskConical size={18} />,  label: 'Lab',         href: '/lab',         feature: 'agents' },
   { id: 'files',       icon: <Folder size={18} />,        label: 'Files',       href: '/files',       feature: 'files' },
   { id: 'chat',        icon: <MessageSquare size={18} />, label: 'Chat',        href: '/chat',        feature: 'chat' },
   { id: 'search',      icon: <Search size={18} />,        label: 'Search',      href: '/search',      feature: 'search' },
@@ -101,14 +100,13 @@ export function Sidebar() {
     setDockWidth,
   } = useWorkspaceStore();
 
-  const { fetchFiles, fetchLabFiles, setActiveSource } = useFilesStore();
+  const { fetchFiles, setActiveSource } = useFilesStore();
   const { fetchItems: fetchOntology } = useOntologyStore();
 
   const canMaps = useFeature('maps');
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
   const canDatasets = useFeature('datasets');
-  const canAgents = useFeature('agents');
   const canApps = useFeature('apps');
   const canMarketplace = useFeature('marketplace');
   const canSearch = useFeature('search');
@@ -142,9 +140,9 @@ export function Sidebar() {
   }, [pathname, currentWorkspaceId]);
 
   useEffect(() => {
-    if (urlSection?.id === 'files' && canFiles) { fetchFiles(); fetchLabFiles(); }
+    if (urlSection?.id === 'files' && canFiles) { fetchFiles(); }
     if (urlSection?.id === 'ontology' && canOntology) { fetchOntology(); }
-  }, [urlSection?.id, currentWorkspaceId, canFiles, canOntology, fetchFiles, fetchLabFiles, fetchOntology]);
+  }, [urlSection?.id, currentWorkspaceId, canFiles, canOntology, fetchFiles, fetchOntology]);
 
   const lastReconciledPathRef = useRef<string | null>(null);
   useEffect(() => {
@@ -173,7 +171,6 @@ export function Sidebar() {
     if (feature === 'chat') return !!canChat;
     if (feature === 'files') return !!canFiles;
     if (feature === 'datasets') return !!canDatasets;
-    if (feature === 'agents') return !!canAgents;
     if (feature === 'apps') return !!canApps;
     if (feature === 'marketplace') return !!canMarketplace;
     if (feature === 'search') return !!canSearch;
@@ -202,7 +199,7 @@ export function Sidebar() {
       .filter((s) => isFeatureEnabled(s.feature))
       .sort((a, b) => (index.get(a.id) ?? 999) - (index.get(b.id) ?? 999));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sidebarNavOrder, canMaps, canChat, canFiles, canDatasets, canAgents, canApps, canMarketplace, canSearch, canOntology, canGraph, canCode, canSlides]);
+  }, [sidebarNavOrder, canMaps, canChat, canFiles, canDatasets, canApps, canMarketplace, canSearch, canOntology, canGraph, canCode, canSlides]);
 
   const getDefaultPath = (sectionId: SidebarSection): string => {
     switch (sectionId) {
@@ -220,8 +217,7 @@ export function Sidebar() {
       case 'graph':    return getWorkspacePath(currentWorkspaceId, '/graph/network');
       case 'files':    return getWorkspacePath(currentWorkspaceId, '/files');
       case 'datasets': return getWorkspacePath(currentWorkspaceId, '/datasets');
-      case 'lab':      return getWorkspacePath(currentWorkspaceId, '/lab');
-      case 'code':     return getWorkspacePath(currentWorkspaceId, '/code/workspaces');
+      case 'code':     return getWorkspacePath(currentWorkspaceId, '/code');
       case 'slides':   return getWorkspacePath(currentWorkspaceId, '/slides');
       case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
@@ -229,6 +225,14 @@ export function Sidebar() {
       case 'workspaces':   return getWorkspacePath(currentWorkspaceId, '/home');
     }
   };
+
+  useEffect(() => {
+    if (!currentWorkspaceId) return;
+    for (const section of orderedSections) {
+      if (section.id === 'search') continue;
+      router.prefetch(getDefaultPath(section.id));
+    }
+  }, [currentWorkspaceId, orderedSections, router]);
 
   const handleSectionClick = (section: SectionDef) => {
     clearAppsSkipRestore();
@@ -484,6 +488,10 @@ export function Sidebar() {
               onPointerMove={onItemPointerMove}
               onPointerUp={(e) => onItemPointerUp(section, e)}
               onPointerCancel={onItemPointerCancel}
+              onPointerEnter={() => {
+                if (section.id === 'search') return;
+                router.prefetch(getDefaultPath(section.id));
+              }}
               onClick={(e) => {
                 if (didDragRef.current) {
                   e.preventDefault();

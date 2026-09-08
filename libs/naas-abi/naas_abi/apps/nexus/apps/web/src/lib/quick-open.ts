@@ -26,7 +26,6 @@ export type QuickOpenSection = {
 export const QUICK_OPEN_SECTIONS: readonly QuickOpenSection[] = [
   { id: 'home', label: 'Home', href: '/home' },
   { id: 'apps', label: 'Apps', href: '/apps', feature: 'apps' },
-  { id: 'lab', label: 'Lab', href: '/lab', feature: 'agents' },
   { id: 'files', label: 'Files', href: '/files', feature: 'files' },
   { id: 'chat', label: 'Chat', href: '/chat', feature: 'chat' },
   { id: 'search', label: 'Search', href: '/search', feature: 'search' },
@@ -35,7 +34,7 @@ export const QUICK_OPEN_SECTIONS: readonly QuickOpenSection[] = [
   { id: 'graph', label: 'Knowledge Graph', href: '/graph/network', feature: 'graph' },
   { id: 'datasets', label: 'Datasets', href: '/datasets', feature: 'datasets' },
   { id: 'slides', label: 'Slides', href: '/slides', feature: 'slides' },
-  { id: 'code', label: 'Code', href: '/code/workspaces', feature: 'code' },
+  { id: 'code', label: 'Code', href: '/code', feature: 'code' },
   { id: 'marketplace', label: 'Marketplace', href: '/marketplace', feature: 'marketplace' },
   { id: 'settings', label: 'Settings', href: '/settings', feature: 'settings.workspace' },
 ];

@@ -42,7 +42,6 @@ export type NavigationItem =
   | 'chat'
   | 'search'
   | 'files'
-  | 'lab'
   | 'ontology'
   | 'graph'
   | 'apps'
@@ -193,7 +192,9 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'home' | 'workspaces' | 'maps' | 'chat' | 'search' | 'files' | 'datasets' | 'lab' | 'code' | 'slides' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings';
+export type SidebarSection = 'home' | 'workspaces' | 'maps' | 'chat' | 'search' | 'files' | 'datasets' | 'code' | 'slides' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings';
+
+const RETIRED_PANEL_SECTIONS = new Set<string>(['lab']);
 
 /** Home is a full-bleed desk. Workspaces is a mark-owned directory. Neither is a last-panel restore target. */
 export function isTransientPanelSection(section: SidebarSection | null): boolean {
@@ -1704,10 +1705,21 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           // re-defaults the right pane to Abi (agents sync), matching main chat.
           state.paneAgentExplicitlySelected = false;
           state.sidebarNavOrder = mergeNavOrder(state.sidebarNavOrder);
-          if (isTransientPanelSection(state.activePanelSection)) {
+          if (Array.isArray(state.expandedSections)) {
+            state.expandedSections = state.expandedSections.filter(
+              (section) => !RETIRED_PANEL_SECTIONS.has(section),
+            );
+          }
+          if (
+            isTransientPanelSection(state.activePanelSection)
+            || RETIRED_PANEL_SECTIONS.has(state.activePanelSection ?? '')
+          ) {
             state.activePanelSection = null;
           }
-          if (isTransientPanelSection(state.lastActivePanelSection)) {
+          if (
+            isTransientPanelSection(state.lastActivePanelSection)
+            || RETIRED_PANEL_SECTIONS.has(state.lastActivePanelSection ?? '')
+          ) {
             state.lastActivePanelSection = null;
           }
           state.recentWorkspaceIds = Array.isArray(state.recentWorkspaceIds)
