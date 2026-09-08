@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.33.0 (2026-09-08)
+
+### Features
+
+- **slides**: Composer, cover gallery, and pane-bound deck threads
+  ([`30ffacd`](https://github.com/jupyter-naas/abi/commit/30ffacd04d923167df57ec0a01c204a0af37eab8))
+
+
 ## v2.32.0 (2026-09-07)
 
 ### Bug Fixes
