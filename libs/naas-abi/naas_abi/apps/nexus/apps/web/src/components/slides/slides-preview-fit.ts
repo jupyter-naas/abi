@@ -13,7 +13,14 @@ export const SLIDES_INDUSTRY_STAGE_HEIGHT = 1080;
 export const SLIDES_INDUSTRY_STAGE_SCALE =
   SLIDES_STAGE_WIDTH / SLIDES_INDUSTRY_STAGE_WIDTH;
 
-/** 16:9 landscape page used by File → Export to PDF (browser print). */
+/**
+ * 16:9 page used by File → Print / Save as PDF.
+ *
+ * Width and height are already landscape. Do not add the `landscape` keyword:
+ * Chrome treats `size: W H landscape` as a swap (7.5in x 13.333in) or drops
+ * the rule and falls back to Letter, then shrink-to-fit leaves the next slide
+ * on the same sheet.
+ */
 export const SLIDES_PRINT_PAGE_WIDTH_IN = '13.333in';
 export const SLIDES_PRINT_PAGE_HEIGHT_IN = '7.5in';
 
@@ -109,6 +116,7 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
         );
         setTimeout(function () {
           try {
+            resetDeckForPrint();
             window.print();
           } catch (e) {}
         }, 0);
@@ -192,10 +200,10 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
 })();
 </script>`;
 
-/** Print rules injected into every preview: one .slide = one 16:9 landscape page. */
+/** Print rules injected into every preview: one .slide = one 16:9 page. */
 export const SLIDES_PREVIEW_PRINT_CSS = `
   @media print {
-    @page { size: ${SLIDES_PRINT_PAGE_WIDTH_IN} ${SLIDES_PRINT_PAGE_HEIGHT_IN} landscape; margin: 0; }
+    @page { size: ${SLIDES_PRINT_PAGE_WIDTH_IN} ${SLIDES_PRINT_PAGE_HEIGHT_IN}; margin: 0; }
     * {
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
@@ -206,8 +214,7 @@ export const SLIDES_PREVIEW_PRINT_CSS = `
       width: ${SLIDES_PRINT_PAGE_WIDTH_IN} !important;
       height: auto !important;
       background: #fff !important;
-      overflow-x: hidden !important;
-      overflow-y: visible !important;
+      overflow: visible !important;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
     }
@@ -221,20 +228,23 @@ export const SLIDES_PREVIEW_PRINT_CSS = `
       padding: 0 !important;
       gap: 0 !important;
       margin: 0 !important;
-      width: ${SLIDES_STAGE_WIDTH}px !important;
-      max-width: ${SLIDES_PRINT_PAGE_WIDTH_IN} !important;
+      width: ${SLIDES_PRINT_PAGE_WIDTH_IN} !important;
+      max-width: none !important;
       transform: none !important;
+      zoom: 1 !important;
       overflow: visible !important;
     }
     .slide {
+      display: block !important;
       position: relative !important;
       box-sizing: border-box !important;
-      width: ${SLIDES_STAGE_WIDTH}px !important;
-      height: ${SLIDES_STAGE_HEIGHT}px !important;
-      max-width: ${SLIDES_PRINT_PAGE_WIDTH_IN} !important;
-      max-height: ${SLIDES_PRINT_PAGE_HEIGHT_IN} !important;
+      width: ${SLIDES_PRINT_PAGE_WIDTH_IN} !important;
+      height: ${SLIDES_PRINT_PAGE_HEIGHT_IN} !important;
+      max-width: none !important;
+      max-height: none !important;
       margin: 0 !important;
       overflow: hidden !important;
+      contain: strict !important;
       page-break-after: always !important;
       break-after: page !important;
       page-break-inside: avoid !important;
@@ -242,6 +252,18 @@ export const SLIDES_PREVIEW_PRINT_CSS = `
       border: none !important;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
+    }
+    .slide.cover {
+      display: flex !important;
+      flex-direction: column !important;
+    }
+    .slide:first-child {
+      page-break-before: auto !important;
+      break-before: auto !important;
+    }
+    .slide:not(:first-child) {
+      page-break-before: always !important;
+      break-before: page !important;
     }
     .slide:last-child {
       page-break-after: auto !important;
@@ -253,8 +275,8 @@ export const SLIDES_PREVIEW_PRINT_CSS = `
       position: absolute !important;
       top: 0 !important;
       left: 0 !important;
-      transform: scale(${SLIDES_INDUSTRY_STAGE_SCALE}) !important;
-      transform-origin: top left !important;
+      transform: none !important;
+      zoom: ${SLIDES_INDUSTRY_STAGE_SCALE} !important;
       overflow: hidden !important;
     }
   }

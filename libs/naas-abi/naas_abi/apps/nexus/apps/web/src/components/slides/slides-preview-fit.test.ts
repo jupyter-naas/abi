@@ -52,13 +52,16 @@ describe('prepareSlidesPreviewHtml', () => {
     expect(once).toContain('export-pdf');
     expect(once).toContain('window.print');
     expect(once).toContain('@media print');
-    expect(once).toContain(`size: ${SLIDES_PRINT_PAGE_WIDTH_IN} ${SLIDES_PRINT_PAGE_HEIGHT_IN} landscape`);
+    expect(once).toContain(`size: ${SLIDES_PRINT_PAGE_WIDTH_IN} ${SLIDES_PRINT_PAGE_HEIGHT_IN}; margin: 0;`);
+    expect(once).not.toMatch(/@page \{[^}]*landscape/);
     expect(once).toContain('display: block !important');
     expect(once).toContain('.slide-index');
     expect(once).toContain('.industry-stage');
-    expect(once).toContain(`transform: scale(${SLIDES_INDUSTRY_STAGE_SCALE})`);
+    expect(once).toContain(`zoom: ${SLIDES_INDUSTRY_STAGE_SCALE}`);
     expect(once).toContain('print-color-adjust: exact');
     expect(once).toContain('page-break-after: always');
+    expect(once).toContain('page-break-before: always');
+    expect(once).toContain('contain: strict');
     expect(once).toContain('beforeprint');
     const ackAt = once.indexOf("type: 'export-pdf-result', ok: true");
     const printAt = once.lastIndexOf('window.print()');
@@ -104,6 +107,27 @@ const TWO_SLIDE_DECK = `<!doctype html><html><head>
 </main>
 <script>const IMG = { hero: "data:image/svg+xml,hero" };</script>
 </body></html>`;
+
+describe('SLIDES_PREVIEW_PRINT_CSS', () => {
+  it('sizes the page and each slide in the same inches, without landscape', () => {
+    expect(SLIDES_PREVIEW_PRINT_CSS).toContain(
+      `@page { size: ${SLIDES_PRINT_PAGE_WIDTH_IN} ${SLIDES_PRINT_PAGE_HEIGHT_IN}; margin: 0; }`,
+    );
+    expect(SLIDES_PREVIEW_PRINT_CSS).not.toMatch(/@page \{[^}]*landscape/);
+    expect(SLIDES_PREVIEW_PRINT_CSS).toContain(`width: ${SLIDES_PRINT_PAGE_WIDTH_IN} !important`);
+    expect(SLIDES_PREVIEW_PRINT_CSS).toContain(`height: ${SLIDES_PRINT_PAGE_HEIGHT_IN} !important`);
+    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('max-width: none !important');
+    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('max-height: none !important');
+  });
+
+  it('uses zoom for the industry paint box so print layout is 1280x720', () => {
+    expect(SLIDES_PREVIEW_PRINT_CSS).toContain(`zoom: ${SLIDES_INDUSTRY_STAGE_SCALE} !important`);
+    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('transform: none !important');
+    expect(SLIDES_PREVIEW_PRINT_CSS).not.toContain(
+      `transform: scale(${SLIDES_INDUSTRY_STAGE_SCALE})`,
+    );
+  });
+});
 
 describe('prepareSlidesCoverHtml', () => {
   it('keeps the first slide and drops the rest', () => {
