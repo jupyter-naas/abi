@@ -27,6 +27,13 @@ from __future__ import annotations
 from contextvars import ContextVar
 
 agent_user_id: ContextVar[str | None] = ContextVar("agent_user_id", default=None)
+# Display identity for the acting user, alongside agent_user_id. Populated at
+# the same request boundary so tools that commit on the user's behalf (e.g.
+# Slides' upsert_file/upsert_files) can attribute the commit's git author to
+# the real connected user instead of the service account, without a second
+# lookup back to the auth store.
+agent_user_name: ContextVar[str | None] = ContextVar("agent_user_name", default=None)
+agent_user_email: ContextVar[str | None] = ContextVar("agent_user_email", default=None)
 agent_chat_id: ContextVar[str | None] = ContextVar("agent_chat_id", default=None)
 agent_workspace_id: ContextVar[str | None] = ContextVar(
     "agent_workspace_id", default=None

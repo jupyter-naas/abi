@@ -38,7 +38,9 @@ from naas_abi.agents.slides import (
 )
 from naas_abi_core.services.agent.context import (
     agent_chat_id,
+    agent_user_email,
     agent_user_id,
+    agent_user_name,
     agent_workspace_id,
     coder_workspace_base,
     note_slides_write,
@@ -77,6 +79,23 @@ def _get_source_control():
     from naas_abi import ABIModule
 
     return ABIModule.get_instance().engine.services.source_control
+
+
+def _agent_author() -> dict[str, str]:
+    """git author kwargs for the connected user, when the request boundary set
+    them (see agent.context). Adapters accept a plain name/email pair on the
+    commit's author/committer fields directly — no linked Forgejo account
+    required — so an Abi-driven commit attributes to the person who asked for
+    it instead of the service account, same as the REST endpoints that write
+    on the user's behalf (see slides FastAPI adapter's `author_name`/
+    `author_email`). Empty when either half is unset, so upsert_file falls
+    back to its own default identity rather than sending a half author.
+    """
+    name = (agent_user_name.get() or "").strip()
+    email = (agent_user_email.get() or "").strip()
+    if not name or not email:
+        return {}
+    return {"author_name": name, "author_email": email}
 
 
 def _repo_id() -> str:
@@ -246,6 +265,7 @@ def _ensure_project_json(
             content=json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
             message=f"chore(slides): name project {slug}",
             branch=paths["branch"],
+            **_agent_author(),
         )
     except SourceControlError:
         return stored or title
@@ -551,6 +571,7 @@ def _commit_deck_forgejo(
             content=html,
             message=_conventional_message(message, default_type=default_type),
             branch=paths["branch"],
+            **_agent_author(),
         )
     except SourceControlError as exc:
         return {"error": _friendly_sc_error(exc), "source": "forgejo"}
@@ -1476,6 +1497,7 @@ def slides_tools() -> list[BaseTool]:
                 content=_seed_deck_with_title(seed, clean_title),
                 message=f"feat(slides): create {slug}",
                 branch=paths["branch"],
+                **_agent_author(),
             )
 
             # Become the active deck for the rest of this conversation.

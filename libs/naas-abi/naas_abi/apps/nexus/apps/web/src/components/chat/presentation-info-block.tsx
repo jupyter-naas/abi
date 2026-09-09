@@ -8,7 +8,13 @@ import { SLIDES_DECK_UPDATED_EVENT } from '@/stores/slides';
 import { createPersistedOpenState } from '@/lib/persisted-open-state';
 
 type DeckVersionResponse = { version: string; commit_count: number };
-type DeckCommit = { sha: string; message: string; author: string; date: string | null };
+type DeckCommit = {
+  sha: string;
+  message: string;
+  author: string;
+  date: string | null;
+  version: string;
+};
 
 // There is no version-validation feature yet (e.g. a QA agent sign-off), so
 // the tag always reads as validated. Once one exists, thread a real
@@ -19,11 +25,14 @@ const HISTORY_LIMIT = 20;
 
 const openState = createPersistedOpenState('nexus.chat.presentationInfoOpenBySlug');
 
-function formatCommitDate(date: string | null): string | null {
+function formatCommitTimestamp(date: string | null): string | null {
   if (!date) return null;
   const parsed = new Date(date);
   if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const time = `${pad(parsed.getHours())}:${pad(parsed.getMinutes())}:${pad(parsed.getSeconds())}`;
+  const day = `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`;
+  return `${time} ${day}`;
 }
 
 /**
@@ -152,8 +161,10 @@ export function PresentationInfoBlock({
         <ul className="chat-slides-composer-list chat-composer-header-list" aria-label="Version history">
           {commits.map((commit) => {
             const message = commit.message.split('\n')[0] || commit.message;
-            const date = formatCommitDate(commit.date);
-            const hint = [date, commit.author].filter(Boolean).join(' · ');
+            const timestamp = formatCommitTimestamp(commit.date);
+            const hint = [timestamp, commit.author, `v${commit.version}`]
+              .filter(Boolean)
+              .join(' · ');
             return (
               <li key={commit.sha} className="chat-slides-composer-row is-static" title={commit.message}>
                 <span className="chat-slides-composer-row-text">
