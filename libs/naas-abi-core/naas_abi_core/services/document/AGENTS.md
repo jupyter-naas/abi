@@ -42,8 +42,11 @@ Decimal, non-finite floats, NUL in strings/keys, and invalid UTF-8 are rejected.
 Use bytes for arbitrary binary content. Datetimes normalize to UTC with
 microsecond precision. Datetimes/bytes use tagged JSON; user keys beginning with
 `$` are escaped so user dictionaries cannot collide with internal tags.
-Object key order is unspecified (including nested dictionaries); values and
-types are preserved. Encode ordered entries as lists when order matters.
+Object key order is unspecified (including nested dictionaries). Encode ordered
+entries as lists when order matters. Numbers compare by value: PostgreSQL may
+normalize integral floats to integers within signed 64 bits. Expanded JSONB
+numbers outside that range are restored to floats so reads remain valid portable
+values and cursor paging can continue. Dates and bytes retain their types.
 
 ## Service API
 

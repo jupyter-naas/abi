@@ -50,6 +50,10 @@ validate existing values, while undeclared fields remain queryable.
 Object key order is unspecified, matching JSONB; lists preserve order. Shared
 type ranks and byte sort keys, with paging tests over every value kind, keep
 database sorting aligned with cursor continuation values.
+PostgreSQL may normalize integral floats to integers. Decode expanded JSONB
+integers outside signed 64 bits back to floats, since they can only originate
+from valid float inputs. This keeps retrieved documents within the port's value
+range and preserves cursor paging for large finite floats.
 
 Use independent SQLite file connections per transaction and retain a serialized
 connection for `:memory:`. Access literal fields through a deterministic function

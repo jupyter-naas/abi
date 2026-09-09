@@ -191,6 +191,32 @@ class DocumentSecondaryAdapterContract(ABC):
         )
         assert [doc.id for doc in page.items] == ["c"]
 
+    def test_large_finite_floats_remain_portable_after_read_and_during_paging(
+        self, docs
+    ):
+        values = [
+            -1.7976931348623157e308,
+            -1e100,
+            -1e20,
+            1e20,
+            1e100,
+            1.7976931348623157e308,
+        ]
+        for index, value in enumerate(values):
+            id = str(index)
+            docs.put("module", "records", id, {"x": value, "nested": [value]}, None)
+            stored = docs.get("module", "records", id)
+            assert stored.data == {"x": value, "nested": [value]}
+            docs.put("module", "records", id, stored.data, stored.version)
+        cursor, found = None, []
+        while True:
+            page = docs.find("module", "records", (), ("x", "asc"), 1, cursor)
+            found.extend(doc.id for doc in page.items)
+            cursor = page.cursor
+            if cursor is None:
+                break
+        assert found == [str(index) for index in range(len(values))]
+
     def test_byte_sort_and_exact_nested_array_membership(self, docs):
         for id, value in [("a", b"\xff"), ("b", b"\x00"), ("c", b"\x01")]:
             docs.put(

@@ -1,4 +1,4 @@
-"""Value/type-preserving JSON encoding. Object key order is not a contract."""
+"""Portable JSON values with tagged dates/bytes and canonical object keys."""
 
 from __future__ import annotations
 
@@ -66,6 +66,10 @@ def encode(value: Value) -> Any:
 
 
 def decode(value: Any) -> Value:
+    # JSONB expands exponent-form floats into integer text. Integers outside
+    # this range cannot originate from the port, so restore their float type.
+    if type(value) is int and not -(2**63) <= value < 2**63:
+        return float(value)
     if isinstance(value, dict):
         if value.get("$t") == "datetime":
             return datetime.fromisoformat(value["$v"])

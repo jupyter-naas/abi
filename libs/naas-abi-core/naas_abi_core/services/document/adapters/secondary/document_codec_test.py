@@ -44,6 +44,23 @@ def test_objects_are_unordered_but_arrays_and_scalar_types_are_distinct():
     assert sqlite_json_key("true") != sqlite_json_key("1")
 
 
+@pytest.mark.parametrize("value", [-(2**63), 2**63 - 1])
+def test_decoding_preserves_signed_integer_boundaries(value):
+    decoded = decode(value)
+    assert type(decoded) is int
+    assert decoded == value
+
+
+def test_jsonb_expanded_float_is_restored_recursively():
+    normalized = json.loads(
+        '{"x":100000000000000000000,"nested":[-100000000000000000000]}'
+    )
+    decoded = decode(normalized)
+    assert decoded == {"x": 1e20, "nested": [-1e20]}
+    assert type(decoded["x"]) is float
+    assert type(decoded["nested"][0]) is float
+
+
 @pytest.mark.parametrize("key", ['a.b"\\\n', "$t", "", "caf\u00e9"])
 def test_literal_field_accessor_distinguishes_missing_and_null(key):
     raw = dumps(encode({key: None}))
