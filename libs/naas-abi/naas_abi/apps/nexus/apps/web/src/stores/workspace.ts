@@ -198,7 +198,7 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'home' | 'workspaces' | 'maps' | 'chat' | 'search' | 'files' | 'datasets' | 'code' | 'slides' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings';
+export type SidebarSection = 'home' | 'workspaces' | 'maps' | 'chat' | 'search' | 'files' | 'datasets' | 'code' | 'slides' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings' | 'events';
 
 const RETIRED_PANEL_SECTIONS = new Set<string>(['lab']);
 

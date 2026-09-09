@@ -58,6 +58,10 @@ const SettingsSection = dynamic(() => import('./settings-section').then((m) => m
   ssr: false,
   loading: sectionLoading,
 });
+const EventsSection = dynamic(() => import('./events-section').then((m) => m.EventsSection), {
+  ssr: false,
+  loading: sectionLoading,
+});
 
 function SectionContent({ section }: { section: SidebarSection }) {
   const canMaps = useFeature('maps');
@@ -83,6 +87,8 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'apps' && canApps) return <AppsSection collapsed={false} detailOnly />;
   if (section === 'marketplace' && canMarketplace) return <MarketplaceSection collapsed={false} detailOnly />;
   if (section === 'settings') return <SettingsSection collapsed={false} detailOnly />;
+  // Superadmin-only route; the dock only offers it to superadmins.
+  if (section === 'events') return <EventsSection collapsed={false} detailOnly />;
   return null;
 }
 
