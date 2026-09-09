@@ -165,7 +165,41 @@ _SKILLS_CATALOG_HEADER = (
 )
 
 
-def _render_slides_context_block(client_context: dict | None) -> str:
+def _coerce_index(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+        return int(value.strip())
+    return None
+
+
+def _selected_slide_lines(slides: dict) -> list[str]:
+    """Selected slide from the editor, in tool index space (0-based).
+
+    ``slide_count`` alone is still useful; ``selected_index`` without a count
+    is emitted as-is. Out-of-range or negative indexes are dropped.
+    """
+    count = _coerce_index(slides.get("slide_count"))
+    index = _coerce_index(slides.get("selected_index"))
+    if count is not None and count <= 0:
+        count = None
+    if index is not None and (index < 0 or (count is not None and index >= count)):
+        index = None
+    lines: list[str] = []
+    if count is not None:
+        lines.append(f"- slide_count: {count}")
+    if index is not None:
+        human = f"{index + 1} of {count}" if count is not None else str(index + 1)
+        lines.append(f"- selected_slide_index: {index} (slide {human} in the editor)")
+    return lines
+
+
+def _render_slides_context_block(
+    client_context: dict | None,
+    workspace_id: str | None = None,
+) -> str:
     """Inject open Slides deck so Abi researches, then edits that file."""
     if not isinstance(client_context, dict):
         return ""
@@ -175,8 +209,11 @@ def _render_slides_context_block(client_context: dict | None) -> str:
     slug = str(slides.get("slug") or "").strip()
     if not slug:
         return ""
-    path = str(slides.get("path") or f"slides/{slug}/deck.html").strip()
-    branch = str(slides.get("branch") or f"slides/{slug}").strip()
+    ws = str(slides.get("workspace_id") or workspace_id or "").strip()
+    default_path = f"slides/{ws}/{slug}/deck.html" if ws else f"slides/{slug}/deck.html"
+    default_branch = f"slides/{ws}/{slug}" if ws else f"slides/{slug}"
+    path = str(slides.get("path") or default_path).strip()
+    branch = str(slides.get("branch") or default_branch).strip()
     title = str(slides.get("title") or "").strip()
     mode = str(slides.get("mode") or "").strip()
     today = datetime.now().date().isoformat()
@@ -187,10 +224,13 @@ def _render_slides_context_block(client_context: dict | None) -> str:
         f"- branch: {branch}",
         f"- today: {today}",
     ]
+    if ws:
+        lines.append(f"- workspace_id: {ws}")
     if title:
         lines.append(f"- title: {title}")
     if mode:
         lines.append(f"- editor_mode: {mode}")
+    lines.extend(_selected_slide_lines(slides))
     return (
         "\n\n## Open Slides presentation\n"
         "The user is editing this presentation in the Slides overlay right now. "
@@ -202,6 +242,11 @@ def _render_slides_context_block(client_context: dict | None) -> str:
         "Forgejo remains the Save/history snapshot. Preview loads from sidecar when "
         "ready. Do not ask which deck, slug, file, or template. "
         "Omit slug on Slides tool calls; tools default to this open deck.\n"
+        "selected_slide_index below is the slide the user has selected in the "
+        "editor, 0-based, same index space as section_index / index / "
+        "after_index on the Slides tools. When the user says this slide, here, "
+        "the current slide, or gives no slide, target that index. Do not ask "
+        "which slide.\n"
         "Plan, then write. For news, current events, "
         '"what is going on", country or company briefings, or any factual deck:\n'
         f"1. Call web_search 2 to 4 times first (latest developments, context, "
@@ -340,7 +385,7 @@ class ChatService:
             agent, AGENT_SYSTEM_PROMPTS["aia"]
         )
         system_prompt += await self._build_skills_block(context, workspace_id)
-        slides_block = _render_slides_context_block(client_context)
+        slides_block = _render_slides_context_block(client_context, workspace_id)
         if slides_block:
             system_prompt += slides_block
         coding_block = _render_coding_context_block(client_context)
@@ -375,7 +420,7 @@ class ChatService:
         if skills_block.strip():
             parts.append(skills_block.strip())
 
-        slides_block = _render_slides_context_block(client_context)
+        slides_block = _render_slides_context_block(client_context, workspace_id)
         if slides_block.strip():
             parts.append(slides_block.strip())
 

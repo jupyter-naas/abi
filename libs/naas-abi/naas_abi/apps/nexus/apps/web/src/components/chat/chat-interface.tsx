@@ -39,6 +39,7 @@ import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
 import { humanizeChatProviderError } from '@/lib/chat-provider-error';
+import { slidesOpenDeckBranch, slidesOpenDeckPath } from '@/lib/slides-pane-conversation';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import { getLogoUrl } from '@/lib/logo-url';
 import {
@@ -926,6 +927,8 @@ export function ChatInterface({
   const slidesSlug = useSlidesStore((s) => s.selectedSlug);
   const slidesTitle = useSlidesStore((s) => s.selectedTitle);
   const slidesMode = useSlidesStore((s) => s.editorMode);
+  const slidesSelectedIndex = useSlidesStore((s) => s.selectedIndex);
+  const slidesSlideCount = useSlidesStore((s) => s.slideCount);
   const slidesRuntimeStatus = useSlidesStore((s) => s.runtimeStatus);
   const slidesChatContext = useMemo(() => {
     const onSlides =
@@ -936,11 +939,23 @@ export function ChatInterface({
         slug: slidesSlug,
         title: slidesTitle || slidesSlug,
         mode: slidesMode,
-        branch: `slides/${slidesSlug}`,
-        path: `slides/${slidesSlug}/deck.html`,
+        workspace_id: currentWorkspaceId || undefined,
+        branch: slidesOpenDeckBranch(currentWorkspaceId || '', slidesSlug),
+        path: slidesOpenDeckPath(currentWorkspaceId || '', slidesSlug),
+        // 0-based, same index space as the slides tools (section_index).
+        selected_index: slidesSlideCount > 0 ? slidesSelectedIndex : undefined,
+        slide_count: slidesSlideCount > 0 ? slidesSlideCount : undefined,
       },
     };
-  }, [pathname, slidesSlug, slidesTitle, slidesMode]);
+  }, [
+    pathname,
+    slidesSlug,
+    slidesTitle,
+    slidesMode,
+    currentWorkspaceId,
+    slidesSelectedIndex,
+    slidesSlideCount,
+  ]);
 
   const codeActiveBranch = useCodeStore((s) => s.activeBranch);
   const codeSelectedRepo = useCodeStore((s) => s.selectedRepoId);
