@@ -344,7 +344,7 @@ export function QuickOpen() {
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={onInputKeyDown}
                   placeholder={`Search ${workspaceName}`}
-                  className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                  className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none focus-visible:ring-0 placeholder:text-muted-foreground"
                   aria-label={`Search ${workspaceName}`}
                   aria-autocomplete="list"
                   aria-controls="quick-open-list"
