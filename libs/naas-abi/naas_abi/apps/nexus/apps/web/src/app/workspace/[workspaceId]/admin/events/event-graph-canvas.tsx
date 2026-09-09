@@ -7,7 +7,7 @@ import { EVENT_GRAPH_BUCKETS, UNKNOWN, type BfoBucketType } from './bfo-event-pr
 import type { EventGraphModel, GraphFilters } from './event-graph-model';
 import type { GraphParams, GraphView } from './event-graph-params';
 import { runPhysics, settlePhysicsSync } from './event-graph-physics';
-import { EventGraphToolbar } from './event-graph-toolbar';
+import { EventGraphToolbar, TemporalSlicer } from './event-graph-toolbar';
 import { EventGraphParamsPanel } from './event-graph-params-panel';
 import {
   depthAlpha,
@@ -434,7 +434,7 @@ export function EventGraphCanvas({
       />
 
       {params.legend && (
-        <div className="pointer-events-none absolute right-3 bottom-12 flex flex-col gap-1 rounded-lg border bg-background/90 p-2 text-[10px]">
+        <div className="pointer-events-none absolute right-3 bottom-24 flex flex-col gap-1 rounded-lg border bg-background/90 p-2 text-[10px]">
           <strong className="text-[10px]">BFO buckets</strong>
           {(['Process', ...EVENT_GRAPH_BUCKETS] as BfoBucketType[]).map((bucket) => {
             const def = BFO_BUCKET_BY_TYPE[bucket];
@@ -453,7 +453,7 @@ export function EventGraphCanvas({
         </div>
       )}
 
-      <div className="absolute bottom-3 right-3 flex items-center gap-1">
+      <div className="absolute bottom-14 right-3 flex items-center gap-1">
         <span className="mr-2 text-[10px] text-muted-foreground">
           {params.view === '3d' ? 'drag to orbit' : 'drag to pan · drag a node to move it'} · double-click a
           process to focus · scroll to zoom
@@ -490,8 +490,15 @@ export function EventGraphCanvas({
         />
       </div>
 
+      <TemporalSlicer
+        range={model.temporalRange}
+        start={filters.dateStart}
+        end={filters.dateEnd}
+        onChange={(dateStart, dateEnd) => onFiltersChange({ ...filters, dateStart, dateEnd })}
+      />
+
       {selectedNode && (
-        <aside className="absolute right-3 top-3 max-h-[calc(100%-6rem)] w-64 overflow-y-auto rounded-lg border bg-background/95 p-3 text-xs shadow-sm">
+        <aside className="absolute right-3 top-3 max-h-[calc(100%-9rem)] w-64 overflow-y-auto rounded-lg border bg-background/95 p-3 text-xs shadow-sm">
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Inspect</p>
           <p className="mt-1 flex items-center gap-1.5 font-medium">
             <span
@@ -526,7 +533,7 @@ export function EventGraphCanvas({
             <button
               type="button"
               onClick={() => onPickProcess(selectedNode.id)}
-              className="mt-3 w-full rounded border px-2 py-1 text-[11px] hover:bg-accent"
+              className="mt-3 w-full rounded border px-2 py-1 text-[11px] hover:bg-workspace-accent-10 hover:text-workspace-accent"
             >
               Focus this process
             </button>

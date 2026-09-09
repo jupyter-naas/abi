@@ -170,7 +170,7 @@ export default function AdminEventsPage() {
           )}
           <button
             onClick={() => setShowRaw((v) => !v)}
-            className="rounded border px-2 py-1 hover:bg-accent"
+            className="rounded border px-2 py-1 hover:bg-workspace-accent-10 hover:text-workspace-accent"
           >
             {showRaw ? 'Hide payload' : 'Raw payload'}
           </button>

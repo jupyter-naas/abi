@@ -460,7 +460,11 @@ export function Sidebar() {
         ref={navRef}
         className={cn(
           'flex flex-1 flex-col gap-1 py-3',
-          draggingId ? 'overflow-visible' : 'overflow-y-auto',
+          // overflow-x-hidden matters: `overflow-y: auto` forces overflow-x to
+          // compute to `auto` too, and at DOCK_WIDTH_MIN the vertical
+          // scrollbar leaves the 40px buttons + px-2 8px short — enough to
+          // raise a horizontal scrollbar across the foot of the dock.
+          draggingId ? 'overflow-visible' : 'overflow-y-auto overflow-x-hidden',
           labeled ? 'px-2' : 'items-center px-2'
         )}
       >
@@ -524,9 +528,14 @@ export function Sidebar() {
         })}
       </nav>
 
+      {/*
+        Pinned below the scrolling list only because it must stay in view — it
+        is the same column of destinations, so it carries no divider and no top
+        padding of its own.
+      */}
       <nav
         className={cn(
-          'flex flex-shrink-0 flex-col gap-1 border-t border-border/50 py-3',
+          'flex flex-shrink-0 flex-col gap-1 pb-3',
           labeled ? 'px-2' : 'items-center px-2'
         )}
       >
@@ -581,9 +590,10 @@ export function Sidebar() {
         })}
       </nav>
 
+      {/* The avatar reads as its own thing without a rule drawn over it. */}
       <div
         className={cn(
-          'flex flex-shrink-0 flex-col border-t border-border/50 py-2',
+          'flex flex-shrink-0 flex-col pb-2',
           labeled ? 'px-2' : 'items-center px-2',
         )}
       >

@@ -92,7 +92,9 @@ export function EventGraphParamsPanel({
                 onClick={() => onSwitchView(view)}
                 className={cn(
                   'flex-1 rounded px-2 py-1 text-[11px]',
-                  params.view === view ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:bg-muted/60',
+                  params.view === view
+                    ? 'bg-workspace-accent-10 font-medium text-workspace-accent'
+                    : 'text-muted-foreground hover:bg-workspace-accent-10',
                 )}
               >
                 {GRAPH_VIEW_LABELS[view]}
@@ -152,7 +154,7 @@ export function EventGraphParamsPanel({
           <button
             type="button"
             onClick={onReset}
-            className="mt-3 w-full rounded border px-2 py-1 text-[11px] hover:bg-accent"
+            className="mt-3 w-full rounded border px-2 py-1 text-[11px] hover:bg-workspace-accent-10 hover:text-workspace-accent"
           >
             Reset to defaults
           </button>

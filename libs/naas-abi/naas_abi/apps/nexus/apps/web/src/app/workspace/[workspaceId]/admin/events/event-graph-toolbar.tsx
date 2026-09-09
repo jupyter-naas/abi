@@ -68,7 +68,13 @@ function FilterDropdown({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="true"
-        className="flex items-center gap-1 rounded border bg-background/80 px-2 py-1 text-[11px] hover:bg-accent disabled:opacity-50"
+        className={cn(
+          'flex items-center gap-1 rounded border bg-background/80 px-2 py-1 text-[11px] hover:bg-workspace-accent-10 hover:text-workspace-accent disabled:opacity-50',
+          // Open reads in the workspace accent. It used to be `bg-accent`,
+          // which workspace-layout.tsx rewrites to the workspace colour at full
+          // strength — black text on a black button in a dark theme.
+          open && 'bg-workspace-accent-10 border-workspace-accent text-workspace-accent',
+        )}
       >
         <span>{summary}</span>
         <ChevronDown size={11} className={cn('transition-transform', open && 'rotate-180')} />
@@ -87,7 +93,7 @@ function FilterDropdown({
               return (
                 <li key={group.label}>
                   <div className="flex items-center gap-1">
-                    <label className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-1.5 py-1 text-[11px] hover:bg-muted">
+                    <label className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-1.5 py-1 text-[11px] hover:bg-workspace-accent-10">
                       <input
                         type="checkbox"
                         checked={!typeHidden}
@@ -127,7 +133,7 @@ function FilterDropdown({
                         <li key={instance.id}>
                           <label
                             className={cn(
-                              'flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px] hover:bg-muted',
+                              'flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px] hover:bg-workspace-accent-10',
                               typeHidden && 'opacity-50',
                             )}
                           >
@@ -155,14 +161,14 @@ function FilterDropdown({
             <button
               type="button"
               onClick={onSelectAll}
-              className="flex-1 rounded px-2 py-1 text-[11px] hover:bg-accent"
+              className="flex-1 rounded px-2 py-1 text-[11px] hover:bg-workspace-accent-10 hover:text-workspace-accent"
             >
               Select all
             </button>
             <button
               type="button"
               onClick={onClearAll}
-              className="flex-1 rounded px-2 py-1 text-[11px] hover:bg-accent"
+              className="flex-1 rounded px-2 py-1 text-[11px] hover:bg-workspace-accent-10 hover:text-workspace-accent"
             >
               Clear all
             </button>
@@ -173,8 +179,15 @@ function FilterDropdown({
   );
 }
 
-/** Date slicer over the loaded window, the cockpit's `renderDateSlicer`. */
-function TemporalSlicer({
+/**
+ * Date slicer over the loaded window, the cockpit's `renderDateSlicer`.
+ *
+ * One track, two cursors. Two native range inputs are stacked on the same
+ * track rather than drawn from scratch so both ends stay keyboard operable;
+ * `.range-dual` in globals.css makes the inputs transparent to the pointer
+ * except at their thumbs, which is what keeps the lower one grabbable.
+ */
+export function TemporalSlicer({
   range,
   start,
   end,
@@ -194,32 +207,46 @@ function TemporalSlicer({
 
   if (!bounds) {
     return (
-      <div className="flex items-center gap-1.5">
+      <div className="pointer-events-auto absolute inset-x-3 bottom-3 z-20 flex items-center gap-2 rounded-lg border bg-background/90 px-3 py-2 backdrop-blur">
         <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Temporal</span>
         <span className="text-[11px] text-muted-foreground">No range</span>
       </div>
     );
   }
 
-  const startValue = start ? new Date(start).getTime() : bounds.min;
-  const endValue = end ? new Date(end).getTime() : bounds.max;
+  const span = bounds.max - bounds.min;
+  const startValue = Math.min(start ? new Date(start).getTime() : bounds.min, end ? new Date(end).getTime() : bounds.max);
+  const endValue = Math.max(startValue, end ? new Date(end).getTime() : bounds.max);
+  const pct = (value: number) => ((value - bounds.min) / span) * 100;
+  const sliced = Boolean(start || end);
 
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Temporal</span>
-      <div className="flex flex-col gap-0.5">
+    <div className="pointer-events-auto absolute inset-x-3 bottom-3 z-20 flex items-center gap-3 rounded-lg border bg-background/90 px-3 py-2 backdrop-blur">
+      <span className="flex-shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+        Temporal
+      </span>
+      <span className="flex-shrink-0 font-mono text-[9px] leading-tight text-muted-foreground">
+        {formatRangeBound(new Date(startValue).toISOString())}
+      </span>
+
+      <div className="relative h-4 min-w-0 flex-1">
+        <span className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-muted" />
+        <span
+          className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-workspace-accent"
+          style={{ left: `${pct(startValue)}%`, right: `${100 - pct(endValue)}%` }}
+        />
         <input
           type="range"
           aria-label="Range start"
           min={bounds.min}
           max={bounds.max}
           step={1000}
-          value={Math.min(startValue, endValue)}
+          value={startValue}
           onChange={(e) => {
-            const next = Number(e.target.value);
-            onChange(new Date(Math.min(next, endValue)).toISOString(), end);
+            const next = Math.min(Number(e.target.value), endValue);
+            onChange(new Date(next).toISOString(), end);
           }}
-          className="h-1 w-32"
+          className="range-dual"
         />
         <input
           type="range"
@@ -227,27 +254,26 @@ function TemporalSlicer({
           min={bounds.min}
           max={bounds.max}
           step={1000}
-          value={Math.max(endValue, startValue)}
+          value={endValue}
           onChange={(e) => {
-            const next = Number(e.target.value);
-            onChange(start, new Date(Math.max(next, startValue)).toISOString());
+            const next = Math.max(Number(e.target.value), startValue);
+            onChange(start, new Date(next).toISOString());
           }}
-          className="h-1 w-32"
+          className="range-dual"
         />
       </div>
-      <span className="font-mono text-[9px] leading-tight text-muted-foreground">
-        <span className="block">{formatRangeBound(new Date(startValue).toISOString())}</span>
-        <span className="block">{formatRangeBound(new Date(endValue).toISOString())}</span>
+
+      <span className="flex-shrink-0 font-mono text-[9px] leading-tight text-muted-foreground">
+        {formatRangeBound(new Date(endValue).toISOString())}
       </span>
-      {(start || end) && (
-        <button
-          type="button"
-          onClick={() => onChange(null, null)}
-          className="rounded border px-1.5 py-0.5 text-[10px] hover:bg-accent"
-        >
-          Reset
-        </button>
-      )}
+      <button
+        type="button"
+        disabled={!sliced}
+        onClick={() => onChange(null, null)}
+        className="flex-shrink-0 rounded border px-1.5 py-0.5 text-[10px] hover:bg-workspace-accent-10 hover:text-workspace-accent disabled:opacity-40"
+      >
+        Reset
+      </button>
     </div>
   );
 }
@@ -329,7 +355,7 @@ export function EventGraphToolbar({
                     onPickProcess(instance.id);
                     setSuggestOpen(false);
                   }}
-                  className="flex w-full flex-col items-start rounded px-2 py-1 text-left hover:bg-muted"
+                  className="flex w-full flex-col items-start rounded px-2 py-1 text-left hover:bg-workspace-accent-10"
                 >
                   <span className="text-[11px] font-medium">{instance.label}</span>
                   <span className="font-mono text-[9px] text-muted-foreground">{instance.type}</span>
@@ -355,13 +381,6 @@ export function EventGraphToolbar({
             hiddenProcessInstances: new Set(model.processInstances.map((instance) => instance.id)),
           })
         }
-      />
-
-      <TemporalSlicer
-        range={model.temporalRange}
-        start={filters.dateStart}
-        end={filters.dateEnd}
-        onChange={(dateStart, dateEnd) => patch({ dateStart, dateEnd })}
       />
 
       <FilterDropdown
