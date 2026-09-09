@@ -24,8 +24,15 @@ def test_postgresql_factory_forwards_connection_options():
             schema="documents",
             connect_timeout=2,
             statement_timeout=4000,
+            pool_max_size=10,
+            pool_timeout=5.0,
         )
         assert documents.namespace == "module"
         adapter.assert_called_once_with(
-            "dbname=test", schema="documents", connect_timeout=2, statement_timeout=4000
+            "dbname=test",
+            schema="documents",
+            connect_timeout=2,
+            statement_timeout=4000,
+            pool_max_size=10,
+            pool_timeout=5.0,
         )

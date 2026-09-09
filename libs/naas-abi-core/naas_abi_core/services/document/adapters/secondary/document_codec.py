@@ -1,13 +1,49 @@
-"""Lossless JSON encoding shared by the SQL adapters, including escaped tag keys."""
+"""Value/type-preserving JSON encoding. Object key order is not a contract."""
 
 from __future__ import annotations
 
 import base64
 import json
 from datetime import UTC, datetime
+from enum import IntEnum
 from typing import Any, cast
 
 from naas_abi_core.services.document.DocumentPort import Value
+
+
+class ValueKind(IntEnum):
+    NULL = 0
+    BOOL = 1
+    NUMBER = 2
+    STRING = 3
+    DATETIME = 4
+    BYTES = 5
+    ARRAY = 6
+    OBJECT = 7
+
+
+def bytes_sort_key(value: bytes) -> str:
+    return value.hex()
+
+
+def encoded_bytes_sort_key(value: str | None) -> str:
+    return bytes_sort_key(base64.b64decode(value, validate=True)) if value else ""
+
+
+def value_sort_parts(value: Value) -> tuple[int, int | float, str]:
+    if value is None:
+        return (ValueKind.NULL, 0, "")
+    if isinstance(value, bool):
+        return (ValueKind.BOOL, int(value), "")
+    if isinstance(value, (int, float)):
+        return (ValueKind.NUMBER, value, "")
+    if isinstance(value, str):
+        return (ValueKind.STRING, 0, value)
+    if isinstance(value, datetime):
+        return (ValueKind.DATETIME, 0, encode(value)["$v"])
+    if isinstance(value, bytes):
+        return (ValueKind.BYTES, 0, bytes_sort_key(value))
+    return (ValueKind.ARRAY if isinstance(value, list) else ValueKind.OBJECT, 0, "")
 
 
 def storage_key(key: str) -> str:
@@ -45,9 +81,16 @@ def decode(value: Any) -> Value:
 
 
 def dumps(value: Any) -> str:
+    """Canonical object serialization for equality, indexes, and cursors."""
     return json.dumps(
         value, ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False
     )
+
+
+def sqlite_field(raw: str, key: str) -> str | None:
+    """Look up a literal key, including quotes/backslashes on older SQLite."""
+    data = json.loads(raw)
+    return dumps(data[key]) if key in data else None
 
 
 def equality_key(value: Any) -> Any:

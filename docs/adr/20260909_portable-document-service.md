@@ -47,9 +47,28 @@ Use reversible tag-key escaping for datetimes/bytes at any nesting depth. Reject
 naive datetimes, non-finite floats, integers outside signed 64 bits, and NUL or
 invalid UTF-8 strings to keep SQLite and PostgreSQL semantics aligned. Declarations
 validate existing values, while undeclared fields remain queryable.
+Object key order is unspecified, matching JSONB; lists preserve order. Shared
+type ranks and byte sort keys, with paging tests over every value kind, keep
+database sorting aligned with cursor continuation values.
+
+Use independent SQLite file connections per transaction and retain a serialized
+connection for `:memory:`. Access literal fields through a deterministic function
+instead of SQLite JSON paths, whose escaping behavior differs across versions.
+Build equality expression indexes alongside typed sort/range indexes; exclusions
+and array membership may scan. Repair outdated SQLite indexes transactionally
+when ensuring a collection. PostgreSQL leases transactions from a bounded pool;
+adapter owners release resources with `close()`.
+
+Only engine-created root services may produce namespace-bound handles. Scoped
+handles retain service wiring and reject namespace rebinding. Remote root and
+scaffold configurations explicitly select the deployment's PostgreSQL database.
 
 Interim reliability defaults are a 5-second SQLite busy timeout, 5-second
-PostgreSQL connection timeout, and 30-second PostgreSQL statement timeout.
+PostgreSQL connection timeout, and 30-second PostgreSQL statement timeout. The
+PostgreSQL pool has one initial connection, at most ten connections, and a
+5-second startup/acquisition timeout; all are configuration options except the
+initial size. Read transactions also lock catalog rows, so PostgreSQL deliberately
+does not interpret the shared `write=False` flag as SQL read-only mode.
 There is no automatic write replay, added telemetry, or new inter-domain
 authentication mechanism. Module scoping is an application boundary, not
 protection against hostile code running in the same process.

@@ -1,4 +1,5 @@
 import hashlib
+import math
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -7,6 +8,7 @@ from typing import Any
 import psycopg
 from naas_abi_core.services.document.adapters.secondary.document_sql import DocumentSQL
 from naas_abi_core.services.document.DocumentPort import UniqueViolation
+from psycopg_pool import ConnectionPool
 
 
 class DocumentSecondaryAdapterPostgreSQL(DocumentSQL):
@@ -18,21 +20,44 @@ class DocumentSecondaryAdapterPostgreSQL(DocumentSQL):
         schema: str = "abi_document",
         connect_timeout: int = 5,
         statement_timeout: int = 30000,
+        pool_max_size: int = 10,
+        pool_timeout: float = 5.0,
     ):
         if not re.fullmatch(r"[a-z_][a-z0-9_]{0,62}", schema):
             raise ValueError(
                 "schema must be a lowercase PostgreSQL identifier (max 63 bytes)"
             )
-        if not dsn or connect_timeout <= 0 or statement_timeout <= 0:
+        if (
+            not dsn
+            or connect_timeout <= 0
+            or statement_timeout <= 0
+            or pool_max_size < 1
+            or pool_timeout <= 0
+            or not math.isfinite(pool_timeout)
+        ):
             raise ValueError("dsn must be nonempty and timeouts must be positive")
         super().__init__(
             postgres=True,
             documents=f'"{schema}".abi_documents',
             collections=f'"{schema}".abi_document_collections',
         )
-        self._dsn = dsn
-        self._connect_timeout = connect_timeout
         self._statement_timeout = statement_timeout
+        self._pool = ConnectionPool(
+            dsn,
+            kwargs={"connect_timeout": connect_timeout},
+            min_size=1,
+            max_size=pool_max_size,
+            timeout=pool_timeout,
+            open=False,
+        )
+        try:
+            self._pool.open(wait=True, timeout=pool_timeout)
+            self._initialize(schema)
+        except BaseException:
+            self._pool.close()
+            raise
+
+    def _initialize(self, schema: str) -> None:
         with self.transaction(write=True) as connection:
             # Serialize first-boot DDL across processes using this schema.
             lock_id = int.from_bytes(
@@ -52,10 +77,13 @@ class DocumentSecondaryAdapterPostgreSQL(DocumentSQL):
 
     @contextmanager
     def transaction(self, *, write: bool = False) -> Iterator[psycopg.Connection[Any]]:
+        """Lease a transaction. write selects SQLite locking in the shared API.
+
+        PostgreSQL reads also acquire catalog row locks, so they deliberately
+        use read/write transactions rather than SET TRANSACTION READ ONLY.
+        """
         try:
-            with psycopg.connect(
-                self._dsn, connect_timeout=self._connect_timeout
-            ) as connection:
+            with self._pool.connection() as connection:
                 connection.execute(
                     "SELECT set_config('statement_timeout', %s, true)",
                     (str(self._statement_timeout),),
@@ -65,3 +93,6 @@ class DocumentSecondaryAdapterPostgreSQL(DocumentSQL):
                 yield connection
         except psycopg.errors.UniqueViolation as exc:
             raise UniqueViolation("Document violates a unique constraint") from exc
+
+    def close(self) -> None:
+        self._pool.close()

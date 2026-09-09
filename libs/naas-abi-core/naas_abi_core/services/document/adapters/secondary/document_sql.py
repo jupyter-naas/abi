@@ -12,10 +12,13 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 from naas_abi_core.services.document.adapters.secondary.document_codec import (
+    ValueKind,
     decode,
     dumps,
     encode,
+    sqlite_json_key,
     storage_key,
+    value_sort_parts,
 )
 from naas_abi_core.services.document.DocumentPort import (
     CollectionNotFound,
@@ -62,8 +65,7 @@ class DocumentSQL(ABC):
         key = storage_key(name)
         if self.pg:
             return f"(data -> {self.literal(key)})"
-        path = "$." + json.dumps(key, ensure_ascii=False)
-        return f"(data -> {self.literal(path)})"
+        return f"document_field(data, {self.literal(key)})"
 
     def kind(self, expression: str) -> str:
         return f"jsonb_typeof({expression})" if self.pg else f"json_type({expression})"
@@ -87,12 +89,19 @@ class DocumentSQL(ABC):
         numeric_types = "'number'" if self.pg else "'integer','real'"
         bool_types = "'boolean'" if self.pg else "'true','false'"
         string_type = "'string'" if self.pg else "'text'"
+        kinds = [
+            (f"{kind} IN ({bool_types})", ValueKind.BOOL),
+            (f"{kind} IN ({numeric_types})", ValueKind.NUMBER),
+            (f"{kind} = {string_type}", ValueKind.STRING),
+            (f"{tag} = 'datetime'", ValueKind.DATETIME),
+            (f"{tag} = 'bytes'", ValueKind.BYTES),
+            (f"{kind} = 'array'", ValueKind.ARRAY),
+            (f"{kind} = 'object'", ValueKind.OBJECT),
+        ]
         rank = (
-            f"CASE WHEN {kind} IN ({bool_types}) THEN 1 "
-            f"WHEN {kind} IN ({numeric_types}) THEN 2 "
-            f"WHEN {kind} = {string_type} THEN 3 "
-            f"WHEN {tag} = 'datetime' THEN 4 WHEN {tag} = 'bytes' THEN 5 "
-            f"WHEN {kind} = 'array' THEN 6 WHEN {kind} = 'object' THEN 7 ELSE 0 END"
+            "CASE "
+            + " ".join(f"WHEN {condition} THEN {rank}" for condition, rank in kinds)
+            + f" ELSE {ValueKind.NULL} END"
         )
         scalar = self.text(expression)
         number = f"CAST({scalar} AS NUMERIC)" if self.pg else scalar
@@ -110,10 +119,15 @@ class DocumentSQL(ABC):
         return [f"({rank})", f"({numeric})", text]
 
     def equal(self, expression: str, value: Value, params: list[Any]) -> str:
-        params.append(dumps(encode(value)))
+        raw = dumps(encode(value))
         if self.pg:
+            params.append(raw)
             return f"COALESCE({expression} = CAST({self.p} AS JSONB), FALSE)"
-        return f"document_equal({expression}, {self.p})"
+        key = f"document_json_key({expression})"
+        if value is None:
+            return f"({key} IS NULL AND {expression} IS NOT NULL)"
+        params.append(sqlite_json_key(raw))
+        return f"{key} = {self.p}"
 
     def predicates(self, where: Sequence[Predicate], params: list[Any]) -> str:
         clauses = []
@@ -124,7 +138,9 @@ class DocumentSQL(ABC):
             elif operator in ("eq", "ne"):
                 clause = self.equal(expression, value, params)
                 if operator == "ne":
-                    clause = f"{expression} IS NOT NULL AND NOT ({clause})"
+                    clause = (
+                        f"{expression} IS NOT NULL AND NOT COALESCE(({clause}), FALSE)"
+                    )
                 elif self.pg:
                     # GIN narrows candidates; equality still enforces exact objects/arrays.
                     params.append(dumps({storage_key(field): encode(value)}))
@@ -137,7 +153,9 @@ class DocumentSQL(ABC):
                 )
                 clause = f"({clause})"
                 if operator == "nin":
-                    clause = f"{expression} IS NOT NULL AND NOT {clause}"
+                    clause = (
+                        f"{expression} IS NOT NULL AND NOT COALESCE({clause}, FALSE)"
+                    )
             elif operator == "contains":
                 if self.pg:
                     item = "member.value"
@@ -148,35 +166,20 @@ class DocumentSQL(ABC):
                 clause = f"EXISTS (SELECT 1 FROM {source} WHERE {self.equal(item, value, params)})"
             else:
                 rank, numeric, text = self.sort_parts(field)
-                value_rank, value_numeric, value_text = self.value_sort_parts(value)
+                value_rank, value_numeric, value_text = value_sort_parts(value)
                 compare = {"lt": "<", "lte": "<=", "gt": ">", "gte": ">="}[operator]
-                target = value_numeric if value_rank in (1, 2) else value_text
-                numeric_comparison = self.pg and value_rank in (1, 2)
+                is_numeric = value_rank in (ValueKind.BOOL, ValueKind.NUMBER)
+                target = value_numeric if is_numeric else value_text
+                numeric_comparison = self.pg and is_numeric
                 params.extend(
                     [value_rank, str(target) if numeric_comparison else target]
                 )
                 placeholder = (
                     f"CAST({self.p} AS NUMERIC)" if numeric_comparison else self.p
                 )
-                clause = f"{rank} = {self.p} AND {numeric if value_rank in (1, 2) else text} {compare} {placeholder}"
+                clause = f"{rank} = {self.p} AND {numeric if is_numeric else text} {compare} {placeholder}"
             clauses.append(f"({clause})")
         return " AND ".join(clauses) or "TRUE"
-
-    @staticmethod
-    def value_sort_parts(value: Value) -> tuple[int, int | float, str]:
-        if value is None:
-            return (0, 0, "")
-        if isinstance(value, bool):
-            return (1, int(value), "")
-        if isinstance(value, (int, float)):
-            return (2, value, "")
-        if isinstance(value, str):
-            return (3, 0, value)
-        if isinstance(value, datetime):
-            return (4, 0, encode(value)["$v"])
-        if isinstance(value, bytes):
-            return (5, 0, value.hex())
-        return (6 if isinstance(value, list) else 7, 0, "")
 
     def require_collection(
         self,
@@ -240,6 +243,45 @@ class DocumentSQL(ABC):
         result.extend((group, True) for group in spec.unique_together)
         return list(dict.fromkeys(result))
 
+    def index_statements(
+        self, namespace: str, spec: CollectionSpec
+    ) -> list[tuple[str, str]]:
+        statements = []
+        condition = f"namespace = {self.literal(namespace)} AND collection = {self.literal(spec.name)}"
+        for fields, unique in self.indexes(spec):
+            name = self.index_name(namespace, spec.name, fields, unique)
+            expressions = []
+            for field in fields:
+                raw = self.field(field)
+                if unique:
+                    expressions.append(
+                        f"(NULLIF({raw}, 'null'::jsonb))"
+                        if self.pg
+                        else f"document_json_key({raw})"
+                    )
+                else:
+                    expressions.extend(self.sort_parts(field))
+            statements.append(
+                (
+                    name,
+                    f"CREATE {'UNIQUE ' if unique else ''}INDEX IF NOT EXISTS {name} ON {self.documents_table} ({', '.join(expressions)}) WHERE {condition}",
+                )
+            )
+            if not self.pg and not unique:
+                equality = ", ".join(
+                    f"document_json_key({self.field(field)})" for field in fields
+                )
+                statements.append(
+                    (
+                        name + "_eq",
+                        f"CREATE INDEX IF NOT EXISTS {name}_eq ON {self.documents_table} ({equality}) WHERE {condition}",
+                    )
+                )
+        return statements
+
+    def ensure_index(self, connection: Any, name: str, statement: str) -> None:
+        connection.execute(statement, ())
+
     def ensure_collection(self, namespace: str, spec: CollectionSpec) -> None:
         validate_name(namespace)
         with self.transaction(write=True) as connection:
@@ -255,8 +297,6 @@ class DocumentSQL(ABC):
                 connection, namespace, spec.name, exclusive=True
             )
             merged = self.merge_spec(old, spec)
-            if merged == old:
-                return
             # Type declarations also apply to existing records. Stream validation
             # before DDL so incompatible declarations never partly take effect.
             if merged.fields != old.fields:
@@ -267,28 +307,13 @@ class DocumentSQL(ABC):
                 while batch := rows.fetchmany(500):
                     for row in batch:
                         validate_data(self.read_data(row[0]), merged)
-            for fields, unique in self.indexes(merged):
-                name = self.index_name(namespace, spec.name, fields, unique)
-                expressions = []
-                for field in fields:
-                    raw = self.field(field)
-                    if unique:
-                        expressions.append(
-                            f"(NULLIF({raw}, 'null'::jsonb))"
-                            if self.pg
-                            else f"document_json_key({raw})"
-                        )
-                    else:
-                        expressions.extend(self.sort_parts(field))
-                condition = f"namespace = {self.literal(namespace)} AND collection = {self.literal(spec.name)}"
+            for name, statement in self.index_statements(namespace, merged):
+                self.ensure_index(connection, name, statement)
+            if merged != old:
                 connection.execute(
-                    f"CREATE {'UNIQUE ' if unique else ''}INDEX IF NOT EXISTS {name} ON {self.documents_table} ({', '.join(expressions)}) WHERE {condition}",
-                    (),
+                    f"UPDATE {self.collections_table} SET spec = {self.p} WHERE namespace = {self.p} AND name = {self.p}",  # nosec B608
+                    (merged.model_dump_json(), namespace, spec.name),
                 )
-            connection.execute(
-                f"UPDATE {self.collections_table} SET spec = {self.p} WHERE namespace = {self.p} AND name = {self.p}",  # nosec B608
-                (merged.model_dump_json(), namespace, spec.name),
-            )
 
     def drop_collection(self, namespace: str, collection: str) -> None:
         with self.transaction(write=True) as connection:
@@ -299,8 +324,7 @@ class DocumentSQL(ABC):
                 f"DELETE FROM {self.documents_table} WHERE namespace = {self.p} AND collection = {self.p}",  # nosec B608
                 (namespace, collection),
             )
-            for fields, unique in self.indexes(spec):
-                name = self.index_name(namespace, collection, fields, unique)
+            for name, _ in self.index_statements(namespace, spec):
                 # PostgreSQL index names live in the table's schema.
                 prefix = self.documents_table.rsplit(".", 1)[0] + "." if self.pg else ""
                 connection.execute(f"DROP INDEX IF EXISTS {prefix}{name}", ())
@@ -456,7 +480,7 @@ class DocumentSQL(ABC):
                 validate_value(key)
                 if order_by is not None and (
                     type(key[0]) is not int
-                    or not 0 <= key[0] <= 7
+                    or key[0] not in set(ValueKind)
                     or type(key[1]) not in (int, float)
                     or not isinstance(key[2], str)
                 ):
@@ -486,7 +510,7 @@ class DocumentSQL(ABC):
             last_key = (
                 []
                 if order_by is None
-                else list(self.value_sort_parts(last.data.get(order_by[0])))
+                else list(value_sort_parts(last.data.get(order_by[0])))
             ) + [last.id]
             next_cursor = base64.urlsafe_b64encode(
                 dumps({"v": 1, "q": fingerprint, "key": last_key}).encode()

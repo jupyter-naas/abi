@@ -17,13 +17,13 @@ their existing responsibilities.
 | `adapters/secondary/DocumentSecondaryAdapterSQLite.py` | SQLite connections and transactions |
 | `adapters/secondary/DocumentSecondaryAdapterPostgreSQL.py` | psycopg connections, JSONB and boot provisioning |
 | `adapters/secondary/document_sql.py` | Shared SQL compilation and storage operations |
-| `adapters/secondary/document_codec.py` | Lossless tagged values and SQLite equality functions |
+| `adapters/secondary/document_codec.py` | Tagged values, shared sort kinds, and SQLite equality/accessor functions |
 | `tests/document__secondary_adapter__generic_test.py` | Reusable adapter contract |
 
 ## Port
 
 `IDocumentAdapter` is a runtime-checkable protocol with `ensure_collection`,
-`drop_collection`, `collections`, `put`, `get`, `delete`, `find`, and `count`.
+`drop_collection`, `collections`, `put`, `get`, `delete`, `find`, `count`, and `close`.
 Every operation takes an explicit namespace. Every adapter must implement every
 method. Exceptions are `CollectionNotFound`, `DocumentNotFound`,
 `VersionConflict`, and `UniqueViolation`.
@@ -42,6 +42,8 @@ Decimal, non-finite floats, NUL in strings/keys, and invalid UTF-8 are rejected.
 Use bytes for arbitrary binary content. Datetimes normalize to UTC with
 microsecond precision. Datetimes/bytes use tagged JSON; user keys beginning with
 `$` are escaped so user dictionaries cannot collide with internal tags.
+Object key order is unspecified (including nested dictionaries); values and
+types are preserved. Encode ordered entries as lists when order matters.
 
 ## Service API
 
@@ -50,7 +52,9 @@ loads its configured adapter before module initialization, so connection and
 provisioning failures stop loading. `self._engine.services.document` binds the
 module's complete dotted name as its namespace. Callers never pass a namespace
 on CRUD/query operations. This is module isolation by API convention, not a
-security sandbox against hostile Python code with process access.
+security sandbox against hostile Python code with process access. Only the
+engine root created through `_for_engine` may bind namespaces; returned handles
+reject `_for_namespace` rebinding and retain the root's service wiring.
 
 ```python
 from naas_abi_core.module.Module import ModuleDependencies
@@ -111,13 +115,22 @@ are scoped to a collection and namespace and enforced by database indexes.
 ## Adapters
 
 SQLite requires >= 3.38 with JSON functions. A file uses WAL, a 5-second busy
-timeout, and a serialized connection per adapter; writes use `BEGIN IMMEDIATE`.
-Independent adapters/processes can share the file. `:memory:` works for tests.
-The adapter's `close()` releases its connection. Use the service adapter when
+timeout, and an independent connection per transaction, so readers do not block
+each other or writers; writes use `BEGIN IMMEDIATE`. Independent adapters/processes
+can share the file. `:memory:` retains one serialized connection for tests.
+Literal field lookup uses a deterministic function, avoiding version-dependent
+JSON-path escaping. `indexed=True` creates typed range/sort and exact equality
+expression indexes. Equality and `in` can use the equality index; SQLite chooses
+plans using its statistics. Exclusions and array `contains` can still scan.
+`ensure_collection` transactionally repairs outdated expression indexes even if
+the declaration is unchanged; conflicting data raises `UniqueViolation` and
+rolls back the repair. Both adapters expose `close()` and reject subsequent use.
+An in-flight SQLite file transaction releases its own connection when it ends.
+Use the service adapter when
 writing the file because expression indexes use its registered SQLite functions.
 
-PostgreSQL uses the existing psycopg dependency, one connection/transaction per
-operation, and one documents table plus a collection catalog in the configured
+PostgreSQL uses the existing psycopg pool dependency, leasing a connection and
+transaction per operation, and one documents table plus a collection catalog in the configured
 schema. A namespace column scopes all statements and partial indexes. A GIN index
 accelerates containment candidates; exact equality still checks full values.
 `indexed=True` creates expressions matching the typed range/sort expressions.
@@ -128,8 +141,11 @@ serialized across processes and runs on every adapter initialization.
 The PostgreSQL database must already exist; reuse the deployment database.
 Credentials need permission to create/use the configured schema, tables, and
 indexes. No new database, ORM, authentication scheme, or additional dependency
-is introduced. Defaults: 5-second connection timeout and 30-second statement
-timeout (milliseconds in config). Failures are surfaced without automatic
+is introduced. The pool starts with one connection and grows to at most ten;
+startup and acquisition time out after 5 seconds. Defaults: 5-second connection
+timeout and 30-second statement timeout (milliseconds in config). PostgreSQL
+reads also lock catalog rows; the shared `write` flag only selects SQLite's
+locking mode, not PostgreSQL read-only transactions. Failures are surfaced without automatic
 replay, including ambiguous commit failures. No retry/circuit-breaker policy or
 additional telemetry is introduced.
 
@@ -159,10 +175,15 @@ services:
         schema: abi_document
         connect_timeout: 5
         statement_timeout: 30000
+        pool_max_size: 10
+        pool_timeout: 5.0
 ```
 
 Render credentials through the deployment's secret service; do not log DSNs.
 The standard `custom` adapter loader is also supported.
+Root and scaffold `config.remote.yaml` select PostgreSQL through the deployment's
+existing `POSTGRES_*` secrets, as does the Docker configuration. They reuse the
+configured database; it must exist before boot.
 
 ## Migrations and operations
 
@@ -183,6 +204,7 @@ database backup/restore. Switching adapter configuration does not migrate data.
 From the repository root:
 
 ```bash
+make test-document-core
 uv run pytest libs/naas-abi-core/naas_abi_core/services/document libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_DocumentService_test.py -q
 DOCUMENT_TEST_POSTGRES_DSN='postgresql://localhost/test' uv run pytest libs/naas-abi-core/naas_abi_core/services/document -q
 ```
@@ -192,6 +214,8 @@ requires an existing test database and schema-creation permission; without the
 environment variable its integration tests explicitly skip. A configured but
 unreachable database fails tests rather than skipping. Standard `make deps`,
 `make check-core`, and `make test` remain the development entry points.
+PR CI runs `make test-document-core` on Python 3.11/3.12 with a PostgreSQL 17 service,
+covering both backends, direct port/codec/compiler tests, and engine configuration.
 
 ## Adding a new adapter
 

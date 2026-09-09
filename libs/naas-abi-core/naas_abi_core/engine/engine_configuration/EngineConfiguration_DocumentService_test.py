@@ -1,6 +1,9 @@
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
+import yaml
+from jinja2 import Environment, StrictUndefined
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
 )
@@ -46,6 +49,10 @@ services:
     two = EngineProxy(engine, "two.module", dependencies).services
     for proxy in (one, two):
         assert proxy.document_available()
+        assert proxy.document.services_wired
+        assert proxy.document.services is services
+        with pytest.raises(PermissionError, match="namespace"):
+            proxy.document._for_namespace("unrelated.module")
         proxy.document.ensure_collection(CollectionSpec(name="records"))
     one.document.put("records", "id", {"owner": "one"})
     assert one.document.get("records", "id").data == {"owner": "one"}
@@ -119,3 +126,32 @@ def test_custom_adapter_uses_standard_loader(tmp_path):
         assert isinstance(adapter, IDocumentAdapter)
     finally:
         adapter.close()
+
+
+@pytest.mark.parametrize("scaffold", [False, True])
+def test_remote_configuration_explicitly_uses_deployment_postgresql(scaffold):
+    root = Path(__file__).resolve().parents[5]
+    if scaffold:
+        path = (
+            root
+            / "libs/naas-abi-cli/naas_abi_cli/cli/new/templates/project/config.remote.yaml"
+        )
+        content = (
+            Environment(undefined=StrictUndefined, autoescape=False)  # nosec B701
+            .from_string(path.read_text())
+            .render(project_name_snake="example", project_name_pascal="Example")
+        )
+    else:
+        content = (root / "config.remote.yaml").read_text()
+    document = yaml.safe_load(content)["services"]["document"]
+    configuration = DocumentServiceConfiguration.model_validate(document)
+    assert configuration.document_adapter.adapter == "postgresql"
+    dsn = configuration.document_adapter.config["dsn"]
+    for secret in (
+        "POSTGRES_HOST",
+        "POSTGRES_PORT",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+        "POSTGRES_DB",
+    ):
+        assert "{{ secret." + secret + " }}" in dsn

@@ -35,6 +35,66 @@ ROUND_TRIP_VALUES = [
 
 
 class DocumentSecondaryAdapterContract(ABC):
+    @pytest.mark.parametrize(
+        "field", ["a.b'\"$", 'quote"and\\slash', "line\nbreak", "$tag", "caf\u00e9"]
+    )
+    def test_literal_field_names_preserve_queries_and_uniqueness(self, adapter, field):
+        adapter.ensure_collection(
+            "module",
+            CollectionSpec(
+                name="literal",
+                fields=(
+                    FieldSpec(name=field, type="string", indexed=True, unique=True),
+                ),
+            ),
+        )
+        adapter.put("module", "literal", "first", {field: "value"}, None)
+        with pytest.raises(UniqueViolation):
+            adapter.put("module", "literal", "duplicate", {field: "value"}, None)
+        assert adapter.count("module", "literal", [(field, "eq", "value")]) == 1
+        assert (
+            adapter.find(
+                "module", "literal", [(field, "in", ["value"])], (field, "asc"), 1, None
+            )
+            .items[0]
+            .id
+            == "first"
+        )
+
+    def test_cursor_sort_keys_match_database_order_for_every_value_kind(self, docs):
+        values = [
+            None,
+            False,
+            True,
+            -1,
+            0,
+            9,
+            10,
+            "",
+            "a",
+            "z",
+            datetime(2026, 1, 1, tzinfo=UTC),
+            b"",
+            b"\x00",
+            b"\xff",
+            [],
+            [1],
+            {},
+            {"a": 1},
+        ]
+        for index, value in enumerate(values):
+            docs.put("module", "records", f"{index:02}", {"x": value}, None)
+        for direction in ("asc", "desc"):
+            found, cursor = [], None
+            while True:
+                page = docs.find("module", "records", (), ("x", direction), 1, cursor)
+                found.extend(item.id for item in page.items)
+                cursor = page.cursor
+                if cursor is None:
+                    break
+            expected = [f"{index:02}" for index in range(len(values))]
+            assert found == (expected if direction == "asc" else expected[::-1])
+
     @pytest.fixture
     @abstractmethod
     def adapter(self) -> IDocumentAdapter:

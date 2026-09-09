@@ -1,4 +1,4 @@
-import base64
+import math
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -6,7 +6,9 @@ from pathlib import Path
 from threading import RLock
 
 from naas_abi_core.services.document.adapters.secondary.document_codec import (
+    encoded_bytes_sort_key,
     sqlite_equal,
+    sqlite_field,
     sqlite_json_key,
 )
 from naas_abi_core.services.document.adapters.secondary.document_sql import DocumentSQL
@@ -14,7 +16,7 @@ from naas_abi_core.services.document.DocumentPort import UniqueViolation
 
 
 class DocumentSecondaryAdapterSQLite(DocumentSQL):
-    """SQLite JSON store. One connection per adapter, serialized across threads."""
+    """File transactions use independent connections; :memory: retains one."""
 
     def __init__(self, path: str = "storage/documents.sqlite", timeout: float = 5.0):
         super().__init__(
@@ -22,7 +24,7 @@ class DocumentSecondaryAdapterSQLite(DocumentSQL):
             documents="abi_documents",
             collections="abi_document_collections",
         )
-        if not path or timeout <= 0:
+        if not path or timeout <= 0 or not math.isfinite(timeout):
             raise ValueError("path must be nonempty and timeout must be positive")
         if sqlite3.sqlite_version_info < (3, 38, 0):
             raise RuntimeError(
@@ -31,23 +33,15 @@ class DocumentSecondaryAdapterSQLite(DocumentSQL):
         if path != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._lock = RLock()
-        self._connection = sqlite3.connect(
-            path, timeout=timeout, check_same_thread=False, isolation_level=None
-        )
-        self._connection.create_function(
-            "document_equal", 2, sqlite_equal, deterministic=True
-        )
-        self._connection.create_function(
-            "document_json_key", 1, sqlite_json_key, deterministic=True
-        )
-        self._connection.create_function(
-            "document_bytes_key",
-            1,
-            lambda value: base64.b64decode(value).hex() if value else "",
-            deterministic=True,
-        )
+        self._path = path
+        self._timeout = timeout
+        self._closed = False
+        self._memory_connection: sqlite3.Connection | None = None
         try:
-            self._connection.execute("PRAGMA journal_mode=WAL")
+            if path == ":memory:":
+                self._memory_connection = self._connect()
+            with self._connection() as connection:
+                connection.execute("PRAGMA journal_mode=WAL")
             with self.transaction(write=True) as connection:
                 connection.execute(
                     "CREATE TABLE IF NOT EXISTS abi_document_collections (namespace TEXT NOT NULL, name TEXT NOT NULL, spec TEXT NOT NULL, PRIMARY KEY (namespace, name))"
@@ -59,15 +53,68 @@ class DocumentSecondaryAdapterSQLite(DocumentSQL):
             self.close()
             raise
 
+    def _connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(
+            self._path,
+            timeout=self._timeout,
+            check_same_thread=False,
+            isolation_level=None,
+        )
+        try:
+            connection.create_function(
+                "document_equal", 2, sqlite_equal, deterministic=True
+            )
+            connection.create_function(
+                "document_field", 2, sqlite_field, deterministic=True
+            )
+            connection.create_function(
+                "document_json_key", 1, sqlite_json_key, deterministic=True
+            )
+            connection.create_function(
+                "document_bytes_key", 1, encoded_bytes_sort_key, deterministic=True
+            )
+            return connection
+        except BaseException:
+            connection.close()
+            raise
+
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("Document adapter is closed")
+            if self._memory_connection is not None:
+                yield self._memory_connection
+                return
+        connection = self._connect()
+        try:
+            yield connection
+        finally:
+            connection.close()
+
+    def ensure_index(
+        self, connection: sqlite3.Connection, name: str, statement: str
+    ) -> None:
+        existing = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?", (name,)
+        ).fetchone()
+        # Repair indexes built using the old JSON-path accessor. Rebuild and
+        # uniqueness validation share ensure_collection's write transaction.
+        if existing is not None and existing[0] != statement.replace(
+            " IF NOT EXISTS", ""
+        ):
+            connection.execute(f"DROP INDEX {name}")
+        super().ensure_index(connection, name, statement)
+
     @contextmanager
     def transaction(self, *, write: bool = False) -> Iterator[sqlite3.Connection]:
-        with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
             try:
-                yield self._connection
-                self._connection.commit()
+                yield connection
+                connection.commit()
             except sqlite3.IntegrityError as exc:
-                self._connection.rollback()
+                connection.rollback()
                 if exc.sqlite_errorcode in (
                     sqlite3.SQLITE_CONSTRAINT_UNIQUE,
                     sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY,
@@ -77,9 +124,12 @@ class DocumentSecondaryAdapterSQLite(DocumentSQL):
                     ) from exc
                 raise
             except BaseException:
-                self._connection.rollback()
+                connection.rollback()
                 raise
 
     def close(self) -> None:
         with self._lock:
-            self._connection.close()
+            self._closed = True
+            if self._memory_connection is not None:
+                self._memory_connection.close()
+                self._memory_connection = None

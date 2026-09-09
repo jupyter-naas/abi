@@ -29,6 +29,13 @@ class DocumentService(ServiceBase):
         super().__init__()
         self.__adapter = adapter
         self.__namespace = validate_name(namespace)
+        self.__can_bind_namespaces = False
+
+    @classmethod
+    def _for_engine(cls, adapter: IDocumentAdapter) -> "DocumentService":
+        root = cls(adapter, namespace="default")
+        root.__can_bind_namespaces = True
+        return root
 
     @property
     def namespace(self) -> str:
@@ -36,7 +43,12 @@ class DocumentService(ServiceBase):
 
     def _for_namespace(self, namespace: str) -> "DocumentService":
         """Composition-root hook; module proxies choose the namespace."""
-        return DocumentService(self.__adapter, namespace)
+        if not self.__can_bind_namespaces:
+            raise PermissionError("A bound document service cannot change namespace")
+        scoped = DocumentService(self.__adapter, namespace)
+        if self.services_wired:
+            scoped.set_services(self.services)
+        return scoped
 
     def ensure_collection(self, spec: CollectionSpec) -> None:
         self.__adapter.ensure_collection(self.__namespace, spec)
