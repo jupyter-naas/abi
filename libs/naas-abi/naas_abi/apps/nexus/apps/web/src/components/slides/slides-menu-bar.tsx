@@ -1,32 +1,194 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, ChevronDown } from 'lucide-react';
+import React, { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SLIDE_LAYOUTS, type SlideLayout } from './slides-outline';
 
 export type SlidesEditorMode = 'preview' | 'code';
 
-type MenuKey = 'file' | 'view' | null;
+type MenuKey = 'file' | 'edit' | 'view' | 'insert' | null;
 
-interface MenuItem {
+export type SlidesMenuEntry = {
   id: string;
-  label: string;
+  label?: string;
   shortcut?: string;
   disabled?: boolean;
   checked?: boolean;
-  onSelect: () => void;
+  separator?: boolean;
+  items?: SlidesMenuEntry[];
+  onSelect?: () => void;
+};
+
+function isSeparator(item: SlidesMenuEntry): boolean {
+  return Boolean(item.separator);
+}
+
+export function isSlidesTypingTarget(target: EventTarget | null): boolean {
+  if (target == null || typeof target !== 'object') return false;
+  const el = target as {
+    tagName?: string;
+    isContentEditable?: boolean;
+    closest?: (selector: string) => unknown;
+  };
+  const tag = (el.tagName || '').toUpperCase();
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (el.isContentEditable) return true;
+  if (typeof el.closest === 'function') {
+    return Boolean(
+      el.closest('input, textarea, select, [contenteditable="true"], .monaco-editor'),
+    );
+  }
+  return false;
+}
+
+export function buildSlidesEditMenu(opts: {
+  canDuplicate: boolean;
+  canDelete: boolean;
+  mod: string;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}): SlidesMenuEntry[] {
+  return [
+    { id: 'undo', label: 'Undo', shortcut: `${opts.mod}Z`, disabled: true },
+    { id: 'redo', label: 'Redo', shortcut: `${opts.mod}Y`, disabled: true },
+    { id: 'sep-history', separator: true },
+    {
+      id: 'duplicate',
+      label: 'Duplicate Slide',
+      disabled: !opts.canDuplicate,
+      onSelect: opts.onDuplicate,
+    },
+    {
+      id: 'delete',
+      label: 'Delete Slide',
+      shortcut: 'Del',
+      disabled: !opts.canDelete,
+      onSelect: opts.onDelete,
+    },
+  ];
+}
+
+export function buildSlidesInsertMenu(opts: {
+  canInsert: boolean;
+  canDuplicate: boolean;
+  onInsert: (layout: SlideLayout) => void;
+  onDuplicate: () => void;
+}): SlidesMenuEntry[] {
+  return [
+    {
+      id: 'new-slide',
+      label: 'New Slide',
+      disabled: !opts.canInsert,
+      items: SLIDE_LAYOUTS.map((layout) => ({
+        id: `layout-${layout.id}`,
+        label: layout.label,
+        disabled: !opts.canInsert,
+        onSelect: () => opts.onInsert(layout.id),
+      })),
+    },
+    {
+      id: 'duplicate',
+      label: 'Duplicate Slide',
+      disabled: !opts.canDuplicate,
+      onSelect: opts.onDuplicate,
+    },
+  ];
+}
+
+function MenuRow({ item, onClose }: { item: SlidesMenuEntry; onClose: () => void }) {
+  const [subOpen, setSubOpen] = useState(false);
+  if (isSeparator(item)) {
+    return <div role="separator" className="my-1 h-px bg-border" />;
+  }
+  const submenu = item.items?.filter((child) => !isSeparator(child));
+  if (submenu?.length) {
+    return (
+      <div
+        className="relative"
+        onMouseEnter={() => {
+          if (!item.disabled) setSubOpen(true);
+        }}
+        onMouseLeave={() => setSubOpen(false)}
+      >
+        <button
+          type="button"
+          role="menuitem"
+          aria-haspopup="menu"
+          aria-expanded={subOpen}
+          disabled={item.disabled}
+          data-testid={`slides-menuitem-${item.id}`}
+          onClick={() => {
+            if (item.disabled) return;
+            setSubOpen((open) => !open);
+          }}
+          className={cn(
+            'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors',
+            item.disabled
+              ? 'cursor-not-allowed text-muted-foreground/50'
+              : 'hover:bg-muted',
+          )}
+        >
+          <span className="w-3.5 shrink-0" />
+          <span className="flex-1">{item.label}</span>
+          <ChevronRight size={12} className="opacity-60" />
+        </button>
+        {subOpen && !item.disabled ? (
+          <div
+            role="menu"
+            data-testid={`slides-submenu-${item.id}`}
+            className="absolute left-full top-0 z-[301] ml-0.5 min-w-[10rem] rounded-md border border-border bg-card py-1 shadow-lg"
+          >
+            {submenu.map((child) => (
+              <MenuRow key={child.id} item={child} onClose={onClose} />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+  return (
+    <button
+      key={item.id}
+      type="button"
+      role="menuitem"
+      disabled={item.disabled}
+      data-testid={`slides-menuitem-${item.id}`}
+      onClick={() => {
+        if (item.disabled || !item.onSelect) return;
+        item.onSelect();
+        onClose();
+      }}
+      className={cn(
+        'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors',
+        item.disabled
+          ? 'cursor-not-allowed text-muted-foreground/50'
+          : 'hover:bg-muted',
+      )}
+    >
+      <span className="w-3.5 shrink-0">
+        {item.checked ? <Check size={12} className="text-workspace-accent" /> : null}
+      </span>
+      <span className="flex-1">{item.label}</span>
+      {item.shortcut ? (
+        <span className="text-[10px] text-muted-foreground">{item.shortcut}</span>
+      ) : null}
+    </button>
+  );
 }
 
 function MenuDropdown({
   label,
+  menuKey,
   open,
   onOpenChange,
   items,
 }: {
   label: string;
+  menuKey: Exclude<MenuKey, null>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  items: MenuItem[];
+  items: SlidesMenuEntry[];
 }) {
   return (
     <div className="relative">
@@ -34,6 +196,7 @@ function MenuDropdown({
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
+        data-testid={`slides-menu-${menuKey}`}
         onClick={() => onOpenChange(!open)}
         className={cn(
           'inline-flex items-center gap-0.5 rounded px-2 py-1 text-xs font-medium transition-colors',
@@ -48,34 +211,11 @@ function MenuDropdown({
       {open && (
         <div
           role="menu"
+          data-testid={`slides-menu-${menuKey}-dropdown`}
           className="absolute left-0 top-full z-[300] mt-1 min-w-[12.5rem] rounded-md border border-border bg-card py-1 shadow-lg"
         >
           {items.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="menuitem"
-              disabled={item.disabled}
-              onClick={() => {
-                if (item.disabled) return;
-                item.onSelect();
-                onOpenChange(false);
-              }}
-              className={cn(
-                'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors',
-                item.disabled
-                  ? 'cursor-not-allowed text-muted-foreground/50'
-                  : 'hover:bg-muted',
-              )}
-            >
-              <span className="w-3.5 shrink-0">
-                {item.checked ? <Check size={12} className="text-workspace-accent" /> : null}
-              </span>
-              <span className="flex-1">{item.label}</span>
-              {item.shortcut ? (
-                <span className="text-[10px] text-muted-foreground">{item.shortcut}</span>
-              ) : null}
-            </button>
+            <MenuRow key={item.id} item={item} onClose={() => onOpenChange(false)} />
           ))}
         </div>
       )}
@@ -103,7 +243,16 @@ export interface SlidesMenuBarProps {
   onExportPdf?: () => void;
   /** File → Export to PPTX. Omit when not on an open deck. */
   onExportPptx?: () => void;
+  /** File → Export HTML. Omit when not on an open deck. */
+  onExportHtml?: () => void;
   exportDisabled?: boolean;
+  /** Edit / Insert slide actions. Omit on index/new pages. */
+  onInsertSlide?: (layout: SlideLayout) => void;
+  insertSlideDisabled?: boolean;
+  onDuplicateSlide?: () => void;
+  duplicateSlideDisabled?: boolean;
+  onDeleteSlide?: () => void;
+  deleteSlideDisabled?: boolean;
   /** View → Preview / Code / Refresh. Omit on index/new pages. */
   mode?: SlidesEditorMode;
   onModeChange?: (mode: SlidesEditorMode) => void;
@@ -115,8 +264,8 @@ export interface SlidesMenuBarProps {
 }
 
 /**
- * Lean PowerPoint/Google Slides-style menu bar wired to existing Slides actions.
- * Menus: File, View (Help deferred).
+ * Lean PowerPoint-style menu bar: File, Edit, View, Insert.
+ * Format / Arrange / Tools stay out of this pass.
  */
 export function SlidesMenuBar({
   onNewPresentation,
@@ -126,7 +275,14 @@ export function SlidesMenuBar({
   saveToMyDriveDisabled,
   onExportPdf,
   onExportPptx,
+  onExportHtml,
   exportDisabled,
+  onInsertSlide,
+  insertSlideDisabled,
+  onDuplicateSlide,
+  duplicateSlideDisabled,
+  onDeleteSlide,
+  deleteSlideDisabled,
   mode,
   onModeChange,
   onRefresh,
@@ -147,15 +303,16 @@ export function SlidesMenuBar({
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
 
-  const fileItems: MenuItem[] = [
+  const fileItems: SlidesMenuEntry[] = [
     {
       id: 'new',
       label: 'New Presentation',
       onSelect: onNewPresentation,
     },
   ];
+  const saveItems: SlidesMenuEntry[] = [];
   if (onCommit) {
-    fileItems.push({
+    saveItems.push({
       id: 'commit',
       label: 'Save',
       shortcut: `${mod}S`,
@@ -164,15 +321,16 @@ export function SlidesMenuBar({
     });
   }
   if (onSaveToMyDrive) {
-    fileItems.push({
+    saveItems.push({
       id: 'save-to-my-drive',
       label: 'Save to My Drive',
       disabled: saveToMyDriveDisabled,
       onSelect: onSaveToMyDrive,
     });
   }
+  const exportItems: SlidesMenuEntry[] = [];
   if (onExportPdf) {
-    fileItems.push({
+    exportItems.push({
       id: 'export-pdf',
       label: 'Print / Save as PDF',
       disabled: exportDisabled,
@@ -180,15 +338,50 @@ export function SlidesMenuBar({
     });
   }
   if (onExportPptx) {
-    fileItems.push({
+    exportItems.push({
       id: 'export-pptx',
       label: 'Export to PPTX',
       disabled: exportDisabled,
       onSelect: onExportPptx,
     });
   }
+  if (onExportHtml) {
+    exportItems.push({
+      id: 'export-html',
+      label: 'Export HTML',
+      disabled: exportDisabled,
+      onSelect: onExportHtml,
+    });
+  }
+  if (saveItems.length) {
+    fileItems.push({ id: 'sep-save', separator: true }, ...saveItems);
+  }
+  if (exportItems.length) {
+    fileItems.push({ id: 'sep-export', separator: true }, ...exportItems);
+  }
 
-  const viewItems: MenuItem[] | null =
+  const showEdit = Boolean(onDuplicateSlide || onDeleteSlide);
+  const editItems = showEdit
+    ? buildSlidesEditMenu({
+        canDuplicate: Boolean(onDuplicateSlide) && !duplicateSlideDisabled,
+        canDelete: Boolean(onDeleteSlide) && !deleteSlideDisabled,
+        mod,
+        onDuplicate: () => onDuplicateSlide?.(),
+        onDelete: () => onDeleteSlide?.(),
+      })
+    : [];
+
+  const showInsert = Boolean(onInsertSlide || onDuplicateSlide);
+  const insertItems = showInsert
+    ? buildSlidesInsertMenu({
+        canInsert: Boolean(onInsertSlide) && !insertSlideDisabled,
+        canDuplicate: Boolean(onDuplicateSlide) && !duplicateSlideDisabled,
+        onInsert: (layout) => onInsertSlide?.(layout),
+        onDuplicate: () => onDuplicateSlide?.(),
+      })
+    : [];
+
+  const viewItems: SlidesMenuEntry[] | null =
     mode && onModeChange
       ? [
           {
@@ -205,13 +398,14 @@ export function SlidesMenuBar({
           },
           ...(onRefresh
             ? [
+                { id: 'sep-refresh', separator: true } satisfies SlidesMenuEntry,
                 {
                   id: 'refresh',
                   label: 'Refresh',
                   shortcut: `${mod}R`,
                   disabled: refreshDisabled,
                   onSelect: onRefresh,
-                } satisfies MenuItem,
+                } satisfies SlidesMenuEntry,
               ]
             : []),
         ]
@@ -228,20 +422,40 @@ export function SlidesMenuBar({
         : null;
 
   return (
-    <div ref={rootRef} className="flex min-w-0 items-center gap-1">
+    <div ref={rootRef} className="flex min-w-0 items-center gap-1" data-testid="slides-menu-bar">
       <span className="mr-1 hidden text-xs font-semibold text-foreground sm:inline">Slides</span>
       <MenuDropdown
         label="File"
+        menuKey="file"
         open={openMenu === 'file'}
         onOpenChange={(open) => setOpenMenu(open ? 'file' : null)}
         items={fileItems}
       />
+      {showEdit && (
+        <MenuDropdown
+          label="Edit"
+          menuKey="edit"
+          open={openMenu === 'edit'}
+          onOpenChange={(open) => setOpenMenu(open ? 'edit' : null)}
+          items={editItems}
+        />
+      )}
       {viewItems && (
         <MenuDropdown
           label="View"
+          menuKey="view"
           open={openMenu === 'view'}
           onOpenChange={(open) => setOpenMenu(open ? 'view' : null)}
           items={viewItems}
+        />
+      )}
+      {showInsert && (
+        <MenuDropdown
+          label="Insert"
+          menuKey="insert"
+          open={openMenu === 'insert'}
+          onOpenChange={(open) => setOpenMenu(open ? 'insert' : null)}
+          items={insertItems}
         />
       )}
       {trailing}

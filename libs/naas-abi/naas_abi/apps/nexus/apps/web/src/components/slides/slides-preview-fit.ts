@@ -64,6 +64,26 @@ export function computeSlidesPreviewScale(
   return Math.min(availWidth / stageWidth, availHeight / stageHeight);
 }
 
+/** Host scrollTop that brings ``index`` into view at the current contain scale. */
+export function slidesPreviewScrollTop(
+  index: number,
+  scale: number,
+  stageHeight = SLIDES_STAGE_HEIGHT,
+): number {
+  if (index <= 0 || scale <= 0 || stageHeight <= 0) return 0;
+  return index * stageHeight * scale;
+}
+
+export function slidesPreviewIndexFromScroll(
+  scrollTop: number,
+  scale: number,
+  stageHeight = SLIDES_STAGE_HEIGHT,
+): number {
+  const step = stageHeight * scale;
+  if (step <= 0) return 0;
+  return Math.max(0, Math.round(scrollTop / step));
+}
+
 /** CSS injected into preview srcDoc so fixed 1280x720 slides fill the stage cleanly. */
 export const SLIDES_PREVIEW_FIT_STYLE_ID = 'nexus-slides-preview-fit';
 export const SLIDES_PREVIEW_BRIDGE_SCRIPT_ID = 'nexus-slides-preview-bridge';
@@ -354,17 +374,24 @@ const HEAD_RE = /<head\b[^>]*>([\s\S]*?)<\/head>/i;
 const HERO_RE = /hero:\s*"((?:\\.|[^"\\])*)"/;
 const HERO_MAX_CHARS = 80_000;
 
-/** First `<section class="slide">` in a deck, or null when none is complete. */
-export function extractFirstSlideHtml(html: string): string | null {
-  if (!html) return null;
+/** The `index`-th `<section class="slide">`, or null when that slide is missing. */
+export function extractSlideHtmlAt(html: string, index: number): string | null {
+  if (!html || index < 0) return null;
   SECTION_RE.lastIndex = 0;
   let match: RegExpExecArray | null;
+  let seen = 0;
   while ((match = SECTION_RE.exec(html))) {
     if (SLIDE_CLASS_RE.test(match[1] || '')) {
-      return match[0];
+      if (seen === index) return match[0];
+      seen += 1;
     }
   }
   return null;
+}
+
+/** First `<section class="slide">` in a deck, or null when none is complete. */
+export function extractFirstSlideHtml(html: string): string | null {
+  return extractSlideHtmlAt(html, 0);
 }
 
 export function extractHeadInnerHtml(html: string): string {
@@ -391,7 +418,12 @@ export function coverHeroCss(html: string): string {
   const match = HERO_RE.exec(html);
   if (!match || match[1].length > HERO_MAX_CHARS) return '';
   const url = match[1].replace(/\\"/g, '"');
-  if (!url.startsWith('data:') && !url.startsWith('http') && !url.startsWith('/')) {
+  if (
+    !url.startsWith('data:') &&
+    !url.startsWith('http') &&
+    !url.startsWith('/') &&
+    !url.startsWith('assets/')
+  ) {
     return '';
   }
   return `:root { --hero: url("${url}"); }`;
@@ -400,11 +432,12 @@ export function coverHeroCss(html: string): string {
 export const SLIDES_COVER_FIT_STYLE_ID = 'nexus-slides-cover-fit';
 
 /**
- * First-slide srcDoc for an index card: head styles plus one `.slide`,
- * locked to the 1280x720 stage. No print/PPTX bridge.
+ * One-slide srcDoc for an index card or filmstrip thumb: head styles plus
+ * one `.slide`, locked to the 1280x720 stage. No print/PPTX bridge.
+ * `index` defaults to the cover (first slide).
  */
-export function prepareSlidesCoverHtml(html: string): string | null {
-  const slide = extractFirstSlideHtml(html);
+export function prepareSlidesCoverHtml(html: string, index = 0): string | null {
+  const slide = extractSlideHtmlAt(html, index);
   if (!slide) return null;
   const head = stripHeadScripts(extractHeadInnerHtml(html));
   const hero = coverHeroCss(html);

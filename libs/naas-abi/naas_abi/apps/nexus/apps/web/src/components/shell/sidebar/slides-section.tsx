@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
-import { ChevronRight, Presentation } from 'lucide-react';
+import { ChevronRight, FolderTree, LayoutGrid, Presentation } from 'lucide-react';
 import {
   DEFAULT_SLIDES_TEMPLATE_ID,
   openSlidesAgentPane,
@@ -19,23 +19,28 @@ import { authFetch } from '@/stores/auth';
 import {
   SLIDES_DECK_UPDATED_EVENT,
   useSlidesStore,
+  type SlidesFilmstripDeck,
   type SlidesProject,
 } from '@/stores/slides';
+import { SlidesFilmstrip } from '@/components/slides/slides-filmstrip';
+import { clampSlideIndex, parseSlidesOutline } from '@/components/slides/slides-outline';
 import { CollapsibleSection } from './collapsible-section';
 import { SidebarNewItem, type SidebarNewItemMenuOption } from './sidebar-new-item';
+import { SidebarToolbar, SidebarToolbarButton } from './sidebar-toolbar';
 import {
   buildSlidesTree,
   initialExpandedSlidesDecks,
   type SlidesProjectTree,
 } from './slides-tree';
 import { SlidesTreeView } from './slides-tree-view';
+import { slidesFilmstripEmptyCopy } from './slides-section-views';
 import { getWorkspacePath } from './utils';
 
 /**
- * Slides sidebar: create and the file tree.
+ * Slides sidebar: Ontology-style view toolbar, then Decks or Filmstrip.
  *
- * Templates hang off the New Slides caret. The home gallery is the main
- * template surface. The tree below is the decks in the workspace repo.
+ * Decks is the file tree. Filmstrip is vertical thumbs for the open deck.
+ * Templates hang off the New Slides caret on the Decks view.
  */
 export function SlidesSection({
   collapsed,
@@ -65,6 +70,12 @@ export function SlidesSection({
   const selectedTitle = useSlidesStore((s) => s.selectedTitle);
   const setSelectedSlug = useSlidesStore((s) => s.setSelectedSlug);
   const setSelectedTitle = useSlidesStore((s) => s.setSelectedTitle);
+  const sidebarView = useSlidesStore((s) => s.sidebarView);
+  const setSidebarView = useSlidesStore((s) => s.setSidebarView);
+  const selectedIndex = useSlidesStore((s) => s.selectedIndex);
+  const setSelectedIndex = useSlidesStore((s) => s.setSelectedIndex);
+  const filmstrip = useSlidesStore((s) => s.filmstrip);
+  const reorderOpenDeck = useSlidesStore((s) => s.reorderOpenDeck);
 
   const openSlug = routeSlug || selectedSlug;
 
@@ -256,104 +267,168 @@ export function SlidesSection({
       collapsed={collapsed}
       detailOnly={detailOnly}
     >
-      <SidebarNewItem
-        label="New Slides"
-        title="New presentation"
-        onClick={() => createDeck(DEFAULT_SLIDES_TEMPLATE_ID)}
-        disabled={creating}
-        menuLabel="Choose a template"
-        menuOptions={templateOptions}
-        menuOpen={templateMenuOpen}
-        onMenuOpenChange={setTemplateMenuOpen}
-      />
+      <div data-testid="slides-sidebar-views">
+        <SidebarToolbar>
+          <SidebarToolbarButton
+            icon={<FolderTree size={14} />}
+            label="Decks"
+            active={sidebarView === 'decks'}
+            pressed={sidebarView === 'decks'}
+            testId="slides-sidebar-view-decks"
+            onClick={() => setSidebarView('decks')}
+          />
+          <SidebarToolbarButton
+            icon={<LayoutGrid size={14} />}
+            label="Filmstrip"
+            active={sidebarView === 'filmstrip'}
+            pressed={sidebarView === 'filmstrip'}
+            testId="slides-sidebar-view-filmstrip"
+            onClick={() => setSidebarView('filmstrip')}
+          />
+        </SidebarToolbar>
+      </div>
 
-      {actionError ? <p className="px-2 pb-1 text-xs text-red-600">{actionError}</p> : null}
+      {sidebarView === 'filmstrip' ? (
+        filmstrip?.html ? (
+          <SlidesSidebarFilmstrip
+            filmstrip={filmstrip}
+            selectedIndex={selectedIndex}
+            onSelect={setSelectedIndex}
+            onReorder={(fromIndex, toIndex) => reorderOpenDeck?.(fromIndex, toIndex)}
+          />
+        ) : (
+          <p className="px-3 py-4 text-xs text-muted-foreground" data-testid="slides-filmstrip-empty">
+            {slidesFilmstripEmptyCopy(Boolean(filmstrip))}
+          </p>
+        )
+      ) : (
+        <>
+          <SidebarNewItem
+            label="New Slides"
+            title="New presentation"
+            onClick={() => createDeck(DEFAULT_SLIDES_TEMPLATE_ID)}
+            disabled={creating}
+            menuLabel="Choose a template"
+            menuOptions={templateOptions}
+            menuOpen={templateMenuOpen}
+            onMenuOpenChange={setTemplateMenuOpen}
+          />
 
-      <SlidesTreeView
-        decks={decks}
-        rootHref={slidesBase}
-        currentPath={pathname}
-        rootExpanded={rootExpanded}
-        onToggleRoot={() => setRootExpanded((open) => !open)}
-        expandedDecks={expandedDecks}
-        onToggleDeck={(slug) =>
-          setExpandedDecks((current) =>
-            current.includes(slug) ? current.filter((s) => s !== slug) : [...current, slug],
-          )
-        }
-        expandedDirs={expandedDirs}
-        onToggleDir={(path) =>
-          setExpandedDirs((current) =>
-            current.includes(path) ? current.filter((p) => p !== path) : [...current, path],
-          )
-        }
-        onOpenDeck={(deck) => {
-          setSelectedSlug(deck.slug);
-          setSelectedTitle(deck.label);
-          openSlidesAgentPane({ slug: deck.slug, title: deck.label });
-        }}
-        renamingSlug={renamingSlug}
-        onStartRename={(slug) => setRenamingSlug(slug)}
-        onRename={(slug, title) => {
-          void renameDeck(slug, title);
-          setRenamingSlug(null);
-        }}
-        onCancelRename={() => setRenamingSlug(null)}
-        onArchive={(slug) => void archiveDeck(slug, true)}
-      />
+          {actionError ? <p className="px-2 pb-1 text-xs text-red-600">{actionError}</p> : null}
 
-      {archived.length > 0 ? (
-        <div className="chat-section-group">
-          <button
-            type="button"
-            data-testid="slides-archived-toggle"
-            onClick={() => setShowArchived((open) => !open)}
-            className="chat-section-show-more"
-          >
-            <ChevronRight
-              size={12}
-              className={`chat-section-show-more-chevron${showArchived ? ' is-expanded' : ''}`}
-            />
-            <span>Archived</span>
-          </button>
-          {showArchived ? (
-            <SlidesTreeView
-              decks={archivedDecks}
-              rootHref={slidesBase}
-              currentPath={pathname}
-              rootExpanded
-              onToggleRoot={() => {}}
-              hideRoot
-              emptyLabel="No archived presentations"
-              expandedDecks={expandedDecks}
-              onToggleDeck={(slug) =>
-                setExpandedDecks((current) =>
-                  current.includes(slug) ? current.filter((s) => s !== slug) : [...current, slug],
-                )
-              }
-              expandedDirs={expandedDirs}
-              onToggleDir={(path) =>
-                setExpandedDirs((current) =>
-                  current.includes(path) ? current.filter((p) => p !== path) : [...current, path],
-                )
-              }
-              onOpenDeck={(deck) => {
-                setSelectedSlug(deck.slug);
-                setSelectedTitle(deck.label);
-                openSlidesAgentPane({ slug: deck.slug, title: deck.label });
-              }}
-              renamingSlug={renamingSlug}
-              onStartRename={(slug) => setRenamingSlug(slug)}
-              onRename={(slug, title) => {
-                void renameDeck(slug, title);
-                setRenamingSlug(null);
-              }}
-              onCancelRename={() => setRenamingSlug(null)}
-              onArchive={(slug) => void archiveDeck(slug, false)}
-            />
+          <SlidesTreeView
+            decks={decks}
+            rootHref={slidesBase}
+            currentPath={pathname}
+            rootExpanded={rootExpanded}
+            onToggleRoot={() => setRootExpanded((open) => !open)}
+            expandedDecks={expandedDecks}
+            onToggleDeck={(slug) =>
+              setExpandedDecks((current) =>
+                current.includes(slug) ? current.filter((s) => s !== slug) : [...current, slug],
+              )
+            }
+            expandedDirs={expandedDirs}
+            onToggleDir={(path) =>
+              setExpandedDirs((current) =>
+                current.includes(path) ? current.filter((p) => p !== path) : [...current, path],
+              )
+            }
+            onOpenDeck={(deck) => {
+              setSelectedSlug(deck.slug);
+              setSelectedTitle(deck.label);
+              openSlidesAgentPane({ slug: deck.slug, title: deck.label });
+            }}
+            renamingSlug={renamingSlug}
+            onStartRename={(slug) => setRenamingSlug(slug)}
+            onRename={(slug, title) => {
+              void renameDeck(slug, title);
+              setRenamingSlug(null);
+            }}
+            onCancelRename={() => setRenamingSlug(null)}
+            onArchive={(slug) => void archiveDeck(slug, true)}
+          />
+
+          {archived.length > 0 ? (
+            <div className="chat-section-group">
+              <button
+                type="button"
+                data-testid="slides-archived-toggle"
+                onClick={() => setShowArchived((open) => !open)}
+                className="chat-section-show-more"
+              >
+                <ChevronRight
+                  size={12}
+                  className={`chat-section-show-more-chevron${showArchived ? ' is-expanded' : ''}`}
+                />
+                <span>Archived</span>
+              </button>
+              {showArchived ? (
+                <SlidesTreeView
+                  decks={archivedDecks}
+                  rootHref={slidesBase}
+                  currentPath={pathname}
+                  rootExpanded
+                  onToggleRoot={() => {}}
+                  hideRoot
+                  emptyLabel="No archived presentations"
+                  expandedDecks={expandedDecks}
+                  onToggleDeck={(slug) =>
+                    setExpandedDecks((current) =>
+                      current.includes(slug) ? current.filter((s) => s !== slug) : [...current, slug],
+                    )
+                  }
+                  expandedDirs={expandedDirs}
+                  onToggleDir={(path) =>
+                    setExpandedDirs((current) =>
+                      current.includes(path) ? current.filter((p) => p !== path) : [...current, path],
+                    )
+                  }
+                  onOpenDeck={(deck) => {
+                    setSelectedSlug(deck.slug);
+                    setSelectedTitle(deck.label);
+                    openSlidesAgentPane({ slug: deck.slug, title: deck.label });
+                  }}
+                  renamingSlug={renamingSlug}
+                  onStartRename={(slug) => setRenamingSlug(slug)}
+                  onRename={(slug, title) => {
+                    void renameDeck(slug, title);
+                    setRenamingSlug(null);
+                  }}
+                  onCancelRename={() => setRenamingSlug(null)}
+                  onArchive={(slug) => void archiveDeck(slug, false)}
+                />
+              ) : null}
+            </div>
           ) : null}
-        </div>
-      ) : null}
+        </>
+      )}
     </CollapsibleSection>
+  );
+}
+
+function SlidesSidebarFilmstrip({
+  filmstrip,
+  selectedIndex,
+  onSelect,
+  onReorder,
+}: {
+  filmstrip: SlidesFilmstripDeck;
+  selectedIndex: number;
+  onSelect: (index: number) => void;
+  onReorder: (fromIndex: number, toIndex: number) => void;
+}) {
+  const slides = parseSlidesOutline(filmstrip.html);
+  return (
+    <SlidesFilmstrip
+      html={filmstrip.html}
+      workspaceId={filmstrip.workspaceId}
+      slug={filmstrip.slug}
+      slides={slides}
+      selectedIndex={clampSlideIndex(selectedIndex, slides.length)}
+      disabled={filmstrip.disabled}
+      onSelect={onSelect}
+      onReorder={onReorder}
+    />
   );
 }

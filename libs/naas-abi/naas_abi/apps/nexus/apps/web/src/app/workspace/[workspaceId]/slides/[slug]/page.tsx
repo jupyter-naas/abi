@@ -1,15 +1,30 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Header } from '@/components/shell/header';
-import { SlidesMenuBar, type SlidesEditorMode } from '@/components/slides/slides-menu-bar';
+import {
+  isSlidesTypingTarget,
+  SlidesMenuBar,
+  type SlidesEditorMode,
+} from '@/components/slides/slides-menu-bar';
 import {
   SlidesPreviewFrame,
   type SlidesPreviewFrameHandle,
 } from '@/components/slides/slides-preview-frame';
+import { downloadSlidesHtml, resolveSlidesPreviewAssets } from '@/components/slides/slides-assets';
+import {
+  clampSlideIndex,
+  deleteSlide,
+  duplicateSlide,
+  insertSlide,
+  parseSlidesOutline,
+  reorderSlides,
+  type SlideLayout,
+  type SlideMutationResult,
+} from '@/components/slides/slides-outline';
 import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
 import {
   openSlidesAgentPane,
@@ -164,6 +179,11 @@ export default function SlidesEditorPage() {
   const slug = typeof params?.slug === 'string' ? params.slug : '';
   const setSelectedSlug = useSlidesStore((s) => s.setSelectedSlug);
   const setSelectedTitle = useSlidesStore((s) => s.setSelectedTitle);
+  const selectedIndex = useSlidesStore((s) => s.selectedIndex);
+  const setSelectedIndex = useSlidesStore((s) => s.setSelectedIndex);
+  const setSlideCount = useSlidesStore((s) => s.setSlideCount);
+  const setFilmstrip = useSlidesStore((s) => s.setFilmstrip);
+  const setReorderOpenDeck = useSlidesStore((s) => s.setReorderOpenDeck);
   const setEditorMode = useSlidesStore((s) => s.setEditorMode);
   const setRuntimeStatus = useSlidesStore((s) => s.setRuntimeStatus);
   const setRuntimeMeta = useSlidesStore((s) => s.setRuntimeMeta);
@@ -185,6 +205,7 @@ export default function SlidesEditorPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [mode, setMode] = useState<SlidesEditorMode>('preview');
+  const [mutating, setMutating] = useState(false);
   const previewRef = useRef<SlidesPreviewFrameHandle>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [previewHtml, setPreviewHtml] = useState('');
@@ -198,6 +219,10 @@ export default function SlidesEditorPage() {
     if (!slug) return;
     openSlidesAgentPane({ slug });
   }, [slug]);
+
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [slug, setSelectedIndex]);
 
   useEffect(() => {
     dirtyRef.current = dirty;
@@ -276,6 +301,12 @@ export default function SlidesEditorPage() {
         setTitle(proj.title);
         setHtml(deck.html);
         setPreviewHtml(deck.html);
+        setSelectedIndex(
+          clampSlideIndex(
+            useSlidesStore.getState().selectedIndex,
+            parseSlidesOutline(deck.html).length,
+          ),
+        );
         setDirty(false);
         setDeckSource(
           deck.source === 'sidecar' || deck.source === 'forgejo' ? deck.source : null,
@@ -331,6 +362,7 @@ export default function SlidesEditorPage() {
       setRuntimeStatus,
       setRuntimeMeta,
       setDeckSource,
+      setSelectedIndex,
       applyRuntime,
     ],
   );
@@ -441,11 +473,19 @@ export default function SlidesEditorPage() {
     refreshRef.current = refresh;
   }, [refresh]);
 
-  // ⌘/Ctrl+S Save, ⌘/Ctrl+R Refresh (intercept browser reload).
+  const deleteSelectedSlideRef = useRef<() => void>(() => {});
+
+  // ⌘/Ctrl+S Save, ⌘/Ctrl+R Refresh (intercept browser reload). Delete slide when not typing.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const mod = event.metaKey || event.ctrlKey;
-      if (!mod) return;
+      if (!mod) {
+        if (event.key === 'Delete' && !isSlidesTypingTarget(event.target)) {
+          event.preventDefault();
+          deleteSelectedSlideRef.current();
+        }
+        return;
+      }
       const key = event.key.toLowerCase();
       if (key === 's') {
         event.preventDefault();
@@ -502,6 +542,122 @@ export default function SlidesEditorPage() {
     }
   };
 
+  const slides = useMemo(() => parseSlidesOutline(html), [html]);
+  const currentIndex = clampSlideIndex(selectedIndex, slides.length);
+
+  // Publish the slide count so the chat pane can tell Abi "slide N of M".
+  useEffect(() => {
+    setSlideCount(slides.length);
+  }, [slides.length, setSlideCount]);
+
+  const applyMutation = useCallback(
+    async (run: () => Promise<SlideMutationResult>, label: string) => {
+      if (!workspaceId || !slug) return;
+      if (dirtyRef.current) {
+        const ok = window.confirm(
+          'Unsaved code edits will be replaced by this slide change. Continue?',
+        );
+        if (!ok) return;
+      }
+      setMutating(true);
+      setError(null);
+      setStatus(null);
+      try {
+        const result = await run();
+        if (result.html) {
+          setHtml(result.html);
+          setPreviewHtml(result.html);
+        }
+        setSelectedIndex(result.section_index);
+        setDirty(false);
+        setStatus(`${label} (${result.section_index + 1}/${result.section_count})`);
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setMutating(false);
+      }
+    },
+    [workspaceId, slug, setSelectedIndex],
+  );
+
+  useEffect(() => {
+    if (!workspaceId || !slug) {
+      setFilmstrip(null);
+      return;
+    }
+    setFilmstrip({
+      workspaceId,
+      slug,
+      html: previewHtml || html,
+      disabled: mutating || loading || !html,
+    });
+  }, [workspaceId, slug, previewHtml, html, mutating, loading, setFilmstrip]);
+
+  useEffect(() => {
+    setReorderOpenDeck((fromIndex, toIndex) => {
+      if (fromIndex === toIndex) return;
+      void applyMutation(
+        () => reorderSlides(workspaceId, slug, fromIndex, toIndex),
+        'Moved slide',
+      );
+    });
+  }, [workspaceId, slug, applyMutation, setReorderOpenDeck]);
+
+  useEffect(() => {
+    return () => {
+      setFilmstrip(null);
+      setReorderOpenDeck(null);
+      setSlideCount(0);
+    };
+  }, [setFilmstrip, setReorderOpenDeck, setSlideCount]);
+
+  const exportHtml = async () => {
+    const live = previewHtml || html;
+    if (!live) {
+      setError('Deck is empty; nothing to export.');
+      return;
+    }
+    setExporting(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const inlined = await resolveSlidesPreviewAssets(live, workspaceId, slug);
+      downloadSlidesHtml(`${slug || 'deck'}.html`, inlined);
+      setStatus('Downloaded self-contained HTML');
+    } catch (e) {
+      setError(`HTML export failed: ${(e as Error).message}`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const slideActionsDisabled = mutating || loading || !html;
+
+  const insertSelectedSlide = (layout: SlideLayout) => {
+    const after = slides.length ? currentIndex : -1;
+    void applyMutation(
+      () => insertSlide(workspaceId, slug, after, layout),
+      'Inserted slide',
+    );
+  };
+
+  const duplicateSelectedSlide = () => {
+    void applyMutation(
+      () => duplicateSlide(workspaceId, slug, currentIndex),
+      'Duplicated slide',
+    );
+  };
+
+  const deleteSelectedSlide = () => {
+    if (slides.length <= 1) return;
+    if (!window.confirm('Delete the selected slide?')) return;
+    void applyMutation(
+      () => deleteSlide(workspaceId, slug, currentIndex),
+      'Deleted slide',
+    );
+  };
+  deleteSelectedSlideRef.current = deleteSelectedSlide;
+
   const menuBar = (
     <SlidesMenuBar
       onNewPresentation={() => {
@@ -516,7 +672,14 @@ export default function SlidesEditorPage() {
       saveToMyDriveDisabled={savingToDrive || loading || !html}
       onExportPdf={() => void exportPdf()}
       onExportPptx={() => void exportPptx()}
+      onExportHtml={() => void exportHtml()}
       exportDisabled={exporting || loading}
+      onInsertSlide={insertSelectedSlide}
+      insertSlideDisabled={slideActionsDisabled}
+      onDuplicateSlide={duplicateSelectedSlide}
+      duplicateSlideDisabled={slideActionsDisabled || !slides.length}
+      onDeleteSlide={deleteSelectedSlide}
+      deleteSlideDisabled={slideActionsDisabled || slides.length <= 1}
       mode={mode}
       onModeChange={setMode}
       onRefresh={() => void refresh()}
@@ -599,7 +762,8 @@ export default function SlidesEditorPage() {
         </div>
       )}
 
-      <div className="relative min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="relative min-h-0 flex-1">
         {/* Keep iframe mounted so PPTX export and live preview stay warm. */}
         <div
           className={cn(
@@ -608,7 +772,14 @@ export default function SlidesEditorPage() {
           )}
           aria-hidden={mode !== 'preview'}
         >
-          <SlidesPreviewFrame ref={previewRef} html={previewHtml} />
+          <SlidesPreviewFrame
+            ref={previewRef}
+            html={previewHtml}
+            workspaceId={workspaceId}
+            slug={slug}
+            selectedIndex={currentIndex}
+            onSelectedIndexChange={setSelectedIndex}
+          />
         </div>
 
         {mode === 'code' && (
@@ -644,6 +815,7 @@ export default function SlidesEditorPage() {
             />
           </div>
         )}
+        </div>
       </div>
 
       <SlidesStatusBar onRefresh={() => void refresh()} refreshing={refreshing} />

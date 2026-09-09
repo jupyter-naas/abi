@@ -10,10 +10,13 @@ import {
   useState,
 } from 'react';
 import { cn } from '@/lib/utils';
+import { resolveSlidesPreviewAssets } from './slides-assets';
 import {
   computeSlidesPreviewScale,
   isSlidesPreviewMessage,
   prepareSlidesPreviewHtml,
+  slidesPreviewIndexFromScroll,
+  slidesPreviewScrollTop,
   SLIDES_PDF_EXPORT_ACK_MS,
   SLIDES_PREVIEW_MESSAGE_SOURCE,
   SLIDES_STAGE_HEIGHT,
@@ -28,8 +31,12 @@ export interface SlidesPreviewFrameHandle {
 
 export interface SlidesPreviewFrameProps {
   html: string;
+  workspaceId?: string;
+  slug?: string;
   className?: string;
   title?: string;
+  selectedIndex?: number;
+  onSelectedIndexChange?: (index: number) => void;
 }
 
 /**
@@ -40,18 +47,42 @@ export interface SlidesPreviewFrameProps {
  * Sandbox omits allow-same-origin so deck scripts cannot touch Nexus storage
  * or make credentialed same-origin requests. Height, PPTX, and PDF export use
  * a constrained postMessage bridge injected into srcDoc. allow-modals is
- * required so File → Export to PDF can open the browser print dialog.
+ * required so File, Print / Save as PDF can open the browser print dialog.
+ *
+ * Relative ``assets/`` paths 404 inside srcDoc. The parent fetches the slides
+ * asset route with Bearer auth and inlines data-URLs before setting srcDoc.
  */
 export const SlidesPreviewFrame = forwardRef<
   SlidesPreviewFrameHandle,
   SlidesPreviewFrameProps
->(function SlidesPreviewFrame({ html, className, title = 'Slides preview' }, ref) {
+>(function SlidesPreviewFrame(
+  {
+    html,
+    workspaceId = '',
+    slug = '',
+    className,
+    title = 'Slides preview',
+    selectedIndex = 0,
+    onSelectedIndexChange,
+  },
+  ref,
+) {
   const hostRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [scale, setScale] = useState(1);
   const [docHeight, setDocHeight] = useState(SLIDES_STAGE_HEIGHT);
   const [hostHeight, setHostHeight] = useState(0);
-  const previewHtml = prepareSlidesPreviewHtml(html);
+  const [previewHtml, setPreviewHtml] = useState(() => prepareSlidesPreviewHtml(html));
+
+  useEffect(() => {
+    let cancelled = false;
+    void resolveSlidesPreviewAssets(html, workspaceId, slug).then((resolved) => {
+      if (!cancelled) setPreviewHtml(prepareSlidesPreviewHtml(resolved));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [html, workspaceId, slug]);
   const exportWaiters = useRef<
     Array<{
       resolve: () => void;
@@ -116,6 +147,22 @@ export const SlidesPreviewFrame = forwardRef<
     // Reset height while a new srcDoc loads; bridge will report metrics.
     setDocHeight(SLIDES_STAGE_HEIGHT);
   }, [previewHtml]);
+
+  const ignoreScrollRef = useRef(false);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const target = slidesPreviewScrollTop(selectedIndex, scale);
+    ignoreScrollRef.current = true;
+    if (Math.abs(host.scrollTop - target) >= SLIDES_STAGE_HEIGHT * scale * 0.25) {
+      host.scrollTo({ top: target });
+    }
+    const timer = window.setTimeout(() => {
+      ignoreScrollRef.current = false;
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [selectedIndex, scale, previewHtml]);
 
   useImperativeHandle(
     ref,
@@ -186,6 +233,13 @@ export const SlidesPreviewFrame = forwardRef<
     <div
       ref={hostRef}
       className={cn('absolute inset-0 overflow-auto bg-neutral-950', className)}
+      onScroll={() => {
+        if (!onSelectedIndexChange || ignoreScrollRef.current) return;
+        const host = hostRef.current;
+        if (!host) return;
+        const next = slidesPreviewIndexFromScroll(host.scrollTop, scale);
+        if (next !== selectedIndex) onSelectedIndexChange(next);
+      }}
     >
       <div
         className="mx-auto"

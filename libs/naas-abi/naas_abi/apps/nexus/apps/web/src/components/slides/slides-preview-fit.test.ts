@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeSlidesPreviewScale,
+  slidesPreviewIndexFromScroll,
+  slidesPreviewScrollTop,
   coverHeroCss,
   deckBufferHasCover,
   extractFirstSlideHtml,
+  extractSlideHtmlAt,
   prepareSlidesCoverHtml,
   prepareSlidesPreviewHtml,
   readDeckCoverHtml,
@@ -35,6 +38,14 @@ describe('computeSlidesPreviewScale', () => {
   it('returns 1 for non-positive inputs', () => {
     expect(computeSlidesPreviewScale(0, 720)).toBe(1);
     expect(computeSlidesPreviewScale(1280, -1)).toBe(1);
+  });
+});
+
+describe('slidesPreviewScrollTop', () => {
+  it('maps a selected index to host scroll at the current scale', () => {
+    expect(slidesPreviewScrollTop(0, 0.5)).toBe(0);
+    expect(slidesPreviewScrollTop(2, 0.5)).toBe(2 * SLIDES_STAGE_HEIGHT * 0.5);
+    expect(slidesPreviewIndexFromScroll(SLIDES_STAGE_HEIGHT * 0.5, 0.5)).toBe(1);
   });
 });
 
@@ -146,8 +157,20 @@ describe('prepareSlidesCoverHtml', () => {
     expect(prepareSlidesCoverHtml('<html><body>no slides</body></html>')).toBeNull();
   });
 
+  it('builds a filmstrip thumb for a later slide', () => {
+    const thumb = prepareSlidesCoverHtml(TWO_SLIDE_DECK, 1);
+    expect(thumb).toContain('Agenda');
+    expect(thumb).not.toContain('Cover Title');
+    expect(thumb).toContain(`id="${SLIDES_COVER_FIT_STYLE_ID}"`);
+  });
+
   it('reads a small hero data URL for the cover band', () => {
     expect(coverHeroCss(TWO_SLIDE_DECK)).toContain('data:image/svg+xml,hero');
+  });
+
+  it('allows a relative assets/ hero after seed extraction', () => {
+    const html = 'const IMG = { hero: "assets/img-001.jpg" };';
+    expect(coverHeroCss(html)).toContain('url("assets/img-001.jpg")');
   });
 });
 
@@ -164,6 +187,16 @@ describe('extractFirstSlideHtml', () => {
       '<section class="notes">skip</section><section class="slide cover"><h1>Keep</h1></section>';
     expect(extractFirstSlideHtml(html)).toContain('Keep');
     expect(extractFirstSlideHtml(html)).not.toContain('skip');
+  });
+});
+
+describe('extractSlideHtmlAt', () => {
+  it('returns the slide at the filmstrip index', () => {
+    expect(extractSlideHtmlAt(TWO_SLIDE_DECK, 0)).toContain('Cover Title');
+    expect(extractSlideHtmlAt(TWO_SLIDE_DECK, 1)).toContain('Agenda');
+    expect(extractSlideHtmlAt(TWO_SLIDE_DECK, 1)).not.toContain('Cover Title');
+    expect(extractSlideHtmlAt(TWO_SLIDE_DECK, 2)).toBeNull();
+    expect(extractSlideHtmlAt('', 0)).toBeNull();
   });
 });
 

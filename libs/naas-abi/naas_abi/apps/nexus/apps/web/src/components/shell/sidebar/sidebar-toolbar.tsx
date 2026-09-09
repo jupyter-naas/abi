@@ -33,6 +33,8 @@ export function SidebarToolbarButton({
   disabled = false,
   spinning = false,
   active = false,
+  pressed,
+  testId,
   className,
 }: {
   icon: React.ReactNode;
@@ -44,6 +46,9 @@ export function SidebarToolbarButton({
   spinning?: boolean;
   /** Highlights the button with the accent color (e.g. for the active view). */
   active?: boolean;
+  /** When set, the button is a toggle (view switcher). */
+  pressed?: boolean;
+  testId?: string;
   className?: string;
 }) {
   return (
@@ -53,6 +58,8 @@ export function SidebarToolbarButton({
       disabled={disabled}
       title={label}
       aria-label={label}
+      aria-pressed={pressed}
+      data-testid={testId}
       className={cn(
         'flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-workspace-accent-10 hover:text-workspace-accent disabled:opacity-50',
         active && 'bg-workspace-accent-10 text-workspace-accent',
