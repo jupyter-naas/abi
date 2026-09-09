@@ -507,7 +507,7 @@ button.chat-slides-composer-row:hover {
 
 .chat-slides-composer-row-name {
   overflow: hidden;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   line-height: 1.3;
   color: var(--foreground-hex);
@@ -521,7 +521,7 @@ button.chat-slides-composer-row:hover {
 
 .chat-slides-composer-row-hint {
   overflow: hidden;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.35;
   color: var(--muted-foreground-hex);
   text-overflow: ellipsis;
@@ -543,23 +543,24 @@ button.chat-slides-composer-row:hover {
   color: var(--muted-foreground-hex);
 }
 
-/* Agent-scoped "Suggestions" container above the composer: a clickable
-   header that expands in place. Sits flush on the composer input box
-   below it — shared border, no gap; the composer box drops its own top
-   border/radius (see the showSuggestionsBlock ternary on the input shell
-   in chat-interface.tsx) so the two read as one seamless card. */
-.chat-suggestions-block {
+/* Shared "Suggestions" / "Files" containers above the composer: clickable
+   headers that expand in place. They can stack (Suggestions above Files)
+   and sit flush on the composer input box below them — shared border, no
+   gap; only the topmost block gets the top border/radius, and the
+   composer box drops its own top border/radius (see showComposerHeaderBlock
+   in chat-interface.tsx) so the whole stack reads as one seamless card. */
+.chat-composer-header-block {
   overflow: hidden;
   /* Slightly distinct from the composer input's --card-hex below it. */
   background: color-mix(in srgb, var(--muted-bg-hex) 55%, var(--card-hex));
 }
 
-.chat-suggestions-toggle {
+.chat-composer-header-toggle {
   display: flex;
   width: 100%;
   align-items: center;
   gap: 5px;
-  padding: 4px 5px;
+  padding: 2px 5px;
   border: none;
   background: transparent;
   font-size: 11px;
@@ -568,24 +569,24 @@ button.chat-slides-composer-row:hover {
   text-align: left;
 }
 
-.chat-suggestions-toggle:hover {
+.chat-composer-header-toggle:hover {
   background: color-mix(in srgb, var(--muted-foreground-hex) 8%, transparent);
 }
 
-.chat-suggestions-toggle-label {
-  font-size: 10px;
+.chat-composer-header-toggle-label {
+  font-size: 9px;
   font-weight: 400;
 }
 
-.chat-suggestions-toggle-chevron {
+.chat-composer-header-toggle-chevron {
   transition: transform 0.15s ease;
 }
 
-.chat-suggestions-toggle-chevron.is-open {
+.chat-composer-header-toggle-chevron.is-open {
   transform: rotate(90deg);
 }
 
-.chat-suggestions-list {
+.chat-composer-header-list {
   padding-top: 0;
 }
 

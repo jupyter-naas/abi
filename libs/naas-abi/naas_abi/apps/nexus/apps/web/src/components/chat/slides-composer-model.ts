@@ -3,7 +3,6 @@ import {
   type SlidesProjectTree,
   type SlidesTreeFileNode,
 } from '@/components/shell/sidebar/slides-tree';
-import type { SlidesRuntimeStatus } from '@/stores/slides';
 
 export type SlidesComposerFile = {
   name: string;
@@ -45,12 +44,4 @@ export function slidesComposerFiles(
 ): SlidesComposerFile[] {
   if (!tree) return slidesComposerFallbackFiles(fallbackPath);
   return flattenSlidesComposerFiles(slidesTreeFileNodes(tree, { deckOpen: true }));
-}
-
-export function slidesComposerRuntimeSuffix(
-  runtime?: SlidesRuntimeStatus | null,
-): string {
-  if (runtime === 'error' || runtime === 'degraded') return 'Forgejo fallback';
-  if (runtime === 'ready') return 'workspace';
-  return '';
 }

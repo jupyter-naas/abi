@@ -26,7 +26,7 @@ import {
   slidesDeckTitleFromToolOutput,
 } from '@/components/slides/slides-deck-card';
 import { SlidesDeckCardView } from '@/components/slides/slides-deck-card-view';
-import { SlidesComposerContext, SlidesComposerTabs } from './slides-composer-chrome';
+import { FilesBlock } from './files-block';
 import { SuggestionsBlock } from './suggestions-block';
 import { slidesEmptyStateCopy } from './slides-empty-state';
 import { templateDisplayName } from '@/lib/slides-templates';
@@ -936,7 +936,6 @@ export function ChatInterface({
   const slidesMode = useSlidesStore((s) => s.editorMode);
   const slidesSelectedIndex = useSlidesStore((s) => s.selectedIndex);
   const slidesSlideCount = useSlidesStore((s) => s.slideCount);
-  const slidesRuntimeStatus = useSlidesStore((s) => s.runtimeStatus);
   const slidesChatContext = useMemo(() => {
     const onSlides =
       typeof pathname === 'string' && pathname.includes('/slides') && Boolean(slidesSlug);
@@ -2789,13 +2788,15 @@ export function ChatInterface({
     setInput('');
   }, [input, isLoading]);
 
-  // Whether the "Suggestions" container renders above the composer input box.
-  // Always shown for the selected agent (new or existing conversations alike).
-  // Drives the input box dropping its own top border/radius so the two read
-  // as one seamless card with no gap between them.
+  // Whether the "Suggestions" / "Files" containers render above the composer
+  // input box. Always shown for the selected agent / open deck (new or
+  // existing conversations alike). Drives the input box dropping its own
+  // top border/radius so the whole stack reads as one seamless card with no
+  // gap between them.
   const showSuggestionsBlock =
-    !(isPane && slidesChatContext) &&
     activeSuggestions(selectedAgentData?.suggestions as ChatSuggestion[] | undefined).length > 0;
+  const showFilesBlock = isPane && !!slidesChatContext;
+  const showComposerHeaderBlock = showSuggestionsBlock || showFilesBlock;
 
   return (
     <div className="relative flex h-full min-h-0 flex-1">
@@ -2854,15 +2855,23 @@ export function ChatInterface({
       <div className="chat-composer-root mt-auto shrink-0 px-4">
         <div className="mx-auto max-w-3xl">
           {isPane && slidesChatContext ? (
-            <SlidesComposerTabs
-              slug={slidesChatContext.slides.slug}
-              path={slidesChatContext.slides.path}
-              workspaceId={currentWorkspaceId}
-              suggestions={selectedAgentData?.suggestions}
-              onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
-              onSuggestionHover={(value) => setInput(value)}
-              onSuggestionLeave={() => setInput('')}
-            />
+            <>
+              {showSuggestionsBlock && (
+                <SuggestionsBlock
+                  agentId={selectedAgent}
+                  suggestions={selectedAgentData?.suggestions}
+                  onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
+                  onSuggestionHover={(value) => setInput(value)}
+                  onSuggestionLeave={() => setInput('')}
+                />
+              )}
+              <FilesBlock
+                slug={slidesChatContext.slides.slug}
+                path={slidesChatContext.slides.path}
+                workspaceId={currentWorkspaceId}
+                topmost={!showSuggestionsBlock}
+              />
+            </>
           ) : (
             showSuggestionsBlock && (
               <SuggestionsBlock
@@ -3008,19 +3017,11 @@ export function ChatInterface({
               </div>
             )}
 
-            {isPane && slidesChatContext && (
-              <SlidesComposerContext
-                title={slidesChatContext.slides.title}
-                path={slidesChatContext.slides.path}
-                runtime={slidesRuntimeStatus}
-              />
-            )}
-
             {voiceMode === 'idle' ? (
             <div
               className={cn(
                 'relative border bg-card transition-colors',
-                showSuggestionsBlock ? 'rounded-b-2xl border-t-0' : 'rounded-2xl',
+                showComposerHeaderBlock ? 'rounded-b-2xl border-t-0' : 'rounded-2xl',
                 isDragOver
                   ? 'border-workspace-accent border-2 bg-workspace-accent/5'
                   : 'border-border/50',

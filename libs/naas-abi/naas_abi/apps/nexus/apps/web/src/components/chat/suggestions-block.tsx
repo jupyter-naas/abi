@@ -6,6 +6,7 @@ import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { activeSuggestions, suggestionHint, type ChatSuggestion } from '@/lib/suggestion-row';
+import { createPersistedOpenState } from '@/lib/persisted-open-state';
 
 // Maps CTA paths to their corresponding SidebarSection IDs.
 const CTA_SECTION_MAP: Record<string, SidebarSection> = {
@@ -13,75 +14,45 @@ const CTA_SECTION_MAP: Record<string, SidebarSection> = {
   '/apps': 'apps',
 };
 
-// Open/collapsed state per agent, persisted to localStorage so it survives
-// agent switches, conversation changes, and page reloads. An in-memory
-// cache avoids re-parsing the stored blob on every render.
-const STORAGE_KEY = 'nexus.chat.suggestionsOpenByAgent';
-const openStateCache = new Map<string, boolean>();
-
-function readStoredOpenMap(): Record<string, boolean> {
-  if (typeof window === 'undefined') return {};
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
-  } catch {
-    return {};
-  }
-}
-
-function loadOpenState(agentId: string): boolean {
-  const cached = openStateCache.get(agentId);
-  if (cached !== undefined) return cached;
-  const value = readStoredOpenMap()[agentId] ?? false;
-  openStateCache.set(agentId, value);
-  return value;
-}
-
-function saveOpenState(agentId: string, value: boolean): void {
-  openStateCache.set(agentId, value);
-  if (typeof window === 'undefined') return;
-  try {
-    const map = readStoredOpenMap();
-    map[agentId] = value;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
-  } catch {
-    // Best-effort persistence only.
-  }
-}
+const openState = createPersistedOpenState('nexus.chat.suggestionsOpenByAgent');
 
 /**
  * Agent-scoped "Suggestions" container above the composer: a single
  * clickable header that expands in place to reveal the full suggestion
- * list. Sits flush on top of the composer input box (shared border, no
- * gap) via `.chat-suggestions-block` in chat-agent-selector.css.
+ * list. Can stack with `FilesBlock` (Suggestions on top) and sits flush on
+ * the composer input box below the stack — shared border, no gap — via
+ * `.chat-composer-header-block` in chat-agent-selector.css.
  */
 export function SuggestionsBlock({
   agentId,
   suggestions,
+  topmost = true,
   onSuggestionClick,
   onSuggestionHover,
   onSuggestionLeave,
 }: {
   agentId?: string | null;
   suggestions?: ChatSuggestion[];
+  /** Whether this is the first block in the stack (gets the top border/radius). */
+  topmost?: boolean;
   onSuggestionClick: (prompt: string) => void;
   onSuggestionHover?: (value: string) => void;
   onSuggestionLeave?: () => void;
 }) {
   const router = useRouter();
   const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
-  const [open, setOpen] = useState(() => (agentId ? loadOpenState(agentId) : false));
+  const [open, setOpen] = useState(() => (agentId ? openState.load(agentId) : false));
   const chips = useMemo(() => activeSuggestions(suggestions), [suggestions]);
 
   // Restore the remembered state whenever the agent underneath it changes.
   useEffect(() => {
-    setOpen(agentId ? loadOpenState(agentId) : false);
+    setOpen(agentId ? openState.load(agentId) : false);
   }, [agentId]);
 
   const toggleOpen = () => {
     setOpen((value) => {
       const next = !value;
-      if (agentId) saveOpenState(agentId, next);
+      if (agentId) openState.save(agentId, next);
       return next;
     });
   };
@@ -100,22 +71,27 @@ export function SuggestionsBlock({
   };
 
   return (
-    <div className="chat-suggestions-block rounded-t-2xl border border-border/50">
+    <div
+      className={cn(
+        'chat-composer-header-block border-x border-b border-border/50',
+        topmost && 'rounded-t-2xl border-t',
+      )}
+    >
       <button
         type="button"
-        className="chat-suggestions-toggle"
+        className="chat-composer-header-toggle"
         aria-expanded={open}
         onClick={toggleOpen}
       >
         <ChevronRight
           size={12}
-          className={cn('chat-suggestions-toggle-chevron shrink-0', open && 'is-open')}
+          className={cn('chat-composer-header-toggle-chevron shrink-0', open && 'is-open')}
         />
-        <span className="chat-suggestions-toggle-label">{chips.length} Suggestions</span>
+        <span className="chat-composer-header-toggle-label">{chips.length} Suggestions</span>
       </button>
       {open && (
         <ul
-          className="chat-slides-composer-list chat-suggestions-list"
+          className="chat-slides-composer-list chat-composer-header-list"
           aria-label="Suggested questions"
           onMouseLeave={() => onSuggestionLeave?.()}
         >
