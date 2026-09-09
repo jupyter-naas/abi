@@ -145,7 +145,18 @@ _CONVENTIONAL_COMMIT_RE = re.compile(
 
 def _conventional_message(message: str, *, default_type: str = "chore") -> str:
     """Coerce a commit message into Conventional Commits so `slides_history`
-    and Forgejo log a real changelog instead of free text per tool call."""
+    and Forgejo log a real changelog instead of free text per tool call.
+
+    ``default_type`` should reflect what the *calling tool* does (feat for
+    additions like insert/duplicate slide, fix for corrections like
+    replace_in_slides_deck, refactor for restructuring, style for reordering)
+    so an LLM-authored free-text message (no ``type(scope):`` prefix of its
+    own) still lands in the semver bucket the edit actually belongs to,
+    instead of the non-bumping "chore" default. A deck has no public API, so
+    there is no "breaking change" concept here: `_semver_from_commits` keeps
+    major pinned at 0 and treats a `!` breaking marker the same as `feat`
+    (bump minor) — nothing in this module needs to detect breaking changes.
+    """
     text = (message or "").strip() or "update slides deck"
     if _CONVENTIONAL_COMMIT_RE.match(text):
         return text
@@ -233,7 +244,7 @@ def _ensure_project_json(
             repo_id=repo_id,
             path=paths["project_path"],
             content=json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
-            message=f"Name slides project {slug}",
+            message=f"chore(slides): name project {slug}",
             branch=paths["branch"],
         )
     except SourceControlError:
@@ -526,7 +537,9 @@ def _load_deck_via_forgejo(slug: str) -> str | dict[str, Any]:
     return file.text
 
 
-def _commit_deck_forgejo(slug: str, html: str, message: str) -> dict[str, Any]:
+def _commit_deck_forgejo(
+    slug: str, html: str, message: str, *, default_type: str = "chore"
+) -> dict[str, Any]:
     paths = _ensure_slides_write_paths(slug)
     if paths.get("error"):
         return {"error": paths["error"], "source": "forgejo"}
@@ -536,7 +549,7 @@ def _commit_deck_forgejo(slug: str, html: str, message: str) -> dict[str, Any]:
             repo_id=_repo_id(),
             path=paths["deck_path"],
             content=html,
-            message=_conventional_message(message),
+            message=_conventional_message(message, default_type=default_type),
             branch=paths["branch"],
         )
     except SourceControlError as exc:
@@ -570,11 +583,20 @@ def _load_deck_text(slug: str) -> tuple[str | dict[str, Any], str]:
     return forgejo, "forgejo"
 
 
-def _persist_deck(slug: str, html: str, message: str) -> dict[str, Any]:
+def _persist_deck(
+    slug: str, html: str, message: str, *, default_type: str = "chore"
+) -> dict[str, Any]:
     """Write editing context (sidecar) then version storage (Forgejo).
 
     Product truth when the slides runtime is up: Coder/sidecar is the live
     editing copy. Forgejo is the commit/history snapshot (Save + dual-write).
+
+    ``default_type`` is the Conventional Commits type this *tool* implies
+    (feat for additions, fix/refactor for edits, ...) — used only when
+    ``message`` is free text without its own ``type(scope):`` prefix, so an
+    LLM-authored descriptive message (e.g. "Update event date on cover
+    slide") still buckets into the right semver bump instead of always
+    falling back to the non-bumping "chore" type.
     """
     sources: list[str] = []
     sidecar_result: dict[str, Any] | None = None
@@ -586,7 +608,7 @@ def _persist_deck(slug: str, html: str, message: str) -> dict[str, Any]:
             # Keep going: Forgejo write still updates version storage.
             sources.append("sidecar-failed")
     try:
-        forgejo = _commit_deck_forgejo(slug, html, message)
+        forgejo = _commit_deck_forgejo(slug, html, message, default_type=default_type)
         if forgejo.get("error"):
             if sidecar_result and sidecar_result.get("ok"):
                 return {
@@ -1339,6 +1361,8 @@ def _run_slide_mutation(
     mutate,
     message: str,
     write_label: str,
+    *,
+    default_type: str = "chore",
 ) -> dict[str, Any]:
     """Load, mutate, persist. Strip HTML so the model never sees the deck body."""
     if not agent_user_id.get():
@@ -1353,7 +1377,9 @@ def _run_slide_mutation(
         mutated = mutate(original)
         if mutated.get("error"):
             return {k: v for k, v in mutated.items() if k != "html"}
-        result = _persist_deck(resolved, str(mutated["html"]), message)
+        result = _persist_deck(
+            resolved, str(mutated["html"]), message, default_type=default_type
+        )
         if "error" not in result:
             note_slides_write(write_label)
             result["ok"] = True
@@ -1670,7 +1696,10 @@ def slides_tools() -> list[BaseTool]:
                 return applied
             new_html, written = applied
             result = _persist_deck(
-                resolved, new_html, message or "refactor(slides): rewrite section via Abi"
+                resolved,
+                new_html,
+                message or "refactor(slides): rewrite section via Abi",
+                default_type="refactor",
             )
             if "error" not in result and written:
                 result["section_index"] = written[0]
@@ -1716,7 +1745,10 @@ def slides_tools() -> list[BaseTool]:
                 return applied
             new_html, written = applied
             result = _persist_deck(
-                resolved, new_html, message or "refactor(slides): rewrite sections via Abi"
+                resolved,
+                new_html,
+                message or "refactor(slides): rewrite sections via Abi",
+                default_type="refactor",
             )
             if "error" not in result and written:
                 labels = [f"slide {idx + 1}" for idx in written]
@@ -1787,7 +1819,10 @@ def slides_tools() -> list[BaseTool]:
                 return applied
             updated, count, replaced, resolved_section = applied
             result = _persist_deck(
-                resolved, updated, message or "fix(slides): replace text via Abi"
+                resolved,
+                updated,
+                message or "fix(slides): replace text via Abi",
+                default_type="fix",
             )
             if "error" not in result:
                 label = (
@@ -1930,7 +1965,10 @@ def slides_tools() -> list[BaseTool]:
                 _restore_redacted_data_urls(html, original) if original else html
             )
             result = _persist_deck(
-                resolved, content, message or "refactor(slides): rewrite deck via Abi"
+                resolved,
+                content,
+                message or "refactor(slides): rewrite deck via Abi",
+                default_type="refactor",
             )
             if "error" not in result:
                 note_slides_write("full deck")
@@ -1960,6 +1998,7 @@ def slides_tools() -> list[BaseTool]:
             ),
             message or "feat(slides): insert slide via Abi",
             "insert slide",
+            default_type="feat",
         )
 
     @tool
@@ -1977,6 +2016,7 @@ def slides_tools() -> list[BaseTool]:
             lambda html: _delete_slide_html(html, index),
             message or "refactor(slides): delete slide via Abi",
             f"delete slide {index + 1}",
+            default_type="refactor",
         )
 
     @tool
@@ -1994,6 +2034,7 @@ def slides_tools() -> list[BaseTool]:
             lambda html: _duplicate_slide_html(html, index),
             message or "feat(slides): duplicate slide via Abi",
             f"duplicate slide {index + 1}",
+            default_type="feat",
         )
 
     @tool
@@ -2024,6 +2065,7 @@ def slides_tools() -> list[BaseTool]:
             _mutate,
             message or "style(slides): reorder slides via Abi",
             "reorder slides",
+            default_type="style",
         )
 
     @tool

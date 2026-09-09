@@ -87,6 +87,16 @@ describe('prepareSlidesPreviewHtml', () => {
     expect(twice).toBe(once);
   });
 
+  it('waits for every <img> before posting images-ready', () => {
+    const src = '<!doctype html><html><head></head><body><main class="deck"></main></body></html>';
+    const out = prepareSlidesPreviewHtml(src);
+    expect(out).toContain('waitForImages');
+    expect(out).toContain("type: 'images-ready'");
+    const onReadyAt = out.indexOf('function onReady()');
+    const waitForImagesCallAt = out.indexOf('waitForImages().then');
+    expect(waitForImagesCallAt).toBeGreaterThan(onReadyAt);
+  });
+
   it('overrides a hardcoded seed buildPptx with the DOM walker', () => {
     const src =
       '<!doctype html><html><head></head><body><main class="deck"></main>' +

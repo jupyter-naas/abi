@@ -610,7 +610,7 @@ button.chat-slides-composer-row:hover {
 }
 
 /* Version tag: pinned to the right (margin-left: auto) regardless of the
-   name's width; a small pill so it reads as a git-style version tag. */
+   name's width. */
 .chat-composer-info-version-tag {
   display: flex;
   flex-shrink: 0;
@@ -618,8 +618,6 @@ button.chat-slides-composer-row:hover {
   gap: 3px;
   margin-left: auto;
   padding: 1px 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--muted-foreground-hex) 10%, transparent);
 }
 
 

@@ -16,8 +16,10 @@ const VERSION_VALIDATED = true;
  * Deck identity strip above the composer, Slides only: the presentation's
  * folder name plus a 0.x semver derived from its Conventional Commits
  * history (see the backend's `_semver_from_commits`). Static info, not
- * collapsible like Suggestions/Files — always the first block in the stack
- * so it always owns the top border/radius.
+ * collapsible like Suggestions/Files — always the *last* block in the
+ * stack, directly touching the composer input box. Picks up the top
+ * border/radius itself via `first:` only when Suggestions/Files are both
+ * absent (e.g. brand-new deck, no suggestions for the agent).
  */
 export function PresentationInfoBlock({
   slug,
@@ -48,20 +50,26 @@ export function PresentationInfoBlock({
     };
     setVersion(null);
     void fetchVersion();
+    const timers: number[] = [];
     const onUpdated = (event: Event) => {
       const updated = (event as CustomEvent<{ slug?: string }>).detail?.slug;
       if (updated && updated !== slug) return;
       void fetchVersion();
+      // The git backend's commit-log read can lag the write that triggered
+      // this event by a beat; reconcile once more so the pill doesn't stay
+      // on the pre-edit version.
+      timers.push(window.setTimeout(() => void fetchVersion(), 1000));
     };
     window.addEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
     return () => {
       cancelled = true;
       window.removeEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
+      timers.forEach((timer) => window.clearTimeout(timer));
     };
   }, [workspaceId, slug]);
 
   return (
-    <div className="chat-composer-info-row bg-card rounded-t-2xl border-x border-t border-b border-border/50">
+    <div className="chat-composer-info-row bg-card border-x border-b border-border/50 first:rounded-t-2xl first:border-t">
       <Presentation size={12} className="shrink-0 text-muted-foreground" />
       <span
         className="chat-composer-header-toggle-label chat-composer-info-name"

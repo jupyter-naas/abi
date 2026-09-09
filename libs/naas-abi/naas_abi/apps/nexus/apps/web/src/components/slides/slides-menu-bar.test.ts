@@ -96,15 +96,15 @@ describe('SlidesMenuBar', () => {
     expect(html).toContain('data-testid="slides-menu-insert"');
   });
 
-  it('hides Edit and Insert on index-style pages', () => {
+  it('still shows Edit, View and Insert (disabled) on index-style pages', () => {
     const html = renderToStaticMarkup(
       createElement(SlidesMenuBar, {
         onNewPresentation: () => {},
       }),
     );
     expect(html).toContain('File');
-    expect(html).not.toContain('data-testid="slides-menu-edit"');
-    expect(html).not.toContain('data-testid="slides-menu-insert"');
-    expect(html).not.toContain('data-testid="slides-menu-view"');
+    expect(html).toContain('data-testid="slides-menu-edit"');
+    expect(html).toContain('data-testid="slides-menu-insert"');
+    expect(html).toContain('data-testid="slides-menu-view"');
   });
 });

@@ -9,17 +9,16 @@ import { useIsMobile } from '@/hooks/use-is-mobile';
 import { TOPNAV_HEIGHT } from '@/lib/shell-columns';
 import { QuickOpen } from './quick-open';
 import { useTopNavContent } from './topnav-content';
-import { WorkspaceSwitcher } from './workspace-switcher';
 import { SECTION_HOME_HREF, SECTION_LABELS } from './sidebar/section-labels';
 import { getWorkspacePath } from './sidebar/utils';
 
 /**
  * The one persistent topnav bar. Mounted once by WorkspaceLayout above the
- * dock, the feature column, main content and the AI chat pane, so every
- * column's own header (workspace mark, section title, page header) lives
- * here instead of being duplicated once per column. Content specific to the
- * current page (app-menu row, page actions) comes from whichever page last
- * called `<Header>`; mobile owns its own chrome via MobileTopBar instead.
+ * feature column, main content and the AI chat pane — pushed right of the
+ * dock, which owns the workspace mark and keeps its own full-height column.
+ * Content specific to the current page (app-menu row, page actions) comes
+ * from whichever page last called `<Header>`; mobile owns its own chrome
+ * via MobileTopBar instead.
  */
 export function TopNav() {
   const isMobile = useIsMobile();
@@ -62,14 +61,15 @@ export function TopNav() {
   return (
     <header className="glass-nav relative z-[200] shrink-0 border-b border-border/50">
       <div className="relative flex items-stretch" style={{ height: TOPNAV_HEIGHT }}>
-        <WorkspaceSwitcher />
-
         {sectionTitleOpen && (
           <div
             className="flex h-full shrink-0 items-center pl-4 pr-3"
-            style={{ width: sectionPanelWidth }}
+            style={{ minWidth: sectionPanelWidth }}
+            data-testid="app-menu-bar"
           >
-            {panelHref ? (
+            {nav ? (
+              nav
+            ) : panelHref ? (
               <Link
                 href={panelHref}
                 data-testid="section-panel-title"
@@ -140,15 +140,6 @@ export function TopNav() {
           </button>
         </div>
       </div>
-
-      {nav ? (
-        <div
-          className="flex h-9 min-w-0 items-center bg-background/80 px-3"
-          data-testid="app-menu-bar"
-        >
-          {nav}
-        </div>
-      ) : null}
     </header>
   );
 }

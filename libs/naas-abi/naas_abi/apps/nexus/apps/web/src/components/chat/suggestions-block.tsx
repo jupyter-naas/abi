@@ -19,22 +19,22 @@ const openState = createPersistedOpenState('nexus.chat.suggestionsOpenByAgent');
 /**
  * Agent-scoped "Suggestions" container above the composer: a single
  * clickable header that expands in place to reveal the full suggestion
- * list. Can stack with `FilesBlock` (Suggestions on top) and sits flush on
- * the composer input box below the stack — shared border, no gap — via
- * `.chat-composer-header-block` in chat-agent-selector.css.
+ * list. Can stack with `FilesBlock` / `PresentationInfoBlock` and sits flush
+ * on the composer input box below the stack — shared border, no gap — via
+ * `.chat-composer-header-block` in chat-agent-selector.css. Whichever block
+ * actually renders first in the stack (order varies, and siblings can hide
+ * themselves) picks up the top border/radius via the `first:` variant, so no
+ * component needs to know its position.
  */
 export function SuggestionsBlock({
   agentId,
   suggestions,
-  topmost = true,
   onSuggestionClick,
   onSuggestionHover,
   onSuggestionLeave,
 }: {
   agentId?: string | null;
   suggestions?: ChatSuggestion[];
-  /** Whether this is the first block in the stack (gets the top border/radius). */
-  topmost?: boolean;
   onSuggestionClick: (prompt: string) => void;
   onSuggestionHover?: (value: string) => void;
   onSuggestionLeave?: () => void;
@@ -71,12 +71,7 @@ export function SuggestionsBlock({
   };
 
   return (
-    <div
-      className={cn(
-        'chat-composer-header-block border-x border-b border-border/50',
-        topmost && 'rounded-t-2xl border-t',
-      )}
-    >
+    <div className="chat-composer-header-block border-x border-b border-border/50 first:rounded-t-2xl first:border-t">
       <button
         type="button"
         className="chat-composer-header-toggle"

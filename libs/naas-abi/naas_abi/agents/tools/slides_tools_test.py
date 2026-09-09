@@ -420,6 +420,29 @@ def test_ensure_coding_repo_seeds_empty_in_memory_on_write(monkeypatch):
         _reset_tokens(tokens)
 
 
+def test_persist_deck_uses_tool_default_type_for_unprefixed_message(monkeypatch):
+    """A free-text agent message with no type(scope): prefix must bucket into
+    the calling tool's own Conventional Commits type (e.g. "fix" for a text
+    replace), not the non-bumping "chore" fallback — otherwise the deck
+    version never advances even though real content changed."""
+    _bind_in_memory_git(monkeypatch)
+    tokens = _slides_context()
+    try:
+        _ensure_coding_repo()
+        result = _persist_deck(
+            "untitled-local",
+            "<html><body><main><section class='slide'>"
+            "<h1>Updated date</h1></section></main></body></html>",
+            "Update the conference date on the cover slide",
+            default_type="fix",
+        )
+        assert "error" not in result, result
+        assert result["message"].startswith("fix(slides): ")
+        assert "Update the conference date" in result["message"]
+    finally:
+        _reset_tokens(tokens)
+
+
 def test_replace_write_path_matches_ui_create(monkeypatch):
     """UI create seeds namespaced deck.html; replace must edit that file."""
     sc = _bind_in_memory_git(monkeypatch)

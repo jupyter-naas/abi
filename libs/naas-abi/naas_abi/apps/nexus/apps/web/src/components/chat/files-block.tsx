@@ -19,7 +19,9 @@ type DeckDiffResponse = { base: string; head: string; files: DeckDiffFile[] };
  * header that expands in place to reveal the files *changed since this deck
  * was opened* — a git diff against the branch tip seen on mount, not the
  * whole project tree. Renders nothing while that diff is empty (unknown
- * baseline included), rather than showing a "0 Files" row.
+ * baseline included), rather than showing a "0 Files" row. Sits between
+ * `SuggestionsBlock` and `PresentationInfoBlock` in the stack; picks up the
+ * top border/radius itself via `first:` only if both of those are absent.
  */
 export function FilesBlock({
   slug,
@@ -109,20 +111,29 @@ export function FilesBlock({
   }, [fetchTree, establishBaseline, slug]);
 
   useEffect(() => {
+    const timers: number[] = [];
     const onUpdated = (event: Event) => {
       const updated = (event as CustomEvent<{ slug?: string }>).detail?.slug;
       if (updated && updated !== slug) return;
       void fetchTree();
       void fetchDiff();
+      // The git backend's read path can lag the commit that triggered this
+      // event by a beat; reconcile a couple more times so a just-made change
+      // doesn't get stuck reading back as "0 Files".
+      timers.push(window.setTimeout(() => void fetchDiff(), 700));
+      timers.push(window.setTimeout(() => void fetchDiff(), 2000));
     };
     window.addEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
-    return () => window.removeEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
+    return () => {
+      window.removeEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
   }, [fetchTree, fetchDiff, slug]);
 
   if (changedFiles.length === 0) return null;
 
   return (
-    <div className="chat-composer-header-block border-x border-b border-border/50">
+    <div className="chat-composer-header-block border-x border-b border-border/50 first:rounded-t-2xl first:border-t">
       <button
         type="button"
         className="chat-composer-header-toggle"

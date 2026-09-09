@@ -2790,11 +2790,14 @@ export function ChatInterface({
   }, [input, isLoading]);
 
   // Whether the "Suggestions" / "Files" / deck-identity containers render
-  // above the composer input box. Always shown for the selected agent / open
-  // deck (new or existing conversations alike). Drives the input box
-  // dropping its own top border/radius so the whole stack reads as one
-  // seamless card with no gap between them. FilesBlock hides itself when
-  // nothing has changed this session, so it does not factor in here.
+  // above the composer input box. Order is Suggestions, then Files, then
+  // the deck-identity strip last (directly touching the input) — each
+  // block picks up its own top border/radius via the CSS `first:` variant,
+  // so whichever one actually renders first "wins" it regardless of which
+  // siblings are hidden. Drives the input box dropping its own top
+  // border/radius so the whole stack reads as one seamless card with no gap
+  // between them. FilesBlock hides itself when nothing has changed this
+  // session, so it does not factor into showComposerHeaderBlock below.
   const showSuggestionsBlock =
     activeSuggestions(selectedAgentData?.suggestions as ChatSuggestion[] | undefined).length > 0;
   const showPresentationInfoBlock = isPane && !!slidesChatContext;
@@ -2858,16 +2861,10 @@ export function ChatInterface({
         <div className="mx-auto max-w-3xl">
           {isPane && slidesChatContext ? (
             <>
-              <PresentationInfoBlock
-                slug={slidesChatContext.slides.slug}
-                title={slidesChatContext.slides.title}
-                workspaceId={currentWorkspaceId}
-              />
               {showSuggestionsBlock && (
                 <SuggestionsBlock
                   agentId={selectedAgent}
                   suggestions={selectedAgentData?.suggestions}
-                  topmost={false}
                   onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
                   onSuggestionHover={(value) => setInput(value)}
                   onSuggestionLeave={() => setInput('')}
@@ -2876,6 +2873,11 @@ export function ChatInterface({
               <FilesBlock
                 slug={slidesChatContext.slides.slug}
                 path={slidesChatContext.slides.path}
+                workspaceId={currentWorkspaceId}
+              />
+              <PresentationInfoBlock
+                slug={slidesChatContext.slides.slug}
+                title={slidesChatContext.slides.title}
                 workspaceId={currentWorkspaceId}
               />
             </>

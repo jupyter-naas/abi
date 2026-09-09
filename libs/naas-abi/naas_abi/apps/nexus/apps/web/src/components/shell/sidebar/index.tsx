@@ -28,6 +28,7 @@ import { clearAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/app
 import { dockShowsLabels } from '@/lib/shell-columns';
 import { ColumnResizeHandle, useColumnResize } from '../column-resize-handle';
 import { DockProfile } from './dock-profile';
+import { WorkspaceSwitcher } from '../workspace-switcher';
 
 type SectionDef = {
   id: SidebarSection;
@@ -449,6 +450,8 @@ export function Sidebar() {
         style={{ width: dockWidth }}
         aria-label="Dock"
       >
+      <WorkspaceSwitcher />
+
       <nav
         ref={navRef}
         className={cn(

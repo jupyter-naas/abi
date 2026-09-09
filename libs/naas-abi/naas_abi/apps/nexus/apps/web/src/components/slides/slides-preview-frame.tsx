@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { resolveSlidesPreviewAssets } from './slides-assets';
 import {
@@ -18,6 +19,7 @@ import {
   slidesPreviewIndexFromScroll,
   slidesPreviewScrollTop,
   SLIDES_PDF_EXPORT_ACK_MS,
+  SLIDES_PREVIEW_IMAGES_READY_TIMEOUT_MS,
   SLIDES_PREVIEW_MESSAGE_SOURCE,
   SLIDES_STAGE_HEIGHT,
   SLIDES_STAGE_WIDTH,
@@ -51,6 +53,11 @@ export interface SlidesPreviewFrameProps {
  *
  * Relative ``assets/`` paths 404 inside srcDoc. The parent fetches the slides
  * asset route with Bearer auth and inlines data-URLs before setting srcDoc.
+ *
+ * The iframe stays transparent (and a spinner shows) until the in-frame
+ * bridge script reports every `<img>` has loaded/errored ('images-ready'),
+ * so slides never flash in with blank image boxes. A timeout reveals the
+ * preview anyway if that ack never arrives.
  */
 export const SlidesPreviewFrame = forwardRef<
   SlidesPreviewFrameHandle,
@@ -72,10 +79,15 @@ export const SlidesPreviewFrame = forwardRef<
   const [scale, setScale] = useState(1);
   const [docHeight, setDocHeight] = useState(SLIDES_STAGE_HEIGHT);
   const [hostHeight, setHostHeight] = useState(0);
-  const [previewHtml, setPreviewHtml] = useState(() => prepareSlidesPreviewHtml(html));
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  // True once every `<img>` in the srcDoc has loaded (or errored) — gates the
+  // iframe's visibility so slides don't flash in with blank image boxes
+  // while assets are still resolving / painting.
+  const [imagesReady, setImagesReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    setImagesReady(false);
     void resolveSlidesPreviewAssets(html, workspaceId, slug).then((resolved) => {
       if (!cancelled) setPreviewHtml(prepareSlidesPreviewHtml(resolved));
     });
@@ -83,6 +95,12 @@ export const SlidesPreviewFrame = forwardRef<
       cancelled = true;
     };
   }, [html, workspaceId, slug]);
+
+  useEffect(() => {
+    if (imagesReady) return;
+    const timer = window.setTimeout(() => setImagesReady(true), SLIDES_PREVIEW_IMAGES_READY_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [previewHtml, imagesReady]);
   const exportWaiters = useRef<
     Array<{
       resolve: () => void;
@@ -115,10 +133,15 @@ export const SlidesPreviewFrame = forwardRef<
     const onMessage = (event: MessageEvent) => {
       if (event.source !== iframeRef.current?.contentWindow) return;
       if (!isSlidesPreviewMessage(event.data)) return;
-      if (event.data.type === 'metrics' || event.data.type === 'ready') {
+      if (
+        event.data.type === 'metrics' ||
+        event.data.type === 'ready' ||
+        event.data.type === 'images-ready'
+      ) {
         if (typeof event.data.height === 'number' && event.data.height > 0) {
           setDocHeight(event.data.height);
         }
+        if (event.data.type === 'images-ready') setImagesReady(true);
         return;
       }
       if (
@@ -254,8 +277,11 @@ export const SlidesPreviewFrame = forwardRef<
           ref={iframeRef}
           title={title}
           sandbox="allow-scripts allow-downloads allow-modals"
-          srcDoc={previewHtml}
-          className="block border-0 bg-black"
+          srcDoc={previewHtml ?? ''}
+          className={cn(
+            'block border-0 bg-black transition-opacity duration-150',
+            imagesReady ? 'opacity-100' : 'opacity-0',
+          )}
           style={{
             width: SLIDES_STAGE_WIDTH,
             height: docHeight,
@@ -263,6 +289,15 @@ export const SlidesPreviewFrame = forwardRef<
             transformOrigin: 'top left',
           }}
         />
+        {!imagesReady && (
+          <div
+            className="absolute inset-0 flex items-center justify-center gap-2 bg-neutral-950 text-sm text-muted-foreground"
+            aria-hidden="true"
+          >
+            <Loader2 size={16} className="animate-spin" />
+            Loading slides…
+          </div>
+        )}
       </div>
     </div>
   );

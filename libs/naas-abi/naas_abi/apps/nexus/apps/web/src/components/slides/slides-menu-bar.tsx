@@ -264,7 +264,10 @@ export interface SlidesMenuBarProps {
 }
 
 /**
- * Lean PowerPoint-style menu bar: File, Edit, View, Insert.
+ * Lean PowerPoint-style menu bar: File, Edit, View, Insert. All four always
+ * render — on pages with no open deck yet (index/new) the Edit/View/Insert
+ * items are just disabled rather than the menus disappearing, so the bar
+ * looks the same on every Slides page.
  * Format / Arrange / Tools stay out of this pass.
  */
 export function SlidesMenuBar({
@@ -360,66 +363,50 @@ export function SlidesMenuBar({
     fileItems.push({ id: 'sep-export', separator: true }, ...exportItems);
   }
 
-  const showEdit = Boolean(onDuplicateSlide || onDeleteSlide);
-  const editItems = showEdit
-    ? buildSlidesEditMenu({
-        canDuplicate: Boolean(onDuplicateSlide) && !duplicateSlideDisabled,
-        canDelete: Boolean(onDeleteSlide) && !deleteSlideDisabled,
-        mod,
-        onDuplicate: () => onDuplicateSlide?.(),
-        onDelete: () => onDeleteSlide?.(),
-      })
-    : [];
+  // File/Edit/View/Insert are always present, like a real app menu bar —
+  // pages that haven't wired a given action (index/new pages have no open
+  // deck yet) just get that item disabled instead of the whole menu
+  // vanishing, so the bar looks identical everywhere in Slides.
+  const editItems = buildSlidesEditMenu({
+    canDuplicate: Boolean(onDuplicateSlide) && !duplicateSlideDisabled,
+    canDelete: Boolean(onDeleteSlide) && !deleteSlideDisabled,
+    mod,
+    onDuplicate: () => onDuplicateSlide?.(),
+    onDelete: () => onDeleteSlide?.(),
+  });
 
-  const showInsert = Boolean(onInsertSlide || onDuplicateSlide);
-  const insertItems = showInsert
-    ? buildSlidesInsertMenu({
-        canInsert: Boolean(onInsertSlide) && !insertSlideDisabled,
-        canDuplicate: Boolean(onDuplicateSlide) && !duplicateSlideDisabled,
-        onInsert: (layout) => onInsertSlide?.(layout),
-        onDuplicate: () => onDuplicateSlide?.(),
-      })
-    : [];
+  const insertItems = buildSlidesInsertMenu({
+    canInsert: Boolean(onInsertSlide) && !insertSlideDisabled,
+    canDuplicate: Boolean(onDuplicateSlide) && !duplicateSlideDisabled,
+    onInsert: (layout) => onInsertSlide?.(layout),
+    onDuplicate: () => onDuplicateSlide?.(),
+  });
 
-  const viewItems: SlidesMenuEntry[] | null =
-    mode && onModeChange
-      ? [
-          {
-            id: 'preview',
-            label: 'Preview',
-            checked: mode === 'preview',
-            onSelect: () => onModeChange('preview'),
-          },
-          {
-            id: 'code',
-            label: 'Code',
-            checked: mode === 'code',
-            onSelect: () => onModeChange('code'),
-          },
-          ...(onRefresh
-            ? [
-                { id: 'sep-refresh', separator: true } satisfies SlidesMenuEntry,
-                {
-                  id: 'refresh',
-                  label: 'Refresh',
-                  shortcut: `${mod}R`,
-                  disabled: refreshDisabled,
-                  onSelect: onRefresh,
-                } satisfies SlidesMenuEntry,
-              ]
-            : []),
-        ]
-      : onRefresh
-        ? [
-            {
-              id: 'refresh',
-              label: 'Refresh',
-              shortcut: `${mod}R`,
-              disabled: refreshDisabled,
-              onSelect: onRefresh,
-            },
-          ]
-        : null;
+  const canChangeMode = Boolean(mode && onModeChange);
+  const viewItems: SlidesMenuEntry[] = [
+    {
+      id: 'preview',
+      label: 'Preview',
+      disabled: !canChangeMode,
+      checked: mode === 'preview',
+      onSelect: () => onModeChange?.('preview'),
+    },
+    {
+      id: 'code',
+      label: 'Code',
+      disabled: !canChangeMode,
+      checked: mode === 'code',
+      onSelect: () => onModeChange?.('code'),
+    },
+    { id: 'sep-refresh', separator: true },
+    {
+      id: 'refresh',
+      label: 'Refresh',
+      shortcut: `${mod}R`,
+      disabled: !onRefresh || refreshDisabled,
+      onSelect: () => onRefresh?.(),
+    },
+  ];
 
   return (
     <div ref={rootRef} className="flex min-w-0 items-center gap-1" data-testid="slides-menu-bar">
@@ -431,33 +418,27 @@ export function SlidesMenuBar({
         onOpenChange={(open) => setOpenMenu(open ? 'file' : null)}
         items={fileItems}
       />
-      {showEdit && (
-        <MenuDropdown
-          label="Edit"
-          menuKey="edit"
-          open={openMenu === 'edit'}
-          onOpenChange={(open) => setOpenMenu(open ? 'edit' : null)}
-          items={editItems}
-        />
-      )}
-      {viewItems && (
-        <MenuDropdown
-          label="View"
-          menuKey="view"
-          open={openMenu === 'view'}
-          onOpenChange={(open) => setOpenMenu(open ? 'view' : null)}
-          items={viewItems}
-        />
-      )}
-      {showInsert && (
-        <MenuDropdown
-          label="Insert"
-          menuKey="insert"
-          open={openMenu === 'insert'}
-          onOpenChange={(open) => setOpenMenu(open ? 'insert' : null)}
-          items={insertItems}
-        />
-      )}
+      <MenuDropdown
+        label="Edit"
+        menuKey="edit"
+        open={openMenu === 'edit'}
+        onOpenChange={(open) => setOpenMenu(open ? 'edit' : null)}
+        items={editItems}
+      />
+      <MenuDropdown
+        label="View"
+        menuKey="view"
+        open={openMenu === 'view'}
+        onOpenChange={(open) => setOpenMenu(open ? 'view' : null)}
+        items={viewItems}
+      />
+      <MenuDropdown
+        label="Insert"
+        menuKey="insert"
+        open={openMenu === 'insert'}
+        onOpenChange={(open) => setOpenMenu(open ? 'insert' : null)}
+        items={insertItems}
+      />
       {trailing}
     </div>
   );

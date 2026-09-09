@@ -336,7 +336,7 @@ export function QuickOpen() {
                 width: listBox?.width ?? 480,
               }}
             >
-              <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+              <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-background px-3 py-2">
                 <Search size={14} className="shrink-0 opacity-70 text-muted-foreground" />
                 <input
                   ref={inputRef}

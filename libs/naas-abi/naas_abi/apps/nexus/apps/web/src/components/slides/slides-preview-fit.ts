@@ -27,13 +27,26 @@ export const SLIDES_PRINT_PAGE_HEIGHT_IN = '7.5in';
 /** Parent waits this long for an iframe ack that print() was invoked. */
 export const SLIDES_PDF_EXPORT_ACK_MS = 8000;
 
+/**
+ * Parent reveals the preview after this long even without an `images-ready`
+ * ack (broken bridge injection, hostile deck script, etc.) — a stuck spinner
+ * is worse than a slide that finishes painting a beat late.
+ */
+export const SLIDES_PREVIEW_IMAGES_READY_TIMEOUT_MS = 6000;
+
 /** postMessage channel for sandboxed preview iframes (no allow-same-origin). */
 export const SLIDES_PREVIEW_MESSAGE_SOURCE = 'nexus-slides-preview';
 
 export type SlidesPreviewToParentMessage =
   | {
       source: typeof SLIDES_PREVIEW_MESSAGE_SOURCE;
-      type: 'ready' | 'metrics';
+      /**
+       * 'ready' fires on DOMContentLoaded (markup parsed, images may still be
+       * decoding); 'images-ready' fires once every `<img>` has loaded or
+       * errored, so the parent can hold the preview hidden until slides are
+       * visually complete instead of flashing in with blank image boxes.
+       */
+      type: 'ready' | 'metrics' | 'images-ready';
       height: number;
     }
   | {
@@ -110,6 +123,24 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
       );
     } catch (e) {}
   }
+  function waitForImages() {
+    var imgs;
+    try {
+      imgs = Array.prototype.slice.call(document.images || []);
+    } catch (e) {
+      return Promise.resolve();
+    }
+    if (!imgs.length) return Promise.resolve();
+    return Promise.all(
+      imgs.map(function (img) {
+        if (img.complete) return Promise.resolve();
+        return new Promise(function (resolve) {
+          img.addEventListener('load', resolve, { once: true });
+          img.addEventListener('error', resolve, { once: true });
+        });
+      })
+    );
+  }
   function onReady() {
     parent.postMessage(
       { source: SOURCE, type: 'ready', height: STAGE_HEIGHT },
@@ -118,6 +149,13 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
     reportMetrics();
     setTimeout(reportMetrics, 50);
     setTimeout(reportMetrics, 250);
+    waitForImages().then(function () {
+      parent.postMessage(
+        { source: SOURCE, type: 'images-ready', height: STAGE_HEIGHT },
+        '*'
+      );
+      reportMetrics();
+    });
   }
   window.addEventListener('message', function (event) {
     var data = event.data;

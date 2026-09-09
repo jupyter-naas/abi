@@ -373,34 +373,38 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
 
   return (
     <div
-      className="flex h-screen w-screen flex-col overflow-hidden bg-background"
+      className="flex h-screen w-screen overflow-hidden bg-background"
       style={themeStyles}
       data-org-branded="true"
     >
-      {/* Global topnav: workspace mark, active section title, page header,
-          chat pane toggle. Spans the full app width so the dock, feature
-          column, main content and AI pane each drop their own header. */}
-      <TopNav />
+      {/* Dock: workspace mark, nav, profile — a full top-to-bottom column of
+          its own. Width matches the feature column by default and is resizable. */}
+      <Sidebar />
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* Dock: workspace mark now lives in TopNav; nav + profile here. Width matches the feature column by default and is resizable. */}
-        <Sidebar />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Topnav: active section title / app menu, page header, chat pane
+            toggle. Spans the region right of the dock — pushed by it — so
+            the feature column, main content and AI pane share one header
+            instead of each painting their own. */}
+        <TopNav />
 
-        {/* Feature column: Chat, Files, Workspaces, ... */}
-        <SectionPanel />
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          {/* Feature column: Chat, Files, Workspaces, ... */}
+          <SectionPanel />
 
-        {/* Main content + the AI chat pane, opening below TopNav instead of
-            beside a per-page-scoped header. */}
-        <main className="flex flex-1 flex-col overflow-hidden">
-          {currentWorkspaceId && <PresenceIndicator workspaceId={currentWorkspaceId} />}
-          <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
-        </main>
+          {/* Main content + the AI chat pane, opening below TopNav instead of
+              beside a per-page-scoped header. */}
+          <main className="flex flex-1 flex-col overflow-hidden">
+            {currentWorkspaceId && <PresenceIndicator workspaceId={currentWorkspaceId} />}
+            <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+          </main>
 
-        {contextPanelOpen && <AIPane />}
+          {contextPanelOpen && <AIPane />}
+        </div>
+
+        {/* Footer: User / Business workspace / Repo / Branch / Code workspace. Same region as TopNav, pushed by the dock. */}
+        <PlatformStatusFooter />
       </div>
-
-      {/* Global footer: User / Business workspace / Repo / Branch / Code workspace. */}
-      <PlatformStatusFooter />
     </div>
   );
 }
