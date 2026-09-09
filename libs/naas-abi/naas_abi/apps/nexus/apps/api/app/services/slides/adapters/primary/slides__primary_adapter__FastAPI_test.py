@@ -1233,6 +1233,63 @@ def test_deck_version_bumps_from_conventional_commit_history(monkeypatch) -> Non
     assert missing.status_code == 404
 
 
+def test_history_tracks_version_per_commit(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "History version deck",
+            "slug": "history-version-deck",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    deck = client.get(
+        "/slides/projects/history-version-deck/deck", params={"workspace_id": "ws-test"}
+    )
+    assert deck.status_code == 200, deck.text
+    saved = client.put(
+        "/slides/projects/history-version-deck/deck",
+        json={
+            "workspace_id": "ws-test",
+            "html": deck.json()["html"],
+            "message": "fix(deck): correct typo",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    inserted = client.post(
+        "/slides/projects/history-version-deck/slides/insert",
+        json={"workspace_id": "ws-test", "after_index": -1},
+    )
+    assert inserted.status_code == 200, inserted.text
+
+    version = client.get(
+        "/slides/projects/history-version-deck/version", params={"workspace_id": "ws-test"}
+    )
+    assert version.status_code == 200, version.text
+    assert version.json()["version"] == "0.2.0"
+
+    history = client.get(
+        "/slides/projects/history-version-deck/history", params={"workspace_id": "ws-test"}
+    )
+    assert history.status_code == 200, history.text
+    commits = history.json()
+    assert len(commits) >= 2
+
+    # The branch tip's tracked version matches the deck's current version.
+    assert commits[0]["version"] == "0.2.0"
+
+    # The oldest (seed) commit tracks the version as of its own point in
+    # history, not the deck's current version.
+    seed = commits[-1]
+    assert seed["message"].startswith("feat(slides): create")
+    assert seed["version"] == "0.1.0"
+
+
 def test_semver_from_commits_ignores_unrecognized_and_non_bumping_types() -> None:
     from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary import (
         slides__primary_adapter__FastAPI as slides_module,
@@ -1251,3 +1308,33 @@ def test_semver_from_commits_ignores_unrecognized_and_non_bumping_types() -> Non
     ]
     newest_first = list(reversed(oldest_to_newest))
     assert slides_module._semver_from_commits(newest_first) == "0.2.1"
+
+
+def test_versions_from_commits_tracks_running_total_per_commit() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary import (
+        slides__primary_adapter__FastAPI as slides_module,
+    )
+    from naas_abi_core.services.source_control.SourceControlPorts import Commit
+
+    oldest_to_newest = [
+        Commit(sha="1", message="Free-form message before the convention", author="a"),
+        Commit(sha="2", message="feat(slides): create x", author="a"),
+        Commit(sha="3", message="style(slides): reorder slides", author="a"),
+        Commit(sha="4", message="fix(slides): replace text", author="a"),
+        Commit(sha="5", message="feat(slides)!: breaking layout change", author="a"),
+        Commit(sha="6", message="fix(slides): another fix", author="a"),
+    ]
+    newest_first = list(reversed(oldest_to_newest))
+    versions = slides_module._versions_from_commits(newest_first)
+    assert versions == {
+        # A commit predating the convention carries the running baseline
+        # forward (0.0.0 here, nothing bumped it yet) rather than being
+        # dropped from the map.
+        "1": "0.0.0",
+        "2": "0.1.0",
+        # A non-bumping type (style) repeats the prior commit's version.
+        "3": "0.1.0",
+        "4": "0.1.1",
+        "5": "0.2.0",
+        "6": "0.2.1",
+    }

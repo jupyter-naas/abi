@@ -255,7 +255,7 @@ export const SlidesPreviewFrame = forwardRef<
   return (
     <div
       ref={hostRef}
-      className={cn('absolute inset-0 overflow-auto bg-neutral-950', className)}
+      className={cn('absolute inset-0 overflow-auto bg-muted', className)}
       onScroll={() => {
         if (!onSelectedIndexChange || ignoreScrollRef.current) return;
         const host = hostRef.current;
@@ -279,7 +279,7 @@ export const SlidesPreviewFrame = forwardRef<
           sandbox="allow-scripts allow-downloads allow-modals"
           srcDoc={previewHtml ?? ''}
           className={cn(
-            'block border-0 bg-black transition-opacity duration-150',
+            'block border-0 bg-white transition-opacity duration-150',
             imagesReady ? 'opacity-100' : 'opacity-0',
           )}
           style={{
@@ -291,7 +291,7 @@ export const SlidesPreviewFrame = forwardRef<
         />
         {!imagesReady && (
           <div
-            className="absolute inset-0 flex items-center justify-center gap-2 bg-neutral-950 text-sm text-muted-foreground"
+            className="absolute inset-0 flex items-center justify-center gap-2 bg-muted text-sm text-muted-foreground"
             aria-hidden="true"
           >
             <Loader2 size={16} className="animate-spin" />

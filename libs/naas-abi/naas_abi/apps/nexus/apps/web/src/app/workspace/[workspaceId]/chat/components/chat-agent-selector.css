@@ -544,12 +544,12 @@ button.chat-slides-composer-row:hover {
 }
 
 /* Shared "Suggestions" / "Files" / deck-identity containers above the
-   composer. Suggestions and Files are clickable headers that expand in
-   place; the deck-identity strip (Slides only) is static and always leads
-   the stack. They sit flush on the composer input box below them — shared
-   border, no gap; only the topmost block gets the top border/radius, and the
-   composer box drops its own top border/radius (see showComposerHeaderBlock
-   in chat-interface.tsx) so the whole stack reads as one seamless card. */
+   composer — each a clickable header that expands in place (Suggestions,
+   Files, then the deck-identity strip last, Slides only). They sit flush
+   on the composer input box below them — shared border, no gap; only the
+   topmost block gets the top border/radius, and the composer box drops its
+   own top border/radius (see showComposerHeaderBlock in chat-interface.tsx)
+   so the whole stack reads as one seamless card. */
 .chat-composer-header-block {
   overflow: hidden;
   /* Slightly distinct from the composer input's --card-hex below it. */
@@ -591,17 +591,9 @@ button.chat-slides-composer-row:hover {
   padding-top: 0;
 }
 
-/* Deck-identity strip (PresentationInfoBlock): static, non-interactive —
-   same padding/gap as .chat-composer-header-toggle but no cursor/hover. */
-.chat-composer-info-row {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  color: var(--muted-foreground-hex);
-}
-
+/* Deck-identity strip (PresentationInfoBlock): title + version tag inside
+   its own .chat-composer-header-toggle button — expandable to the commit
+   log behind the version, like Suggestions/Files. */
 .chat-composer-info-name {
   min-width: 0;
   overflow: hidden;

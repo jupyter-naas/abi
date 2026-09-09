@@ -210,28 +210,43 @@ _CONVENTIONAL_TYPE_RE = re.compile(
     r"^(feat|fix|chore|style|refactor|docs|perf)(\([a-z0-9_.-]+\))?(?P<breaking>!)?: "
 )
 
+# Not paginated: the source control port has no total-commit-count API, so
+# this reflects at most the most recent 250 commits. A deck with more history
+# than that undercounts its earliest bumps.
+_VERSION_COMMIT_SCAN_LIMIT = 250
 
-def _semver_from_commits(commits: list[Commit]) -> str:
-    """Derive a 0.x semver from Conventional Commits history (newest first).
+
+def _versions_from_commits(commits: list[Commit]) -> dict[str, str]:
+    """Cumulative 0.x semver as of each commit (newest-first input), by sha.
 
     A deck never has a "stable public API" milestone the way a library does,
     so it stays on major 0 forever: a breaking (``!``) or ``feat`` commit
     bumps minor, ``fix``/``perf`` bumps patch, everything else (chore, style,
     refactor, docs...) does not bump. Commits predating this convention (no
-    recognizable type) are skipped rather than guessed at.
+    recognizable type) carry the running total forward unchanged rather than
+    being guessed at, so every commit — including scaffolding commits from
+    repo creation — tracks the version as of that point in history.
     """
     minor = patch = 0
+    versions: dict[str, str] = {}
     for commit in reversed(commits):  # oldest first
         match = _CONVENTIONAL_TYPE_RE.match(commit.message or "")
-        if not match:
-            continue
-        commit_type = match.group(1)
-        if match.group("breaking") or commit_type == "feat":
-            minor += 1
-            patch = 0
-        elif commit_type in ("fix", "perf"):
-            patch += 1
-    return f"0.{minor}.{patch}"
+        if match:
+            commit_type = match.group(1)
+            if match.group("breaking") or commit_type == "feat":
+                minor += 1
+                patch = 0
+            elif commit_type in ("fix", "perf"):
+                patch += 1
+        versions[commit.sha] = f"0.{minor}.{patch}"
+    return versions
+
+
+def _semver_from_commits(commits: list[Commit]) -> str:
+    """The deck's current version: the newest commit's cumulative semver."""
+    if not commits:
+        return "0.0.0"
+    return _versions_from_commits(commits)[commits[0].sha]
 
 
 def _ensure_coding_repo(sc: SourceControlService) -> str:
@@ -1005,6 +1020,8 @@ class CommitResponse(BaseModel):
     message: str
     author: str
     date: str | None = None
+    # Cumulative 0.x semver as of this commit (see _versions_from_commits).
+    version: str
 
 
 class DeckDiffFileResponse(BaseModel):
@@ -2051,14 +2068,22 @@ async def list_history(
         )
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
-        commits = sc.list_commits(
-            repo_id=repo_id, ref=paths["branch"], limit=max(1, min(limit, 50))
+        # Scan the same depth as /version so every returned commit's version
+        # reflects the true running total, not just what's within `limit`.
+        scanned = sc.list_commits(
+            repo_id=repo_id, ref=paths["branch"], limit=_VERSION_COMMIT_SCAN_LIMIT
         )
+        versions = _versions_from_commits(scanned)
+        visible = scanned[: max(1, min(limit, 50))]
         return [
             CommitResponse(
-                sha=c.sha, message=c.message, author=c.author, date=c.date
+                sha=c.sha,
+                message=c.message,
+                author=c.author,
+                date=c.date,
+                version=versions[c.sha],
             )
-            for c in commits
+            for c in visible
         ]
 
     try:
@@ -2125,12 +2150,6 @@ async def get_history_diff(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SourceControlError as exc:
         raise _source_control_http_error(exc) from exc
-
-
-# Not paginated: the source control port has no total-commit-count API, so
-# this reflects at most the most recent 250 commits. A deck with more history
-# than that undercounts its earliest bumps.
-_VERSION_COMMIT_SCAN_LIMIT = 250
 
 
 @router.get("/projects/{slug}/version", response_model=DeckVersionResponse)
