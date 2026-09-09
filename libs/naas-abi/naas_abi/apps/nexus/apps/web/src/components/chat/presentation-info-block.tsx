@@ -1,11 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Presentation } from 'lucide-react';
+import { CheckCircle2, Presentation } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
 import { SLIDES_DECK_UPDATED_EVENT } from '@/stores/slides';
 
 type DeckVersionResponse = { version: string; commit_count: number };
+
+// There is no version-validation feature yet (e.g. a QA agent sign-off), so
+// the tag always reads as validated. Once one exists, thread a real
+// `validated: boolean` through here and swap CheckCircle2 for CircleX.
+const VERSION_VALIDATED = true;
 
 /**
  * Deck identity strip above the composer, Slides only: the presentation's
@@ -56,15 +61,23 @@ export function PresentationInfoBlock({
   }, [workspaceId, slug]);
 
   return (
-    <div className="chat-composer-header-block chat-composer-info-row rounded-t-2xl border-x border-t border-b border-border/50">
+    <div className="chat-composer-info-row bg-card rounded-t-2xl border-x border-t border-b border-border/50">
       <Presentation size={12} className="shrink-0 text-muted-foreground" />
       <span
-        className="chat-composer-header-toggle-label chat-composer-info-text"
-        title={version ? `${title} · v${version}` : title}
+        className="chat-composer-header-toggle-label chat-composer-info-name"
+        title={title}
       >
-        <span className="chat-composer-info-name">{title}</span>
-        {version && <span className="chat-composer-info-version">v{version}</span>}
+        {title}
       </span>
+      {version && (
+        <span
+          className="chat-composer-header-toggle-label chat-composer-info-version-tag"
+          title={VERSION_VALIDATED ? 'Version validated' : 'Version not validated'}
+        >
+          <CheckCircle2 size={10} className="shrink-0 text-emerald-500" />
+          v{version}
+        </span>
+      )}
     </div>
   );
 }
