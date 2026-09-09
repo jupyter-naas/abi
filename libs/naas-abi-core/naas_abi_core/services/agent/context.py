@@ -97,6 +97,14 @@ slides_writes_completed: ContextVar[list[str] | None] = ContextVar(
     "slides_writes_completed", default=None
 )
 
+# Per-turn read budget. Qwen ignores "list once, do not read every section"
+# and dumps every slide HTML into the checkpointer. The tools refuse the
+# second list and the fourth unique section read.
+slides_list_calls: ContextVar[int] = ContextVar("slides_list_calls", default=0)
+slides_section_read_indexes: ContextVar[list[int] | None] = ContextVar(
+    "slides_section_read_indexes", default=None
+)
+
 # LangGraph counts every node visit (IntentAgent setup plus call_model +
 # call_tools per hop). Default LangGraph is 25. 80 was too low for an 8-32
 # slide industry rewrite that listed, read, and wrote one section at a time.
