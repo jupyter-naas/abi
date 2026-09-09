@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.21.4 (2026-09-08)
+
+### Bug Fixes
+
+- Update various files including pyproject.toml, manifest.json, CSS, and TSX components
+  ([`2dab230`](https://github.com/jupyter-naas/abi/commit/2dab23059560b1155210787bfc09d855acbd4dd2))
+
+
 ## v2.21.3 (2026-09-07)
 
 ### Bug Fixes

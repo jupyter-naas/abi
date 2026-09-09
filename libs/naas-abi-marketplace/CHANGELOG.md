@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v3.43.0 (2026-09-08)
+
+### Bug Fixes
+
+- Update various files including pyproject.toml, manifest.json, CSS, and TSX components
+  ([`2dab230`](https://github.com/jupyter-naas/abi/commit/2dab23059560b1155210787bfc09d855acbd4dd2))
+
+### Documentation
+
+- **x**: Update search queries documentations
+  ([`3b3dedd`](https://github.com/jupyter-naas/abi/commit/3b3deddfc2082f0d85ed93a3875cfd440b1777bf))
+
+### Features
+
+- **x_proxy**: Add warm_usernames function to refresh search_users shards
+  ([`c5eaf5b`](https://github.com/jupyter-naas/abi/commit/c5eaf5bb2e95e7aecdbfda49dee89bb55261f952))
+
+
 ## v3.42.1 (2026-09-07)
 
 ### Bug Fixes
