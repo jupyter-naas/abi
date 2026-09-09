@@ -2,12 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
-from unittest.mock import MagicMock
-
-import numpy as np
 import pytest
-
 from naas_abi_marketplace.domains.operations.modules.document.agents.DocumentAgent import (
     DocumentSearchInput,
     _build_search_tool,
@@ -22,7 +17,7 @@ class FakeSearchResult:
 
 
 class FakeVectorStore:
-    def __init__(self, results: List[FakeSearchResult]):
+    def __init__(self, results: list[FakeSearchResult]):
         self._results = results
 
     def search_similar(self, collection_name, query_vector, k, include_metadata=True):
@@ -30,7 +25,7 @@ class FakeVectorStore:
 
 
 class FakeEmbeddingsModel:
-    def embed_query(self, text: str) -> List[float]:
+    def embed_query(self, text: str) -> list[float]:
         return [0.1, 0.2, 0.3, 0.4]
 
 

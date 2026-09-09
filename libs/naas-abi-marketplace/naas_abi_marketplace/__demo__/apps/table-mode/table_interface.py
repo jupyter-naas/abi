@@ -3,12 +3,13 @@ Table Mode Interface Pattern
 Structured grid view of data with sorting, filtering, and editing capabilities
 """
 
-import streamlit as st
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-import plotly.express as px
 import os
+from datetime import datetime, timedelta
+
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import streamlit as st
 
 st.set_page_config(page_title="Table Mode", page_icon="📊", layout="wide")
 
@@ -47,7 +48,7 @@ if st.session_state.page == "sop":
     except FileNotFoundError:
         st.error("SOP.md file not found. Please ensure the SOP file exists in the same directory as this interface.")
     except Exception as e:
-        st.error(f"Error loading SOP: {str(e)}")
+        st.error(f"Error loading SOP: {e!s}")
     
     st.stop()  # Stop execution here for SOP page
 
@@ -299,7 +300,7 @@ elif view_mode == "Pivot Table":
                 )
                 st.dataframe(pivot_table, use_container_width=True)
             except Exception as e:
-                st.error(f"Error creating pivot table: {str(e)}")
+                st.error(f"Error creating pivot table: {e!s}")
         else:
             st.warning("Please select a numeric column for values")
 

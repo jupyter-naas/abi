@@ -3,14 +3,11 @@ from __future__ import annotations
 
 import datetime
 import uuid
+from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
-    Callable,
     ClassVar,
-    Iterable,
-    List,
-    Optional,
     Union,
     get_args,
     get_origin,
@@ -112,7 +109,7 @@ class RDFEntity(BaseModel):
     def _field_expects_list(field_annotation: object) -> bool:
         """Return True when a field annotation contains a list type."""
         origin = get_origin(field_annotation)
-        if origin in (list, List):
+        if origin in (list, list):
             return True
         if origin is Annotated:
             args = get_args(field_annotation)
@@ -352,70 +349,18 @@ class EmploymentRecord(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    employee_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Identifier assigned to a person by the employing organization's HR system."
-            ),
-        ]
-    ] = None
-    hire_date: Optional[
-        Annotated[
-            datetime.date,
-            Field(
-                description="Date on which the employment relationship documented by this record began."
-            ),
-        ]
-    ] = None
-    termination_date: Optional[
-        Annotated[
-            datetime.date,
-            Field(
-                description="Date on which the employment relationship documented by this record ended. Absent while the relationship is active."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    employee_id: Annotated[str, Field(description="Identifier assigned to a person by the employing organization's HR system.")] | None = None
+    hire_date: Annotated[datetime.date, Field(description="Date on which the employment relationship documented by this record began.")] | None = None
+    termination_date: Annotated[datetime.date, Field(description="Date on which the employment relationship documented by this record ended. Absent while the relationship is active.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    isConcretizedBy: Optional[
-        Annotated[List[Union[ActOfWorking, URIRef, str]], Field()]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-    is_employment_record_of: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="Relates an employment record to the person on which it generically depends."
-            ),
-        ]
-    ] = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    isConcretizedBy: Annotated[list[ActOfWorking | URIRef | str], Field()] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_employment_record_of: Annotated[list[Person | URIRef | str], Field(description="Relates an employment record to the person on which it generically depends.")] | None = None
 
 
 class JobPosition(GenericallyDependentContinuant, RDFEntity):
@@ -448,73 +393,19 @@ class JobPosition(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    job_title: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Title of the job position as published by the organization."
-            ),
-        ]
-    ] = None
-    job_family: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Grouping of related job positions sharing a common discipline or career track."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    job_title: Annotated[str, Field(description="Title of the job position as published by the organization.")] | None = None
+    job_family: Annotated[str, Field(description="Grouping of related job positions sharing a common discipline or career track.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    genericallyDependsOn: Optional[
-        Annotated[List[Union[Organization, URIRef, str]], Field()]
-    ] = None
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    has_job_description: Optional[
-        Annotated[
-            List[Union[JobDescription, URIRef, str]],
-            Field(
-                description="Relates a job position to the job description document that states its duties and requirements."
-            ),
-        ]
-    ] = None
-    isConcretizedBy: Optional[
-        Annotated[List[Union[EmployeeRole, URIRef, str]], Field()]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-    is_job_position_of: Optional[
-        Annotated[
-            List[Union[EmployeeRole, URIRef, str]],
-            Field(
-                description="Relates a job position to the employee role that concretizes it, when the position is occupied."
-            ),
-        ]
-    ] = None
+    genericallyDependsOn: Annotated[list[Organization | URIRef | str], Field()] | None = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    has_job_description: Annotated[list[JobDescription | URIRef | str], Field(description="Relates a job position to the job description document that states its duties and requirements.")] | None = None
+    isConcretizedBy: Annotated[list[EmployeeRole | URIRef | str], Field()] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_job_position_of: Annotated[list[EmployeeRole | URIRef | str], Field(description="Relates a job position to the employee role that concretizes it, when the position is occupied.")] | None = None
 
 
 class EmploymentContract(GenericallyDependentContinuant, RDFEntity):
@@ -543,49 +434,16 @@ class EmploymentContract(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    genericallyDependsOn: Optional[
-        Annotated[List[Union[Person, URIRef, str]], Field()]
-    ] = None
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    isConcretizedBy: Optional[
-        Annotated[List[Union[ActOfWorking, URIRef, str]], Field()]
-    ] = None
-    is_about_job_description: Optional[
-        Annotated[
-            List[Union[JobDescription, URIRef, str]],
-            Field(
-                description="Relates an employment contract to the job description it is about."
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
+    genericallyDependsOn: Annotated[list[Person | URIRef | str], Field()] | None = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    isConcretizedBy: Annotated[list[ActOfWorking | URIRef | str], Field()] | None = None
+    is_about_job_description: Annotated[list[JobDescription | URIRef | str], Field(description="Relates an employment contract to the job description it is about.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
 class EnrollmentRecord(GenericallyDependentContinuant, RDFEntity):
@@ -617,71 +475,19 @@ class EnrollmentRecord(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    program_name: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Name of the curriculum or programme the enrollment is for."
-            ),
-        ]
-    ] = None
-    enrollment_date: Optional[
-        Annotated[
-            datetime.date,
-            Field(
-                description="Date on which the course of study documented by this record began."
-            ),
-        ]
-    ] = None
-    completion_date: Optional[
-        Annotated[
-            datetime.date,
-            Field(
-                description="Date on which the course of study documented by this record ended. Absent while the person is still enrolled."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    program_name: Annotated[str, Field(description="Name of the curriculum or programme the enrollment is for.")] | None = None
+    enrollment_date: Annotated[datetime.date, Field(description="Date on which the course of study documented by this record began.")] | None = None
+    completion_date: Annotated[datetime.date, Field(description="Date on which the course of study documented by this record ended. Absent while the person is still enrolled.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    genericallyDependsOn: Optional[Annotated[Union[URIRef, str], Field()]] = None
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    isConcretizedBy: Optional[
-        Annotated[List[Union[ActOfStudying, URIRef, str]], Field()]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-    is_enrollment_record_of: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="Relates an enrollment record to the person on which it generically depends."
-            ),
-        ]
-    ] = None
+    genericallyDependsOn: Annotated[URIRef | str, Field()] | None = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    isConcretizedBy: Annotated[list[ActOfStudying | URIRef | str], Field()] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_enrollment_record_of: Annotated[list[Person | URIRef | str], Field(description="Relates an enrollment record to the person on which it generically depends.")] | None = None
 
 
 class AcademicDegree(GenericallyDependentContinuant, RDFEntity):
@@ -706,38 +512,14 @@ class AcademicDegree(GenericallyDependentContinuant, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    genericallyDependsOn: Optional[
-        Annotated[List[Union[Person, URIRef, str]], Field()]
-    ] = None
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
+    genericallyDependsOn: Annotated[list[Person | URIRef | str], Field()] | None = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
 class EmployeeRole(Role, RDFEntity):
@@ -768,62 +550,17 @@ class EmployeeRole(Role, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    hasRealization: Optional[
-        Annotated[List[Union[ActOfWorking, URIRef, str]], Field()]
-    ] = None
-    has_job_position: Optional[
-        Annotated[
-            List[Union[JobPosition, URIRef, str]],
-            Field(
-                description="Relates an employee role to the job position it concretizes. Named sub-property of abi:concretizes: a role (SDC) concretizes a position (GDC)."
-            ),
-        ]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_employee_role_of: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="Relates an employee role to the person in whom it inheres."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    hasRealization: Annotated[list[ActOfWorking | URIRef | str], Field()] | None = None
+    has_job_position: Annotated[list[JobPosition | URIRef | str], Field(description="Relates an employee role to the job position it concretizes. Named sub-property of abi:concretizes: a role (SDC) concretizes a position (GDC).")] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_employee_role_of: Annotated[list[Person | URIRef | str], Field(description="Relates an employee role to the person in whom it inheres.")] | None = None
 
 
 class StudentRole(Role, RDFEntity):
@@ -852,54 +589,16 @@ class StudentRole(Role, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    hasRealization: Optional[
-        Annotated[List[Union[ActOfStudying, URIRef, str]], Field()]
-    ] = None
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_student_role_of: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="Relates a student role to the person in whom it inheres."
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    hasRealization: Annotated[list[ActOfStudying | URIRef | str], Field()] | None = None
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_student_role_of: Annotated[list[Person | URIRef | str], Field(description="Relates a student role to the person in whom it inheres.")] | None = None
 
 
 class EmploymentStatus(Quality, RDFEntity):
@@ -927,56 +626,16 @@ class EmploymentStatus(Quality, RDFEntity):
     }
 
     # Data properties
-    status_value: Optional[
-        Annotated[
-            str,
-            Field(
-                description="Value of an employment status, e.g. 'active', 'on-leave', 'notice-period', 'terminated'."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    status_value: Annotated[str, Field(description="Value of an employment status, e.g. 'active', 'on-leave', 'notice-period', 'terminated'.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[List[Union[EmploymentRecord, URIRef, str]], Field()]
-    ] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    is_employment_status_of: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="Relates an employment status quality to the person in whom it inheres."
-            ),
-        ]
-    ] = None
-    participates_in: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(
-                description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[EmploymentRecord | URIRef | str], Field()] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_employment_status_of: Annotated[list[Person | URIRef | str], Field(description="Relates an employment status quality to the person in whom it inheres.")] | None = None
+    participates_in: Annotated[list[Process | URIRef | str], Field(description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way")] | None = None
 
 
 class Remuneration(Quality, RDFEntity):
@@ -1007,56 +666,18 @@ class Remuneration(Quality, RDFEntity):
     }
 
     # Data properties
-    remuneration_amount: Optional[
-        Annotated[
-            Any,
-            Field(description="Annual remuneration amount in the contract currency."),
-        ]
-    ] = None
-    remuneration_currency: Optional[Annotated[str, Field()]] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    remuneration_amount: Annotated[Any, Field(description="Annual remuneration amount in the contract currency.")] | None = None
+    remuneration_currency: Annotated[str, Field()] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = None
-    inheresIn: Optional[Annotated[List[Union[Person, URIRef, str]], Field()]] = None
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = None
-    participatesIn: Optional[
-        Annotated[List[Union[ActOfWorking, URIRef, str]], Field()]
-    ] = None
-    participates_in: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(
-                description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"
-            ),
-        ]
-    ] = None
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    inheresIn: Annotated[list[Person | URIRef | str], Field()] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    participatesIn: Annotated[list[ActOfWorking | URIRef | str], Field()] | None = None
+    participates_in: Annotated[list[Process | URIRef | str], Field(description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way")] | None = None
 
 
 class JobDescription(DocumentContentEntity, RDFEntity):
@@ -1085,54 +706,16 @@ class JobDescription(DocumentContentEntity, RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
-    created: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="Date of creation of the resource."),
-        ]
-    ] = None
-    creator: Optional[
-        Annotated[
-            Any,
-            Field(description="An entity responsible for making the resource."),
-        ]
-    ] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    genericallyDependsOn: Optional[
-        Annotated[List[Union[Organization, URIRef, str]], Field()]
-    ] = None
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = None
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = None
-    is_job_description_of: Optional[
-        Annotated[
-            List[Union[JobPosition, URIRef, str]],
-            Field(
-                description="Relates a job description document to the job position it describes."
-            ),
-        ]
-    ] = None
-    is_job_description_of_contract: Optional[
-        Annotated[
-            List[Union[EmploymentContract, URIRef, str]],
-            Field(
-                description="Relates a job description to an employment contract that is about it."
-            ),
-        ]
-    ] = None
+    genericallyDependsOn: Annotated[list[Organization | URIRef | str], Field()] | None = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_job_description_of: Annotated[list[JobPosition | URIRef | str], Field(description="Relates a job description document to the job position it describes.")] | None = None
+    is_job_description_of_contract: Annotated[list[EmploymentContract | URIRef | str], Field(description="Relates a job description to an employment contract that is about it.")] | None = None
 
 
 # Rebuild models to resolve forward references

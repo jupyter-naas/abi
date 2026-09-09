@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import List, Optional, Set, Tuple
 
 from naas_abi_core import logger
 from rdflib import OWL, RDF, RDFS, BNode, Graph, URIRef
@@ -75,7 +74,7 @@ def get_short_name(uri: URIRef) -> str:
 
 
 def get_rdfs_label(
-    uri: URIRef, graph: Graph, imported_graph: Optional[Graph] = None
+    uri: URIRef, graph: Graph, imported_graph: Graph | None = None
 ) -> str:
     """
     Get rdfs:label for a URI from main graph and handle imported graph if present.
@@ -105,7 +104,7 @@ def get_rdfs_label(
     return get_short_name(uri)
 
 
-def extract_classes_from_union(graph: Graph, union_node: BNode) -> Set[URIRef]:
+def extract_classes_from_union(graph: Graph, union_node: BNode) -> set[URIRef]:
     """Extract class URIs from an owl:unionOf construct."""
     classes = set()
     try:
@@ -144,7 +143,7 @@ def extract_classes_from_union(graph: Graph, union_node: BNode) -> Set[URIRef]:
     return classes
 
 
-def extract_restriction_targets(graph: Graph, restriction: BNode) -> Set[URIRef]:
+def extract_restriction_targets(graph: Graph, restriction: BNode) -> set[URIRef]:
     """Extract target classes from an owl:Restriction."""
     targets = set()
 
@@ -186,7 +185,7 @@ def extract_restriction_targets(graph: Graph, restriction: BNode) -> Set[URIRef]
     return targets
 
 
-def extract_relationships(graph: Graph, class_uri: URIRef) -> List:
+def extract_relationships(graph: Graph, class_uri: URIRef) -> list:
     """
     Extract relationships from a class through its rdfs:subClassOf restrictions.
 
@@ -230,7 +229,7 @@ def get_class_id_prefix(uri: URIRef, graph: Graph) -> str:
     return "class"
 
 
-def get_inverse_property(property_uri: URIRef, graph: Graph) -> Optional[URIRef]:
+def get_inverse_property(property_uri: URIRef, graph: Graph) -> URIRef | None:
     """
     Get the inverse property of a given property URI.
     Checks both owl:inverseOf directions.
@@ -249,8 +248,8 @@ def get_inverse_property(property_uri: URIRef, graph: Graph) -> Optional[URIRef]
 
 
 def get_group_from_class_hierarchy(
-    class_uri: URIRef, graph: Graph, visited: Optional[Set[URIRef]] = None
-) -> Optional[str]:
+    class_uri: URIRef, graph: Graph, visited: set[URIRef] | None = None
+) -> str | None:
     """
     Traverse up the subclass hierarchy to find a group from URI_TO_GROUP.
     Returns the first matching group found, or None if none found.
@@ -282,8 +281,8 @@ def get_group_from_class_hierarchy(
 
 def parse_turtle_ontology(
     turtle_path: str,
-    imported_ontologies: Optional[List[str]] = None,
-) -> Tuple[Graph, Graph, Set[URIRef], Set[Tuple[URIRef, URIRef, URIRef]]]:
+    imported_ontologies: list[str] | None = None,
+) -> tuple[Graph, Graph, set[URIRef], set[tuple[URIRef, URIRef, URIRef]]]:
     """
     Parse a Turtle ontology file and extract classes and relationships.
 

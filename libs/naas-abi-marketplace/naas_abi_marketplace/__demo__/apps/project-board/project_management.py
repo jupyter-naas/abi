@@ -4,12 +4,13 @@ Multi-use: Project Manager, Software Engineer, DevOps Engineer, Product Manager,
 Tools: Kanban boards, sprint planning, resource allocation, timeline tracking, deliverable management
 """
 
-import streamlit as st
+from datetime import datetime, timedelta
+
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
-import numpy as np
+import streamlit as st
 
 st.set_page_config(page_title="Project Board", page_icon="📋", layout="wide")
 
@@ -67,7 +68,7 @@ if st.session_state.page == "sop":
     except FileNotFoundError:
         st.error("SOP.md file not found. Please ensure the SOP file exists in the same directory as this interface.")
     except Exception as e:
-        st.error(f"Error loading SOP: {str(e)}")
+        st.error(f"Error loading SOP: {e!s}")
     
     st.stop()  # Stop execution here for SOP page
 

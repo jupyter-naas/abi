@@ -1,6 +1,12 @@
 """View-only tool-result compaction before call_model.invoke."""
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from naas_abi_core.services.agent.Agent import (
     _MAX_TOOL_RESULT_CHARS,
     _OLD_TOOL_RESULT_STUB,
@@ -24,7 +30,7 @@ def _tool(
 
 
 def test_compact_returns_same_list_when_nothing_to_shrink() -> None:
-    messages = [
+    messages: list[AnyMessage] = [
         HumanMessage(content="hi", id="h1"),
         AIMessage(content="ok", id="a1"),
     ]
@@ -35,7 +41,7 @@ def test_compact_stubs_prior_turn_reads_keeps_last_list_and_write() -> None:
     prior_read = "x" * 200
     list_body = '{"sections": ["Cover"]}'
     write_body = '{"slug": "deck", "ok": true}'
-    messages = [
+    messages: list[AnyMessage] = [
         HumanMessage(content="first", id="h1"),
         _tool(prior_read, "read_slides_section", "c1"),
         _tool(list_body, "list_slides_sections", "c2"),
@@ -47,9 +53,11 @@ def test_compact_stubs_prior_turn_reads_keeps_last_list_and_write() -> None:
 
     assert out is not messages
     assert out[0] is messages[0]
-    assert out[1].content == _OLD_TOOL_RESULT_STUB
-    assert out[1].tool_call_id == "c1"
-    assert out[1].name == "read_slides_section"
+    stubbed = out[1]
+    assert isinstance(stubbed, ToolMessage)
+    assert stubbed.content == _OLD_TOOL_RESULT_STUB
+    assert stubbed.tool_call_id == "c1"
+    assert stubbed.name == "read_slides_section"
     assert out[2].content == list_body
     assert out[3].content == write_body
     assert out[4] is messages[4]
@@ -57,22 +65,25 @@ def test_compact_stubs_prior_turn_reads_keeps_last_list_and_write() -> None:
 
 def test_compact_truncates_huge_current_turn_read() -> None:
     huge = "<html>" + ("A" * (_MAX_TOOL_RESULT_CHARS + 500))
-    messages = [
+    messages: list[AnyMessage] = [
         HumanMessage(content="edit slide 2", id="h1"),
         _tool(huge, "read_slides_deck", "c1"),
     ]
 
     out = compact_old_tool_messages(messages)
 
-    assert out[1].content.startswith("<html>")
-    assert out[1].content.endswith("...[truncated]...")
-    assert len(out[1].content) < len(huge)
-    assert out[1].tool_call_id == "c1"
+    truncated = out[1]
+    assert isinstance(truncated, ToolMessage)
+    assert isinstance(truncated.content, str)
+    assert truncated.content.startswith("<html>")
+    assert truncated.content.endswith("...[truncated]...")
+    assert len(truncated.content) < len(huge)
+    assert truncated.tool_call_id == "c1"
 
 
 def test_compact_keeps_small_current_turn_reads() -> None:
     section = "<section>one slide</section>"
-    messages = [
+    messages: list[AnyMessage] = [
         HumanMessage(content="tweak cover", id="h1"),
         _tool(section, "read_slides_section", "c1"),
     ]
@@ -85,7 +96,7 @@ def test_compact_keeps_small_current_turn_reads() -> None:
 
 def test_compact_truncates_huge_last_write() -> None:
     huge_write = "W" * (_MAX_TOOL_RESULT_CHARS + 10)
-    messages = [
+    messages: list[AnyMessage] = [
         HumanMessage(content="old", id="h1"),
         _tool(huge_write, "write_slides_deck", "c1"),
         HumanMessage(content="new", id="h2"),
@@ -93,13 +104,16 @@ def test_compact_truncates_huge_last_write() -> None:
 
     out = compact_old_tool_messages(messages)
 
-    assert out[1].name == "write_slides_deck"
-    assert out[1].content.endswith("...[truncated]...")
-    assert len(out[1].content) <= _MAX_TOOL_RESULT_CHARS + len("\n...[truncated]...")
+    truncated = out[1]
+    assert isinstance(truncated, ToolMessage)
+    assert truncated.name == "write_slides_deck"
+    assert isinstance(truncated.content, str)
+    assert truncated.content.endswith("...[truncated]...")
+    assert len(truncated.content) <= _MAX_TOOL_RESULT_CHARS + len("\n...[truncated]...")
 
 
 def test_compact_keeps_handoff_and_system_messages() -> None:
-    messages = [
+    messages: list[AnyMessage] = [
         SystemMessage(content="sys"),
         HumanMessage(content="go", id="h1"),
         _tool("__handoff__:Slides", "transfer_to_Slides", "t1"),
@@ -112,7 +126,7 @@ def test_compact_keeps_handoff_and_system_messages() -> None:
 
 def test_compact_keeps_last_replace_in_as_write() -> None:
     replace_body = '{"ok": true, "replacements": 1}'
-    messages = [
+    messages: list[AnyMessage] = [
         HumanMessage(content="old", id="h1"),
         _tool("<section>old</section>", "read_slides_section", "c1"),
         _tool(replace_body, "replace_in_slides_deck", "c2"),
@@ -126,7 +140,7 @@ def test_compact_keeps_last_replace_in_as_write() -> None:
 
 
 def test_compact_stubs_older_list_when_a_newer_list_exists() -> None:
-    messages = [
+    messages: list[AnyMessage] = [
         HumanMessage(content="old", id="h1"),
         _tool('{"sections": ["A"]}', "list_slides_sections", "c1"),
         HumanMessage(content="new", id="h2"),

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from langchain_core.messages import AnyMessage
 from naas_abi_core.services.agent.Agent import (
     Agent,
@@ -72,9 +70,9 @@ Help the user accomplish their OSINT research tasks using the tools available to
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "OSINTResearcherAgent":
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> OSINTResearcherAgent:
         # from naas_abi_marketplace.domains.intelligence import ABIModule
         from naas_abi_core.engine.context import get_default_model_registry
 

@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from naas_abi_core.services.agent.IntentAgent import IntentType
-
 from naas_abi_marketplace.domains.operations.modules.support.agents.SupportAgent import (
     INTENTS_FILE,
     SupportAgent,

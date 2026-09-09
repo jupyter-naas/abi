@@ -124,7 +124,7 @@ def publish_remote_agent(
             description = getattr(agent, "description", "")
             model = "gpt-4o"
             temperature = 0
-            agent_configuration = getattr(agent, "configuration")
+            agent_configuration = agent.configuration
             if agent_configuration is not None:
                 prompt = agent_configuration.system_prompt
             else:

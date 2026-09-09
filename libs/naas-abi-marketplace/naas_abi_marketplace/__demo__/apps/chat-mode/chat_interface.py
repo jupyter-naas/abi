@@ -99,7 +99,7 @@ def load_agent(agent_class: str):
         st.write(f"🔍 **Debug:** ❌ Agent {agent_class} not found in any module")
         return None
     except Exception as e:
-        st.error(f"Error loading modules: {str(e)}")
+        st.error(f"Error loading modules: {e!s}")
         import traceback
 
         st.error(f"Traceback: {traceback.format_exc()}")
@@ -123,7 +123,7 @@ def initialize_agent():
         return agent
 
     except Exception as e:
-        st.error(f"Error initializing agent: {str(e)}")
+        st.error(f"Error initializing agent: {e!s}")
         return None
 
 
@@ -177,7 +177,7 @@ def process_user_input(user_input):
         else:
             st.error(f"Unknown agent: @{mentioned_agent}")
             st.error(
-                f"Available agents: {', '.join([f'@{k}' for k in AGENT_MAPPING.keys()])}"
+                f"Available agents: {', '.join([f'@{k}' for k in AGENT_MAPPING])}"
             )
 
     return user_input
@@ -261,8 +261,7 @@ if prompt := st.chat_input("Type your message..."):
     # Process and send
     processed_input = process_user_input(prompt)
 
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            send_message(processed_input)
+    with st.chat_message("assistant"), st.spinner("Thinking..."):
+        send_message(processed_input)
 
     st.rerun()

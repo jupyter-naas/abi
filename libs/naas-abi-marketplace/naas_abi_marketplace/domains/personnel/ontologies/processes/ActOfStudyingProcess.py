@@ -4,14 +4,11 @@ from __future__ import annotations
 import datetime
 import os
 import uuid
+from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
-    Callable,
     ClassVar,
-    Iterable,
-    List,
-    Optional,
     Union,
     get_args,
     get_origin,
@@ -102,7 +99,7 @@ class RDFEntity(BaseModel):
     def _field_expects_list(field_annotation: object) -> bool:
         """Return True when a field annotation contains a list type."""
         origin = get_origin(field_annotation)
-        if origin in (list, List):
+        if origin in (list, list):
             return True
         if origin is Annotated:
             args = get_args(field_annotation)
@@ -349,65 +346,28 @@ class ActOfStudying(RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    for_educational_organization: Optional[
-        Annotated[
-            List[Union[Organization, URIRef, str]],
-            Field(
-                description="Relates an act of studying to the educational organization that participates as the training provider."
-            ),
-        ]
-    ] = None
-    hasParticipant: Optional[Annotated[List[Union[Person, URIRef, str]], Field()]] = (
+    for_educational_organization: Annotated[list[Organization | URIRef | str], Field(description="Relates an act of studying to the educational organization that participates as the training provider.")] | None = None
+    hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = (
         None
     )
-    has_enrollment: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="Relates an act of studying to the enrollment record it concretizes."
-            ),
-        ]
-    ] = None
-    has_degree: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="Relates an act of studying to the academic degree it concretizes."
-            ),
-        ]
-    ] = None
-    develops_skill: Optional[
-        Annotated[
-            List[Union[URIRef, str]],
-            Field(
-                description="Relates an act of studying to a skill exercised and developed in the course of it."
-            ),
-        ]
-    ] = None
-    is_act_of_studying_of: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="Relates an act of studying to the person acquiring the curriculum."
-            ),
-        ]
-    ] = None
-    occupiesTemporalRegion: Optional[
-        Annotated[List[Union[TemporalRegion, URIRef, str]], Field()]
-    ] = None
-    occursIn: Optional[Annotated[List[Union[Site, URIRef, str]], Field()]] = None
-    realizes: Optional[Annotated[Union[URIRef, str], Field()]] = None
+    has_enrollment: Annotated[URIRef | str, Field(description="Relates an act of studying to the enrollment record it concretizes.")] | None = None
+    has_degree: Annotated[URIRef | str, Field(description="Relates an act of studying to the academic degree it concretizes.")] | None = None
+    develops_skill: Annotated[list[URIRef | str], Field(description="Relates an act of studying to a skill exercised and developed in the course of it.")] | None = None
+    is_act_of_studying_of: Annotated[list[Person | URIRef | str], Field(description="Relates an act of studying to the person acquiring the curriculum.")] | None = None
+    occupiesTemporalRegion: Annotated[list[TemporalRegion | URIRef | str], Field()] | None = None
+    occursIn: Annotated[list[Site | URIRef | str], Field()] | None = None
+    realizes: Annotated[URIRef | str, Field()] | None = None
 
 
 # Rebuild models to resolve forward references

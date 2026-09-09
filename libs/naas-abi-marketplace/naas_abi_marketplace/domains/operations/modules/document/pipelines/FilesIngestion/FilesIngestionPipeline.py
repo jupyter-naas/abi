@@ -20,7 +20,9 @@ from naas_abi_marketplace.domains.operations.modules.document import ABIModule
 from naas_abi_marketplace.domains.operations.modules.document.ontologies.classes.ontology_demo.abi.document.File import (
     File,
 )
-from naas_abi_marketplace.domains.operations.modules.document.pipelines.common import file_already_ingested
+from naas_abi_marketplace.domains.operations.modules.document.pipelines.common import (
+    file_already_ingested,
+)
 from pydantic import Field
 from rdflib import Graph, URIRef
 
@@ -29,7 +31,6 @@ from rdflib import Graph, URIRef
 class FilesIngestionPipelineConfiguration(PipelineConfiguration):
     """Configuration for ingesting a local directory of files."""
 
-    pass
 
 
 class FilesIngestionPipelineParameters(PipelineParameters):
@@ -87,7 +88,7 @@ class FilesIngestionPipeline(Pipeline):
             try:
                 parsed = dt.datetime.fromisoformat(value)
                 if parsed.tzinfo is None:
-                    parsed = parsed.replace(tzinfo=dt.timezone.utc)
+                    parsed = parsed.replace(tzinfo=dt.UTC)
                 return parsed
             except ValueError:
                 return None

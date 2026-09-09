@@ -1,8 +1,9 @@
-from dotenv import load_dotenv
 import os
-import yaml
+
 import pydash
 import requests
+import yaml
+from dotenv import load_dotenv
 
 
 def get_storage_credentials(naas_api_key, workspace_id, storage_name):

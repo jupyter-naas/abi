@@ -3,17 +3,13 @@
 from __future__ import annotations
 
 import hashlib
-import json
 
 import numpy as np
-import pytest
-
 from naas_abi_marketplace.domains.operations.modules.document.pipelines.MarkdownToVectorPipeline import (
     MarkdownToVectorPipeline,
     MarkdownToVectorPipelineConfiguration,
     _split_markdown,
 )
-
 
 # ---------------------------------------------------------------------------
 # _split_markdown

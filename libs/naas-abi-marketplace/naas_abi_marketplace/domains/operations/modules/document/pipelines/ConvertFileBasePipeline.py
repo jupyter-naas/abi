@@ -10,7 +10,9 @@ from naas_abi_marketplace.domains.operations.modules.document import ABIModule
 from naas_abi_marketplace.domains.operations.modules.document.ontologies.classes.ontology_demo.abi.document.File import (
     File,
 )
-from naas_abi_marketplace.domains.operations.modules.document.pipelines.common import get_files_to_process
+from naas_abi_marketplace.domains.operations.modules.document.pipelines.common import (
+    get_files_to_process,
+)
 from pydantic import Field
 from rdflib import Graph
 
@@ -124,4 +126,3 @@ class ConvertFileBasePipeline(Pipeline):
     ) -> None:
         if tags is None:
             tags = []
-        return None

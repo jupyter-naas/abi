@@ -1,11 +1,12 @@
 import os
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Annotated, Dict, List, Optional
+from typing import Annotated
+
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core import logger
+from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
 from naas_abi_marketplace.applications.github.integrations.GitHubGraphqlIntegration import (
@@ -16,8 +17,8 @@ from naas_abi_marketplace.applications.github.integrations.GitHubIntegration imp
     GitHubIntegration,
     GitHubIntegrationConfiguration,
 )
-from pydantic import Field
 from naas_abi_marketplace.domains.operations.modules.support import ABIModule
+from pydantic import Field
 
 
 @dataclass
@@ -96,12 +97,7 @@ class ReportBugParameters(WorkflowParameters):
             description="The ID of the status of the bug report"
         )
     ]
-    assignees: Optional[
-        Annotated[
-            list,
-            Field(description="The assignees of the bug report")
-        ]
-    ] = []
+    assignees: Annotated[list, Field(description="The assignees of the bug report")] | None = []
 
 
 class ReportBugWorkflow(Workflow):
@@ -122,7 +118,7 @@ class ReportBugWorkflow(Workflow):
             ABIModule.get_instance().engine.services.object_storage
         )
 
-    def report_bug(self, parameters: ReportBugParameters) -> Dict:
+    def report_bug(self, parameters: ReportBugParameters) -> dict:
         """Creates a new bug report issue and adds it to the project."""
         # Get the current iteration ID
         iteration_option_id = (
@@ -167,7 +163,7 @@ class ReportBugWorkflow(Workflow):
         )
         return issue
 
-    def as_tools(self) -> List[BaseTool]:
+    def as_tools(self) -> list[BaseTool]:
         """Returns a list of LangChain tools for all support workflows.
 
         Returns:
@@ -193,4 +189,3 @@ class ReportBugWorkflow(Workflow):
     ) -> None:
         if tags is None:
             tags = []
-        return None

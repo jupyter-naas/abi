@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import Optional
 
 from fastapi import APIRouter
 from naas_abi import ABIModule
@@ -140,7 +139,7 @@ class MultiModelAgent(Agent):
         name: str = NAME.capitalize().replace("_", " "),
         description: str = "API endpoints to call the Multi Model Agent completion.",
         description_stream: str = "API endpoints to call the Multi Model Agent stream completion.",
-        tags: Optional[list[str | Enum]] = None,
+        tags: list[str | Enum] | None = None,
     ) -> None:
         if tags is None:
             tags = []

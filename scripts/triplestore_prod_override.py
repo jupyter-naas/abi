@@ -1,6 +1,7 @@
-from common import get_config, get_storage_credentials
 import os
 from datetime import datetime
+
+from common import get_config, get_storage_credentials
 
 if __name__ == "__main__":
     # Ask user to validate storage? (y/n): " confirm

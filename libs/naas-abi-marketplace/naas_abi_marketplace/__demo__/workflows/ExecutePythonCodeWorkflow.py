@@ -102,7 +102,7 @@ class ExecutePythonCodeWorkflow(Workflow):
             logger.error(error_msg)
             return error_msg
         except Exception as e:
-            error_msg = f"Error: {str(e)}"
+            error_msg = f"Error: {e!s}"
             logger.error(f"Unexpected error during code execution: {error_msg}")
             return error_msg
 
@@ -135,4 +135,3 @@ class ExecutePythonCodeWorkflow(Workflow):
     ) -> None:
         if tags is None:
             tags = []
-        return None

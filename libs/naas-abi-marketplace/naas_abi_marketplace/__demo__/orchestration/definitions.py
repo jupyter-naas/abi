@@ -1,12 +1,12 @@
 import json
 import os
-from typing import Any, Dict
+from typing import Any
 
 import dagster
 
 
 class MyAssetConfig(dagster.Config):  # type: ignore
-    entry: Dict[str, Any]
+    entry: dict[str, Any]
 
 
 @dagster.asset

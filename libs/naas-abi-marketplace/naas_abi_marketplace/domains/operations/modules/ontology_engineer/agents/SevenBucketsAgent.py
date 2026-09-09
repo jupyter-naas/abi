@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Optional
 
 from langchain_core.tools import tool
 from naas_abi_core.models.Model import CanonicalModelId
@@ -368,11 +367,13 @@ SUGGESTIONS: list[dict[str, str]] = [
 
 
 def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
+    agent_shared_state: AgentSharedState | None = None,
+    agent_configuration: AgentConfiguration | None = None,
 ) -> Agent:
     # Define model
-    from naas_abi_marketplace.domains.operations.modules.ontology_engineer import ABIModule
+    from naas_abi_marketplace.domains.operations.modules.ontology_engineer import (
+        ABIModule,
+    )
 
     abi_module = ABIModule.get_instance()
     chat_model = abi_module.engine.services.model_registry.get_chat_model(CanonicalModelId.GPT_5_2)
