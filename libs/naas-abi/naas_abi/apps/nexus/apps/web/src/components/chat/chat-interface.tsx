@@ -27,6 +27,7 @@ import {
 } from '@/components/slides/slides-deck-card';
 import { SlidesDeckCardView } from '@/components/slides/slides-deck-card-view';
 import { FilesBlock } from './files-block';
+import { PresentationInfoBlock } from './presentation-info-block';
 import { SuggestionsBlock } from './suggestions-block';
 import { slidesEmptyStateCopy } from './slides-empty-state';
 import { templateDisplayName } from '@/lib/slides-templates';
@@ -2788,15 +2789,16 @@ export function ChatInterface({
     setInput('');
   }, [input, isLoading]);
 
-  // Whether the "Suggestions" / "Files" containers render above the composer
-  // input box. Always shown for the selected agent / open deck (new or
-  // existing conversations alike). Drives the input box dropping its own
-  // top border/radius so the whole stack reads as one seamless card with no
-  // gap between them.
+  // Whether the "Suggestions" / "Files" / deck-identity containers render
+  // above the composer input box. Always shown for the selected agent / open
+  // deck (new or existing conversations alike). Drives the input box
+  // dropping its own top border/radius so the whole stack reads as one
+  // seamless card with no gap between them. FilesBlock hides itself when
+  // nothing has changed this session, so it does not factor in here.
   const showSuggestionsBlock =
     activeSuggestions(selectedAgentData?.suggestions as ChatSuggestion[] | undefined).length > 0;
-  const showFilesBlock = isPane && !!slidesChatContext;
-  const showComposerHeaderBlock = showSuggestionsBlock || showFilesBlock;
+  const showPresentationInfoBlock = isPane && !!slidesChatContext;
+  const showComposerHeaderBlock = showSuggestionsBlock || showPresentationInfoBlock;
 
   return (
     <div className="relative flex h-full min-h-0 flex-1">
@@ -2856,10 +2858,16 @@ export function ChatInterface({
         <div className="mx-auto max-w-3xl">
           {isPane && slidesChatContext ? (
             <>
+              <PresentationInfoBlock
+                slug={slidesChatContext.slides.slug}
+                title={slidesChatContext.slides.title}
+                workspaceId={currentWorkspaceId}
+              />
               {showSuggestionsBlock && (
                 <SuggestionsBlock
                   agentId={selectedAgent}
                   suggestions={selectedAgentData?.suggestions}
+                  topmost={false}
                   onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
                   onSuggestionHover={(value) => setInput(value)}
                   onSuggestionLeave={() => setInput('')}
@@ -2869,7 +2877,6 @@ export function ChatInterface({
                 slug={slidesChatContext.slides.slug}
                 path={slidesChatContext.slides.path}
                 workspaceId={currentWorkspaceId}
-                topmost={!showSuggestionsBlock}
               />
             </>
           ) : (

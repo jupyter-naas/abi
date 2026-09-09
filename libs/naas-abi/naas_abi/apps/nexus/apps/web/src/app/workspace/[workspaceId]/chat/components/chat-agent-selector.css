@@ -543,10 +543,11 @@ button.chat-slides-composer-row:hover {
   color: var(--muted-foreground-hex);
 }
 
-/* Shared "Suggestions" / "Files" containers above the composer: clickable
-   headers that expand in place. They can stack (Suggestions above Files)
-   and sit flush on the composer input box below them — shared border, no
-   gap; only the topmost block gets the top border/radius, and the
+/* Shared "Suggestions" / "Files" / deck-identity containers above the
+   composer. Suggestions and Files are clickable headers that expand in
+   place; the deck-identity strip (Slides only) is static and always leads
+   the stack. They sit flush on the composer input box below them — shared
+   border, no gap; only the topmost block gets the top border/radius, and the
    composer box drops its own top border/radius (see showComposerHeaderBlock
    in chat-interface.tsx) so the whole stack reads as one seamless card. */
 .chat-composer-header-block {
@@ -588,6 +589,35 @@ button.chat-slides-composer-row:hover {
 
 .chat-composer-header-list {
   padding-top: 0;
+}
+
+/* Deck-identity strip (PresentationInfoBlock): static, non-interactive —
+   same padding/gap as .chat-composer-header-toggle but no cursor/hover. */
+.chat-composer-info-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 5px;
+  color: var(--muted-foreground-hex);
+}
+
+.chat-composer-info-text {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.chat-composer-info-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-composer-info-version {
+  flex-shrink: 0;
+  opacity: 0.7;
 }
 
 

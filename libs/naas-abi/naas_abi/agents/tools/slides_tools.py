@@ -138,6 +138,20 @@ def _tool_error(exc: BaseException) -> dict[str, Any]:
     return {"error": _friendly_sc_error(exc)}
 
 
+_CONVENTIONAL_COMMIT_RE = re.compile(
+    r"^(feat|fix|chore|style|refactor|docs|perf)(\([a-z0-9_.-]+\))?!?: .+"
+)
+
+
+def _conventional_message(message: str, *, default_type: str = "chore") -> str:
+    """Coerce a commit message into Conventional Commits so `slides_history`
+    and Forgejo log a real changelog instead of free text per tool call."""
+    text = (message or "").strip() or "update slides deck"
+    if _CONVENTIONAL_COMMIT_RE.match(text):
+        return text
+    return f"{default_type}(slides): {text}"
+
+
 def _load_seed_deck_html() -> str | None:
     """Same Minimal Light seed the UI New path writes."""
     try:
@@ -522,7 +536,7 @@ def _commit_deck_forgejo(slug: str, html: str, message: str) -> dict[str, Any]:
             repo_id=_repo_id(),
             path=paths["deck_path"],
             content=html,
-            message=message,
+            message=_conventional_message(message),
             branch=paths["branch"],
         )
     except SourceControlError as exc:
@@ -1434,7 +1448,7 @@ def slides_tools() -> list[BaseTool]:
                 repo_id=repo_id,
                 path=paths["deck_path"],
                 content=_seed_deck_with_title(seed, clean_title),
-                message=f"Create slides project {slug}",
+                message=f"feat(slides): create {slug}",
                 branch=paths["branch"],
             )
 
@@ -1622,7 +1636,7 @@ def slides_tools() -> list[BaseTool]:
         slug: str = "",
         index: int | None = None,
         section_id: str | None = None,
-        message: str = "Update slides section via Abi",
+        message: str = "refactor(slides): rewrite section via Abi",
     ) -> dict[str, Any]:
         """Replace one slide. For a full-deck rewrite, use write_slides_sections.
 
@@ -1656,7 +1670,7 @@ def slides_tools() -> list[BaseTool]:
                 return applied
             new_html, written = applied
             result = _persist_deck(
-                resolved, new_html, message or "Update slides section via Abi"
+                resolved, new_html, message or "refactor(slides): rewrite section via Abi"
             )
             if "error" not in result and written:
                 result["section_index"] = written[0]
@@ -1670,7 +1684,7 @@ def slides_tools() -> list[BaseTool]:
     def write_slides_sections(
         sections: str,
         slug: str = "",
-        message: str = "Update slides sections via Abi",
+        message: str = "refactor(slides): rewrite sections via Abi",
     ) -> dict[str, Any]:
         """Replace several slides in one persist. Use this for a full-deck rewrite.
 
@@ -1702,7 +1716,7 @@ def slides_tools() -> list[BaseTool]:
                 return applied
             new_html, written = applied
             result = _persist_deck(
-                resolved, new_html, message or "Update slides sections via Abi"
+                resolved, new_html, message or "refactor(slides): rewrite sections via Abi"
             )
             if "error" not in result and written:
                 labels = [f"slide {idx + 1}" for idx in written]
@@ -1722,7 +1736,7 @@ def slides_tools() -> list[BaseTool]:
         occurrence: int = 0,
         section_index: int | None = None,
         section_id: str | None = None,
-        message: str = "Replace text in slides deck via Abi",
+        message: str = "fix(slides): replace text via Abi",
     ) -> dict[str, Any]:
         """Surgically replace a string in the open deck without dumping full HTML in chat.
 
@@ -1773,7 +1787,7 @@ def slides_tools() -> list[BaseTool]:
                 return applied
             updated, count, replaced, resolved_section = applied
             result = _persist_deck(
-                resolved, updated, message or "Replace text in slides deck via Abi"
+                resolved, updated, message or "fix(slides): replace text via Abi"
             )
             if "error" not in result:
                 label = (
@@ -1876,7 +1890,7 @@ def slides_tools() -> list[BaseTool]:
     def write_slides_deck(
         html: str,
         slug: str = "",
-        message: str = "Update slides deck via Abi",
+        message: str = "refactor(slides): rewrite deck via Abi",
     ) -> dict[str, Any]:
         """Write the full HTML deck. Prefer this or write_slides_sections for a whole-deck brief.
 
@@ -1916,7 +1930,7 @@ def slides_tools() -> list[BaseTool]:
                 _restore_redacted_data_urls(html, original) if original else html
             )
             result = _persist_deck(
-                resolved, content, message or "Update slides deck via Abi"
+                resolved, content, message or "refactor(slides): rewrite deck via Abi"
             )
             if "error" not in result:
                 note_slides_write("full deck")
@@ -1931,7 +1945,7 @@ def slides_tools() -> list[BaseTool]:
         layout: str = "content",
         title: str = "",
         slug: str = "",
-        message: str = "Insert slide via Abi",
+        message: str = "feat(slides): insert slide via Abi",
     ) -> dict[str, Any]:
         """Insert a slide after after_index. after_index=-1 appends.
 
@@ -1944,7 +1958,7 @@ def slides_tools() -> list[BaseTool]:
             lambda html: _insert_slide_html(
                 html, after_index=after_index, layout=layout, title=title
             ),
-            message or "Insert slide via Abi",
+            message or "feat(slides): insert slide via Abi",
             "insert slide",
         )
 
@@ -1952,7 +1966,7 @@ def slides_tools() -> list[BaseTool]:
     def delete_slide(
         index: int,
         slug: str = "",
-        message: str = "Delete slide via Abi",
+        message: str = "refactor(slides): delete slide via Abi",
     ) -> dict[str, Any]:
         """Delete the slide at index. Refuses when it is the last slide.
 
@@ -1961,7 +1975,7 @@ def slides_tools() -> list[BaseTool]:
         return _run_slide_mutation(
             slug,
             lambda html: _delete_slide_html(html, index),
-            message or "Delete slide via Abi",
+            message or "refactor(slides): delete slide via Abi",
             f"delete slide {index + 1}",
         )
 
@@ -1969,7 +1983,7 @@ def slides_tools() -> list[BaseTool]:
     def duplicate_slide(
         index: int,
         slug: str = "",
-        message: str = "Duplicate slide via Abi",
+        message: str = "feat(slides): duplicate slide via Abi",
     ) -> dict[str, Any]:
         """Duplicate the slide at index and insert the copy after it.
 
@@ -1978,7 +1992,7 @@ def slides_tools() -> list[BaseTool]:
         return _run_slide_mutation(
             slug,
             lambda html: _duplicate_slide_html(html, index),
-            message or "Duplicate slide via Abi",
+            message or "feat(slides): duplicate slide via Abi",
             f"duplicate slide {index + 1}",
         )
 
@@ -1988,7 +2002,7 @@ def slides_tools() -> list[BaseTool]:
         to_index: int = 0,
         order: str = "",
         slug: str = "",
-        message: str = "Reorder slides via Abi",
+        message: str = "style(slides): reorder slides via Abi",
     ) -> dict[str, Any]:
         """Move a slide from from_index to to_index, or pass order as a JSON index list.
 
@@ -2008,7 +2022,7 @@ def slides_tools() -> list[BaseTool]:
         return _run_slide_mutation(
             slug,
             _mutate,
-            message or "Reorder slides via Abi",
+            message or "style(slides): reorder slides via Abi",
             "reorder slides",
         )
 

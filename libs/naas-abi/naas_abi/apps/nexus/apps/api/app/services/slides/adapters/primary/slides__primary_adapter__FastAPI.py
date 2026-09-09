@@ -56,6 +56,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
 )
 from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNameConflictError,
+    Commit,
     FileWrite,
     RepoNotFoundError,
     SourceControlError,
@@ -190,6 +191,47 @@ def _source_control_http_error(exc: BaseException) -> HTTPException:
     if _is_forgejo_unreachable(exc):
         return HTTPException(status_code=503, detail=_FORGEJO_UNREACHABLE)
     return HTTPException(status_code=502, detail=_friendly_git_detail(exc))
+
+
+_CONVENTIONAL_COMMIT_RE = re.compile(
+    r"^(feat|fix|chore|style|refactor|docs|perf)(\([a-z0-9_.-]+\))?!?: .+"
+)
+
+
+def _conventional_message(message: str, *, default_type: str = "chore") -> str:
+    """Coerce a commit message into Conventional Commits for a real deck history."""
+    text = (message or "").strip() or "update slides deck"
+    if _CONVENTIONAL_COMMIT_RE.match(text):
+        return text
+    return f"{default_type}(slides): {text}"
+
+
+_CONVENTIONAL_TYPE_RE = re.compile(
+    r"^(feat|fix|chore|style|refactor|docs|perf)(\([a-z0-9_.-]+\))?(?P<breaking>!)?: "
+)
+
+
+def _semver_from_commits(commits: list[Commit]) -> str:
+    """Derive a 0.x semver from Conventional Commits history (newest first).
+
+    A deck never has a "stable public API" milestone the way a library does,
+    so it stays on major 0 forever: a breaking (``!``) or ``feat`` commit
+    bumps minor, ``fix``/``perf`` bumps patch, everything else (chore, style,
+    refactor, docs...) does not bump. Commits predating this convention (no
+    recognizable type) are skipped rather than guessed at.
+    """
+    minor = patch = 0
+    for commit in reversed(commits):  # oldest first
+        match = _CONVENTIONAL_TYPE_RE.match(commit.message or "")
+        if not match:
+            continue
+        commit_type = match.group(1)
+        if match.group("breaking") or commit_type == "feat":
+            minor += 1
+            patch = 0
+        elif commit_type in ("fix", "perf"):
+            patch += 1
+    return f"0.{minor}.{patch}"
 
 
 def _ensure_coding_repo(sc: SourceControlService) -> str:
@@ -385,7 +427,7 @@ def _claim_workspace_in_meta(
         repo_id=repo_id,
         path=paths["project_path"],
         content=json.dumps(meta, indent=2) + "\n",
-        message=f"Claim slides project {slug} for workspace",
+        message=f"chore(slides): claim {slug} for workspace",
         branch=paths["branch"],
         author_name=author_name,
         author_email=author_email,
@@ -949,7 +991,7 @@ class DeckResponse(BaseModel):
 class DeckUpdateRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     html: str = Field(..., min_length=1)
-    message: str = Field(default="Update slides deck", max_length=200)
+    message: str = Field(default="chore(deck): update slides deck", max_length=200)
     template_id: str | None = Field(default=None, max_length=_TEMPLATE_ID_MAX_LEN)
 
 
@@ -963,6 +1005,25 @@ class CommitResponse(BaseModel):
     message: str
     author: str
     date: str | None = None
+
+
+class DeckDiffFileResponse(BaseModel):
+    path: str
+    status: str
+    additions: int
+    deletions: int
+    old_path: str | None = None
+
+
+class DeckDiffResponse(BaseModel):
+    base: str
+    head: str
+    files: list[DeckDiffFileResponse]
+
+
+class DeckVersionResponse(BaseModel):
+    version: str
+    commit_count: int
 
 
 class RuntimeResponse(BaseModel):
@@ -1437,7 +1498,7 @@ async def create_project(
                 assets=catalog_assets,
                 meta=meta,
             ),
-            message=f"Create slides project {slug} from {body.template_id}",
+            message=f"feat(slides): create {slug} from {body.template_id}",
             branch=branch,
             author_name=author_name,
             author_email=author_email,
@@ -1565,7 +1626,7 @@ async def update_project(
             repo_id=repo_id,
             path=paths["project_path"],
             content=json.dumps(meta, indent=2) + "\n",
-            message=f"Update slides project {slug}",
+            message=f"chore(slides): update {slug} project settings",
             branch=paths["branch"],
             author_name=author_name,
             author_email=author_email,
@@ -1757,7 +1818,7 @@ async def put_deck(
             repo_id=repo_id,
             path=paths["deck_path"],
             content=body.html,
-            message=body.message or "Update slides deck",
+            message=_conventional_message(body.message),
             branch=paths["branch"],
             author_name=author_name,
             author_email=author_email,
@@ -1778,7 +1839,7 @@ async def put_deck(
                     repo_id=repo_id,
                     path=paths["project_path"],
                     content=json.dumps(data, indent=2) + "\n",
-                    message=f"Touch project metadata for {slug}",
+                    message=f"chore(slides): touch metadata for {slug}",
                     branch=paths["branch"],
                     author_name=author_name,
                     author_email=author_email,
@@ -1871,7 +1932,7 @@ def _save_live_deck_html(
                 repo_id=repo_id,
                 path=paths["project_path"],
                 content=json.dumps(data, indent=2) + "\n",
-                message=f"Touch project metadata for {slug}",
+                message=f"chore(slides): touch metadata for {slug}",
                 branch=paths["branch"],
                 author_name=author_name,
                 author_email=author_email,
@@ -1950,7 +2011,7 @@ async def apply_template(
                 assets=catalog_assets,
                 meta=meta,
             ),
-            message=f"Apply template {body.template_id}",
+            message=f"feat(slides): apply template {body.template_id}",
             branch=paths["branch"],
             author_name=author_name,
             author_email=author_email,
@@ -2002,6 +2063,104 @@ async def list_history(
 
     try:
         return await run_in_threadpool(_hist)
+    except RepoNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SourceControlError as exc:
+        raise _source_control_http_error(exc) from exc
+
+
+@router.get("/projects/{slug}/history/diff", response_model=DeckDiffResponse)
+async def get_history_diff(
+    slug: str,
+    workspace_id: str,
+    base: str,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    head: str | None = None,
+) -> DeckDiffResponse:
+    """Files changed between two commits on the deck branch, for the Files panel.
+
+    ``base`` is the commit the caller wants to diff against (its own baseline,
+    e.g. the branch head when the chat session opened this deck). ``head``
+    defaults to the current branch tip.
+    """
+    await require_workspace_access(current_user.id, workspace_id)
+    if not _SLUG_RE.match(slug):
+        raise HTTPException(status_code=422, detail="Invalid slug")
+    sc, repo_id = _slides_sc(request)
+
+    def _diff() -> DeckDiffResponse:
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
+        )
+        if paths is None:
+            raise RepoNotFoundError(f"slides project {slug}")
+        resolved_head = head
+        if not resolved_head:
+            commits = sc.list_commits(repo_id=repo_id, ref=paths["branch"], limit=1)
+            if not commits:
+                raise RepoNotFoundError(f"slides project {slug}")
+            resolved_head = commits[0].sha
+        if resolved_head == base:
+            return DeckDiffResponse(base=base, head=resolved_head, files=[])
+        diff = sc.get_diff(repo_id=repo_id, base=base, head=resolved_head)
+        return DeckDiffResponse(
+            base=base,
+            head=resolved_head,
+            files=[
+                DeckDiffFileResponse(
+                    path=f.path,
+                    status=f.status,
+                    additions=f.additions,
+                    deletions=f.deletions,
+                    old_path=f.old_path,
+                )
+                for f in diff.files
+            ],
+        )
+
+    try:
+        return await run_in_threadpool(_diff)
+    except RepoNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SourceControlError as exc:
+        raise _source_control_http_error(exc) from exc
+
+
+# Not paginated: the source control port has no total-commit-count API, so
+# this reflects at most the most recent 250 commits. A deck with more history
+# than that undercounts its earliest bumps.
+_VERSION_COMMIT_SCAN_LIMIT = 250
+
+
+@router.get("/projects/{slug}/version", response_model=DeckVersionResponse)
+async def get_deck_version(
+    slug: str,
+    workspace_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+) -> DeckVersionResponse:
+    """0.x semver derived from Conventional Commits history; see `_semver_from_commits`."""
+    await require_workspace_access(current_user.id, workspace_id)
+    if not _SLUG_RE.match(slug):
+        raise HTTPException(status_code=422, detail="Invalid slug")
+    sc, repo_id = _slides_sc(request)
+
+    def _version() -> DeckVersionResponse:
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
+        )
+        if paths is None:
+            raise RepoNotFoundError(f"slides project {slug}")
+        commits = sc.list_commits(
+            repo_id=repo_id, ref=paths["branch"], limit=_VERSION_COMMIT_SCAN_LIMIT
+        )
+        return DeckVersionResponse(
+            version=_semver_from_commits(commits), commit_count=len(commits)
+        )
+
+    try:
+        return await run_in_threadpool(_version)
     except RepoNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SourceControlError as exc:
@@ -2889,7 +3048,7 @@ async def insert_slide(
             layout=body.layout,
             title=body.title,
         ),
-        message=f"Insert slide in {slug}",
+        message=f"feat(slides): insert slide in {slug}",
     )
 
 
@@ -2912,7 +3071,7 @@ async def delete_slide(
         current_user=current_user,
         db=db,
         mutate=lambda html: _delete_slide_html(html, body.index),
-        message=f"Delete slide in {slug}",
+        message=f"refactor(slides): delete slide in {slug}",
     )
 
 
@@ -2935,7 +3094,7 @@ async def duplicate_slide(
         current_user=current_user,
         db=db,
         mutate=lambda html: _duplicate_slide_html(html, body.index),
-        message=f"Duplicate slide in {slug}",
+        message=f"feat(slides): duplicate slide in {slug}",
     )
 
 
@@ -2963,5 +3122,5 @@ async def reorder_slides(
             to_index=body.to_index,
             order=body.order,
         ),
-        message=f"Reorder slides in {slug}",
+        message=f"style(slides): reorder slides in {slug}",
     )

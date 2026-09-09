@@ -429,7 +429,7 @@ export default function SlidesEditorPage() {
         body: JSON.stringify({
           workspace_id: workspaceId,
           html,
-          message: `Update deck ${slug}`,
+          message: `chore(deck): update ${slug}`,
         }),
       });
       if (!res.ok) {

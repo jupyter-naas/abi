@@ -943,7 +943,7 @@ def test_create_and_apply_template_copies_catalog_assets(
     commits = sc.list_commits(
         repo_id=slides_api._repo_id(), ref="slides/ws-test/pixel-deck", limit=20
     )
-    seed_commits = [c for c in commits if "Create slides project" in c.message]
+    seed_commits = [c for c in commits if "feat(slides): create" in c.message]
     assert len(seed_commits) == 1
 
     asset = client.get(
@@ -986,7 +986,7 @@ def test_create_and_apply_template_copies_catalog_assets(
         for c in sc.list_commits(
             repo_id=slides_api._repo_id(), ref="slides/ws-test/pixel-deck", limit=20
         )
-        if c.message.startswith("Apply template")
+        if c.message.startswith("feat(slides): apply template")
     ]
     assert len(apply_commits) == 1
 
@@ -1099,3 +1099,155 @@ def test_delete_last_slide_is_refused(monkeypatch) -> None:
     )
     assert last.status_code == 409
     assert "last slide" in last.json()["detail"].lower()
+
+
+def test_history_uses_conventional_commits_and_diff_resolves_head(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Diff deck",
+            "slug": "diff-deck",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+    base_sha = created.json()["commit_sha"]
+    assert base_sha
+
+    history = client.get(
+        "/slides/projects/diff-deck/history", params={"workspace_id": "ws-test"}
+    )
+    assert history.status_code == 200, history.text
+    assert history.json()[0]["message"].startswith("feat(slides): create")
+
+    deck = client.get(
+        "/slides/projects/diff-deck/deck", params={"workspace_id": "ws-test"}
+    )
+    assert deck.status_code == 200, deck.text
+    saved = client.put(
+        "/slides/projects/diff-deck/deck",
+        json={
+            "workspace_id": "ws-test",
+            "html": deck.json()["html"],
+            "message": "made a copy tweak",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["commit_sha"] != base_sha
+
+    history2 = client.get(
+        "/slides/projects/diff-deck/history", params={"workspace_id": "ws-test"}
+    )
+    # A free-text message with no Conventional Commits type is bucketed as
+    # `chore(slides): ...` rather than saved as raw free text. put_deck also
+    # commits a metadata touch on top, so the branch tip is that commit, not
+    # the deck commit itself.
+    commits2 = history2.json()
+    messages = [c["message"] for c in commits2]
+    assert "chore(slides): made a copy tweak" in messages
+    head_sha = commits2[0]["sha"]
+    assert head_sha != base_sha
+
+    # `head` omitted resolves to the branch tip InMemoryAdapter just committed.
+    diff = client.get(
+        "/slides/projects/diff-deck/history/diff",
+        params={"workspace_id": "ws-test", "base": base_sha},
+    )
+    assert diff.status_code == 200, diff.text
+    body = diff.json()
+    assert body["base"] == base_sha
+    assert body["head"] == head_sha
+    # InMemoryAdapter.get_diff is a stub (no per-commit tree snapshots), so it
+    # always reports no changed files. Only Forgejo/LocalGitAdapter compute a
+    # real diff; this asserts today's stub behavior, not the intended one.
+    assert body["files"] == []
+
+    missing = client.get(
+        "/slides/projects/does-not-exist/history/diff",
+        params={"workspace_id": "ws-test", "base": base_sha},
+    )
+    assert missing.status_code == 404
+
+
+def test_deck_version_bumps_from_conventional_commit_history(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Version deck",
+            "slug": "version-deck",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    version = client.get(
+        "/slides/projects/version-deck/version", params={"workspace_id": "ws-test"}
+    )
+    assert version.status_code == 200, version.text
+    # Seed commit is `feat(slides): create ...` -> one minor bump.
+    assert version.json() == {"version": "0.1.0", "commit_count": 1}
+
+    deck = client.get(
+        "/slides/projects/version-deck/deck", params={"workspace_id": "ws-test"}
+    )
+    assert deck.status_code == 200, deck.text
+    saved = client.put(
+        "/slides/projects/version-deck/deck",
+        json={
+            "workspace_id": "ws-test",
+            "html": deck.json()["html"],
+            "message": "fix(deck): correct typo",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    version2 = client.get(
+        "/slides/projects/version-deck/version", params={"workspace_id": "ws-test"}
+    )
+    # `fix` bumps patch only; the metadata-touch `chore` commit alongside it
+    # does not bump anything.
+    assert version2.json()["version"] == "0.1.1"
+    assert version2.json()["commit_count"] == 3
+
+    inserted = client.post(
+        "/slides/projects/version-deck/slides/insert",
+        json={"workspace_id": "ws-test", "after_index": -1},
+    )
+    assert inserted.status_code == 200, inserted.text
+
+    version3 = client.get(
+        "/slides/projects/version-deck/version", params={"workspace_id": "ws-test"}
+    )
+    # `feat(slides): insert slide ...` resets patch and bumps minor.
+    assert version3.json()["version"] == "0.2.0"
+
+    missing = client.get(
+        "/slides/projects/does-not-exist/version", params={"workspace_id": "ws-test"}
+    )
+    assert missing.status_code == 404
+
+
+def test_semver_from_commits_ignores_unrecognized_and_non_bumping_types() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary import (
+        slides__primary_adapter__FastAPI as slides_module,
+    )
+    from naas_abi_core.services.source_control.SourceControlPorts import Commit
+
+    # Oldest first for readability; the function itself expects newest-first
+    # (it reverses), so build newest-first here to match the real contract.
+    oldest_to_newest = [
+        Commit(sha="1", message="Free-form message before the convention", author="a"),
+        Commit(sha="2", message="feat(slides): create x", author="a"),
+        Commit(sha="3", message="style(slides): reorder slides", author="a"),
+        Commit(sha="4", message="fix(slides): replace text", author="a"),
+        Commit(sha="5", message="feat(slides)!: breaking layout change", author="a"),
+        Commit(sha="6", message="fix(slides): another fix", author="a"),
+    ]
+    newest_first = list(reversed(oldest_to_newest))
+    assert slides_module._semver_from_commits(newest_first) == "0.2.1"
