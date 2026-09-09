@@ -1,5 +1,10 @@
 /** Shared widths for the dock (icon nav) and the feature column. */
 
+/** Global footer bar height (px). */
+export const FOOTER_HEIGHT = 28;
+/** Global topnav bar height (px): footer height +20%. */
+export const TOPNAV_HEIGHT = Math.round(FOOTER_HEIGHT * 1.2);
+
 export const FEATURE_COLUMN_WIDTH_DEFAULT = 256;
 export const FEATURE_COLUMN_WIDTH_MIN = 200;
 export const FEATURE_COLUMN_WIDTH_MAX = 480;

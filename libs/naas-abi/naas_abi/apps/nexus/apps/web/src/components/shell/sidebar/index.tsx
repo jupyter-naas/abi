@@ -24,7 +24,6 @@ import {
 import { requestQuickOpen } from '@/lib/quick-open';
 import { isSlidesNestedPath } from './slides-tree';
 import { getWorkspacePath } from './utils';
-import { WorkspaceMark, WorkspaceMarkFrame } from '../workspace-mark';
 import { clearAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
 import { dockShowsLabels } from '@/lib/shell-columns';
 import { ColumnResizeHandle, useColumnResize } from '../column-resize-handle';
@@ -99,7 +98,6 @@ export function Sidebar() {
   const pathname = usePathname();
 
   const {
-    workspaces,
     currentWorkspaceId,
     activePanelSection,
     setActivePanelSection,
@@ -161,18 +159,14 @@ export function Sidebar() {
       if (pathname.includes('/admin/')) setActivePanelSection(null);
       return;
     }
-    // Home is a desk, not a column. Only a mark-opened Workspaces panel may stay open.
+    // Home is a desk, not a column.
     if (urlSection.id === 'home') {
-      if (useWorkspaceStore.getState().activePanelSection !== 'workspaces') {
-        setActivePanelSection(null);
-      }
+      setActivePanelSection(null);
       return;
     }
     setActivePanelSection(urlSection.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, urlSection]);
-
-  const currentWorkspace = mounted ? workspaces.find((w) => w.id === currentWorkspaceId) || null : null;
 
   const isFeatureEnabled = (feature?: SectionDef['feature']) => {
     if (!feature) return true;
@@ -421,10 +415,6 @@ export function Sidebar() {
     endDragChrome();
   };
 
-  const toggleWorkspacesPanel = () => {
-    setActivePanelSection(activePanelSection === 'workspaces' ? null : 'workspaces');
-  };
-
   const labeled = dockShowsLabels(dockWidth);
   const { isDragging: isResizing, handleDragStart } = useColumnResize(dockWidth, setDockWidth);
 
@@ -459,42 +449,6 @@ export function Sidebar() {
         style={{ width: dockWidth }}
         aria-label="Dock"
       >
-      <div className="flex h-14 flex-shrink-0 items-center justify-center border-b border-border/50">
-        <button
-          type="button"
-          onClick={toggleWorkspacesPanel}
-          aria-label="Workspaces"
-          aria-expanded={activePanelSection === 'workspaces'}
-          title="Workspaces"
-          className={cn(
-            'flex h-full w-full items-center outline-none focus-visible:ring-0',
-            labeled ? 'gap-3 px-3' : 'justify-center',
-          )}
-        >
-          <WorkspaceMarkFrame
-            backgroundColor={
-              currentWorkspace?.theme?.logoUrl
-                ? undefined
-                : (currentWorkspace?.theme?.primaryColor || '#22c55e')
-            }
-            className="h-10 w-10"
-          >
-            <WorkspaceMark
-              name={currentWorkspace?.name}
-              icon={currentWorkspace?.icon}
-              logoUrl={currentWorkspace?.theme?.logoUrl}
-              logoEmoji={currentWorkspace?.theme?.logoEmoji}
-              letterClassName="text-sm font-bold text-white"
-            />
-          </WorkspaceMarkFrame>
-          {labeled && (
-            <span className="truncate text-sm font-medium text-foreground">
-              {currentWorkspace?.name || 'NEXUS'}
-            </span>
-          )}
-        </button>
-      </div>
-
       <nav
         ref={navRef}
         className={cn(

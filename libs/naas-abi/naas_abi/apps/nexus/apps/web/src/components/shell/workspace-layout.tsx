@@ -372,34 +372,35 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   }
 
   return (
-    <div 
-      className="flex h-screen w-screen overflow-hidden bg-background"
+    <div
+      className="flex h-screen w-screen flex-col overflow-hidden bg-background"
       style={themeStyles}
       data-org-branded="true"
     >
-      {/* Dock: workspace mark, nav, profile. Width matches the feature column by default and is resizable. */}
-      <Sidebar />
+      {/* Global topnav: workspace mark, active section title, page header,
+          chat pane toggle. Spans the full app width so the dock, feature
+          column, main content and AI pane each drop their own header. */}
+      <TopNav />
 
-      {/* Feature column: Chat, Files, Workspaces, ... */}
-      <SectionPanel />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* Dock: workspace mark now lives in TopNav; nav + profile here. Width matches the feature column by default and is resizable. */}
+        <Sidebar />
 
-      {/* Topnav spans main content + the AI chat pane, so the pane opens
-          below it instead of beside a per-page-scoped header. */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <TopNav />
-        <div className="flex min-h-0 flex-1 overflow-hidden">
-          {/* Main content + platform status footer (User / Business workspace / Repo / Branch / Code workspace) */}
-          <main className="flex flex-1 flex-col overflow-hidden">
-            {currentWorkspaceId && <PresenceIndicator workspaceId={currentWorkspaceId} />}
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
-              <PlatformStatusFooter />
-            </div>
-          </main>
+        {/* Feature column: Chat, Files, Workspaces, ... */}
+        <SectionPanel />
 
-          {contextPanelOpen && <AIPane />}
-        </div>
+        {/* Main content + the AI chat pane, opening below TopNav instead of
+            beside a per-page-scoped header. */}
+        <main className="flex flex-1 flex-col overflow-hidden">
+          {currentWorkspaceId && <PresenceIndicator workspaceId={currentWorkspaceId} />}
+          <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+        </main>
+
+        {contextPanelOpen && <AIPane />}
       </div>
+
+      {/* Global footer: User / Business workspace / Repo / Branch / Code workspace. */}
+      <PlatformStatusFooter />
     </div>
   );
 }

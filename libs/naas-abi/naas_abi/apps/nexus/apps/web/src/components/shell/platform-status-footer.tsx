@@ -11,6 +11,7 @@ import { usePlatformStatusStore } from '@/stores/platform-status';
 import { useSlidesStore } from '@/stores/slides';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { cn } from '@/lib/utils';
+import { FOOTER_HEIGHT } from '@/lib/shell-columns';
 
 /** Empty field glyph when a slot does not apply to the current surface. */
 const NA = '\u2014';
@@ -78,7 +79,9 @@ function Slot({
 }
 
 /**
- * Thin platform status footer for every Nexus workspace section.
+ * Global platform status footer, mounted once by WorkspaceLayout spanning
+ * the full app width (same glass chrome as TopNav) instead of once per
+ * main column.
  * Left: User / Business workspace / Repo / Branch / Code workspace [/ dirty]
  * Right: Refresh + API health
  *
@@ -229,9 +232,10 @@ export function PlatformStatusFooter() {
   return (
     <footer
       className={cn(
-        'flex h-7 shrink-0 items-center justify-between gap-3 border-t border-border/60',
-        'bg-muted/40 px-3 text-[11px] text-muted-foreground',
+        'glass-nav-footer relative z-[200] flex shrink-0 items-center justify-between gap-3',
+        'px-3 text-[11px] text-muted-foreground',
       )}
+      style={{ height: FOOTER_HEIGHT }}
       data-platform-status-footer="true"
     >
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">

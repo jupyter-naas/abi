@@ -1,19 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { PanelLeft, PanelRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, isTransientPanelSection } from '@/stores/workspace';
 import { useIsMobile } from '@/hooks/use-is-mobile';
+import { TOPNAV_HEIGHT } from '@/lib/shell-columns';
 import { QuickOpen } from './quick-open';
 import { useTopNavContent } from './topnav-content';
+import { WorkspaceSwitcher } from './workspace-switcher';
+import { SECTION_HOME_HREF, SECTION_LABELS } from './sidebar/section-labels';
+import { getWorkspacePath } from './sidebar/utils';
 
 /**
- * The one persistent topnav bar. Mounted once by WorkspaceLayout above main
- * content and the AI chat pane, so the pane opens below it instead of beside
- * a per-page-scoped header. Content (app-menu row, page actions) comes from
- * whichever page last called `<Header>`; mobile owns its own chrome via
- * MobileTopBar instead.
+ * The one persistent topnav bar. Mounted once by WorkspaceLayout above the
+ * dock, the feature column, main content and the AI chat pane, so every
+ * column's own header (workspace mark, section title, page header) lives
+ * here instead of being duplicated once per column. Content specific to the
+ * current page (app-menu row, page actions) comes from whichever page last
+ * called `<Header>`; mobile owns its own chrome via MobileTopBar instead.
  */
 export function TopNav() {
   const isMobile = useIsMobile();
@@ -28,6 +34,8 @@ export function TopNav() {
     activePanelSection,
     setActivePanelSection,
     lastActivePanelSection,
+    sectionPanelWidth,
+    currentWorkspaceId,
   } = useWorkspaceStore();
 
   useEffect(() => {
@@ -42,22 +50,50 @@ export function TopNav() {
       ? lastActivePanelSection
       : 'chat';
 
+  const sectionTitleOpen = mounted && activePanelSection !== null;
+  const panelTitle = activePanelSection ? SECTION_LABELS[activePanelSection] : '';
+  const panelHref =
+    activePanelSection && SECTION_HOME_HREF[activePanelSection]
+      ? getWorkspacePath(currentWorkspaceId, SECTION_HOME_HREF[activePanelSection])
+      : null;
+
   if (isMobile) return null;
 
   return (
     <header className="glass-nav relative z-[200] shrink-0 border-b border-border/50">
-      <div className="relative flex h-14 items-center pl-2 pr-4">
-        <div className="relative z-10 flex min-w-0 items-center gap-1">
+      <div className="relative flex items-stretch" style={{ height: TOPNAV_HEIGHT }}>
+        <WorkspaceSwitcher />
+
+        {sectionTitleOpen && (
+          <div
+            className="flex h-full shrink-0 items-center pl-4 pr-3"
+            style={{ width: sectionPanelWidth }}
+          >
+            {panelHref ? (
+              <Link
+                href={panelHref}
+                data-testid="section-panel-title"
+                className="truncate text-sm font-semibold hover:text-workspace-accent"
+              >
+                {panelTitle}
+              </Link>
+            ) : (
+              <span className="truncate text-sm font-semibold">{panelTitle}</span>
+            )}
+          </div>
+        )}
+
+        <div className="relative z-10 flex min-w-0 items-center gap-1 pl-2 pr-2">
           {!sidebarOpen && (
             <button
               onClick={toggleSidebar}
               className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-md transition-all',
+                'flex h-7 w-7 items-center justify-center rounded-md transition-all',
                 'hover:bg-muted hover:text-foreground text-muted-foreground'
               )}
               title="Show dock"
             >
-              <PanelLeft size={16} />
+              <PanelLeft size={14} />
             </button>
           )}
 
@@ -66,15 +102,15 @@ export function TopNav() {
               type="button"
               onClick={() => setActivePanelSection(activePanelSection ? null : sectionToToggle)}
               className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-md transition-all',
+                'flex h-7 w-7 items-center justify-center rounded-md transition-all',
                 'hover:bg-muted hover:text-foreground',
-                activePanelSection ? 'text-foreground bg-muted' : 'text-muted-foreground'
+                activePanelSection ? 'text-foreground' : 'text-muted-foreground'
               )}
               title={activePanelSection ? 'Close panel' : 'Open panel'}
               aria-label={activePanelSection ? 'Close panel' : 'Open panel'}
               aria-pressed={Boolean(activePanelSection)}
             >
-              <PanelLeft size={16} />
+              <PanelLeft size={14} />
             </button>
           )}
         </div>
@@ -85,29 +121,29 @@ export function TopNav() {
           </div>
         </div>
 
-        <div className="relative z-10 ml-auto flex items-center gap-1">
+        <div className="relative z-10 ml-auto flex items-center gap-1 pr-4">
           {actions}
 
           <button
             type="button"
             onClick={toggleContextPanel}
             className={cn(
-              'flex h-8 w-8 items-center justify-center rounded-md transition-all',
+              'flex h-7 w-7 items-center justify-center rounded-md transition-all',
               'hover:bg-muted hover:text-foreground',
-              panelOpen ? 'bg-muted text-foreground' : 'text-muted-foreground'
+              panelOpen ? 'text-foreground' : 'text-muted-foreground'
             )}
             title="Toggle Abi chat pane (⌘K)"
             aria-label="Toggle Abi chat pane"
             aria-pressed={panelOpen}
           >
-            <PanelRight size={16} />
+            <PanelRight size={14} />
           </button>
         </div>
       </div>
 
       {nav ? (
         <div
-          className="flex h-9 min-w-0 items-center border-t border-border/50 bg-background/80 px-3"
+          className="flex h-9 min-w-0 items-center bg-background/80 px-3"
           data-testid="app-menu-bar"
         >
           {nav}

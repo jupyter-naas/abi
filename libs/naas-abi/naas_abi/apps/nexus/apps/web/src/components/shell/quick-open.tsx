@@ -314,7 +314,7 @@ export function QuickOpen() {
       <button
         type="button"
         onClick={() => (open ? close() : openPalette())}
-        className="flex h-8 w-full min-w-40 items-center justify-center rounded-md px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+        className="flex h-7 w-full min-w-40 items-center justify-center rounded-md px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
         aria-label={open ? 'Close quick open' : `Open quick open for ${workspaceName}`}
         aria-expanded={open}
         aria-haspopup="listbox"

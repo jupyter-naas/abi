@@ -183,7 +183,16 @@
     background: var(--glass-bg);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border-bottom: 1px solid var(--glass-border);
+    border-radius: var(--org-border-radius, 0px);
+  }
+
+  /* Same chrome as .glass-nav, mirrored for the global footer bar (border on
+     top instead of bottom, since it sits at the bottom of the app). */
+  .glass-nav-footer {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid var(--glass-border);
     border-radius: var(--org-border-radius, 0px);
   }
 
@@ -346,7 +355,8 @@ aside.glass :focus-visible {
 [data-org-branded="true"] .border,
 [data-org-branded="true"] .glass,
 [data-org-branded="true"] .glass-card,
-[data-org-branded="true"] .glass-nav {
+[data-org-branded="true"] .glass-nav,
+[data-org-branded="true"] .glass-nav-footer {
   /* Default to 0px unless org overrides */
   border-radius: var(--org-border-radius, 0px) !important;
 }
