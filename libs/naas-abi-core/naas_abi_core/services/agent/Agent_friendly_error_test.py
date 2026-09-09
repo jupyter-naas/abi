@@ -26,6 +26,36 @@ def test_friendly_model_invoke_error_hides_json_dump() -> None:
     )
 
 
+def test_friendly_model_invoke_error_names_context_window() -> None:
+    token = slides_active_slug.set(None)
+    try:
+        raw = (
+            "Error code: 400 - {'error': {'message': "
+            "\"litellm.ContextWindowExceededError: This model's maximum context "
+            "length is 262144 tokens. However, you requested 100000 output tokens "
+            'and your prompt contains at least 162145 input tokens."}}'
+        )
+        assert _friendly_model_invoke_error(Exception(raw)) == (
+            "This request exceeded the model's context window. "
+            "Do not load whole files with embedded images, then try again."
+        )
+    finally:
+        slides_active_slug.reset(token)
+
+
+def test_friendly_model_invoke_error_context_window_on_slides() -> None:
+    token = slides_active_slug.set("untitled-mtsg9zse")
+    try:
+        raw = (
+            "Error code: 400 - ContextWindowExceededError: maximum context length"
+        )
+        text = _friendly_model_invoke_error(Exception(raw))
+        assert "list_slides_sections" in text
+        assert "read_file" in text
+    finally:
+        slides_active_slug.reset(token)
+
+
 def test_friendly_model_invoke_error_recursion_without_slides() -> None:
     tokens = (
         slides_active_slug.set(None),
