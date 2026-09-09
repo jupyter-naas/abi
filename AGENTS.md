@@ -29,6 +29,7 @@ Core services live under `libs/naas-abi-core/naas_abi_core/services/`. Each has 
 | `agent` | LLM ↔ tools/sub-agents orchestration, memory, SSE streaming | [services/agent/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/agent/AGENTS.md) |
 | `bus` | Pub/sub + durable work-queue message broker | [services/bus/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/bus/AGENTS.md) |
 | `cache` | Multi-tier (hot/cold) cache with decorator API | [services/cache/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/cache/AGENTS.md) |
+| `document` | Portable mutable documents, scoped to modules (SQLite / PostgreSQL) | [services/document/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/document/AGENTS.md) |
 | `email` | Transactional email sending (SMTP / SES / FS) | [services/email/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/email/AGENTS.md) |
 | `event` | Durable typed event log + live pub/sub | [services/event/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/event/AGENTS.md) |
 | `keyvalue` | Bytes-in/out KV store with TTL + atomic CAS/CAD | [services/keyvalue/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/keyvalue/AGENTS.md) |

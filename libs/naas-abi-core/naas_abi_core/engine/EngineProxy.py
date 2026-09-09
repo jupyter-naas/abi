@@ -13,6 +13,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
 from naas_abi_core.services.dataset.DatasetService import DatasetService
+from naas_abi_core.services.document.DocumentService import DocumentService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
@@ -92,6 +93,16 @@ class ServicesProxy:
         if not self.__unlocked and DatasetService not in self.__module_dependencies.services:
             return False
         return self.__engine.services.dataset_available()
+
+    @property
+    def document(self) -> DocumentService:
+        self.__ensure_access(DocumentService)
+        return self.__engine.services.document._for_namespace(self.__module_name)
+
+    def document_available(self) -> bool:
+        if not self.__unlocked and DocumentService not in self.__module_dependencies.services:
+            return False
+        return self.__engine.services.document_available()
 
     @property
     def triple_store(self) -> TripleStoreService:
