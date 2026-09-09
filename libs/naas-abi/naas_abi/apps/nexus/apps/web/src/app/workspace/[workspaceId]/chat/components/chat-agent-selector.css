@@ -543,52 +543,52 @@ button.chat-slides-composer-row:hover {
   color: var(--muted-foreground-hex);
 }
 
-/* One-line suggestion chips immediately above the composer */
-.chat-suggestion-row {
+/* Agent-scoped "Suggestions" container above the composer: a clickable
+   header that expands in place. Sits flush on the composer input box
+   below it — shared border, no gap; the composer box drops its own top
+   border/radius (see the showSuggestionsBlock ternary on the input shell
+   in chat-interface.tsx) so the two read as one seamless card. */
+.chat-suggestions-block {
+  overflow: hidden;
+  /* Slightly distinct from the composer input's --card-hex below it. */
+  background: color-mix(in srgb, var(--muted-bg-hex) 55%, var(--card-hex));
+}
+
+.chat-suggestions-toggle {
   display: flex;
-  min-width: 0;
+  width: 100%;
   align-items: center;
-  gap: 4px;
-  padding: 0 0 8px;
+  gap: 5px;
+  padding: 4px 5px;
+  border: none;
+  background: transparent;
+  font-size: 11px;
+  color: var(--muted-foreground-hex);
+  cursor: pointer;
+  text-align: left;
 }
 
-.chat-suggestion-scroller {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 6px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
+.chat-suggestions-toggle:hover {
+  background: color-mix(in srgb, var(--muted-foreground-hex) 8%, transparent);
 }
 
-.chat-suggestion-chip {
-  flex: 0 0 auto;
-  width: auto;
-  max-width: min(280px, 80vw);
-  height: 32px;
-  white-space: nowrap;
+.chat-suggestions-toggle-label {
+  font-size: 10px;
+  font-weight: 400;
 }
 
-@media (max-width: 767px) {
-  .chat-suggestion-nav {
-    display: none !important;
-  }
+.chat-suggestions-toggle-chevron {
+  transition: transform 0.15s ease;
 }
 
-@media (min-width: 768px) {
-  .chat-suggestion-scroller {
-    scrollbar-width: none;
-  }
-
-  .chat-suggestion-scroller::-webkit-scrollbar {
-    display: none;
-  }
+.chat-suggestions-toggle-chevron.is-open {
+  transform: rotate(90deg);
 }
+
+.chat-suggestions-list {
+  padding-top: 0;
+}
+
 
 .chat-composer-input {
   /* 16px: prevent iOS Safari focus zoom */

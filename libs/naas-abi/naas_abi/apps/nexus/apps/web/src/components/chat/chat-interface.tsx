@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, ChevronLeft, ChevronRight, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
+import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
@@ -27,6 +27,7 @@ import {
 } from '@/components/slides/slides-deck-card';
 import { SlidesDeckCardView } from '@/components/slides/slides-deck-card-view';
 import { SlidesComposerContext, SlidesComposerTabs } from './slides-composer-chrome';
+import { SuggestionsBlock } from './suggestions-block';
 import { slidesEmptyStateCopy } from './slides-empty-state';
 import { templateDisplayName } from '@/lib/slides-templates';
 import { dispatchCodeFileUpdated, useCodeStore } from '@/stores/code';
@@ -49,12 +50,7 @@ import { slidesOpenDeckBranch, slidesOpenDeckPath } from '@/lib/slides-pane-conv
 import { ContextUsageMeter } from './context-usage-meter';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import { getLogoUrl } from '@/lib/logo-url';
-import {
-  activeSuggestions,
-  suggestionRowNavState,
-  suggestionScrollStep,
-  type ChatSuggestion,
-} from '@/lib/suggestion-row';
+import { activeSuggestions, type ChatSuggestion } from '@/lib/suggestion-row';
 
 const getApiBase = () => getApiUrl();
 
@@ -2793,6 +2789,14 @@ export function ChatInterface({
     setInput('');
   }, [input, isLoading]);
 
+  // Whether the "Suggestions" container renders above the composer input box.
+  // Always shown for the selected agent (new or existing conversations alike).
+  // Drives the input box dropping its own top border/radius so the two read
+  // as one seamless card with no gap between them.
+  const showSuggestionsBlock =
+    !(isPane && slidesChatContext) &&
+    activeSuggestions(selectedAgentData?.suggestions as ChatSuggestion[] | undefined).length > 0;
+
   return (
     <div className="relative flex h-full min-h-0 flex-1">
     {/* Chat column */}
@@ -2860,8 +2864,9 @@ export function ChatInterface({
               onSuggestionLeave={() => setInput('')}
             />
           ) : (
-            (!activeConversation || activeConversation.messages.length === 0) && (
-              <SuggestionChipsRow
+            showSuggestionsBlock && (
+              <SuggestionsBlock
+                agentId={selectedAgent}
                 suggestions={selectedAgentData?.suggestions}
                 onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
                 onSuggestionHover={(value) => setInput(value)}
@@ -3014,7 +3019,8 @@ export function ChatInterface({
             {voiceMode === 'idle' ? (
             <div
               className={cn(
-                'relative rounded-2xl border bg-card transition-colors',
+                'relative border bg-card transition-colors',
+                showSuggestionsBlock ? 'rounded-b-2xl border-t-0' : 'rounded-2xl',
                 isDragOver
                   ? 'border-workspace-accent border-2 bg-workspace-accent/5'
                   : 'border-border/50',
@@ -3358,12 +3364,6 @@ export function ChatInterface({
   );
 }
 
-// Maps CTA paths to their corresponding SidebarSection IDs.
-const CTA_SECTION_MAP: Record<string, SidebarSection> = {
-  '/marketplace': 'marketplace',
-  '/apps': 'apps',
-};
-
 function EmptyStateLogo({ src, name }: { src?: string; name: string }) {
   const [imgReady, setImgReady] = useState(false);
 
@@ -3384,121 +3384,6 @@ function EmptyStateLogo({ src, name }: { src?: string; name: string }) {
           onError={() => setImgReady(false)}
         />
       ) : null}
-    </div>
-  );
-}
-
-function SuggestionChipsRow({
-  suggestions,
-  onSuggestionClick,
-  onSuggestionHover,
-  onSuggestionLeave,
-}: {
-  suggestions?: ChatSuggestion[];
-  onSuggestionClick: (prompt: string) => void;
-  onSuggestionHover?: (value: string) => void;
-  onSuggestionLeave?: () => void;
-}) {
-  const router = useRouter();
-  const { setActivePanelSection } = useWorkspaceStore();
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const [nav, setNav] = useState({ overflow: false, canPrev: false, canNext: false });
-  const chips = useMemo(() => activeSuggestions(suggestions), [suggestions]);
-
-  const updateNav = useCallback(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    setNav(suggestionRowNavState(el.scrollLeft, el.clientWidth, el.scrollWidth));
-  }, []);
-
-  useLayoutEffect(() => {
-    updateNav();
-    const el = scrollerRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver(updateNav);
-    observer.observe(el);
-    el.addEventListener('scroll', updateNav, { passive: true });
-    return () => {
-      observer.disconnect();
-      el.removeEventListener('scroll', updateNav);
-    };
-  }, [updateNav, chips]);
-
-  const scrollByPage = (direction: -1 | 1) => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    el.scrollBy({ left: direction * suggestionScrollStep(el.clientWidth), behavior: 'smooth' });
-  };
-
-  if (chips.length === 0) return null;
-
-  return (
-    <div className="chat-suggestion-row" onMouseLeave={() => onSuggestionLeave?.()}>
-      <button
-        type="button"
-        className="chat-composer-action chat-suggestion-nav"
-        aria-label="Previous suggestions"
-        hidden={!nav.overflow}
-        disabled={!nav.canPrev}
-        onClick={() => scrollByPage(-1)}
-      >
-        <ChevronLeft size={16} />
-      </button>
-      <div ref={scrollerRef} className="chat-suggestion-scroller" aria-label="Suggested questions">
-        {chips.map((suggestion) => {
-          const baseClass =
-            'chat-suggestion-chip glass-card flex min-w-0 items-center px-3 py-1.5 text-left transition-all hover:border-primary/30 hover:glow-primary-sm cursor-pointer';
-
-          const content = (
-            <>
-              <span className="min-w-0 flex-1 truncate text-sm font-medium leading-none">
-                {suggestion.label}
-              </span>
-              <span className="ml-2 shrink-0 text-muted-foreground/40">›</span>
-            </>
-          );
-
-          if (suggestion.cta) {
-            const sectionId = (CTA_SECTION_MAP[suggestion.cta] ?? suggestion.cta.replace(/^\//, '')) as SidebarSection;
-            return (
-              <button
-                key={`${suggestion.label}:${suggestion.value}`}
-                type="button"
-                onMouseEnter={() => onSuggestionHover?.(suggestion.label)}
-                onClick={() => {
-                  setActivePanelSection(sectionId);
-                  router.push(suggestion.cta!);
-                }}
-                className={baseClass}
-              >
-                {content}
-              </button>
-            );
-          }
-
-          return (
-            <button
-              key={`${suggestion.label}:${suggestion.value}`}
-              type="button"
-              onMouseEnter={() => onSuggestionHover?.(suggestion.value)}
-              onClick={() => onSuggestionClick(suggestion.value)}
-              className={baseClass}
-            >
-              {content}
-            </button>
-          );
-        })}
-      </div>
-      <button
-        type="button"
-        className="chat-composer-action chat-suggestion-nav"
-        aria-label="Next suggestions"
-        hidden={!nav.overflow}
-        disabled={!nav.canNext}
-        onClick={() => scrollByPage(1)}
-      >
-        <ChevronRight size={16} />
-      </button>
     </div>
   );
 }
