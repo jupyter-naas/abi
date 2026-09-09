@@ -5,6 +5,7 @@ import pytest
 from naas_abi_core.services.document.adapters.secondary.document_codec import (
     ValueKind,
     bytes_sort_key,
+    compare_numeric_text,
     decode,
     dumps,
     encode,
@@ -12,6 +13,8 @@ from naas_abi_core.services.document.adapters.secondary.document_codec import (
     equality_key,
     sqlite_field,
     sqlite_json_key,
+    sqlite_legacy_json_key,
+    sqlite_numeric_text,
     storage_key,
     value_sort_parts,
 )
@@ -74,3 +77,19 @@ def test_bytes_encoding_and_cursor_share_sort_key(value):
     assert bytes_sort_key(value) == expected
     assert encoded_bytes_sort_key(encode(value)["$v"]) == expected
     assert value_sort_parts(value) == (ValueKind.BYTES, 0, expected)
+
+
+def test_numeric_keys_follow_json_decimal_not_binary_float_value():
+    raw = "1.0000000000000001e18"
+    assert sqlite_json_key(raw) == sqlite_json_key("1000000000000000100")
+    assert sqlite_json_key(raw) != sqlite_json_key("1000000000000000128")
+    assert compare_numeric_text(sqlite_numeric_text(raw), "1000000000000000100") == 0
+    assert compare_numeric_text(sqlite_numeric_text(raw), "1000000000000000128") == -1
+    assert compare_numeric_text("5e-324", "0") == 1
+    assert decode(json.loads(raw)) == 1000000000000000100
+
+
+def test_legacy_numeric_keys_remain_available_during_index_upgrade():
+    assert sqlite_legacy_json_key("1.0000000000000001e18") == "1000000000000000128"
+    assert sqlite_legacy_json_key("null") is None
+    assert sqlite_legacy_json_key("[1.0, true, 1.5]") == "[1,true,1.5]"

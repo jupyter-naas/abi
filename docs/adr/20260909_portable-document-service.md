@@ -98,6 +98,19 @@ There is no automatic write replay, added telemetry, or new inter-domain
 authentication mechanism. Module scoping is an application boundary, not
 protection against hostile code running in the same process.
 
+Numeric equality, uniqueness, ranges, and cursor boundaries use JSON decimal
+values consistently across adapters. SQLite retains decimal text for numeric
+comparison through a Decimal collation; it does not round through SQLite REAL.
+Integral float equality uses the serialized decimal value rather than Python's
+binary-to-integer conversion. Versioned SQLite equality functions trigger index
+repair, retaining the legacy function for safe migration/rollback.
+
+PostgreSQL optional range/sort indexes bound their text/bytes key to 256
+characters so an optimization hint cannot reject long valid values. Full-value
+query and cursor comparisons remain authoritative; string/bytes ordering may
+need a separate sort. Numeric/rank index prefixes and GIN equality candidates
+remain available. Existing index fingerprints trigger transactional replacement.
+
 ## Consequences
 
 Modules can replace adapters through configuration without changing storage

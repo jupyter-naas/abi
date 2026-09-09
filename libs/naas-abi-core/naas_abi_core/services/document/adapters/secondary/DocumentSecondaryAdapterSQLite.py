@@ -6,9 +6,12 @@ from pathlib import Path
 from threading import RLock
 
 from naas_abi_core.services.document.adapters.secondary.document_codec import (
+    compare_numeric_text,
     encoded_bytes_sort_key,
     sqlite_field,
     sqlite_json_key,
+    sqlite_legacy_json_key,
+    sqlite_numeric_text,
 )
 from naas_abi_core.services.document.adapters.secondary.document_sql import DocumentSQL
 from naas_abi_core.services.document.DocumentPort import (
@@ -72,11 +75,18 @@ class DocumentSecondaryAdapterSQLite(DocumentSQL):
                 "document_field", 2, sqlite_field, deterministic=True
             )
             connection.create_function(
-                "document_json_key", 1, sqlite_json_key, deterministic=True
+                "document_json_key", 1, sqlite_legacy_json_key, deterministic=True
             )
             connection.create_function(
                 "document_bytes_key", 1, encoded_bytes_sort_key, deterministic=True
             )
+            connection.create_function(
+                "document_json_key_v2", 1, sqlite_json_key, deterministic=True
+            )
+            connection.create_function(
+                "document_numeric_text", 1, sqlite_numeric_text, deterministic=True
+            )
+            connection.create_collation("document_numeric", compare_numeric_text)
             return connection
         except BaseException:
             connection.close()

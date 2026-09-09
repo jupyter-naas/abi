@@ -1,3 +1,4 @@
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from unittest.mock import Mock, patch
@@ -18,6 +19,33 @@ from naas_abi_core.services.document.tests.document__secondary_adapter__generic_
 
 
 class TestDocumentSecondaryAdapterSQLite(DocumentSecondaryAdapterContract):
+    @pytest.mark.parametrize("duplicates", [False, True])
+    def test_numeric_index_upgrade_rebuilds_legacy_equality_keys(
+        self, docs, duplicates
+    ):
+        spec = CollectionSpec(
+            name="records", fields=(FieldSpec(name="x", type="float", unique=True),)
+        )
+        docs.ensure_collection("module", spec)
+        name, statement = docs.index_statements("module", spec)[0]
+        with docs.transaction(write=True) as connection:
+            connection.execute(f"DROP INDEX {name}")
+            connection.execute(
+                statement.replace("document_json_key_v2", "document_json_key")
+            )
+        docs.put("module", "records", "float", {"x": 1.0000000000000001e18}, None)
+        if duplicates:
+            docs.put("module", "records", "decimal", {"x": 1000000000000000100}, None)
+            with pytest.raises(UniqueViolation):
+                docs.ensure_collection("module", spec)
+            # Rollback retains usable old index semantics, including deletion.
+            docs.delete("module", "records", "decimal", None)
+        docs.ensure_collection("module", spec)
+        with pytest.raises(UniqueViolation):
+            docs.put("module", "records", "decimal", {"x": 1000000000000000100}, None)
+        docs.put("module", "records", "binary", {"x": 1000000000000000128}, None)
+        assert docs.count("module", "records", [("x", "eq", 1000000000000000100)]) == 1
+
     def test_busy_timeout_uses_portable_storage_error_without_replaying(
         self, docs, tmp_path
     ):
@@ -170,6 +198,3 @@ def test_memory_adapter_persists_until_closed():
     adapter.close()
     with pytest.raises(RuntimeError, match="closed"):
         adapter.collections("module")
-
-
-import sqlite3

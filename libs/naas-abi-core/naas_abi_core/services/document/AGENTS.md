@@ -56,8 +56,12 @@ Use bytes for arbitrary binary content. Datetimes normalize to UTC with
 microsecond precision. Datetimes/bytes use tagged JSON; user keys beginning with
 `$` are escaped so user dictionaries cannot collide with internal tags.
 Object key order is unspecified (including nested dictionaries). Encode ordered
-entries as lists when order matters. Numbers compare by value: PostgreSQL may
-normalize integral floats to integers within signed 64 bits. Expanded JSONB
+entries as lists when order matters. Numbers compare by their JSON decimal value, not the exact binary expansion of a
+Python float: `1.0000000000000001e18` equals integer `1000000000000000100`,
+not `1000000000000000128`. This applies recursively to equality and uniqueness,
+and to ranges and pagination. Integral floats may normalize to integers within
+signed 64 bits; reads normalize values where binary-to-integer conversion would
+otherwise change the decimal value. Expanded JSONB
 numbers outside that range are restored to floats so reads remain valid portable
 values and cursor paging can continue. Dates and bytes retain their types.
 
@@ -146,7 +150,11 @@ can share the file. `:memory:` retains one serialized connection for tests.
 Literal field lookup uses a deterministic function, avoiding version-dependent
 JSON-path escaping. `indexed=True` creates typed range/sort and exact equality
 expression indexes. Equality and `in` can use the equality index; SQLite chooses
-plans using its statistics. Exclusions and array `contains` can still scan.
+plans using its statistics. Numeric range/sort keys retain JSON decimal text and
+use a Decimal-based SQLite collation, avoiding lossy REAL conversion near large
+integers. Versioned equality functions force existing indexes to rebuild on
+`ensure_collection`; the legacy function remains available until that migration
+succeeds. Exclusions and array `contains` can still scan.
 `ensure_collection` transactionally repairs outdated expression indexes even if
 the declaration is unchanged; conflicting data raises `UniqueViolation` and
 rolls back the repair. Both adapters expose `close()` and reject subsequent use.
@@ -158,7 +166,12 @@ PostgreSQL uses the existing psycopg pool dependency, leasing a connection and
 transaction per operation, and one documents table plus a collection catalog in the configured
 schema. A namespace column scopes all statements and partial indexes. A GIN index
 accelerates containment candidates; exact equality still checks full values.
-`indexed=True` creates expressions matching the typed range/sort expressions.
+`indexed=True` indexes type rank, numeric value, and a bounded 256-character
+prefix of the text/bytes sort key. This keeps optional B-tree entries below
+PostgreSQL's size limit even for long incompressible values. Queries and cursors
+compare full values; sorting strings/bytes can require an explicit sort, while
+type/numeric ordering can use the leading index expressions. Equality candidates
+continue to use the GIN index.
 Collection locks coordinate writes with declaration changes and teardown; CAS
 updates/deletes check the version in the modifying statement. Boot DDL is
 serialized across processes and runs on every adapter initialization.

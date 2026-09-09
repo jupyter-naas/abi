@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 from datetime import UTC, datetime
+from decimal import Decimal
 from enum import IntEnum
 from typing import Any, cast
 
@@ -70,6 +71,10 @@ def decode(value: Any) -> Value:
     # this range cannot originate from the port, so restore their float type.
     if type(value) is int and not -(2**63) <= value < 2**63:
         return float(value)
+    if isinstance(value, float) and value.is_integer():
+        integer = int(Decimal(str(value)))
+        if -(2**63) <= integer < 2**63 and integer != value:
+            return integer
     if isinstance(value, dict):
         if value.get("$t") == "datetime":
             return datetime.fromisoformat(value["$v"])
@@ -100,7 +105,7 @@ def sqlite_field(raw: str, key: str) -> str | None:
 def equality_key(value: Any) -> Any:
     """Match JSONB equality: numeric 1 == 1.0, but true != 1, recursively."""
     if isinstance(value, float) and value.is_integer():
-        return int(value)
+        return int(Decimal(str(value)))
     if isinstance(value, list):
         return [equality_key(item) for item in value]
     if isinstance(value, dict):
@@ -112,3 +117,25 @@ def sqlite_json_key(raw: str | None) -> str | None:
     if raw is None or raw == "null":
         return None
     return dumps(equality_key(json.loads(raw)))
+
+
+def sqlite_numeric_text(raw: str) -> str:
+    """Preserve JSON decimal numbers without SQLite REAL conversion."""
+    return str(json.loads(raw))
+
+
+def compare_numeric_text(left: str, right: str) -> int:
+    a, b = Decimal(left), Decimal(right)
+    return (a > b) - (a < b)
+
+
+def sqlite_legacy_json_key(raw: str | None) -> str | None:
+    """Keep old expression indexes usable until ensure_collection rebuilds them."""
+    if raw is None or raw == "null":
+        return None
+
+    def binary_integer(token: str) -> int | float:
+        value = float(token)
+        return int(value) if value.is_integer() else value
+
+    return dumps(json.loads(raw, parse_float=binary_integer))

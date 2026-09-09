@@ -20,6 +20,26 @@ from naas_abi_core.services.document.tests.document__secondary_adapter__generic_
 
 @pytest.mark.integration
 class TestDocumentSecondaryAdapterPostgreSQL(DocumentSecondaryAdapterContract):
+    def test_optional_index_upgrade_replaces_unbounded_text_key(self, docs):
+        spec = CollectionSpec(
+            name="records", fields=(FieldSpec(name="x", type="string", indexed=True),)
+        )
+        docs.ensure_collection("module", spec)
+        name, statement = docs.index_statements("module", spec)[0]
+        text = docs.sort_parts("x")[2]
+        old_statement = statement.replace(f"left({text}, 256)", text)
+        assert old_statement != statement
+        with docs.transaction(write=True) as connection:
+            docs.ensure_index(connection, name, old_statement)
+        docs.put("module", "records", "before", {"x": "short"}, None)
+        docs.ensure_collection("module", spec)
+        import random
+        import string
+
+        value = "".join(random.Random(1258).choices(string.ascii_letters, k=5000))
+        docs.put("module", "records", "after", {"x": value}, None)
+        assert docs.get("module", "records", "after").data["x"] == value
+
     def test_pool_reuses_connections_after_rollback_and_releases_on_close(
         self, adapter
     ):

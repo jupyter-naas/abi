@@ -35,6 +35,93 @@ ROUND_TRIP_VALUES = [
 
 
 class DocumentSecondaryAdapterContract(ABC):
+    @pytest.mark.parametrize("sign", [1, -1])
+    def test_decimal_numeric_equality_ranges_uniqueness_and_paging(self, docs, sign):
+        from naas_abi_core.services.document.DocumentService import DocumentService
+
+        service = DocumentService(docs, "module")
+        values = {
+            "float": sign * 1.0000000000000001e18,
+            "decimal": sign * 1000000000000000100,
+            "binary": sign * 1000000000000000128,
+        }
+        service.ensure_collection(
+            CollectionSpec(
+                name="records",
+                fields=(FieldSpec(name="x", type="float", indexed=True),),
+            )
+        )
+        for id, value in values.items():
+            service.put("records", id, {"x": value, "nested": [value]})
+        for value in (values["float"], values["decimal"]):
+            assert {
+                d.id for d in service.find("records", where=[("x", "eq", value)]).items
+            } == {"float", "decimal"}
+            assert service.count("records", [("nested", "eq", [value])]) == 2
+            assert service.count("records", [("nested", "contains", value)]) == 2
+        assert service.get("records", "float").data["x"] == values["decimal"]
+        for direction in ("asc", "desc"):
+            expected = (
+                ["decimal", "float", "binary"]
+                if sign == 1
+                else ["binary", "decimal", "float"]
+            )
+            if direction == "desc":
+                expected.reverse()
+            assert [
+                d.id
+                for d in service.iterate("records", order_by=("x", direction), batch=1)
+            ] == expected
+        assert [
+            d.id
+            for d in service.find(
+                "records", where=[("x", "gt" if sign == 1 else "lt", values["float"])]
+            ).items
+        ] == ["binary"]
+        service.ensure_collection(
+            CollectionSpec(
+                name="unique", fields=(FieldSpec(name="x", type="float", unique=True),)
+            )
+        )
+        service.put("unique", "float", {"x": values["float"]})
+        service.put("unique", "binary", {"x": values["binary"]})
+        with pytest.raises(UniqueViolation):
+            service.put("unique", "decimal", {"x": values["decimal"]})
+
+    @pytest.mark.parametrize("kind", ["string", "bytes", "unicode"])
+    def test_index_hint_accepts_long_incompressible_values(self, docs, kind):
+        import random
+        import string
+
+        from naas_abi_core.services.document.DocumentService import DocumentService
+
+        rng = random.Random(1258)
+        prefix = "".join(rng.choices(string.ascii_letters + string.digits, k=5000))
+        if kind == "unicode":
+            prefix = "".join(chr(rng.randrange(0x10000, 0x10FFFF)) for _ in range(5000))
+            kind = "string"
+        values = [prefix + suffix for suffix in ("a", "b", "c")]
+        if kind == "bytes":
+            values = [value.encode() for value in values]
+        service = DocumentService(docs, "module")
+        service.put("records", "0", {"x": values[0]})
+        service.ensure_collection(
+            CollectionSpec(
+                name="records", fields=(FieldSpec(name="x", type=kind, indexed=True),)
+            )
+        )
+        for i, value in enumerate(values[1:], 1):
+            service.put("records", str(i), {"x": value})
+        service.ensure_collection(CollectionSpec(name="records"))
+        assert service.count("records", [("x", "eq", values[1])]) == 1
+        assert service.count("records", [("x", "gt", values[0])]) == 2
+        for direction in ("asc", "desc"):
+            expected = ["0", "1", "2"] if direction == "asc" else ["2", "1", "0"]
+            assert [
+                d.id
+                for d in service.iterate("records", order_by=("x", direction), batch=1)
+            ] == expected
+
     def test_generator_filters_cannot_expand_bulk_deletion(self, docs):
         from naas_abi_core.services.document.DocumentService import DocumentService
 

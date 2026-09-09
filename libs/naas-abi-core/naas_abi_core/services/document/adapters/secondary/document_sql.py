@@ -106,11 +106,17 @@ class DocumentSQL(ABC):
             + f" ELSE {ValueKind.NULL} END"
         )
         scalar = self.text(expression)
-        number = f"CAST({scalar} AS NUMERIC)" if self.pg else scalar
+        number = (
+            f"CAST({scalar} AS NUMERIC)"
+            if self.pg
+            else f"document_numeric_text({expression})"
+        )
         boolean = (
             f"CASE WHEN {scalar} = 'true' THEN 1 ELSE 0 END" if self.pg else scalar
         )
         numeric = f"CASE WHEN {kind} IN ({numeric_types}) THEN {number} WHEN {kind} IN ({bool_types}) THEN {boolean} ELSE 0 END"
+        if not self.pg:
+            numeric = f"CAST(({numeric}) AS TEXT) COLLATE document_numeric"
         binary = (
             f"encode(decode({value}, 'base64'), 'hex')"
             if self.pg
@@ -125,7 +131,7 @@ class DocumentSQL(ABC):
         if self.pg:
             params.append(raw)
             return f"COALESCE({expression} = CAST({self.p} AS JSONB), FALSE)"
-        key = f"document_json_key({expression})"
+        key = f"document_json_key_v2({expression})"
         if value is None:
             return f"({key} IS NULL AND {expression} IS NOT NULL)"
         params.append(sqlite_json_key(raw))
@@ -173,9 +179,7 @@ class DocumentSQL(ABC):
                 is_numeric = value_rank in (ValueKind.BOOL, ValueKind.NUMBER)
                 target = value_numeric if is_numeric else value_text
                 numeric_comparison = self.pg and is_numeric
-                params.extend(
-                    [value_rank, str(target) if numeric_comparison else target]
-                )
+                params.extend([value_rank, str(target) if is_numeric else target])
                 placeholder = (
                     f"CAST({self.p} AS NUMERIC)" if numeric_comparison else self.p
                 )
@@ -260,10 +264,15 @@ class DocumentSQL(ABC):
                     expressions.append(
                         f"(NULLIF({raw}, 'null'::jsonb))"
                         if self.pg
-                        else f"document_json_key({raw})"
+                        else f"document_json_key_v2({raw})"
                     )
                 else:
-                    expressions.extend(self.sort_parts(field))
+                    parts = self.sort_parts(field)
+                    if self.pg:
+                        # B-tree entries are bounded even for arbitrarily long
+                        # strings/bytes. Queries still compare the full value.
+                        parts[2] = f"left({parts[2]}, 256)"
+                    expressions.extend(parts)
             statements.append(
                 (
                     name,
@@ -272,7 +281,7 @@ class DocumentSQL(ABC):
             )
             if not self.pg and not unique:
                 equality = ", ".join(
-                    f"document_json_key({self.field(field)})" for field in fields
+                    f"document_json_key_v2({self.field(field)})" for field in fields
                 )
                 statements.append(
                     (
@@ -498,8 +507,9 @@ class DocumentSQL(ABC):
             except (ValueError, TypeError, KeyError, IndexError) as exc:
                 raise ValueError("Invalid cursor for this query") from exc
             placeholders = [self.p] * len(parts)
-            if self.pg and order_by is not None:
-                placeholders[1] = f"CAST({self.p} AS NUMERIC)"
+            if order_by is not None:
+                if self.pg:
+                    placeholders[1] = f"CAST({self.p} AS NUMERIC)"
                 key[1] = str(key[1])
             condition += f" AND ({', '.join(parts)}) {'<' if descending else '>'} ({', '.join(placeholders)})"
             params.extend(key)
