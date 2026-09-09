@@ -39,7 +39,14 @@ import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
 import { humanizeChatProviderError } from '@/lib/chat-provider-error';
+import {
+  buildContextUsage,
+  parseStreamTokenUsage,
+  reservedOutputTokensForModel,
+  resolveContextWindow,
+} from '@/lib/chat-context-usage';
 import { slidesOpenDeckBranch, slidesOpenDeckPath } from '@/lib/slides-pane-conversation';
+import { ContextUsageMeter } from './context-usage-meter';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import { getLogoUrl } from '@/lib/logo-url';
 import {
@@ -874,6 +881,10 @@ export function ChatInterface({
   const { providers, getProviderForAgent: getLegacyProviderForAgent } = useIntegrationsStore();
   const { getAgent, resolveAgent } = useAgentsStore();
   const { getSecretByKey } = useSecretsStore();
+  const selectedChatModels = useWorkspaceStore((s) => s.selectedChatModels);
+  const catalogModels = useModelsStore((s) => s.models);
+  const lastUsageByConversationRef = useRef<Map<string, number>>(new Map());
+  const [lastPromptTokens, setLastPromptTokens] = useState<number | null>(null);
   
   // Get provider for current agent - check agents store first, then legacy mapping
   const getProviderForAgent = (agentId: string) => {
@@ -1215,6 +1226,50 @@ export function ChatInterface({
   // Use null on server to prevent hydration mismatch
   const activeConversation = mounted ? surfaceConversation : null;
   const selectedAgentData = resolveAgent(selectedAgent);
+
+  useEffect(() => {
+    if (!activeConversationId) {
+      setLastPromptTokens(null);
+      return;
+    }
+    setLastPromptTokens(lastUsageByConversationRef.current.get(activeConversationId) ?? null);
+  }, [activeConversationId]);
+
+  const contextUsage = useMemo(() => {
+    const lastAssistantModel = [...(activeConversation?.messages ?? [])]
+      .reverse()
+      .find((message) => message.role === 'assistant' && message.modelId)?.modelId;
+    const modelId =
+      lastAssistantModel ||
+      (selectedAgentData && selectedChatModels[selectedAgentData.id]) ||
+      selectedAgentData?.modelIds?.[0] ||
+      selectedAgentData?.resolvedModelId ||
+      selectedAgentData?.modelId ||
+      null;
+    const window = resolveContextWindow(modelId, catalogModels);
+    return buildContextUsage({
+      messages: getModelHistory(activeConversation?.messages ?? []),
+      draft: input,
+      attachedImages,
+      attachedFileNames: pendingFileAttachments,
+      slidesPath: slidesChatContext?.slides.path ?? null,
+      lastPromptTokens,
+      contextWindow: window.tokens,
+      windowSource: window.source,
+      systemPrompt: selectedAgentData?.systemPrompt ?? null,
+      reservedOutputTokens: reservedOutputTokensForModel(modelId),
+    });
+  }, [
+    activeConversation?.messages,
+    attachedImages,
+    catalogModels,
+    input,
+    lastPromptTokens,
+    pendingFileAttachments,
+    selectedAgentData,
+    selectedChatModels,
+    slidesChatContext,
+  ]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -2390,6 +2445,12 @@ export function ChatInterface({
                   }
                 }
 
+                const streamUsage = parseStreamTokenUsage(parsed);
+                if (streamUsage && conversationId) {
+                  lastUsageByConversationRef.current.set(conversationId, streamUsage.promptTokens);
+                  setLastPromptTokens(streamUsage.promptTokens);
+                }
+
                 if (parseEvent(parsed as Record<string, unknown>)) {
                   renderStreamingMessage(true);
                 }
@@ -3107,6 +3168,8 @@ export function ChatInterface({
                     >
                       <Plus size={20} />
                     </button>
+
+                    <ContextUsageMeter snapshot={contextUsage} />
 
                     {/* My Drive picker */}
                     <div className="relative shrink-0" ref={myDrivePickerRef}>
