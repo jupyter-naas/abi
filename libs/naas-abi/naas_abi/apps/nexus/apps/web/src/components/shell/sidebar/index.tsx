@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Folder, Database, Code, Presentation, LayoutGrid, Store, Settings, Activity, Boxes, Home,
+  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Folder, Database, Code, Presentation, LayoutGrid, Store, Settings, Activity, Home,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -157,7 +157,10 @@ export function Sidebar() {
     if (lastReconciledPathRef.current === pathname) return;
     lastReconciledPathRef.current = pathname;
     if (!urlSection) {
-      if (pathname.includes('/admin/')) setActivePanelSection(null);
+      // Events is an admin route with its own feed panel; the rest of /admin/
+      // is full-bleed.
+      if (pathname.includes('/admin/events')) setActivePanelSection('events');
+      else if (pathname.includes('/admin/')) setActivePanelSection(null);
       return;
     }
     // Home is a desk, not a column.
@@ -227,6 +230,7 @@ export function Sidebar() {
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
       case 'settings':     return getWorkspacePath(currentWorkspaceId, '/settings');
       case 'workspaces':   return getWorkspacePath(currentWorkspaceId, '/home');
+      case 'events':       return getWorkspacePath(currentWorkspaceId, '/admin/events');
     }
   };
 
@@ -528,14 +532,13 @@ export function Sidebar() {
       >
         {isSuperadmin && [
           { key: 'admin-events', href: '/admin/events', label: 'Events', description: 'Recent platform activity', icon: <Activity size={18} /> },
-          { key: 'admin-services', href: '/admin/services', label: 'Services', description: 'Backing service health and status', icon: <Boxes size={18} /> },
         ].map((item) => {
           const base = getWorkspacePath(currentWorkspaceId, item.href);
           const active = pathname.startsWith(base);
           return (
             <button
               key={item.key}
-              onClick={() => { setActivePanelSection(null); router.push(base); }}
+              onClick={() => { setActivePanelSection('events'); router.push(base); }}
               onPointerEnter={(e) => showHoverTip({ id: item.key, ...item }, e.currentTarget)}
               onPointerLeave={hideHoverTip}
               onFocus={(e) => showHoverTip({ id: item.key, ...item }, e.currentTarget)}
