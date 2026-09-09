@@ -1,4 +1,4 @@
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping
 
 from naas_abi_core.services.document.DocumentPort import (
     CollectionSpec,
@@ -33,12 +33,14 @@ class DocumentService(ServiceBase):
 
     @classmethod
     def _for_engine(cls, adapter: IDocumentAdapter) -> "DocumentService":
-        root = cls(adapter, namespace="default")
+        root = cls(adapter, namespace="__engine__")
         root.__can_bind_namespaces = True
         return root
 
     @property
     def namespace(self) -> str:
+        if self.__can_bind_namespaces:
+            raise PermissionError("The engine document root only binds namespaces")
         return self.__namespace
 
     def _for_namespace(self, namespace: str) -> "DocumentService":
@@ -51,13 +53,13 @@ class DocumentService(ServiceBase):
         return scoped
 
     def ensure_collection(self, spec: CollectionSpec) -> None:
-        self.__adapter.ensure_collection(self.__namespace, spec)
+        self.__adapter.ensure_collection(self.namespace, spec)
 
     def drop_collection(self, collection: str) -> None:
-        self.__adapter.drop_collection(self.__namespace, validate_name(collection))
+        self.__adapter.drop_collection(self.namespace, validate_name(collection))
 
     def collections(self) -> list[str]:
-        return self.__adapter.collections(self.__namespace)
+        return self.__adapter.collections(self.namespace)
 
     def put(
         self,
@@ -70,7 +72,7 @@ class DocumentService(ServiceBase):
         validate_data(data)
         validate_version(if_version)
         return self.__adapter.put(
-            self.__namespace,
+            self.namespace,
             validate_name(collection),
             validate_name(id),
             data,
@@ -79,10 +81,10 @@ class DocumentService(ServiceBase):
 
     def get(self, collection: str, id: str) -> Document:
         return self.__adapter.get(
-            self.__namespace, validate_name(collection), validate_name(id)
+            self.namespace, validate_name(collection), validate_name(id)
         )
 
-    def find_one(self, collection: str, where: Sequence[Predicate]) -> Document | None:
+    def find_one(self, collection: str, where: Iterable[Predicate]) -> Document | None:
         page = self.find(collection, where=where, limit=1)
         return page.items[0] if page.items else None
 
@@ -98,31 +100,32 @@ class DocumentService(ServiceBase):
     ) -> None:
         validate_version(if_version)
         self.__adapter.delete(
-            self.__namespace, validate_name(collection), validate_name(id), if_version
+            self.namespace, validate_name(collection), validate_name(id), if_version
         )
 
     def find(
         self,
         collection: str,
         *,
-        where: Sequence[Predicate] = (),
+        where: Iterable[Predicate] = (),
         order_by: OrderBy = None,
         limit: int = 100,
         cursor: str | None = None,
     ) -> Page:
-        validate_query(where, order_by, limit)
+        where = validate_query(where, order_by, limit)
         return self.__adapter.find(
-            self.__namespace, validate_name(collection), where, order_by, limit, cursor
+            self.namespace, validate_name(collection), where, order_by, limit, cursor
         )
 
     def iterate(
         self,
         collection: str,
         *,
-        where: Sequence[Predicate] = (),
+        where: Iterable[Predicate] = (),
         order_by: OrderBy = None,
         batch: int = 500,
     ) -> Iterator[Document]:
+        where = validate_query(where, order_by, batch)
         cursor = None
         while True:
             page = self.find(
@@ -133,16 +136,16 @@ class DocumentService(ServiceBase):
             if cursor is None:
                 break
 
-    def count(self, collection: str, where: Sequence[Predicate] = ()) -> int:
-        validate_query(where)
-        return self.__adapter.count(self.__namespace, validate_name(collection), where)
+    def count(self, collection: str, where: Iterable[Predicate] = ()) -> int:
+        where = validate_query(where)
+        return self.__adapter.count(self.namespace, validate_name(collection), where)
 
     def put_many(
         self, collection: str, items: Mapping[str, dict[str, Value]]
     ) -> list[Document]:
         return [self.put(collection, id, data) for id, data in items.items()]
 
-    def delete_many(self, collection: str, where: Sequence[Predicate]) -> int:
+    def delete_many(self, collection: str, where: Iterable[Predicate]) -> int:
         deleted = 0
         for document in self.iterate(collection, where=where):
             self.delete(collection, document.id, if_version=document.version)

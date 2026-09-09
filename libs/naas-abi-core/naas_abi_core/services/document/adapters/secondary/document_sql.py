@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from contextlib import AbstractContextManager
 from datetime import UTC, datetime
+from functools import lru_cache
 from typing import Any, cast
 
 from naas_abi_core.services.document.adapters.secondary.document_codec import (
@@ -51,6 +52,7 @@ class DocumentSQL(ABC):
         self.documents_table = documents
         self.collections_table = collections
         self.p = "%s" if postgres else "?"
+        self._parse_spec = lru_cache(maxsize=128)(CollectionSpec.model_validate_json)
 
     @abstractmethod
     def transaction(self, *, write: bool = False) -> AbstractContextManager[Any]: ...
@@ -200,7 +202,7 @@ class DocumentSQL(ABC):
             raise CollectionNotFound(
                 f"Collection {namespace}.{collection} does not exist"
             )
-        return CollectionSpec.model_validate_json(row[0])
+        return self._parse_spec(row[0])
 
     @staticmethod
     def merge_spec(old: CollectionSpec, new: CollectionSpec) -> CollectionSpec:
@@ -219,12 +221,13 @@ class DocumentSQL(ABC):
                     unique=field.unique or previous.unique,
                 )
             fields[field.name] = field
+        groups: dict[frozenset[str], tuple[str, ...]] = {}
+        for group in old.unique_together + new.unique_together:
+            groups.setdefault(frozenset(group), group)
         return CollectionSpec(
             name=new.name,
             fields=tuple(fields.values()),
-            unique_together=tuple(
-                dict.fromkeys(old.unique_together + new.unique_together)
-            ),
+            unique_together=tuple(groups.values()),
         )
 
     def index_name(
@@ -301,12 +304,17 @@ class DocumentSQL(ABC):
             # before DDL so incompatible declarations never partly take effect.
             if merged.fields != old.fields:
                 rows = connection.execute(
-                    f"SELECT data FROM {self.documents_table} WHERE namespace = {self.p} AND collection = {self.p}",  # nosec B608
+                    f"SELECT id, data FROM {self.documents_table} WHERE namespace = {self.p} AND collection = {self.p}",  # nosec B608
                     (namespace, spec.name),
                 )
                 while batch := rows.fetchmany(500):
                     for row in batch:
-                        validate_data(self.read_data(row[0]), merged)
+                        try:
+                            validate_data(self.read_data(row[1]), merged)
+                        except ValueError as exc:
+                            raise ValueError(
+                                f"Cannot declare {namespace}.{spec.name}: document {row[0]!r}: {exc}. Migrate existing data before adding this declaration."
+                            ) from exc
             for name, statement in self.index_statements(namespace, merged):
                 self.ensure_index(connection, name, statement)
             if merged != old:
@@ -442,7 +450,7 @@ class DocumentSQL(ABC):
         limit: int,
         cursor: str | None,
     ) -> Page:
-        validate_query(where, order_by, limit)
+        where = validate_query(where, order_by, limit)
         params: list[Any] = [namespace, collection]
         condition = self.predicates(where, params)
         collation = '"C"' if self.pg else "BINARY"
@@ -456,7 +464,9 @@ class DocumentSQL(ABC):
                     [
                         namespace,
                         collection,
-                        [list(p) for p in where],
+                        sorted(
+                            [list(p) for p in where], key=lambda p: dumps(encode(p))
+                        ),
                         list(order_by) if order_by else None,
                     ]
                 )
@@ -518,7 +528,7 @@ class DocumentSQL(ABC):
         return Page(items, next_cursor)
 
     def count(self, namespace: str, collection: str, where: Sequence[Predicate]) -> int:
-        validate_query(where)
+        where = validate_query(where)
         params: list[Any] = [namespace, collection]
         condition = self.predicates(where, params)
         with self.transaction() as connection:

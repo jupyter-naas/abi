@@ -7,12 +7,14 @@ from threading import RLock
 
 from naas_abi_core.services.document.adapters.secondary.document_codec import (
     encoded_bytes_sort_key,
-    sqlite_equal,
     sqlite_field,
     sqlite_json_key,
 )
 from naas_abi_core.services.document.adapters.secondary.document_sql import DocumentSQL
-from naas_abi_core.services.document.DocumentPort import UniqueViolation
+from naas_abi_core.services.document.DocumentPort import (
+    DocumentStorageError,
+    UniqueViolation,
+)
 
 
 class DocumentSecondaryAdapterSQLite(DocumentSQL):
@@ -49,6 +51,11 @@ class DocumentSecondaryAdapterSQLite(DocumentSQL):
                 connection.execute(
                     "CREATE TABLE IF NOT EXISTS abi_documents (namespace TEXT NOT NULL, collection TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, version INTEGER NOT NULL, PRIMARY KEY (namespace, collection, id))"
                 )
+        except sqlite3.Error as exc:
+            self.close()
+            raise DocumentStorageError(
+                "Cannot initialize SQLite document storage"
+            ) from exc
         except BaseException:
             self.close()
             raise
@@ -61,9 +68,6 @@ class DocumentSecondaryAdapterSQLite(DocumentSQL):
             isolation_level=None,
         )
         try:
-            connection.create_function(
-                "document_equal", 2, sqlite_equal, deterministic=True
-            )
             connection.create_function(
                 "document_field", 2, sqlite_field, deterministic=True
             )
@@ -82,7 +86,7 @@ class DocumentSecondaryAdapterSQLite(DocumentSQL):
     def _connection(self) -> Iterator[sqlite3.Connection]:
         with self._lock:
             if self._closed:
-                raise RuntimeError("Document adapter is closed")
+                raise DocumentStorageError("Document adapter is closed")
             if self._memory_connection is not None:
                 yield self._memory_connection
                 return
@@ -108,27 +112,35 @@ class DocumentSecondaryAdapterSQLite(DocumentSQL):
 
     @contextmanager
     def transaction(self, *, write: bool = False) -> Iterator[sqlite3.Connection]:
-        with self._connection() as connection:
+        with self._translate_errors(), self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
             try:
                 yield connection
                 connection.commit()
-            except sqlite3.IntegrityError as exc:
-                connection.rollback()
-                if exc.sqlite_errorcode in (
-                    sqlite3.SQLITE_CONSTRAINT_UNIQUE,
-                    sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY,
-                ):
-                    raise UniqueViolation(
-                        "Document violates a unique constraint"
-                    ) from exc
-                raise
             except BaseException:
                 connection.rollback()
                 raise
 
+    @contextmanager
+    def _translate_errors(self) -> Iterator[None]:
+        try:
+            yield
+        except sqlite3.IntegrityError as exc:
+            if exc.sqlite_errorcode in (
+                sqlite3.SQLITE_CONSTRAINT_UNIQUE,
+                sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY,
+            ):
+                raise UniqueViolation("Document violates a unique constraint") from exc
+            raise DocumentStorageError(
+                "SQLite document storage constraint failed"
+            ) from exc
+        except sqlite3.Error as exc:
+            raise DocumentStorageError(
+                "SQLite document storage operation failed"
+            ) from exc
+
     def close(self) -> None:
-        with self._lock:
+        with self._translate_errors(), self._lock:
             self._closed = True
             if self._memory_connection is not None:
                 self._memory_connection.close()

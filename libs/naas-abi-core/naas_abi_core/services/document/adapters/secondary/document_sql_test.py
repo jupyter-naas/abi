@@ -60,3 +60,9 @@ def test_index_identifiers_are_bounded_and_namespace_specific(compiler):
     }
     assert len(names) == 4
     assert all(len(name) < 63 and name.replace("_", "").isalnum() for name in names)
+
+
+def test_compound_uniqueness_redeclaration_ignores_field_order(compiler):
+    old = CollectionSpec(name="records", unique_together=(("team", "slug"),))
+    new = CollectionSpec(name="records", unique_together=(("slug", "team"),))
+    assert compiler.merge_spec(old, new) == old

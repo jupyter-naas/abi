@@ -99,7 +99,7 @@ def test_find_one_and_iteration_follow_opaque_cursors(service, adapter):
     assert adapter.find.call_args_list[1].args == (
         "my.module",
         "records",
-        [("x", "exists", True)],
+        (("x", "exists", True),),
         None,
         1,
         "opaque",
@@ -124,3 +124,21 @@ def test_put_many_is_per_document_and_stops_on_failure(service, adapter):
     with pytest.raises(VersionConflict):
         service.put_many("records", {"a": {}, "b": {}, "c": {}})
     assert adapter.put.call_count == 2
+
+
+def test_engine_root_cannot_use_an_implicit_storage_namespace(adapter):
+    root = DocumentService._for_engine(adapter)
+    with pytest.raises(PermissionError, match="only binds namespaces"):
+        root.put("records", "id", {})
+    adapter.put.assert_not_called()
+
+
+def test_failed_filter_iteration_does_not_start_bulk_deletion(service, adapter):
+    def predicates():
+        yield ("x", "eq", 1)
+        raise ValueError("filter construction failed")
+
+    with pytest.raises(ValueError, match="filter construction failed"):
+        service.delete_many("records", predicates())
+    adapter.find.assert_not_called()
+    adapter.delete.assert_not_called()

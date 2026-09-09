@@ -35,6 +35,63 @@ ROUND_TRIP_VALUES = [
 
 
 class DocumentSecondaryAdapterContract(ABC):
+    def test_generator_filters_cannot_expand_bulk_deletion(self, docs):
+        from naas_abi_core.services.document.DocumentService import DocumentService
+
+        service = DocumentService(docs, "module")
+        for id, keep in (("a", False), ("b", True), ("c", False), ("d", True)):
+            service.put("records", id, {"keep": keep})
+        where = [("keep", "eq", False)]
+        assert service.count("records", iter(where)) == 2
+        assert [
+            doc.id for doc in service.iterate("records", where=iter(where), batch=1)
+        ] == ["a", "c"]
+        assert service.delete_many("records", iter(where)) == 2
+        assert [doc.id for doc in service.iterate("records")] == ["b", "d"]
+
+    def test_adapter_generator_filters_are_not_consumed_by_validation(self, docs):
+        docs.put("module", "records", "one", {"x": 1}, None)
+        docs.put("module", "records", "two", {"x": 2}, None)
+        where = [("x", "eq", 1)]
+        assert docs.count("module", "records", iter(where)) == 1
+        assert [
+            doc.id
+            for doc in docs.find("module", "records", iter(where), None, 10, None).items
+        ] == ["one"]
+
+    def test_cursor_accepts_reordered_and_predicates(self, docs):
+        for id in ("a", "b", "c"):
+            docs.put("module", "records", id, {"x": 1, "y": True}, None)
+        where = [("x", "eq", 1), ("y", "eq", True)]
+        first = docs.find("module", "records", where, None, 1, None)
+        second = docs.find("module", "records", where[::-1], None, 1, first.cursor)
+        assert second.items[0].id == "b"
+
+    def test_catalog_changes_from_peer_are_visible_after_prior_reads(self, docs, peer):
+        docs.put("module", "records", "one", {"x": 1}, None)
+        peer.ensure_collection(
+            "module",
+            CollectionSpec(name="records", fields=(FieldSpec(name="x", type="int"),)),
+        )
+        with pytest.raises(ValueError, match="type int"):
+            docs.put("module", "records", "two", {"x": "bad"}, None)
+        peer.drop_collection("module", "records")
+        with pytest.raises(CollectionNotFound):
+            docs.get("module", "records", "one")
+
+    def test_invalid_type_declaration_preserves_existing_data_and_catalog(self, docs):
+        docs.put("module", "records", "legacy", {"x": "text"}, None)
+        spec = CollectionSpec(name="records", fields=(FieldSpec(name="x", type="int"),))
+        with pytest.raises(ValueError, match="module.records.*legacy.*Migrate"):
+            docs.ensure_collection("module", spec)
+        docs.ensure_collection("module", CollectionSpec(name="records"))
+        assert docs.get("module", "records", "legacy").data == {"x": "text"}
+        docs.put("module", "records", "new", {"x": "still allowed"}, None)
+
+    def test_delete_zero_is_a_version_conflict_even_for_absent_documents(self, docs):
+        with pytest.raises(VersionConflict):
+            docs.delete("module", "records", "absent", 0)
+
     @pytest.mark.parametrize(
         "field", ["a.b'\"$", 'quote"and\\slash', "line\nbreak", "$tag", "caf\u00e9"]
     )

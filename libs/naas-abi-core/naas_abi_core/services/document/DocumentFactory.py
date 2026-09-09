@@ -4,8 +4,8 @@ from naas_abi_core.services.document.DocumentService import DocumentService
 class DocumentFactory:
     @staticmethod
     def DocumentServiceSQLite(
-        path: str = "storage/documents.sqlite",
-        namespace: str = "default",
+        path: str,
+        namespace: str,
         *,
         timeout: float = 5.0,
     ) -> DocumentService:
@@ -20,7 +20,7 @@ class DocumentFactory:
     @staticmethod
     def DocumentServicePostgreSQL(
         dsn: str,
-        namespace: str = "default",
+        namespace: str,
         *,
         schema: str = "abi_document",
         connect_timeout: int = 5,

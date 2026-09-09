@@ -112,11 +112,3 @@ def sqlite_json_key(raw: str | None) -> str | None:
     if raw is None or raw == "null":
         return None
     return dumps(equality_key(json.loads(raw)))
-
-
-def sqlite_equal(left: str | None, right: str) -> bool:
-    if left is None:
-        return False
-    return dumps(equality_key(json.loads(left))) == dumps(
-        equality_key(json.loads(right))
-    )

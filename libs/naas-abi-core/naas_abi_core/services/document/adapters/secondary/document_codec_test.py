@@ -10,7 +10,6 @@ from naas_abi_core.services.document.adapters.secondary.document_codec import (
     encode,
     encoded_bytes_sort_key,
     equality_key,
-    sqlite_equal,
     sqlite_field,
     sqlite_json_key,
     storage_key,
@@ -36,9 +35,8 @@ def test_objects_are_unordered_but_arrays_and_scalar_types_are_distinct():
     assert dumps(encode({"z": 1, "a": {"y": 2, "b": 3}})) == dumps(
         encode({"a": {"b": 3, "y": 2}, "z": 1})
     )
-    assert sqlite_equal('[1,{"a":2}]', '[1.0,{"a":2.0}]')
-    assert not sqlite_equal("[1,2]", "[2,1]")
-    assert not sqlite_equal("true", "1")
+    assert sqlite_json_key('[1,{"a":2}]') == sqlite_json_key('[1.0,{"a":2.0}]')
+    assert sqlite_json_key("[1,2]") != sqlite_json_key("[2,1]")
     assert equality_key({"x": [1.0, True]}) == {"x": [1, True]}
     assert sqlite_json_key("1.0") == sqlite_json_key("1")
     assert sqlite_json_key("true") != sqlite_json_key("1")

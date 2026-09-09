@@ -88,3 +88,9 @@ def test_version_rejects_coercible_nonintegers(version):
 def test_query_rejects_invalid_operator_arguments(where):
     with pytest.raises(ValueError):
         validate_query(where)
+
+
+@pytest.mark.parametrize("limit", [1001, 5_000_000])
+def test_query_rejects_oversized_pages(limit):
+    with pytest.raises(ValueError, match="1000"):
+        validate_query((), limit=limit)

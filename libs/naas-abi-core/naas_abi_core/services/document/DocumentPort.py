@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol, TypeAlias, runtime_checkable
@@ -26,6 +26,7 @@ Operator = Literal[
 ]
 Predicate: TypeAlias = tuple[str, Operator, Value]
 OrderBy: TypeAlias = tuple[str, Literal["asc", "desc"]] | None
+MAX_PAGE_SIZE = 1000
 
 
 class DocumentNotFound(Exception):
@@ -42,6 +43,13 @@ class VersionConflict(Exception):
 
 class UniqueViolation(Exception):
     pass
+
+
+class DocumentStorageError(RuntimeError):
+    """Backend I/O, availability, locking, or transaction failure.
+
+    The outcome of a failed write can be unknown; do not replay blindly.
+    """
 
 
 def validate_name(value: str) -> str:
@@ -168,15 +176,17 @@ def validate_version(version: int | None) -> None:
 
 
 def validate_query(
-    where: Sequence[Predicate], order_by: OrderBy = None, limit: int = 100
-) -> None:
-    if type(limit) is not int or limit < 1:
-        raise ValueError("Page size must be a positive integer")
+    where: Iterable[Predicate], order_by: OrderBy = None, limit: int = 100
+) -> tuple[Predicate, ...]:
+    """Return a validated snapshot, safe to reuse after consuming an iterator."""
+    if type(limit) is not int or not 1 <= limit <= MAX_PAGE_SIZE:
+        raise ValueError(f"Page size must be an integer between 1 and {MAX_PAGE_SIZE}")
+    predicates = tuple(where)
     if order_by is not None:
         if len(order_by) != 2 or order_by[1] not in ("asc", "desc"):
             raise ValueError("order_by must be (field, 'asc'|'desc')")
         validate_name(order_by[0])
-    for predicate in where:
+    for predicate in predicates:
         if len(predicate) != 3:
             raise ValueError("Predicates must contain (field, operator, value)")
         field, operator, value = predicate
@@ -203,6 +213,7 @@ def validate_query(
             value is None or isinstance(value, (list, dict))
         ):
             raise ValueError("Range predicates require a non-null scalar")
+    return predicates
 
 
 @runtime_checkable

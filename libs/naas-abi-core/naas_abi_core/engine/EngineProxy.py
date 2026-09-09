@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from threading import Lock
 from typing import TYPE_CHECKING
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
@@ -51,6 +52,9 @@ class ServicesProxy:
         self.__module_name = module_name
         self.__module_dependencies = module_dependencies
         self.__unlocked = unlocked
+        self.__document_source: DocumentService | None = None
+        self.__document_view: DocumentService | None = None
+        self.__document_lock = Lock()
 
     # def __accessible_services(self) -> List[Any]:
     #     engine_services = {
@@ -97,7 +101,13 @@ class ServicesProxy:
     @property
     def document(self) -> DocumentService:
         self.__ensure_access(DocumentService)
-        return self.__engine.services.document._for_namespace(self.__module_name)
+        with self.__document_lock:
+            source = self.__engine.services.document
+            if source is not self.__document_source:
+                self.__document_view = source._for_namespace(self.__module_name)
+                self.__document_source = source
+            assert self.__document_view is not None
+            return self.__document_view
 
     def document_available(self) -> bool:
         if not self.__unlocked and DocumentService not in self.__module_dependencies.services:

@@ -8,6 +8,7 @@ from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapter
 )
 from naas_abi_core.services.document.DocumentPort import (
     CollectionSpec,
+    DocumentStorageError,
     FieldSpec,
     UniqueViolation,
 )
@@ -17,6 +18,23 @@ from naas_abi_core.services.document.tests.document__secondary_adapter__generic_
 
 
 class TestDocumentSecondaryAdapterSQLite(DocumentSecondaryAdapterContract):
+    def test_busy_timeout_uses_portable_storage_error_without_replaying(
+        self, docs, tmp_path
+    ):
+        contender = DocumentSecondaryAdapterSQLite(
+            str(tmp_path / "documents.sqlite"), timeout=0.05
+        )
+        try:
+            with docs.transaction(write=True):
+                with pytest.raises(DocumentStorageError) as failed:
+                    contender.put("module", "records", "id", {}, None)
+                assert isinstance(failed.value.__cause__, sqlite3.OperationalError)
+            assert docs.count("module", "records", ()) == 0
+            contender.put("module", "records", "id", {}, None)
+            assert docs.count("module", "records", ()) == 1
+        finally:
+            contender.close()
+
     @pytest.mark.parametrize("duplicates", [False, True])
     def test_existing_index_is_repaired_atomically_even_when_spec_is_unchanged(
         self, docs, duplicates
@@ -152,3 +170,6 @@ def test_memory_adapter_persists_until_closed():
     adapter.close()
     with pytest.raises(RuntimeError, match="closed"):
         adapter.collections("module")
+
+
+import sqlite3

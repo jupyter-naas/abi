@@ -35,6 +35,9 @@ Resolve the issue's open decisions as follows:
   any null/missing component. Adding invalid uniqueness fails transactionally.
 - Bind all predicates to literal top-level fields, combine them with AND, and
   distinguish missing fields from explicit null. Ranges compare scalar kinds.
+- Materialize filter iterables before validation and retain them across pages.
+  Canonicalize AND-predicate order for cursor binding. Bound individual pages
+  and iteration batches to 1,000 documents (plus one continuation sentinel).
 - Use a portable scalar sort order, with numeric casts, UTC dates, binary string
   collation, and ID tie-breakers. Containers tie by kind then ID. Keyset cursors
   bind to the query and retain the anchor values, even if its record is deleted.
@@ -42,6 +45,8 @@ Resolve the issue's open decisions as follows:
   versions require a match. Deleting/recreating an ID starts a new version
   sequence. Bulk operations provide per-document atomicity and may commit a
   prefix. Version-aware bulk deletion surfaces concurrent changes.
+  A supplied delete version must match an existing document, including when
+  zero is supplied; zero's create-only interpretation is specific to `put`.
 
 Use reversible tag-key escaping for datetimes/bytes at any nesting depth. Reject
 naive datetimes, non-finite floats, integers outside signed 64 bits, and NUL or
@@ -62,9 +67,20 @@ Build equality expression indexes alongside typed sort/range indexes; exclusions
 and array membership may scan. Repair outdated SQLite indexes transactionally
 when ensuring a collection. PostgreSQL leases transactions from a bounded pool;
 adapter owners release resources with `close()`.
+PostgreSQL expression indexes store a fingerprint of their defining SQL in an
+adapter-owned index comment. Ensuring a collection transactionally replaces
+missing/stale definitions and rolls back on uniqueness failure. Compound
+uniqueness deduplicates field permutations while preserving the first index order.
+
+Keep catalog queries and PostgreSQL row locks on every operation for cross-process
+declaration/drop correctness. Cache parsed immutable specs per adapter by their
+exact catalog JSON, bounded to 128 entries; never cache away the catalog check.
 
 Only engine-created root services may produce namespace-bound handles. Scoped
-handles retain service wiring and reject namespace rebinding. Remote root and
+handles retain service wiring and reject namespace rebinding. Proxies reuse their
+scoped handle, retaining access checks and refreshing it when the engine root
+changes. The root cannot store data, and standalone factories require an explicit
+namespace. Remote root and
 scaffold configurations explicitly select the deployment's PostgreSQL database.
 
 Interim reliability defaults are a 5-second SQLite busy timeout, 5-second
@@ -73,6 +89,11 @@ PostgreSQL pool has one initial connection, at most ten connections, and a
 5-second startup/acquisition timeout; all are configuration options except the
 initial size. Read transactions also lock catalog rows, so PostgreSQL deliberately
 does not interpret the shared `write=False` flag as SQL read-only mode.
+Boot advisory-lock waits are bounded by the same statement timeout. Backend
+driver/pool/locking failures become `DocumentStorageError`; causes remain
+available and write outcomes can be ambiguous. Incompatible declarations fail
+with collection/document context and roll back; migrate data before enabling
+those declarations rather than bypassing validation during boot.
 There is no automatic write replay, added telemetry, or new inter-domain
 authentication mechanism. Module scoping is an application boundary, not
 protection against hostile code running in the same process.

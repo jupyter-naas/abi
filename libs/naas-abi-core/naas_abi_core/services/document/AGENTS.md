@@ -24,9 +24,17 @@ their existing responsibilities.
 
 `IDocumentAdapter` is a runtime-checkable protocol with `ensure_collection`,
 `drop_collection`, `collections`, `put`, `get`, `delete`, `find`, `count`, and `close`.
-Every operation takes an explicit namespace. Every adapter must implement every
-method. Exceptions are `CollectionNotFound`, `DocumentNotFound`,
-`VersionConflict`, and `UniqueViolation`.
+Every storage operation takes an explicit namespace; `close` releases resources.
+Every adapter must implement every
+method. Domain exceptions are `CollectionNotFound`, `DocumentNotFound`,
+`VersionConflict`, and `UniqueViolation`. Driver, locking, and pool failures
+surface as `DocumentStorageError`, with the original exception as its cause.
+A failed write may have an unknown outcome; this exception does not authorize
+automatic replay. Invalid values/declarations raise `ValueError`.
+
+The runtime protocol check validates method presence, not signatures or semantic
+conformance. Custom adapters must also pass static signature checks and the full
+shared adapter contract. Boot does not issue probe writes to certify an adapter.
 
 `CollectionSpec` declares optional typed fields and `unique_together`. Undeclared
 fields remain storable and queryable. Declared fields can be absent/null; other
@@ -35,6 +43,11 @@ Adding declarations validates existing documents. Type changes are rejected.
 Declarations merge additively: omitting an existing field, index, or uniqueness
 constraint does not remove it. Adding a violated unique constraint rolls back
 and raises `UniqueViolation`. Index removal requires explicit maintenance.
+Compound uniqueness declarations ignore field-order permutations, retaining the
+first declared order so existing index names stay stable. An incompatible type
+declaration fails with the collection and document ID, preserving the old catalog
+and data. Migrate/backfill incompatible values before enabling the declaration;
+boot deliberately fails rather than silently accepting an unenforced constraint.
 
 Values are strings, signed 64-bit integers, finite floats, booleans, null, aware
 datetimes, bytes, lists, and string-keyed dictionaries, recursively. Naive dates,
@@ -58,6 +71,9 @@ on CRUD/query operations. This is module isolation by API convention, not a
 security sandbox against hostile Python code with process access. Only the
 engine root created through `_for_engine` may bind namespaces; returned handles
 reject `_for_namespace` rebinding and retain the root's service wiring.
+The engine root only binds namespaces and cannot perform storage operations.
+Each module proxy retains its scoped handle, checking access on every retrieval
+and replacing the handle if the engine installs a different root service.
 
 ```python
 from naas_abi_core.module.Module import ModuleDependencies
@@ -86,9 +102,12 @@ documents.ensure_collection(
   avoid reusing IDs when stale references may still exist.
 - `get` raises `DocumentNotFound`. `exists` catches only that exception.
 - `delete` is idempotent without a version. With a version, absence or a mismatch
-  raises `VersionConflict`.
+  raises `VersionConflict`, including `if_version=0`. Zero's create-only meaning
+  applies to `put`; `delete` requires an actual matching document version.
 - `find`, `find_one`, `count`, and `iterate` support AND-combined top-level
   predicates. Field names are literal keys; dots do not select nested paths.
+  Filter iterables are materialized before validation or I/O and retained across
+  iteration pages, so generators cannot become empty filters after validation.
 - `eq` is exact structural equality, including array order and all object keys;
   booleans differ from numbers, while numeric 1 equals 1.0. `eq None` matches
   explicit null only. `exists` distinguishes missing from present (including
@@ -102,7 +121,8 @@ documents.ensure_collection(
   Strings/IDs use binary collation. Arrays then objects follow scalars; containers
   of the same kind tie by ID. No recursive container ordering is promised.
 - Cursors include the last sort values and ID, survive deletion of the anchor,
-  and are bound to the namespace, collection, filter, and ordering. They are
+  and are bound to the namespace, collection, filter, and ordering. Reordering
+  AND predicates does not invalidate a cursor. Cursors are
   opaque continuation tokens, not encrypted credentials. An inserted document
   before the cursor does not shift the next page. Paging is not a snapshot;
   changing sort values during iteration can repeat or omit documents.
@@ -110,6 +130,8 @@ documents.ensure_collection(
   an already committed prefix. `delete_many` checks each observed version so it
   cannot silently delete a concurrently changed document. `iterate(batch=500)`
   pages internally; `find(limit=100)` returns `Page(items, cursor)`.
+  `limit` and `batch` must be between 1 and 1,000. Use `iterate` for larger result
+  sets. The database fetches at most one extra row to detect a continuation.
 
 Unique constraints are sparse: missing or null fields do not conflict. For a
 compound constraint, any missing/null component exempts that document. Constraints
@@ -140,6 +162,15 @@ accelerates containment candidates; exact equality still checks full values.
 Collection locks coordinate writes with declaration changes and teardown; CAS
 updates/deletes check the version in the modifying statement. Boot DDL is
 serialized across processes and runs on every adapter initialization.
+PostgreSQL expression indexes carry an adapter-owned comment containing the
+defining SQL's fingerprint. `ensure_collection` replaces an index transactionally
+when that fingerprint changes or is absent, so compiler upgrades cannot silently
+retain old expressions. Uniqueness failures roll back the replacement.
+
+Catalog existence checks and PostgreSQL row locks remain per operation to
+coordinate with other processes changing declarations or dropping collections.
+Parsed immutable specs are cached per adapter in a bounded 128-entry cache keyed
+by the exact catalog JSON; a changed declaration selects a new cache entry.
 
 The PostgreSQL database must already exist; reuse the deployment database.
 Credentials need permission to create/use the configured schema, tables, and
@@ -151,12 +182,15 @@ reads also lock catalog rows; the shared `write` flag only selects SQLite's
 locking mode, not PostgreSQL read-only transactions. Failures are surfaced without automatic
 replay, including ambiguous commit failures. No retry/circuit-breaker policy or
 additional telemetry is introduced.
+The statement timeout also bounds waiting for the boot DDL advisory lock. A
+timeout fails initialization as `DocumentStorageError`; deployment orchestration
+can retry boot after the other initializer finishes. No unbounded lock wait is used.
 
 ## Factory and configuration
 
 `DocumentFactory.DocumentServiceSQLite(path, namespace)` and
 `DocumentFactory.DocumentServicePostgreSQL(dsn, namespace)` construct standalone
-services. Engine configuration defaults to SQLite:
+services and require an explicit namespace. Engine configuration defaults to SQLite:
 
 ```yaml
 services:

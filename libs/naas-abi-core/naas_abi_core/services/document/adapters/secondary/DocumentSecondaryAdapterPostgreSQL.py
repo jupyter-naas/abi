@@ -7,8 +7,11 @@ from typing import Any
 
 import psycopg
 from naas_abi_core.services.document.adapters.secondary.document_sql import DocumentSQL
-from naas_abi_core.services.document.DocumentPort import UniqueViolation
-from psycopg_pool import ConnectionPool
+from naas_abi_core.services.document.DocumentPort import (
+    DocumentStorageError,
+    UniqueViolation,
+)
+from psycopg_pool import ConnectionPool, PoolClosed, PoolTimeout
 
 
 class DocumentSecondaryAdapterPostgreSQL(DocumentSQL):
@@ -53,6 +56,11 @@ class DocumentSecondaryAdapterPostgreSQL(DocumentSQL):
         try:
             self._pool.open(wait=True, timeout=pool_timeout)
             self._initialize(schema)
+        except (psycopg.Error, PoolTimeout, PoolClosed) as exc:
+            self._pool.close()
+            raise DocumentStorageError(
+                "Cannot initialize PostgreSQL document storage"
+            ) from exc
         except BaseException:
             self._pool.close()
             raise
@@ -93,6 +101,30 @@ class DocumentSecondaryAdapterPostgreSQL(DocumentSQL):
                 yield connection
         except psycopg.errors.UniqueViolation as exc:
             raise UniqueViolation("Document violates a unique constraint") from exc
+        except (psycopg.Error, PoolTimeout, PoolClosed) as exc:
+            raise DocumentStorageError(
+                "PostgreSQL document storage operation failed"
+            ) from exc
+
+    def ensure_index(
+        self, connection: psycopg.Connection[Any], name: str, statement: str
+    ) -> None:
+        qualified = self.documents_table.rsplit(".", 1)[0] + "." + name
+        fingerprint = (
+            "abi-document-index:" + hashlib.sha256(statement.encode()).hexdigest()
+        )
+        current = connection.execute(
+            "SELECT obj_description(to_regclass(%s), 'pg_class')", (qualified,)
+        ).fetchone()
+        if current is not None and current[0] == fingerprint:
+            return
+        # Adapter-owned comments track the defining SQL across compiler updates.
+        # Replacement and uniqueness validation share the catalog write lock.
+        connection.execute(f"DROP INDEX IF EXISTS {qualified}")
+        super().ensure_index(connection, name, statement)
+        connection.execute(
+            f"COMMENT ON INDEX {qualified} IS {self.literal(fingerprint)}", ()
+        )
 
     def close(self) -> None:
         self._pool.close()

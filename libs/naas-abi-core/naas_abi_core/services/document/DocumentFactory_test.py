@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+import pytest
 from naas_abi_core.services.document.DocumentFactory import DocumentFactory
 from naas_abi_core.services.document.DocumentPort import CollectionSpec
 
@@ -36,3 +37,12 @@ def test_postgresql_factory_forwards_connection_options():
             pool_max_size=10,
             pool_timeout=5.0,
         )
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [DocumentFactory.DocumentServiceSQLite, DocumentFactory.DocumentServicePostgreSQL],
+)
+def test_factories_require_explicit_namespace_before_opening_resources(factory):
+    with pytest.raises(TypeError, match="namespace"):
+        factory("unused")

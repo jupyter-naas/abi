@@ -49,6 +49,7 @@ services:
     two = EngineProxy(engine, "two.module", dependencies).services
     for proxy in (one, two):
         assert proxy.document_available()
+        assert proxy.document is proxy.document
         assert proxy.document.services_wired
         assert proxy.document.services is services
         with pytest.raises(PermissionError, match="namespace"):
@@ -72,6 +73,20 @@ def test_service_is_not_loaded_without_dependency():
     services = EngineServiceLoader(configuration).load_services({})
     assert not services.document_available()
     configuration.services.document.load.assert_not_called()
+
+
+def test_cached_proxy_tracks_root_replacement_and_still_checks_access():
+    dependencies = ModuleDependencies(modules=[], services=[DocumentService])
+    root = DocumentService._for_engine(Mock(spec=IDocumentAdapter))
+    engine = Mock(services=Mock(document=root))
+    proxy = EngineProxy(engine, "module", dependencies).services
+    first = proxy.document
+    engine.services.document = DocumentService._for_engine(Mock(spec=IDocumentAdapter))
+    assert proxy.document is not first
+    assert proxy.document.namespace == "module"
+    dependencies.services = []
+    with pytest.raises(ValueError, match="does not have access"):
+        _ = proxy.document
 
 
 def test_unavailable_backend_fails_at_service_loading():
