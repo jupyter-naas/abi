@@ -20,6 +20,8 @@ Line-graph timeseries always cover every day in the scenario window
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import threading
 import time
@@ -67,6 +69,22 @@ REF_WORKSPACES_FILE = "ref-workspaces.json"
 RECENT_EVENTS_LIMIT = 100
 
 _REBUILD_DEBOUNCE_SECONDS = 60
+# Ceiling on how long a steady trickle of events can keep pushing the debounce
+# out. Without it, one event every 59s would postpone the rebuild forever.
+_REBUILD_MAX_DELAY_SECONDS = 300
+
+# Digest of what this process last wrote for each aggregate, so an unchanged
+# file is not rewritten. Write-side only: on a cold process the cache is empty
+# and every file is written, so a miss costs a write and never correctness.
+_last_written_digests: dict[str, str] = {}
+_digest_lock = threading.Lock()
+
+
+def _payload_digest(payload: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+
 
 _CHAT_CONV_PATH_RE = re.compile(r"/chat/(conv-[^/?#]+)")
 
@@ -106,6 +124,7 @@ def _enumerate_days(date_start: str, date_end: str) -> list[str]:
 
 def _enumerate_hours(date_start: str, date_end: str) -> list[str]:
     """Every ``YYYY-MM-DDTHH`` hour slot between two ISO timestamps, inclusive."""
+
     def _trunc_hour(ts: str) -> datetime:
         dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
         return dt.replace(minute=0, second=0, microsecond=0)
@@ -416,12 +435,6 @@ class AnalyticsService:
     def __init__(self, storage: AnalyticsStoragePort) -> None:
         self._storage = storage
 
-        # Debounced rebuild bookkeeping.
-        self._rebuild_lock = threading.Lock()
-        self._rebuild_timer: threading.Timer | None = None
-        self._rebuild_running = False
-        self._rebuild_pending = False
-
     # --- ingest -------------------------------------------------------------
 
     def ingest_event(self, event: AnalyticsEvent) -> str:
@@ -486,18 +499,19 @@ class AnalyticsService:
 
     # --- rebuild ------------------------------------------------------------
 
-    def rebuild(self) -> Metadata:
+    def rebuild(self, now: datetime | None = None) -> Metadata:
         overall_start = time.monotonic()
 
         events_start = time.monotonic()
         events = self._storage.list_events()
         events.sort(key=lambda e: e.get("timestamp", ""))
-        self._storage.save_json(EVENTS_FILE, {"events": events})
+        self._save_json_if_changed(EVENTS_FILE, {"events": events})
         events_ms = int((time.monotonic() - events_start) * 1000)
 
         # Anchor every scenario at the same "now" so a single rebuild produces
-        # a consistent snapshot across windows.
-        now = datetime.now(UTC)
+        # a consistent snapshot across windows. Injectable so tests can pin the
+        # windows instead of racing the clock.
+        now = now or datetime.now(UTC)
         scenarios = _build_scenarios(now)
 
         ref_users = self._storage.load_json(REF_USERS_FILE, fallback=[])
@@ -546,7 +560,7 @@ class AnalyticsService:
 
         def _write(file_name: str, payload: Any, count: int) -> None:
             t0 = time.monotonic()
-            self._storage.save_json(file_name, payload)
+            self._save_json_if_changed(file_name, payload)
             aggregate_stats.append(
                 FileStats(
                     file=file_name,
@@ -573,35 +587,24 @@ class AnalyticsService:
         self._storage.save_json(METADATA_FILE, metadata.model_dump())
         return metadata
 
-    def _schedule_rebuild(self) -> None:
-        with self._rebuild_lock:
-            if self._rebuild_timer is not None:
-                self._rebuild_timer.cancel()
-            self._rebuild_timer = threading.Timer(_REBUILD_DEBOUNCE_SECONDS, self._run_rebuild)
-            self._rebuild_timer.daemon = True
-            self._rebuild_timer.start()
+    def _save_json_if_changed(self, file_name: str, payload: Any) -> bool:
+        """Write an aggregate only when its bytes differ from the last write.
 
-    def _run_rebuild(self) -> None:
-        with self._rebuild_lock:
-            if self._rebuild_running:
-                self._rebuild_pending = True
-                return
-            self._rebuild_running = True
-        try:
-            meta = self.rebuild()
-            logger.debug(
-                f"[analytics] rebuilt: {meta.events.count} events, "
-                f"{len(meta.aggregates)} aggregates"
-            )
-        except Exception as exc:
-            logger.warning(f"[analytics] rebuild failed: {exc}")
-        finally:
-            with self._rebuild_lock:
-                self._rebuild_running = False
-                rerun = self._rebuild_pending
-                self._rebuild_pending = False
-            if rerun:
-                self._run_rebuild()
+        Object storage has no compare-and-set, so this is a process-local
+        cache of what we last wrote. The digest is recorded only after the
+        write lands, so a failed write is retried on the next rebuild.
+        """
+        digest = _payload_digest(payload)
+        with _digest_lock:
+            if _last_written_digests.get(file_name) == digest:
+                return False
+        self._storage.save_json(file_name, payload)
+        with _digest_lock:
+            _last_written_digests[file_name] = digest
+        return True
+
+    def _schedule_rebuild(self) -> None:
+        _rebuild_scheduler.schedule(self)
 
     # --- read endpoints -----------------------------------------------------
 
@@ -652,8 +655,7 @@ class AnalyticsService:
 
     def _has_filters(self, workspace_id: str | None, user_email: str | None) -> bool:
         return bool(
-            (workspace_id and workspace_id != "all")
-            or (user_email and user_email != "all")
+            (workspace_id and workspace_id != "all") or (user_email and user_email != "all")
         )
 
     def get_overview(
@@ -866,3 +868,86 @@ class AnalyticsService:
                     return _enumerate_hours(s.date_start, s.date_end)
                 return _enumerate_days(s.date_start, s.date_end)
         return []
+
+
+# ---------------------------------------------------------------------------
+# Rebuild scheduling
+# ---------------------------------------------------------------------------
+
+
+class _RebuildScheduler:
+    """Process-wide debounce for the analytics rebuild.
+
+    ``AnalyticsService`` is constructed per HTTP request (a FastAPI
+    ``Depends`` factory), so debounce state held on the instance could never
+    coalesce: every ingest armed its own timer on its own object and fired its
+    own rebuild, which is why a 60s debounce still produced roughly one
+    rebuild — and one write of every aggregate — per ingested event. There is
+    exactly one scheduler per process, so the debounce actually applies.
+    """
+
+    def __init__(
+        self,
+        debounce: float = _REBUILD_DEBOUNCE_SECONDS,
+        max_delay: float = _REBUILD_MAX_DELAY_SECONDS,
+    ) -> None:
+        self._debounce = debounce
+        self._max_delay = max_delay
+        self._lock = threading.RLock()
+        self._timer: threading.Timer | None = None
+        self._running = False
+        self._pending = False
+        self._window_started_at: float | None = None
+        self._service: AnalyticsService | None = None
+
+    def schedule(self, service: AnalyticsService) -> None:
+        with self._lock:
+            # Any instance will do: they all read and write the same storage.
+            self._service = service
+            now = time.monotonic()
+            if self._window_started_at is None:
+                self._window_started_at = now
+            deadline = min(now + self._debounce, self._window_started_at + self._max_delay)
+            if self._timer is not None:
+                self._timer.cancel()
+            self._timer = threading.Timer(max(0.0, deadline - now), self._fire)
+            self._timer.daemon = True
+            self._timer.start()
+
+    def _fire(self) -> None:
+        with self._lock:
+            self._timer = None
+            self._window_started_at = None
+            if self._running:
+                # Collapse everything that arrived mid-flight into one re-run.
+                self._pending = True
+                return
+            self._running = True
+            service = self._service
+        try:
+            if service is not None:
+                meta = service.rebuild()
+                logger.debug(
+                    f"[analytics] rebuilt: {meta.events.count} events, "
+                    f"{len(meta.aggregates)} aggregates"
+                )
+        except Exception as exc:
+            logger.warning(f"[analytics] rebuild failed: {exc}")
+        finally:
+            with self._lock:
+                self._running = False
+                rerun = self._pending
+                self._pending = False
+            if rerun:
+                self._fire()
+
+    def cancel(self) -> None:
+        """Drop a pending rebuild. Used by tests and at shutdown."""
+        with self._lock:
+            if self._timer is not None:
+                self._timer.cancel()
+                self._timer = None
+            self._window_started_at = None
+
+
+_rebuild_scheduler = _RebuildScheduler()
