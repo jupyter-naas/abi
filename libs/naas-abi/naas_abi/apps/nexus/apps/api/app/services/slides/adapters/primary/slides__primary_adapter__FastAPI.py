@@ -15,6 +15,7 @@ import hashlib
 import html as html_lib
 import json
 import logging
+import mimetypes
 import re
 import secrets
 import time
@@ -29,6 +30,7 @@ from urllib.request import urlopen
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
@@ -54,6 +56,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
 )
 from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNameConflictError,
+    FileWrite,
     RepoNotFoundError,
     SourceControlError,
     ValidationError,
@@ -391,22 +394,87 @@ def _claim_workspace_in_meta(
 
 _ASSETS_README = """# Presentation assets
 
-Drop images and other media for this deck here.
+Images for this deck live here. ``deck.html`` references them as relative
+``assets/<file>`` paths.
 
-## Seed note
+## Seed
 
-The default template ships decorative bands as neutral ``data:`` URLs inside
-``deck.html``. Binary extraction into this folder is deferred: Forgejo
-``upsert_file`` is text-only today, and rewriting the deck to relative
-``assets/`` paths would break the in-browser Preview until an asset-serving
-route exists.
+New presentations and Apply template copy the HTML plus any ``assets/``
+folder from the template catalog. Preview resolves those paths through the
+slides asset route. File, Export HTML inlines them again so the download
+is one file.
 
-Manual files you add here appear in the Slides sidebar tree.
+Tiny URL-encoded SVG data-URLs (no ``;base64,``) may stay in the HTML.
 """
+
+_ASSET_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_SKIP_ASSET_NAMES = {".gitkeep", "README.md"}
 
 
 def _count_embedded_images(html: str) -> int:
-    return len(re.findall(r"data:image/[^;]+;base64,", html))
+    return len(re.findall(r"data:image/[^;]+;base64,", html or ""))
+
+
+def _assets_note(*, copied: int, embedded: int) -> str | None:
+    if copied:
+        return f"{copied} template images copied from the catalog into assets/"
+    if embedded:
+        return "assets/ seeded empty; template images remain as data-URLs in deck.html"
+    return None
+
+
+def _file_bytes(file) -> bytes | None:
+    data = getattr(file, "data", None)
+    if isinstance(data, (bytes, bytearray)) and data:
+        return bytes(data)
+    text = getattr(file, "text", None)
+    if isinstance(text, str):
+        return text.encode("utf-8")
+    return None
+
+
+def _asset_write_content(name: str, payload: bytes) -> str | bytes:
+    if name.endswith(".svg"):
+        try:
+            return payload.decode("utf-8")
+        except UnicodeDecodeError:
+            return payload
+    return payload
+
+
+def _seed_file_writes(
+    *,
+    paths: dict[str, str],
+    seed: str,
+    assets: list[tuple[str, bytes]],
+    meta: dict,
+    include_project: bool = True,
+    include_readme: bool = True,
+) -> list[FileWrite]:
+    writes: list[FileWrite] = []
+    if include_project:
+        writes.append(
+            FileWrite(
+                path=paths["project_path"],
+                content=json.dumps(meta, indent=2) + "\n",
+            )
+        )
+    writes.append(FileWrite(path=paths["deck_path"], content=seed))
+    if assets:
+        for name, payload in assets:
+            writes.append(
+                FileWrite(
+                    path=f"{paths['assets_dir']}/{name}",
+                    content=_asset_write_content(name, payload),
+                )
+            )
+    else:
+        writes.append(FileWrite(path=paths["assets_gitkeep"], content=""))
+    if include_readme:
+        writes.append(
+            FileWrite(path=paths["assets_readme"], content=_ASSETS_README)
+        )
+    return writes
 
 
 _SECTION_SLIDE_RE = re.compile(
@@ -607,20 +675,46 @@ def _read_from_roots(source: _TemplateSource, name: str) -> str | None:
     return None
 
 
+def _entry_is_dir(entry: object) -> bool:
+    try:
+        return bool(entry.is_dir())
+    except Exception:
+        return False
+
+
+def _seed_html_names(stem: str) -> tuple[str, ...]:
+    return (f"{stem}.html", f"{stem}/{stem}.html", f"{stem}/index.html")
+
+
 def _stems_in_roots(source: _TemplateSource) -> list[str]:
-    """Seed stems from the first root that has any."""
+    """Seed stems from the first root that has any.
+
+    A stem is a kebab ``*.html`` at the source root, or a kebab folder that
+    holds ``{stem}.html`` / ``index.html``.
+    """
     for root in source.roots:
         try:
-            names = [getattr(entry, "name", "") for entry in root.iterdir()]
+            entries = list(root.iterdir())
         except Exception:
             continue
-        stems = sorted(
-            name[:-5]
-            for name in names
-            if name.endswith(".html") and _SLUG_RE.match(name[:-5])
-        )
+        stems: set[str] = set()
+        for entry in entries:
+            name = getattr(entry, "name", "") or ""
+            if name.endswith(".html") and _SLUG_RE.match(name[:-5]):
+                stems.add(name[:-5])
+                continue
+            if not _SLUG_RE.match(name) or not _entry_is_dir(entry):
+                continue
+            for inner in (f"{name}.html", "index.html"):
+                try:
+                    text = entry.joinpath(inner).read_text(encoding="utf-8")
+                except Exception:
+                    continue
+                if text.strip():
+                    stems.add(name)
+                    break
         if stems:
-            return stems
+            return sorted(stems)
     return []
 
 
@@ -715,7 +809,12 @@ def _list_seed_template_records() -> list[dict]:
         except HTTPException:
             seed = ""
         meta["slides"] = _parse_slide_outline(seed) if seed else []
-        meta["assets"] = _parse_template_assets(seed) if seed else []
+        file_assets = [
+            {"name": name, "kind": "file"} for name in _list_seed_asset_names(tid)
+        ]
+        meta["assets"] = file_assets or (
+            _parse_template_assets(seed) if seed else []
+        )
         rows.append(meta)
     return rows
 
@@ -731,7 +830,6 @@ def _known_template_ids() -> set[str]:
 
 def _load_seed_html(template_id: str = _DEFAULT_TEMPLATE_ID) -> str:
     namespace, stem = _parse_template_ref(template_id)
-    name = f"{stem}.html"
     source = _source_named(namespace) if namespace else None
     if namespace and source is None:
         raise HTTPException(
@@ -742,13 +840,76 @@ def _load_seed_html(template_id: str = _DEFAULT_TEMPLATE_ID) -> str:
     # ABI first, then configured sources.
     candidates = [source] if source else _template_sources()
     for candidate in candidates:
-        text = _read_from_roots(candidate, name)
-        if text:
-            return text
+        for name in _seed_html_names(stem):
+            text = _read_from_roots(candidate, name)
+            if text:
+                return text
     raise HTTPException(
         status_code=404,
         detail=f"Unknown slides template '{template_id}'.",
     )
+
+
+def _iter_seed_asset_entries(template_id: str):
+    """Yield catalog ``assets/`` entries for ``template_id``, if any."""
+    namespace, stem = _parse_template_ref(template_id)
+    source = _source_named(namespace) if namespace else None
+    if namespace and source is None:
+        return
+    candidates = [source] if source else _template_sources()
+    rel = f"{stem}/assets"
+    for candidate in candidates:
+        for root in candidate.roots:
+            try:
+                folder = root.joinpath(rel)
+                entries = list(folder.iterdir())
+            except Exception:
+                continue
+            yielded = False
+            for entry in entries:
+                name = getattr(entry, "name", "") or ""
+                if (
+                    not name
+                    or name in _SKIP_ASSET_NAMES
+                    or not _ASSET_FILENAME_RE.match(name)
+                ):
+                    continue
+                try:
+                    if hasattr(entry, "is_file") and not entry.is_file():
+                        continue
+                except Exception:
+                    continue
+                yielded = True
+                yield entry, name
+            if yielded:
+                return
+
+
+def _list_seed_asset_names(template_id: str) -> list[str]:
+    return sorted({name for _entry, name in _iter_seed_asset_entries(template_id)})
+
+
+def _list_seed_asset_files(template_id: str) -> list[tuple[str, bytes]]:
+    assets: list[tuple[str, bytes]] = []
+    for entry, name in _iter_seed_asset_entries(template_id):
+        try:
+            payload = entry.read_bytes()
+        except Exception:
+            continue
+        if payload:
+            assets.append((name, payload))
+    return assets
+
+
+def _load_seed_bundle(
+    template_id: str = _DEFAULT_TEMPLATE_ID,
+) -> tuple[str, list[tuple[str, bytes]]]:
+    """HTML plus real files from the catalog ``assets/`` folder.
+
+    Does not parse base64 out of the HTML. Leftover data-URLs stay in the
+    deck until someone re-imports the template.
+    """
+    return _load_seed_html(template_id), _list_seed_asset_files(template_id)
 
 
 class ProjectCreateRequest(BaseModel):
@@ -1204,7 +1365,7 @@ async def create_project(
     paths = _paths_for(body.workspace_id, slug, legacy=False)
     branch = paths["branch"]
     username = _forge_username(current_user.name or "", str(current_user.email))
-    seed = _load_seed_html(body.template_id)
+    seed, catalog_assets = _load_seed_bundle(body.template_id)
     author_name = current_user.name or username
     author_email = str(current_user.email)
 
@@ -1250,8 +1411,9 @@ async def create_project(
             "archived": False,
             "updated_at": None,
             "embedded_images": embedded,
-            "assets_note": (
-                "assets/ seeded empty; template images remain as data-URLs in deck.html"
+            "extracted_images": len(catalog_assets),
+            "assets_note": _assets_note(
+                copied=len(catalog_assets), embedded=embedded
             ),
         }
         # Concurrent/prior create already finished: keep 409. If seed is
@@ -1267,38 +1429,15 @@ async def create_project(
                     )
             except RepoNotFoundError:
                 pass
-        sc.upsert_file(
+        commit = sc.upsert_files(
             repo_id=repo_id,
-            path=paths["project_path"],
-            content=json.dumps(meta, indent=2) + "\n",
-            message=f"Create slides project {slug}",
-            branch=branch,
-            author_name=author_name,
-            author_email=author_email,
-        )
-        commit = sc.upsert_file(
-            repo_id=repo_id,
-            path=paths["deck_path"],
-            content=seed,
-            message=f"Seed deck from {body.template_id}",
-            branch=branch,
-            author_name=author_name,
-            author_email=author_email,
-        )
-        sc.upsert_file(
-            repo_id=repo_id,
-            path=paths["assets_gitkeep"],
-            content="",
-            message=f"Seed assets folder for {slug}",
-            branch=branch,
-            author_name=author_name,
-            author_email=author_email,
-        )
-        sc.upsert_file(
-            repo_id=repo_id,
-            path=paths["assets_readme"],
-            content=_ASSETS_README,
-            message=f"Document assets folder for {slug}",
+            files=_seed_file_writes(
+                paths=paths,
+                seed=seed,
+                assets=catalog_assets,
+                meta=meta,
+            ),
+            message=f"Create slides project {slug} from {body.template_id}",
             branch=branch,
             author_name=author_name,
             author_email=author_email,
@@ -1532,6 +1671,47 @@ async def get_deck(
         raise _source_control_http_error(exc) from exc
 
 
+@router.get("/projects/{slug}/assets/{filename}")
+async def get_project_asset(
+    slug: str,
+    filename: str,
+    workspace_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+) -> Response:
+    """Serve a file from the deck ``assets/`` folder (preview / export)."""
+    await require_workspace_access(current_user.id, workspace_id)
+    if not _SLUG_RE.match(slug):
+        raise HTTPException(status_code=422, detail="Invalid slug")
+    if not _ASSET_FILENAME_RE.match(filename) or ".." in filename:
+        raise HTTPException(status_code=422, detail="Invalid asset filename")
+    sc, repo_id = _slides_sc(request)
+
+    def _get() -> Response:
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
+        )
+        if paths is None:
+            raise RepoNotFoundError(f"slides project {slug}")
+        file = sc.get_file(
+            repo_id=repo_id,
+            path=f"{paths['assets_dir']}/{filename}",
+            ref=paths["branch"],
+        )
+        payload = _file_bytes(file)
+        if payload is None:
+            raise RepoNotFoundError(f"slides asset {filename}")
+        media = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        return Response(content=payload, media_type=media)
+
+    try:
+        return await run_in_threadpool(_get)
+    except RepoNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SourceControlError as exc:
+        raise _source_control_http_error(exc) from exc
+
+
 @router.put("/projects/{slug}/deck", response_model=DeckResponse)
 async def put_deck(
     slug: str,
@@ -1621,6 +1801,86 @@ async def put_deck(
         raise _source_control_http_error(exc) from exc
 
 
+def _read_live_deck_html(
+    sc: SourceControlService,
+    *,
+    repo_id: str,
+    paths: dict[str, str],
+    sidecar_base: str | None,
+    sidecar_secret: str | None,
+) -> str:
+    sidecar_html = _read_deck_via_sidecar(
+        sidecar_base, sidecar_secret, deck_path=paths["deck_path"]
+    )
+    if isinstance(sidecar_html, str) and sidecar_html:
+        return sidecar_html
+    file = sc.get_file(repo_id=repo_id, path=paths["deck_path"], ref=paths["branch"])
+    if file.is_binary or file.text is None:
+        raise ValidationError("Deck is not UTF-8 text")
+    return file.text
+
+
+def _save_live_deck_html(
+    sc: SourceControlService,
+    *,
+    repo_id: str,
+    paths: dict[str, str],
+    html: str,
+    message: str,
+    workspace_id: str,
+    slug: str,
+    current_user: User,
+    username: str,
+    author_name: str,
+    author_email: str,
+    sidecar_base: str | None,
+    sidecar_secret: str | None,
+) -> tuple[str | None, str]:
+    sc.ensure_user(
+        external_id=current_user.id,
+        email=author_email,
+        username=username,
+    )
+    sidecar_ok = _write_deck_via_sidecar(
+        sidecar_base,
+        sidecar_secret,
+        deck_path=paths["deck_path"],
+        html=html,
+    )
+    commit = sc.upsert_file(
+        repo_id=repo_id,
+        path=paths["deck_path"],
+        content=html,
+        message=message,
+        branch=paths["branch"],
+        author_name=author_name,
+        author_email=author_email,
+    )
+    try:
+        meta_file = sc.get_file(
+            repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
+        )
+        if meta_file.text:
+            data = _parse_meta(meta_file.text)
+            from datetime import UTC, datetime
+
+            data["workspace_id"] = workspace_id
+            data["slug"] = data.get("slug") or slug
+            data["updated_at"] = datetime.now(UTC).isoformat()
+            sc.upsert_file(
+                repo_id=repo_id,
+                path=paths["project_path"],
+                content=json.dumps(data, indent=2) + "\n",
+                message=f"Touch project metadata for {slug}",
+                branch=paths["branch"],
+                author_name=author_name,
+                author_email=author_email,
+            )
+    except SourceControlError:
+        pass
+    return commit.sha or None, "sidecar" if sidecar_ok else "forgejo"
+
+
 @router.post("/projects/{slug}/apply-template", response_model=DeckResponse)
 async def apply_template(
     slug: str,
@@ -1635,19 +1895,80 @@ async def apply_template(
             status_code=422,
             detail=f"Unknown template_id '{body.template_id}'.",
         )
-    seed = _load_seed_html(body.template_id)
-    return await put_deck(
-        slug,
-        DeckUpdateRequest(
-            workspace_id=body.workspace_id,
-            html=seed,
-            message=f"Apply template {body.template_id}",
-            template_id=body.template_id,
-        ),
-        request,
-        current_user,
+    seed, catalog_assets = _load_seed_bundle(body.template_id)
+    await require_workspace_access(current_user.id, body.workspace_id)
+    if not _SLUG_RE.match(slug):
+        raise HTTPException(status_code=422, detail="Invalid slug")
+    sc, repo_id = _slides_sc(request)
+    username = _forge_username(current_user.name or "", str(current_user.email))
+    author_name = current_user.name or username
+    author_email = str(current_user.email)
+
+    sidecar_base, sidecar_secret = await lookup_slides_sidecar(
         db,
+        workspace_id=body.workspace_id,
+        user_id=current_user.id,
+        slug=slug,
     )
+
+    def _apply() -> DeckResponse:
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=body.workspace_id, slug=slug
+        )
+        if paths is None:
+            raise RepoNotFoundError(f"slides project {slug}")
+        sc.ensure_user(
+            external_id=current_user.id,
+            email=author_email,
+            username=username,
+        )
+        sidecar_ok = _write_deck_via_sidecar(
+            sidecar_base,
+            sidecar_secret,
+            deck_path=paths["deck_path"],
+            html=seed,
+        )
+        from datetime import UTC, datetime
+
+        meta = _load_project_meta(
+            sc, repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
+        ) or {}
+        meta["workspace_id"] = body.workspace_id
+        meta["template_id"] = body.template_id
+        meta["updated_at"] = datetime.now(UTC).isoformat()
+        meta["embedded_images"] = _count_embedded_images(seed)
+        meta["extracted_images"] = len(catalog_assets)
+        meta["assets_note"] = _assets_note(
+            copied=len(catalog_assets),
+            embedded=int(meta["embedded_images"]),
+        )
+        commit = sc.upsert_files(
+            repo_id=repo_id,
+            files=_seed_file_writes(
+                paths=paths,
+                seed=seed,
+                assets=catalog_assets,
+                meta=meta,
+            ),
+            message=f"Apply template {body.template_id}",
+            branch=paths["branch"],
+            author_name=author_name,
+            author_email=author_email,
+        )
+        return DeckResponse(
+            slug=slug,
+            path=paths["deck_path"],
+            html=seed,
+            commit_sha=commit.sha or None,
+            source="sidecar" if sidecar_ok else "forgejo",
+        )
+
+    try:
+        return await run_in_threadpool(_apply)
+    except RepoNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SourceControlError as exc:
+        raise _source_control_http_error(exc) from exc
 
 
 @router.get("/projects/{slug}/history", response_model=list[CommitResponse])
@@ -2290,11 +2611,7 @@ async def get_project_tree(
             assets=assets,
             embedded_images=embedded,
             assets_note=assets_note
-            or (
-                "assets/ seeded empty; template images remain as data-URLs in deck.html"
-                if embedded
-                else None
-            ),
+            or _assets_note(copied=len(assets), embedded=embedded),
         )
 
     try:
@@ -2310,6 +2627,46 @@ class SlideOutlineItem(BaseModel):
     id: str | None = None
     eyebrow: str = ""
     title: str = ""
+    layout: str = ""
+
+
+class SlideInsertRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    after_index: int = -1
+    layout: str = Field(default="content", max_length=32)
+    title: str = Field(default="", max_length=200)
+
+
+class SlideIndexRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    index: int
+
+
+class SlideReorderRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    from_index: int | None = None
+    to_index: int | None = None
+    order: list[int] | None = None
+
+
+class SlideMutationResponse(BaseModel):
+    ok: bool = True
+    slug: str
+    section_index: int
+    section_count: int
+    ids: list[str | None] = Field(default_factory=list)
+    slides: list[SlideOutlineItem] = Field(default_factory=list)
+    html: str | None = None
+    commit_sha: str | None = None
+    source: str | None = None
+
+
+class SlidesListResponse(BaseModel):
+    ok: bool = True
+    slug: str
+    section_count: int
+    ids: list[str | None] = Field(default_factory=list)
+    slides: list[SlideOutlineItem] = Field(default_factory=list)
 
 
 class TemplateAssetItem(BaseModel):
@@ -2340,3 +2697,271 @@ async def list_seed_templates(
     """List seed templates with slide outlines for the Slides sidebar."""
     await require_workspace_access(current_user.id, workspace_id)
     return [SeedTemplateResponse(**row) for row in _list_seed_template_records()]
+
+
+def _mutation_outline(html: str) -> tuple[list[SlideOutlineItem], list[str | None]]:
+    from naas_abi.agents.tools.slides_tools import (
+        _slide_outline_items,
+        _split_sections,
+    )
+
+    _prefix, sections, _suffix = _split_sections(html)
+    items = _slide_outline_items(sections)
+    slides = [
+        SlideOutlineItem(
+            index=int(item["index"]),
+            id=item.get("id"),
+            title=str(item.get("title") or ""),
+            layout=str(item.get("layout") or ""),
+        )
+        for item in items
+    ]
+    return slides, [s.id for s in slides]
+
+
+def _mutation_http_error(result: dict) -> HTTPException:
+    detail = str(result.get("error") or "Slide mutation failed")
+    status = 409 if "last slide" in detail.lower() else 422
+    return HTTPException(status_code=status, detail=detail)
+
+
+async def _run_slide_html_mutation(
+    *,
+    slug: str,
+    workspace_id: str,
+    request: Request,
+    current_user: User,
+    db: AsyncSession,
+    mutate,
+    message: str,
+) -> SlideMutationResponse:
+    if not _SLUG_RE.match(slug):
+        raise HTTPException(status_code=422, detail="Invalid slug")
+    sc, repo_id = _slides_sc(request)
+    username = _forge_username(current_user.name or "", str(current_user.email))
+    author_name = current_user.name or username
+    author_email = str(current_user.email)
+    sidecar_base, sidecar_secret = await lookup_slides_sidecar(
+        db,
+        workspace_id=workspace_id,
+        user_id=current_user.id,
+        slug=slug,
+    )
+
+    def _run() -> SlideMutationResponse:
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
+        )
+        if paths is None:
+            raise RepoNotFoundError(f"slides project {slug}")
+        html = _read_live_deck_html(
+            sc,
+            repo_id=repo_id,
+            paths=paths,
+            sidecar_base=sidecar_base,
+            sidecar_secret=sidecar_secret,
+        )
+        mutated = mutate(html)
+        if mutated.get("error"):
+            raise _mutation_http_error(mutated)
+        new_html = str(mutated["html"])
+        commit_sha, source = _save_live_deck_html(
+            sc,
+            repo_id=repo_id,
+            paths=paths,
+            html=new_html,
+            message=message,
+            workspace_id=workspace_id,
+            slug=slug,
+            current_user=current_user,
+            username=username,
+            author_name=author_name,
+            author_email=author_email,
+            sidecar_base=sidecar_base,
+            sidecar_secret=sidecar_secret,
+        )
+        slides = [
+            SlideOutlineItem(
+                index=int(item["index"]),
+                id=item.get("id"),
+                title=str(item.get("title") or ""),
+                layout=str(item.get("layout") or ""),
+            )
+            for item in mutated.get("slides") or []
+        ]
+        return SlideMutationResponse(
+            ok=True,
+            slug=slug,
+            section_index=int(mutated["section_index"]),
+            section_count=int(mutated["section_count"]),
+            ids=list(mutated.get("ids") or []),
+            slides=slides,
+            html=new_html,
+            commit_sha=commit_sha,
+            source=source,
+        )
+
+    try:
+        return await run_in_threadpool(_run)
+    except HTTPException:
+        raise
+    except RepoNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except SourceControlError as exc:
+        raise _source_control_http_error(exc) from exc
+
+
+@router.get("/projects/{slug}/slides", response_model=SlidesListResponse)
+async def list_slides(
+    slug: str,
+    workspace_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> SlidesListResponse:
+    """Outline of ``<section>`` slides. No HTML body."""
+    await require_workspace_access(current_user.id, workspace_id)
+    if not _SLUG_RE.match(slug):
+        raise HTTPException(status_code=422, detail="Invalid slug")
+    sc, repo_id = _slides_sc(request)
+    sidecar_base, sidecar_secret = await lookup_slides_sidecar(
+        db,
+        workspace_id=workspace_id,
+        user_id=current_user.id,
+        slug=slug,
+    )
+
+    def _list() -> SlidesListResponse:
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
+        )
+        if paths is None:
+            raise RepoNotFoundError(f"slides project {slug}")
+        html = _read_live_deck_html(
+            sc,
+            repo_id=repo_id,
+            paths=paths,
+            sidecar_base=sidecar_base,
+            sidecar_secret=sidecar_secret,
+        )
+        slides, ids = _mutation_outline(html)
+        return SlidesListResponse(
+            ok=True,
+            slug=slug,
+            section_count=len(slides),
+            ids=ids,
+            slides=slides,
+        )
+
+    try:
+        return await run_in_threadpool(_list)
+    except RepoNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except SourceControlError as exc:
+        raise _source_control_http_error(exc) from exc
+
+
+@router.post("/projects/{slug}/slides/insert", response_model=SlideMutationResponse)
+async def insert_slide(
+    slug: str,
+    body: SlideInsertRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> SlideMutationResponse:
+    """Insert a slide after ``after_index`` (-1 appends). Same mutation as the agent tool."""
+    from naas_abi.agents.tools.slides_tools import _insert_slide_html
+
+    await require_workspace_access(current_user.id, body.workspace_id)
+    return await _run_slide_html_mutation(
+        slug=slug,
+        workspace_id=body.workspace_id,
+        request=request,
+        current_user=current_user,
+        db=db,
+        mutate=lambda html: _insert_slide_html(
+            html,
+            after_index=body.after_index,
+            layout=body.layout,
+            title=body.title,
+        ),
+        message=f"Insert slide in {slug}",
+    )
+
+
+@router.post("/projects/{slug}/slides/delete", response_model=SlideMutationResponse)
+async def delete_slide(
+    slug: str,
+    body: SlideIndexRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> SlideMutationResponse:
+    """Delete the slide at index. Refuses the last slide."""
+    from naas_abi.agents.tools.slides_tools import _delete_slide_html
+
+    await require_workspace_access(current_user.id, body.workspace_id)
+    return await _run_slide_html_mutation(
+        slug=slug,
+        workspace_id=body.workspace_id,
+        request=request,
+        current_user=current_user,
+        db=db,
+        mutate=lambda html: _delete_slide_html(html, body.index),
+        message=f"Delete slide in {slug}",
+    )
+
+
+@router.post("/projects/{slug}/slides/duplicate", response_model=SlideMutationResponse)
+async def duplicate_slide(
+    slug: str,
+    body: SlideIndexRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> SlideMutationResponse:
+    """Duplicate the slide at index and insert the copy after it."""
+    from naas_abi.agents.tools.slides_tools import _duplicate_slide_html
+
+    await require_workspace_access(current_user.id, body.workspace_id)
+    return await _run_slide_html_mutation(
+        slug=slug,
+        workspace_id=body.workspace_id,
+        request=request,
+        current_user=current_user,
+        db=db,
+        mutate=lambda html: _duplicate_slide_html(html, body.index),
+        message=f"Duplicate slide in {slug}",
+    )
+
+
+@router.post("/projects/{slug}/slides/reorder", response_model=SlideMutationResponse)
+async def reorder_slides(
+    slug: str,
+    body: SlideReorderRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> SlideMutationResponse:
+    """Move one slide (from_index/to_index) or apply a full ``order`` permutation."""
+    from naas_abi.agents.tools.slides_tools import _reorder_slides_html
+
+    await require_workspace_access(current_user.id, body.workspace_id)
+    return await _run_slide_html_mutation(
+        slug=slug,
+        workspace_id=body.workspace_id,
+        request=request,
+        current_user=current_user,
+        db=db,
+        mutate=lambda html: _reorder_slides_html(
+            html,
+            from_index=body.from_index,
+            to_index=body.to_index,
+            order=body.order,
+        ),
+        message=f"Reorder slides in {slug}",
+    )

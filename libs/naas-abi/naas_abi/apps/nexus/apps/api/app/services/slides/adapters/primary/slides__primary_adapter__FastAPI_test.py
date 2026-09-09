@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
@@ -888,3 +889,213 @@ def test_runtime_rebinds_when_the_same_environment_is_adopted_twice(
     assert secret == _REBOUND_SIDECAR_SECRET, secret
     # merge() must not blank the insert-only column it was never given.
     assert created is not None
+
+
+_TINY_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+
+
+def _write_folder_template(directory: Path, stem: str, name: str) -> Path:
+    """Catalog folder: ``{stem}/{stem}.html`` plus ``{stem}/assets/hero.png``."""
+    folder = directory / stem
+    assets = folder / "assets"
+    assets.mkdir(parents=True, exist_ok=True)
+    (directory / "catalog.json").write_text(
+        json.dumps({"templates": [{"id": stem, "name": name}]}),
+        encoding="utf-8",
+    )
+    (folder / f"{stem}.html").write_text(
+        f'<!doctype html><html><body><img src="assets/hero.png" alt="{name}"></body></html>',
+        encoding="utf-8",
+    )
+    (assets / "hero.png").write_bytes(_TINY_PNG)
+    return directory
+
+
+def test_create_and_apply_template_copies_catalog_assets(
+    tmp_path, monkeypatch
+) -> None:
+    source_dir = _write_folder_template(tmp_path / "office", "pixel-v1", "Pixel")
+    _configure_sources(monkeypatch, ("office", source_dir))
+
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Pixel deck",
+            "slug": "pixel-deck",
+            "template_id": "office/pixel-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+    deck = client.get(
+        "/slides/projects/pixel-deck/deck",
+        params={"workspace_id": "ws-test"},
+    )
+    assert deck.status_code == 200, deck.text
+    html = deck.json()["html"]
+    assert "data:image/" not in html
+    assert 'src="assets/hero.png"' in html
+
+    commits = sc.list_commits(
+        repo_id=slides_api._repo_id(), ref="slides/ws-test/pixel-deck", limit=20
+    )
+    seed_commits = [c for c in commits if "Create slides project" in c.message]
+    assert len(seed_commits) == 1
+
+    asset = client.get(
+        "/slides/projects/pixel-deck/assets/hero.png",
+        params={"workspace_id": "ws-test"},
+    )
+    assert asset.status_code == 200, asset.text
+    assert asset.content[:8] == b"\x89PNG\r\n\x1a\n"
+    assert "image/png" in (asset.headers.get("content-type") or "")
+
+    traversal = client.get(
+        "/slides/projects/pixel-deck/assets/..png",
+        params={"workspace_id": "ws-test"},
+    )
+    assert traversal.status_code == 422
+
+    tree = client.get(
+        "/slides/projects/pixel-deck/tree",
+        params={"workspace_id": "ws-test"},
+    )
+    assert tree.status_code == 200, tree.text
+    body = tree.json()
+    assert body["embedded_images"] == 0
+    assert "copied from the catalog" in (body.get("assets_note") or "")
+
+    applied = client.post(
+        "/slides/projects/pixel-deck/apply-template",
+        json={"workspace_id": "ws-test", "template_id": "office/pixel-v1"},
+    )
+    assert applied.status_code == 200, applied.text
+    assert "data:image/" not in applied.json()["html"]
+    again = client.get(
+        "/slides/projects/pixel-deck/assets/hero.png",
+        params={"workspace_id": "ws-test"},
+    )
+    assert again.status_code == 200
+    assert again.content[:8] == b"\x89PNG\r\n\x1a\n"
+    apply_commits = [
+        c
+        for c in sc.list_commits(
+            repo_id=slides_api._repo_id(), ref="slides/ws-test/pixel-deck", limit=20
+        )
+        if c.message.startswith("Apply template")
+    ]
+    assert len(apply_commits) == 1
+
+
+def test_load_seed_html_reads_folder_template(tmp_path, monkeypatch) -> None:
+    source_dir = _write_folder_template(tmp_path / "acme", "folder-deck-v1", "Folder")
+    _configure_sources(monkeypatch, ("acme", source_dir))
+    html = _load_seed_html("acme/folder-deck-v1")
+    assert 'src="assets/hero.png"' in html
+    assert "acme/folder-deck-v1" in _discover_seed_ids()
+
+
+def test_slide_mutations_insert_delete_duplicate_reorder(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Mutation deck",
+            "slug": "mutation-deck",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+    listed = client.get(
+        "/slides/projects/mutation-deck/slides",
+        params={"workspace_id": "ws-test"},
+    )
+    assert listed.status_code == 200, listed.text
+    start = listed.json()
+    assert start["ok"] is True
+    assert start["section_count"] >= 2
+    n = start["section_count"]
+
+    inserted = client.post(
+        "/slides/projects/mutation-deck/slides/insert",
+        json={
+            "workspace_id": "ws-test",
+            "after_index": 0,
+            "layout": "content",
+            "title": "Risks",
+        },
+    )
+    assert inserted.status_code == 200, inserted.text
+    body = inserted.json()
+    assert body["ok"] is True
+    assert body["section_index"] == 1
+    assert body["section_count"] == n + 1
+    assert "Risks" in (body.get("html") or "")
+    assert any(s.get("title") == "Risks" for s in body["slides"])
+
+    duplicated = client.post(
+        "/slides/projects/mutation-deck/slides/duplicate",
+        json={"workspace_id": "ws-test", "index": 1},
+    )
+    assert duplicated.status_code == 200, duplicated.text
+    assert duplicated.json()["section_count"] == n + 2
+    assert duplicated.json()["section_index"] == 2
+
+    reordered = client.post(
+        "/slides/projects/mutation-deck/slides/reorder",
+        json={"workspace_id": "ws-test", "from_index": 1, "to_index": 2},
+    )
+    assert reordered.status_code == 200, reordered.text
+    assert reordered.json()["section_index"] == 2
+
+    deleted = client.post(
+        "/slides/projects/mutation-deck/slides/delete",
+        json={"workspace_id": "ws-test", "index": 2},
+    )
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["section_count"] == n + 1
+
+    deck = client.get(
+        "/slides/projects/mutation-deck/deck",
+        params={"workspace_id": "ws-test"},
+    )
+    assert deck.status_code == 200
+    assert "Risks" in deck.json()["html"]
+
+
+def test_delete_last_slide_is_refused(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "One slide",
+            "slug": "one-slide-deck",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+    listed = client.get(
+        "/slides/projects/one-slide-deck/slides",
+        params={"workspace_id": "ws-test"},
+    )
+    count = listed.json()["section_count"]
+    for index in range(count - 1, 0, -1):
+        gone = client.post(
+            "/slides/projects/one-slide-deck/slides/delete",
+            json={"workspace_id": "ws-test", "index": index},
+        )
+        assert gone.status_code == 200, gone.text
+    last = client.post(
+        "/slides/projects/one-slide-deck/slides/delete",
+        json={"workspace_id": "ws-test", "index": 0},
+    )
+    assert last.status_code == 409
+    assert "last slide" in last.json()["detail"].lower()
