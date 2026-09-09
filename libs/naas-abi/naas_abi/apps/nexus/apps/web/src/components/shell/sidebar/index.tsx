@@ -455,11 +455,18 @@ export function Sidebar() {
       <nav
         ref={navRef}
         className={cn(
-          'flex flex-1 flex-col gap-1 py-3',
-          draggingId ? 'overflow-visible' : 'overflow-y-auto',
+          'flex min-h-0 flex-1 flex-col py-3',
           labeled ? 'px-2' : 'items-center px-2'
         )}
       >
+        {/* Keep overflow on this shrink-wrapped list. A full-height overflow nav seams above Events. */}
+        <div
+          className={cn(
+            'flex max-h-full min-h-0 flex-col gap-1',
+            draggingId ? 'overflow-visible' : 'overflow-y-auto',
+            !labeled && 'items-center',
+          )}
+        >
         {orderedSections.map((section, index) => {
           const active = isSectionActive(section);
           const isDragging = draggingId === section.id;
@@ -518,11 +525,12 @@ export function Sidebar() {
             </button>
           );
         })}
+        </div>
       </nav>
 
       <nav
         className={cn(
-          'flex flex-shrink-0 flex-col gap-1 border-t border-border/50 py-3',
+          'flex flex-shrink-0 flex-col gap-1 py-3',
           labeled ? 'px-2' : 'items-center px-2'
         )}
       >
@@ -580,7 +588,7 @@ export function Sidebar() {
 
       <div
         className={cn(
-          'flex flex-shrink-0 flex-col border-t border-border/50 py-2',
+          'flex flex-shrink-0 flex-col py-2',
           labeled ? 'px-2' : 'items-center px-2',
         )}
       >

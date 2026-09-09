@@ -16,6 +16,13 @@ import {
 } from '@/components/slides/slides-preview-frame';
 import { downloadSlidesHtml, resolveSlidesPreviewAssets } from '@/components/slides/slides-assets';
 import {
+  applySlidesTextEdits,
+  collectSlidesTextEdits,
+  sanitizeSlidesEditHtml,
+  SLIDES_MANUAL_EDIT_IDLE_MS,
+  type SlidesTextEdit,
+} from '@/components/slides/slides-preview-fit';
+import {
   clampSlideIndex,
   deleteSlide,
   duplicateSlide,
@@ -205,11 +212,16 @@ export default function SlidesEditorPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [mode, setMode] = useState<SlidesEditorMode>('preview');
+  const [manualEdit, setManualEdit] = useState(false);
+  const [holdPreview, setHoldPreview] = useState(false);
   const [mutating, setMutating] = useState(false);
   const previewRef = useRef<SlidesPreviewFrameHandle>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [previewHtml, setPreviewHtml] = useState('');
   const dirtyRef = useRef(false);
+  const htmlRef = useRef('');
+  const manualEditRef = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadGenRef = useRef(0);
   const skipTokenEffectRef = useRef(true);
   const saveRef = useRef<() => Promise<void>>(async () => {});
@@ -228,6 +240,14 @@ export default function SlidesEditorPage() {
     dirtyRef.current = dirty;
     setDeckDirty(dirty);
   }, [dirty, setDeckDirty]);
+
+  useEffect(() => {
+    htmlRef.current = html;
+  }, [html]);
+
+  useEffect(() => {
+    manualEditRef.current = manualEdit;
+  }, [manualEdit]);
 
   useEffect(() => {
     return () => {
@@ -299,6 +319,7 @@ export default function SlidesEditorPage() {
         const deck = (await deckRes.json()) as { html: string; source?: string };
         if (gen !== loadGenRef.current) return;
         setTitle(proj.title);
+        setHoldPreview(false);
         setHtml(deck.html);
         setPreviewHtml(deck.html);
         setSelectedIndex(
@@ -410,15 +431,17 @@ export default function SlidesEditorPage() {
   }, [mode, setEditorMode]);
 
   useEffect(() => {
+    if (holdPreview) return;
     if (previewTimer.current) clearTimeout(previewTimer.current);
     previewTimer.current = setTimeout(() => setPreviewHtml(html), 350);
     return () => {
       if (previewTimer.current) clearTimeout(previewTimer.current);
     };
-  }, [html]);
+  }, [html, holdPreview]);
 
   const save = useCallback(async () => {
-    if (!workspaceId || !slug || !html) return;
+    const deck = htmlRef.current;
+    if (!workspaceId || !slug || !deck) return;
     setSaving(true);
     setError(null);
     setStatus(null);
@@ -428,7 +451,7 @@ export default function SlidesEditorPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           workspace_id: workspaceId,
-          html,
+          html: deck,
           message: `chore(deck): update ${slug}`,
         }),
       });
@@ -444,7 +467,7 @@ export default function SlidesEditorPage() {
     } finally {
       setSaving(false);
     }
-  }, [workspaceId, slug, html]);
+  }, [workspaceId, slug]);
 
   const saveToMyDrive = useCallback(async () => {
     if (!slug || !html) return;
@@ -480,7 +503,11 @@ export default function SlidesEditorPage() {
     const onKey = (event: KeyboardEvent) => {
       const mod = event.metaKey || event.ctrlKey;
       if (!mod) {
-        if (event.key === 'Delete' && !isSlidesTypingTarget(event.target)) {
+        if (
+          event.key === 'Delete' &&
+          !manualEditRef.current &&
+          !isSlidesTypingTarget(event.target)
+        ) {
           event.preventDefault();
           deleteSelectedSlideRef.current();
         }
@@ -565,6 +592,7 @@ export default function SlidesEditorPage() {
       try {
         const result = await run();
         if (result.html) {
+          setHoldPreview(false);
           setHtml(result.html);
           setPreviewHtml(result.html);
         }
@@ -588,10 +616,10 @@ export default function SlidesEditorPage() {
     setFilmstrip({
       workspaceId,
       slug,
-      html: previewHtml || html,
+      html: holdPreview ? html : previewHtml || html,
       disabled: mutating || loading || !html,
     });
-  }, [workspaceId, slug, previewHtml, html, mutating, loading, setFilmstrip]);
+  }, [workspaceId, slug, previewHtml, html, holdPreview, mutating, loading, setFilmstrip]);
 
   useEffect(() => {
     setReorderOpenDeck((fromIndex, toIndex) => {
@@ -630,6 +658,42 @@ export default function SlidesEditorPage() {
       setExporting(false);
     }
   };
+
+  const scheduleManualSave = useCallback(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      saveTimer.current = null;
+      void saveRef.current();
+    }, SLIDES_MANUAL_EDIT_IDLE_MS);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, []);
+
+  const onManualEditCommit = useCallback(
+    (edits: SlidesTextEdit[]) => {
+      if (!edits.length) return;
+      const baseline = new Map(
+        collectSlidesTextEdits(htmlRef.current).map((edit) => [edit.path, edit.html]),
+      );
+      const changed = edits.filter((edit) => {
+        const before = baseline.get(edit.path);
+        if (before === undefined) return false;
+        return sanitizeSlidesEditHtml(edit.html) !== sanitizeSlidesEditHtml(before);
+      });
+      if (!changed.length) return;
+      const next = applySlidesTextEdits(htmlRef.current, changed);
+      if (next === htmlRef.current) return;
+      setHoldPreview(true);
+      setHtml(next);
+      setDirty(true);
+      scheduleManualSave();
+    },
+    [scheduleManualSave],
+  );
 
   const slideActionsDisabled = mutating || loading || !html;
 
@@ -681,7 +745,13 @@ export default function SlidesEditorPage() {
       onDeleteSlide={deleteSelectedSlide}
       deleteSlideDisabled={slideActionsDisabled || slides.length <= 1}
       mode={mode}
-      onModeChange={setMode}
+      onModeChange={(next) => {
+        setMode(next);
+        if (next !== 'preview') setManualEdit(false);
+      }}
+      manualEdit={manualEdit}
+      onManualEditChange={setManualEdit}
+      manualEditDisabled={slideActionsDisabled}
       onRefresh={() => void refresh()}
       refreshDisabled={loading || refreshing}
       trailing={
@@ -779,6 +849,8 @@ export default function SlidesEditorPage() {
             slug={slug}
             selectedIndex={currentIndex}
             onSelectedIndexChange={setSelectedIndex}
+            manualEdit={manualEdit}
+            onManualEditCommit={onManualEditCommit}
           />
         </div>
 
@@ -790,6 +862,7 @@ export default function SlidesEditorPage() {
               theme="vs-dark"
               value={html}
               onChange={(value) => {
+                setHoldPreview(false);
                 setHtml(value ?? '');
                 setDirty(true);
               }}

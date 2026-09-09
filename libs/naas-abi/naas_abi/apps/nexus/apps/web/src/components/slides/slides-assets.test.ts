@@ -19,6 +19,16 @@ describe('collectSlidesAssetRefs', () => {
     expect(collectSlidesAssetRefs('')).toEqual([]);
     expect(collectSlidesAssetRefs('<img src="data:image/png;base64,AAAA">')).toEqual([]);
   });
+
+  it('ignores absolute /assets/images URLs and directory prefixes', () => {
+    const html = `
+      <img src="https://cdn.example.com/assets/images/acme-logo.png">
+      <img src="/assets/images/logo.png">
+      <div style="background:url(assets/images)"></div>
+      <img src="assets/img-001.png">
+    `;
+    expect(collectSlidesAssetRefs(html)).toEqual(['assets/img-001.png']);
+  });
 });
 
 describe('rewriteSlidesAssetUrls', () => {

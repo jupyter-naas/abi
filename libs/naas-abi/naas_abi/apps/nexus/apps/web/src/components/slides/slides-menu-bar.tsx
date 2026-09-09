@@ -48,6 +48,9 @@ export function buildSlidesEditMenu(opts: {
   mod: string;
   onDuplicate: () => void;
   onDelete: () => void;
+  manualEdit?: boolean;
+  canManualEdit?: boolean;
+  onManualEditChange?: (enabled: boolean) => void;
 }): SlidesMenuEntry[] {
   return [
     { id: 'undo', label: 'Undo', shortcut: `${opts.mod}Z`, disabled: true },
@@ -65,6 +68,14 @@ export function buildSlidesEditMenu(opts: {
       shortcut: 'Del',
       disabled: !opts.canDelete,
       onSelect: opts.onDelete,
+    },
+    { id: 'sep-manual-edit', separator: true },
+    {
+      id: 'manual-edit',
+      label: 'Manual edit',
+      disabled: !opts.canManualEdit,
+      checked: Boolean(opts.manualEdit),
+      onSelect: () => opts.onManualEditChange?.(!opts.manualEdit),
     },
   ];
 }
@@ -256,6 +267,10 @@ export interface SlidesMenuBarProps {
   /** View → Preview / Code / Refresh. Omit on index/new pages. */
   mode?: SlidesEditorMode;
   onModeChange?: (mode: SlidesEditorMode) => void;
+  /** Edit → Manual edit. Off by default. Omit on index/new pages. */
+  manualEdit?: boolean;
+  onManualEditChange?: (enabled: boolean) => void;
+  manualEditDisabled?: boolean;
   /** View → Refresh (reload deck from Forgejo / server). */
   onRefresh?: () => void;
   refreshDisabled?: boolean;
@@ -265,7 +280,7 @@ export interface SlidesMenuBarProps {
 
 /**
  * Lean PowerPoint-style menu bar: File, Edit, View, Insert. All four always
- * render — on pages with no open deck yet (index/new) the Edit/View/Insert
+ * render. On pages with no open deck yet (index/new) the Edit/View/Insert
  * items are just disabled rather than the menus disappearing, so the bar
  * looks the same on every Slides page.
  * Format / Arrange / Tools stay out of this pass.
@@ -288,6 +303,9 @@ export function SlidesMenuBar({
   deleteSlideDisabled,
   mode,
   onModeChange,
+  manualEdit = false,
+  onManualEditChange,
+  manualEditDisabled,
   onRefresh,
   refreshDisabled,
   trailing,
@@ -363,16 +381,20 @@ export function SlidesMenuBar({
     fileItems.push({ id: 'sep-export', separator: true }, ...exportItems);
   }
 
-  // File/Edit/View/Insert are always present, like a real app menu bar —
+  // File/Edit/View/Insert are always present, like a real app menu bar :
   // pages that haven't wired a given action (index/new pages have no open
   // deck yet) just get that item disabled instead of the whole menu
   // vanishing, so the bar looks identical everywhere in Slides.
+  const canToggleManualEdit = Boolean(onManualEditChange) && mode !== 'code';
   const editItems = buildSlidesEditMenu({
     canDuplicate: Boolean(onDuplicateSlide) && !duplicateSlideDisabled,
     canDelete: Boolean(onDeleteSlide) && !deleteSlideDisabled,
     mod,
     onDuplicate: () => onDuplicateSlide?.(),
     onDelete: () => onDeleteSlide?.(),
+    manualEdit,
+    canManualEdit: canToggleManualEdit && !manualEditDisabled,
+    onManualEditChange,
   });
 
   const insertItems = buildSlidesInsertMenu({
