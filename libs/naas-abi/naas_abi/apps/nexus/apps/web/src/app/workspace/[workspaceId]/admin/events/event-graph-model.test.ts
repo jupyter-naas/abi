@@ -119,6 +119,64 @@ describe('buildEventGraphModel', () => {
     });
     expect(model.focusId).toBe('evt-3');
     expect(model.nodes.some((node) => node.id === 'evt-3')).toBe(true);
+    expect(model.focusFiltered).toBe(false);
+  });
+
+  // Clicking a row in the feed is an explicit "draw this one". Resolving the
+  // focus out of the filtered set instead silently re-pointed it at the newest
+  // matching process, so the centre stopped being what was clicked.
+  it('keeps the clicked process as the focus when a type filter excludes it', () => {
+    const filters = emptyFilters();
+    filters.hiddenProcessTypes.add('AgentToolCalled');
+    const model = buildEventGraphModel([later(1), later(2)], filters, {
+      focusUri: 'evt-1',
+      processCount: 8,
+    });
+    expect(model.focusId).toBe('evt-1');
+    expect(model.focusFiltered).toBe(true);
+  });
+
+  it('keeps the clicked process as the focus when the date slicer excludes it', () => {
+    const filters = emptyFilters();
+    filters.dateStart = '2026-07-31T12:02:00Z';
+    const model = buildEventGraphModel([later(1), later(2)], filters, {
+      focusUri: 'evt-1',
+      processCount: 8,
+    });
+    expect(model.focusId).toBe('evt-1');
+    expect(model.focusFiltered).toBe(true);
+    expect(model.matchedProcessCount).toBe(1);
+  });
+
+  it('draws the focus alone rather than nothing when every filter excludes it', () => {
+    const filters = emptyFilters();
+    filters.dateStart = '2027-01-01T00:00:00Z';
+    const model = buildEventGraphModel([later(1), later(2)], filters, {
+      focusUri: 'evt-1',
+      processCount: 8,
+    });
+    expect(model.focusId).toBe('evt-1');
+    expect(model.nodes.filter((node) => node.isProcess)).toHaveLength(1);
+  });
+
+  // The store hands the list newest-first, so the head of the window is the
+  // newest event.
+  it('falls back to the head of the window only when nothing is selected', () => {
+    const model = buildEventGraphModel([later(2), later(1)], emptyFilters(), {
+      focusUri: null,
+      processCount: 8,
+    });
+    expect(model.focusId).toBe('evt-2');
+    expect(model.focusFiltered).toBe(false);
+  });
+
+  it('captions a process with its clock so same-class processes stay apart', () => {
+    const model = buildEventGraphModel([later(1), later(2)], emptyFilters(), {
+      focusUri: null,
+      processCount: 8,
+    });
+    const captions = model.nodes.filter((node) => node.isProcess).map((node) => node.caption);
+    expect(new Set(captions).size).toBe(2);
   });
 });
 

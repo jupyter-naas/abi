@@ -156,6 +156,13 @@ export default function AdminEventsPage() {
             {model.nodes.filter((node) => node.isProcess).length} of {model.matchedProcessCount} matching
             processes drawn
           </span>
+          {model.focusFiltered && (
+            // The focus is drawn regardless, so say why it is there: otherwise
+            // it reads as a filter that failed to apply.
+            <span className="rounded border border-dashed px-2 py-1 text-muted-foreground">
+              selected process is outside the current filters — kept as the focus
+            </span>
+          )}
           {payload.missing.length > 0 && (
             <span className="text-muted-foreground">
               focus gaps: <span className="font-mono">{payload.missing.join(', ')}</span>

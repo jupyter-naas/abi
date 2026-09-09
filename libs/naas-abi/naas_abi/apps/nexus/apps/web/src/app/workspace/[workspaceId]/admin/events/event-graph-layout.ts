@@ -38,6 +38,7 @@ export interface LayoutNode extends PhysicsNode {
   fields: EventGraphField[];
   isProcess: boolean;
   typeLabel: string;
+  caption: string;
   processIds: string[];
   z: number;
   /** Projected screen position and perspective scale, filled by projectNodes. */
@@ -148,6 +149,7 @@ export function seedEventGraph(model: EventGraphModel, params: GraphParams): Eve
       fields: node.fields,
       isProcess: node.isProcess,
       typeLabel: node.typeLabel,
+      caption: node.caption,
       processIds: node.processIds,
       x,
       y,

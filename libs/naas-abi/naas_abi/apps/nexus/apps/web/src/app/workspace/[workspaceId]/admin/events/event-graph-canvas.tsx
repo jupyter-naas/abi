@@ -221,10 +221,11 @@ export function EventGraphCanvas({
         ctx!.fillText(line, node.px, y);
         y += lineHeight;
       }
-      // Bucket caption: the point of the view is which bucket holds what.
+      // Caption: which bucket holds what for a satellite, and the clock for a
+      // process — a ring of same-class processes is otherwise all one label.
       ctx!.font = `${9 * depth}px var(--font-body), system-ui, sans-serif`;
       ctx!.fillStyle = colors.muted;
-      ctx!.fillText(node.bucket, node.px, node.py + nodeRadiusOf(node) * depth + 11 * depth);
+      ctx!.fillText(node.caption, node.px, node.py + nodeRadiusOf(node) * depth + 11 * depth);
     }
 
     function draw() {

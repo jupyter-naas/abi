@@ -28,6 +28,12 @@ export interface ModelNode {
   isProcess: boolean;
   /** Filter grouping: the event class for a process, the bucket otherwise. */
   typeLabel: string;
+  /**
+   * Drawn under the node. Processes of one class share a label, so without the
+   * clock a ring of eight `PUT Object` nodes is unreadable; satellites keep
+   * their bucket, which is the thing worth reading there.
+   */
+  caption: string;
   /** Which processes reference this node. One entry unless the node is shared. */
   processIds: string[];
 }
@@ -76,6 +82,8 @@ export interface EventGraphModel {
   temporalRange: { start: string; end: string } | null;
   /** Processes matching every filter, before the count cap. */
   matchedProcessCount: number;
+  /** The focus is drawn even though the current filters exclude it. */
+  focusFiltered: boolean;
 }
 
 export function emptyFilters(): GraphFilters {
@@ -153,12 +161,21 @@ export function buildEventGraphModel(
       !filters.hiddenProcessInstances.has(event._uri) &&
       withinRange(event, filters.dateStart, filters.dateEnd),
   );
-  // Keep the focus in view even when it falls past the count cap.
+  // Keep the focus in view even when it falls past the count cap — and when
+  // the filters exclude it. Clicking a row in the feed says "draw this one";
+  // the filters shape the context around it. Resolving the focus out of
+  // `matched` instead re-pointed the centre at the newest matching process
+  // without saying so, which reads as the click having gone to the wrong row.
   const capped = matched.slice(0, Math.max(1, options.processCount));
-  const focusEvent =
-    (options.focusUri && matched.find((event) => event._uri === options.focusUri)) || capped[0] || null;
+  const selected = options.focusUri
+    ? (events.find((event) => event._uri === options.focusUri) ?? null)
+    : null;
+  const focusEvent = selected ?? capped[0] ?? null;
+  const focusFiltered = Boolean(selected) && !matched.includes(focusEvent as PlatformEvent);
   const drawn =
-    focusEvent && !capped.includes(focusEvent) ? [focusEvent, ...capped.slice(0, -1)] : capped;
+    focusEvent && !capped.includes(focusEvent)
+      ? [focusEvent, ...capped.slice(0, Math.max(0, capped.length - 1))]
+      : capped;
 
   // --- Expand each process into its buckets, sharing what is shared -------
   const nodes = new Map<string, ModelNode>();
@@ -177,6 +194,7 @@ export function buildEventGraphModel(
       fields: payload.process.fields,
       isProcess: true,
       typeLabel: payload.naming.className,
+      caption: formatEventClock(eventTimestamp(event)),
       processIds: [processId],
     });
 
@@ -194,6 +212,7 @@ export function buildEventGraphModel(
           fields: satellite.fields,
           isProcess: false,
           typeLabel: satellite.bucket,
+          caption: satellite.bucket,
           processIds: [processId],
         });
         const instance: FilterInstance = {
@@ -240,6 +259,7 @@ export function buildEventGraphModel(
     classInstances,
     temporalRange,
     matchedProcessCount: matched.length,
+    focusFiltered,
   };
 }
 
