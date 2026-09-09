@@ -6,6 +6,7 @@ from naas_abi_core.services.source_control.adapters.secondary.LocalGitAdapter im
 )
 from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNameConflictError,
+    FileWrite,
     RepoNotFoundError,
 )
 from naas_abi_core.services.source_control.tests.source_control__secondary_adapter__generic_test import (
@@ -175,3 +176,33 @@ def test_create_branch_conflict(adapter: LocalGitAdapter) -> None:
 def test_missing_repo(adapter: LocalGitAdapter) -> None:
     with pytest.raises(RepoNotFoundError):
         adapter.list_branches(repo_id="abi/missing")
+
+
+def test_upsert_files_is_one_commit(adapter: LocalGitAdapter) -> None:
+    repo = adapter.ensure_repo(owner="abi", name="demo")
+    repo_id = f"{repo.owner}/{repo.name}"
+    adapter.create_branch(repo_id=repo_id, name="slides/ws/demo", from_ref="main")
+    before = adapter.list_commits(repo_id=repo_id, ref="slides/ws/demo", limit=20)
+    commit = adapter.upsert_files(
+        repo_id=repo_id,
+        files=(
+            FileWrite(path="slides/ws/demo/deck.html", content="<html></html>\n"),
+            FileWrite(path="slides/ws/demo/assets/hero.png", content=b"\x89PNG"),
+        ),
+        message="Seed slides",
+        branch="slides/ws/demo",
+    )
+    after = adapter.list_commits(repo_id=repo_id, ref="slides/ws/demo", limit=20)
+    assert commit.message == "Seed slides"
+    assert len(after) == len(before) + 1
+    assert adapter.get_file(
+        repo_id=repo_id, path="slides/ws/demo/deck.html", ref="slides/ws/demo"
+    ).text == "<html></html>\n"
+    assert (
+        adapter.get_file(
+            repo_id=repo_id,
+            path="slides/ws/demo/assets/hero.png",
+            ref="slides/ws/demo",
+        ).data
+        == b"\x89PNG"
+    )

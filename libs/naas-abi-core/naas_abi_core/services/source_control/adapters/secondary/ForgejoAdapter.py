@@ -5,6 +5,7 @@ import re
 import secrets
 import threading
 import time
+from collections.abc import Sequence
 from typing import Any
 from urllib.parse import quote
 
@@ -30,6 +31,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Diff,
     DiffFile,
     FileContent,
+    FileWrite,
     ISourceControlAdapter,
     MergeBlockedError,
     MergeConflictError,
@@ -275,6 +277,7 @@ class ForgejoAdapter(ISourceControlAdapter):
         raw = result.get("content") or ""
         text: str | None = None
         is_binary = False
+        data: bytes | None = None
         if (result.get("encoding") == "base64") and raw:
             data = base64.b64decode(raw)
             try:
@@ -287,6 +290,7 @@ class ForgejoAdapter(ISourceControlAdapter):
             size=int(result.get("size", 0) or 0),
             text=text,
             is_binary=is_binary,
+            data=data,
         )
 
     def upsert_file(
@@ -294,7 +298,7 @@ class ForgejoAdapter(ISourceControlAdapter):
         *,
         repo_id: str,
         path: str,
-        content: str,
+        content: str | bytes,
         message: str,
         branch: str,
         author_name: str | None = None,
@@ -329,14 +333,15 @@ class ForgejoAdapter(ISourceControlAdapter):
         *,
         repo_id: str,
         path: str,
-        content: str,
+        content: str | bytes,
         message: str,
         branch: str,
         author_name: str | None = None,
         author_email: str | None = None,
     ) -> Commit:
         clean_path = path.lstrip("/")
-        encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
+        raw = content if isinstance(content, bytes) else content.encode("utf-8")
+        encoded = base64.b64encode(raw).decode("ascii")
         payload: dict[str, Any] = {
             "content": encoded,
             "message": message,
@@ -387,6 +392,127 @@ class ForgejoAdapter(ISourceControlAdapter):
                 )
             else:
                 raise
+
+        commit_blob = result.get("commit") if isinstance(result, dict) else None
+        if isinstance(commit_blob, dict):
+            return self._to_commit(commit_blob)
+        return Commit(
+            sha="",
+            message=message.split("\n", 1)[0],
+            author=author_name or "",
+            date=None,
+        )
+
+    def upsert_files(
+        self,
+        *,
+        repo_id: str,
+        files: Sequence[FileWrite],
+        message: str,
+        branch: str,
+        author_name: str | None = None,
+        author_email: str | None = None,
+    ) -> Commit:
+        writes = [item for item in files if item.path]
+        if not writes:
+            raise ValidationError("upsert_files requires at least one path")
+        if len(writes) == 1:
+            return self.upsert_file(
+                repo_id=repo_id,
+                path=writes[0].path,
+                content=writes[0].content,
+                message=message,
+                branch=branch,
+                author_name=author_name,
+                author_email=author_email,
+            )
+        with _branch_write_lock(repo_id, branch):
+            last_exc: SourceControlError | None = None
+            for attempt in range(_UPSERT_MAX_ATTEMPTS):
+                try:
+                    return self._upsert_files_once(
+                        repo_id=repo_id,
+                        files=writes,
+                        message=message,
+                        branch=branch,
+                        author_name=author_name,
+                        author_email=author_email,
+                    )
+                except SourceControlError as exc:
+                    last_exc = exc
+                    if not _is_upsert_race(exc) or attempt + 1 >= _UPSERT_MAX_ATTEMPTS:
+                        raise
+                    time.sleep(0.05 * (attempt + 1))
+            assert last_exc is not None
+            raise last_exc
+
+    def _upsert_files_once(
+        self,
+        *,
+        repo_id: str,
+        files: Sequence[FileWrite],
+        message: str,
+        branch: str,
+        author_name: str | None = None,
+        author_email: str | None = None,
+    ) -> Commit:
+        ops: list[dict[str, Any]] = []
+        for item in files:
+            clean_path = item.path.lstrip("/")
+            raw = (
+                item.content
+                if isinstance(item.content, bytes)
+                else item.content.encode("utf-8")
+            )
+            op: dict[str, Any] = {
+                "path": clean_path,
+                "content": base64.b64encode(raw).decode("ascii"),
+                "operation": "create",
+            }
+            try:
+                existing = self._request(
+                    "GET",
+                    f"/repos/{repo_id}/contents/{clean_path}"
+                    f"?ref={quote(branch, safe='')}",
+                )
+                if isinstance(existing, dict) and existing.get("sha"):
+                    op["operation"] = "update"
+                    op["sha"] = existing["sha"]
+            except RepoNotFoundError:
+                pass
+            ops.append(op)
+
+        payload: dict[str, Any] = {
+            "files": ops,
+            "message": message,
+            "branch": branch,
+        }
+        if author_name and author_email:
+            payload["author"] = {"name": author_name, "email": author_email}
+            payload["committer"] = {"name": author_name, "email": author_email}
+
+        try:
+            result = self._request(
+                "POST", f"/repos/{repo_id}/contents", json=payload
+            )
+        except SourceControlError as exc:
+            # Older Gitea builds have no change-files route. Leftover: one
+            # Contents-API commit per file.
+            if getattr(exc, "status", None) not in (404, 405):
+                raise
+            last: Commit | None = None
+            for item in files:
+                last = self._upsert_file_once(
+                    repo_id=repo_id,
+                    path=item.path,
+                    content=item.content,
+                    message=message,
+                    branch=branch,
+                    author_name=author_name,
+                    author_email=author_email,
+                )
+            assert last is not None
+            return last
 
         commit_blob = result.get("commit") if isinstance(result, dict) else None
         if isinstance(commit_blob, dict):

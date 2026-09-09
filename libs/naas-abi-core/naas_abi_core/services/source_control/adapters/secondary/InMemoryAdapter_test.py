@@ -9,6 +9,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     PROPOSAL_OPEN,
     REVIEW_APPROVED,
     BranchNameConflictError,
+    FileWrite,
     MergeBlockedError,
     ProposalNotFoundError,
     RepoNotFoundError,
@@ -182,3 +183,29 @@ def test_mint_git_token_returns_token() -> None:
     user_id = adapter.ensure_user(external_id="x", email="a@b.c", username="alice")
     token = adapter.mint_git_token(user_id=user_id)
     assert token.startswith("git-token-")
+
+
+def test_upsert_files_is_one_commit() -> None:
+    adapter = InMemoryAdapter()
+    repo_id = _repo(adapter)
+    adapter.create_branch(repo_id=repo_id, name="slides/ws/demo", from_ref="main")
+    before = adapter.list_commits(repo_id=repo_id, ref="slides/ws/demo", limit=20)
+    commit = adapter.upsert_files(
+        repo_id=repo_id,
+        files=(
+            FileWrite(path="slides/ws/demo/deck.html", content="<html></html>\n"),
+            FileWrite(path="slides/ws/demo/assets/hero.png", content=b"\x89PNG"),
+        ),
+        message="Seed slides",
+        branch="slides/ws/demo",
+    )
+    after = adapter.list_commits(repo_id=repo_id, ref="slides/ws/demo", limit=20)
+    assert commit.message == "Seed slides"
+    assert len(after) == len(before) + 1
+    assert adapter.get_file(
+        repo_id=repo_id, path="slides/ws/demo/deck.html"
+    ).text == "<html></html>\n"
+    assert (
+        adapter.get_file(repo_id=repo_id, path="slides/ws/demo/assets/hero.png").data
+        == b"\x89PNG"
+    )

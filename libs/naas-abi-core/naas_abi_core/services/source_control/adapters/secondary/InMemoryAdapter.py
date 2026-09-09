@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from naas_abi_core.services.source_control.SourceControlPorts import (
     PROPOSAL_MERGED,
     PROPOSAL_OPEN,
@@ -15,6 +17,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     ContentEntry,
     Diff,
     FileContent,
+    FileWrite,
     ISourceControlAdapter,
     MergeBlockedError,
     MergeResult,
@@ -23,6 +26,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Repo,
     RepoNotFoundError,
     Review,
+    SourceControlError,
     WorkflowRun,
 )
 
@@ -115,9 +119,24 @@ class InMemoryAdapter(ISourceControlAdapter):
         files = self._repo(repo_id).get("files", {})
         if path not in files:
             raise RepoNotFoundError(f"{repo_id}:{path}")
-        text = files[path]
+        stored = files[path]
+        if isinstance(stored, bytes):
+            try:
+                text = stored.decode("utf-8")
+                is_binary = False
+            except UnicodeDecodeError:
+                text = None
+                is_binary = True
+            return FileContent(
+                path=path,
+                name=path.rsplit("/", 1)[-1],
+                size=len(stored),
+                text=text,
+                is_binary=is_binary,
+                data=stored,
+            )
         return FileContent(
-            path=path, name=path.rsplit("/", 1)[-1], size=len(text), text=text
+            path=path, name=path.rsplit("/", 1)[-1], size=len(stored), text=stored
         )
 
     def upsert_file(
@@ -125,7 +144,7 @@ class InMemoryAdapter(ISourceControlAdapter):
         *,
         repo_id: str,
         path: str,
-        content: str,
+        content: str | bytes,
         message: str,
         branch: str,
         author_name: str | None = None,
@@ -135,6 +154,39 @@ class InMemoryAdapter(ISourceControlAdapter):
         if branch and branch not in repo["branches"]:
             raise BranchNotFoundError(f"{repo_id}@{branch}")
         repo.setdefault("files", {})[path] = content
+        repo["empty"] = False
+        sha = self._next_id("sha")
+        if branch in repo["branches"]:
+            repo["branches"][branch]["commit_sha"] = sha
+        commits = repo.setdefault("commits", [])
+        commit = Commit(
+            sha=sha,
+            message=message.split("\n", 1)[0],
+            author=author_name or "in-memory",
+            date=None,
+        )
+        commits.insert(0, {"ref": branch, "commit": commit})
+        return commit
+
+    def upsert_files(
+        self,
+        *,
+        repo_id: str,
+        files: Sequence[FileWrite],
+        message: str,
+        branch: str,
+        author_name: str | None = None,
+        author_email: str | None = None,
+    ) -> Commit:
+        writes = [item for item in files if item.path]
+        if not writes:
+            raise SourceControlError("upsert_files requires at least one path")
+        repo = self._repo(repo_id)
+        if branch and branch not in repo["branches"]:
+            raise BranchNotFoundError(f"{repo_id}@{branch}")
+        store = repo.setdefault("files", {})
+        for item in writes:
+            store[item.path] = item.content
         repo["empty"] = False
         sha = self._next_id("sha")
         if branch in repo["branches"]:

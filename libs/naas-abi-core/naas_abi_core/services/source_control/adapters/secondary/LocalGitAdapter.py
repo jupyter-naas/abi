@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
 from typing import NoReturn
 
@@ -15,6 +16,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     ContentEntry,
     Diff,
     FileContent,
+    FileWrite,
     ISourceControlAdapter,
     MergeResult,
     Proposal,
@@ -213,6 +215,7 @@ class LocalGitAdapter(ISourceControlAdapter):
             size=len(raw),
             text=text,
             is_binary=is_binary,
+            data=raw,
         )
 
     def upsert_file(
@@ -220,7 +223,7 @@ class LocalGitAdapter(ISourceControlAdapter):
         *,
         repo_id: str,
         path: str,
-        content: str,
+        content: str | bytes,
         message: str,
         branch: str,
         author_name: str | None = None,
@@ -233,8 +236,44 @@ class LocalGitAdapter(ISourceControlAdapter):
         self._run("checkout", branch, cwd=repo_path, env=env)
         target = repo_path / path.lstrip("/")
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
+        if isinstance(content, bytes):
+            target.write_bytes(content)
+        else:
+            target.write_text(content, encoding="utf-8")
         self._run("add", path.lstrip("/"), cwd=repo_path, env=env)
+        self._run("commit", "-m", message, cwd=repo_path, env=env)
+        sha = self._run("rev-parse", "HEAD", cwd=repo_path, env=env)
+        return Commit(sha=sha, message=message, author=author_name or "abi")
+
+    def upsert_files(
+        self,
+        *,
+        repo_id: str,
+        files: Sequence[FileWrite],
+        message: str,
+        branch: str,
+        author_name: str | None = None,
+        author_email: str | None = None,
+    ) -> Commit:
+        writes = [item for item in files if item.path]
+        if not writes:
+            raise SourceControlError("upsert_files requires at least one path")
+        repo_path = self._repo_path(repo_id)
+        if not self._repo_exists(repo_id):
+            raise RepoNotFoundError(repo_id)
+        env = _git_env(author_name or "abi", author_email or "abi@local")
+        self._run("checkout", branch, cwd=repo_path, env=env)
+        added: list[str] = []
+        for item in writes:
+            rel = item.path.lstrip("/")
+            target = repo_path / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if isinstance(item.content, bytes):
+                target.write_bytes(item.content)
+            else:
+                target.write_text(item.content, encoding="utf-8")
+            added.append(rel)
+        self._run("add", "--", *added, cwd=repo_path, env=env)
         self._run("commit", "-m", message, cwd=repo_path, env=env)
         sha = self._run("rev-parse", "HEAD", cwd=repo_path, env=env)
         return Commit(sha=sha, message=message, author=author_name or "abi")
