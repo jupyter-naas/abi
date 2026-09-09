@@ -4,9 +4,10 @@ export const FEATURE_COLUMN_WIDTH_DEFAULT = 256;
 export const FEATURE_COLUMN_WIDTH_MIN = 200;
 export const FEATURE_COLUMN_WIDTH_MAX = 480;
 
-export const DOCK_WIDTH_DEFAULT = FEATURE_COLUMN_WIDTH_DEFAULT;
 export const DOCK_WIDTH_MIN = 56;
 export const DOCK_WIDTH_MAX = FEATURE_COLUMN_WIDTH_MAX;
+/** Dock starts icon-only; hover flyouts carry the section title/description. */
+export const DOCK_WIDTH_DEFAULT = DOCK_WIDTH_MIN;
 /** Below this, the dock is icon-only. At or above, labels show. */
 export const DOCK_LABELS_MIN_WIDTH = 140;
 

@@ -161,7 +161,7 @@ export function SectionPanel() {
         )}
       </div>
       {isOpen && (
-        <ColumnResizeHandle onMouseDown={handleDragStart} label="Drag to resize column" />
+        <ColumnResizeHandle onMouseDown={handleDragStart} label="Drag to resize column" isActive={isDragging} />
       )}
     </>
   );
