@@ -4,6 +4,7 @@ import { Component, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { WorkspaceLayout } from '@/components/shell/workspace-layout';
 import { ShellTitleProvider } from '@/components/shell/shell-title';
+import { TopNavProvider } from '@/components/shell/topnav-content';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { clearAuthFlagCookie } from '@/lib/auth-session';
 import { useAuthStore } from '@/stores/auth';
@@ -218,7 +219,9 @@ export default function WorkspaceShellLayout({
         </div>
       ) : (
         <ShellTitleProvider>
-          <WorkspaceLayout>{children}</WorkspaceLayout>
+          <TopNavProvider>
+            <WorkspaceLayout>{children}</WorkspaceLayout>
+          </TopNavProvider>
         </ShellTitleProvider>
       )}
     </WorkspaceErrorBoundary>

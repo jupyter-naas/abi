@@ -6,6 +6,7 @@ import { useTheme } from 'next-themes';
 import dynamic from 'next/dynamic';
 import { Sidebar } from './sidebar';
 import { SectionPanel } from './sidebar/section-panel';
+import { TopNav } from './topnav';
 import { PlatformStatusFooter } from './platform-status-footer';
 import { MobileBottomNav } from './mobile/mobile-bottom-nav';
 import { MobileMoreSheet } from './mobile/mobile-more-sheet';
@@ -382,16 +383,23 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
       {/* Feature column: Chat, Files, Workspaces, ... */}
       <SectionPanel />
 
-      {/* Main content + platform status footer (User / Business workspace / Repo / Branch / Code workspace) */}
-      <main className="flex flex-1 flex-col overflow-hidden">
-        {currentWorkspaceId && <PresenceIndicator workspaceId={currentWorkspaceId} />}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
-          <PlatformStatusFooter />
-        </div>
-      </main>
+      {/* Topnav spans main content + the AI chat pane, so the pane opens
+          below it instead of beside a per-page-scoped header. */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <TopNav />
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          {/* Main content + platform status footer (User / Business workspace / Repo / Branch / Code workspace) */}
+          <main className="flex flex-1 flex-col overflow-hidden">
+            {currentWorkspaceId && <PresenceIndicator workspaceId={currentWorkspaceId} />}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+              <PlatformStatusFooter />
+            </div>
+          </main>
 
-      {contextPanelOpen && <AIPane />}
+          {contextPanelOpen && <AIPane />}
+        </div>
+      </div>
     </div>
   );
 }
