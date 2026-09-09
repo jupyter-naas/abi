@@ -9,6 +9,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
 from naas_abi_core.services.dataset.DatasetService import DatasetService
+from naas_abi_core.services.document.DocumentService import DocumentService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
@@ -38,6 +39,7 @@ class IEngine:
     class Services:
         __object_storage: ObjectStorageService | None
         __dataset: DatasetService | None
+        __document: DocumentService | None
         __triple_store: TripleStoreService | None
         __vector_store: VectorStoreService | None
         __secret: Secret | None
@@ -67,9 +69,11 @@ class IEngine:
             model_registry: ModelRegistryService | None = None,
             coding_environment: CodingEnvironmentService | None = None,
             source_control: SourceControlService | None = None,
+            document: DocumentService | None = None,
         ):
             self.__object_storage = object_storage
             self.__dataset = dataset
+            self.__document = document
             self.__triple_store = triple_store
             self.__vector_store = vector_store
             self.__secret = secret
@@ -102,6 +106,14 @@ class IEngine:
 
         def dataset_available(self) -> bool:
             return self.__dataset is not None
+
+        @property
+        def document(self) -> DocumentService:
+            assert self.__document is not None, "Document service is not initialized"
+            return self.__document
+
+        def document_available(self) -> bool:
+            return self.__document is not None
 
         @property
         def triple_store(self) -> TripleStoreService:
@@ -189,11 +201,12 @@ class IEngine:
         def all(
             self,
         ) -> list[
-            ObjectStorageService | None | DatasetService | TripleStoreService | VectorStoreService | Secret | BusService | KeyValueService | EmailService | CacheService | EventService | ActivityLogService | ModelRegistryService | CodingEnvironmentService | SourceControlService
+            ObjectStorageService | None | DatasetService | DocumentService | TripleStoreService | VectorStoreService | Secret | BusService | KeyValueService | EmailService | CacheService | EventService | ActivityLogService | ModelRegistryService | CodingEnvironmentService | SourceControlService
         ]:
             return [
                 self.__object_storage,
                 self.__dataset,
+                self.__document,
                 self.__triple_store,
                 self.__vector_store,
                 self.__secret,

@@ -126,6 +126,11 @@ services:
       adapter: "fs"
       config:
         base_path: "storage/datastore"
+  document:
+    document_adapter:
+      adapter: "sqlite"
+      config:
+        path: "storage/documents.sqlite"
   dataset:
     dataset_adapter:
       adapter: "ducklake"
