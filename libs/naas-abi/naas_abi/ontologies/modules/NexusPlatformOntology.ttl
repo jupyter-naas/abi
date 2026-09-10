@@ -280,256 +280,241 @@ nexus:hasProvider a owl:ObjectProperty ;
 
 # WHY — concretization pairs for workspace role
 nexus:hasWorkspaceRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isWorkspaceRoleOf ;
     rdfs:label "has workspace role"@en ;
-    skos:definition "Relates a workspace to a workspace role that concretizes it in platform use."@en ;
+    skos:definition "Relates a workspace to the category (a workspace role) that classifies it."@en ;
     rdfs:domain nexus:Workspace ;
     rdfs:range nexus:WorkspaceRole .
 
 nexus:isWorkspaceRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:inheresIn ;
+    rdfs:subPropertyOf nexus:isAbout ;
     owl:inverseOf nexus:hasWorkspaceRole ;
     rdfs:label "is workspace role of"@en ;
-    skos:definition "Relates a workspace role to the workspace of which it is the role-side concretization."@en ;
+    skos:definition "Relates a workspace role, a category, to the workspace it classifies."@en ;
     rdfs:domain nexus:WorkspaceRole ;
     rdfs:range nexus:Workspace .
 
 # WHY — concretization pairs for search role
 nexus:hasSearchRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isSearchRoleOf ;
     rdfs:label "has search role"@en ;
-    skos:definition "Relates a search artifact to a search role that concretizes it in platform use."@en ;
+    skos:definition "Relates a search artifact to the category (a search role) that classifies it."@en ;
     rdfs:domain nexus:Search ;
     rdfs:range nexus:SearchRole .
 
 nexus:isSearchRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:inheresIn ;
+    rdfs:subPropertyOf nexus:isAbout ;
     owl:inverseOf nexus:hasSearchRole ;
     rdfs:label "is search role of"@en ;
-    skos:definition "Relates a search role to the search artifact of which it is the role-side concretization."@en ;
+    skos:definition "Relates a search role, a category, to the search artifact it classifies."@en ;
     rdfs:domain nexus:SearchRole ;
     rdfs:range nexus:Search .
 
 # WHY — concretization pairs for conversation role
 nexus:hasConversationRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isConversationRoleOf ;
     rdfs:label "has conversation role"@en ;
-    skos:definition "Relates a conversation to a conversation role that concretizes it in platform use."@en ;
+    skos:definition "Relates a conversation to the category (a conversation role) that classifies it."@en ;
     rdfs:domain nexus:Conversation ;
     rdfs:range nexus:ConversationRole .
 
 nexus:isConversationRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:inheresIn ;
+    rdfs:subPropertyOf nexus:isAbout ;
     owl:inverseOf nexus:hasConversationRole ;
     rdfs:label "is conversation role of"@en ;
-    skos:definition "Relates a conversation role to the conversation of which it is the role-side concretization."@en ;
+    skos:definition "Relates a conversation role, a category, to the conversation it classifies."@en ;
     rdfs:domain nexus:ConversationRole ;
     rdfs:range nexus:Conversation .
 
 # WHY — concretization pairs for message role
 nexus:hasMessageRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isMessageRoleOf ;
     rdfs:label "has message role"@en ;
-    skos:definition "Relates a message to a message role that concretizes it in platform use."@en ;
+    skos:definition "Relates a message to the category (a message role) that classifies it."@en ;
     rdfs:domain nexus:Message ;
     rdfs:range nexus:MessageRole .
 
 nexus:isMessageRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:inheresIn ;
+    rdfs:subPropertyOf nexus:isAbout ;
     owl:inverseOf nexus:hasMessageRole ;
     rdfs:label "is message role of"@en ;
-    skos:definition "Relates a message role to the message of which it is the role-side concretization."@en ;
+    skos:definition "Relates a message role, a category, to the message it classifies."@en ;
     rdfs:domain nexus:MessageRole ;
     rdfs:range nexus:Message .
 
 # WHY — concretization pairs for agent role
 nexus:hasAgentRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isAgentRoleOf ;
     rdfs:label "has agent role"@en ;
-    skos:definition "Relates an agent to an agent role that concretizes it in platform use."@en ;
+    skos:definition "Relates an agent to the category (an agent role) that classifies it."@en ;
     rdfs:domain nexus:Agent ;
     rdfs:range nexus:AgentRole .
 
 nexus:isAgentRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:inheresIn ;
+    rdfs:subPropertyOf nexus:isAbout ;
     owl:inverseOf nexus:hasAgentRole ;
     rdfs:label "is agent role of"@en ;
-    skos:definition "Relates an agent role to the agent of which it is the role-side concretization."@en ;
+    skos:definition "Relates an agent role, a category, to the agent it classifies."@en ;
     rdfs:domain nexus:AgentRole ;
     rdfs:range nexus:Agent .
 
 # WHY — concretization pairs for ontology role
 nexus:hasOntologyRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isOntologyRoleOf ;
     rdfs:label "has ontology role"@en ;
-    skos:definition "Relates an ontology to an ontology role that concretizes it in platform use."@en ;
+    skos:definition "Relates an ontology to the category (an ontology role) that classifies it."@en ;
     rdfs:domain nexus:Ontology ;
     rdfs:range nexus:OntologyRole .
 
 nexus:isOntologyRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:inheresIn ;
+    rdfs:subPropertyOf nexus:isAbout ;
     owl:inverseOf nexus:hasOntologyRole ;
     rdfs:label "is ontology role of"@en ;
-    skos:definition "Relates an ontology role to the ontology of which it is the role-side concretization."@en ;
+    skos:definition "Relates an ontology role, a category, to the ontology it classifies."@en ;
     rdfs:domain nexus:OntologyRole ;
     rdfs:range nexus:Ontology .
 
 # WHY — concretization pairs for ontology module role
 nexus:hasOntologyModuleRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isOntologyModuleRoleOf ;
     rdfs:label "has ontology module role"@en ;
-    skos:definition "Relates an ontology module to an ontology module role that concretizes it in platform use."@en ;
+    skos:definition "Relates an ontology module to the category (an ontology module role) that classifies it."@en ;
     rdfs:domain nexus:OntologyModule ;
     rdfs:range nexus:OntologyModuleRole .
 
 nexus:isOntologyModuleRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:inheresIn ;
+    rdfs:subPropertyOf nexus:isAbout ;
     owl:inverseOf nexus:hasOntologyModuleRole ;
     rdfs:label "is ontology module role of"@en ;
-    skos:definition "Relates an ontology module role to the ontology module of which it is the role-side concretization."@en ;
+    skos:definition "Relates an ontology module role, a category, to the ontology module it classifies."@en ;
     rdfs:domain nexus:OntologyModuleRole ;
     rdfs:range nexus:OntologyModule .
 
 # WHY — concretization pairs for ontology class role
 nexus:hasOntologyClassRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isOntologyClassRoleOf ;
     rdfs:label "has ontology class role"@en ;
-    skos:definition "Relates an ontology class to an ontology class role that concretizes it in platform use."@en ;
+    skos:definition "Relates an ontology class to the category (an ontology class role) that classifies it."@en ;
     rdfs:domain nexus:OntologyClass ;
     rdfs:range nexus:OntologyClassRole .
 
 nexus:isOntologyClassRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:inheresIn ;
+    rdfs:subPropertyOf nexus:isAbout ;
     owl:inverseOf nexus:hasOntologyClassRole ;
     rdfs:label "is ontology class role of"@en ;
-    skos:definition "Relates an ontology class role to the ontology class of which it is the role-side concretization."@en ;
+    skos:definition "Relates an ontology class role, a category, to the ontology class it classifies."@en ;
     rdfs:domain nexus:OntologyClassRole ;
     rdfs:range nexus:OntologyClass .
 
 # WHY — concretization pairs for ontology object property role
 nexus:hasOntologyObjectPropertyRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isOntologyObjectPropertyRoleOf ;
     rdfs:label "has ontology object property role"@en ;
-    skos:definition "Relates an ontology object property to an ontology object property role that concretizes it in platform use."@en ;
+    skos:definition "Relates an ontology object property to the category (an ontology object property role) that classifies it."@en ;
     rdfs:domain nexus:OntologyObjectProperty ;
     rdfs:range nexus:OntologyObjectPropertyRole .
 
 nexus:isOntologyObjectPropertyRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:inheresIn ;
+    rdfs:subPropertyOf nexus:isAbout ;
     owl:inverseOf nexus:hasOntologyObjectPropertyRole ;
     rdfs:label "is ontology object property role of"@en ;
-    skos:definition "Relates an ontology object property role to the ontology object property of which it is the role-side concretization."@en ;
+    skos:definition "Relates an ontology object property role, a category, to the ontology object property it classifies."@en ;
     rdfs:domain nexus:OntologyObjectPropertyRole ;
     rdfs:range nexus:OntologyObjectProperty .
 
 # WHY — concretization pairs for knowledge graph role
 nexus:hasKnowledgeGraphRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isKnowledgeGraphRoleOf ;
     rdfs:label "has knowledge graph role"@en ;
-    skos:definition "Relates a knowledge graph to a knowledge graph role that concretizes it in platform use."@en ;
+    skos:definition "Relates a knowledge graph to the category (a knowledge graph role) that classifies it."@en ;
     rdfs:domain nexus:KnowledgeGraph ;
     rdfs:range nexus:KnowledgeGraphRole .
 
 nexus:isKnowledgeGraphRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:inheresIn ;
+    rdfs:subPropertyOf nexus:isAbout ;
     owl:inverseOf nexus:hasKnowledgeGraphRole ;
     rdfs:label "is knowledge graph role of"@en ;
-    skos:definition "Relates a knowledge graph role to the knowledge graph of which it is the role-side concretization."@en ;
+    skos:definition "Relates a knowledge graph role, a category, to the knowledge graph it classifies."@en ;
     rdfs:domain nexus:KnowledgeGraphRole ;
     rdfs:range nexus:KnowledgeGraph .
 
 # WHY — concretization pairs for graph view role
 nexus:hasGraphViewRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isGraphViewRoleOf ;
     rdfs:label "has graph view role"@en ;
-    skos:definition "Relates a graph view to a graph view role that concretizes it in platform use."@en ;
+    skos:definition "Relates a graph view to the category (a graph view role) that classifies it."@en ;
     rdfs:domain nexus:GraphView ;
     rdfs:range nexus:GraphViewRole .
 
 nexus:isGraphViewRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:inheresIn ;
+    rdfs:subPropertyOf nexus:isAbout ;
     owl:inverseOf nexus:hasGraphViewRole ;
     rdfs:label "is graph view role of"@en ;
-    skos:definition "Relates a graph view role to the graph view of which it is the role-side concretization."@en ;
+    skos:definition "Relates a graph view role, a category, to the graph view it classifies."@en ;
     rdfs:domain nexus:GraphViewRole ;
     rdfs:range nexus:GraphView .
 
 # WHY — concretization pairs for graph filter role
 nexus:hasGraphFilterRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isGraphFilterRoleOf ;
     rdfs:label "has graph filter role"@en ;
-    skos:definition "Relates a graph filter to a graph filter role that concretizes it in platform use."@en ;
+    skos:definition "Relates a graph filter to the category (a graph filter role) that classifies it."@en ;
     rdfs:domain nexus:GraphFilter ;
     rdfs:range nexus:GraphFilterRole .
 
 nexus:isGraphFilterRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:inheresIn ;
+    rdfs:subPropertyOf nexus:isAbout ;
     owl:inverseOf nexus:hasGraphFilterRole ;
     rdfs:label "is graph filter role of"@en ;
-    skos:definition "Relates a graph filter role to the graph filter of which it is the role-side concretization."@en ;
+    skos:definition "Relates a graph filter role, a category, to the graph filter it classifies."@en ;
     rdfs:domain nexus:GraphFilterRole ;
     rdfs:range nexus:GraphFilter .
 
 # WHY — concretization pairs for file role
 nexus:hasFileRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isFileRoleOf ;
     rdfs:label "has file role"@en ;
-    skos:definition "Relates a file artifact to a file role that concretizes it in platform use."@en ;
+    skos:definition "Relates a file artifact to the category (a file role) that classifies it."@en ;
     rdfs:domain nexus:Files ;
     rdfs:range nexus:FileRole .
 
 nexus:isFileRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:inheresIn ;
+    rdfs:subPropertyOf nexus:isAbout ;
     owl:inverseOf nexus:hasFileRole ;
     rdfs:label "is file role of"@en ;
-    skos:definition "Relates a file role to the file artifact of which it is the role-side concretization."@en ;
+    skos:definition "Relates a file role, a category, to the file artifact it classifies."@en ;
     rdfs:domain nexus:FileRole ;
     rdfs:range nexus:Files .
 
 # WHY — concretization pairs for file system role
 nexus:hasFileSystemRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isFileSystemRoleOf ;
     rdfs:label "has file system role"@en ;
-    skos:definition "Relates a file system to a file system role that concretizes it in platform use."@en ;
+    skos:definition "Relates a file system to the category (a file system role) that classifies it."@en ;
     rdfs:domain nexus:FileSystem ;
     rdfs:range nexus:FileSystemRole .
 
 nexus:isFileSystemRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:inheresIn ;
+    rdfs:subPropertyOf nexus:isAbout ;
     owl:inverseOf nexus:hasFileSystemRole ;
     rdfs:label "is file system role of"@en ;
-    skos:definition "Relates a file system role to the file system of which it is the role-side concretization."@en ;
+    skos:definition "Relates a file system role, a category, to the file system it classifies."@en ;
     rdfs:domain nexus:FileSystemRole ;
     rdfs:range nexus:FileSystem .
 
 # WHY — concretization pairs for marketplace app role
 nexus:hasMarketplaceAppRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:bearerOf ;
     owl:inverseOf nexus:isMarketplaceAppRoleOf ;
     rdfs:label "has marketplace app role"@en ;
-    skos:definition "Relates a marketplace application to a marketplace application role that concretizes it in platform use."@en ;
+    skos:definition "Relates a marketplace application to the category (a marketplace application role) that classifies it."@en ;
     rdfs:domain nexus:MarketplaceApps ;
     rdfs:range nexus:MarketplaceAppRole .
 
 nexus:isMarketplaceAppRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf abi:inheresIn ;
+    rdfs:subPropertyOf nexus:isAbout ;
     owl:inverseOf nexus:hasMarketplaceAppRole ;
     rdfs:label "is marketplace app role of"@en ;
-    skos:definition "Relates a marketplace application role to the marketplace application of which it is the role-side concretization."@en ;
+    skos:definition "Relates a marketplace application role, a category, to the marketplace application it classifies."@en ;
     rdfs:domain nexus:MarketplaceAppRole ;
     rdfs:range nexus:MarketplaceApps .
 
@@ -1300,8 +1285,8 @@ nexus:Tenant a owl:Class ;
 
 nexus:WorkspaceRole a owl:Class ;
     rdfs:label "Workspace Role"@en ;
-    skos:definition "A role associated with a workspace as a configured digital environment in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Role ,
+    skos:definition "A category that classifies a workspace as a configured digital environment in the Nexus platform."@en ;
+    rdfs:subClassOf nexus:ArtifactCategory ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isWorkspaceRoleOf ;
           owl:someValuesFrom nexus:Workspace
@@ -1311,10 +1296,21 @@ nexus:WorkspaceRole a owl:Class ;
           owl:allValuesFrom nexus:Workspace
         ] .
 
+# HOW WE KNOW — categories of platform artifacts. Artifacts (agents,
+# conversations, graphs, workspaces, ...) are information entities: they cannot
+# bear roles, and one category (e.g. "Supervisor Agent") classifies many of
+# them, which no role can. The *Role class and property names are kept so
+# existing code, queries and stored triples do not change.
+nexus:ArtifactCategory a owl:Class ;
+    rdfs:label "Artifact Category"@en ;
+    skos:definition "A generically dependent continuant that classifies Nexus artifacts (agents, conversations, knowledge graphs, workspaces, ...) into a kind the platform acts on."@en ;
+    skos:example "Supervisor Agent", "Admin knowledge graph"@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant .
+
 nexus:SearchRole a owl:Class ;
     rdfs:label "Search Role"@en ;
-    skos:definition "A role associated with a search artifact as a search capability in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Role ,
+    skos:definition "A category that classifies a search artifact as a search capability in the Nexus platform."@en ;
+    rdfs:subClassOf nexus:ArtifactCategory ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isSearchRoleOf ;
           owl:someValuesFrom nexus:Search
@@ -1326,8 +1322,8 @@ nexus:SearchRole a owl:Class ;
 
 nexus:ConversationRole a owl:Class ;
     rdfs:label "Conversation Role"@en ;
-    skos:definition "A role associated with a conversation as a stored communication artifact in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Role ,
+    skos:definition "A category that classifies a conversation as a stored communication artifact in the Nexus platform."@en ;
+    rdfs:subClassOf nexus:ArtifactCategory ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isConversationRoleOf ;
           owl:someValuesFrom nexus:Conversation
@@ -1339,8 +1335,8 @@ nexus:ConversationRole a owl:Class ;
 
 nexus:MessageRole a owl:Class ;
     rdfs:label "Message Role"@en ;
-    skos:definition "A role associated with a message as a stored communication unit in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Role ,
+    skos:definition "A category that classifies a message as a stored communication unit in the Nexus platform."@en ;
+    rdfs:subClassOf nexus:ArtifactCategory ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isMessageRoleOf ;
           owl:someValuesFrom nexus:Message
@@ -1352,8 +1348,8 @@ nexus:MessageRole a owl:Class ;
 
 nexus:AgentRole a owl:Class ;
     rdfs:label "Agent Role"@en ;
-    skos:definition "A role associated with an agent as a configured software assistant in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Role ,
+    skos:definition "A category that classifies an agent as a configured software assistant in the Nexus platform."@en ;
+    rdfs:subClassOf nexus:ArtifactCategory ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isAgentRoleOf ;
           owl:someValuesFrom nexus:Agent
@@ -1365,8 +1361,8 @@ nexus:AgentRole a owl:Class ;
 
 nexus:OntologyRole a owl:Class ;
     rdfs:label "Ontology Role"@en ;
-    skos:definition "A role associated with an ontology as a formal knowledge schema in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Role ,
+    skos:definition "A category that classifies an ontology as a formal knowledge schema in the Nexus platform."@en ;
+    rdfs:subClassOf nexus:ArtifactCategory ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isOntologyRoleOf ;
           owl:someValuesFrom nexus:Ontology
@@ -1378,8 +1374,8 @@ nexus:OntologyRole a owl:Class ;
 
 nexus:OntologyModuleRole a owl:Class ;
     rdfs:label "Ontology Module Role"@en ;
-    skos:definition "A role associated with an ontology module as a modular portion of an ontology in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Role ,
+    skos:definition "A category that classifies an ontology module as a modular portion of an ontology in the Nexus platform."@en ;
+    rdfs:subClassOf nexus:ArtifactCategory ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isOntologyModuleRoleOf ;
           owl:someValuesFrom nexus:OntologyModule
@@ -1391,8 +1387,8 @@ nexus:OntologyModuleRole a owl:Class ;
 
 nexus:OntologyClassRole a owl:Class ;
     rdfs:label "Ontology Class Role"@en ;
-    skos:definition "A role associated with an ontology class as a formal classificatory element in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Role ,
+    skos:definition "A category that classifies an ontology class as a formal classificatory element in the Nexus platform."@en ;
+    rdfs:subClassOf nexus:ArtifactCategory ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isOntologyClassRoleOf ;
           owl:someValuesFrom nexus:OntologyClass
@@ -1404,8 +1400,8 @@ nexus:OntologyClassRole a owl:Class ;
 
 nexus:OntologyObjectPropertyRole a owl:Class ;
     rdfs:label "Ontology Object Property Role"@en ;
-    skos:definition "A role associated with an ontology object property as a formal relational element in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Role ,
+    skos:definition "A category that classifies an ontology object property as a formal relational element in the Nexus platform."@en ;
+    rdfs:subClassOf nexus:ArtifactCategory ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isOntologyObjectPropertyRoleOf ;
           owl:someValuesFrom nexus:OntologyObjectProperty
@@ -1417,8 +1413,8 @@ nexus:OntologyObjectPropertyRole a owl:Class ;
 
 nexus:KnowledgeGraphRole a owl:Class ;
     rdfs:label "Knowledge Graph Role"@en ;
-    skos:definition "A role associated with a knowledge graph as a structured graph artifact in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Role ,
+    skos:definition "A category that classifies a knowledge graph as a structured graph artifact in the Nexus platform."@en ;
+    rdfs:subClassOf nexus:ArtifactCategory ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isKnowledgeGraphRoleOf ;
           owl:someValuesFrom nexus:KnowledgeGraph
@@ -1430,8 +1426,8 @@ nexus:KnowledgeGraphRole a owl:Class ;
 
 nexus:GraphViewRole a owl:Class ;
     rdfs:label "Graph View Role"@en ;
-    skos:definition "A role associated with a graph view as a configured graph representation in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Role ,
+    skos:definition "A category that classifies a graph view as a configured graph representation in the Nexus platform."@en ;
+    rdfs:subClassOf nexus:ArtifactCategory ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isGraphViewRoleOf ;
           owl:someValuesFrom nexus:GraphView
@@ -1443,8 +1439,8 @@ nexus:GraphViewRole a owl:Class ;
 
 nexus:GraphFilterRole a owl:Class ;
     rdfs:label "Graph Filter Role"@en ;
-    skos:definition "A role associated with a graph filter as a graph-specific selection criterion in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Role ,
+    skos:definition "A category that classifies a graph filter as a graph-specific selection criterion in the Nexus platform."@en ;
+    rdfs:subClassOf nexus:ArtifactCategory ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isGraphFilterRoleOf ;
           owl:someValuesFrom nexus:GraphFilter
@@ -1456,8 +1452,8 @@ nexus:GraphFilterRole a owl:Class ;
 
 nexus:FileRole a owl:Class ;
     rdfs:label "File Role"@en ;
-    skos:definition "A role associated with a digital file as an accessible file artifact in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Role ,
+    skos:definition "A category that classifies a digital file as an accessible file artifact in the Nexus platform."@en ;
+    rdfs:subClassOf nexus:ArtifactCategory ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isFileRoleOf ;
           owl:someValuesFrom nexus:Files
@@ -1469,8 +1465,8 @@ nexus:FileRole a owl:Class ;
 
 nexus:FileSystemRole a owl:Class ;
     rdfs:label "File System Role"@en ;
-    skos:definition "A role associated with a configured file system source in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Role ,
+    skos:definition "A category that classifies a configured file system source in the Nexus platform."@en ;
+    rdfs:subClassOf nexus:ArtifactCategory ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isFileSystemRoleOf ;
           owl:someValuesFrom nexus:FileSystem
@@ -1482,8 +1478,8 @@ nexus:FileSystemRole a owl:Class ;
 
 nexus:MarketplaceAppRole a owl:Class ;
     rdfs:label "Marketplace App Role"@en ;
-    skos:definition "A role associated with a marketplace application as a configured application or customization in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Role ,
+    skos:definition "A category that classifies a marketplace application as a configured application or customization in the Nexus platform."@en ;
+    rdfs:subClassOf nexus:ArtifactCategory ,
         [ a owl:Restriction ;
           owl:onProperty nexus:isMarketplaceAppRoleOf ;
           owl:someValuesFrom nexus:MarketplaceApps
@@ -2489,6 +2485,8 @@ nexus:company a owl:DatatypeProperty ; rdfs:label "company"@en ; rdfs:domain nex
 nexus:job_title a owl:DatatypeProperty ; rdfs:label "job title"@en ; rdfs:domain nexus:User ; rdfs:range xsd:string ;
     skos:definition "The job title the user entered in their profile (users.role). Not an access role."@en .
 nexus:bio a owl:DatatypeProperty ; rdfs:label "bio"@en ; rdfs:domain nexus:User ; rdfs:range xsd:string .
+nexus:user_email_sha256 a owl:DatatypeProperty ; rdfs:label "user email sha256"@en ; rdfs:domain nexus:User ; rdfs:range xsd:string ;
+    skos:definition "SHA-256 of the lower-cased account email. Events started from a terminal name their actor as email-sha256:<this>, from the git author, so they resolve to the account without the log holding an email."@en .
 nexus:store_credentials_in_secrets a owl:DatatypeProperty ; rdfs:label "store credentials in secrets"@en ; rdfs:domain nexus:User ; rdfs:range xsd:boolean .
 
 # Organization profile, workspace and tenant branding

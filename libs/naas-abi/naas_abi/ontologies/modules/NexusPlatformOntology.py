@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 77ef2314e2a110843acfdf8130b986469f7611c9b8188b2489f8b9bfece10b65
+# onto2py-source-sha256: f5552314feaee8efa5f991306ea16d819cdf84f794176a1710a163abc3a05976
 from __future__ import annotations
 
 import contextlib
@@ -470,6 +470,7 @@ class User(GenericallyDependentContinuant, RDFEntity):
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "store_credentials_in_secrets": "http://ontology.naas.ai/nexus/store_credentials_in_secrets",
         "user_email": "http://ontology.naas.ai/nexus/user_email",
+        "user_email_sha256": "http://ontology.naas.ai/nexus/user_email_sha256",
         "user_id": "http://ontology.naas.ai/nexus/user_id",
     }
     _object_properties: ClassVar[set[str]] = {
@@ -486,6 +487,7 @@ class User(GenericallyDependentContinuant, RDFEntity):
     company: Annotated[str, Field()] | None = None
     job_title: Annotated[str, Field(description="The job title the user entered in their profile (users.role). Not an access role.")] | None = None
     bio: Annotated[str, Field()] | None = None
+    user_email_sha256: Annotated[str, Field(description="SHA-256 of the lower-cased account email. Events started from a terminal name their actor as email-sha256:<this>, from the git author, so they resolve to the account without the log holding an email.")] | None = None
     store_credentials_in_secrets: Annotated[bool, Field()] | None = None
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
     created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
@@ -572,7 +574,7 @@ class Workspace(GenericallyDependentContinuant, RDFEntity):
     generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
     has_conversation: Annotated[list[Conversation | URIRef | str], Field(description="Relates a workspace to a conversation it carries or contains.")] | None = None
     has_marketplace_apps: Annotated[list[MarketplaceApps | URIRef | str], Field(description="Relates a workspace to a marketplace application available in or associated with it.")] | None = None
-    has_workspace_role: Annotated[list[URIRef | WorkspaceRole | str], Field(description="Relates a workspace to a workspace role that concretizes it in platform use.")] | None = None
+    has_workspace_role: Annotated[list[URIRef | WorkspaceRole | str], Field(description="Relates a workspace to the category (a workspace role) that classifies it.")] | None = None
     hosted_on: Annotated[list[Server | URIRef | str], Field(description="Relates a workspace to the physical server on which it depends for hosting.")] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
     is_workspace_of: Annotated[list[NexusOrganization | URIRef | str], Field(description="Relates a workspace to the organization on which it generically depends.")] | None = None
@@ -606,7 +608,7 @@ class Search(GenericallyDependentContinuant, RDFEntity):
 
     # Object properties
     generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
-    has_search_role: Annotated[list[SearchRole | URIRef | str], Field(description="Relates a search artifact to a search role that concretizes it in platform use.")] | None = None
+    has_search_role: Annotated[list[SearchRole | URIRef | str], Field(description="Relates a search artifact to the category (a search role) that classifies it.")] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
@@ -642,7 +644,7 @@ class Conversation(GenericallyDependentContinuant, RDFEntity):
 
     # Object properties
     generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
-    has_conversation_role: Annotated[list[ConversationRole | URIRef | str], Field(description="Relates a conversation to a conversation role that concretizes it in platform use.")] | None = None
+    has_conversation_role: Annotated[list[ConversationRole | URIRef | str], Field(description="Relates a conversation to the category (a conversation role) that classifies it.")] | None = None
     has_message: Annotated[list[Message | URIRef | str], Field(description="Relates a conversation to a message it contains.")] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
     is_conversation_of: Annotated[list[URIRef | Workspace | str], Field(description="Relates a conversation to the workspace on which it depends.")] | None = None
@@ -678,7 +680,7 @@ class Message(GenericallyDependentContinuant, RDFEntity):
 
     # Object properties
     generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
-    has_message_role: Annotated[list[MessageRole | URIRef | str], Field(description="Relates a message to a message role that concretizes it in platform use.")] | None = None
+    has_message_role: Annotated[list[MessageRole | URIRef | str], Field(description="Relates a message to the category (a message role) that classifies it.")] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
     is_message_of: Annotated[list[Conversation | URIRef | str], Field(description="Relates a message to the conversation on which it depends.")] | None = None
 
@@ -733,7 +735,7 @@ class Agent(GenericallyDependentContinuant, RDFEntity):
 
     # Object properties
     generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
-    has_agent_role: Annotated[list[AgentRole | URIRef | str], Field(description="Relates an agent to an agent role that concretizes it in platform use.")] | None = None
+    has_agent_role: Annotated[list[AgentRole | URIRef | str], Field(description="Relates an agent to the category (an agent role) that classifies it.")] | None = None
     has_intent: Annotated[list[AgentIntent | URIRef | str], Field(description="Relates an agent to an intent available to it.")] | None = None
     has_subagent: Annotated[list[Agent | URIRef | str], Field(description="Relates a supervisor agent to a sub-agent it orchestrates within the Nexus platform.")] | None = None
     has_tool: Annotated[list[AgentTool | URIRef | str], Field(description="Relates an agent to a tool available to it.")] | None = None
@@ -855,7 +857,7 @@ class Ontology(GenericallyDependentContinuant, RDFEntity):
     has_ontology_class: Annotated[list[OntologyClass | URIRef | str], Field(description="Relates an ontology to a class defined within it.")] | None = None
     has_ontology_module: Annotated[list[OntologyModule | URIRef | str], Field(description="Relates an ontology to one of its ontology modules.")] | None = None
     has_ontology_object_property: Annotated[list[OntologyObjectProperty | URIRef | str], Field(description="Relates an ontology to an object property defined within it.")] | None = None
-    has_ontology_role: Annotated[list[OntologyRole | URIRef | str], Field(description="Relates an ontology to an ontology role that concretizes it in platform use.")] | None = None
+    has_ontology_role: Annotated[list[OntologyRole | URIRef | str], Field(description="Relates an ontology to the category (an ontology role) that classifies it.")] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
@@ -889,7 +891,7 @@ class OntologyModule(GenericallyDependentContinuant, RDFEntity):
 
     # Object properties
     generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
-    has_ontology_module_role: Annotated[list[OntologyModuleRole | URIRef | str], Field(description="Relates an ontology module to an ontology module role that concretizes it in platform use.")] | None = None
+    has_ontology_module_role: Annotated[list[OntologyModuleRole | URIRef | str], Field(description="Relates an ontology module to the category (an ontology module role) that classifies it.")] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
     is_ontology_module_of: Annotated[list[Ontology | URIRef | str], Field(description="Relates an ontology module to the ontology on which it depends.")] | None = None
 
@@ -922,7 +924,7 @@ class OntologyClass(GenericallyDependentContinuant, RDFEntity):
 
     # Object properties
     generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
-    has_ontology_class_role: Annotated[list[OntologyClassRole | URIRef | str], Field(description="Relates an ontology class to an ontology class role that concretizes it in platform use.")] | None = None
+    has_ontology_class_role: Annotated[list[OntologyClassRole | URIRef | str], Field(description="Relates an ontology class to the category (an ontology class role) that classifies it.")] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
@@ -954,7 +956,7 @@ class OntologyObjectProperty(GenericallyDependentContinuant, RDFEntity):
 
     # Object properties
     generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
-    has_ontology_object_property_role: Annotated[list[OntologyObjectPropertyRole | URIRef | str], Field(description="Relates an ontology object property to an ontology object property role that concretizes it in platform use.")] | None = None
+    has_ontology_object_property_role: Annotated[list[OntologyObjectPropertyRole | URIRef | str], Field(description="Relates an ontology object property to the category (an ontology object property role) that classifies it.")] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
@@ -991,7 +993,7 @@ class KnowledgeGraph(GenericallyDependentContinuant, RDFEntity):
     # Object properties
     generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
     has_graph_view: Annotated[list[GraphView | URIRef | str], Field(description="Relates a knowledge graph to a graph view derived from it.")] | None = None
-    has_knowledge_graph_role: Annotated[list[KnowledgeGraphRole | URIRef | str], Field(description="Relates a knowledge graph to a knowledge graph role that concretizes it in platform use.")] | None = None
+    has_knowledge_graph_role: Annotated[list[KnowledgeGraphRole | URIRef | str], Field(description="Relates a knowledge graph to the category (a knowledge graph role) that classifies it.")] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
@@ -1030,7 +1032,7 @@ class GraphView(GenericallyDependentContinuant, RDFEntity):
     # Object properties
     generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
     has_graph_filter: Annotated[list[GraphFilter | URIRef | str], Field(description="Relates a graph view to a graph filter used in it.")] | None = None
-    has_graph_view_role: Annotated[list[GraphViewRole | URIRef | str], Field(description="Relates a graph view to a graph view role that concretizes it in platform use.")] | None = None
+    has_graph_view_role: Annotated[list[GraphViewRole | URIRef | str], Field(description="Relates a graph view to the category (a graph view role) that classifies it.")] | None = None
     includes_knowledge_graph: Annotated[list[KnowledgeGraph | URIRef | str], Field(description="Relates a graph view to a knowledge graph it includes.")] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
@@ -1069,7 +1071,7 @@ class GraphFilter(GenericallyDependentContinuant, RDFEntity):
 
     # Object properties
     generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
-    has_graph_filter_role: Annotated[list[GraphFilterRole | URIRef | str], Field(description="Relates a graph filter to a graph filter role that concretizes it in platform use.")] | None = None
+    has_graph_filter_role: Annotated[list[GraphFilterRole | URIRef | str], Field(description="Relates a graph filter to the category (a graph filter role) that classifies it.")] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
@@ -1101,7 +1103,7 @@ class Files(GenericallyDependentContinuant, RDFEntity):
 
     # Object properties
     generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
-    has_file_role: Annotated[list[FileRole | URIRef | str], Field(description="Relates a file artifact to a file role that concretizes it in platform use.")] | None = None
+    has_file_role: Annotated[list[FileRole | URIRef | str], Field(description="Relates a file artifact to the category (a file role) that classifies it.")] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
@@ -1135,7 +1137,7 @@ class FileSystem(GenericallyDependentContinuant, RDFEntity):
 
     # Object properties
     generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
-    has_file_system_role: Annotated[list[FileSystemRole | URIRef | str], Field(description="Relates a file system to a file system role that concretizes it in platform use.")] | None = None
+    has_file_system_role: Annotated[list[FileSystemRole | URIRef | str], Field(description="Relates a file system to the category (a file system role) that classifies it.")] | None = None
     has_files: Annotated[list[Files | URIRef | str], Field(description="Relates a file system to files accessible through it.")] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
@@ -1168,7 +1170,7 @@ class MarketplaceApps(GenericallyDependentContinuant, RDFEntity):
 
     # Object properties
     generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
-    has_marketplace_app_role: Annotated[list[MarketplaceAppRole | URIRef | str], Field(description="Relates a marketplace application to a marketplace application role that concretizes it in platform use.")] | None = None
+    has_marketplace_app_role: Annotated[list[MarketplaceAppRole | URIRef | str], Field(description="Relates a marketplace application to the category (a marketplace application role) that classifies it.")] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
@@ -1356,27 +1358,23 @@ class Tenant(Role, RDFEntity):
     is_tenant_of: Annotated[list[NexusOrganization | URIRef | str], Field(description="Relates a tenant role to the organization in which it inheres.")] | None = None
 
 
-class WorkspaceRole(Role, RDFEntity):
+class ArtifactCategory(GenericallyDependentContinuant, RDFEntity):
     """
-    Workspace Role
+    Artifact Category
     """
 
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/WorkspaceRole"
-    _name: ClassVar[str] = "Workspace Role"
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/ArtifactCategory"
+    _name: ClassVar[str] = "Artifact Category"
     _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
-        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_workspace_role_of": "http://ontology.naas.ai/nexus/isWorkspaceRoleOf",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
     }
     _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "has_realization",
-        "inheres_in",
-        "is_workspace_role_of",
+        "generically_depends_on",
+        "is_concretized_by",
     }
 
     # Data properties
@@ -1385,504 +1383,8 @@ class WorkspaceRole(Role, RDFEntity):
     creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
 
     # Object properties
-    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
-    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
-    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
-    is_workspace_role_of: Annotated[list[URIRef | Workspace | str], Field(description="Relates a workspace role to the workspace of which it is the role-side concretization.")] | None = None
-
-
-class SearchRole(Role, RDFEntity):
-    """
-    Search Role
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/SearchRole"
-    _name: ClassVar[str] = "Search Role"
-    _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
-        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_search_role_of": "http://ontology.naas.ai/nexus/isSearchRoleOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "has_realization",
-        "inheres_in",
-        "is_search_role_of",
-    }
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
-
-    # Object properties
-    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
-    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
-    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
-    is_search_role_of: Annotated[list[Search | URIRef | str], Field(description="Relates a search role to the search artifact of which it is the role-side concretization.")] | None = None
-
-
-class ConversationRole(Role, RDFEntity):
-    """
-    Conversation Role
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/ConversationRole"
-    _name: ClassVar[str] = "Conversation Role"
-    _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
-        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_conversation_role_of": "http://ontology.naas.ai/nexus/isConversationRoleOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "has_realization",
-        "inheres_in",
-        "is_conversation_role_of",
-    }
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
-
-    # Object properties
-    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
-    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
-    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
-    is_conversation_role_of: Annotated[list[Conversation | URIRef | str], Field(description="Relates a conversation role to the conversation of which it is the role-side concretization.")] | None = None
-
-
-class MessageRole(Role, RDFEntity):
-    """
-    Message Role
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/MessageRole"
-    _name: ClassVar[str] = "Message Role"
-    _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
-        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_message_role_of": "http://ontology.naas.ai/nexus/isMessageRoleOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "has_realization",
-        "inheres_in",
-        "is_message_role_of",
-    }
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
-
-    # Object properties
-    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
-    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
-    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
-    is_message_role_of: Annotated[list[Message | URIRef | str], Field(description="Relates a message role to the message of which it is the role-side concretization.")] | None = None
-
-
-class AgentRole(Role, RDFEntity):
-    """
-    Agent Role
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/AgentRole"
-    _name: ClassVar[str] = "Agent Role"
-    _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "description": "http://ontology.naas.ai/nexus/description",
-        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
-        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_agent_role_of": "http://ontology.naas.ai/nexus/isAgentRoleOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "has_realization",
-        "inheres_in",
-        "is_agent_role_of",
-    }
-
-    # Data properties
-    description: Annotated[str, Field(description="A description used in Nexus platform to identify a generically dependent continuant instance.")] | None = None
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
-
-    # Object properties
-    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
-    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
-    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
-    is_agent_role_of: Annotated[list[Agent | URIRef | str], Field(description="Relates an agent role to the agent of which it is the role-side concretization.")] | None = None
-
-
-class OntologyRole(Role, RDFEntity):
-    """
-    Ontology Role
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/OntologyRole"
-    _name: ClassVar[str] = "Ontology Role"
-    _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
-        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_ontology_role_of": "http://ontology.naas.ai/nexus/isOntologyRoleOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "has_realization",
-        "inheres_in",
-        "is_ontology_role_of",
-    }
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
-
-    # Object properties
-    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
-    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
-    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
-    is_ontology_role_of: Annotated[list[Ontology | URIRef | str], Field(description="Relates an ontology role to the ontology of which it is the role-side concretization.")] | None = None
-
-
-class OntologyModuleRole(Role, RDFEntity):
-    """
-    Ontology Module Role
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/OntologyModuleRole"
-    _name: ClassVar[str] = "Ontology Module Role"
-    _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
-        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_ontology_module_role_of": "http://ontology.naas.ai/nexus/isOntologyModuleRoleOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "has_realization",
-        "inheres_in",
-        "is_ontology_module_role_of",
-    }
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
-
-    # Object properties
-    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
-    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
-    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
-    is_ontology_module_role_of: Annotated[list[OntologyModule | URIRef | str], Field(description="Relates an ontology module role to the ontology module of which it is the role-side concretization.")] | None = None
-
-
-class OntologyClassRole(Role, RDFEntity):
-    """
-    Ontology Class Role
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/OntologyClassRole"
-    _name: ClassVar[str] = "Ontology Class Role"
-    _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
-        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_ontology_class_role_of": "http://ontology.naas.ai/nexus/isOntologyClassRoleOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "has_realization",
-        "inheres_in",
-        "is_ontology_class_role_of",
-    }
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
-
-    # Object properties
-    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
-    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
-    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
-    is_ontology_class_role_of: Annotated[list[OntologyClass | URIRef | str], Field(description="Relates an ontology class role to the ontology class of which it is the role-side concretization.")] | None = None
-
-
-class OntologyObjectPropertyRole(Role, RDFEntity):
-    """
-    Ontology Object Property Role
-    """
-
-    _class_uri: ClassVar[str] = (
-        "http://ontology.naas.ai/nexus/OntologyObjectPropertyRole"
-    )
-    _name: ClassVar[str] = "Ontology Object Property Role"
-    _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
-        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_ontology_object_property_role_of": "http://ontology.naas.ai/nexus/isOntologyObjectPropertyRoleOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "has_realization",
-        "inheres_in",
-        "is_ontology_object_property_role_of",
-    }
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
-
-    # Object properties
-    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
-    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
-    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
-    is_ontology_object_property_role_of: Annotated[list[OntologyObjectProperty | URIRef | str], Field(description="Relates an ontology object property role to the ontology object property of which it is the role-side concretization.")] | None = None
-
-
-class KnowledgeGraphRole(Role, RDFEntity):
-    """
-    Knowledge Graph Role
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/KnowledgeGraphRole"
-    _name: ClassVar[str] = "Knowledge Graph Role"
-    _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
-        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_knowledge_graph_role_of": "http://ontology.naas.ai/nexus/isKnowledgeGraphRoleOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "has_realization",
-        "inheres_in",
-        "is_knowledge_graph_role_of",
-    }
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
-
-    # Object properties
-    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
-    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
-    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
-    is_knowledge_graph_role_of: Annotated[list[KnowledgeGraph | URIRef | str], Field(description="Relates a knowledge graph role to the knowledge graph of which it is the role-side concretization.")] | None = None
-
-
-class GraphViewRole(Role, RDFEntity):
-    """
-    Graph View Role
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/GraphViewRole"
-    _name: ClassVar[str] = "Graph View Role"
-    _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
-        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_graph_view_role_of": "http://ontology.naas.ai/nexus/isGraphViewRoleOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "has_realization",
-        "inheres_in",
-        "is_graph_view_role_of",
-    }
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
-
-    # Object properties
-    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
-    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
-    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
-    is_graph_view_role_of: Annotated[list[GraphView | URIRef | str], Field(description="Relates a graph view role to the graph view of which it is the role-side concretization.")] | None = None
-
-
-class GraphFilterRole(Role, RDFEntity):
-    """
-    Graph Filter Role
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/GraphFilterRole"
-    _name: ClassVar[str] = "Graph Filter Role"
-    _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
-        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_graph_filter_role_of": "http://ontology.naas.ai/nexus/isGraphFilterRoleOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "has_realization",
-        "inheres_in",
-        "is_graph_filter_role_of",
-    }
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
-
-    # Object properties
-    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
-    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
-    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
-    is_graph_filter_role_of: Annotated[list[GraphFilter | URIRef | str], Field(description="Relates a graph filter role to the graph filter of which it is the role-side concretization.")] | None = None
-
-
-class FileRole(Role, RDFEntity):
-    """
-    File Role
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/FileRole"
-    _name: ClassVar[str] = "File Role"
-    _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
-        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_file_role_of": "http://ontology.naas.ai/nexus/isFileRoleOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "has_realization",
-        "inheres_in",
-        "is_file_role_of",
-    }
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
-
-    # Object properties
-    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
-    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
-    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
-    is_file_role_of: Annotated[list[Files | URIRef | str], Field(description="Relates a file role to the file artifact of which it is the role-side concretization.")] | None = None
-
-
-class FileSystemRole(Role, RDFEntity):
-    """
-    File System Role
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/FileSystemRole"
-    _name: ClassVar[str] = "File System Role"
-    _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
-        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_file_system_role_of": "http://ontology.naas.ai/nexus/isFileSystemRoleOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "has_realization",
-        "inheres_in",
-        "is_file_system_role_of",
-    }
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
-
-    # Object properties
-    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
-    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
-    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
-    is_file_system_role_of: Annotated[list[FileSystem | URIRef | str], Field(description="Relates a file system role to the file system of which it is the role-side concretization.")] | None = None
-
-
-class MarketplaceAppRole(Role, RDFEntity):
-    """
-    Marketplace App Role
-    """
-
-    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/MarketplaceAppRole"
-    _name: ClassVar[str] = "Marketplace App Role"
-    _property_uris: ClassVar[dict] = {
-        "concretizes": "http://ontology.naas.ai/abi/concretizes",
-        "created": "http://purl.org/dc/terms/created",
-        "creator": "http://purl.org/dc/terms/creator",
-        "has_realization": "http://ontology.naas.ai/abi/hasRealization",
-        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
-        "is_marketplace_app_role_of": "http://ontology.naas.ai/nexus/isMarketplaceAppRoleOf",
-        "label": "http://www.w3.org/2000/01/rdf-schema#label",
-    }
-    _object_properties: ClassVar[set[str]] = {
-        "concretizes",
-        "has_realization",
-        "inheres_in",
-        "is_marketplace_app_role_of",
-    }
-
-    # Data properties
-    label: Annotated[str, Field(description="Label of the resource.")] | None = None
-    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
-    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
-
-    # Object properties
-    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
-    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = None
-    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
-    is_marketplace_app_role_of: Annotated[list[MarketplaceApps | URIRef | str], Field(description="Relates a marketplace application role to the marketplace application of which it is the role-side concretization.")] | None = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
 
 
 class Capabilities(Disposition, RDFEntity):
@@ -2948,6 +2450,490 @@ class IdentityAndAccessProcess(Process, RDFEntity):
     occurs_in: Annotated[list[Site | URIRef | str], Field(description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t")] | None = None
     realizes: Annotated[list[Role | URIRef | str], Field()] | None = None
     updates: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="Relates a platform process performed in the application to a generically dependent continuant artifact it modifies.")] | None = None
+
+
+class WorkspaceRole(ArtifactCategory, RDFEntity):
+    """
+    Workspace Role
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/WorkspaceRole"
+    _name: ClassVar[str] = "Workspace Role"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_workspace_role_of": "http://ontology.naas.ai/nexus/isWorkspaceRoleOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_workspace_role_of",
+    }
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+
+    # Object properties
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_workspace_role_of: Annotated[list[URIRef | Workspace | str], Field(description="Relates a workspace role, a category, to the workspace it classifies.")] | None = None
+
+
+class SearchRole(ArtifactCategory, RDFEntity):
+    """
+    Search Role
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/SearchRole"
+    _name: ClassVar[str] = "Search Role"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_search_role_of": "http://ontology.naas.ai/nexus/isSearchRoleOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_search_role_of",
+    }
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+
+    # Object properties
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_search_role_of: Annotated[list[Search | URIRef | str], Field(description="Relates a search role, a category, to the search artifact it classifies.")] | None = None
+
+
+class ConversationRole(ArtifactCategory, RDFEntity):
+    """
+    Conversation Role
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/ConversationRole"
+    _name: ClassVar[str] = "Conversation Role"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_conversation_role_of": "http://ontology.naas.ai/nexus/isConversationRoleOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_conversation_role_of",
+    }
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+
+    # Object properties
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_conversation_role_of: Annotated[list[Conversation | URIRef | str], Field(description="Relates a conversation role, a category, to the conversation it classifies.")] | None = None
+
+
+class MessageRole(ArtifactCategory, RDFEntity):
+    """
+    Message Role
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/MessageRole"
+    _name: ClassVar[str] = "Message Role"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_message_role_of": "http://ontology.naas.ai/nexus/isMessageRoleOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_message_role_of",
+    }
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+
+    # Object properties
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_message_role_of: Annotated[list[Message | URIRef | str], Field(description="Relates a message role, a category, to the message it classifies.")] | None = None
+
+
+class AgentRole(ArtifactCategory, RDFEntity):
+    """
+    Agent Role
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/AgentRole"
+    _name: ClassVar[str] = "Agent Role"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "description": "http://ontology.naas.ai/nexus/description",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_agent_role_of": "http://ontology.naas.ai/nexus/isAgentRoleOf",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_agent_role_of",
+        "is_concretized_by",
+    }
+
+    # Data properties
+    description: Annotated[str, Field(description="A description used in Nexus platform to identify a generically dependent continuant instance.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+
+    # Object properties
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_agent_role_of: Annotated[list[Agent | URIRef | str], Field(description="Relates an agent role, a category, to the agent it classifies.")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+
+
+class OntologyRole(ArtifactCategory, RDFEntity):
+    """
+    Ontology Role
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/OntologyRole"
+    _name: ClassVar[str] = "Ontology Role"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_ontology_role_of": "http://ontology.naas.ai/nexus/isOntologyRoleOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_ontology_role_of",
+    }
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+
+    # Object properties
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_ontology_role_of: Annotated[list[Ontology | URIRef | str], Field(description="Relates an ontology role, a category, to the ontology it classifies.")] | None = None
+
+
+class OntologyModuleRole(ArtifactCategory, RDFEntity):
+    """
+    Ontology Module Role
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/OntologyModuleRole"
+    _name: ClassVar[str] = "Ontology Module Role"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_ontology_module_role_of": "http://ontology.naas.ai/nexus/isOntologyModuleRoleOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_ontology_module_role_of",
+    }
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+
+    # Object properties
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_ontology_module_role_of: Annotated[list[OntologyModule | URIRef | str], Field(description="Relates an ontology module role, a category, to the ontology module it classifies.")] | None = None
+
+
+class OntologyClassRole(ArtifactCategory, RDFEntity):
+    """
+    Ontology Class Role
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/OntologyClassRole"
+    _name: ClassVar[str] = "Ontology Class Role"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_ontology_class_role_of": "http://ontology.naas.ai/nexus/isOntologyClassRoleOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_ontology_class_role_of",
+    }
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+
+    # Object properties
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_ontology_class_role_of: Annotated[list[OntologyClass | URIRef | str], Field(description="Relates an ontology class role, a category, to the ontology class it classifies.")] | None = None
+
+
+class OntologyObjectPropertyRole(ArtifactCategory, RDFEntity):
+    """
+    Ontology Object Property Role
+    """
+
+    _class_uri: ClassVar[str] = (
+        "http://ontology.naas.ai/nexus/OntologyObjectPropertyRole"
+    )
+    _name: ClassVar[str] = "Ontology Object Property Role"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_ontology_object_property_role_of": "http://ontology.naas.ai/nexus/isOntologyObjectPropertyRoleOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_ontology_object_property_role_of",
+    }
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+
+    # Object properties
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_ontology_object_property_role_of: Annotated[list[OntologyObjectProperty | URIRef | str], Field(description="Relates an ontology object property role, a category, to the ontology object property it classifies.")] | None = None
+
+
+class KnowledgeGraphRole(ArtifactCategory, RDFEntity):
+    """
+    Knowledge Graph Role
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/KnowledgeGraphRole"
+    _name: ClassVar[str] = "Knowledge Graph Role"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_knowledge_graph_role_of": "http://ontology.naas.ai/nexus/isKnowledgeGraphRoleOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_knowledge_graph_role_of",
+    }
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+
+    # Object properties
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_knowledge_graph_role_of: Annotated[list[KnowledgeGraph | URIRef | str], Field(description="Relates a knowledge graph role, a category, to the knowledge graph it classifies.")] | None = None
+
+
+class GraphViewRole(ArtifactCategory, RDFEntity):
+    """
+    Graph View Role
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/GraphViewRole"
+    _name: ClassVar[str] = "Graph View Role"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_graph_view_role_of": "http://ontology.naas.ai/nexus/isGraphViewRoleOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_graph_view_role_of",
+    }
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+
+    # Object properties
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_graph_view_role_of: Annotated[list[GraphView | URIRef | str], Field(description="Relates a graph view role, a category, to the graph view it classifies.")] | None = None
+
+
+class GraphFilterRole(ArtifactCategory, RDFEntity):
+    """
+    Graph Filter Role
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/GraphFilterRole"
+    _name: ClassVar[str] = "Graph Filter Role"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_graph_filter_role_of": "http://ontology.naas.ai/nexus/isGraphFilterRoleOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_graph_filter_role_of",
+    }
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+
+    # Object properties
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_graph_filter_role_of: Annotated[list[GraphFilter | URIRef | str], Field(description="Relates a graph filter role, a category, to the graph filter it classifies.")] | None = None
+
+
+class FileRole(ArtifactCategory, RDFEntity):
+    """
+    File Role
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/FileRole"
+    _name: ClassVar[str] = "File Role"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_file_role_of": "http://ontology.naas.ai/nexus/isFileRoleOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_file_role_of",
+    }
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+
+    # Object properties
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_file_role_of: Annotated[list[Files | URIRef | str], Field(description="Relates a file role, a category, to the file artifact it classifies.")] | None = None
+
+
+class FileSystemRole(ArtifactCategory, RDFEntity):
+    """
+    File System Role
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/FileSystemRole"
+    _name: ClassVar[str] = "File System Role"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_file_system_role_of": "http://ontology.naas.ai/nexus/isFileSystemRoleOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_file_system_role_of",
+    }
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+
+    # Object properties
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_file_system_role_of: Annotated[list[FileSystem | URIRef | str], Field(description="Relates a file system role, a category, to the file system it classifies.")] | None = None
+
+
+class MarketplaceAppRole(ArtifactCategory, RDFEntity):
+    """
+    Marketplace App Role
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/nexus/MarketplaceAppRole"
+    _name: ClassVar[str] = "Marketplace App Role"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_marketplace_app_role_of": "http://ontology.naas.ai/nexus/isMarketplaceAppRoleOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_marketplace_app_role_of",
+    }
+
+    # Data properties
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+
+    # Object properties
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_marketplace_app_role_of: Annotated[list[MarketplaceApps | URIRef | str], Field(description="Relates a marketplace application role, a category, to the marketplace application it classifies.")] | None = None
 
 
 class CreateUser(IdentityAndAccessProcess, RDFEntity):
@@ -4658,21 +4644,7 @@ Page.model_rebuild()
 Session.model_rebuild()
 AuthenticationStatus.model_rebuild()
 Tenant.model_rebuild()
-WorkspaceRole.model_rebuild()
-SearchRole.model_rebuild()
-ConversationRole.model_rebuild()
-MessageRole.model_rebuild()
-AgentRole.model_rebuild()
-OntologyRole.model_rebuild()
-OntologyModuleRole.model_rebuild()
-OntologyClassRole.model_rebuild()
-OntologyObjectPropertyRole.model_rebuild()
-KnowledgeGraphRole.model_rebuild()
-GraphViewRole.model_rebuild()
-GraphFilterRole.model_rebuild()
-FileRole.model_rebuild()
-FileSystemRole.model_rebuild()
-MarketplaceAppRole.model_rebuild()
+ArtifactCategory.model_rebuild()
 Capabilities.model_rebuild()
 FrontEndEvent.model_rebuild()
 Login.model_rebuild()
@@ -4697,6 +4669,21 @@ PlatformSuperadminRole.model_rebuild()
 WorkspaceAccessRole.model_rebuild()
 OrganizationAccessRole.model_rebuild()
 IdentityAndAccessProcess.model_rebuild()
+WorkspaceRole.model_rebuild()
+SearchRole.model_rebuild()
+ConversationRole.model_rebuild()
+MessageRole.model_rebuild()
+AgentRole.model_rebuild()
+OntologyRole.model_rebuild()
+OntologyModuleRole.model_rebuild()
+OntologyClassRole.model_rebuild()
+OntologyObjectPropertyRole.model_rebuild()
+KnowledgeGraphRole.model_rebuild()
+GraphViewRole.model_rebuild()
+GraphFilterRole.model_rebuild()
+FileRole.model_rebuild()
+FileSystemRole.model_rebuild()
+MarketplaceAppRole.model_rebuild()
 CreateUser.model_rebuild()
 CreateWorkspace.model_rebuild()
 AddUserToWorkspace.model_rebuild()

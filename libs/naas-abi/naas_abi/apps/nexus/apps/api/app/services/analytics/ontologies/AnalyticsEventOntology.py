@@ -54,8 +54,13 @@ class AnalyticsEventRecorded(LogProcess):
     user_id: (
         Annotated[str, Field(description="Identifier of the user the event belongs to.")] | None
     ) = None
+    # Legacy: kept so events written before 2026-09-10 still decode. New events
+    # leave it empty; the email lives in the analytics user directory.
     user_email: (
-        Annotated[str, Field(description="Email of the user the event belongs to.")] | None
+        Annotated[
+            str, Field(description="Legacy. Email of the user; no longer written to the log.")
+        ]
+        | None
     ) = None
     workspace_id: Annotated[str, Field(description="Workspace the event occurred in.")] | None = (
         None

@@ -173,3 +173,25 @@ def test_cached_enricher_skips_anonymous_events_and_reuses_resolutions() -> None
     now[0] = 61.0
     enricher.enrich({"actor_user_id": "usr-1"})
     assert len(calls) > made
+
+
+def test_terminal_actors_resolve_through_their_git_email_hash() -> None:
+    from naas_abi_core.services.event.local_identity import email_actor_id
+
+    actor = email_actor_id("Bob@Example.com")
+    events = [{"agent_name": "Git_Agent", "actor_user_id": actor, "workspace_id": "ws-1"}]
+
+    enrich_events(events, _resolver())
+
+    resolved = events[0]["_identity"]["actor"]
+    assert (resolved["name"], resolved["user_id"]) == ("Bob Stone", "usr-2")
+    assert resolved["workspace_role"] == "admin"
+
+
+def test_unknown_terminal_actor_stays_unresolved() -> None:
+    from naas_abi_core.services.event.local_identity import email_actor_id
+
+    events = [{"actor_user_id": email_actor_id("stranger@example.com")}]
+    enrich_events(events, _resolver())
+
+    assert "_identity" not in events[0]

@@ -16,6 +16,7 @@ from typing import Any
 from naas_abi.apps.nexus.apps.api.app.services.identity_graph import iris
 from naas_abi.apps.nexus.apps.api.app.services.identity_graph.service import IDENTITY_GRAPH_URI
 from naas_abi_core import logger
+from naas_abi_core.services.event.local_identity import EMAIL_ACTOR_PREFIX
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9_.:@+\-]{1,200}$")
 _PREFIXES = (
@@ -94,19 +95,36 @@ class IdentityResolver:
         memberships: Iterable[tuple[str | None, str | None]] = (),
     ) -> Identities:
         out = Identities()
-        users = _safe(user_ids)
-        if users:
-            for row in self._run(
-                f"""VALUES ?id {{ {_literals(users)} }}
-                ?account nexus:user_id ?id ; nexus:isUserAccountOf ?person .
+        safe_users = _safe(user_ids)
+        # Terminal events name their actor by git email hash, not by user id.
+        hashes = {
+            u[len(EMAIL_ACTOR_PREFIX) :]: u for u in safe_users if u.startswith(EMAIL_ACTOR_PREFIX)
+        }
+        users = [u for u in safe_users if not u.startswith(EMAIL_ACTOR_PREFIX)]
+        person_details = """?account nexus:user_id ?uid ; nexus:isUserAccountOf ?person .
                 OPTIONAL {{ ?person abi:full_name ?name }}
                 OPTIONAL {{ ?account nexus:user_email ?email }}
                 OPTIONAL {{ ?account nexus:avatar_url ?avatar }}
                 OPTIONAL {{ ?role a nexus:PlatformSuperadminRole ; abi:inheresIn ?person }}"""
-            ):
-                user_id = str(row.id)
-                out.users[user_id] = ResolvedUser(
-                    user_id=user_id,
+        lookups = []
+        if users:
+            lookups.append(
+                (
+                    f"VALUES ?key {{ {_literals(users)} }} ?account nexus:user_id ?key .",
+                    {u: u for u in users},
+                )
+            )
+        if hashes:
+            lookups.append(
+                (
+                    f"VALUES ?key {{ {_literals(sorted(hashes))} }} ?account nexus:user_email_sha256 ?key .",
+                    hashes,
+                )
+            )
+        for match, keys in lookups:
+            for row in self._run(f"{match}\n{person_details.format()}"):
+                out.users[keys[str(row.key)]] = ResolvedUser(
+                    user_id=str(row.uid),
                     name=_text(row, "name"),
                     email=_text(row, "email"),
                     avatar_url=_text(row, "avatar"),
@@ -150,8 +168,19 @@ class IdentityResolver:
                     slug=_text(row, "slug"),
                     iri=str(row.org),
                 )
+
+        # Memberships are keyed by the account's user id; a terminal actor's
+        # hash is swapped for the id it resolved to.
+        def account_id(user: str) -> str:
+            resolved = out.users.get(user)
+            return resolved.user_id if resolved is not None else user
+
         pairs = sorted(
-            {(w, u) for w, u in memberships if w and u and _SAFE_ID.match(w) and _SAFE_ID.match(u)}
+            {
+                (w, account_id(u))
+                for w, u in memberships
+                if w and u and _SAFE_ID.match(w) and _SAFE_ID.match(u)
+            }
         )
         if pairs:
             by_iri = {str(iris.workspace_membership_iri(w, u)): (w, u) for w, u in pairs}

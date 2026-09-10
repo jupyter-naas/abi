@@ -69,6 +69,7 @@ from naas_abi.ontologies.modules.NexusPlatformOntology import (
     WorkspaceOwnerRole,
     WorkspaceViewerRole,
 )
+from naas_abi_core.services.event.local_identity import email_sha256
 from rdflib import Graph, Literal, URIRef
 
 NEXUS = iris.NEXUS
@@ -325,6 +326,8 @@ class _Builder:
                 label=user.email,
                 user_id=user.id,
                 user_email=user.email,
+                # How terminal events (email-sha256:<hash>) find this account.
+                user_email_sha256=email_sha256(user.email),
                 is_user_account_of=[person],
                 **{k: v for k, v in profile.items() if v is not None and v != ""},
             )

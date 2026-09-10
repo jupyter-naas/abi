@@ -14,7 +14,10 @@ The actor (``created_by``) comes from the request-scoped identity ContextVars;
 ``EventService.publish()`` stamps ``actor_user_id`` / ``actor_workspace_id`` /
 ``triggered_via`` from the same ContextVars.
 
-Bulk ``update()`` / ``delete()`` statements bypass the ORM and are not seen.
+Bulk ``update()`` / ``delete()`` statements bypass the ORM, so they cannot be
+turned into events. ``do_orm_execute`` reports any that touch an identity table
+(``on_bypass``, a warning by default) so a new one does not go unnoticed:
+write those changes through ORM objects instead.
 """
 
 from __future__ import annotations
@@ -249,6 +252,16 @@ def build_identity_event(
     return None
 
 
+_TRACKED_TABLES = {model.__tablename__ for model in _KINDS}
+
+
+def _warn_bypass(statement: str) -> None:
+    logger.warning(
+        f"[identity-events] bulk {statement} bypasses the ORM: this change is not "
+        "logged as an identity event. Update ORM objects instead."
+    )
+
+
 class IdentityEventCapture:
     """Install/uninstall the ORM listeners. One instance per publisher."""
 
@@ -257,26 +270,42 @@ class IdentityEventCapture:
         publish: Callable[[NexusIdentityEvent], Any],
         site_iri: str | None = None,
         on_published: Callable[[int], None] | None = None,
+        on_bypass: Callable[[str], None] | None = None,
     ):
         self._publish = publish
         self._site_iri = site_iri
         self._on_published = on_published
+        self._on_bypass = on_bypass or _warn_bypass
         self._key = f"nexus_identity_events:{id(self)}"
 
-    def install(self) -> None:
-        if not sa_event.contains(Session, "after_flush", self._after_flush):
-            sa_event.listen(Session, "after_flush", self._after_flush)
-            sa_event.listen(Session, "after_commit", self._after_commit)
-            sa_event.listen(Session, "after_rollback", self._after_rollback)
-
-    def uninstall(self) -> None:
-        for name, fn in (
+    def _listeners(self) -> tuple[tuple[str, Callable[..., Any]], ...]:
+        return (
             ("after_flush", self._after_flush),
             ("after_commit", self._after_commit),
             ("after_rollback", self._after_rollback),
-        ):
+            ("do_orm_execute", self._do_orm_execute),
+        )
+
+    def install(self) -> None:
+        for name, fn in self._listeners():
+            if not sa_event.contains(Session, name, fn):
+                sa_event.listen(Session, name, fn)
+
+    def uninstall(self) -> None:
+        for name, fn in self._listeners():
             if sa_event.contains(Session, name, fn):
                 sa_event.remove(Session, name, fn)
+
+    def _do_orm_execute(self, state: Any) -> None:
+        if not (state.is_update or state.is_delete):
+            return
+        table = getattr(state.statement, "table", None)
+        name = getattr(table, "name", None)
+        if name in _TRACKED_TABLES:
+            try:
+                self._on_bypass(f"{'UPDATE' if state.is_update else 'DELETE'} {name}")
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"[identity-events] on_bypass callback failed: {exc}")
 
     def _after_flush(self, session: Session, _flush_context: Any) -> None:
         try:

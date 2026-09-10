@@ -330,3 +330,28 @@ async def test_a_failing_publisher_never_breaks_the_commit(env, tmp_path) -> Non
 
     async with maker() as session:
         assert await session.get(UserModel, "usr-7") is not None
+
+
+@pytest.mark.asyncio
+async def test_bulk_statements_on_identity_tables_are_reported(env) -> None:
+    """Bulk UPDATE/DELETE bypass the ORM: they cannot be logged, so they are flagged."""
+    from sqlalchemy import delete, update
+
+    maker, events, _ = env
+    await _seed_user(maker)
+    bypassed: list[str] = []
+    capture = IdentityEventCapture(publish=lambda _e: None, on_bypass=bypassed.append)
+    capture.install()
+    try:
+        async with maker() as session:
+            await session.execute(
+                update(UserModel).where(UserModel.id == "usr-1").values(company="Acme")
+            )
+            await session.execute(
+                delete(AppConfigModel).where(AppConfigModel.workspace_id == "ws-x")
+            )
+            await session.commit()
+    finally:
+        capture.uninstall()
+
+    assert bypassed == ["UPDATE users", "DELETE app_configs"]

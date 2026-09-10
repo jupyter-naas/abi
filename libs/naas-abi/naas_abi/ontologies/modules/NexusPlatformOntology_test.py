@@ -181,3 +181,58 @@ def test_new_information_entities_are_gdcs() -> None:
         assert _is_subclass_of(
             graph, NEXUS[name], ABI.GenericallyDependentContinuant
         ), name
+
+
+def test_only_material_entities_bear_roles_dispositions_and_qualities() -> None:
+    """BFO: specifically dependent continuants inhere in independent continuants.
+
+    Artifacts (agents, conversations, graphs, workspaces, ...) are information
+    entities; how they are categorised is itself information, not a role.
+    """
+    graph = _graph()
+    realizables = {ABI.Role, ABI.Disposition, ABI.Quality}
+    inheres = _sub_properties_of(graph, ABI.inheresIn)
+    bears = _sub_properties_of(graph, ABI.bearerOf)
+
+    def is_gdc(node) -> bool:
+        return isinstance(node, URIRef) and _is_subclass_of(
+            graph, node, ABI.GenericallyDependentContinuant
+        )
+
+    offenders = []
+    for prop in inheres:
+        offenders += [
+            (prop, "range", r) for r in graph.objects(prop, RDFS.range) if is_gdc(r)
+        ]
+    for prop in bears:
+        offenders += [
+            (prop, "domain", d) for d in graph.objects(prop, RDFS.domain) if is_gdc(d)
+        ]
+    for cls in graph.subjects(RDFS.subClassOf, None):
+        if not isinstance(cls, URIRef) or not any(
+            _is_subclass_of(graph, cls, r) for r in realizables
+        ):
+            continue
+        for restriction in graph.objects(cls, RDFS.subClassOf):
+            if graph.value(restriction, OWL.onProperty) in inheres:
+                for pred in (OWL.someValuesFrom, OWL.allValuesFrom):
+                    if is_gdc(graph.value(restriction, pred)):
+                        offenders.append(
+                            (cls, "inheres in", graph.value(restriction, pred))
+                        )
+    assert sorted(set(offenders)) == []
+
+
+def test_artifact_categories_are_information_entities() -> None:
+    graph = _graph()
+    for name in (
+        "AgentRole",
+        "KnowledgeGraphRole",
+        "WorkspaceRole",
+        "ConversationRole",
+    ):
+        assert _is_subclass_of(graph, NEXUS[name], NEXUS.ArtifactCategory), name
+        assert _is_subclass_of(
+            graph, NEXUS[name], ABI.GenericallyDependentContinuant
+        ), name
+        assert not _is_subclass_of(graph, NEXUS[name], ABI.Role), name

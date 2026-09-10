@@ -263,3 +263,22 @@ describe('identity resolved from graph/nexus-identity', () => {
     );
   });
 });
+
+describe('terminal (git author) actors', () => {
+  const hash = 'a1b2c3d4'.padEnd(64, '0');
+
+  it('labels an unresolved git author briefly instead of printing the hash', () => {
+    const payload = buildEventGraphPayload(baseEvent({ actor_user_id: `email-sha256:${hash}`, agent_name: 'Git_Agent' }));
+    expect(summarizeBucket(payload, 'Material Entity')).toBe('git author a1b2c3d4 · Git_Agent');
+  });
+
+  it('uses the person name once the hash resolves', () => {
+    const payload = buildEventGraphPayload(
+      baseEvent({
+        actor_user_id: `email-sha256:${hash}`,
+        _identity: { actor: { user_id: 'usr-2', name: 'Bob Stone' } },
+      }),
+    );
+    expect(summarizeBucket(payload, 'Material Entity')).toBe('Bob Stone');
+  });
+});

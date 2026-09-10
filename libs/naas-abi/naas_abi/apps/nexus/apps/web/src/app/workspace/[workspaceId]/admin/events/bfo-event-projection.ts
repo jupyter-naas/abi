@@ -102,6 +102,13 @@ export function eventIdentity(event: PlatformEvent): EventIdentity | null {
   return raw && typeof raw === 'object' ? (raw as EventIdentity) : null;
 }
 
+/** Terminal runs name their actor by git email hash (`email-sha256:<hex>`). */
+const EMAIL_ACTOR_PREFIX = 'email-sha256:';
+
+function actorLabel(id: string): string {
+  return id.startsWith(EMAIL_ACTOR_PREFIX) ? `git author ${id.slice(EMAIL_ACTOR_PREFIX.length, EMAIL_ACTOR_PREFIX.length + 8)}` : id;
+}
+
 /** Keys naming the user an event happened for, most specific first. */
 const ACTOR_KEYS = ['actor_user_id', 'user_id', 'userId', 'actor_id', 'actorId'] as const;
 /** Keys naming the workspace an event happened in, most specific first. */
@@ -468,7 +475,7 @@ export function buildEventGraphPayload(event: PlatformEvent): EventGraphPayload 
   const person = (key: string, id: string, resolved: EventIdentityUser | undefined): EventGraphNode => {
     const fields: EventGraphField[] = [{ label: key, value: id }];
     if (resolved?.email) fields.push({ label: 'account', value: resolved.email });
-    return make('Material Entity', resolved?.name || id, fields, true, true);
+    return make('Material Entity', resolved?.name || actorLabel(id), fields, true, true);
   };
   const actorKey = firstSourceKey(event, ACTOR_KEYS);
   const user = actorKey ? firstField(event, [actorKey]) : null;

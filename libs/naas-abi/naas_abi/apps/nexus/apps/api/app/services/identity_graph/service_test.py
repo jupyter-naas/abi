@@ -463,3 +463,12 @@ async def test_sync_merges_postgres_and_configuration_into_one_graph() -> None:
     )
     assert result.triples == len(graph)
     assert (superadmin_role_iri("usr-1"), RDF.type, NEXUS.PlatformSuperadminRole) in graph
+
+
+def test_account_carries_the_hash_terminal_events_use() -> None:
+    import hashlib
+
+    graph = build_identity_graph(_snapshot())
+
+    digest = hashlib.sha256(b"alice@example.com").hexdigest()
+    assert (user_account_iri("usr-1"), NEXUS.user_email_sha256, Literal(digest)) in graph

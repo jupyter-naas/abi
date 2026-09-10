@@ -641,6 +641,13 @@ class TestUnchangedAggregatesAreNotRewritten:
 # ---------------------------------------------------------------------------
 
 
+def _user_directory(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {"user_id": e["user_id"], "user_email": e["user_email"]}
+        for e in {e["user_id"]: e for e in events if e.get("user_id") and e.get("user_email")}.values()
+    ]
+
+
 class TestEventLogEquivalence:
     """The migration is only safe if the aggregates do not move."""
 
@@ -657,9 +664,12 @@ class TestEventLogEquivalence:
 
         legacy = FakeStorage()
         legacy.events = [dict(e) for e in FIXTURE]
+        legacy.json[analytics_service.REF_USERS_FILE] = _user_directory(FIXTURE)
 
         events = _RealEventService()
         backing = FakeStorage()
+        # What ingest_event's _upsert_refs keeps: the log itself holds no email.
+        backing.json[analytics_service.REF_USERS_FILE] = _user_directory(FIXTURE)
         migrated = AnalyticsSecondaryAdapterEventLog(events=events, object_storage_adapter=backing)
         for raw in FIXTURE:
             migrated.save_event(dict(raw))
@@ -685,8 +695,10 @@ class TestEventLogEquivalence:
             AnalyticsSecondaryAdapterEventLog,
         )
 
+        backing = FakeStorage()
+        backing.json[analytics_service.REF_USERS_FILE] = _user_directory(FIXTURE)
         adapter = AnalyticsSecondaryAdapterEventLog(
-            events=_RealEventService(), object_storage_adapter=FakeStorage()
+            events=_RealEventService(), object_storage_adapter=backing
         )
         original = {
             **FIXTURE[0],
