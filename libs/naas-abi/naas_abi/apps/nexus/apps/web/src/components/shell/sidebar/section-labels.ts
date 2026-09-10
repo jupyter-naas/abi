@@ -17,6 +17,7 @@ export const SECTION_LABELS: Record<SidebarSection, string> = {
   datasets: 'Datasets',
   code: 'Code',
   slides: 'Slides',
+  documents: 'Documents',
   apps: 'Apps',
   marketplace: 'Marketplace',
   settings: 'Settings',
@@ -26,4 +27,5 @@ export const SECTION_LABELS: Record<SidebarSection, string> = {
 /** Panel titles that open the section home. Slides goes to the cover gallery. */
 export const SECTION_HOME_HREF: Partial<Record<SidebarSection, string>> = {
   slides: '/slides',
+  documents: '/documents',
 };

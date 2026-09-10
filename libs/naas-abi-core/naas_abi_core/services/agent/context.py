@@ -120,6 +120,83 @@ slides_section_read_indexes: ContextVar[list[int] | None] = ContextVar(
 # A 32-slide per-section rewrite can still need a second turn.
 SLIDES_RECURSION_LIMIT = 160
 
+# Open Documents file in the Nexus UI (pane). Set at the chat stream boundary from
+# client context so Documents tools default to this slug.
+documents_active_slug: ContextVar[str | None] = ContextVar(
+    "documents_active_slug", default=None
+)
+documents_active_title: ContextVar[str | None] = ContextVar(
+    "documents_active_title", default=None
+)
+documents_active_mode: ContextVar[str | None] = ContextVar(
+    "documents_active_mode", default=None
+)
+documents_research_required: ContextVar[bool] = ContextVar(
+    "documents_research_required", default=False
+)
+documents_research_queries: ContextVar[list[str] | None] = ContextVar(
+    "documents_research_queries", default=None
+)
+documents_brief: ContextVar[str | None] = ContextVar("documents_brief", default=None)
+documents_creation_intent: ContextVar[bool] = ContextVar(
+    "documents_creation_intent", default=False
+)
+documents_writes_completed: ContextVar[list[str] | None] = ContextVar(
+    "documents_writes_completed", default=None
+)
+documents_list_calls: ContextVar[int] = ContextVar("documents_list_calls", default=0)
+documents_section_read_indexes: ContextVar[list[int] | None] = ContextVar(
+    "documents_section_read_indexes", default=None
+)
+DOCUMENTS_RECURSION_LIMIT = 160
+
+
+def documents_turn_active() -> bool:
+    """True when this turn edits an open document or creates a new one."""
+    if (documents_active_slug.get() or "").strip():
+        return True
+    return bool(documents_creation_intent.get())
+
+
+def note_documents_write(label: str) -> None:
+    """Record a successful document write so a step-limit error can name it."""
+    text = (label or "").strip()
+    if not text:
+        return
+    bucket = documents_writes_completed.get()
+    if bucket is None:
+        documents_writes_completed.set([text])
+        return
+    bucket.append(text)
+
+
+def documents_step_limit_message() -> str:
+    """User-facing cap text: what finished vs what did not."""
+    writes = [item for item in (documents_writes_completed.get() or []) if item]
+    queries = documents_research_queries.get() or []
+    finished: list[str] = []
+    if queries:
+        finished.append(
+            f"{len(queries)} web search{'es' if len(queries) != 1 else ''}"
+        )
+    if writes:
+        finished.append("wrote " + ", ".join(writes))
+    done = (
+        "Finished: " + "; ".join(finished) + "."
+        if finished
+        else "Finished: no searches and no document sections written."
+    )
+    leftover = (
+        "The remaining sections were not written."
+        if writes
+        else "The document was not written."
+    )
+    return (
+        f"The agent hit its {DOCUMENTS_RECURSION_LIMIT}-step limit before finishing. "
+        f"{done} {leftover} "
+        "Open the document and ask it to continue from the next unwritten section."
+    )
+
 
 def slides_turn_active() -> bool:
     """True when this turn edits an open deck or creates a new one."""

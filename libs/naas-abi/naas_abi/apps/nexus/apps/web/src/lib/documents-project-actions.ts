@@ -1,0 +1,48 @@
+import { documentsApiErrorMessage } from '@/lib/create-documents-project';
+import { authFetch } from '@/stores/auth';
+import { dispatchDocumentUpdated, useDocumentsStore, type DocumentsProject } from '@/stores/documents';
+
+export type DocumentsProjectPatch = {
+  title?: string;
+  archived?: boolean;
+};
+
+export function isDocumentsProjectArchived(project: Pick<DocumentsProject, 'archived'>): boolean {
+  return Boolean(project.archived);
+}
+
+export function partitionDocumentsProjects(projects: DocumentsProject[]): {
+  active: DocumentsProject[];
+  archived: DocumentsProject[];
+} {
+  const active: DocumentsProject[] = [];
+  const archived: DocumentsProject[] = [];
+  for (const project of projects) {
+    if (!project?.slug) continue;
+    if (isDocumentsProjectArchived(project)) archived.push(project);
+    else active.push(project);
+  }
+  return { active, archived };
+}
+
+export async function patchDocumentsProject(
+  workspaceId: string,
+  slug: string,
+  patch: DocumentsProjectPatch,
+): Promise<DocumentsProject> {
+  const res = await authFetch(`/api/documents/projects/${encodeURIComponent(slug)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace_id: workspaceId, ...patch }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
+    throw new Error(documentsApiErrorMessage(body.detail, `Failed (${res.status})`));
+  }
+  const project = (await res.json()) as DocumentsProject;
+  if (patch.title && useDocumentsStore.getState().selectedSlug === slug) {
+    useDocumentsStore.getState().setSelectedTitle(project.title);
+  }
+  dispatchDocumentUpdated({ slug });
+  return project;
+}

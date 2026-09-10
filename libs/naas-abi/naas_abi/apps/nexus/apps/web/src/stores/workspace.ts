@@ -5,6 +5,10 @@ import { DEFAULT_NAV_ORDER, mergeNavOrder } from '@/lib/sidebar-nav';
 import { clampDockWidth, clampFeatureColumnWidth, DOCK_WIDTH_DEFAULT } from '@/lib/shell-columns';
 import { pushRecentWorkspaceId } from '@/lib/workspace-picker';
 import {
+  dropDocumentsPaneConversationKeys,
+  documentsPaneConversationKey,
+} from '@/lib/documents-pane-conversation';
+import {
   dropSlidesPaneConversationKeys,
   slidesPaneConversationKey,
 } from '@/lib/slides-pane-conversation';
@@ -115,6 +119,7 @@ export interface Conversation {
   isDraft?: boolean;
   /** Slides deck this pane thread is bound to. Client-only; API has no field. */
   slidesSlug?: string;
+  documentsSlug?: string;
 }
 
 export interface Project {
@@ -198,7 +203,7 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'home' | 'workspaces' | 'maps' | 'chat' | 'search' | 'files' | 'datasets' | 'code' | 'slides' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings' | 'events';
+export type SidebarSection = 'home' | 'workspaces' | 'maps' | 'chat' | 'search' | 'files' | 'datasets' | 'code' | 'slides' | 'documents' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings' | 'events';
 
 const RETIRED_PANEL_SECTIONS = new Set<string>(['lab']);
 
@@ -301,6 +306,12 @@ interface WorkspaceState {
   /** workspaceId::slug -> pane conversation id. Survives refresh. */
   slidesPaneConversationByKey: Record<string, string>;
   rememberSlidesPaneConversation: (
+    workspaceId: string,
+    slug: string,
+    conversationId: string,
+  ) => void;
+  documentsPaneConversationByKey: Record<string, string>;
+  rememberDocumentsPaneConversation: (
     workspaceId: string,
     slug: string,
     conversationId: string,
@@ -628,6 +639,23 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
       conversations: state.conversations.map((conv) =>
         conv.id === id && conv.slidesSlug !== deck ? { ...conv, slidesSlug: deck } : conv,
+      ),
+    }));
+  },
+  documentsPaneConversationByKey: {},
+  rememberDocumentsPaneConversation: (workspaceId, slug, conversationId) => {
+    const ws = workspaceId.trim();
+    const doc = slug.trim();
+    const id = conversationId.trim();
+    if (!ws || !doc || !id) return;
+    const key = documentsPaneConversationKey(ws, doc);
+    set((state) => ({
+      documentsPaneConversationByKey: {
+        ...state.documentsPaneConversationByKey,
+        [key]: id,
+      },
+      conversations: state.conversations.map((conv) =>
+        conv.id === id && conv.documentsSlug !== doc ? { ...conv, documentsSlug: doc } : conv,
       ),
     }));
   },
@@ -967,6 +995,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         paneConversationId,
         slidesPaneConversationByKey: dropSlidesPaneConversationKeys(
           state.slidesPaneConversationByKey,
+          id,
+        ),
+        documentsPaneConversationByKey: dropDocumentsPaneConversationKeys(
+          state.documentsPaneConversationByKey,
           id,
         ),
       };
@@ -1757,6 +1789,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         paneConversationId: state.paneConversationId,
         paneOpenTabIds: state.paneOpenTabIds,
         slidesPaneConversationByKey: state.slidesPaneConversationByKey,
+        documentsPaneConversationByKey: state.documentsPaneConversationByKey,
         activePanelSection: state.activePanelSection,
         dockWidth: state.dockWidth,
         sectionPanelWidth: state.sectionPanelWidth,
@@ -1809,6 +1842,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             state.slidesPaneConversationByKey &&
             typeof state.slidesPaneConversationByKey === 'object'
               ? state.slidesPaneConversationByKey
+              : {};
+          state.documentsPaneConversationByKey =
+            state.documentsPaneConversationByKey &&
+            typeof state.documentsPaneConversationByKey === 'object'
+              ? state.documentsPaneConversationByKey
               : {};
           // Use setTimeout to ensure we're outside the hydration cycle
           setTimeout(() => {

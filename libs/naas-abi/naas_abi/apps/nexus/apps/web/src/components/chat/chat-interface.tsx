@@ -14,12 +14,14 @@ import { nextChatUrl } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import {
+  pickDocumentsOfficeAgent,
   pickSlidesOfficeAgent,
   pickWorkspaceDefaultAgent,
 } from '@/lib/pick-workspace-default-agent';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
+import { dispatchDocumentUpdated, isDocumentsWriteTool, useDocumentsStore } from '@/stores/documents';
 import { dispatchSlidesDeckUpdated, isSlidesWriteTool, useSlidesStore } from '@/stores/slides';
 import {
   slidesDeckCardFromToolCalls,
@@ -47,6 +49,7 @@ import {
   reservedOutputTokensForModel,
   resolveContextWindow,
 } from '@/lib/chat-context-usage';
+import { openDocumentBranch, openDocumentPath } from '@/lib/documents-pane-conversation';
 import { slidesOpenDeckBranch, slidesOpenDeckPath } from '@/lib/slides-pane-conversation';
 import { ContextUsageMeter } from './context-usage-meter';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
@@ -964,6 +967,39 @@ export function ChatInterface({
     slidesSlideCount,
   ]);
 
+  const documentsSlug = useDocumentsStore((s) => s.selectedSlug);
+  const documentsTitle = useDocumentsStore((s) => s.selectedTitle);
+  const documentsMode = useDocumentsStore((s) => s.editorMode);
+  const documentsSelectedIndex = useDocumentsStore((s) => s.selectedIndex);
+  const documentsSectionCount = useDocumentsStore((s) => s.sectionCount);
+  const documentsChatContext = useMemo(() => {
+    const onDocuments =
+      typeof pathname === 'string' && pathname.includes('/documents') && Boolean(documentsSlug);
+    if (!onDocuments || !documentsSlug) return null;
+    return {
+      documents: {
+        slug: documentsSlug,
+        title: documentsTitle || documentsSlug,
+        mode: documentsMode,
+        workspace_id: currentWorkspaceId || undefined,
+        branch: openDocumentBranch(currentWorkspaceId || '', documentsSlug),
+        path: openDocumentPath(currentWorkspaceId || '', documentsSlug),
+        selected_index:
+          documentsSectionCount > 0 ? documentsSelectedIndex : undefined,
+        section_count:
+          documentsSectionCount > 0 ? documentsSectionCount : undefined,
+      },
+    };
+  }, [
+    pathname,
+    documentsSlug,
+    documentsTitle,
+    documentsMode,
+    currentWorkspaceId,
+    documentsSelectedIndex,
+    documentsSectionCount,
+  ]);
+
   const codeActiveBranch = useCodeStore((s) => s.activeBranch);
   const codeSelectedRepo = useCodeStore((s) => s.selectedRepoId);
   const codingChatContext = useMemo(() => {
@@ -984,10 +1020,11 @@ export function ChatInterface({
   const chatRequestContext = useMemo(() => {
     const merged = {
       ...(slidesChatContext ?? {}),
+      ...(documentsChatContext ?? {}),
       ...(codingChatContext ?? {}),
     };
     return Object.keys(merged).length > 0 ? merged : null;
-  }, [slidesChatContext, codingChatContext]);
+  }, [slidesChatContext, documentsChatContext, codingChatContext]);
 
   useEffect(() => {
     if (!mounted || isPane) return;
@@ -1874,7 +1911,9 @@ export function ChatInterface({
       const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
       const resolved = slidesChatContext
         ? (pickSlidesOfficeAgent(agents) ?? pickWorkspaceDefaultAgent(agents))
-        : pickWorkspaceDefaultAgent(agents);
+        : documentsChatContext
+          ? (pickDocumentsOfficeAgent(agents) ?? pickWorkspaceDefaultAgent(agents))
+          : pickWorkspaceDefaultAgent(agents);
       if (resolved) {
         effectiveAgent = resolved.id;
         if (isPane) {
@@ -1890,6 +1929,15 @@ export function ChatInterface({
         effectiveAgent = slides.id;
         if (isPane && useWorkspaceStore.getState().paneAgent !== slides.id) {
           useWorkspaceStore.getState().setPaneAgent(slides.id);
+        }
+      }
+    } else if (documentsChatContext) {
+      const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const documents = pickDocumentsOfficeAgent(agents);
+      if (documents) {
+        effectiveAgent = documents.id;
+        if (isPane && useWorkspaceStore.getState().paneAgent !== documents.id) {
+          useWorkspaceStore.getState().setPaneAgent(documents.id);
         }
       }
     }
@@ -2168,6 +2216,9 @@ export function ChatInterface({
           if (isSlidesWriteTool(rawTool)) {
             useSlidesStore.getState().setAgentWriting(true);
           }
+          if (isDocumentsWriteTool(rawTool)) {
+            useDocumentsStore.getState().setAgentWriting(true);
+          }
         };
 
         const handleToolResponseEvent = (output: string) => {
@@ -2209,6 +2260,21 @@ export function ChatInterface({
               const deckTitle = slidesDeckTitleFromToolOutput(output);
               if (deckTitle) useSlidesStore.getState().setSelectedTitle(deckTitle);
               dispatchSlidesDeckUpdated({ slug, source: target.rawName || target.toolName });
+            }
+          }
+          if (isDocumentsWriteTool(raw)) {
+            let slug: string | undefined;
+            let writeFailed = false;
+            try {
+              const parsed = JSON.parse(output) as { slug?: string; error?: unknown };
+              if (typeof parsed?.slug === 'string') slug = parsed.slug;
+              if (parsed && parsed.error) writeFailed = true;
+            } catch {
+              /* tool output may be plain text */
+            }
+            useDocumentsStore.getState().setAgentWriting(false);
+            if (!writeFailed) {
+              dispatchDocumentUpdated({ slug, source: target.rawName || target.toolName });
             }
           }
           if (

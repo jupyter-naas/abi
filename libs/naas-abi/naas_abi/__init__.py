@@ -195,6 +195,8 @@ FeatureKey = Literal[
     "code",
     # Business slides (Forgejo decks + Monaco). On for members by default.
     "slides",
+    # Business documents (Forgejo HTML docs + Monaco). On for members by default.
+    "documents",
 ]
 
 # Default catalog (excludes opt-in features like "code").
@@ -212,6 +214,7 @@ _ALL_FEATURES: list[FeatureKey] = [
     "datasets",
     "settings",
     "slides",
+    "documents",
 ]
 
 
@@ -223,8 +226,8 @@ def _default_role_baseline() -> dict[str, list[FeatureKey]]:
     return {
         "owner": list(_ALL_FEATURES),
         "admin": list(_ALL_FEATURES),
-        "member": ["maps", "chat", "files", "datasets", "skills", "slides"],
-        "viewer": ["maps", "chat", "files", "datasets", "skills", "slides"],
+        "member": ["maps", "chat", "files", "datasets", "skills", "slides", "documents"],
+        "viewer": ["maps", "chat", "files", "datasets", "skills", "slides", "documents"],
     }
 
 
@@ -256,6 +259,15 @@ class SlidesTemplateSourceConfig(BaseModel):
     namespace: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=32)
 
     # Directory of ``<id>.html`` seeds plus an optional ``catalog.json``.
+    path: str = Field(min_length=1)
+
+
+class DocumentsTemplateSourceConfig(BaseModel):
+    """An extra tree of Nexus Documents seed templates, declared by the deploy."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    namespace: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=32)
     path: str = Field(min_length=1)
 
 
@@ -460,6 +472,9 @@ class NexusConfig(BaseModel):
     slides_template_sources: list[SlidesTemplateSourceConfig] = Field(
         default_factory=list
     )
+    documents_template_sources: list[DocumentsTemplateSourceConfig] = Field(
+        default_factory=list
+    )
     users: list[UserSeedConfig] = Field(default_factory=list)
     organizations: list[OrganizationSeedConfig] = Field(default_factory=list)
 
@@ -636,6 +651,7 @@ class ABIModule(BaseModule):
         # check on an install where that module is not enabled. Unset means
         # slides follow ``abi_agent_model``, which the engine already resolves.
         abi_slides_agent_model: str = ""
+        abi_documents_agent_model: str = ""
 
         # Canonical model id used by OntologyEngineerAgent. Same registry
         # semantics as ``abi_agent_model``.
@@ -670,6 +686,12 @@ class ABIModule(BaseModule):
             validate_configured_slides_model(
                 self._engine.services.model_registry,
                 self.configuration.abi_slides_agent_model,
+            )
+            from naas_abi.agents.documents import validate_configured_documents_model
+
+            validate_configured_documents_model(
+                self._engine.services.model_registry,
+                self.configuration.abi_documents_agent_model,
             )
 
         super().on_initialized()

@@ -275,6 +275,89 @@ def _render_slides_context_block(
     )
 
 
+def _selected_document_lines(documents_ctx: dict) -> list[str]:
+    count_raw = documents_ctx.get("section_count")
+    index_raw = documents_ctx.get("selected_index")
+    count: int | None = None
+    index: int | None = None
+    try:
+        if count_raw is not None:
+            count = int(count_raw)
+    except (TypeError, ValueError):
+        count = None
+    try:
+        if index_raw is not None:
+            index = int(index_raw)
+    except (TypeError, ValueError):
+        index = None
+    lines: list[str] = []
+    if count is not None:
+        lines.append(f"- section_count: {count}")
+    if index is not None:
+        human = f"{index + 1} of {count}" if count is not None else str(index + 1)
+        lines.append(f"- selected_section_index: {index} (section {human} in the editor)")
+    return lines
+
+
+def _render_documents_context_block(
+    client_context: dict | None,
+    workspace_id: str | None = None,
+) -> str:
+    """Inject open Documents file so the agent researches, then edits that file."""
+    if not isinstance(client_context, dict):
+        return ""
+    documents = client_context.get("documents")
+    if not isinstance(documents, dict):
+        return ""
+    slug = str(documents.get("slug") or "").strip()
+    if not slug:
+        return ""
+    ws = str(documents.get("workspace_id") or workspace_id or "").strip()
+    default_path = (
+        f"documents/{ws}/{slug}/document.html" if ws else f"documents/{slug}/document.html"
+    )
+    default_branch = f"documents/{ws}/{slug}" if ws else f"documents/{slug}"
+    path = str(documents.get("path") or default_path).strip()
+    branch = str(documents.get("branch") or default_branch).strip()
+    title = str(documents.get("title") or "").strip()
+    mode = str(documents.get("mode") or "").strip()
+    today = datetime.now().date().isoformat()
+    year = today[:4]
+    lines = [
+        f"- slug: {slug}",
+        f"- path: {path}",
+        f"- branch: {branch}",
+        f"- today: {today}",
+    ]
+    if ws:
+        lines.append(f"- workspace_id: {ws}")
+    if title:
+        lines.append(f"- title: {title}")
+    if mode:
+        lines.append(f"- editor_mode: {mode}")
+    lines.extend(_selected_document_lines(documents))
+    return (
+        "\n\n## Open Documents file\n"
+        "The user is editing this document in the Documents overlay right now. "
+        "If you do not have replace_in_document, write_document_section, "
+        "write_document_sections, or write_document, call transfer_to_Documents "
+        "immediately and stop.\n"
+        "You are operating on its Coder workspace files (sidecar) when available; "
+        "Forgejo remains the Save/history snapshot. Do not ask which document, slug, "
+        "file, or template. Omit slug on Documents tool calls; tools default to this "
+        "open file.\n"
+        "selected_section_index below is the section the user has selected in the "
+        "editor, 0-based, same index space as section_index on the Documents tools.\n"
+        "Plan, then write. For news, current events, or factual briefs:\n"
+        f"1. Call web_search 2 to 4 times first. Include {year}. Stop after 4 searches.\n"
+        "2. Call list_document_sections once. Do not read every section.\n"
+        "3. Write the whole document in one write_document_sections or write_document.\n"
+        "4. After that write, report what changed. No lorem or template filler.\n"
+        + "\n".join(lines)
+        + "\n"
+    )
+
+
 def _render_coding_context_block(client_context: dict | None) -> str:
     """Inject open Code repo/branch so Abi edits the sandbox checkout."""
     if not isinstance(client_context, dict):
@@ -388,6 +471,9 @@ class ChatService:
         slides_block = _render_slides_context_block(client_context, workspace_id)
         if slides_block:
             system_prompt += slides_block
+        documents_block = _render_documents_context_block(client_context, workspace_id)
+        if documents_block:
+            system_prompt += documents_block
         coding_block = _render_coding_context_block(client_context)
         if coding_block:
             system_prompt += coding_block
@@ -423,6 +509,10 @@ class ChatService:
         slides_block = _render_slides_context_block(client_context, workspace_id)
         if slides_block.strip():
             parts.append(slides_block.strip())
+
+        documents_block = _render_documents_context_block(client_context, workspace_id)
+        if documents_block.strip():
+            parts.append(documents_block.strip())
 
         coding_block = _render_coding_context_block(client_context)
         if coding_block.strip():
