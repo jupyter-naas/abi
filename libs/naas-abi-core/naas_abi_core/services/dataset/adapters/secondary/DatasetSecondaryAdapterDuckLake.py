@@ -135,6 +135,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         data_path: str,
         *,
         max_retries: int = 10,
+        data_inlining_row_limit: int = 1000,
         retry_base_delay_seconds: float = 0.05,
         retry_max_delay_seconds: float = 1.0,
         s3_endpoint: str = "",
@@ -144,6 +145,9 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         s3_url_style: str = "",
         s3_use_ssl: bool | None = None,
     ) -> None:
+        if data_inlining_row_limit < 0:
+            raise ValueError("data_inlining_row_limit must be non-negative")
+        self._data_inlining_row_limit = data_inlining_row_limit
         if max_retries < 0:
             raise ValueError("max_retries must be greater than or equal to zero")
         if retry_base_delay_seconds < 0:
@@ -371,6 +375,68 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
 
         self._write_transaction(operation)
 
+    def inlined_row_count(self, name: str, *, namespace: str = "default") -> int:
+        con = self._connect()
+        try:
+            con.execute("BEGIN")
+            self._load_spec(con, namespace, name)
+            metadata = self._ident(f"__ducklake_metadata_{CATALOG_ALIAS}")
+            tables = con.execute(
+                f"SELECT i.table_name FROM {metadata}.ducklake_inlined_data_tables i "
+                f"JOIN {metadata}.ducklake_table t ON i.table_id = t.table_id "
+                f"JOIN {metadata}.ducklake_schema s ON t.schema_id = s.schema_id "
+                "WHERE t.table_name = ? AND s.schema_name = ? "
+                "AND t.end_snapshot IS NULL AND s.end_snapshot IS NULL",
+                [name, namespace],
+            ).fetchall()
+            count = sum(
+                int(
+                    con.execute(
+                        f"SELECT count(*) FROM {metadata}.{self._ident(table)}"
+                    ).fetchone()[0]
+                )
+                for (table,) in tables
+            )
+            con.execute("COMMIT")
+            return count
+        finally:
+            con.close()
+
+    def flush(self, name: str, *, namespace: str = "default") -> QueryResult:
+        result = self._maintain(name, namespace=namespace, flush=True)
+        # Flush can drop inline tables from older schema versions. New reads
+        # must attach again; existing cursors retain their connection reference.
+        with self._read_connection_lock:
+            self._read_connection = None
+        return result
+
+    def compact(self, name: str, *, namespace: str = "default") -> QueryResult:
+        return self._maintain(name, namespace=namespace, flush=False)
+
+    def _maintain(self, name: str, *, namespace: str, flush: bool) -> QueryResult:
+        def operation(con: Any) -> QueryResult:
+            self._load_spec(con, namespace, name)
+            if flush:
+                sql = (
+                    f"CALL ducklake_flush_inlined_data({self._sql_string(CATALOG_ALIAS)}, "
+                    f"table_name => {self._sql_string(name)}, "
+                    f"schema_name => {self._sql_string(namespace)})"
+                )
+            else:
+                sql = (
+                    f"CALL ducklake_merge_adjacent_files({self._sql_string(CATALOG_ALIAS)}, "
+                    f"{self._sql_string(name)}, schema => {self._sql_string(namespace)})"
+                )
+            result = con.execute(sql)
+            columns = [str(column[0]) for column in result.description or []]
+            return QueryResult(
+                columns=columns,
+                rows=[dict(zip(columns, row)) for row in result.fetchall()],
+            )
+
+        result, _ = self._write_transaction(operation)
+        return result
+
     def _connect(self, *, snapshot_id: int | None = None) -> Any:
         import duckdb
 
@@ -385,6 +451,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
             self._configure_object_store(con)
             options = [
                 "AUTOMATIC_MIGRATION",
+                f"DATA_INLINING_ROW_LIMIT {int(self._data_inlining_row_limit)}",
                 f"DATA_PATH {self._sql_string(self._data_path)}",
             ]
             if snapshot_id is not None:
@@ -425,9 +492,23 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         cursor's error (bad SQL, a missing table) does not affect the shared
         connection or any other cursor.
         """
-        cursor = self._get_read_connection().cursor()
+        import duckdb
+
+        connection = self._get_read_connection()
+        cursor = connection.cursor()
         try:
             return operation(cursor)
+        except duckdb.CatalogException as exc:
+            # Another process may flush and drop a cached inline table. Retire
+            # this connection for subsequent calls without interrupting cursors
+            # already using it. Do not replay arbitrary SQL: query() allows writes.
+            if "Failed to read inlined data from DuckLake" in str(
+                exc
+            ) and "does not exist" in str(exc):
+                with self._read_connection_lock:
+                    if self._read_connection is connection:
+                        self._read_connection = None
+            raise
         finally:
             cursor.close()
 

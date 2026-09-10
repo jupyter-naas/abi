@@ -216,6 +216,25 @@ class IDatasetPort(ABC):
         """Run SQL against datasets in ``namespace``. Tables are registered by dataset name."""
 
     @abstractmethod
+    def flush(self, name: str, *, namespace: str = "default") -> QueryResult:
+        """Materialize inlined data as Parquet while preserving snapshot history."""
+
+    @abstractmethod
+    def inlined_row_count(self, name: str, *, namespace: str = "default") -> int:
+        """Count unflushed insertion records, including historical/deleted rows.
+
+        This is a pressure indicator, not total catalog bytes or live row count.
+        """
+
+    @abstractmethod
+    def compact(self, name: str, *, namespace: str = "default") -> QueryResult:
+        """Merge eligible small files within partitions, preserving snapshots.
+
+        Returns adapter maintenance statistics. Does not flush inlined rows,
+        expire snapshots, or delete old files. Raises DatasetNotFoundError.
+        """
+
+    @abstractmethod
     def list_snapshots(self) -> builtins.list[DatasetSnapshotInfo]:
         """List the coherent, catalog-level snapshots available for time travel."""
 
