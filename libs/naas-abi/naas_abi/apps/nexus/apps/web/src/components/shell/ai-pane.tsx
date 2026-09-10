@@ -7,6 +7,7 @@ import { downloadConversationTranscript } from '@/lib/chat-transcript-export';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
 import { pickWorkspaceDefaultAgent } from '@/lib/pick-workspace-default-agent';
+import { ColumnResizeHandle } from './column-resize-handle';
 import dynamic from 'next/dynamic';
 
 const ChatInterface = dynamic(
@@ -157,24 +158,7 @@ export function AIPane() {
   return (
     <>
       {isDragging && <div className="fixed inset-0 z-50 cursor-col-resize" />}
-      <div
-        className="group relative flex w-2 shrink-0 cursor-col-resize items-center justify-center"
-        onMouseDown={handleDragStart}
-        title="Drag to resize chat pane"
-        aria-label="Resize chat pane"
-        role="separator"
-        aria-orientation="vertical"
-      >
-        <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors group-hover:bg-workspace-accent" />
-        <div className="relative z-10 flex flex-col gap-[5px]">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="h-[3px] w-[3px] rounded-full bg-muted-foreground/40 transition-colors group-hover:bg-workspace-accent"
-            />
-          ))}
-        </div>
-      </div>
+      <ColumnResizeHandle onMouseDown={handleDragStart} label="Drag to resize chat pane" isActive={isDragging} />
       <aside
         className="flex h-full shrink-0 flex-col border-l border-border/50 bg-background"
         style={{ width: aiPaneWidth }}
@@ -187,17 +171,32 @@ export function AIPane() {
             aria-label="Open chats"
           >
             {showNewChatTab && (
-              <button
-                type="button"
+              <div
                 role="tab"
                 aria-selected
                 className={cn(
-                  'group/tab relative flex max-w-[160px] shrink-0 items-center gap-1.5 border-r border-border/50 px-3 text-xs',
+                  'group/tab relative flex max-w-[160px] shrink-0 items-center gap-1 border-r border-border/50 pl-3 pr-1 text-xs',
                   'bg-background text-foreground'
                 )}
               >
-                <span className="truncate font-medium">New chat</span>
-              </button>
+                <span className="flex min-w-0 flex-1 items-center gap-1.5 py-2">
+                  <MessageSquare size={12} className="shrink-0 text-muted-foreground" />
+                  <span className="truncate font-medium">New chat</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleContextPanel();
+                  }}
+                  className="rounded p-0.5 text-muted-foreground opacity-70 transition-opacity hover:bg-muted hover:text-foreground group-hover/tab:opacity-100 focus-visible:opacity-100"
+                  style={{ borderRadius: 'var(--org-border-radius, 0px)' }}
+                  title="Close chat pane"
+                  aria-label="Close chat pane"
+                >
+                  <X size={12} />
+                </button>
+              </div>
             )}
             {openTabs.map((tab) => {
               const active = paneConversationId === tab.id;

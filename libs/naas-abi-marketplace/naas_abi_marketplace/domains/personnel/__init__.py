@@ -66,6 +66,8 @@ class ABIModule(BaseModule):
         return getattr(self, "_cockpit_data_source", "missing")
 
     def api(self, app: FastAPI) -> None:
-        from naas_abi_marketplace.domains.personnel.apps.cockpit.api.routes import router
+        from naas_abi_marketplace.domains.personnel.apps.cockpit.api.routes import (
+            router,
+        )
 
         app.include_router(router, prefix="/api/personnel-cockpit")

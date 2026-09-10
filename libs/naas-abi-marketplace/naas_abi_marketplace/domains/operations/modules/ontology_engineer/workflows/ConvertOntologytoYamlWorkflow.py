@@ -12,7 +12,7 @@ Usage:
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, List, Optional, Tuple
+from typing import Annotated
 
 import yaml
 from fastapi import APIRouter
@@ -61,7 +61,7 @@ class ConvertOntologytoYamlWorkflowConfiguration(WorkflowConfiguration):
     """
 
     create_workspace_ontology_config: CreateWorkspaceOntologyWorkflowConfiguration
-    default_output_dir: Optional[str] = None
+    default_output_dir: str | None = None
 
 
 class ConvertOntologytoYamlWorkflowParameters(WorkflowParameters):
@@ -78,14 +78,14 @@ class ConvertOntologytoYamlWorkflowParameters(WorkflowParameters):
         str, Field(..., description="Path to the Turtle (.ttl) file")
     ]
     output_dir: Annotated[
-        Optional[str],
+        str | None,
         Field(
             default=None,
             description="Optional output directory. If not provided, uses the directory of the turtle_path",
         ),
     ] = None
     imported_ontologies: Annotated[
-        Optional[List[str]],
+        list[str] | None,
         Field(
             default=None,
             description="Optional list of additional ontology paths/URLs to import",
@@ -175,7 +175,7 @@ class ConvertOntologytoYamlWorkflow(Workflow):
 
             # Extract all NamedIndividuals from the graph
             logger.info("Extracting owl:NamedIndividual instances...")
-            named_individuals: dict[URIRef, List[URIRef]] = {}
+            named_individuals: dict[URIRef, list[URIRef]] = {}
             for individual_uri in graph.subjects(RDF.type, OWL.NamedIndividual):
                 if isinstance(individual_uri, URIRef):
                     # Get the class type(s) of this individual (excluding owl:NamedIndividual)
@@ -203,18 +203,18 @@ class ConvertOntologytoYamlWorkflow(Workflow):
             # Global structure to track NamedIndividual relationships for inverse deduplication
             # Maps (source_id, target_id) -> (property_label, property_uri)
             individual_relationships_seen: dict[
-                Tuple[str, str], Tuple[str, URIRef]
+                tuple[str, str], tuple[str, URIRef]
             ] = {}
 
             # Helper function to create individual entity entry
             def create_individual_entry(
                 individual_uri: URIRef,
-                class_uri: Optional[URIRef],
+                class_uri: URIRef | None,
                 individual_name: str,
                 individual_id: str,
                 individual_group: str,
-                subclassof_uri: Optional[URIRef],
-                entity_class: Optional[str] = None,
+                subclassof_uri: URIRef | None,
+                entity_class: str | None = None,
                 include_class_relation: bool = True,
             ) -> dict:
                 """Create an entity entry for a NamedIndividual."""
@@ -329,7 +329,7 @@ class ConvertOntologytoYamlWorkflow(Workflow):
                 # Get subClassOf
                 subclassof_list = list(full_graph.objects(class_uri, RDFS.subClassOf))
                 subclassof = ""
-                subclassof_uri: Optional[URIRef] = None
+                subclassof_uri: URIRef | None = None
                 for subclassof_node in subclassof_list:
                     if isinstance(subclassof_node, URIRef):
                         subclassof_uri = subclassof_node
@@ -603,7 +603,7 @@ class ConvertOntologytoYamlWorkflow(Workflow):
                 )
             return str(yaml_path)
         except Exception as e:
-            error_msg = f"Error converting ontology to YAML: {str(e)}"
+            error_msg = f"Error converting ontology to YAML: {e!s}"
             logger.error(error_msg)
             raise
 
@@ -636,7 +636,6 @@ class ConvertOntologytoYamlWorkflow(Workflow):
     ) -> None:
         if tags is None:
             tags = []
-        return None
 
 
 if __name__ == "__main__":

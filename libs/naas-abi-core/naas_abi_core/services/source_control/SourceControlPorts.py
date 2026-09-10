@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 # ---------------------------------------------------------------------------
@@ -58,6 +59,15 @@ class FileContent:
     size: int
     text: str | None  # decoded UTF-8 text, or None for binary
     is_binary: bool = False
+    data: bytes | None = None  # raw bytes when the adapter still has them
+
+
+@dataclass(frozen=True)
+class FileWrite:
+    """One path to create or replace in a tree write."""
+
+    path: str
+    content: str | bytes
 
 
 @dataclass(frozen=True)
@@ -138,7 +148,7 @@ class WorkflowRun:
     """A CI/CD workflow run (Forgejo/Gitea Actions, GitHub Actions, ...).
 
     ``status`` carries the forge's run status verbatim (e.g. ``success``,
-    ``failure``, ``running``, ``waiting``, ``cancelled``, ``skipped``) — the UI
+    ``failure``, ``running``, ``waiting``, ``cancelled``, ``skipped``). The UI
     maps it to icons/colors.
     """
 
@@ -267,17 +277,38 @@ class ISourceControlAdapter(ABC):
         *,
         repo_id: str,
         path: str,
-        content: str,
+        content: str | bytes,
         message: str,
         branch: str,
         author_name: str | None = None,
         author_email: str | None = None,
     ) -> Commit:
-        """Create or update a text file on ``branch`` and return the commit.
+        """Create or update a file on ``branch`` and return the commit.
 
         Backends that support the forge Contents API (Forgejo/Gitea) should
         create when the path is missing and update when it exists (using the
-        current blob SHA). ``content`` is UTF-8 text.
+        current blob SHA). ``content`` is UTF-8 text or raw bytes for binary
+        assets (PNG, JPEG, and similar).
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def upsert_files(
+        self,
+        *,
+        repo_id: str,
+        files: Sequence[FileWrite],
+        message: str,
+        branch: str,
+        author_name: str | None = None,
+        author_email: str | None = None,
+    ) -> Commit:
+        """Create or update many files on ``branch`` in as few commits as possible.
+
+        Backends that can write a tree (local git, in-memory, Forgejo
+        ``POST /repos/{owner}/{repo}/contents`` change-files) should make one
+        commit. A backend that only has the single-file Contents API may loop
+        ``upsert_file``; that leftover is N commits and must be documented.
         """
         raise NotImplementedError()
 

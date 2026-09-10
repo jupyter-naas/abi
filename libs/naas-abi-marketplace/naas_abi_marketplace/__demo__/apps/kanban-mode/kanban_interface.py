@@ -3,11 +3,12 @@ Kanban Mode Interface Pattern
 Drag-and-drop task management board interface with customizable columns and workflows
 """
 
-import streamlit as st
-from datetime import datetime, timedelta
-import plotly.express as px
 import json
 import os
+from datetime import datetime, timedelta
+
+import plotly.express as px
+import streamlit as st
 
 st.set_page_config(page_title="Kanban Mode", page_icon="📋", layout="wide")
 
@@ -46,7 +47,7 @@ if st.session_state.page == "sop":
     except FileNotFoundError:
         st.error("SOP.md file not found. Please ensure the SOP file exists in the same directory as this interface.")
     except Exception as e:
-        st.error(f"Error loading SOP: {str(e)}")
+        st.error(f"Error loading SOP: {e!s}")
     
     st.stop()  # Stop execution here for SOP page
 
@@ -348,7 +349,7 @@ if uploaded_board is not None:
         st.sidebar.success("Board imported successfully!")
         st.rerun()
     except Exception as e:
-        st.sidebar.error(f"Error importing board: {str(e)}")
+        st.sidebar.error(f"Error importing board: {e!s}")
 
 # Quick Actions
 st.sidebar.markdown("### ⚡ Quick Actions")

@@ -15,7 +15,6 @@ class File(_File):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass
 
     def read(self) -> bytes:
         module: ABIModule = ABIModule.get_instance()
@@ -30,7 +29,7 @@ class File(_File):
         query = f"""
         PREFIX doc: <http://ontology.naas.ai/abi/document/>
         SELECT ?fileIRI WHERE {{
-            GRAPH <{str(graph_name)}> {{
+            GRAPH <{graph_name!s}> {{
                 ?fileIRI doc:sha256 "{sha256}" .
             }}
         }}

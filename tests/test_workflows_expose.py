@@ -42,7 +42,7 @@ class TestWorkflowExpose:
         assert "run" in workflow_class.__dict__, (
             f"{class_name} must implement its own run method, not inherit it"
         )
-        method = getattr(workflow_class, "run")
+        method = workflow_class.run
         assert callable(method), f"{class_name}.run must be callable"
 
     def test_has_api_function(self, class_name, workflow_class):
@@ -51,7 +51,7 @@ class TestWorkflowExpose:
         assert "as_api" in workflow_class.__dict__, (
             f"{class_name} must implement its own as_api method, not inherit it"
         )
-        function = getattr(workflow_class, "as_api")
+        function = workflow_class.as_api
         assert callable(function), f"{class_name}'s as_api must be callable"
 
     def test_has_as_tools_function(self, class_name, workflow_class):
@@ -60,5 +60,5 @@ class TestWorkflowExpose:
         assert "as_tools" in workflow_class.__dict__, (
             f"{class_name} must implement its own as_tools method, not inherit it"
         )
-        function = getattr(workflow_class, "as_tools")
+        function = workflow_class.as_tools
         assert callable(function), f"{class_name}'s as_tools must be callable"

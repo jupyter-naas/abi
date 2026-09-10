@@ -16,4 +16,12 @@ describe('humanizeChatProviderError', () => {
       'Updated the cover title and agenda.',
     );
   });
+
+  it('names a context-window 400 instead of asking to pick another model', () => {
+    const dumped =
+      "Error code: 400 - {'error': {'message': \"litellm.ContextWindowExceededError: This model's maximum context length is 262144 tokens.\"}}";
+    expect(humanizeChatProviderError(dumped)).toBe(
+      "This request exceeded the model's context window. Do not load whole files with embedded images, then try again.",
+    );
+  });
 });

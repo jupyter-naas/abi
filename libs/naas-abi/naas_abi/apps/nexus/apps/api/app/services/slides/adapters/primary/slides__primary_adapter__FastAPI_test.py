@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
@@ -888,3 +889,452 @@ def test_runtime_rebinds_when_the_same_environment_is_adopted_twice(
     assert secret == _REBOUND_SIDECAR_SECRET, secret
     # merge() must not blank the insert-only column it was never given.
     assert created is not None
+
+
+_TINY_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+
+
+def _write_folder_template(directory: Path, stem: str, name: str) -> Path:
+    """Catalog folder: ``{stem}/{stem}.html`` plus ``{stem}/assets/hero.png``."""
+    folder = directory / stem
+    assets = folder / "assets"
+    assets.mkdir(parents=True, exist_ok=True)
+    (directory / "catalog.json").write_text(
+        json.dumps({"templates": [{"id": stem, "name": name}]}),
+        encoding="utf-8",
+    )
+    (folder / f"{stem}.html").write_text(
+        f'<!doctype html><html><body><img src="assets/hero.png" alt="{name}"></body></html>',
+        encoding="utf-8",
+    )
+    (assets / "hero.png").write_bytes(_TINY_PNG)
+    return directory
+
+
+def test_create_and_apply_template_copies_catalog_assets(
+    tmp_path, monkeypatch
+) -> None:
+    source_dir = _write_folder_template(tmp_path / "office", "pixel-v1", "Pixel")
+    _configure_sources(monkeypatch, ("office", source_dir))
+
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Pixel deck",
+            "slug": "pixel-deck",
+            "template_id": "office/pixel-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+    deck = client.get(
+        "/slides/projects/pixel-deck/deck",
+        params={"workspace_id": "ws-test"},
+    )
+    assert deck.status_code == 200, deck.text
+    html = deck.json()["html"]
+    assert "data:image/" not in html
+    assert 'src="assets/hero.png"' in html
+
+    commits = sc.list_commits(
+        repo_id=slides_api._repo_id(), ref="slides/ws-test/pixel-deck", limit=20
+    )
+    seed_commits = [c for c in commits if "feat(slides): create" in c.message]
+    assert len(seed_commits) == 1
+
+    asset = client.get(
+        "/slides/projects/pixel-deck/assets/hero.png",
+        params={"workspace_id": "ws-test"},
+    )
+    assert asset.status_code == 200, asset.text
+    assert asset.content[:8] == b"\x89PNG\r\n\x1a\n"
+    assert "image/png" in (asset.headers.get("content-type") or "")
+
+    traversal = client.get(
+        "/slides/projects/pixel-deck/assets/..png",
+        params={"workspace_id": "ws-test"},
+    )
+    assert traversal.status_code == 422
+
+    tree = client.get(
+        "/slides/projects/pixel-deck/tree",
+        params={"workspace_id": "ws-test"},
+    )
+    assert tree.status_code == 200, tree.text
+    body = tree.json()
+    assert body["embedded_images"] == 0
+    assert "copied from the catalog" in (body.get("assets_note") or "")
+
+    applied = client.post(
+        "/slides/projects/pixel-deck/apply-template",
+        json={"workspace_id": "ws-test", "template_id": "office/pixel-v1"},
+    )
+    assert applied.status_code == 200, applied.text
+    assert "data:image/" not in applied.json()["html"]
+    again = client.get(
+        "/slides/projects/pixel-deck/assets/hero.png",
+        params={"workspace_id": "ws-test"},
+    )
+    assert again.status_code == 200
+    assert again.content[:8] == b"\x89PNG\r\n\x1a\n"
+    apply_commits = [
+        c
+        for c in sc.list_commits(
+            repo_id=slides_api._repo_id(), ref="slides/ws-test/pixel-deck", limit=20
+        )
+        if c.message.startswith("feat(slides): apply template")
+    ]
+    assert len(apply_commits) == 1
+
+
+def test_load_seed_html_reads_folder_template(tmp_path, monkeypatch) -> None:
+    source_dir = _write_folder_template(tmp_path / "acme", "folder-deck-v1", "Folder")
+    _configure_sources(monkeypatch, ("acme", source_dir))
+    html = _load_seed_html("acme/folder-deck-v1")
+    assert 'src="assets/hero.png"' in html
+    assert "acme/folder-deck-v1" in _discover_seed_ids()
+
+
+def test_slide_mutations_insert_delete_duplicate_reorder(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Mutation deck",
+            "slug": "mutation-deck",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+    listed = client.get(
+        "/slides/projects/mutation-deck/slides",
+        params={"workspace_id": "ws-test"},
+    )
+    assert listed.status_code == 200, listed.text
+    start = listed.json()
+    assert start["ok"] is True
+    assert start["section_count"] >= 2
+    n = start["section_count"]
+
+    inserted = client.post(
+        "/slides/projects/mutation-deck/slides/insert",
+        json={
+            "workspace_id": "ws-test",
+            "after_index": 0,
+            "layout": "content",
+            "title": "Risks",
+        },
+    )
+    assert inserted.status_code == 200, inserted.text
+    body = inserted.json()
+    assert body["ok"] is True
+    assert body["section_index"] == 1
+    assert body["section_count"] == n + 1
+    assert "Risks" in (body.get("html") or "")
+    assert any(s.get("title") == "Risks" for s in body["slides"])
+
+    duplicated = client.post(
+        "/slides/projects/mutation-deck/slides/duplicate",
+        json={"workspace_id": "ws-test", "index": 1},
+    )
+    assert duplicated.status_code == 200, duplicated.text
+    assert duplicated.json()["section_count"] == n + 2
+    assert duplicated.json()["section_index"] == 2
+
+    reordered = client.post(
+        "/slides/projects/mutation-deck/slides/reorder",
+        json={"workspace_id": "ws-test", "from_index": 1, "to_index": 2},
+    )
+    assert reordered.status_code == 200, reordered.text
+    assert reordered.json()["section_index"] == 2
+
+    deleted = client.post(
+        "/slides/projects/mutation-deck/slides/delete",
+        json={"workspace_id": "ws-test", "index": 2},
+    )
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["section_count"] == n + 1
+
+    deck = client.get(
+        "/slides/projects/mutation-deck/deck",
+        params={"workspace_id": "ws-test"},
+    )
+    assert deck.status_code == 200
+    assert "Risks" in deck.json()["html"]
+
+
+def test_delete_last_slide_is_refused(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "One slide",
+            "slug": "one-slide-deck",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+    listed = client.get(
+        "/slides/projects/one-slide-deck/slides",
+        params={"workspace_id": "ws-test"},
+    )
+    count = listed.json()["section_count"]
+    for index in range(count - 1, 0, -1):
+        gone = client.post(
+            "/slides/projects/one-slide-deck/slides/delete",
+            json={"workspace_id": "ws-test", "index": index},
+        )
+        assert gone.status_code == 200, gone.text
+    last = client.post(
+        "/slides/projects/one-slide-deck/slides/delete",
+        json={"workspace_id": "ws-test", "index": 0},
+    )
+    assert last.status_code == 409
+    assert "last slide" in last.json()["detail"].lower()
+
+
+def test_history_uses_conventional_commits_and_diff_resolves_head(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Diff deck",
+            "slug": "diff-deck",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+    base_sha = created.json()["commit_sha"]
+    assert base_sha
+
+    history = client.get(
+        "/slides/projects/diff-deck/history", params={"workspace_id": "ws-test"}
+    )
+    assert history.status_code == 200, history.text
+    assert history.json()[0]["message"].startswith("feat(slides): create")
+
+    deck = client.get(
+        "/slides/projects/diff-deck/deck", params={"workspace_id": "ws-test"}
+    )
+    assert deck.status_code == 200, deck.text
+    saved = client.put(
+        "/slides/projects/diff-deck/deck",
+        json={
+            "workspace_id": "ws-test",
+            "html": deck.json()["html"],
+            "message": "made a copy tweak",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["commit_sha"] != base_sha
+
+    history2 = client.get(
+        "/slides/projects/diff-deck/history", params={"workspace_id": "ws-test"}
+    )
+    # A free-text message with no Conventional Commits type is bucketed as
+    # `chore(slides): ...` rather than saved as raw free text. put_deck also
+    # commits a metadata touch on top, so the branch tip is that commit, not
+    # the deck commit itself.
+    commits2 = history2.json()
+    messages = [c["message"] for c in commits2]
+    assert "chore(slides): made a copy tweak" in messages
+    head_sha = commits2[0]["sha"]
+    assert head_sha != base_sha
+
+    # `head` omitted resolves to the branch tip InMemoryAdapter just committed.
+    diff = client.get(
+        "/slides/projects/diff-deck/history/diff",
+        params={"workspace_id": "ws-test", "base": base_sha},
+    )
+    assert diff.status_code == 200, diff.text
+    body = diff.json()
+    assert body["base"] == base_sha
+    assert body["head"] == head_sha
+    # InMemoryAdapter.get_diff is a stub (no per-commit tree snapshots), so it
+    # always reports no changed files. Only Forgejo/LocalGitAdapter compute a
+    # real diff; this asserts today's stub behavior, not the intended one.
+    assert body["files"] == []
+
+    missing = client.get(
+        "/slides/projects/does-not-exist/history/diff",
+        params={"workspace_id": "ws-test", "base": base_sha},
+    )
+    assert missing.status_code == 404
+
+
+def test_deck_version_bumps_from_conventional_commit_history(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Version deck",
+            "slug": "version-deck",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    version = client.get(
+        "/slides/projects/version-deck/version", params={"workspace_id": "ws-test"}
+    )
+    assert version.status_code == 200, version.text
+    # Seed commit is `feat(slides): create ...` -> one minor bump.
+    assert version.json() == {"version": "0.1.0", "commit_count": 1}
+
+    deck = client.get(
+        "/slides/projects/version-deck/deck", params={"workspace_id": "ws-test"}
+    )
+    assert deck.status_code == 200, deck.text
+    saved = client.put(
+        "/slides/projects/version-deck/deck",
+        json={
+            "workspace_id": "ws-test",
+            "html": deck.json()["html"],
+            "message": "fix(deck): correct typo",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    version2 = client.get(
+        "/slides/projects/version-deck/version", params={"workspace_id": "ws-test"}
+    )
+    # `fix` bumps patch only; the metadata-touch `chore` commit alongside it
+    # does not bump anything.
+    assert version2.json()["version"] == "0.1.1"
+    assert version2.json()["commit_count"] == 3
+
+    inserted = client.post(
+        "/slides/projects/version-deck/slides/insert",
+        json={"workspace_id": "ws-test", "after_index": -1},
+    )
+    assert inserted.status_code == 200, inserted.text
+
+    version3 = client.get(
+        "/slides/projects/version-deck/version", params={"workspace_id": "ws-test"}
+    )
+    # `feat(slides): insert slide ...` resets patch and bumps minor.
+    assert version3.json()["version"] == "0.2.0"
+
+    missing = client.get(
+        "/slides/projects/does-not-exist/version", params={"workspace_id": "ws-test"}
+    )
+    assert missing.status_code == 404
+
+
+def test_history_tracks_version_per_commit(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "History version deck",
+            "slug": "history-version-deck",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    deck = client.get(
+        "/slides/projects/history-version-deck/deck", params={"workspace_id": "ws-test"}
+    )
+    assert deck.status_code == 200, deck.text
+    saved = client.put(
+        "/slides/projects/history-version-deck/deck",
+        json={
+            "workspace_id": "ws-test",
+            "html": deck.json()["html"],
+            "message": "fix(deck): correct typo",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    inserted = client.post(
+        "/slides/projects/history-version-deck/slides/insert",
+        json={"workspace_id": "ws-test", "after_index": -1},
+    )
+    assert inserted.status_code == 200, inserted.text
+
+    version = client.get(
+        "/slides/projects/history-version-deck/version", params={"workspace_id": "ws-test"}
+    )
+    assert version.status_code == 200, version.text
+    assert version.json()["version"] == "0.2.0"
+
+    history = client.get(
+        "/slides/projects/history-version-deck/history", params={"workspace_id": "ws-test"}
+    )
+    assert history.status_code == 200, history.text
+    commits = history.json()
+    assert len(commits) >= 2
+
+    # The branch tip's tracked version matches the deck's current version.
+    assert commits[0]["version"] == "0.2.0"
+
+    # The oldest (seed) commit tracks the version as of its own point in
+    # history, not the deck's current version.
+    seed = commits[-1]
+    assert seed["message"].startswith("feat(slides): create")
+    assert seed["version"] == "0.1.0"
+
+
+def test_semver_from_commits_ignores_unrecognized_and_non_bumping_types() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary import (
+        slides__primary_adapter__FastAPI as slides_module,
+    )
+    from naas_abi_core.services.source_control.SourceControlPorts import Commit
+
+    # Oldest first for readability; the function itself expects newest-first
+    # (it reverses), so build newest-first here to match the real contract.
+    oldest_to_newest = [
+        Commit(sha="1", message="Free-form message before the convention", author="a"),
+        Commit(sha="2", message="feat(slides): create x", author="a"),
+        Commit(sha="3", message="style(slides): reorder slides", author="a"),
+        Commit(sha="4", message="fix(slides): replace text", author="a"),
+        Commit(sha="5", message="feat(slides)!: breaking layout change", author="a"),
+        Commit(sha="6", message="fix(slides): another fix", author="a"),
+    ]
+    newest_first = list(reversed(oldest_to_newest))
+    assert slides_module._semver_from_commits(newest_first) == "0.2.1"
+
+
+def test_versions_from_commits_tracks_running_total_per_commit() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary import (
+        slides__primary_adapter__FastAPI as slides_module,
+    )
+    from naas_abi_core.services.source_control.SourceControlPorts import Commit
+
+    oldest_to_newest = [
+        Commit(sha="1", message="Free-form message before the convention", author="a"),
+        Commit(sha="2", message="feat(slides): create x", author="a"),
+        Commit(sha="3", message="style(slides): reorder slides", author="a"),
+        Commit(sha="4", message="fix(slides): replace text", author="a"),
+        Commit(sha="5", message="feat(slides)!: breaking layout change", author="a"),
+        Commit(sha="6", message="fix(slides): another fix", author="a"),
+    ]
+    newest_first = list(reversed(oldest_to_newest))
+    versions = slides_module._versions_from_commits(newest_first)
+    assert versions == {
+        # A commit predating the convention carries the running baseline
+        # forward (0.0.0 here, nothing bumped it yet) rather than being
+        # dropped from the map.
+        "1": "0.0.0",
+        "2": "0.1.0",
+        # A non-bumping type (style) repeats the prior commit's version.
+        "3": "0.1.0",
+        "4": "0.1.1",
+        "5": "0.2.0",
+        "6": "0.2.1",
+    }

@@ -27,13 +27,26 @@ export const SLIDES_PRINT_PAGE_HEIGHT_IN = '7.5in';
 /** Parent waits this long for an iframe ack that print() was invoked. */
 export const SLIDES_PDF_EXPORT_ACK_MS = 8000;
 
+/**
+ * Parent reveals the preview after this long even without an `images-ready`
+ * ack (broken bridge injection, hostile deck script, etc.). A stuck spinner
+ * is worse than a slide that finishes painting a beat late.
+ */
+export const SLIDES_PREVIEW_IMAGES_READY_TIMEOUT_MS = 6000;
+
 /** postMessage channel for sandboxed preview iframes (no allow-same-origin). */
 export const SLIDES_PREVIEW_MESSAGE_SOURCE = 'nexus-slides-preview';
 
 export type SlidesPreviewToParentMessage =
   | {
       source: typeof SLIDES_PREVIEW_MESSAGE_SOURCE;
-      type: 'ready' | 'metrics';
+      /**
+       * 'ready' fires on DOMContentLoaded (markup parsed, images may still be
+       * decoding); 'images-ready' fires once every `<img>` has loaded or
+       * errored, so the parent can hold the preview hidden until slides are
+       * visually complete instead of flashing in with blank image boxes.
+       */
+      type: 'ready' | 'metrics' | 'images-ready';
       height: number;
     }
   | {
@@ -41,12 +54,67 @@ export type SlidesPreviewToParentMessage =
       type: 'export-pptx-result' | 'export-pdf-result';
       ok: boolean;
       error?: string;
+    }
+  | {
+      source: typeof SLIDES_PREVIEW_MESSAGE_SOURCE;
+      type: 'edit-commit';
+      edits: SlidesTextEdit[];
     };
 
-export type SlidesPreviewFromParentMessage = {
-  source: typeof SLIDES_PREVIEW_MESSAGE_SOURCE;
-  type: 'export-pptx' | 'export-pdf';
-};
+export type SlidesPreviewFromParentMessage =
+  | {
+      source: typeof SLIDES_PREVIEW_MESSAGE_SOURCE;
+      type: 'export-pptx' | 'export-pdf';
+    }
+  | {
+      source: typeof SLIDES_PREVIEW_MESSAGE_SOURCE;
+      type: 'set-manual-edit';
+      enabled: boolean;
+    };
+
+/** Path is ``{slideIndex}:{tag}:{nth}`` among non-nested editable tags in that slide. */
+export type SlidesTextEdit = { path: string; html: string };
+
+/** Idle commit after typing in Manual edit (blur/Escape commit immediately). */
+export const SLIDES_MANUAL_EDIT_IDLE_MS = 600;
+
+export const SLIDES_EDITABLE_TAGS = [
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'p',
+  'li',
+  'button',
+  'a',
+  'figcaption',
+  'blockquote',
+  'label',
+  'td',
+  'th',
+] as const;
+
+const SLIDES_EDITABLE_TAG_SET = new Set<string>(SLIDES_EDITABLE_TAGS);
+
+const SLIDES_EDIT_PATH_RE = /^(\d+):([a-z][a-z0-9]*):(\d+)$/;
+
+/** Phrasing tags kept when applying a Manual edit. Scripts and handlers are dropped. */
+const SLIDES_EDIT_HTML_ALLOWED = new Set([
+  'br',
+  'span',
+  'strong',
+  'em',
+  'b',
+  'i',
+  'u',
+  'small',
+  'mark',
+  'sub',
+  'sup',
+  'a',
+]);
 
 /**
  * Present-style contain scale: fit one 16:9 stage into the available pane.
@@ -62,6 +130,26 @@ export function computeSlidesPreviewScale(
     return 1;
   }
   return Math.min(availWidth / stageWidth, availHeight / stageHeight);
+}
+
+/** Host scrollTop that brings ``index`` into view at the current contain scale. */
+export function slidesPreviewScrollTop(
+  index: number,
+  scale: number,
+  stageHeight = SLIDES_STAGE_HEIGHT,
+): number {
+  if (index <= 0 || scale <= 0 || stageHeight <= 0) return 0;
+  return index * stageHeight * scale;
+}
+
+export function slidesPreviewIndexFromScroll(
+  scrollTop: number,
+  scale: number,
+  stageHeight = SLIDES_STAGE_HEIGHT,
+): number {
+  const step = stageHeight * scale;
+  if (step <= 0) return 0;
+  return Math.max(0, Math.round(scrollTop / step));
 }
 
 /** CSS injected into preview srcDoc so fixed 1280x720 slides fill the stage cleanly. */
@@ -90,6 +178,24 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
       );
     } catch (e) {}
   }
+  function waitForImages() {
+    var imgs;
+    try {
+      imgs = Array.prototype.slice.call(document.images || []);
+    } catch (e) {
+      return Promise.resolve();
+    }
+    if (!imgs.length) return Promise.resolve();
+    return Promise.all(
+      imgs.map(function (img) {
+        if (img.complete) return Promise.resolve();
+        return new Promise(function (resolve) {
+          img.addEventListener('load', resolve, { once: true });
+          img.addEventListener('error', resolve, { once: true });
+        });
+      })
+    );
+  }
   function onReady() {
     parent.postMessage(
       { source: SOURCE, type: 'ready', height: STAGE_HEIGHT },
@@ -98,10 +204,104 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
     reportMetrics();
     setTimeout(reportMetrics, 50);
     setTimeout(reportMetrics, 250);
+    waitForImages().then(function () {
+      parent.postMessage(
+        { source: SOURCE, type: 'images-ready', height: STAGE_HEIGHT },
+        '*'
+      );
+      reportMetrics();
+    });
   }
+  var EDIT_SEL = 'h1,h2,h3,h4,h5,h6,p,li,button,a,figcaption,blockquote,label,td,th';
+  var EDIT_ATTR = 'data-nexus-edit';
+  var editEnabled = false;
+  var editIdle = null;
+  function slideSections() {
+    return Array.prototype.slice.call(document.querySelectorAll('section.slide'));
+  }
+  function isNestedEditable(el, slide) {
+    var p = el.parentElement;
+    while (p && p !== slide) {
+      if (p.matches && p.matches(EDIT_SEL)) return true;
+      p = p.parentElement;
+    }
+    return false;
+  }
+  function tagEditTargets() {
+    var list = [];
+    slideSections().forEach(function (slide, si) {
+      var counts = {};
+      Array.prototype.slice.call(slide.querySelectorAll(EDIT_SEL)).forEach(function (el) {
+        if (isNestedEditable(el, slide)) return;
+        var tag = (el.tagName || '').toLowerCase();
+        if (!counts[tag]) counts[tag] = 0;
+        el.setAttribute(EDIT_ATTR, si + ':' + tag + ':' + counts[tag]);
+        counts[tag] += 1;
+        list.push(el);
+      });
+    });
+    return list;
+  }
+  function collectEdits() {
+    return tagEditTargets().map(function (el) {
+      return { path: el.getAttribute(EDIT_ATTR), html: el.innerHTML || '' };
+    });
+  }
+  function commitEdits() {
+    parent.postMessage({ source: SOURCE, type: 'edit-commit', edits: collectEdits() }, '*');
+  }
+  function scheduleEditCommit() {
+    if (editIdle) clearTimeout(editIdle);
+    editIdle = setTimeout(function () {
+      editIdle = null;
+      commitEdits();
+    }, ${SLIDES_MANUAL_EDIT_IDLE_MS});
+  }
+  function setManualEdit(on) {
+    editEnabled = !!on;
+    document.documentElement.classList.toggle('nexus-slides-manual-edit', editEnabled);
+    tagEditTargets().forEach(function (el) {
+      if (editEnabled) {
+        el.setAttribute('contenteditable', 'true');
+        el.setAttribute('spellcheck', 'true');
+      } else {
+        el.removeAttribute('contenteditable');
+      }
+    });
+    if (!editEnabled) {
+      if (editIdle) {
+        clearTimeout(editIdle);
+        editIdle = null;
+      }
+      commitEdits();
+    }
+  }
+  document.addEventListener('focusout', function (event) {
+    if (!editEnabled) return;
+    var el = event.target;
+    if (!el || !el.getAttribute || !el.getAttribute(EDIT_ATTR)) return;
+    commitEdits();
+  });
+  document.addEventListener('input', function (event) {
+    if (!editEnabled) return;
+    var el = event.target;
+    if (!el || !el.getAttribute || !el.getAttribute(EDIT_ATTR)) return;
+    scheduleEditCommit();
+  });
+  document.addEventListener('keydown', function (event) {
+    if (!editEnabled || event.key !== 'Escape') return;
+    var active = document.activeElement;
+    if (active && active.blur) active.blur();
+    commitEdits();
+    event.preventDefault();
+  });
   window.addEventListener('message', function (event) {
     var data = event.data;
     if (!data || data.source !== SOURCE) return;
+    if (data.type === 'set-manual-edit') {
+      setManualEdit(!!data.enabled);
+      return;
+    }
     if (data.type === 'export-pdf') {
       try {
         if (typeof window.print !== 'function') {
@@ -282,17 +482,23 @@ export const SLIDES_PREVIEW_PRINT_CSS = `
   }
 `;
 
+const VIEWPORT_FIT_SCRIPT_RE =
+  /<script>\s*\/\*\s*nexus-slides-viewport-fit\s*\*\/[\s\S]*?<\/script>/gi;
+
 export function prepareSlidesPreviewHtml(html: string): string {
   if (!html) return html;
-  let next = html;
+  let next = html.replace(VIEWPORT_FIT_SCRIPT_RE, '');
 
   if (!next.includes(`id="${SLIDES_PREVIEW_FIT_STYLE_ID}"`)) {
+    const hero = coverHeroCss(html);
     const inject = `<style id="${SLIDES_PREVIEW_FIT_STYLE_ID}">
+  ${hero}
   .deck-menubar { display: none !important; }
   html, body {
     margin: 0 !important;
     overflow-x: hidden !important;
     background: transparent !important;
+    min-height: 0 !important;
   }
   body.deck-has-menubar .deck,
   .deck {
@@ -301,6 +507,12 @@ export function prepareSlidesPreviewHtml(html: string): string {
     align-items: stretch !important;
     width: ${SLIDES_STAGE_WIDTH}px !important;
     max-width: ${SLIDES_STAGE_WIDTH}px !important;
+    /* Standalone seeds scale the deck to the window. The parent iframe
+       already contain-scales the 1280 stage; a second scale() shrinks
+       text-on-white covers into a blank card. */
+    transform: none !important;
+    margin-left: 0 !important;
+    margin-bottom: 0 !important;
   }
   .slide {
     width: ${SLIDES_STAGE_WIDTH}px !important;
@@ -309,6 +521,25 @@ export function prepareSlidesPreviewHtml(html: string): string {
     border-left: none !important;
     border-right: none !important;
     overflow: hidden !important;
+  }
+  .industry-stage {
+    width: ${SLIDES_INDUSTRY_STAGE_WIDTH}px !important;
+    height: ${SLIDES_INDUSTRY_STAGE_HEIGHT}px !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    transform: scale(${SLIDES_INDUSTRY_STAGE_SCALE}) !important;
+    transform-origin: top left !important;
+    overflow: hidden !important;
+  }
+  html.nexus-slides-manual-edit [data-nexus-edit] {
+    cursor: text;
+    outline: 1px dashed rgba(37, 99, 235, 0.35);
+    outline-offset: 2px;
+  }
+  html.nexus-slides-manual-edit [data-nexus-edit]:focus {
+    outline: 2px solid rgba(37, 99, 235, 0.75);
+    outline-offset: 2px;
   }
 ${SLIDES_PREVIEW_PRINT_CSS}
 </style>`;
@@ -340,12 +571,24 @@ ${SLIDES_PREVIEW_PRINT_CSS}
   return next;
 }
 
+function isSlidesTextEdit(row: unknown): row is SlidesTextEdit {
+  if (!row || typeof row !== 'object') return false;
+  const edit = row as Partial<SlidesTextEdit>;
+  return typeof edit.path === 'string' && typeof edit.html === 'string';
+}
+
 export function isSlidesPreviewMessage(
   data: unknown,
 ): data is SlidesPreviewToParentMessage {
   if (!data || typeof data !== 'object') return false;
-  const msg = data as Partial<SlidesPreviewToParentMessage>;
-  return msg.source === SLIDES_PREVIEW_MESSAGE_SOURCE && typeof msg.type === 'string';
+  const msg = data as { source?: unknown; type?: unknown; edits?: unknown };
+  if (msg.source !== SLIDES_PREVIEW_MESSAGE_SOURCE || typeof msg.type !== 'string') {
+    return false;
+  }
+  if (msg.type === 'edit-commit') {
+    return Array.isArray(msg.edits) && msg.edits.every(isSlidesTextEdit);
+  }
+  return true;
 }
 
 const SECTION_RE = /<section\b([^>]*)>([\s\S]*?)<\/section>/gi;
@@ -354,17 +597,24 @@ const HEAD_RE = /<head\b[^>]*>([\s\S]*?)<\/head>/i;
 const HERO_RE = /hero:\s*"((?:\\.|[^"\\])*)"/;
 const HERO_MAX_CHARS = 80_000;
 
-/** First `<section class="slide">` in a deck, or null when none is complete. */
-export function extractFirstSlideHtml(html: string): string | null {
-  if (!html) return null;
+/** The `index`-th `<section class="slide">`, or null when that slide is missing. */
+export function extractSlideHtmlAt(html: string, index: number): string | null {
+  if (!html || index < 0) return null;
   SECTION_RE.lastIndex = 0;
   let match: RegExpExecArray | null;
+  let seen = 0;
   while ((match = SECTION_RE.exec(html))) {
     if (SLIDE_CLASS_RE.test(match[1] || '')) {
-      return match[0];
+      if (seen === index) return match[0];
+      seen += 1;
     }
   }
   return null;
+}
+
+/** First `<section class="slide">` in a deck, or null when none is complete. */
+export function extractFirstSlideHtml(html: string): string | null {
+  return extractSlideHtmlAt(html, 0);
 }
 
 export function extractHeadInnerHtml(html: string): string {
@@ -391,7 +641,12 @@ export function coverHeroCss(html: string): string {
   const match = HERO_RE.exec(html);
   if (!match || match[1].length > HERO_MAX_CHARS) return '';
   const url = match[1].replace(/\\"/g, '"');
-  if (!url.startsWith('data:') && !url.startsWith('http') && !url.startsWith('/')) {
+  if (
+    !url.startsWith('data:') &&
+    !url.startsWith('http') &&
+    !url.startsWith('/') &&
+    !url.startsWith('assets/')
+  ) {
     return '';
   }
   return `:root { --hero: url("${url}"); }`;
@@ -400,11 +655,12 @@ export function coverHeroCss(html: string): string {
 export const SLIDES_COVER_FIT_STYLE_ID = 'nexus-slides-cover-fit';
 
 /**
- * First-slide srcDoc for an index card: head styles plus one `.slide`,
- * locked to the 1280x720 stage. No print/PPTX bridge.
+ * One-slide srcDoc for an index card or filmstrip thumb: head styles plus
+ * one `.slide`, locked to the 1280x720 stage. No print/PPTX bridge.
+ * `index` defaults to the cover (first slide).
  */
-export function prepareSlidesCoverHtml(html: string): string | null {
-  const slide = extractFirstSlideHtml(html);
+export function prepareSlidesCoverHtml(html: string, index = 0): string | null {
+  const slide = extractSlideHtmlAt(html, index);
   if (!slide) return null;
   const head = stripHeadScripts(extractHeadInnerHtml(html));
   const hero = coverHeroCss(html);
@@ -478,4 +734,167 @@ export async function readDeckCoverHtml(res: Response): Promise<string | null> {
     buf += decoder.decode();
   }
   return prepareSlidesCoverHtml(buf);
+}
+
+type SlidesEditNode = {
+  tag: string;
+  innerStart: number;
+  innerEnd: number;
+  inner: string;
+};
+
+/** Number of ``<section class="slide">`` blocks. Used for preview height before metrics. */
+export function countSlideSections(html: string): number {
+  if (!html) return 0;
+  let index = 0;
+  while (extractSlideHtmlAt(html, index)) {
+    index += 1;
+  }
+  return index;
+}
+
+function listEditableNodes(fragment: string): SlidesEditNode[] {
+  const re = /<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g;
+  const stack: Array<{ tag: string; innerStart: number }> = [];
+  const nodes: SlidesEditNode[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(fragment))) {
+    const raw = match[0];
+    const tag = match[1].toLowerCase();
+    if (!SLIDES_EDITABLE_TAG_SET.has(tag)) continue;
+    if (raw.startsWith('</')) {
+      for (let i = stack.length - 1; i >= 0; i -= 1) {
+        if (stack[i].tag === tag) {
+          const open = stack[i];
+          nodes.push({
+            tag,
+            innerStart: open.innerStart,
+            innerEnd: match.index,
+            inner: fragment.slice(open.innerStart, match.index),
+          });
+          stack.splice(i, 1);
+          break;
+        }
+      }
+    } else if (!/\/\s*>$/.test(raw)) {
+      stack.push({ tag, innerStart: match.index + raw.length });
+    }
+  }
+  nodes.sort((a, b) => a.innerStart - b.innerStart);
+  return nodes.filter(
+    (node, i, all) =>
+      !all.some(
+        (other, j) =>
+          j !== i && other.innerStart < node.innerStart && other.innerEnd > node.innerEnd,
+      ),
+  );
+}
+
+export function sanitizeSlidesEditHtml(html: string): string {
+  if (!html) return '';
+  let next = html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, '')
+    .replace(/<style\b[\s\S]*?<\/style>/gi, '')
+    .replace(/<(iframe|object|embed|link|meta|img|video|audio|svg)\b[^>]*\/?>/gi, '')
+    .replace(/<\/(iframe|object|embed|link|meta|img|video|audio|svg)>/gi, '')
+    .replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  next = next.replace(/<\/?([a-z][a-z0-9]*)\b[^>]*>/gi, (full, name: string) => {
+    const tag = name.toLowerCase();
+    if (tag === 'br') return '<br>';
+    if (!SLIDES_EDIT_HTML_ALLOWED.has(tag)) return '';
+    if (full.startsWith('</')) return `</${tag}>`;
+    if (tag === 'a') {
+      const href = /href\s*=\s*(["'])([^"']*)\1/i.exec(full)?.[2] || '';
+      if (/^(https?:|\/|#|mailto:)/i.test(href) && !/^\s*javascript:/i.test(href)) {
+        return `<a href="${href.replace(/"/g, '&quot;')}">`;
+      }
+      return '<a>';
+    }
+    return `<${tag}>`;
+  });
+  return next;
+}
+
+/** Snapshot of editable runs in source HTML, same paths the preview iframe posts. */
+export function collectSlidesTextEdits(html: string): SlidesTextEdit[] {
+  if (!html) return [];
+  const edits: SlidesTextEdit[] = [];
+  let index = 0;
+  while (true) {
+    const slide = extractSlideHtmlAt(html, index);
+    if (!slide) break;
+    const counts = new Map<string, number>();
+    for (const node of listEditableNodes(slide)) {
+      const nth = counts.get(node.tag) ?? 0;
+      counts.set(node.tag, nth + 1);
+      edits.push({ path: `${index}:${node.tag}:${nth}`, html: node.inner });
+    }
+    index += 1;
+  }
+  return edits;
+}
+
+function replaceSlideHtmlAt(html: string, index: number, slideHtml: string): string {
+  SECTION_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let seen = 0;
+  while ((match = SECTION_RE.exec(html))) {
+    if (SLIDE_CLASS_RE.test(match[1] || '')) {
+      if (seen === index) {
+        return html.slice(0, match.index) + slideHtml + html.slice(match.index + match[0].length);
+      }
+      seen += 1;
+    }
+  }
+  return html;
+}
+
+function applyEditsToSlide(slideHtml: string, edits: SlidesTextEdit[]): string {
+  const nodes = listEditableNodes(slideHtml);
+  const counts = new Map<string, number>();
+  const wanted = new Map<string, string>();
+  for (const edit of edits) {
+    const parsed = SLIDES_EDIT_PATH_RE.exec(edit.path);
+    if (!parsed) continue;
+    wanted.set(`${parsed[2]}:${parsed[3]}`, sanitizeSlidesEditHtml(edit.html));
+  }
+  const replacements = nodes
+    .map((node) => {
+      const nth = counts.get(node.tag) ?? 0;
+      counts.set(node.tag, nth + 1);
+      const html = wanted.get(`${node.tag}:${nth}`);
+      return html === undefined ? null : { ...node, html };
+    })
+    .filter((row): row is SlidesEditNode & { html: string } => row !== null)
+    .sort((a, b) => b.innerStart - a.innerStart);
+  let out = slideHtml;
+  for (const row of replacements) {
+    out = out.slice(0, row.innerStart) + row.html + out.slice(row.innerEnd);
+  }
+  return out;
+}
+
+/**
+ * Write Manual edit commits back onto the source deck.html.
+ * Does not persist inlined preview data-URLs: only tagged text runs change.
+ */
+export function applySlidesTextEdits(html: string, edits: SlidesTextEdit[]): string {
+  if (!html || !edits.length) return html;
+  const bySlide = new Map<number, SlidesTextEdit[]>();
+  for (const edit of edits) {
+    const parsed = SLIDES_EDIT_PATH_RE.exec(edit.path);
+    if (!parsed) continue;
+    const index = Number(parsed[1]);
+    const list = bySlide.get(index) || [];
+    list.push(edit);
+    bySlide.set(index, list);
+  }
+  let next = html;
+  const indices = [...bySlide.keys()].sort((a, b) => b - a);
+  for (const index of indices) {
+    const slide = extractSlideHtmlAt(next, index);
+    if (!slide) continue;
+    next = replaceSlideHtmlAt(next, index, applyEditsToSlide(slide, bySlide.get(index) || []));
+  }
+  return next;
 }

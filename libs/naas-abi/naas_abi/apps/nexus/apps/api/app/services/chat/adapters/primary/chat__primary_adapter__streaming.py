@@ -281,7 +281,9 @@ async def stream_chat_response(
                 # (which uses copy_context) inherit them.
                 from naas_abi_core.services.agent.context import (
                     agent_chat_id,
+                    agent_user_email,
                     agent_user_id,
+                    agent_user_name,
                     agent_workspace_id,
                     coder_workspace_base,
                     coder_workspace_secret,
@@ -290,6 +292,10 @@ async def stream_chat_response(
                     slides_active_title,
                 )
                 agent_user_id.set(str(current_user.id))
+                if current_user.name:
+                    agent_user_name.set(current_user.name)
+                if current_user.email:
+                    agent_user_email.set(str(current_user.email))
                 agent_chat_id.set(str(conversation_id))
                 if request.workspace_id is not None:
                     agent_workspace_id.set(str(request.workspace_id))

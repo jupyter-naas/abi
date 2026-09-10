@@ -23,13 +23,6 @@ import { useAppsStore } from '@/stores/apps';
 import { useFilesStore } from '@/stores/files';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 
-function modifierGlyph(): string {
-  if (typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform)) {
-    return '⌘';
-  }
-  return 'Ctrl+';
-}
-
 export function QuickOpen() {
   const router = useRouter();
   const pathname = usePathname();
@@ -315,47 +308,20 @@ export function QuickOpen() {
   };
 
   const workspaceName = workspace?.name || 'Search';
-  const shortcut = mounted ? `${modifierGlyph()}P` : '⌘P';
 
   return (
     <div ref={wrapRef} className="relative w-full">
-      {open ? (
-        <div
-          className="flex h-8 w-full items-center gap-2 rounded-md border border-workspace-accent/40 bg-background px-2.5 text-sm text-foreground shadow-sm"
-          role="combobox"
-          aria-expanded
-          aria-haspopup="listbox"
-          aria-owns="quick-open-list"
-        >
-          <Search size={14} className="shrink-0 opacity-70" />
-          <input
-            ref={inputRef}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={onInputKeyDown}
-            placeholder={workspaceName}
-            className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-            aria-label={`Search ${workspaceName}`}
-            aria-autocomplete="list"
-            aria-controls="quick-open-list"
-          />
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={openPalette}
-          className="flex h-8 w-full items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-2.5 text-left text-sm text-muted-foreground transition-colors hover:border-border hover:bg-muted/70 hover:text-foreground"
-          aria-label={`Search ${workspaceName}`}
-          aria-expanded={false}
-          aria-haspopup="listbox"
-        >
-          <Search size={14} className="shrink-0 opacity-70" />
-          <span className="min-w-0 flex-1 truncate">{workspaceName}</span>
-          <kbd className="hidden shrink-0 rounded border border-border/70 bg-background/80 px-1.5 py-0.5 font-sans text-[10px] text-muted-foreground sm:inline">
-            {shortcut}
-          </kbd>
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => (open ? close() : openPalette())}
+        className="flex h-7 w-full min-w-40 items-center justify-center rounded-md px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+        aria-label={open ? 'Close quick open' : `Open quick open for ${workspaceName}`}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-controls="quick-open-list"
+      >
+        <span className="min-w-0 truncate text-center">{workspaceName}</span>
+      </button>
 
       {open && mounted
         ? createPortal(
@@ -370,6 +336,20 @@ export function QuickOpen() {
                 width: listBox?.width ?? 480,
               }}
             >
+              <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-background px-3 py-2">
+                <Search size={14} className="shrink-0 opacity-70 text-muted-foreground" />
+                <input
+                  ref={inputRef}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={onInputKeyDown}
+                  placeholder={`Search ${workspaceName}`}
+                  className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none focus-visible:ring-0 placeholder:text-muted-foreground"
+                  aria-label={`Search ${workspaceName}`}
+                  aria-autocomplete="list"
+                  aria-controls="quick-open-list"
+                />
+              </div>
               {groups.length === 0 ? (
                 <p className="px-3 py-6 text-center text-sm text-muted-foreground">
                   {query.trim() ? 'No matches' : 'Nothing to jump to yet'}

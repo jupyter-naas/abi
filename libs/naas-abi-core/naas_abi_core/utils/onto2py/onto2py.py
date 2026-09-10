@@ -1883,7 +1883,7 @@ def add_metadata_properties(g: rdflib.Graph, classes: dict[str, ClassInfo]):
                 property_type="data",
                 datatype="datetime.datetime",
                 description="Date of creation of the resource.",
-                default_value="datetime.datetime.now()",
+                default_value="datetime.datetime.now(datetime.timezone.utc)",
                 required=False,  # Mandatory property with default
             )
             class_info.properties.append(created_prop)
@@ -2236,7 +2236,7 @@ def generate_python_code(
     ]
 
     # Build sorted stdlib imports
-    stdlib_lines: list[str] = ["import uuid"]
+    stdlib_lines: list[str] = ["import contextlib", "import uuid"]
     if needs_datetime:
         stdlib_lines.append("import datetime")
     if needs_os:
@@ -2317,17 +2317,13 @@ def generate_python_code(
             '        """Extract a SPARQL binding value from a ResultRow-like object."""',
             "        if hasattr(row, key):",
             "            return getattr(row, key)",
-            "        try:",
+            "        with contextlib.suppress(LookupError, TypeError):",
             "            return row[key]  # type: ignore[index]",
-            "        except Exception:",
-            "            pass",
             "",
             '        labels = getattr(row, "labels", None)',
             "        if labels and key in labels:",
-            "            try:",
+            "            with contextlib.suppress(LookupError, TypeError):",
             "                return row[key]  # type: ignore[index]",
-            "            except Exception:",
-            "                pass",
             "",
             "        if isinstance(row, (list, tuple)):",
             '            idx = 0 if key == "p" else 1',

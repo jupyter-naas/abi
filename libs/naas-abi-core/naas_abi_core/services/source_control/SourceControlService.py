@@ -16,6 +16,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     ContentEntry,
     Diff,
     FileContent,
+    FileWrite,
     ISourceControlAdapter,
     MergeBlockedError,
     MergeResult,
@@ -89,7 +90,7 @@ class SourceControlService(ServiceBase):
         *,
         repo_id: str,
         path: str,
-        content: str,
+        content: str | bytes,
         message: str,
         branch: str,
         author_name: str | None = None,
@@ -99,6 +100,25 @@ class SourceControlService(ServiceBase):
             repo_id=repo_id,
             path=path,
             content=content,
+            message=message,
+            branch=branch,
+            author_name=author_name,
+            author_email=author_email,
+        )
+
+    def upsert_files(
+        self,
+        *,
+        repo_id: str,
+        files: list[FileWrite],
+        message: str,
+        branch: str,
+        author_name: str | None = None,
+        author_email: str | None = None,
+    ) -> Commit:
+        return self._adapter.upsert_files(
+            repo_id=repo_id,
+            files=files,
             message=message,
             branch=branch,
             author_name=author_name,

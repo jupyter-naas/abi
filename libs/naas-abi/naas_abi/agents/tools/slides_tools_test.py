@@ -15,12 +15,17 @@ from naas_abi.agents.tools.slides_tools import (
     _cover_h1_text,
     _cover_subtitle_text,
     _deck_path,
+    _delete_slide_html,
+    _duplicate_slide_html,
     _ensure_coding_repo,
     _forget_active_slugs,
     _friendly_sc_error,
+    _insert_slide_html,
+    _join_sections,
     _parse_section_writes,
     _persist_deck,
     _redact_data_urls,
+    _reorder_slides_html,
     _replace_string_pairs,
     _resolve_slug,
     _restore_redacted_data_urls,
@@ -116,9 +121,17 @@ def test_restore_redacted_data_urls_round_trip():
 
 def test_view_for_llm_strips_heavy_scripts():
     view = _view_for_llm(_SAMPLE)
-    assert "HEAVYASSETDATA" not in view["html"]
+    assert "html" not in view
+    dumped = json.dumps(view)
+    assert "HEAVYASSETDATA" not in dumped
+    assert "data:image" not in dumped
     assert view["redacted_scripts"] >= 1
     assert view["chars_redacted"] < view["chars"]
+    assert view["section_count"] == 2
+    assert [row["title"] for row in view["sections"]] == [
+        "Presentation Title &amp; Overview",
+        "Agenda",
+    ]
 
 
 def test_resolve_slug_defaults_to_open_deck_context():
@@ -154,8 +167,10 @@ def test_real_template_sections_round_trip_and_compact_view():
     assert "iso 27001" not in low
     view = _view_for_llm(html)
     # Editable surface must stay far below the ~256k-token failure mode.
+    assert "html" not in view
     assert view["chars_redacted"] < 120_000
     assert view["section_count"] == 10
+    assert len(view["sections"]) == 10
 
 
 def test_replace_string_pairs_covers_amp_entity():
@@ -316,6 +331,23 @@ def _bind_in_memory_git(monkeypatch):
     return sc
 
 
+def _seed_in_memory_deck(sc, html: str, *, slug: str = "untitled-local"):
+    sc.ensure_repo(owner="abi", name="monorepo")
+    branch = f"slides/ws-test/{slug}"
+    names = {b.name for b in sc.list_branches(repo_id="abi/monorepo")}
+    if branch not in names:
+        default = "main" if "main" in names else next(iter(names))
+        sc.create_branch(repo_id="abi/monorepo", name=branch, from_ref=default)
+    sc.upsert_file(
+        repo_id="abi/monorepo",
+        path=f"slides/ws-test/{slug}/deck.html",
+        content=html,
+        message="Seed deck",
+        branch=branch,
+    )
+    return sc
+
+
 def _slides_context(*, workspace: str = "ws-test", slug: str = "untitled-local"):
     _forget_active_slugs()
     tokens = [
@@ -384,6 +416,29 @@ def test_ensure_coding_repo_seeds_empty_in_memory_on_write(monkeypatch):
             ref="slides/ws-test/untitled-local",
         )
         assert "ws-test" in (meta.text or "")
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_persist_deck_uses_tool_default_type_for_unprefixed_message(monkeypatch):
+    """A free-text agent message with no type(scope): prefix must bucket into
+    the calling tool's own Conventional Commits type (e.g. "fix" for a text
+    replace), not the non-bumping "chore" fallback — otherwise the deck
+    version never advances even though real content changed."""
+    _bind_in_memory_git(monkeypatch)
+    tokens = _slides_context()
+    try:
+        _ensure_coding_repo()
+        result = _persist_deck(
+            "untitled-local",
+            "<html><body><main><section class='slide'>"
+            "<h1>Updated date</h1></section></main></body></html>",
+            "Update the conference date on the cover slide",
+            default_type="fix",
+        )
+        assert "error" not in result, result
+        assert result["message"].startswith("fix(slides): ")
+        assert "Update the conference date" in result["message"]
     finally:
         _reset_tokens(tokens)
 
@@ -745,14 +800,7 @@ def test_apply_section_writes_replaces_two_slides_in_one_pass():
 
 
 def test_write_slides_sections_persists_once(monkeypatch):
-    sc = _bind_in_memory_git(monkeypatch)
-    sc.upsert_file(
-        repo_id="abi/monorepo",
-        path="slides/ws-test/untitled-local/deck.html",
-        content=_SAMPLE,
-        message="Seed deck",
-        branch="slides/ws-test/untitled-local",
-    )
+    sc = _seed_in_memory_deck(_bind_in_memory_git(monkeypatch), _SAMPLE)
     tokens = _slides_context()
     try:
         write = next(t for t in slides_tools() if t.name == "write_slides_sections")
@@ -788,5 +836,116 @@ def test_write_slides_sections_persists_once(monkeypatch):
         )
         assert "Iran briefing" in (deck.text or "")
         assert "Actors" in (deck.text or "")
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_join_sections_round_trips_split():
+    prefix, sections, suffix = _split_sections(_SAMPLE)
+    assert _join_sections(prefix, sections, suffix) == _SAMPLE
+
+
+def test_insert_slide_appends_and_clones_content_layout():
+    result = _insert_slide_html(_SAMPLE, after_index=-1, layout="content", title="Risks")
+    assert result["ok"] is True
+    assert result["section_count"] == 3
+    assert result["section_index"] == 2
+    assert "html" in result
+    assert "Risks" in result["html"]
+    assert "HEAVYASSETDATA" in result["html"]
+    prefix, sections, suffix = _split_sections(result["html"])
+    assert len(sections) == 3
+    assert 'id="slide-001"' in sections[2]
+    assert _join_sections(prefix, sections, suffix) == result["html"]
+
+
+def test_insert_slide_after_current_uses_catalog_when_layout_missing():
+    result = _insert_slide_html(_SAMPLE, after_index=0, layout="section-divider", title="Part two")
+    assert result["ok"] is True
+    assert result["section_index"] == 1
+    assert result["section_count"] == 3
+    assert "Part two" in result["html"]
+    assert 'data-layout="section-divider"' in result["html"]
+
+
+def test_insert_slide_rejects_unknown_layout():
+    result = _insert_slide_html(_SAMPLE, layout="hero-grid")
+    assert result["error"].startswith("Unknown layout")
+    assert "html" not in result
+
+
+def test_delete_slide_refuses_last():
+    one = (
+        "<!DOCTYPE html><html><body><main>"
+        '<section class="slide"><h1>Only</h1></section>'
+        "</main></body></html>"
+    )
+    result = _delete_slide_html(one, 0)
+    assert result["error"] == "Cannot delete the last slide."
+    gone = _delete_slide_html(_SAMPLE, 1)
+    assert gone["ok"] is True
+    assert gone["section_count"] == 1
+    assert gone["section_index"] == 0
+    assert "slide-agenda" not in gone["html"]
+
+
+def test_duplicate_slide_keeps_title_and_new_id():
+    result = _duplicate_slide_html(_SAMPLE, 0)
+    assert result["ok"] is True
+    assert result["section_count"] == 3
+    assert result["section_index"] == 1
+    assert result["html"].count("Presentation Title") >= 2
+    ids = [sid for sid in result["ids"] if sid]
+    assert len(ids) == len(set(ids))
+
+
+def test_reorder_slides_from_to_and_order_list():
+    moved = _reorder_slides_html(_SAMPLE, from_index=0, to_index=1)
+    assert moved["ok"] is True
+    assert moved["section_index"] == 1
+    _prefix, sections, _suffix = _split_sections(moved["html"])
+    assert 'id="slide-agenda"' in sections[0]
+    assert 'id="slide-cover"' in sections[1]
+    permuted = _reorder_slides_html(moved["html"], order=[1, 0])
+    assert permuted["ok"] is True
+    _p, restored, _s = _split_sections(permuted["html"])
+    assert 'id="slide-cover"' in restored[0]
+    assert 'id="slide-agenda"' in restored[1]
+
+
+def test_structure_tools_persist_without_returning_html(monkeypatch):
+    sc = _seed_in_memory_deck(_bind_in_memory_git(monkeypatch), _SAMPLE)
+    tokens = _slides_context()
+    try:
+        tools = {t.name: t for t in slides_tools()}
+        inserted = tools["insert_slide"].invoke(
+            {"after_index": 0, "layout": "content", "title": "Risks"}
+        )
+        assert "error" not in inserted, inserted
+        assert inserted["ok"] is True
+        assert inserted["section_count"] == 3
+        assert inserted["section_index"] == 1
+        assert "html" not in inserted
+        assert "<section" not in json.dumps(inserted)
+        duplicated = tools["duplicate_slide"].invoke({"index": 0})
+        assert duplicated["ok"] is True
+        assert duplicated["section_count"] == 4
+        assert "html" not in duplicated
+        reordered = tools["reorder_slides"].invoke({"from_index": 0, "to_index": 1})
+        assert reordered["ok"] is True
+        assert "html" not in reordered
+        deleted = tools["delete_slide"].invoke({"index": 3})
+        assert deleted["ok"] is True
+        assert deleted["section_count"] == 3
+        assert tools["delete_slide"].invoke({"index": 0})["section_count"] == 2
+        assert tools["delete_slide"].invoke({"index": 0})["section_count"] == 1
+        last = tools["delete_slide"].invoke({"index": 0})
+        assert last["error"] == "Cannot delete the last slide."
+        deck = sc.get_file(
+            repo_id="abi/monorepo",
+            path="slides/ws-test/untitled-local/deck.html",
+            ref="slides/ws-test/untitled-local",
+        )
+        assert "Risks" in (deck.text or "")
     finally:
         _reset_tokens(tokens)

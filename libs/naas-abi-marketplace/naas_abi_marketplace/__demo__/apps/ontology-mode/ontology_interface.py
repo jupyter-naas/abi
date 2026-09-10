@@ -3,15 +3,16 @@ Ontology Mode Interface - Interactive Knowledge Graph Visualization
 Displays all TTL files from the platform using PyVis/VisJS
 """
 
-import streamlit as st
-import pandas as pd
-from pathlib import Path
-from rdflib import Graph, URIRef, Literal, BNode
-import networkx as nx  # type: ignore
-from pyvis.network import Network  # type: ignore
-import tempfile
 import os
+import tempfile
 from collections import defaultdict
+from pathlib import Path
+
+import networkx as nx  # type: ignore
+import pandas as pd
+import streamlit as st
+from pyvis.network import Network  # type: ignore
+from rdflib import BNode, Graph, Literal, URIRef
 
 # Page config
 st.set_page_config(
@@ -415,6 +416,6 @@ if st.session_state.page == "sop":
     except FileNotFoundError:
         st.error("SOP.md file not found. Please ensure the SOP file exists in the same directory as this interface.")
     except Exception as e:
-        st.error(f"Error loading SOP: {str(e)}")
+        st.error(f"Error loading SOP: {e!s}")
 
     st.stop()  # Stop execution here for SOP page

@@ -6,6 +6,7 @@ import { useTheme } from 'next-themes';
 import dynamic from 'next/dynamic';
 import { Sidebar } from './sidebar';
 import { SectionPanel } from './sidebar/section-panel';
+import { TopNav } from './topnav';
 import { PlatformStatusFooter } from './platform-status-footer';
 import { MobileBottomNav } from './mobile/mobile-bottom-nav';
 import { MobileMoreSheet } from './mobile/mobile-more-sheet';
@@ -371,27 +372,39 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   }
 
   return (
-    <div 
+    <div
       className="flex h-screen w-screen overflow-hidden bg-background"
       style={themeStyles}
       data-org-branded="true"
     >
-      {/* Dock: workspace mark, nav, profile. Width matches the feature column by default and is resizable. */}
+      {/* Dock: workspace mark, nav, profile — a full top-to-bottom column of
+          its own. Width matches the feature column by default and is resizable. */}
       <Sidebar />
 
-      {/* Feature column: Chat, Files, Workspaces, ... */}
-      <SectionPanel />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Topnav: active section title / app menu, page header, chat pane
+            toggle. Spans the region right of the dock — pushed by it — so
+            the feature column, main content and AI pane share one header
+            instead of each painting their own. */}
+        <TopNav />
 
-      {/* Main content + platform status footer (User / Business workspace / Repo / Branch / Code workspace) */}
-      <main className="flex flex-1 flex-col overflow-hidden">
-        {currentWorkspaceId && <PresenceIndicator workspaceId={currentWorkspaceId} />}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
-          <PlatformStatusFooter />
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          {/* Feature column: Chat, Files, Workspaces, ... */}
+          <SectionPanel />
+
+          {/* Main content + the AI chat pane, opening below TopNav instead of
+              beside a per-page-scoped header. */}
+          <main className="flex flex-1 flex-col overflow-hidden">
+            {currentWorkspaceId && <PresenceIndicator workspaceId={currentWorkspaceId} />}
+            <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+          </main>
+
+          {contextPanelOpen && <AIPane />}
         </div>
-      </main>
 
-      {contextPanelOpen && <AIPane />}
+        {/* Footer: Repo / Branch / Code workspace. Same region as TopNav, pushed by the dock. */}
+        <PlatformStatusFooter />
+      </div>
     </div>
   );
 }

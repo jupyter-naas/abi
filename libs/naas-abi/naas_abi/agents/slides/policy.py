@@ -26,8 +26,10 @@ from naas_abi_core.services.agent.context import (
     slides_active_slug,
     slides_brief,
     slides_creation_intent,
+    slides_list_calls,
     slides_research_queries,
     slides_research_required,
+    slides_section_read_indexes,
     slides_writes_completed,
 )
 
@@ -73,10 +75,29 @@ _UNRESEARCHED_WRITE_ERROR = (
 )
 
 MAX_SLIDES_SEARCHES = 4
+MAX_SLIDES_SECTION_READS = 3
 _SEARCH_BUDGET_MESSAGE = (
     "Search budget reached (4 queries). Do not call web_search or web_fetch "
     "again. Call list_slides_sections once, then write the open deck.html in "
     "one write_slides_sections or write_slides_deck. Do not read every section."
+)
+_LIST_ONCE_MESSAGE = (
+    "list_slides_sections already ran this turn. Use that outline. "
+    "Do not list again. Write with write_slides_sections or write_slides_deck."
+)
+_SECTION_READ_BUDGET_MESSAGE = (
+    f"read_slides_section budget reached ({MAX_SLIDES_SECTION_READS} slides "
+    "this turn). Do not read every section. Write the deck with "
+    "write_slides_sections or write_slides_deck, or replace_in_slides_deck "
+    "for one copy edit."
+)
+_SECTION_REREAD_MESSAGE = (
+    "You already read this section this turn. Do not re-read it. "
+    "Write or replace instead."
+)
+_SECTION_READ_AFTER_WRITE_MESSAGE = (
+    "You already wrote this section this turn. Do not re-read it. "
+    "Report what changed, or write a different slide."
 )
 
 
@@ -283,6 +304,7 @@ def bind_slides_research_policy(
             slides_research_required.set(False)
             return False
         slides_writes_completed.set([])
+        _reset_slides_read_budget()
         required = slides_brief_requires_research(message, has_prior_assistant)
         slides_research_required.set(required)
         if required:
@@ -290,11 +312,51 @@ def bind_slides_research_policy(
         return required
     slides_active_slug.set(slug)
     slides_writes_completed.set([])
+    _reset_slides_read_budget()
     required = slides_brief_requires_research(message, has_prior_assistant)
     slides_research_required.set(required)
     if required:
         slides_research_queries.set([])
     return required
+
+
+def _reset_slides_read_budget() -> None:
+    slides_list_calls.set(0)
+    slides_section_read_indexes.set([])
+
+
+def reject_repeat_list_slides_sections() -> dict[str, Any] | None:
+    """Refuse a second list_slides_sections on this turn."""
+    if slides_list_calls.get() >= 1:
+        return {"error": _LIST_ONCE_MESSAGE}
+    return None
+
+
+def note_slides_list() -> None:
+    slides_list_calls.set(slides_list_calls.get() + 1)
+
+
+def reject_slides_section_read(index: int) -> dict[str, Any] | None:
+    """Refuse a re-read, a read after write, or a fourth unique section read."""
+    written = slides_writes_completed.get() or []
+    slide_label = f"slide {index + 1}"
+    if slide_label in written or "full deck" in written:
+        return {"error": _SECTION_READ_AFTER_WRITE_MESSAGE}
+    seen = slides_section_read_indexes.get() or []
+    if index in seen:
+        return {"error": _SECTION_REREAD_MESSAGE}
+    if len(seen) >= MAX_SLIDES_SECTION_READS:
+        return {"error": _SECTION_READ_BUDGET_MESSAGE}
+    return None
+
+
+def note_slides_section_read(index: int) -> None:
+    bucket = slides_section_read_indexes.get()
+    if bucket is None:
+        slides_section_read_indexes.set([index])
+        return
+    if index not in bucket:
+        bucket.append(index)
 
 
 def note_slides_web_search(query: str) -> None:

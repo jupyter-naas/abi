@@ -44,34 +44,38 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
   };
 
   return (
-    <div className="flex flex-col gap-2">
-      <label className="relative block px-1">
-        <Search
-          size={14}
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-        />
+    <div className="flex flex-col">
+      {/* No gap between this and the list below: a flex gap is empty flow
+          space that isn't part of the sticky row's own box, so a scrolled
+          row's label would still be visible passing through it. The search
+          row owns its full covered area (padding, not gap) instead. */}
+      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-background px-3 py-2">
+        <Search size={14} className="shrink-0 opacity-70 text-muted-foreground" />
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search workspaces"
           autoFocus
-          className="w-full border border-border/60 bg-background py-1.5 pl-8 pr-2 text-sm outline-none focus:border-workspace-accent"
+          className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none focus-visible:ring-0 placeholder:text-muted-foreground"
+          aria-label="Search workspaces"
         />
-      </label>
+      </div>
 
-      {listed.length === 0 ? (
-        <p className="px-2 py-2 text-xs text-muted-foreground">No workspaces match</p>
-      ) : (
-        listed.map((workspace) => (
-          <WorkspaceRow
-            key={workspace.id}
-            workspace={workspace}
-            current={workspace.id === currentWorkspaceId}
-            onPick={pick}
-          />
-        ))
-      )}
+      <div className="flex flex-col gap-2">
+        {listed.length === 0 ? (
+          <p className="px-2 py-2 text-xs text-muted-foreground">No workspaces match</p>
+        ) : (
+          listed.map((workspace) => (
+            <WorkspaceRow
+              key={workspace.id}
+              workspace={workspace}
+              current={workspace.id === currentWorkspaceId}
+              onPick={pick}
+            />
+          ))
+        )}
+      </div>
     </div>
   );
 }

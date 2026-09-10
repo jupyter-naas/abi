@@ -43,7 +43,9 @@ abi:Abi a owl:Class ;
     import os
     import re
 
-    from naas_abi_marketplace.domains.operations.modules.ontology_engineer.agents import SevenBucketsAgent
+    from naas_abi_marketplace.domains.operations.modules.ontology_engineer.agents import (
+        SevenBucketsAgent,
+    )
 
     ONTOLOGIES_DIR = SevenBucketsAgent.ONTOLOGIES_DIR
 

@@ -41,7 +41,7 @@ class TestPipelineExpose:
         assert hasattr(pipeline_class, "as_tools"), (
             f"{class_name} must implement as_tools method"
         )
-        method = getattr(pipeline_class, "as_tools")
+        method = pipeline_class.as_tools
         assert callable(method), f"{class_name}.as_tools must be callable"
 
     def test_has_as_api_method(self, class_name, pipeline_class):
@@ -49,5 +49,5 @@ class TestPipelineExpose:
         assert hasattr(pipeline_class, "as_api"), (
             f"{class_name} must implement as_api method"
         )
-        method = getattr(pipeline_class, "as_api")
+        method = pipeline_class.as_api
         assert callable(method), f"{class_name}.as_api must be callable"

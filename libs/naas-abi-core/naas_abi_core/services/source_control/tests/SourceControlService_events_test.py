@@ -86,6 +86,9 @@ class _BlockedMergeAdapter(ISourceControlAdapter):
     def upsert_file(self, **kwargs):
         raise RuntimeError("boom")
 
+    def upsert_files(self, **kwargs):
+        raise RuntimeError("boom")
+
     def list_commits(self, **kwargs) -> list:
         return []
 

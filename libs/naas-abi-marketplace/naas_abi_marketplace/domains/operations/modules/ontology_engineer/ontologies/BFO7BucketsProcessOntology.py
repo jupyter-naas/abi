@@ -1,11 +1,13 @@
 from __future__ import annotations
-from typing import Annotated, Any, ClassVar, List, Optional, Union
-from pydantic import BaseModel, Field
-import uuid
+
 import datetime
 import os
-from rdflib import Graph, URIRef, Literal, Namespace
-from rdflib.namespace import RDF, RDFS, OWL, XSD
+import uuid
+from typing import Annotated, Any, ClassVar
+
+from pydantic import BaseModel, Field
+from rdflib import Graph, Literal, Namespace, URIRef
+from rdflib.namespace import OWL, RDF, RDFS, XSD
 
 BFO = Namespace("http://purl.obolibrary.org/obo/")
 ABI = Namespace("http://ontology.naas.ai/abi/")
@@ -146,53 +148,20 @@ class Process(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_participant: Optional[
-        Annotated[
-            List[Union[MaterialEntity, Quality, URIRef, str]],
-            Field(description="p has participant c =Def c participates in p"),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    occupies_temporal_region: Optional[
-        Annotated[
-            List[Union[TemporalRegion, URIRef, str]],
-            Field(
-                description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    occurs_in: Optional[
-        Annotated[
-            List[Union[Site, URIRef, str]],
-            Field(
-                description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    realizes: Optional[
-        Annotated[
-            List[Union[Disposition, Role, URIRef, str]],
-            Field(
-                description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    has_participant: Annotated[list[MaterialEntity | Quality | URIRef | str], Field(description="p has participant c =Def c participates in p")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    occupies_temporal_region: Annotated[list[TemporalRegion | URIRef | str], Field(description="p occupies temporal region t =Def p is a process or process boundary & the spatiotemporal region occupied by p temporally projects onto t")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    occurs_in: Annotated[list[Site | URIRef | str], Field(description="b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    realizes: Annotated[list[Disposition | Role | URIRef | str], Field(description="(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c")] | None = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class TemporalRegion(RDFEntity):
@@ -212,11 +181,11 @@ class TemporalRegion(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
@@ -251,57 +220,21 @@ class MaterialEntity(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    bearer_of: Optional[
-        Annotated[
-            List[Union[Disposition, Quality, Role, URIRef, str]],
-            Field(description="b bearer of c =Def c inheres in b"),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_member_part: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(description="b has member part c =Def c member part of b"),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    is_carrier_of: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b is carrier of c =Def there is some time t such that c generically depends on b at t"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    located_in: Optional[
-        Annotated[
-            List[Union[Site, URIRef, str]],
-            Field(
-                description="b located in c =Def b is an independent continuant & c is an independent & neither is a spatial region & there is some time t such that the spatial region which b occupies at t is continuant part of the spatial region which c occupies at t"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    material_basis_of: Optional[
-        Annotated[
-            List[Union[Disposition, URIRef, str]],
-            Field(description="b material basis of c =Def c has material basis b"),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    participates_in: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(
-                description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    bearer_of: Annotated[list[Disposition | Quality | Role | URIRef | str], Field(description="b bearer of c =Def c inheres in b")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    has_member_part: Annotated[list[MaterialEntity | URIRef | str], Field(description="b has member part c =Def c member part of b")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    is_carrier_of: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b is carrier of c =Def there is some time t such that c generically depends on b at t")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    located_in: Annotated[list[Site | URIRef | str], Field(description="b located in c =Def b is an independent continuant & c is an independent & neither is a spatial region & there is some time t such that the spatial region which b occupies at t is continuant part of the spatial region which c occupies at t")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    material_basis_of: Annotated[list[Disposition | URIRef | str], Field(description="b material basis of c =Def c has material basis b")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    participates_in: Annotated[list[Process | URIRef | str], Field(description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way")] | None = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class Site(RDFEntity):
@@ -321,11 +254,11 @@ class Site(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
@@ -352,29 +285,17 @@ class GenericallyDependentContinuant(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    generically_depends_on: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    is_concretized_by: Optional[
-        Annotated[
-            List[Union[Disposition, Process, Quality, Role, URIRef, str]],
-            Field(description="c is concretized by b =Def b concretizes c"),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class Quality(RDFEntity):
@@ -401,39 +322,18 @@ class Quality(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    participates_in: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(
-                description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    participates_in: Annotated[list[Process | URIRef | str], Field(description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way")] | None = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class Role(RDFEntity):
@@ -460,37 +360,18 @@ class Role(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    inheres_in: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = ["http://ontology.naas.ai/abi/unknown"]
 
 
 class Disposition(RDFEntity):
@@ -517,37 +398,18 @@ class Disposition(RDFEntity):
     # Data properties
     label: Annotated[str, Field(description="Label of the resource.")]
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    concretizes: Optional[
-        Annotated[
-            List[Union[GenericallyDependentContinuant, URIRef, str]],
-            Field(
-                description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_material_basis: Optional[
-        Annotated[
-            List[Union[MaterialEntity, URIRef, str]],
-            Field(
-                description="b has material basis c =Def b is a disposition & c is a material entity & there is some d bearer of b & there is some time t such that c is a continuant part of d at t & d has disposition b because c is a continuant part of d at t"
-            ),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
-    has_realization: Optional[
-        Annotated[
-            List[Union[Process, URIRef, str]],
-            Field(description="b has realization c =Def c realizes b"),
-        ]
-    ] = ["http://ontology.naas.ai/abi/unknown"]
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    has_material_basis: Annotated[list[MaterialEntity | URIRef | str], Field(description="b has material basis c =Def b is a disposition & c is a material entity & there is some d bearer of b & there is some time t such that c is a continuant part of d at t & d has disposition b because c is a continuant part of d at t")] | None = ["http://ontology.naas.ai/abi/unknown"]
+    has_realization: Annotated[list[Process | URIRef | str], Field(description="b has realization c =Def c realizes b")] | None = ["http://ontology.naas.ai/abi/unknown"]
 
 
 # Rebuild models to resolve forward references

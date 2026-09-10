@@ -109,8 +109,6 @@ Help the user accomplish their human resources tasks using the tools available t
     @classmethod
     def get_pipeline_tools(cls) -> list:
         """Process registration tools (Act of Working, Act of Studying)."""
-        from rdflib import URIRef
-
         from naas_abi_marketplace.domains.personnel import ABIModule
         from naas_abi_marketplace.domains.personnel.pipelines.ActOfStudyingPipeline import (
             ActOfStudyingPipeline,
@@ -120,6 +118,7 @@ Help the user accomplish their human resources tasks using the tools available t
             ActOfWorkingPipeline,
             ActOfWorkingPipelineConfiguration,
         )
+        from rdflib import URIRef
 
         module = ABIModule.get_instance()
         triple_store = module.engine.services.triple_store

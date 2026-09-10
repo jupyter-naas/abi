@@ -12,7 +12,7 @@ Usage:
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, List, Optional, Set, Tuple, cast
+from typing import Annotated, cast
 
 from fastapi import APIRouter
 from langchain_core.tools import BaseTool, StructuredTool
@@ -51,13 +51,13 @@ class EntityResolutionWorkflowParameters(WorkflowParameters):
     """
 
     tbox_paths: Annotated[
-        Optional[List[str]],
+        list[str] | None,
         Field(
             description="Optional list of paths to TBox (schema/classes) Turtle files. If not provided, schema will be loaded from triplestore.",
         ),
     ] = None
     abox_paths: Annotated[
-        Optional[List[str]],
+        list[str] | None,
         Field(
             description="Optional list of paths to ABox (individuals) Turtle files. If not provided, individuals will be loaded from triplestore.",
         ),
@@ -69,13 +69,13 @@ class EntityResolutionWorkflowParameters(WorkflowParameters):
         ),
     ] = 100
     uri_prefix_filter: Annotated[
-        Optional[str],
+        str | None,
         Field(
             description="URI prefix filter for individuals when loading from triplestore.",
         ),
     ] = "http://ontology.naas.ai/abi/"
     limit: Annotated[
-        Optional[int],
+        int | None,
         Field(
             description="Limit the number of individuals to load from triplestore.",
         ),
@@ -92,7 +92,7 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
         self.__configuration = configuration
         self.__triple_store_service = self.__configuration.triple_store
 
-    def _load_schema_from_files(self, tbox_paths: List[str]) -> Graph:
+    def _load_schema_from_files(self, tbox_paths: list[str]) -> Graph:
         """Load schema graph from Turtle files.
 
         Args:
@@ -146,7 +146,7 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
             logger.error(f"Error loading schema from triplestore: {e}")
         return schema_graph
 
-    def _load_individuals_from_files(self, abox_paths: List[str]) -> Graph:
+    def _load_individuals_from_files(self, abox_paths: list[str]) -> Graph:
         """Load individuals graph from Turtle files.
 
         Args:
@@ -168,7 +168,7 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
         return individual_graph
 
     def _load_individuals_from_triplestore(
-        self, uri_prefix_filter: Optional[str] = None, limit: Optional[int] = None
+        self, uri_prefix_filter: str | None = None, limit: int | None = None
     ) -> Graph:
         """Load individuals (owl:NamedIndividual) from triplestore.
 
@@ -209,7 +209,7 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
 
     def get_keys_for_class(
         self, graph: Graph, class_uri: URIRef
-    ) -> Optional[List[Node]]:
+    ) -> list[Node] | None:
         """
         Get the keys (owl:hasKey) for a specific class.
         :param graph: The RDF graph to query.
@@ -240,8 +240,8 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
         return None
 
     def get_keys_for_class_recursive(
-        self, graph: Graph, class_uri: URIRef, visited: Optional[Set[URIRef]] = None
-    ) -> Optional[List[Node]]:
+        self, graph: Graph, class_uri: URIRef, visited: set[URIRef] | None = None
+    ) -> list[Node] | None:
         """
         Recursively get the keys (owl:hasKey) for a specific class, checking parent classes if not found directly.
         :param graph: The RDF graph to query.
@@ -274,7 +274,7 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
 
         return None
 
-    def get_classes_from_individuals_sparql(self, graph: Graph) -> List[URIRef]:
+    def get_classes_from_individuals_sparql(self, graph: Graph) -> list[URIRef]:
         """
         Get the classes (rdf:type values) from the individuals (owl:NamedIndividual) in the graph using a SPARQL query,
         excluding all types that are in the owl: namespace.
@@ -300,8 +300,8 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
         return list(classes)
 
     def resolve_duplicate_entities(
-        self, result_rows: List[ResultRow], similarity_threshold: int = 90
-    ) -> List[Tuple[URIRef, URIRef]]:
+        self, result_rows: list[ResultRow], similarity_threshold: int = 90
+    ) -> list[tuple[URIRef, URIRef]]:
         """
         Efficient entity resolution using business rules and fuzzy matching.
 
@@ -321,8 +321,8 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
         if len(result_rows) < 2:
             return []
 
-        duplicates_to_remove: List[Tuple[URIRef, URIRef]] = []
-        uris_to_remove: Set[URIRef] = set()
+        duplicates_to_remove: list[tuple[URIRef, URIRef]] = []
+        uris_to_remove: set[URIRef] = set()
 
         # Extract URIs and key values from result rows
         entities = []
@@ -420,7 +420,7 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
         classes = self.get_classes_from_individuals_sparql(individual_graph)
         logger.info(f"Found {len(classes)} classes from individuals")
 
-        all_duplicates: List[Tuple[URIRef, URIRef]] = []
+        all_duplicates: list[tuple[URIRef, URIRef]] = []
 
         # Process each class
         for c in classes:
@@ -510,7 +510,6 @@ class EntityResolutionWorkflow(Workflow[EntityResolutionWorkflowParameters]):
     ) -> None:
         if tags is None:
             tags = []
-        return None
 
 
 if __name__ == "__main__":

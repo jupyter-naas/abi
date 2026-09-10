@@ -22,6 +22,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.service import (
     REGENERATION_DIRECTIVE,
     ChatService,
     ResolvedProvider,
+    _render_slides_context_block,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.port import (
     RequestContext,
@@ -1187,6 +1188,61 @@ async def test_build_abi_injection_preamble_includes_open_slides_deck() -> None:
     assert "web_search" in preamble
     assert "start editing immediately" not in preamble
     assert "today:" in preamble
+
+
+@pytest.mark.asyncio
+async def test_build_abi_injection_preamble_namespaces_deck_when_path_omitted() -> None:
+    service = ChatService(adapter=SimpleNamespace())
+    preamble = await service.build_abi_injection_preamble(
+        prior_messages=[SimpleNamespace(role="assistant", content="Hello")],
+        user_id="user-1",
+        workspace_id="ws-894202a3986f",
+        client_context={"slides": {"slug": "untitled-mtsg9zse"}},
+    )
+    assert preamble is not None
+    assert "slides/ws-894202a3986f/untitled-mtsg9zse/deck.html" in preamble
+    assert "slides/untitled-mtsg9zse/deck.html" not in preamble
+
+
+def test_render_slides_context_block_carries_selected_slide() -> None:
+    block = _render_slides_context_block(
+        {"slides": {"slug": "q3-br", "selected_index": 4, "slide_count": 12}},
+        "ws-1",
+    )
+    assert "- slide_count: 12" in block
+    assert "- selected_slide_index: 4 (slide 5 of 12 in the editor)" in block
+    assert "Do not ask which slide" in block
+
+
+def test_render_slides_context_block_accepts_string_indexes() -> None:
+    block = _render_slides_context_block(
+        {"slides": {"slug": "q3-br", "selected_index": "0", "slide_count": "3"}},
+        "ws-1",
+    )
+    assert "- selected_slide_index: 0 (slide 1 of 3 in the editor)" in block
+
+
+def test_render_slides_context_block_drops_out_of_range_selection() -> None:
+    block = _render_slides_context_block(
+        {"slides": {"slug": "q3-br", "selected_index": 9, "slide_count": 3}},
+        "ws-1",
+    )
+    assert "- slide_count: 3" in block
+    assert "- selected_slide_index:" not in block
+
+    block = _render_slides_context_block(
+        {"slides": {"slug": "q3-br", "selected_index": -1}},
+        "ws-1",
+    )
+    assert "- selected_slide_index:" not in block
+    assert "- slide_count:" not in block
+
+
+def test_render_slides_context_block_omits_selection_when_absent() -> None:
+    block = _render_slides_context_block({"slides": {"slug": "q3-br"}}, "ws-1")
+    assert "- selected_slide_index:" not in block
+    assert "- slide_count:" not in block
+    assert "- slug: q3-br" in block
 
 
 @pytest.mark.asyncio

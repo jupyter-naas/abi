@@ -9,6 +9,23 @@ export function slidesDeckConversationPath(slug: string): string {
   return `slides/${slug}/deck.html`;
 }
 
+/** Namespaced Forgejo/sidecar path. Legacy unscoped path is only a fallback. */
+export function slidesOpenDeckPath(workspaceId: string, slug: string): string {
+  const ws = workspaceId.trim();
+  const clean = slug.trim();
+  if (ws && clean) return `slides/${ws}/${clean}/deck.html`;
+  if (clean) return `slides/${clean}/deck.html`;
+  return '';
+}
+
+export function slidesOpenDeckBranch(workspaceId: string, slug: string): string {
+  const ws = workspaceId.trim();
+  const clean = slug.trim();
+  if (ws && clean) return `slides/${ws}/${clean}`;
+  if (clean) return `slides/${clean}`;
+  return '';
+}
+
 const GENERIC_TITLES = new Set(['untitled presentation', 'new conversation', 'new chat']);
 
 function normalizeTitle(value: string): string {

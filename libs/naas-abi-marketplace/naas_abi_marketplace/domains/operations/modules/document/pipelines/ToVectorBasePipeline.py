@@ -185,8 +185,8 @@ class ToVectorBasePipeline(Pipeline):
         for row in results:
             try:
                 if hasattr(row, "fileIRI"):
-                    iri = str(getattr(row, "fileIRI"))
-                    path = str(getattr(row, "path"))
+                    iri = str(row.fileIRI)
+                    path = str(row.path)
                 else:
                     iri = str(row["fileIRI"])  # type: ignore[index]
                     path = str(row["path"])  # type: ignore[index]

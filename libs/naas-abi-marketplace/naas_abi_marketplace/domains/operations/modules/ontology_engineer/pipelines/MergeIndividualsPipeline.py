@@ -272,7 +272,6 @@ class MergeIndividualsPipeline(Pipeline):
     ) -> None:
         if tags is None:
             tags = []
-        return None
 
 
 if __name__ == "__main__":

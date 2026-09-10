@@ -16,6 +16,7 @@ Uses stdlib ``urllib`` (not httpx) to avoid adding a dependency to the core.
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.request
 from typing import Any
@@ -31,10 +32,50 @@ _NO_WORKSPACE = (
     "No coding workspace is connected to this session, so filesystem tools are "
     "unavailable. They only work from inside a coding workspace (the IDE)."
 )
+_DATA_URL_RE = re.compile(
+    r"data:image/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=\s]+",
+    re.IGNORECASE,
+)
+_REDACTED_DATA_URL = "[REDACTED_DATA_URL]"
+_MAX_READ_CHARS = 80_000
 
 # Tool metadata flag: the Agent only binds tools carrying this to the model when
 # a coding workspace is bound to the current request.
 REQUIRES_WORKSPACE_KEY = "requires_coder_workspace"
+
+
+def _sanitize_workspace_read(path: str, result: dict[str, Any]) -> dict[str, Any]:
+    """Keep industry decks out of the model context.
+
+    Generic ``read_file`` has no slides redaction. A PE seed with embedded
+    data-URLs is multi-megabyte; sending it back as a tool result overflows
+    the chat model on the next turn.
+    """
+    content = result.get("content")
+    if not isinstance(content, str):
+        return result
+    redacted, n_assets = _DATA_URL_RE.subn(_REDACTED_DATA_URL, content)
+    if n_assets == 0 and len(redacted) <= _MAX_READ_CHARS:
+        return result
+    out = dict(result)
+    truncated = len(redacted) > _MAX_READ_CHARS
+    if truncated:
+        redacted = redacted[:_MAX_READ_CHARS] + "\n...[truncated]..."
+    out["content"] = redacted
+    notes: list[str] = []
+    if n_assets:
+        notes.append(f"Redacted {n_assets} embedded data-URLs.")
+    if truncated:
+        notes.append(f"Truncated after {_MAX_READ_CHARS} characters.")
+    normalized = path.replace("\\", "/")
+    if "slides/" in normalized and normalized.endswith("deck.html"):
+        notes.append(
+            "This is a slides deck. Call transfer_to_Slides, or use "
+            "list_slides_sections / read_slides_section / write_slides_sections. "
+            "Do not read_file this path again."
+        )
+    out["warning"] = " ".join(notes)
+    return out
 
 
 def _call(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -84,7 +125,7 @@ def workspace_tools() -> list[Tool | BaseTool]:
 
         ``path`` is relative to the project root.
         """
-        return _call("read_file", {"path": path})
+        return _sanitize_workspace_read(path, _call("read_file", {"path": path}))
 
     @tool(return_direct=False)
     def list_dir(path: str = ".") -> dict:

@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   computeSlidesPreviewScale,
+  prepareSlidesCoverHtml,
   readDeckCoverHtml,
   SLIDES_STAGE_HEIGHT,
   SLIDES_STAGE_WIDTH,
 } from './slides-preview-fit';
+import { resolveSlidesPreviewAssets } from './slides-assets';
 import { authFetch } from '@/stores/auth';
 import type { SlidesTemplatePreview } from '@/lib/slides-templates';
 
@@ -56,8 +58,10 @@ async function fetchCoverHtml(workspaceId: string, slug: string): Promise<string
     );
     if (!res.ok) return null;
     const html = await readDeckCoverHtml(res);
-    if (html) COVER_CACHE.set(key, html);
-    return html;
+    if (!html) return null;
+    const resolved = await resolveSlidesPreviewAssets(html, workspaceId, slug);
+    COVER_CACHE.set(key, resolved);
+    return resolved;
   });
   COVER_INFLIGHT.set(key, work);
   try {
@@ -176,6 +180,92 @@ export function SlidesCoverThumb({
           title={`${title} cover`}
           sandbox=""
           srcDoc={coverHtml}
+          className="pointer-events-none block border-0"
+          style={{
+            width: SLIDES_STAGE_WIDTH,
+            height: SLIDES_STAGE_HEIGHT,
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** In-memory 16:9 thumb for one slide. Loads srcDoc when the card is on screen. */
+export function SlidesSlideThumb({
+  html,
+  index,
+  title,
+}: {
+  html: string;
+  index: number;
+  title: string;
+}) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const visibleRef = useRef(false);
+  const [scale, setScale] = useState(1);
+  const [srcDoc, setSrcDoc] = useState<string | null>(null);
+
+  const measure = useCallback(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const { width, height } = host.getBoundingClientRect();
+    setScale(computeSlidesPreviewScale(width, height));
+  }, []);
+
+  useEffect(() => {
+    measure();
+    const host = hostRef.current;
+    if (!host || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(host);
+    return () => ro.disconnect();
+  }, [measure]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host || !html) return;
+    let cancelled = false;
+    const load = () => {
+      visibleRef.current = true;
+      if (cancelled) return;
+      setSrcDoc(prepareSlidesCoverHtml(html, index));
+    };
+    if (visibleRef.current || typeof IntersectionObserver === 'undefined') {
+      load();
+      return () => {
+        cancelled = true;
+      };
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          io.disconnect();
+          load();
+        }
+      },
+      { rootMargin: '160px' },
+    );
+    io.observe(host);
+    return () => {
+      cancelled = true;
+      io.disconnect();
+    };
+  }, [html, index]);
+
+  return (
+    <div
+      ref={hostRef}
+      className="pointer-events-none relative h-full w-full overflow-hidden bg-muted/20"
+      data-testid="slides-slide-thumb"
+    >
+      {srcDoc ? (
+        <iframe
+          title={title}
+          sandbox=""
+          srcDoc={srcDoc}
           className="pointer-events-none block border-0"
           style={{
             width: SLIDES_STAGE_WIDTH,

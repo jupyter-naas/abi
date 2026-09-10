@@ -1,4 +1,6 @@
 const RATE_LIMIT_RE = /error code:\s*429|rate[- ]limited|temporarily rate-limited/i;
+const CONTEXT_WINDOW_RE =
+  /contextwindowexceeded|context window|maximum context length/i;
 const RAW_PROVIDER_RE =
   /encountered an error while processing your request|error code:\s*\d+|provider returned error/i;
 
@@ -6,6 +8,12 @@ const RAW_PROVIDER_RE =
 export function humanizeChatProviderError(content: string): string {
   const raw = (content || '').trim();
   if (!raw) return raw;
+  if (CONTEXT_WINDOW_RE.test(raw)) {
+    return (
+      "This request exceeded the model's context window. " +
+      'Do not load whole files with embedded images, then try again.'
+    );
+  }
   const looksDumped =
     RAW_PROVIDER_RE.test(raw) &&
     (raw.includes('{') || raw.includes("'error'") || raw.includes('"error"') || RATE_LIMIT_RE.test(raw));

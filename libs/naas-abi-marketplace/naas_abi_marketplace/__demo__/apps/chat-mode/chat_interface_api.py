@@ -3,14 +3,16 @@ ABI Chat Interface - API-based version
 Clean, minimal chat interface using the ABI API instead of direct module loading
 """
 
-import streamlit as st
-import requests
 import os
 import re
 from datetime import datetime
 
+import requests
+import streamlit as st
+
 # Load environment
 from dotenv import load_dotenv
+
 load_dotenv()
 
 # Page config
@@ -348,7 +350,7 @@ def load_conversation_from_db(thread_id: str):
         st.error(f"Error loading conversation: {e}")
         st.session_state.messages = [{
             "role": "assistant",
-            "content": f"Error loading conversation thread {thread_id}: {str(e)}",
+            "content": f"Error loading conversation thread {thread_id}: {e!s}",
             "agent": "system",
             "timestamp": datetime.now()
         }]
@@ -406,7 +408,7 @@ def call_abi_api(agent_name: str, prompt: str, thread_id: int = 1) -> dict:
     except requests.exceptions.Timeout:
         return {"success": False, "error": f"⏱️ Timeout calling {agent_name} agent (>2 minutes). The agent might be processing a complex request. Try a simpler question or try again later."}
     except Exception as e:
-        return {"success": False, "error": f"❌ Error: {str(e)}"}
+        return {"success": False, "error": f"❌ Error: {e!s}"}
 
 def process_user_input(user_input: str) -> tuple[str, str]:
     """Process user input and handle @mentions and natural language agent switching"""

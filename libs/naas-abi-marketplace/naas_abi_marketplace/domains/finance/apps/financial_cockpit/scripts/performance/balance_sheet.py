@@ -139,7 +139,7 @@ def _build_records(entity_id: str) -> list[dict]:
     n = len(months)
     for t, (period, scenario_month, scenario_year) in enumerate(months):
         growth = (1.0 + 0.010) ** t
-        noise = lambda: rng.uniform(0.96, 1.04)  # noqa: E731
+        noise = lambda: rng.uniform(0.96, 1.04)
         current_base = unit * growth
 
         fixed = fixed_base * (1.0 + 0.004 * t)

@@ -6,7 +6,7 @@ produced by the MarkdownToVector pipeline.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 from langchain_core.embeddings import Embeddings
@@ -83,7 +83,7 @@ def _build_search_tool(
 ) -> StructuredTool:
     """Create a LangChain StructuredTool that performs vector similarity search."""
 
-    def search_documents(**kwargs: Any) -> List[Dict[str, Any]]:
+    def search_documents(**kwargs: Any) -> list[dict[str, Any]]:
         query: str = kwargs.get("query", "")
         collection_name: str = kwargs.get("collection_name", "documents")
         k: int = kwargs.get("k", 5)
@@ -102,7 +102,7 @@ def _build_search_tool(
                 include_metadata=True,
             )
 
-            formatted: List[Dict[str, Any]] = []
+            formatted: list[dict[str, Any]] = []
             for result in results:
                 meta = result.metadata or {}
                 payload = result.payload or {}
@@ -130,9 +130,9 @@ def _build_search_tool(
 
 
 def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> "DocumentAgent":
+    agent_shared_state: AgentSharedState | None = None,
+    agent_configuration: AgentConfiguration | None = None,
+) -> DocumentAgent:
     from naas_abi_marketplace.domains.operations.modules.document import ABIModule
 
     abi_module = ABIModule.get_instance()
@@ -175,4 +175,3 @@ class DocumentAgent(IntentAgent):
     """Agent that answers questions over ingested and vectorized documents."""
 
     name: str = NAME
-    pass

@@ -48,7 +48,11 @@ SLIDES_GUIDELINES = """- When the user asks for a deck, presentation, or slides 
 - For cover / title / slide 1 edits: call replace_in_slides_deck with section_index=0 and occurrence=0. Never use occurrence=1 for the title (that hits &lt;title&gt;/menubar before the cover &lt;h1&gt; Preview shows). Confirm cover_h1_updated is true in the tool result.
 - Use read_slides_section only when you need the markup of one slide you are about to change surgically. Not as a pre-write ritual.
 - Use write_slides_section only for one targeted slide after the deck already has real copy. Keep .deck / .slide 1280x720, cover h1, and theme CSS variables.
-- Avoid read_slides_deck with include_assets=true. Default reads redact embedded data-URLs on purpose."""
+- Use insert_slide, delete_slide, duplicate_slide, and reorder_slides for structure (add, remove, copy, move). They return {ok, section_index, section_count, ids} and never HTML. Do not dump deck HTML into chat.
+- The system prompt carries selected_slide_index (0-based) when a deck is open: the slide the user is looking at. "This slide", "here", "the current slide", or a slide edit with no number means that index. Never ask which slide.
+- insert_slide(after_index=-1) appends. Pass selected_slide_index as after_index to insert after the current slide. layout is cover, section-divider, or content: clones a skeleton from the open deck when one exists.
+- delete_slide refuses when only one slide remains.
+- Avoid read_slides_deck with include_assets=true. Default reads return an outline (titles, counts), not the HTML."""
 
 
 _HANDOFF_PHRASES = (

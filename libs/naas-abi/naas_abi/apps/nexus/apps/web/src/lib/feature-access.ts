@@ -102,6 +102,14 @@ function pathWithoutQuery(pathname: string): string {
   return pathname.split(/[?#]/)[0];
 }
 
+/** Superadmin Events page: left column shows an events feed, not Chat. */
+export function isWorkspaceAdminEventsPath(pathname: string | null | undefined): boolean {
+  const parts = pathWithoutQuery(pathname || '').split('/').filter(Boolean);
+  const workspaceIndex = parts.indexOf('workspace');
+  if (workspaceIndex < 0) return false;
+  return parts[workspaceIndex + 2] === 'admin' && parts[workspaceIndex + 3] === 'events';
+}
+
 export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null {
   const parts = pathWithoutQuery(pathname).split('/').filter(Boolean);
   const workspaceIndex = parts.indexOf('workspace');

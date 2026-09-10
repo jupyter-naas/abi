@@ -8,4 +8,3 @@ class Mission(_Mission):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass

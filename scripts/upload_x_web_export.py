@@ -1,7 +1,6 @@
 """Upload X Next.js static export to object storage (MinIO)."""
 from __future__ import annotations
 
-import mimetypes
 import sys
 from pathlib import Path
 

@@ -7,6 +7,8 @@ import {
   dropSlidesPaneConversationKeys,
   findSlidesPaneConversationId,
   slidesDeckConversationPath,
+  slidesOpenDeckBranch,
+  slidesOpenDeckPath,
   slidesPaneConversationKey,
 } from './slides-pane-conversation';
 
@@ -31,6 +33,26 @@ describe('slidesPaneConversationKey', () => {
 describe('slidesDeckConversationPath', () => {
   it('matches the pane Editing path', () => {
     expect(slidesDeckConversationPath('materiaux')).toBe('slides/materiaux/deck.html');
+  });
+});
+
+describe('slidesOpenDeckPath', () => {
+  it('namespaces the sidecar path with the workspace id', () => {
+    expect(slidesOpenDeckPath('ws-894202a3986f', 'untitled-mtsg9zse')).toBe(
+      'slides/ws-894202a3986f/untitled-mtsg9zse/deck.html',
+    );
+  });
+
+  it('falls back to the legacy unscoped path without a workspace', () => {
+    expect(slidesOpenDeckPath('', 'untitled-mtsg9zse')).toBe(
+      'slides/untitled-mtsg9zse/deck.html',
+    );
+  });
+});
+
+describe('slidesOpenDeckBranch', () => {
+  it('namespaces the branch with the workspace id', () => {
+    expect(slidesOpenDeckBranch('ws-1', 'q3-br')).toBe('slides/ws-1/q3-br');
   });
 });
 

@@ -9,7 +9,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useFeature } from '@/hooks/use-feature';
-import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
+import { isWorkspaceAdminEventsPath } from '@/lib/feature-access';
+import { isTransientPanelSection, useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFilesStore } from '@/stores/files';
 import { useOntologyStore } from '@/stores/ontology';
 import {
@@ -24,38 +25,39 @@ import {
 import { requestQuickOpen } from '@/lib/quick-open';
 import { isSlidesNestedPath } from './slides-tree';
 import { getWorkspacePath } from './utils';
-import { WorkspaceMark, WorkspaceMarkFrame } from '../workspace-mark';
 import { clearAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
 import { dockShowsLabels } from '@/lib/shell-columns';
 import { ColumnResizeHandle, useColumnResize } from '../column-resize-handle';
 import { DockProfile } from './dock-profile';
+import { WorkspaceSwitcher } from '../workspace-switcher';
 
 type SectionDef = {
   id: SidebarSection;
   icon: React.ReactNode;
   label: string;
+  description: string;
   href: string;
   feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'settings.workspace';
   extraHref?: string;
 };
 
 const SECTIONS: SectionDef[] = [
-  { id: 'home',        icon: <Home size={18} />,          label: 'Home',        href: '/home' },
-  { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        href: '/apps',        feature: 'apps' },
-  { id: 'files',       icon: <Folder size={18} />,        label: 'Files',       href: '/files',       feature: 'files' },
-  { id: 'chat',        icon: <MessageSquare size={18} />, label: 'Chat',        href: '/chat',        feature: 'chat' },
-  { id: 'search',      icon: <Search size={18} />,        label: 'Search',      href: '/search',      feature: 'search' },
-  { id: 'maps',        icon: <MapIcon size={18} />,       label: 'Maps',        href: '/maps',        feature: 'maps' },
-  { id: 'ontology',    icon: <BrainCircuit size={18} />,  label: 'Ontology',    href: '/ontology',    feature: 'ontology' },
-  { id: 'graph',       icon: <Waypoints size={18} />,     label: 'Knowledge Graph', href: '/graph', feature: 'graph' },
-  { id: 'datasets',    icon: <Database size={18} />,      label: 'Datasets',    href: '/datasets',    feature: 'datasets' },
-  { id: 'slides',      icon: <Presentation size={18} />,  label: 'Slides',      href: '/slides',      feature: 'slides' },
-  { id: 'code',        icon: <Code size={18} />,          label: 'Code',        href: '/code',        feature: 'code' },
-  { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', href: '/marketplace', feature: 'marketplace' },
+  { id: 'home',        icon: <Home size={18} />,          label: 'Home',        description: 'Workspace overview and shortcuts',     href: '/home' },
+  { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        description: 'Installed and available apps',          href: '/apps',        feature: 'apps' },
+  { id: 'files',       icon: <Folder size={18} />,        label: 'Files',       description: 'Browse and manage workspace files',     href: '/files',       feature: 'files' },
+  { id: 'chat',        icon: <MessageSquare size={18} />, label: 'Chat',        description: 'Conversations with Abi and your team',  href: '/chat',        feature: 'chat' },
+  { id: 'search',      icon: <Search size={18} />,        label: 'Search',      description: 'Jump to anything in the workspace',     href: '/search',      feature: 'search' },
+  { id: 'maps',        icon: <MapIcon size={18} />,       label: 'Maps',        description: 'Geographic and network presence maps',  href: '/maps',        feature: 'maps' },
+  { id: 'ontology',    icon: <BrainCircuit size={18} />,  label: 'Ontology',    description: 'Explore ontology classes and relations', href: '/ontology',    feature: 'ontology' },
+  { id: 'graph',       icon: <Waypoints size={18} />,     label: 'Knowledge Graph', description: 'Browse the knowledge graph',        href: '/graph', feature: 'graph' },
+  { id: 'datasets',    icon: <Database size={18} />,      label: 'Datasets',    description: 'Manage structured datasets',            href: '/datasets',    feature: 'datasets' },
+  { id: 'slides',      icon: <Presentation size={18} />,  label: 'Slides',      description: 'Create and edit presentation decks',    href: '/slides',      feature: 'slides' },
+  { id: 'code',        icon: <Code size={18} />,          label: 'Code',        description: 'Code editor and repositories',          href: '/code',        feature: 'code' },
+  { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', description: 'Discover and install new apps',          href: '/marketplace', feature: 'marketplace' },
 ];
 
 const BOTTOM_SECTIONS: SectionDef[] = [
-  { id: 'settings', icon: <Settings size={18} />, label: 'Settings', href: '/settings', feature: 'settings.workspace' },
+  { id: 'settings', icon: <Settings size={18} />, label: 'Settings', description: 'Workspace settings and preferences', href: '/settings', feature: 'settings.workspace' },
 ];
 
 const ALL_SECTIONS: SectionDef[] = [...SECTIONS, ...BOTTOM_SECTIONS];
@@ -65,6 +67,13 @@ export function Sidebar() {
   const [draggingId, setDraggingId] = useState<SidebarSection | null>(null);
   const [pressedId, setPressedId] = useState<SidebarSection | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [hoverTip, setHoverTip] = useState<{
+    id: string;
+    label: string;
+    description: string;
+    top: number;
+    left: number;
+  } | null>(null);
   const navRef = useRef<HTMLElement>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -91,9 +100,9 @@ export function Sidebar() {
   const pathname = usePathname();
 
   const {
-    workspaces,
     currentWorkspaceId,
     activePanelSection,
+    lastActivePanelSection,
     setActivePanelSection,
     sidebarNavOrder,
     setSidebarNavOrder,
@@ -150,10 +159,20 @@ export function Sidebar() {
     if (lastReconciledPathRef.current === pathname) return;
     lastReconciledPathRef.current = pathname;
     if (!urlSection) {
+      if (isWorkspaceAdminEventsPath(pathname)) {
+        if (!activePanelSection) {
+          const restore =
+            lastActivePanelSection && !isTransientPanelSection(lastActivePanelSection)
+              ? lastActivePanelSection
+              : 'chat';
+          setActivePanelSection(restore);
+        }
+        return;
+      }
       if (pathname.includes('/admin/')) setActivePanelSection(null);
       return;
     }
-    // Home is a desk, not a column. Only a mark-opened Workspaces panel may stay open.
+    // Home is a desk, not a column. A mark-opened Workspaces panel may stay open.
     if (urlSection.id === 'home') {
       if (useWorkspaceStore.getState().activePanelSection !== 'workspaces') {
         setActivePanelSection(null);
@@ -163,8 +182,6 @@ export function Sidebar() {
     setActivePanelSection(urlSection.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, urlSection]);
-
-  const currentWorkspace = mounted ? workspaces.find((w) => w.id === currentWorkspaceId) || null : null;
 
   const isFeatureEnabled = (feature?: SectionDef['feature']) => {
     if (!feature) return true;
@@ -236,6 +253,7 @@ export function Sidebar() {
   }, [currentWorkspaceId, orderedSections, router]);
 
   const handleSectionClick = (section: SectionDef) => {
+    setHoverTip(null);
     clearAppsSkipRestore();
     if (section.id === 'search') {
       requestQuickOpen();
@@ -311,6 +329,7 @@ export function Sidebar() {
     drag.lastX = clientX;
     drag.lastY = clientY;
     didDragRef.current = true;
+    setHoverTip(null);
     document.body.style.cursor = 'grabbing';
     document.body.style.userSelect = 'none';
     setPressedId(null);
@@ -411,12 +430,23 @@ export function Sidebar() {
     endDragChrome();
   };
 
-  const toggleWorkspacesPanel = () => {
-    setActivePanelSection(activePanelSection === 'workspaces' ? null : 'workspaces');
-  };
-
   const labeled = dockShowsLabels(dockWidth);
   const { isDragging: isResizing, handleDragStart } = useColumnResize(dockWidth, setDockWidth);
+
+  // Collapsed dock has no room for labels, so a hover flyout carries the
+  // section title + description instead of relying on the native title tooltip.
+  const showHoverTip = (section: { id: string; label: string; description: string }, el: HTMLElement) => {
+    if (labeled || draggingId) return;
+    const rect = el.getBoundingClientRect();
+    setHoverTip({
+      id: section.id,
+      label: section.label,
+      description: section.description,
+      top: rect.top + rect.height / 2,
+      left: rect.right + 10,
+    });
+  };
+  const hideHoverTip = () => setHoverTip(null);
 
   const draggingSection = draggingId
     ? orderedSections.find((s) => s.id === draggingId)
@@ -434,50 +464,23 @@ export function Sidebar() {
         style={{ width: dockWidth }}
         aria-label="Dock"
       >
-      <div className="flex h-14 flex-shrink-0 items-center justify-center border-b border-border/50">
-        <button
-          type="button"
-          onClick={toggleWorkspacesPanel}
-          aria-label="Workspaces"
-          aria-expanded={activePanelSection === 'workspaces'}
-          title="Workspaces"
-          className={cn(
-            'flex h-full w-full items-center outline-none focus-visible:ring-0',
-            labeled ? 'gap-3 px-3' : 'justify-center',
-          )}
-        >
-          <WorkspaceMarkFrame
-            backgroundColor={
-              currentWorkspace?.theme?.logoUrl
-                ? undefined
-                : (currentWorkspace?.theme?.primaryColor || '#22c55e')
-            }
-            className="h-10 w-10"
-          >
-            <WorkspaceMark
-              name={currentWorkspace?.name}
-              icon={currentWorkspace?.icon}
-              logoUrl={currentWorkspace?.theme?.logoUrl}
-              logoEmoji={currentWorkspace?.theme?.logoEmoji}
-              letterClassName="text-sm font-bold text-white"
-            />
-          </WorkspaceMarkFrame>
-          {labeled && (
-            <span className="truncate text-sm font-medium text-foreground">
-              {currentWorkspace?.name || 'NEXUS'}
-            </span>
-          )}
-        </button>
-      </div>
+      <WorkspaceSwitcher />
 
       <nav
         ref={navRef}
         className={cn(
-          'flex flex-1 flex-col gap-1 py-3',
-          draggingId ? 'overflow-visible' : 'overflow-y-auto',
+          'flex min-h-0 flex-1 flex-col py-3',
           labeled ? 'px-2' : 'items-center px-2'
         )}
       >
+        {/* Keep overflow on this shrink-wrapped list. A full-height overflow nav seams above Events. */}
+        <div
+          className={cn(
+            'flex max-h-full min-h-0 flex-col gap-1',
+            draggingId ? 'overflow-visible' : 'overflow-y-auto',
+            !labeled && 'items-center',
+          )}
+        >
         {orderedSections.map((section, index) => {
           const active = isSectionActive(section);
           const isDragging = draggingId === section.id;
@@ -496,10 +499,13 @@ export function Sidebar() {
               onPointerMove={onItemPointerMove}
               onPointerUp={(e) => onItemPointerUp(section, e)}
               onPointerCancel={onItemPointerCancel}
-              onPointerEnter={() => {
-                if (section.id === 'search') return;
-                router.prefetch(getDefaultPath(section.id));
+              onPointerEnter={(e) => {
+                if (section.id !== 'search') router.prefetch(getDefaultPath(section.id));
+                showHoverTip(section, e.currentTarget);
               }}
+              onPointerLeave={hideHoverTip}
+              onFocus={(e) => showHoverTip(section, e.currentTarget)}
+              onBlur={hideHoverTip}
               onClick={(e) => {
                 if (didDragRef.current) {
                   e.preventDefault();
@@ -507,7 +513,7 @@ export function Sidebar() {
                   didDragRef.current = false;
                 }
               }}
-              title={!labeled ? section.label : undefined}
+              aria-label={section.label}
               className={cn(
                 'flex items-center rounded-lg touch-none outline-none focus-visible:ring-0',
                 'hover:bg-workspace-accent-10 hover:text-workspace-accent',
@@ -533,25 +539,42 @@ export function Sidebar() {
             </button>
           );
         })}
+        </div>
       </nav>
 
       <nav
         className={cn(
-          'flex flex-shrink-0 flex-col gap-1 border-t border-border/50 py-3',
+          'flex flex-shrink-0 flex-col gap-1 py-3',
           labeled ? 'px-2' : 'items-center px-2'
         )}
       >
         {isSuperadmin && [
-          { key: 'admin-events', href: '/admin/events', label: 'Events', icon: <Activity size={18} /> },
-          { key: 'admin-services', href: '/admin/services', label: 'Services', icon: <Boxes size={18} /> },
+          { key: 'admin-events', href: '/admin/events', label: 'Events', description: 'Recent platform activity', icon: <Activity size={18} /> },
+          { key: 'admin-services', href: '/admin/services', label: 'Services', description: 'Backing service health and status', icon: <Boxes size={18} /> },
         ].map((item) => {
           const base = getWorkspacePath(currentWorkspaceId, item.href);
           const active = pathname.startsWith(base);
           return (
             <button
               key={item.key}
-              onClick={() => { setActivePanelSection(null); router.push(base); }}
-              title={!labeled ? item.label : undefined}
+              onClick={() => {
+                if (item.key === 'admin-events') {
+                  const restore =
+                    activePanelSection
+                    ?? (lastActivePanelSection && !isTransientPanelSection(lastActivePanelSection)
+                      ? lastActivePanelSection
+                      : 'chat');
+                  setActivePanelSection(restore);
+                } else {
+                  setActivePanelSection(null);
+                }
+                router.push(base);
+              }}
+              onPointerEnter={(e) => showHoverTip({ id: item.key, ...item }, e.currentTarget)}
+              onPointerLeave={hideHoverTip}
+              onFocus={(e) => showHoverTip({ id: item.key, ...item }, e.currentTarget)}
+              onBlur={hideHoverTip}
+              aria-label={item.label}
               className={cn(
                 'flex items-center rounded-lg transition-all outline-none focus-visible:ring-0',
                 'hover:bg-workspace-accent-10 hover:text-workspace-accent',
@@ -570,7 +593,11 @@ export function Sidebar() {
             <button
               key={section.id}
               onClick={() => handleSectionClick(section)}
-              title={!labeled ? section.label : undefined}
+              onPointerEnter={(e) => showHoverTip(section, e.currentTarget)}
+              onPointerLeave={hideHoverTip}
+              onFocus={(e) => showHoverTip(section, e.currentTarget)}
+              onBlur={hideHoverTip}
+              aria-label={section.label}
               className={cn(
                 'flex items-center rounded-lg transition-all outline-none focus-visible:ring-0',
                 'hover:bg-workspace-accent-10 hover:text-workspace-accent',
@@ -587,7 +614,7 @@ export function Sidebar() {
 
       <div
         className={cn(
-          'flex flex-shrink-0 flex-col border-t border-border/50 py-2',
+          'flex flex-shrink-0 flex-col py-2',
           labeled ? 'px-2' : 'items-center px-2',
         )}
       >
@@ -616,8 +643,20 @@ export function Sidebar() {
         </div>,
         document.body,
       )}
+
+      {hoverTip && mounted && createPortal(
+        <div
+          role="tooltip"
+          className="pointer-events-none fixed z-[500] w-56 -translate-y-1/2 border border-border bg-background px-3 py-2 shadow-lg"
+          style={{ top: hoverTip.top, left: hoverTip.left }}
+        >
+          <p className="text-sm font-medium text-foreground">{hoverTip.label}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{hoverTip.description}</p>
+        </div>,
+        document.body,
+      )}
     </aside>
-      <ColumnResizeHandle onMouseDown={handleDragStart} label="Drag to resize dock" />
+      <ColumnResizeHandle onMouseDown={handleDragStart} label="Drag to resize dock" isActive={isResizing} />
     </>
   );
 }

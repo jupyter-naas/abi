@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeSlidesPreviewScale,
+  slidesPreviewIndexFromScroll,
+  slidesPreviewScrollTop,
+  applySlidesTextEdits,
+  collectSlidesTextEdits,
+  countSlideSections,
   coverHeroCss,
   deckBufferHasCover,
   extractFirstSlideHtml,
+  extractSlideHtmlAt,
+  isSlidesPreviewMessage,
   prepareSlidesCoverHtml,
   prepareSlidesPreviewHtml,
   readDeckCoverHtml,
+  sanitizeSlidesEditHtml,
   SLIDES_COVER_FIT_STYLE_ID,
   SLIDES_INDUSTRY_STAGE_SCALE,
   SLIDES_PDF_EXPORT_ACK_MS,
@@ -38,6 +46,14 @@ describe('computeSlidesPreviewScale', () => {
   });
 });
 
+describe('slidesPreviewScrollTop', () => {
+  it('maps a selected index to host scroll at the current scale', () => {
+    expect(slidesPreviewScrollTop(0, 0.5)).toBe(0);
+    expect(slidesPreviewScrollTop(2, 0.5)).toBe(2 * SLIDES_STAGE_HEIGHT * 0.5);
+    expect(slidesPreviewIndexFromScroll(SLIDES_STAGE_HEIGHT * 0.5, 0.5)).toBe(1);
+  });
+});
+
 describe('prepareSlidesPreviewHtml', () => {
   it('injects fit CSS and postMessage bridge once', () => {
     const src = '<!doctype html><html><head><title>t</title></head><body><main class="deck"></main></body></html>';
@@ -48,6 +64,18 @@ describe('prepareSlidesPreviewHtml', () => {
     expect(once).toContain('window.buildPptx = buildPptx');
     expect(once).toContain(SLIDES_PREVIEW_MESSAGE_SOURCE);
     expect(once).toContain(`${SLIDES_STAGE_WIDTH}px`);
+    const fitStart = once.indexOf(`id="${SLIDES_PREVIEW_FIT_STYLE_ID}"`);
+    const screenPrintAt = once.indexOf('@media print', fitStart);
+    const screenCss = once.slice(fitStart, screenPrintAt);
+    expect(screenCss).toContain('transform: none !important');
+    expect(screenCss).toContain('margin-left: 0 !important');
+    expect(screenCss).toContain('margin-bottom: 0 !important');
+    expect(screenCss).toContain('.industry-stage');
+    expect(screenCss).toContain(`transform: scale(${SLIDES_INDUSTRY_STAGE_SCALE})`);
+    expect(screenCss).toContain('nexus-slides-manual-edit');
+    expect(once).toContain('set-manual-edit');
+    expect(once).toContain('edit-commit');
+    expect(once).toContain('contenteditable');
     expect(once).toContain('deck-menubar');
     expect(once).toContain('export-pdf');
     expect(once).toContain('window.print');
@@ -65,7 +93,7 @@ describe('prepareSlidesPreviewHtml', () => {
     expect(once).toContain('beforeprint');
     const ackAt = once.indexOf("type: 'export-pdf-result', ok: true");
     const printAt = once.lastIndexOf('window.print()');
-    const timeoutAt = once.indexOf('setTimeout(function ()');
+    const timeoutAt = once.indexOf('setTimeout(function ()', ackAt);
     expect(ackAt).toBeGreaterThan(-1);
     expect(printAt).toBeGreaterThan(ackAt);
     expect(timeoutAt).toBeGreaterThan(ackAt);
@@ -74,6 +102,27 @@ describe('prepareSlidesPreviewHtml', () => {
     expect(SLIDES_PDF_EXPORT_ACK_MS).toBeGreaterThan(0);
     const twice = prepareSlidesPreviewHtml(once);
     expect(twice).toBe(once);
+  });
+
+  it('strips the seed viewport-fit scaler and inlines a small hero', () => {
+    const src =
+      '<!doctype html><html><head></head><body><main class="deck"></main>' +
+      '<script>const IMG = { hero: "data:image/svg+xml,hero" };</script>' +
+      '<script>/* nexus-slides-viewport-fit */\n(function(){ deck.style.transform = "scale(0.3)"; })();\n</script>' +
+      '</body></html>';
+    const out = prepareSlidesPreviewHtml(src);
+    expect(out).not.toMatch(/<script>\s*\/\*\s*nexus-slides-viewport-fit/);
+    expect(out).toContain(':root { --hero: url("data:image/svg+xml,hero"); }');
+  });
+
+  it('waits for every <img> before posting images-ready', () => {
+    const src = '<!doctype html><html><head></head><body><main class="deck"></main></body></html>';
+    const out = prepareSlidesPreviewHtml(src);
+    expect(out).toContain('waitForImages');
+    expect(out).toContain("type: 'images-ready'");
+    const onReadyAt = out.indexOf('function onReady()');
+    const waitForImagesCallAt = out.indexOf('waitForImages().then');
+    expect(waitForImagesCallAt).toBeGreaterThan(onReadyAt);
   });
 
   it('overrides a hardcoded seed buildPptx with the DOM walker', () => {
@@ -146,8 +195,20 @@ describe('prepareSlidesCoverHtml', () => {
     expect(prepareSlidesCoverHtml('<html><body>no slides</body></html>')).toBeNull();
   });
 
+  it('builds a filmstrip thumb for a later slide', () => {
+    const thumb = prepareSlidesCoverHtml(TWO_SLIDE_DECK, 1);
+    expect(thumb).toContain('Agenda');
+    expect(thumb).not.toContain('Cover Title');
+    expect(thumb).toContain(`id="${SLIDES_COVER_FIT_STYLE_ID}"`);
+  });
+
   it('reads a small hero data URL for the cover band', () => {
     expect(coverHeroCss(TWO_SLIDE_DECK)).toContain('data:image/svg+xml,hero');
+  });
+
+  it('allows a relative assets/ hero after seed extraction', () => {
+    const html = 'const IMG = { hero: "assets/img-001.jpg" };';
+    expect(coverHeroCss(html)).toContain('url("assets/img-001.jpg")');
   });
 });
 
@@ -164,6 +225,90 @@ describe('extractFirstSlideHtml', () => {
       '<section class="notes">skip</section><section class="slide cover"><h1>Keep</h1></section>';
     expect(extractFirstSlideHtml(html)).toContain('Keep');
     expect(extractFirstSlideHtml(html)).not.toContain('skip');
+  });
+});
+
+describe('countSlideSections', () => {
+  it('counts slide sections only', () => {
+    expect(countSlideSections(TWO_SLIDE_DECK)).toBe(2);
+    expect(countSlideSections('<section class="notes">x</section>')).toBe(0);
+  });
+});
+
+describe('sanitizeSlidesEditHtml', () => {
+  it('drops script tags, event handlers, and javascript urls', () => {
+    const dirty =
+      'Hello <script>alert(1)</script><img src=x onerror="alert(1)"><a href="javascript:alert(1)">x</a>';
+    const clean = sanitizeSlidesEditHtml(dirty);
+    expect(clean).toContain('Hello');
+    expect(clean).not.toContain('script');
+    expect(clean).not.toContain('onerror');
+    expect(clean).not.toContain('javascript:');
+    expect(clean).not.toContain('<img');
+  });
+
+  it('keeps bold and safe links', () => {
+    expect(sanitizeSlidesEditHtml('A <strong>B</strong>')).toBe('A <strong>B</strong>');
+    expect(sanitizeSlidesEditHtml('<a href="https://example.com">x</a>')).toContain(
+      'href="https://example.com"',
+    );
+  });
+});
+
+describe('isSlidesPreviewMessage', () => {
+  it('accepts a well-formed edit-commit and rejects a loose payload', () => {
+    expect(
+      isSlidesPreviewMessage({
+        source: SLIDES_PREVIEW_MESSAGE_SOURCE,
+        type: 'edit-commit',
+        edits: [{ path: '0:h1:0', html: 'Hi' }],
+      }),
+    ).toBe(true);
+    expect(
+      isSlidesPreviewMessage({
+        source: SLIDES_PREVIEW_MESSAGE_SOURCE,
+        type: 'edit-commit',
+      }),
+    ).toBe(false);
+    expect(
+      isSlidesPreviewMessage({
+        source: SLIDES_PREVIEW_MESSAGE_SOURCE,
+        type: 'ready',
+        height: 720,
+      }),
+    ).toBe(true);
+  });
+});
+
+describe('applySlidesTextEdits', () => {
+  it('writes one heading and leaves the other slide alone', () => {
+    const next = applySlidesTextEdits(TWO_SLIDE_DECK, [
+      { path: '0:h1:0', html: 'New Cover <script>steal()</script>' },
+    ]);
+    expect(next).toContain('New Cover');
+    expect(next).not.toContain('steal()');
+    expect(next).not.toContain('Cover Title');
+    expect(next).toContain('Agenda');
+    expect(collectSlidesTextEdits(TWO_SLIDE_DECK).map((e) => e.path)).toEqual([
+      '0:h1:0',
+      '1:h1:0',
+    ]);
+  });
+
+  it('ignores unknown paths', () => {
+    expect(applySlidesTextEdits(TWO_SLIDE_DECK, [{ path: '9:h1:0', html: 'Nope' }])).toBe(
+      TWO_SLIDE_DECK,
+    );
+  });
+});
+
+describe('extractSlideHtmlAt', () => {
+  it('returns the slide at the filmstrip index', () => {
+    expect(extractSlideHtmlAt(TWO_SLIDE_DECK, 0)).toContain('Cover Title');
+    expect(extractSlideHtmlAt(TWO_SLIDE_DECK, 1)).toContain('Agenda');
+    expect(extractSlideHtmlAt(TWO_SLIDE_DECK, 1)).not.toContain('Cover Title');
+    expect(extractSlideHtmlAt(TWO_SLIDE_DECK, 2)).toBeNull();
+    expect(extractSlideHtmlAt('', 0)).toBeNull();
   });
 });
 

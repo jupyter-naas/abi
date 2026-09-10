@@ -1,4 +1,3 @@
-from typing import Optional
 
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
@@ -102,8 +101,8 @@ The WSR platform fuses the following live data layers:
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
     ) -> "WSRAgent":
 
         from naas_abi_marketplace.domains.intelligence import ABIModule

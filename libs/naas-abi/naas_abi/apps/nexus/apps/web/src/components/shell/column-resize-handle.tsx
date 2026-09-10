@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { cn } from '@/lib/utils';
 
 export function useColumnResize(width: number, setWidth: (next: number) => void) {
   const [isDragging, setIsDragging] = useState(false);
@@ -50,28 +51,35 @@ export function useColumnResize(width: number, setWidth: (next: number) => void)
 export function ColumnResizeHandle({
   onMouseDown,
   label,
+  isActive,
 }: {
   onMouseDown: (e: React.MouseEvent) => void;
   label: string;
+  /**
+   * True while a drag is in progress. A full-screen overlay captures the
+   * cursor during the drag so the pointer is no longer technically "over"
+   * this handle, which drops CSS :hover — so the highlighted state has to be
+   * driven from drag state too, not just group-hover.
+   */
+  isActive?: boolean;
 }) {
   return (
     <div
-      className="group relative flex w-2 shrink-0 cursor-col-resize items-center justify-center"
+      className="group relative flex w-0.5 shrink-0 cursor-col-resize items-center justify-center"
       onMouseDown={onMouseDown}
       title={label}
       aria-label={label}
       role="separator"
       aria-orientation="vertical"
     >
-      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors group-hover:bg-workspace-accent" />
-      <div className="relative z-10 flex flex-col gap-[5px]">
-        {[0, 1, 2, 3, 4].map((i) => (
-          <div
-            key={i}
-            className="h-[3px] w-[3px] rounded-full bg-muted-foreground/40 transition-colors group-hover:bg-workspace-accent"
-          />
-        ))}
-      </div>
+      <div
+        className={cn(
+          'h-full transition-all',
+          isActive
+            ? 'w-0.5 bg-black dark:bg-white'
+            : 'w-px bg-border group-hover:w-0.5 group-hover:bg-black dark:group-hover:bg-white',
+        )}
+      />
     </div>
   );
 }

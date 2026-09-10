@@ -10,6 +10,7 @@ export interface CatalogModel {
   modelId: string;
   provider: string;
   name: string | null;
+  contextWindow?: number | null;
 }
 
 // Re-fetch the catalog at most once every 5 minutes.
@@ -44,11 +45,16 @@ export const useModelsStore = create<ModelsState>()(
               model_id?: string;
               provider?: string;
               name?: string | null;
+              context_window?: number | null;
             }) => ({
               canonicalId: m.canonical_id ?? '',
               modelId: m.model_id ?? '',
               provider: m.provider ?? '',
               name: m.name ?? null,
+              contextWindow:
+                typeof m.context_window === 'number' && Number.isFinite(m.context_window)
+                  ? m.context_window
+                  : null,
             })
           );
           set({ models, lastFetchedAt: Date.now() });

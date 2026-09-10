@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-from typing import Optional
 
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
@@ -221,8 +220,8 @@ Project management:
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
     ) -> "SupportAgent":
         from naas_abi_marketplace.domains.operations.modules.support import ABIModule
 

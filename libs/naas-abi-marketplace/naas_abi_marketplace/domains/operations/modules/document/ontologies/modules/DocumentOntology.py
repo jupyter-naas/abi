@@ -4,14 +4,11 @@ from __future__ import annotations
 import datetime
 import os
 import uuid
+from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
-    Callable,
     ClassVar,
-    Iterable,
-    List,
-    Optional,
     Union,
     get_args,
     get_origin,
@@ -96,7 +93,7 @@ class RDFEntity(BaseModel):
     def _field_expects_list(field_annotation: object) -> bool:
         """Return True when a field annotation contains a list type."""
         origin = get_origin(field_annotation)
-        if origin in (list, List):
+        if origin in (list, list):
             return True
         if origin is Annotated:
             args = get_args(field_annotation)
@@ -343,93 +340,31 @@ class File(RDFEntity):
     }
 
     # Data properties
-    file_path: Optional[
-        Annotated[str, Field(description="The path of the document.")]
-    ] = None
-    file_name: Optional[
-        Annotated[str, Field(description="The name of the document.")]
-    ] = None
-    mime_type: Optional[
-        Annotated[str, Field(description="The MIME type of the document.")]
-    ] = None
-    file_size_bytes: Optional[
-        Annotated[int, Field(description="The size of the document in bytes.")]
-    ] = None
-    created_time: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="The created timestamp of the document."),
-        ]
-    ] = None
-    modified_time: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="The last modified timestamp of the document."),
-        ]
-    ] = None
-    accessed_time: Optional[
-        Annotated[
-            datetime.datetime,
-            Field(description="The last accessed timestamp of the document."),
-        ]
-    ] = None
-    permissions: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The file permissions of the document in Unix-like notation."
-            ),
-        ]
-    ] = None
-    encoding: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The detected character encoding of the document when applicable."
-            ),
-        ]
-    ] = None
-    sha256: Optional[
-        Annotated[
-            str,
-            Field(description="The SHA-256 checksum (hex) of the document content."),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    file_path: Annotated[str, Field(description="The path of the document.")] | None = None
+    file_name: Annotated[str, Field(description="The name of the document.")] | None = None
+    mime_type: Annotated[str, Field(description="The MIME type of the document.")] | None = None
+    file_size_bytes: Annotated[int, Field(description="The size of the document in bytes.")] | None = None
+    created_time: Annotated[datetime.datetime, Field(description="The created timestamp of the document.")] | None = None
+    modified_time: Annotated[datetime.datetime, Field(description="The last modified timestamp of the document.")] | None = None
+    accessed_time: Annotated[datetime.datetime, Field(description="The last accessed timestamp of the document.")] | None = None
+    permissions: Annotated[str, Field(description="The file permissions of the document in Unix-like notation.")] | None = None
+    encoding: Annotated[str, Field(description="The detected character encoding of the document when applicable.")] | None = None
+    sha256: Annotated[str, Field(description="The SHA-256 checksum (hex) of the document content.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    derivedFrom: Optional[
-        Annotated[
-            List[Union[File, URIRef, str]],
-            Field(description="A file is derived from another file."),
-        ]
-    ] = None
-    embodies: Optional[
-        Annotated[
-            List[Union[Document, URIRef, str]],
-            Field(description="A file embodies a document."),
-        ]
-    ] = None
-    hasChunk: Optional[
-        Annotated[
-            List[Union[Chunk, URIRef, str]],
-            Field(description="A file has one or more chunks."),
-        ]
-    ] = None
-    processedBy: Optional[
-        Annotated[
-            List[Union[Processor, URIRef, str]],
-            Field(description="A file is processed by a processor."),
-        ]
-    ] = None
+    derivedFrom: Annotated[list[File | URIRef | str], Field(description="A file is derived from another file.")] | None = None
+    embodies: Annotated[list[Document | URIRef | str], Field(description="A file embodies a document.")] | None = None
+    hasChunk: Annotated[list[Chunk | URIRef | str], Field(description="A file has one or more chunks.")] | None = None
+    processedBy: Annotated[list[Processor | URIRef | str], Field(description="A file is processed by a processor.")] | None = None
 
 
 class Document(RDFEntity):
@@ -449,29 +384,19 @@ class Document(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"isEmbodiedIn"}
 
     # Data properties
-    sha256: Optional[
-        Annotated[
-            str,
-            Field(description="The SHA-256 checksum (hex) of the document content."),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    sha256: Annotated[str, Field(description="The SHA-256 checksum (hex) of the document content.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    isEmbodiedIn: Optional[
-        Annotated[
-            List[Union[File, URIRef, str]],
-            Field(description="A document is embodied in a file."),
-        ]
-    ] = None
+    isEmbodiedIn: Annotated[list[File | URIRef | str], Field(description="A document is embodied in a file.")] | None = None
 
 
 class Processor(RDFEntity):
@@ -489,13 +414,13 @@ class Processor(RDFEntity):
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
@@ -521,58 +446,23 @@ class Chunk(RDFEntity):
     _object_properties: ClassVar[set[str]] = {"isChunkOf"}
 
     # Data properties
-    content: Optional[
-        Annotated[str, Field(description="The text content of a chunk.")]
-    ] = None
-    chunk_index: Optional[
-        Annotated[
-            int,
-            Field(
-                description="The zero-based position of the chunk within its source document."
-            ),
-        ]
-    ] = None
-    embedding_id: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The identifier of the vector embedding stored in the vector store."
-            ),
-        ]
-    ] = None
-    chunk_file_path: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The file path of the source document from which this chunk was derived."
-            ),
-        ]
-    ] = None
-    collection_name: Optional[
-        Annotated[
-            str,
-            Field(
-                description="The name of the vector store collection in which this chunk's embedding is stored."
-            ),
-        ]
-    ] = None
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    content: Annotated[str, Field(description="The text content of a chunk.")] | None = None
+    chunk_index: Annotated[int, Field(description="The zero-based position of the chunk within its source document.")] | None = None
+    embedding_id: Annotated[str, Field(description="The identifier of the vector embedding stored in the vector store.")] | None = None
+    chunk_file_path: Annotated[str, Field(description="The file path of the source document from which this chunk was derived.")] | None = None
+    collection_name: Annotated[str, Field(description="The name of the vector store collection in which this chunk's embedding is stored.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
     ] = datetime.datetime.now()
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    isChunkOf: Optional[
-        Annotated[
-            List[Union[File, URIRef, str]],
-            Field(description="A chunk is derived from a source file."),
-        ]
-    ] = None
+    isChunkOf: Annotated[list[File | URIRef | str], Field(description="A chunk is derived from a source file.")] | None = None
 
 
 # Rebuild models to resolve forward references

@@ -4,18 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Annotated, Optional
+from typing import Annotated
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from pydantic import Field
-from rdflib import Graph, URIRef
-
 from naas_abi_marketplace.domains.personnel.paths import module_graph_name
 from naas_abi_marketplace.domains.personnel.pipelines.utils.graph_builders import (
     PersonnelGraphContext,
 )
+from pydantic import Field
+from rdflib import Graph, URIRef
 
 
 @dataclass
@@ -33,14 +32,14 @@ class ActOfWorkingPipelineParameters(PipelineParameters):
     title: Annotated[str, Field(min_length=1)]
     site: Annotated[str, Field(min_length=1)]
     start: date
-    end: Optional[date] = None
-    duration: Optional[str] = None
+    end: date | None = None
+    duration: str | None = None
     mission_label: Annotated[str, Field(min_length=1)]
     mission: Annotated[str, Field(min_length=1)]
-    contract_type: Optional[str] = None
+    contract_type: str | None = None
     skills: list[str] = []
-    source_url: Optional[str] = None
-    remuneration_amount: Optional[float] = None
+    source_url: str | None = None
+    remuneration_amount: float | None = None
     remuneration_currency: str = "EUR"
 
 

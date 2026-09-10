@@ -144,12 +144,144 @@ def _friendly_model_invoke_error(exc: BaseException) -> str:
             "This model is rate limited. Pick another model in the agent menu and try again."
         )
     if (
+        "contextwindowexceeded" in lowered.replace(" ", "")
+        or "context window" in lowered
+        or "maximum context length" in lowered
+    ):
+        if slides_turn_active():
+            return (
+                "This deck is too large to load in one read. "
+                "Use list_slides_sections and write_slides_sections; "
+                "do not read_file the whole deck.html."
+            )
+        return (
+            "This request exceeded the model's context window. "
+            "Do not load whole files with embedded images, then try again."
+        )
+    if (
         "error code:" in lowered
         or "provider returned error" in lowered
         or (len(text) > 160 and ("{" in text or "'error'" in text or '"error"' in text))
     ):
         return "The model provider failed. Pick another model and try again."
     return text or "The model provider failed. Pick another model and try again."
+
+
+# View-only shrink of prior ToolMessages before invoke. Not Claude Code /compact
+# (that is an LLM summary slash command). This is their microcompact idea:
+# clear old tool dumps so the next API call is smaller. Does not mutate
+# checkpointed state. stream_invoke also caps tool_response frames so the
+# chat meter does not sum a 158K dump.
+_MAX_TOOL_RESULT_CHARS = 8_000
+_OLD_TOOL_RESULT_STUB = (
+    "[Old tool result cleared. Call the tool again if you need the full content.]"
+)
+
+
+def _tool_message_name(message: ToolMessage) -> str:
+    name = getattr(message, "name", None)
+    return name if isinstance(name, str) else ""
+
+
+def _tool_content_chars(content: Any) -> int:
+    if content is None:
+        return 0
+    if isinstance(content, str):
+        return len(content)
+    if isinstance(content, (list, tuple)):
+        return sum(_tool_content_chars(part) for part in content)
+    if isinstance(content, dict):
+        text = content.get("text")
+        if isinstance(text, str):
+            return len(text)
+        return len(json.dumps(content, default=str))
+    return len(str(content))
+
+
+def _truncate_tool_content(content: Any, max_chars: int) -> Any:
+    if isinstance(content, str):
+        if len(content) <= max_chars:
+            return content
+        return content[:max_chars] + "\n...[truncated]..."
+    if _tool_content_chars(content) <= max_chars:
+        return content
+    return _OLD_TOOL_RESULT_STUB
+
+
+def _copy_tool_message(message: ToolMessage, content: Any) -> ToolMessage:
+    kwargs: dict[str, Any] = {
+        "content": content,
+        "tool_call_id": message.tool_call_id,
+    }
+    name = getattr(message, "name", None)
+    if name is not None:
+        kwargs["name"] = name
+    mid = getattr(message, "id", None)
+    if mid is not None:
+        kwargs["id"] = mid
+    extra = getattr(message, "additional_kwargs", None)
+    if extra:
+        kwargs["additional_kwargs"] = dict(extra)
+    return ToolMessage(**kwargs)
+
+
+def compact_old_tool_messages(messages: list[AnyMessage]) -> list[AnyMessage]:
+    """Stub prior-turn ToolMessages; keep last list + last write; cap current-turn size.
+
+    ``transfer_to_*`` results stay as-is (handoff pairing). The last ``list_*``
+    and last ``write_*`` / ``replace_in_*`` stay so the model still sees the
+    current outline and the last successful write. Those two, and any current-
+    turn result, are truncated if they exceed ``_MAX_TOOL_RESULT_CHARS``.
+    """
+    if not messages:
+        return messages
+
+    last_human = -1
+    last_list = -1
+    last_write = -1
+    for i, message in enumerate(messages):
+        if isinstance(message, HumanMessage):
+            last_human = i
+        elif isinstance(message, ToolMessage):
+            name = _tool_message_name(message)
+            if name.startswith("transfer_to_"):
+                continue
+            if name.startswith("list_"):
+                last_list = i
+            elif name.startswith(("write_", "replace_in_")):
+                last_write = i
+
+    changed = False
+    out: list[AnyMessage] = []
+    for i, message in enumerate(messages):
+        if not isinstance(message, ToolMessage):
+            out.append(message)
+            continue
+        name = _tool_message_name(message)
+        if name.startswith("transfer_to_"):
+            out.append(message)
+            continue
+        keep_identity = i == last_list or i == last_write
+        current_turn = i > last_human
+        chars = _tool_content_chars(message.content)
+        if keep_identity or current_turn:
+            if chars <= _MAX_TOOL_RESULT_CHARS:
+                out.append(message)
+                continue
+            out.append(
+                _copy_tool_message(
+                    message,
+                    _truncate_tool_content(message.content, _MAX_TOOL_RESULT_CHARS),
+                )
+            )
+            changed = True
+            continue
+        if chars == 0 or message.content == _OLD_TOOL_RESULT_STUB:
+            out.append(message)
+            continue
+        out.append(_copy_tool_message(message, _OLD_TOOL_RESULT_STUB))
+        changed = True
+    return out if changed else messages
 
 
 def create_checkpointer() -> BaseCheckpointSaver:
@@ -1468,6 +1600,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         # Bedrock (and some other providers) require toolUse.input to be a JSON
         # object. Normalize any prior assistant tool calls before re-sending.
         messages = self._normalize_tool_inputs_in_messages(messages)
+        messages = compact_old_tool_messages(messages)
         logger.debug(f"Messages before calling model: {messages}")
 
         # Calling model. Only expose workspace-gated tools when a coding
@@ -2418,9 +2551,10 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                         "data": str(message.payload.tool_calls[0]["name"]),
                     }
                 elif isinstance(message, ToolResponseEvent):
+                    raw = str(pd.get(message, "payload.content", "NULL"))
                     yield {
                         "event": "tool_response",
-                        "data": str(pd.get(message, "payload.content", "NULL")),
+                        "data": _truncate_tool_content(raw, _MAX_TOOL_RESULT_CHARS),
                     }
                 elif isinstance(message, AIMessageEvent):
                     yield {

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from langchain_core.messages import AnyMessage
 from naas_abi_core.services.agent.Agent import (
     Agent,
@@ -71,9 +69,9 @@ Help the user accomplish their community management tasks using the tools availa
     @classmethod
     def New(
         cls,
-        agent_shared_state: Optional[AgentSharedState] = None,
-        agent_configuration: Optional[AgentConfiguration] = None,
-    ) -> "CommunityManagerAgent":
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+    ) -> CommunityManagerAgent:
         # from naas_abi_marketplace.domains.external import ABIModule
         from naas_abi_core.engine.context import get_default_model_registry
 

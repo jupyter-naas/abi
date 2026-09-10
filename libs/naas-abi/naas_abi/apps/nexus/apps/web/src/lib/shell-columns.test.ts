@@ -7,12 +7,11 @@ import {
   DOCK_WIDTH_MAX,
   DOCK_WIDTH_MIN,
   dockShowsLabels,
-  FEATURE_COLUMN_WIDTH_DEFAULT,
 } from './shell-columns';
 
 describe('clampDockWidth', () => {
-  it('defaults sit at the same width as the feature column', () => {
-    expect(DOCK_WIDTH_DEFAULT).toBe(FEATURE_COLUMN_WIDTH_DEFAULT);
+  it('defaults to the icon-only floor', () => {
+    expect(DOCK_WIDTH_DEFAULT).toBe(DOCK_WIDTH_MIN);
   });
 
   it('clamps to the icon-only floor and the shared ceiling', () => {
@@ -27,8 +26,8 @@ describe('dockShowsLabels', () => {
     expect(dockShowsLabels(DOCK_WIDTH_MIN)).toBe(false);
   });
 
-  it('shows labels at the default width', () => {
-    expect(dockShowsLabels(DOCK_WIDTH_DEFAULT)).toBe(true);
+  it('hides labels at the default (collapsed) width', () => {
+    expect(dockShowsLabels(DOCK_WIDTH_DEFAULT)).toBe(false);
   });
 });
 

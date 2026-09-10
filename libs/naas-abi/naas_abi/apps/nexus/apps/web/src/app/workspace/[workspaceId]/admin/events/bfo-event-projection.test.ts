@@ -3,6 +3,7 @@ import {
   BFO_COLUMNS,
   UNKNOWN,
   projectEventToBfo,
+  projectEventToBfoSources,
   type PlatformEvent,
 } from './bfo-event-projection';
 
@@ -67,6 +68,24 @@ describe('projectEventToBfo', () => {
   it('uses agent_name as material when user_id is absent', () => {
     const buckets = projectEventToBfo(baseEvent({ agent_name: 'ResearchAgent' }));
     expect(buckets.materialEntity).toBe('ResearchAgent');
+  });
+
+  it('lists only the JSON keys that filled each mapped column', () => {
+    const sources = projectEventToBfoSources(
+      baseEvent({
+        _site: 'deploy.example',
+        user_id: 'user-123',
+        status: 'ok',
+        latency_ms: 12,
+      }),
+    );
+    expect(sources.materialEntity).toEqual(['user_id']);
+    expect(sources.process).toEqual(['_class_uri']);
+    expect(sources.site).toEqual(['_site']);
+    expect(sources.ice).toEqual(['_seq']);
+    expect(sources.quality).toEqual(['status', 'latency_ms']);
+    expect(sources.realizable).toBeUndefined();
+    expect(sources.temporalRegion).toEqual(['_stored_at']);
   });
 
   it('uses event URI for ICE when seq is missing', () => {

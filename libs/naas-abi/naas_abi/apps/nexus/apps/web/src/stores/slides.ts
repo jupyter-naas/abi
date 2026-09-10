@@ -16,6 +16,15 @@ export interface SlidesProject {
 
 export type SlidesEditorMode = 'preview' | 'code';
 
+export type SlidesSidebarView = 'decks' | 'filmstrip';
+
+export type SlidesFilmstripDeck = {
+  workspaceId: string;
+  slug: string;
+  html: string;
+  disabled: boolean;
+};
+
 export type SlidesRuntimeStatus =
   | 'idle'
   | 'ensuring'
@@ -36,6 +45,12 @@ export type SlidesDeckSource = 'sidecar' | 'forgejo' | null;
 interface SlidesState {
   selectedSlug: string | null;
   selectedTitle: string | null;
+  sidebarView: SlidesSidebarView;
+  selectedIndex: number;
+  /** Number of slides in the open deck (0 when none is open). Sent to Abi with selectedIndex. */
+  slideCount: number;
+  filmstrip: SlidesFilmstripDeck | null;
+  reorderOpenDeck: ((fromIndex: number, toIndex: number) => void) | null;
   editorMode: SlidesEditorMode;
   runtimeStatus: SlidesRuntimeStatus;
   runtimeDetail: string | null;
@@ -54,6 +69,11 @@ interface SlidesState {
   agentWriting: boolean;
   setSelectedSlug: (slug: string | null) => void;
   setSelectedTitle: (title: string | null) => void;
+  setSidebarView: (view: SlidesSidebarView) => void;
+  setSelectedIndex: (index: number) => void;
+  setSlideCount: (count: number) => void;
+  setFilmstrip: (filmstrip: SlidesFilmstripDeck | null) => void;
+  setReorderOpenDeck: (fn: ((fromIndex: number, toIndex: number) => void) | null) => void;
   setEditorMode: (mode: SlidesEditorMode) => void;
   setRuntimeStatus: (status: SlidesRuntimeStatus, detail?: string | null) => void;
   setRuntimeMeta: (meta: {
@@ -73,6 +93,11 @@ export const useSlidesStore = create<SlidesState>()(
     (set, get) => ({
       selectedSlug: null,
       selectedTitle: null,
+      sidebarView: 'decks',
+      selectedIndex: 0,
+      slideCount: 0,
+      filmstrip: null,
+      reorderOpenDeck: null,
       editorMode: 'preview',
       runtimeStatus: 'idle',
       runtimeDetail: null,
@@ -86,6 +111,11 @@ export const useSlidesStore = create<SlidesState>()(
       agentWriting: false,
       setSelectedSlug: (slug) => set({ selectedSlug: slug }),
       setSelectedTitle: (title) => set({ selectedTitle: title }),
+      setSidebarView: (view) => set({ sidebarView: view }),
+      setSelectedIndex: (index) => set({ selectedIndex: index }),
+      setSlideCount: (count) => set({ slideCount: count }),
+      setFilmstrip: (filmstrip) => set({ filmstrip }),
+      setReorderOpenDeck: (fn) => set({ reorderOpenDeck: fn }),
       setEditorMode: (mode) => set({ editorMode: mode }),
       setRuntimeStatus: (status, detail = null) =>
         set({ runtimeStatus: status, runtimeDetail: detail }),
@@ -116,14 +146,30 @@ export const useSlidesStore = create<SlidesState>()(
       partialize: (s) => ({
         selectedSlug: s.selectedSlug,
         selectedTitle: s.selectedTitle,
+        sidebarView: s.sidebarView,
       }),
     },
   ),
 );
 
+/**
+ * Every backend tool in slides_tools.py that persists a deck change — must
+ * stay in sync with that file's `@tool` defs. Missing one here means a real
+ * edit (e.g. insert_slide) never triggers a Files/version refresh: the
+ * chat-driven write succeeds, but the composer strip goes stale until the
+ * user does something else that happens to match.
+ */
 export function isSlidesWriteTool(rawName: string | null | undefined): boolean {
   const raw = (rawName || '').toLowerCase();
-  return raw.includes('write_slides') || raw.includes('replace_in_slides');
+  return (
+    raw.includes('write_slides') ||
+    raw.includes('replace_in_slides') ||
+    raw.includes('insert_slide') ||
+    raw.includes('delete_slide') ||
+    raw.includes('duplicate_slide') ||
+    raw.includes('reorder_slides') ||
+    raw.includes('create_slides_project')
+  );
 }
 
 export function dispatchSlidesDeckUpdated(detail: SlidesDeckUpdatedDetail = {}) {

@@ -27,6 +27,13 @@ from __future__ import annotations
 from contextvars import ContextVar
 
 agent_user_id: ContextVar[str | None] = ContextVar("agent_user_id", default=None)
+# Display identity for the acting user, alongside agent_user_id. Populated at
+# the same request boundary so tools that commit on the user's behalf (e.g.
+# Slides' upsert_file/upsert_files) can attribute the commit's git author to
+# the real connected user instead of the service account, without a second
+# lookup back to the auth store.
+agent_user_name: ContextVar[str | None] = ContextVar("agent_user_name", default=None)
+agent_user_email: ContextVar[str | None] = ContextVar("agent_user_email", default=None)
 agent_chat_id: ContextVar[str | None] = ContextVar("agent_chat_id", default=None)
 agent_workspace_id: ContextVar[str | None] = ContextVar(
     "agent_workspace_id", default=None
@@ -95,6 +102,14 @@ slides_creation_intent: ContextVar[bool] = ContextVar(
 # The step-limit message uses this so the user hears what finished vs what did not.
 slides_writes_completed: ContextVar[list[str] | None] = ContextVar(
     "slides_writes_completed", default=None
+)
+
+# Per-turn read budget. Qwen ignores "list once, do not read every section"
+# and dumps every slide HTML into the checkpointer. The tools refuse the
+# second list and the fourth unique section read.
+slides_list_calls: ContextVar[int] = ContextVar("slides_list_calls", default=0)
+slides_section_read_indexes: ContextVar[list[int] | None] = ContextVar(
+    "slides_section_read_indexes", default=None
 )
 
 # LangGraph counts every node visit (IntentAgent setup plus call_model +

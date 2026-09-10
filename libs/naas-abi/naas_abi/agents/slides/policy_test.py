@@ -9,13 +9,18 @@ import pytest
 from naas_abi.agents.slides.policy import (
     DEFAULT_SLIDES_MODEL,
     MAX_SLIDES_SEARCHES,
+    MAX_SLIDES_SECTION_READS,
     apply_slides_model_override,
     attach_slides_research_note,
     bind_slides_reasoning,
     bind_slides_research_policy,
     configured_slides_model,
     load_slides_chat_model,
+    note_slides_list,
+    note_slides_section_read,
     note_slides_web_search,
+    reject_repeat_list_slides_sections,
+    reject_slides_section_read,
     reject_unresearched_slides_write,
     resolve_slides_llm_model,
     slides_brief_requires_research,
@@ -25,9 +30,14 @@ from naas_abi.agents.slides.policy import (
     validate_configured_slides_model,
 )
 from naas_abi_core.services.agent.context import (
+    note_slides_write,
     slides_active_slug,
+    slides_brief,
+    slides_list_calls,
     slides_research_queries,
     slides_research_required,
+    slides_section_read_indexes,
+    slides_writes_completed,
 )
 
 
@@ -776,3 +786,79 @@ def test_validate_configured_slides_model_accepts_a_registered_id() -> None:
     would make every possible typo resolve and the check would assert nothing.
     """
     validate_configured_slides_model(_registry_with_slides_model(), "claude-sonnet-5")
+
+
+def test_list_slides_sections_is_once_per_turn() -> None:
+    tokens = (
+        slides_list_calls.set(0),
+        slides_section_read_indexes.set([]),
+        slides_writes_completed.set([]),
+    )
+    try:
+        assert reject_repeat_list_slides_sections() is None
+        note_slides_list()
+        blocked = reject_repeat_list_slides_sections()
+        assert blocked is not None
+        assert "already ran this turn" in blocked["error"]
+    finally:
+        slides_list_calls.reset(tokens[0])
+        slides_section_read_indexes.reset(tokens[1])
+        slides_writes_completed.reset(tokens[2])
+
+
+def test_section_read_budget_is_three_unique_slides() -> None:
+    tokens = (
+        slides_section_read_indexes.set([]),
+        slides_writes_completed.set([]),
+    )
+    try:
+        for index in range(MAX_SLIDES_SECTION_READS):
+            assert reject_slides_section_read(index) is None
+            note_slides_section_read(index)
+        blocked = reject_slides_section_read(MAX_SLIDES_SECTION_READS)
+        assert blocked is not None
+        assert "budget reached" in blocked["error"]
+        assert reject_slides_section_read(0) is not None
+        assert "already read" in reject_slides_section_read(0)["error"]
+    finally:
+        slides_section_read_indexes.reset(tokens[0])
+        slides_writes_completed.reset(tokens[1])
+
+
+def test_section_read_refuses_a_slide_already_written() -> None:
+    tokens = (
+        slides_section_read_indexes.set([]),
+        slides_writes_completed.set([]),
+    )
+    try:
+        note_slides_write("slide 18")
+        blocked = reject_slides_section_read(17)
+        assert blocked is not None
+        assert "already wrote" in blocked["error"]
+        assert reject_slides_section_read(0) is None
+    finally:
+        slides_section_read_indexes.reset(tokens[0])
+        slides_writes_completed.reset(tokens[1])
+
+
+def test_bind_slides_research_policy_resets_the_read_budget() -> None:
+    tokens = (
+        slides_list_calls.set(4),
+        slides_section_read_indexes.set([0, 1, 2]),
+        slides_active_slug.set("untitled-mtsqs99k"),
+        slides_brief.set(None),
+    )
+    try:
+        bind_slides_research_policy(
+            "adapt this deck for Sanofi",
+            has_prior_assistant=True,
+            client_context={"slides": {"slug": "untitled-mtsqs99k"}},
+        )
+        assert slides_list_calls.get() == 0
+        assert slides_section_read_indexes.get() == []
+        assert reject_repeat_list_slides_sections() is None
+    finally:
+        slides_list_calls.reset(tokens[0])
+        slides_section_read_indexes.reset(tokens[1])
+        slides_active_slug.reset(tokens[2])
+        slides_brief.reset(tokens[3])

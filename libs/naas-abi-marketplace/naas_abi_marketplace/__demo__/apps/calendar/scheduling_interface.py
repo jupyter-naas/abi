@@ -4,12 +4,13 @@ Multi-use: Project Manager, HR Manager, Sales Rep, Account Executive, Community 
 Tools: Meeting scheduling, resource booking, deadline tracking, availability management
 """
 
-import streamlit as st
+import calendar
+from datetime import datetime, timedelta
+
+import numpy as np
 import pandas as pd
 import plotly.express as px
-from datetime import datetime, timedelta
-import numpy as np
-import calendar
+import streamlit as st
 
 st.set_page_config(page_title="Scheduling Center", page_icon="📅", layout="wide")
 
@@ -67,7 +68,7 @@ if st.session_state.page == "sop":
     except FileNotFoundError:
         st.error("SOP.md file not found. Please ensure the SOP file exists in the same directory as this interface.")
     except Exception as e:
-        st.error(f"Error loading SOP: {str(e)}")
+        st.error(f"Error loading SOP: {e!s}")
     
     st.stop()  # Stop execution here for SOP page
 

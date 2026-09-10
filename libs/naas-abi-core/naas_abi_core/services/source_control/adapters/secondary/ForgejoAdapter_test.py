@@ -11,6 +11,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     REVIEW_APPROVED,
     AccessDeniedError,
     BranchNameConflictError,
+    FileWrite,
     MergeBlockedError,
     MergeConflictError,
     ProposalNotFoundError,
@@ -123,6 +124,7 @@ def test_get_file_decodes_base64() -> None:
     f = _adapter(session).get_file(repo_id="abi/monorepo", path="README.md", ref="main")
     assert f.text == "# Hello\n"
     assert f.is_binary is False
+    assert f.data == b"# Hello\n"
 
 
 def test_list_repos_maps_search_results() -> None:
@@ -486,3 +488,56 @@ def test_upsert_file_create_race_adopts_existing_blob() -> None:
     assert commit.sha == "def456"
     put = next(c for c in session.calls if c["method"] == "PUT")
     assert put["json"]["sha"] == "blob-created"
+
+
+def test_upsert_files_posts_one_change_files_commit() -> None:
+    ok = FakeResponse(
+        201,
+        {
+            "commit": {
+                "sha": "tree-1",
+                "commit": {
+                    "message": "Seed slides",
+                    "author": {"name": "alice", "date": "2026-09-08T00:00:00Z"},
+                },
+            }
+        },
+    )
+    session = FakeSession(
+        [
+            (
+                "GET",
+                "/repos/abi/monorepo/contents/slides/ws/demo/deck.html",
+                FakeResponse(404, {}, "not found"),
+            ),
+            (
+                "GET",
+                "/repos/abi/monorepo/contents/slides/ws/demo/assets/hero.png",
+                FakeResponse(404, {}, "not found"),
+            ),
+            ("POST", "/repos/abi/monorepo/contents", ok),
+        ]
+    )
+    commit = _adapter(session).upsert_files(
+        repo_id="abi/monorepo",
+        files=(
+            FileWrite(path="slides/ws/demo/deck.html", content="<html></html>"),
+            FileWrite(path="slides/ws/demo/assets/hero.png", content=b"\x89PNG"),
+        ),
+        message="Seed slides",
+        branch="slides/ws/demo",
+        author_name="alice",
+        author_email="alice@example.com",
+    )
+    assert commit.sha == "tree-1"
+    posts = [c for c in session.calls if c["method"] == "POST"]
+    assert len(posts) == 1
+    assert posts[0]["url"].endswith("/contents")
+    body = posts[0]["json"]
+    assert body["message"] == "Seed slides"
+    assert len(body["files"]) == 2
+    assert {item["operation"] for item in body["files"]} == {"create"}
+    assert {item["path"] for item in body["files"]} == {
+        "slides/ws/demo/deck.html",
+        "slides/ws/demo/assets/hero.png",
+    }

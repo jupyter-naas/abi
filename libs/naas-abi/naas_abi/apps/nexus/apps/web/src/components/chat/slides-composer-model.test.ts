@@ -4,7 +4,6 @@ import {
   flattenSlidesComposerFiles,
   slidesComposerFallbackFiles,
   slidesComposerFiles,
-  slidesComposerRuntimeSuffix,
 } from './slides-composer-model';
 
 function tree(over: Partial<SlidesProjectTree> = {}): SlidesProjectTree {
@@ -75,15 +74,5 @@ describe('slidesComposerFiles', () => {
         'slides/untitled-mtrv99t1/deck.html',
       ),
     ).toEqual([]);
-  });
-});
-
-describe('slidesComposerRuntimeSuffix', () => {
-  it('labels a ready workspace and a Forgejo fallback', () => {
-    expect(slidesComposerRuntimeSuffix('ready')).toBe('workspace');
-    expect(slidesComposerRuntimeSuffix('error')).toBe('Forgejo fallback');
-    expect(slidesComposerRuntimeSuffix('degraded')).toBe('Forgejo fallback');
-    expect(slidesComposerRuntimeSuffix('ensuring')).toBe('');
-    expect(slidesComposerRuntimeSuffix(null)).toBe('');
   });
 });

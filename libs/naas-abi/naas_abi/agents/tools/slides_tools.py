@@ -29,12 +29,18 @@ from langchain_core.tools import BaseTool, tool
 from naas_abi.agents.slides import (
     derive_deck_title,
     is_placeholder_deck_title,
+    note_slides_list,
+    note_slides_section_read,
+    reject_repeat_list_slides_sections,
+    reject_slides_section_read,
     reject_unresearched_slides_write,
     resolve_deck_title,
 )
 from naas_abi_core.services.agent.context import (
     agent_chat_id,
+    agent_user_email,
     agent_user_id,
+    agent_user_name,
     agent_workspace_id,
     coder_workspace_base,
     note_slides_write,
@@ -73,6 +79,23 @@ def _get_source_control():
     from naas_abi import ABIModule
 
     return ABIModule.get_instance().engine.services.source_control
+
+
+def _agent_author() -> dict[str, str]:
+    """git author kwargs for the connected user, when the request boundary set
+    them (see agent.context). Adapters accept a plain name/email pair on the
+    commit's author/committer fields directly — no linked Forgejo account
+    required — so an Abi-driven commit attributes to the person who asked for
+    it instead of the service account, same as the REST endpoints that write
+    on the user's behalf (see slides FastAPI adapter's `author_name`/
+    `author_email`). Empty when either half is unset, so upsert_file falls
+    back to its own default identity rather than sending a half author.
+    """
+    name = (agent_user_name.get() or "").strip()
+    email = (agent_user_email.get() or "").strip()
+    if not name or not email:
+        return {}
+    return {"author_name": name, "author_email": email}
 
 
 def _repo_id() -> str:
@@ -132,6 +155,31 @@ def _friendly_sc_error(exc: BaseException) -> str:
 
 def _tool_error(exc: BaseException) -> dict[str, Any]:
     return {"error": _friendly_sc_error(exc)}
+
+
+_CONVENTIONAL_COMMIT_RE = re.compile(
+    r"^(feat|fix|chore|style|refactor|docs|perf)(\([a-z0-9_.-]+\))?!?: .+"
+)
+
+
+def _conventional_message(message: str, *, default_type: str = "chore") -> str:
+    """Coerce a commit message into Conventional Commits so `slides_history`
+    and Forgejo log a real changelog instead of free text per tool call.
+
+    ``default_type`` should reflect what the *calling tool* does (feat for
+    additions like insert/duplicate slide, fix for corrections like
+    replace_in_slides_deck, refactor for restructuring, style for reordering)
+    so an LLM-authored free-text message (no ``type(scope):`` prefix of its
+    own) still lands in the semver bucket the edit actually belongs to,
+    instead of the non-bumping "chore" default. A deck has no public API, so
+    there is no "breaking change" concept here: `_semver_from_commits` keeps
+    major pinned at 0 and treats a `!` breaking marker the same as `feat`
+    (bump minor) — nothing in this module needs to detect breaking changes.
+    """
+    text = (message or "").strip() or "update slides deck"
+    if _CONVENTIONAL_COMMIT_RE.match(text):
+        return text
+    return f"{default_type}(slides): {text}"
 
 
 def _load_seed_deck_html() -> str | None:
@@ -215,8 +263,9 @@ def _ensure_project_json(
             repo_id=repo_id,
             path=paths["project_path"],
             content=json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
-            message=f"Name slides project {slug}",
+            message=f"chore(slides): name project {slug}",
             branch=paths["branch"],
+            **_agent_author(),
         )
     except SourceControlError:
         return stored or title
@@ -508,7 +557,9 @@ def _load_deck_via_forgejo(slug: str) -> str | dict[str, Any]:
     return file.text
 
 
-def _commit_deck_forgejo(slug: str, html: str, message: str) -> dict[str, Any]:
+def _commit_deck_forgejo(
+    slug: str, html: str, message: str, *, default_type: str = "chore"
+) -> dict[str, Any]:
     paths = _ensure_slides_write_paths(slug)
     if paths.get("error"):
         return {"error": paths["error"], "source": "forgejo"}
@@ -518,8 +569,9 @@ def _commit_deck_forgejo(slug: str, html: str, message: str) -> dict[str, Any]:
             repo_id=_repo_id(),
             path=paths["deck_path"],
             content=html,
-            message=message,
+            message=_conventional_message(message, default_type=default_type),
             branch=paths["branch"],
+            **_agent_author(),
         )
     except SourceControlError as exc:
         return {"error": _friendly_sc_error(exc), "source": "forgejo"}
@@ -552,11 +604,20 @@ def _load_deck_text(slug: str) -> tuple[str | dict[str, Any], str]:
     return forgejo, "forgejo"
 
 
-def _persist_deck(slug: str, html: str, message: str) -> dict[str, Any]:
+def _persist_deck(
+    slug: str, html: str, message: str, *, default_type: str = "chore"
+) -> dict[str, Any]:
     """Write editing context (sidecar) then version storage (Forgejo).
 
     Product truth when the slides runtime is up: Coder/sidecar is the live
     editing copy. Forgejo is the commit/history snapshot (Save + dual-write).
+
+    ``default_type`` is the Conventional Commits type this *tool* implies
+    (feat for additions, fix/refactor for edits, ...) — used only when
+    ``message`` is free text without its own ``type(scope):`` prefix, so an
+    LLM-authored descriptive message (e.g. "Update event date on cover
+    slide") still buckets into the right semver bump instead of always
+    falling back to the non-bumping "chore" type.
     """
     sources: list[str] = []
     sidecar_result: dict[str, Any] | None = None
@@ -568,7 +629,7 @@ def _persist_deck(slug: str, html: str, message: str) -> dict[str, Any]:
             # Keep going: Forgejo write still updates version storage.
             sources.append("sidecar-failed")
     try:
-        forgejo = _commit_deck_forgejo(slug, html, message)
+        forgejo = _commit_deck_forgejo(slug, html, message, default_type=default_type)
         if forgejo.get("error"):
             if sidecar_result and sidecar_result.get("ok"):
                 return {
@@ -870,6 +931,48 @@ def _split_sections(html: str) -> tuple[str, list[str], str]:
     return before + lead, sections, inter_suffix + after
 
 
+def _join_sections(prefix: str, sections: list[str], suffix: str) -> str:
+    """Inverse of ``_split_sections``: prefix + sections + suffix."""
+    return prefix + "".join(sections) + suffix
+
+
+_ATTR_LAYOUT_RE = re.compile(r"""\bdata-layout\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
+_DIVIDER_TITLE_RE = re.compile(
+    r"""<div\b[^>]*class=["'][^"']*\bdivider-title\b[^"']*["'][^>]*>(.*?)</div>""",
+    re.IGNORECASE | re.DOTALL,
+)
+_DEFAULT_INSERT_TITLE = "New slide"
+_LAYOUT_ALIASES = {
+    "blank": "content",
+    "divider": "section-divider",
+    "section": "section-divider",
+}
+_KNOWN_LAYOUTS = frozenset({"cover", "section-divider", "content"})
+_LAYOUT_SKELETONS = {
+    "cover": (
+        '<section class="slide cover" data-layout="cover">'
+        '<div class="cover-content">'
+        '<div class="eyebrow">New slide</div>'
+        "<h1>{title}</h1>"
+        '<p class="subtitle">Add a subtitle</p>'
+        "</div></section>"
+    ),
+    "section-divider": (
+        '<section class="slide section-divider" data-layout="section-divider">'
+        '<div class="divider-eyebrow">Section</div>'
+        '<div class="divider-title">{title}</div>'
+        "</section>"
+    ),
+    "content": (
+        '<section class="slide" data-layout="content">'
+        '<div class="eyebrow">Slide</div>'
+        "<h1>{title}</h1>"
+        "<p>Replace this copy.</p>"
+        "</section>"
+    ),
+}
+
+
 def _attach_inter_section_markup(section_parts: list[str]) -> tuple[list[str], str]:
     sections: list[str] = []
     trailing_after_last = ""
@@ -899,6 +1002,9 @@ def _section_meta(index: int, section_html: str) -> dict[str, Any]:
     class_m = _ATTR_CLASS_RE.search(attrs)
     h1_m = _H1_RE.search(section_html)
     title = _strip_tags(h1_m.group(1)) if h1_m else ""
+    if not title:
+        divider_m = _DIVIDER_TITLE_RE.search(section_html)
+        title = _strip_tags(divider_m.group(1)) if divider_m else ""
     redacted, n_assets = _redact_data_urls(section_html)
     return {
         "index": index,
@@ -990,10 +1096,322 @@ def _apply_section_writes(
             str(item["html"]).strip(), sections[resolved_idx]
         )
         written.append(resolved_idx)
-    new_html = prefix + "".join(sections) + suffix
+    new_html = _join_sections(prefix, sections, suffix)
     if _MAIN_RE.search(original) and not _MAIN_RE.search(new_html):
         return {"error": "Refusing to write: reconstructed HTML lost <main>."}
     return new_html, written
+
+
+def _section_id(section_html: str) -> str | None:
+    open_m = _SECTION_OPEN_RE.search(section_html)
+    attrs = open_m.group(1) if open_m else ""
+    id_m = _ATTR_ID_RE.search(attrs)
+    return id_m.group(1) if id_m else None
+
+
+def _normalize_layout(layout: str) -> str | dict[str, str]:
+    name = (layout or "content").strip().lower() or "content"
+    name = _LAYOUT_ALIASES.get(name, name)
+    if name not in _KNOWN_LAYOUTS:
+        return {
+            "error": (
+                f"Unknown layout {layout!r}. Use cover, section-divider, or content."
+            )
+        }
+    return name
+
+
+def _section_layout(section_html: str) -> str:
+    open_m = _SECTION_OPEN_RE.search(section_html)
+    attrs = open_m.group(1) if open_m else ""
+    layout_m = _ATTR_LAYOUT_RE.search(attrs)
+    if layout_m:
+        raw = layout_m.group(1).strip().lower()
+        aliased = _LAYOUT_ALIASES.get(raw, raw)
+        if aliased in _KNOWN_LAYOUTS:
+            return aliased
+    class_m = _ATTR_CLASS_RE.search(attrs)
+    classes = (class_m.group(1) if class_m else "").lower().split()
+    if "cover" in classes:
+        return "cover"
+    if "section-divider" in classes:
+        return "section-divider"
+    return "content"
+
+
+def _find_layout_donor(sections: list[str], layout: str) -> str | None:
+    for sec in sections:
+        if _section_layout(sec) == layout:
+            return sec
+    return None
+
+
+def _next_section_id(sections: list[str]) -> str:
+    used = {sid for sid in (_section_id(s) for s in sections) if sid}
+    n = 1
+    while True:
+        candidate = f"slide-{n:03d}"
+        if candidate not in used:
+            return candidate
+        n += 1
+
+
+def _assign_section_id(section_html: str, new_id: str) -> str:
+    open_m = _SECTION_OPEN_RE.search(section_html)
+    if not open_m:
+        return f'<section id="{new_id}">{section_html}</section>'
+    attrs = open_m.group(1) or ""
+    if _ATTR_ID_RE.search(attrs):
+        new_attrs = _ATTR_ID_RE.sub(f'id="{new_id}"', attrs, count=1)
+    else:
+        new_attrs = f' id="{new_id}"{attrs}'
+    return f"<section{new_attrs}>{section_html[open_m.end() :]}"
+
+
+def _set_section_title(section_html: str, title: str, layout: str) -> str:
+    safe = html_lib.escape(title, quote=False)
+    if layout == "section-divider":
+        match = _DIVIDER_TITLE_RE.search(section_html)
+        if match:
+            return section_html[: match.start(1)] + safe + section_html[match.end(1) :]
+    match = _H1_RE.search(section_html)
+    if match:
+        return section_html[: match.start(1)] + safe + section_html[match.end(1) :]
+    open_m = _SECTION_OPEN_RE.search(section_html)
+    if not open_m:
+        return section_html
+    injection = (
+        f'<div class="divider-title">{safe}</div>'
+        if layout == "section-divider"
+        else f"<h1>{safe}</h1>"
+    )
+    return section_html[: open_m.end()] + injection + section_html[open_m.end() :]
+
+
+def _clone_section(
+    section_html: str, *, new_id: str, title: str | None, layout: str
+) -> str:
+    cloned = _assign_section_id(section_html, new_id)
+    if title:
+        cloned = _set_section_title(cloned, title, layout)
+    return cloned
+
+
+def _catalog_section(layout: str, title: str, new_id: str) -> str:
+    safe = html_lib.escape(title or _DEFAULT_INSERT_TITLE, quote=False)
+    raw = _LAYOUT_SKELETONS[layout].format(title=safe)
+    return _assign_section_id(raw, new_id)
+
+
+def _slide_outline_items(sections: list[str]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for i, sec in enumerate(sections):
+        meta = _section_meta(i, sec)
+        items.append(
+            {
+                "index": i,
+                "id": meta["id"],
+                "title": meta["title"],
+                "layout": _section_layout(sec),
+            }
+        )
+    return items
+
+
+def _mutation_payload(
+    html: str, sections: list[str], section_index: int
+) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "html": html,
+        "section_index": section_index,
+        "section_count": len(sections),
+        "ids": [_section_id(s) for s in sections],
+        "slides": _slide_outline_items(sections),
+    }
+
+
+def _guard_main(original: str, new_html: str) -> dict[str, str] | None:
+    if _MAIN_RE.search(original) and not _MAIN_RE.search(new_html):
+        return {"error": "Refusing to write: reconstructed HTML lost <main>."}
+    return None
+
+
+def _insert_slide_html(
+    html: str,
+    *,
+    after_index: int = -1,
+    layout: str = "content",
+    title: str = "",
+) -> dict[str, Any]:
+    """Insert a slide after ``after_index`` (-1 appends). Never returns to the model."""
+    resolved_layout = _normalize_layout(layout)
+    if isinstance(resolved_layout, dict):
+        return resolved_layout
+    prefix, sections, suffix = _split_sections(html)
+    last = max(0, len(sections) - 1)
+    if after_index < -1 or (sections and after_index >= len(sections)):
+        return {
+            "error": (
+                f"after_index out of range (-1 appends, or 0..{last}; got {after_index})"
+            )
+        }
+    insert_at = len(sections) if after_index == -1 else after_index + 1
+    new_id = _next_section_id(sections)
+    heading = (title or "").strip() or _DEFAULT_INSERT_TITLE
+    donor = _find_layout_donor(sections, resolved_layout)
+    if donor:
+        new_section = _clone_section(
+            donor, new_id=new_id, title=heading, layout=resolved_layout
+        )
+    else:
+        new_section = _catalog_section(resolved_layout, heading, new_id)
+    sections = [*sections[:insert_at], new_section, *sections[insert_at:]]
+    new_html = _join_sections(prefix, sections, suffix)
+    lost = _guard_main(html, new_html)
+    if lost:
+        return lost
+    return _mutation_payload(new_html, sections, insert_at)
+
+
+def _delete_slide_html(html: str, index: int) -> dict[str, Any]:
+    prefix, sections, suffix = _split_sections(html)
+    if not sections:
+        return {"error": "Deck has no slides to delete."}
+    if len(sections) <= 1:
+        return {"error": "Cannot delete the last slide."}
+    if index < 0 or index >= len(sections):
+        return {
+            "error": f"index out of range (0..{len(sections) - 1}; got {index})"
+        }
+    del sections[index]
+    new_html = _join_sections(prefix, sections, suffix)
+    lost = _guard_main(html, new_html)
+    if lost:
+        return lost
+    return _mutation_payload(new_html, sections, min(index, len(sections) - 1))
+
+
+def _duplicate_slide_html(html: str, index: int) -> dict[str, Any]:
+    prefix, sections, suffix = _split_sections(html)
+    if not sections:
+        return {"error": "Deck has no slides to duplicate."}
+    if index < 0 or index >= len(sections):
+        return {
+            "error": f"index out of range (0..{len(sections) - 1}; got {index})"
+        }
+    layout = _section_layout(sections[index])
+    clone = _clone_section(
+        sections[index],
+        new_id=_next_section_id(sections),
+        title=None,
+        layout=layout,
+    )
+    insert_at = index + 1
+    sections = [*sections[:insert_at], clone, *sections[insert_at:]]
+    new_html = _join_sections(prefix, sections, suffix)
+    lost = _guard_main(html, new_html)
+    if lost:
+        return lost
+    return _mutation_payload(new_html, sections, insert_at)
+
+
+def _parse_order_arg(order: Any) -> list[int] | dict[str, str] | None:
+    if order is None or order == "":
+        return None
+    payload = order
+    if isinstance(order, str):
+        try:
+            payload = json.loads(order)
+        except json.JSONDecodeError as exc:
+            return {"error": f"order is not valid JSON: {exc}"}
+    if not isinstance(payload, list) or not payload:
+        return {"error": "order must be a non-empty JSON array of indexes"}
+    parsed: list[int] = []
+    for i, item in enumerate(payload):
+        try:
+            parsed.append(int(item))
+        except (TypeError, ValueError):
+            return {"error": f"order[{i}] must be an integer"}
+    return parsed
+
+
+def _reorder_slides_html(
+    html: str,
+    *,
+    from_index: int | None = None,
+    to_index: int | None = None,
+    order: list[int] | None = None,
+) -> dict[str, Any]:
+    prefix, sections, suffix = _split_sections(html)
+    if not sections:
+        return {"error": "Deck has no slides to reorder."}
+    n = len(sections)
+    if order is not None:
+        if sorted(order) != list(range(n)):
+            return {"error": f"order must be a permutation of 0..{n - 1}"}
+        old = sections
+        sections = [old[i] for i in order]
+        section_index = next((i for i in range(n) if sections[i] is not old[i]), 0)
+        new_html = _join_sections(prefix, sections, suffix)
+        lost = _guard_main(html, new_html)
+        if lost:
+            return lost
+        return _mutation_payload(new_html, sections, section_index)
+    if from_index is None or to_index is None:
+        return {"error": "Provide from_index and to_index, or order."}
+    if from_index < 0 or from_index >= n or to_index < 0 or to_index >= n:
+        return {
+            "error": (
+                f"indexes out of range (0..{n - 1}; "
+                f"from={from_index}, to={to_index})"
+            )
+        }
+    if from_index != to_index:
+        item = sections.pop(from_index)
+        sections.insert(to_index, item)
+    new_html = _join_sections(prefix, sections, suffix)
+    lost = _guard_main(html, new_html)
+    if lost:
+        return lost
+    return _mutation_payload(new_html, sections, to_index)
+
+
+def _run_slide_mutation(
+    slug: str,
+    mutate,
+    message: str,
+    write_label: str,
+    *,
+    default_type: str = "chore",
+) -> dict[str, Any]:
+    """Load, mutate, persist. Strip HTML so the model never sees the deck body."""
+    if not agent_user_id.get():
+        return {"error": "No authenticated user on this agent session."}
+    resolved = _resolve_slug(slug)
+    if isinstance(resolved, dict):
+        return resolved
+    try:
+        original, _source = _load_deck_text(resolved)
+        if isinstance(original, dict):
+            return original
+        mutated = mutate(original)
+        if mutated.get("error"):
+            return {k: v for k, v in mutated.items() if k != "html"}
+        result = _persist_deck(
+            resolved, str(mutated["html"]), message, default_type=default_type
+        )
+        if "error" not in result:
+            note_slides_write(write_label)
+            result["ok"] = True
+            result["section_index"] = mutated["section_index"]
+            result["section_count"] = mutated["section_count"]
+            result["ids"] = mutated["ids"]
+        result.pop("html", None)
+        result.update(_open_deck_note(resolved))
+        return result
+    except Exception as exc:  # noqa: BLE001
+        return _tool_error(exc)
 
 
 def _restore_redacted_data_urls(new_html: str, original_html: str) -> str:
@@ -1013,23 +1431,23 @@ def _restore_redacted_data_urls(new_html: str, original_html: str) -> str:
 
 
 def _view_for_llm(html: str) -> dict[str, Any]:
-    """Compact deck view safe to place in model context."""
+    """Outline-only deck view. Full HTML belongs in one targeted section read."""
     scripts_redacted_html, n_scripts = _redact_scripts(html)
     redacted, n_assets = _redact_data_urls(scripts_redacted_html)
     _prefix, sections, _suffix = _split_sections(html)
     return {
-        "html": redacted,
         "chars": len(html),
         "chars_redacted": len(redacted),
         "section_count": len(sections),
+        "sections": [_section_meta(i, sec) for i, sec in enumerate(sections)],
         "redacted_scripts": n_scripts,
         "redacted_assets": n_assets,
         "note": (
-            "Heavy <script> blocks (assets / export) and data-URLs are redacted. "
-            "Prefer list_slides_sections + replace_in_slides_deck / "
-            "write_slides_section for HTML edits. Do not rewrite the whole file "
-            "or edit buildPptx. Preview is HTML; PPTX is derived at export. "
-            "You are editing the open presentation; do not ask which deck."
+            "Outline only. HTML is omitted on purpose: a 25-slide industry "
+            "deck is ~160k characters and blows the next model call. "
+            "Read at most 3 sections, then write with write_slides_sections "
+            "or write_slides_deck. Do not edit buildPptx. Preview is HTML; "
+            "PPTX is derived at export."
         ),
     }
 
@@ -1077,8 +1495,9 @@ def slides_tools() -> list[BaseTool]:
                 repo_id=repo_id,
                 path=paths["deck_path"],
                 content=_seed_deck_with_title(seed, clean_title),
-                message=f"Create slides project {slug}",
+                message=f"feat(slides): create {slug}",
                 branch=paths["branch"],
+                **_agent_author(),
             )
 
             # Become the active deck for the rest of this conversation.
@@ -1188,6 +1607,9 @@ def slides_tools() -> list[BaseTool]:
         """
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
+        blocked = reject_repeat_list_slides_sections()
+        if blocked:
+            return blocked
         resolved = _resolve_slug(slug)
         if isinstance(resolved, dict):
             return resolved
@@ -1196,6 +1618,7 @@ def slides_tools() -> list[BaseTool]:
             if isinstance(html, dict):
                 return html
             _prefix, sections, _suffix = _split_sections(html)
+            note_slides_list()
             return {
                 **_open_deck_note(resolved),
                 "slug": resolved,
@@ -1231,6 +1654,10 @@ def slides_tools() -> list[BaseTool]:
             resolved_idx = _resolve_section_index(sections, index, section_id)
             if isinstance(resolved_idx, dict):
                 return resolved_idx
+            blocked = reject_slides_section_read(resolved_idx)
+            if blocked:
+                return blocked
+            note_slides_section_read(resolved_idx)
             section_html = sections[resolved_idx]
             redacted, n_assets = _redact_data_urls(section_html)
             meta = _section_meta(resolved_idx, section_html)
@@ -1257,7 +1684,7 @@ def slides_tools() -> list[BaseTool]:
         slug: str = "",
         index: int | None = None,
         section_id: str | None = None,
-        message: str = "Update slides section via Abi",
+        message: str = "refactor(slides): rewrite section via Abi",
     ) -> dict[str, Any]:
         """Replace one slide. For a full-deck rewrite, use write_slides_sections.
 
@@ -1291,7 +1718,10 @@ def slides_tools() -> list[BaseTool]:
                 return applied
             new_html, written = applied
             result = _persist_deck(
-                resolved, new_html, message or "Update slides section via Abi"
+                resolved,
+                new_html,
+                message or "refactor(slides): rewrite section via Abi",
+                default_type="refactor",
             )
             if "error" not in result and written:
                 result["section_index"] = written[0]
@@ -1305,7 +1735,7 @@ def slides_tools() -> list[BaseTool]:
     def write_slides_sections(
         sections: str,
         slug: str = "",
-        message: str = "Update slides sections via Abi",
+        message: str = "refactor(slides): rewrite sections via Abi",
     ) -> dict[str, Any]:
         """Replace several slides in one persist. Use this for a full-deck rewrite.
 
@@ -1337,7 +1767,10 @@ def slides_tools() -> list[BaseTool]:
                 return applied
             new_html, written = applied
             result = _persist_deck(
-                resolved, new_html, message or "Update slides sections via Abi"
+                resolved,
+                new_html,
+                message or "refactor(slides): rewrite sections via Abi",
+                default_type="refactor",
             )
             if "error" not in result and written:
                 labels = [f"slide {idx + 1}" for idx in written]
@@ -1357,7 +1790,7 @@ def slides_tools() -> list[BaseTool]:
         occurrence: int = 0,
         section_index: int | None = None,
         section_id: str | None = None,
-        message: str = "Replace text in slides deck via Abi",
+        message: str = "fix(slides): replace text via Abi",
     ) -> dict[str, Any]:
         """Surgically replace a string in the open deck without dumping full HTML in chat.
 
@@ -1408,7 +1841,10 @@ def slides_tools() -> list[BaseTool]:
                 return applied
             updated, count, replaced, resolved_section = applied
             result = _persist_deck(
-                resolved, updated, message or "Replace text in slides deck via Abi"
+                resolved,
+                updated,
+                message or "fix(slides): replace text via Abi",
+                default_type="fix",
             )
             if "error" not in result:
                 label = (
@@ -1467,11 +1903,12 @@ def slides_tools() -> list[BaseTool]:
 
     @tool
     def read_slides_deck(slug: str = "", include_assets: bool = False) -> dict[str, Any]:
-        """Read the HTML deck for a Slides project slug.
+        """Read a compact outline of the HTML deck (titles, counts, no HTML).
 
-        Omit slug when a deck is open. By default, heavy scripts and embedded
-        data-URLs are redacted. Prefer list_slides_sections / read_slides_section /
-        replace_in_slides_deck for edits.
+        Omit slug when a deck is open. Default omits the file body: a 25-slide
+        industry deck is ~160k characters. Prefer list_slides_sections, then
+        write. Set include_assets=true only if you must see scripts or
+        embedded images (that path can exceed the model context window).
         """
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
@@ -1510,7 +1947,7 @@ def slides_tools() -> list[BaseTool]:
     def write_slides_deck(
         html: str,
         slug: str = "",
-        message: str = "Update slides deck via Abi",
+        message: str = "refactor(slides): rewrite deck via Abi",
     ) -> dict[str, Any]:
         """Write the full HTML deck. Prefer this or write_slides_sections for a whole-deck brief.
 
@@ -1550,7 +1987,10 @@ def slides_tools() -> list[BaseTool]:
                 _restore_redacted_data_urls(html, original) if original else html
             )
             result = _persist_deck(
-                resolved, content, message or "Update slides deck via Abi"
+                resolved,
+                content,
+                message or "refactor(slides): rewrite deck via Abi",
+                default_type="refactor",
             )
             if "error" not in result:
                 note_slides_write("full deck")
@@ -1558,6 +1998,97 @@ def slides_tools() -> list[BaseTool]:
             return result
         except Exception as exc:  # noqa: BLE001
             return _tool_error(exc)
+
+    @tool
+    def insert_slide(
+        after_index: int = -1,
+        layout: str = "content",
+        title: str = "",
+        slug: str = "",
+        message: str = "feat(slides): insert slide via Abi",
+    ) -> dict[str, Any]:
+        """Insert a slide after after_index. after_index=-1 appends.
+
+        layout is cover, section-divider, or content. Clones a matching
+        skeleton from the open deck when one exists; otherwise a tiny catalog
+        stub. Returns {ok, section_index, section_count, ids}. Never HTML.
+        """
+        return _run_slide_mutation(
+            slug,
+            lambda html: _insert_slide_html(
+                html, after_index=after_index, layout=layout, title=title
+            ),
+            message or "feat(slides): insert slide via Abi",
+            "insert slide",
+            default_type="feat",
+        )
+
+    @tool
+    def delete_slide(
+        index: int,
+        slug: str = "",
+        message: str = "refactor(slides): delete slide via Abi",
+    ) -> dict[str, Any]:
+        """Delete the slide at index. Refuses when it is the last slide.
+
+        Returns {ok, section_index, section_count, ids}. Never HTML.
+        """
+        return _run_slide_mutation(
+            slug,
+            lambda html: _delete_slide_html(html, index),
+            message or "refactor(slides): delete slide via Abi",
+            f"delete slide {index + 1}",
+            default_type="refactor",
+        )
+
+    @tool
+    def duplicate_slide(
+        index: int,
+        slug: str = "",
+        message: str = "feat(slides): duplicate slide via Abi",
+    ) -> dict[str, Any]:
+        """Duplicate the slide at index and insert the copy after it.
+
+        Returns {ok, section_index, section_count, ids}. Never HTML.
+        """
+        return _run_slide_mutation(
+            slug,
+            lambda html: _duplicate_slide_html(html, index),
+            message or "feat(slides): duplicate slide via Abi",
+            f"duplicate slide {index + 1}",
+            default_type="feat",
+        )
+
+    @tool
+    def reorder_slides(
+        from_index: int = 0,
+        to_index: int = 0,
+        order: str = "",
+        slug: str = "",
+        message: str = "style(slides): reorder slides via Abi",
+    ) -> dict[str, Any]:
+        """Move a slide from from_index to to_index, or pass order as a JSON index list.
+
+        Returns {ok, section_index, section_count, ids}. Never HTML.
+        """
+        parsed = _parse_order_arg(order)
+        if isinstance(parsed, dict):
+            return parsed
+
+        def _mutate(html: str) -> dict[str, Any]:
+            if parsed is not None:
+                return _reorder_slides_html(html, order=parsed)
+            return _reorder_slides_html(
+                html, from_index=from_index, to_index=to_index
+            )
+
+        return _run_slide_mutation(
+            slug,
+            _mutate,
+            message or "style(slides): reorder slides via Abi",
+            "reorder slides",
+            default_type="style",
+        )
 
     @tool
     def slides_history(slug: str = "", limit: int = 10) -> dict[str, Any]:
@@ -1601,5 +2132,9 @@ def slides_tools() -> list[BaseTool]:
         replace_in_slides_deck,
         read_slides_deck,
         write_slides_deck,
+        insert_slide,
+        delete_slide,
+        duplicate_slide,
+        reorder_slides,
         slides_history,
     ]

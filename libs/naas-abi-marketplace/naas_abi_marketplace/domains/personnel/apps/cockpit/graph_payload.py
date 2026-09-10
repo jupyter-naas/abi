@@ -17,10 +17,11 @@ pull Site up to distance 1 and collapse the layering above.
 
 from __future__ import annotations
 
-from naas_abi_marketplace.domains.personnel.utils.individual_uri import compact_personnel
-
 from naas_abi_marketplace.domains.personnel.apps.cockpit.process_class_catalog import (
     build_process_class_catalog,
+)
+from naas_abi_marketplace.domains.personnel.utils.individual_uri import (
+    compact_personnel,
 )
 
 PERSONNEL_NS = "http://ontology.naas.ai/personnel/"

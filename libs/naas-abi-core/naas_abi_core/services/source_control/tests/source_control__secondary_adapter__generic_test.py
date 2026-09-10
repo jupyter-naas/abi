@@ -10,6 +10,7 @@ REQUIRED_METHODS = (
     "list_contents",
     "get_file",
     "upsert_file",
+    "upsert_files",
     "list_commits",
     "list_branches",
     "create_branch",

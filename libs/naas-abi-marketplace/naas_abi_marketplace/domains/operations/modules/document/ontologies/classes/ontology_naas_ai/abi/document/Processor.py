@@ -8,4 +8,3 @@ class Processor(_Processor):
 
     def actions(self):
         """Action method - implement your logic here"""
-        pass
