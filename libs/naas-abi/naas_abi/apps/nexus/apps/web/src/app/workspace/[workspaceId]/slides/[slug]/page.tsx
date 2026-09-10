@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
+import { MonacoEditor } from '@/components/monaco/monaco-editor';
 import { Header } from '@/components/shell/header';
 import {
   isSlidesTypingTarget,
@@ -45,7 +45,6 @@ import {
   useSlidesStore,
   type SlidesDeckUpdatedDetail,
 } from '@/stores/slides';
-import { useWorkspaceStore } from '@/stores/workspace';
 import { cn } from '@/lib/utils';
 
 function isGitWriteRaceDetail(detail: string): boolean {
@@ -169,15 +168,6 @@ async function ensureSlidesRuntime(
     environment_id: lastMeta.environment_id ?? null,
   };
 }
-
-const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-      Loading editor…
-    </div>
-  ),
-});
 
 export default function SlidesEditorPage() {
   const params = useParams();
@@ -867,10 +857,6 @@ export default function SlidesEditorPage() {
                 setDirty(true);
               }}
               onMount={(editor, monaco) => {
-                // Monaco defaults ⌘K to a chord starter; route it to the Abi pane.
-                editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, () => {
-                  useWorkspaceStore.getState().toggleContextPanel();
-                });
                 // Override Monaco save / browser-reload chords for Slides.
                 editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
                   void saveRef.current();

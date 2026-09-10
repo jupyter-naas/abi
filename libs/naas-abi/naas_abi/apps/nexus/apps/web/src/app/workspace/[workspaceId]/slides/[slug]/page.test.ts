@@ -14,5 +14,7 @@ describe('slides editor page', () => {
     expect(src).toContain('onDuplicateSlide');
     expect(src).toContain('onDeleteSlide');
     expect(src).toContain('onExportHtml');
+    expect(src).toContain("from '@/components/monaco/monaco-editor'");
+    expect(src).not.toContain('@monaco-editor/react');
   });
 });
