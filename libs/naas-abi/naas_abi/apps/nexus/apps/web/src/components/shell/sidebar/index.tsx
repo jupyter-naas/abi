@@ -160,9 +160,11 @@ export function Sidebar() {
       if (pathname.includes('/admin/')) setActivePanelSection(null);
       return;
     }
-    // Home is a desk, not a column.
+    // Home is a desk, not a column. A mark-opened Workspaces panel may stay open.
     if (urlSection.id === 'home') {
-      setActivePanelSection(null);
+      if (useWorkspaceStore.getState().activePanelSection !== 'workspaces') {
+        setActivePanelSection(null);
+      }
       return;
     }
     setActivePanelSection(urlSection.id);

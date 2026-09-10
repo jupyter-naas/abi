@@ -1,10 +1,9 @@
 'use client';
 
-import { useMemo, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { ExternalLink, GitBranch, RefreshCw } from 'lucide-react';
 import { ApiStatusIndicator } from '@/components/shell/api-status-indicator';
-import { useAuthStore } from '@/stores/auth';
 import { useCodeStore } from '@/stores/code';
 import { useFilesStore } from '@/stores/files';
 import { usePlatformStatusStore } from '@/stores/platform-status';
@@ -82,17 +81,12 @@ function Slot({
  * Global platform status footer, mounted once by WorkspaceLayout spanning
  * the full app width (same glass chrome as TopNav) instead of once per
  * main column.
- * Left: User / Business workspace / Repo / Branch / Code workspace [/ dirty]
+ * Left: Repo / Branch / Code workspace [/ dirty]
  * Right: Refresh + API health
- *
- * Terminology: see parent-app docs/ux/business-vs-code-workspace.md
  */
 export function PlatformStatusFooter() {
   const pathname = usePathname() || '';
   const router = useRouter();
-  const user = useAuthStore((s) => s.user);
-  const workspaces = useWorkspaceStore((s) => s.workspaces);
-  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const fetchWorkspaces = useWorkspaceStore((s) => s.fetchWorkspaces);
 
   const onRefresh = usePlatformStatusStore((s) => s.onRefresh);
@@ -126,16 +120,6 @@ export function PlatformStatusFooter() {
   const isSlides = pathname.includes('/slides');
   const isCode = pathname.includes('/code') || pathname.includes('/ide');
   const pathRepo = parseCodeRepoFromPath(pathname);
-
-  const currentWorkspace = useMemo(
-    () => workspaces.find((w) => w.id === currentWorkspaceId),
-    [workspaces, currentWorkspaceId],
-  );
-
-  const userLabel = user?.name?.trim() || user?.email?.trim() || null;
-
-  // Product "Workspace" in Nexus = Business Workspace name (not Coder).
-  const businessWorkspaceLabel = currentWorkspace?.name?.trim() || null;
 
   const slidesBranch =
     forgejoBranch || (selectedSlug ? `slides/${selectedSlug}` : null);
@@ -239,22 +223,6 @@ export function PlatformStatusFooter() {
       data-platform-status-footer="true"
     >
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
-        <Slot label="User" value={userLabel || NA} title={user?.email || undefined} />
-        <span className="text-border/80" aria-hidden>
-          /
-        </span>
-        <Slot
-          label="Business workspace"
-          value={businessWorkspaceLabel || NA}
-          title={
-            currentWorkspace
-              ? `Business workspace: ${currentWorkspace.name} (${currentWorkspace.id})`
-              : 'Business workspace (Nexus collaboration space)'
-          }
-        />
-        <span className="text-border/80" aria-hidden>
-          /
-        </span>
         <Slot label="Repo" value={repo || NA} mono title="Forgejo / git repository" />
         <span className="text-border/80" aria-hidden>
           /

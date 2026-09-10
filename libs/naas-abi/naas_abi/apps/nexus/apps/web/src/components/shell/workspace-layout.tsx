@@ -402,7 +402,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
           {contextPanelOpen && <AIPane />}
         </div>
 
-        {/* Footer: User / Business workspace / Repo / Branch / Code workspace. Same region as TopNav, pushed by the dock. */}
+        {/* Footer: Repo / Branch / Code workspace. Same region as TopNav, pushed by the dock. */}
         <PlatformStatusFooter />
       </div>
     </div>

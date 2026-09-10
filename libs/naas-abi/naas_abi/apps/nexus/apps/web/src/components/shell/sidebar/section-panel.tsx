@@ -58,6 +58,10 @@ const SettingsSection = dynamic(() => import('./settings-section').then((m) => m
   ssr: false,
   loading: sectionLoading,
 });
+const WorkspacesSection = dynamic(
+  () => import('./workspaces-section').then((m) => m.WorkspacesSection),
+  { ssr: false, loading: sectionLoading },
+);
 
 function SectionContent({ section }: { section: SidebarSection }) {
   const canMaps = useFeature('maps');
@@ -83,6 +87,7 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'apps' && canApps) return <AppsSection collapsed={false} detailOnly />;
   if (section === 'marketplace' && canMarketplace) return <MarketplaceSection collapsed={false} detailOnly />;
   if (section === 'settings') return <SettingsSection collapsed={false} detailOnly />;
+  if (section === 'workspaces') return <WorkspacesSection />;
   return null;
 }
 
@@ -103,14 +108,14 @@ export function SectionPanel() {
       {isDragging && <div className="fixed inset-0 z-50 cursor-col-resize" />}
       <div
         className={cn(
-          'glass flex flex-col border-r border-border/50 overflow-hidden flex-shrink-0',
+          'glass flex h-full min-h-0 flex-col overflow-hidden border-r border-border/50 flex-shrink-0',
           !isDragging && 'transition-[width] duration-300',
           !isOpen && 'w-0 border-r-0'
         )}
         style={isOpen ? { width: sectionPanelWidth } : undefined}
       >
         {isOpen && activePanelSection && (
-          <nav className="flex-1 overflow-y-auto p-2">
+          <nav className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
             <SectionContent section={activePanelSection} />
           </nav>
         )}
