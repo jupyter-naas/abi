@@ -1,0 +1,15 @@
+{
+  "templates": [
+    {
+      "id": "article-light-v1",
+      "name": "Article Light",
+      "description": "Clean prose document with cover and content sections.",
+      "preview": {
+        "bg": "#f7f6f3",
+        "panel": "#ffffff",
+        "accent": "#1a1a1a",
+        "ink": "#1a1a1a"
+      }
+    }
+  ]
+}

@@ -198,6 +198,7 @@ async def stream_chat_response(
     if request.workspace_id:
         from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
             pick_workspace_chat_agent_id,
+            pick_workspace_documents_agent_id,
             pick_workspace_slides_agent_id,
         )
 
@@ -210,6 +211,7 @@ async def stream_chat_response(
         resolved_agent = pick_workspace_chat_agent_id(
             workspace_agents, request.agent
         )
+        from naas_abi.agents.documents.policy import open_documents_slug
         from naas_abi.agents.slides.policy import open_slides_slug
 
         slides_agent = None
@@ -217,8 +219,15 @@ async def stream_chat_response(
             request.context if isinstance(request.context, dict) else None
         ):
             slides_agent = pick_workspace_slides_agent_id(workspace_agents)
+        documents_agent = None
+        if open_documents_slug(
+            request.context if isinstance(request.context, dict) else None
+        ):
+            documents_agent = pick_workspace_documents_agent_id(workspace_agents)
         if slides_agent:
             resolved_agent = slides_agent
+        elif documents_agent:
+            resolved_agent = documents_agent
         if resolved_agent and resolved_agent != request.agent:
             logger.info(
                 "Rewriting chat agent %s -> %s for workspace %s",
@@ -287,6 +296,9 @@ async def stream_chat_response(
                     agent_workspace_id,
                     coder_workspace_base,
                     coder_workspace_secret,
+                    documents_active_mode,
+                    documents_active_slug,
+                    documents_active_title,
                     slides_active_mode,
                     slides_active_slug,
                     slides_active_title,
@@ -300,10 +312,12 @@ async def stream_chat_response(
                 if request.workspace_id is not None:
                     agent_workspace_id.set(str(request.workspace_id))
 
-                # Bind open Slides deck + its Coder sidecar so SlidesAgent tools
-                # act on workspace files (Continue-parity) without asking which deck.
+                # Bind open Slides deck or Documents file + Coder sidecar.
                 client_ctx = request.context if isinstance(request.context, dict) else {}
                 slides_ctx = client_ctx.get("slides") if isinstance(client_ctx, dict) else None
+                documents_ctx = (
+                    client_ctx.get("documents") if isinstance(client_ctx, dict) else None
+                )
                 open_slug = ""
                 if isinstance(slides_ctx, dict):
                     open_slug = str(slides_ctx.get("slug") or "").strip()
@@ -315,10 +329,19 @@ async def stream_chat_response(
                             slides_active_title.set(title)
                         if mode:
                             slides_active_mode.set(mode)
+                open_document_slug = ""
+                if isinstance(documents_ctx, dict):
+                    open_document_slug = str(documents_ctx.get("slug") or "").strip()
+                    if open_document_slug:
+                        documents_active_slug.set(open_document_slug)
+                        title = str(documents_ctx.get("title") or "").strip()
+                        mode = str(documents_ctx.get("mode") or "").strip()
+                        if title:
+                            documents_active_title.set(title)
+                        if mode:
+                            documents_active_mode.set(mode)
 
-                # Arm the research gate for both surfaces. With no deck open
-                # this also flags a deck requested from the main chat, so the
-                # agent gets a slides-sized step budget.
+                from naas_abi.agents.documents import bind_documents_research_policy
                 from naas_abi.agents.slides import bind_slides_research_policy
 
                 has_prior_assistant = any(
@@ -326,6 +349,11 @@ async def stream_chat_response(
                     for m in (request.messages or [])
                 )
                 bind_slides_research_policy(
+                    request.message,
+                    has_prior_assistant,
+                    client_ctx,
+                )
+                bind_documents_research_policy(
                     request.message,
                     has_prior_assistant,
                     client_ctx,
@@ -350,6 +378,27 @@ async def stream_chat_response(
                         logger.warning(
                             "Failed to bind slides sidecar for %s",
                             open_slug,
+                            exc_info=True,
+                        )
+                elif open_document_slug and request.workspace_id:
+                    try:
+                        from naas_abi.apps.nexus.apps.api.app.services.documents.adapters.primary.documents__primary_adapter__FastAPI import (
+                            lookup_documents_sidecar,
+                        )
+
+                        ws_base, ws_secret = await lookup_documents_sidecar(
+                            db,
+                            workspace_id=str(request.workspace_id),
+                            user_id=str(current_user.id),
+                            slug=open_document_slug,
+                        )
+                        if ws_base and ws_secret:
+                            coder_workspace_base.set(ws_base)
+                            coder_workspace_secret.set(ws_secret)
+                    except Exception:
+                        logger.warning(
+                            "Failed to bind documents sidecar for %s",
+                            open_document_slug,
                             exc_info=True,
                         )
 

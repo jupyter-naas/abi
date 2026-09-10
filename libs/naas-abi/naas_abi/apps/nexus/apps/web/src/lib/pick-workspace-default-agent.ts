@@ -38,3 +38,24 @@ export function pickSlidesOfficeAgent<T extends SlidesOfficeAgent>(
   const slides = agents.find((agent) => agent.enabled && isNexusSlidesAgent(agent));
   return slides ?? pickWorkspaceDefaultAgent(agents);
 }
+
+type DocumentsOfficeAgent = {
+  enabled?: boolean;
+  isDefault?: boolean;
+  name?: string;
+  class_name?: string | null;
+};
+
+function isNexusDocumentsAgent(agent: DocumentsOfficeAgent): boolean {
+  if (agent.name === 'Documents') return true;
+  const className = agent.class_name ?? '';
+  return className.endsWith('/DocumentsAgent') && className.includes('naas_abi');
+}
+
+/** Nexus Documents when the workspace listed it, else the workspace default. */
+export function pickDocumentsOfficeAgent<T extends DocumentsOfficeAgent>(
+  agents: T[],
+): T | undefined {
+  const documents = agents.find((agent) => agent.enabled && isNexusDocumentsAgent(agent));
+  return documents ?? pickWorkspaceDefaultAgent(agents);
+}

@@ -12,6 +12,7 @@ export type FeatureKey =
   | 'datasets'
   | 'code'
   | 'slides'
+  | 'documents'
   | 'settings'
   | 'settings.workspace'
   | 'settings.organization';
@@ -32,6 +33,7 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'datasets',
   'code',
   'slides',
+  'documents',
   'settings',
   'settings.workspace',
   'settings.organization',
@@ -45,8 +47,8 @@ const OPT_IN_FEATURES: FeatureKey[] = ['code'];
 const DEFAULT_ROLE_BASELINE: Record<string, FeatureKey[]> = {
   owner: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
   admin: FEATURE_KEYS.filter((f) => !OPT_IN_FEATURES.includes(f)),
-  member: ['maps', 'chat', 'files', 'datasets', 'skills', 'slides'],
-  viewer: ['maps', 'chat', 'files', 'datasets', 'skills', 'slides'],
+  member: ['maps', 'chat', 'files', 'datasets', 'skills', 'slides', 'documents'],
+  viewer: ['maps', 'chat', 'files', 'datasets', 'skills', 'slides', 'documents'],
 };
 
 const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
@@ -63,6 +65,7 @@ const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
   datasets: '/datasets',
   code: '/code',
   slides: '/slides',
+  documents: '/documents',
   settings: '/settings',
   'settings.workspace': '/settings',
   'settings.organization': '/organization',
@@ -144,6 +147,9 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   }
   if (firstSegment === 'slides') {
     return 'slides';
+  }
+  if (firstSegment === 'documents') {
+    return 'documents';
   }
   if (firstSegment === 'apps') {
     return 'apps';

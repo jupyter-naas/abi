@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="nexus-documents-template" content="article-light-v1" />
+<title>Document Title</title>
+<style>
+  :root {
+    --bg: #f7f6f3;
+    --panel: #ffffff;
+    --ink: #1a1a1a;
+    --muted: #5c5c5c;
+    --accent: #1a1a1a;
+    --line: #e4e2dc;
+  }
+  * { box-sizing: border-box; font-family: "IBM Plex Sans", "Segoe UI", Arial, sans-serif; }
+  body { margin: 0; background: var(--bg); color: var(--ink); }
+  .document { max-width: 816px; margin: 0 auto; padding: 48px 24px 96px; }
+  .page {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 48px 56px;
+    margin-bottom: 24px;
+    min-height: 400px;
+  }
+  h1 { margin: 0 0 12px; font-size: 32px; line-height: 1.2; }
+  h2 { margin: 0 0 10px; font-size: 22px; }
+  p { margin: 0 0 14px; font-size: 16px; line-height: 1.6; color: var(--muted); }
+  ul { margin: 0 0 14px; padding-left: 22px; color: var(--muted); }
+  li { margin: 6px 0; line-height: 1.5; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<main class="document">
+  <section class="page cover">
+    <div class="eyebrow">Document</div>
+    <h1>Document Title</h1>
+    <p>Subtitle or one-line summary goes here.</p>
+  </section>
+  <section class="page content">
+    <h2>Introduction</h2>
+    <p>Start writing your document here. Replace this placeholder copy with your content.</p>
+  </section>
+  <section class="page content">
+    <h2>Section</h2>
+    <p>Add sections as needed. The Documents agent can research and rewrite the whole file.</p>
+    <ul>
+      <li>Point one</li>
+      <li>Point two</li>
+      <li>Point three</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
