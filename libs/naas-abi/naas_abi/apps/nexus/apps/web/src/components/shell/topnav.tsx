@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { PanelLeft, PanelRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { isWorkspaceAdminEventsPath } from '@/lib/feature-access';
 import { useWorkspaceStore, isTransientPanelSection } from '@/stores/workspace';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { TOPNAV_HEIGHT } from '@/lib/shell-columns';
@@ -22,6 +24,8 @@ import { getWorkspacePath } from './sidebar/utils';
  */
 export function TopNav() {
   const isMobile = useIsMobile();
+  const pathname = usePathname();
+  const onEventsAdmin = isWorkspaceAdminEventsPath(pathname);
   const { nav, actions } = useTopNavContent();
   const [mounted, setMounted] = useState(false);
 
@@ -50,9 +54,13 @@ export function TopNav() {
       : 'chat';
 
   const sectionTitleOpen = mounted && activePanelSection !== null;
-  const panelTitle = activePanelSection ? SECTION_LABELS[activePanelSection] : '';
+  const panelTitle = onEventsAdmin
+    ? 'Events'
+    : activePanelSection
+      ? SECTION_LABELS[activePanelSection]
+      : '';
   const panelHref =
-    activePanelSection && SECTION_HOME_HREF[activePanelSection]
+    !onEventsAdmin && activePanelSection && SECTION_HOME_HREF[activePanelSection]
       ? getWorkspacePath(currentWorkspaceId, SECTION_HOME_HREF[activePanelSection])
       : null;
 
@@ -78,7 +86,9 @@ export function TopNav() {
                 {panelTitle}
               </Link>
             ) : (
-              <span className="truncate text-sm font-semibold">{panelTitle}</span>
+              <span data-testid="section-panel-title" className="truncate text-sm font-semibold">
+                {panelTitle}
+              </span>
             )}
           </div>
         )}

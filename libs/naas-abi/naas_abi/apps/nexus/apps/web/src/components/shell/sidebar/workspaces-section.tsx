@@ -49,7 +49,7 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
           space that isn't part of the sticky row's own box, so a scrolled
           row's label would still be visible passing through it. The search
           row owns its full covered area (padding, not gap) instead. */}
-      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-popover px-3 py-2">
+      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-background px-3 py-2">
         <Search size={14} className="shrink-0 opacity-70 text-muted-foreground" />
         <input
           type="search"

@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.21.5 (2026-09-10)
+
+### Bug Fixes
+
+- Make check errors
+  ([`b625142`](https://github.com/jupyter-naas/abi/commit/b625142be94d315fe6afe4cbc5e8180237079a9f))
+
+
 ## v2.21.4 (2026-09-08)
 
 ### Bug Fixes

@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.34.0 (2026-09-10)
+
+### Bug Fixes
+
+- Make check errors
+  ([`b625142`](https://github.com/jupyter-naas/abi/commit/b625142be94d315fe6afe4cbc5e8180237079a9f))
+
+### Features
+
+- **slides**: Attribute commits to connected user
+  ([`85cbd61`](https://github.com/jupyter-naas/abi/commit/85cbd61657cc77d01a074e86ac1fb4f9b419ade3))
+
+
 ## v2.33.0 (2026-09-08)
 
 ### Features

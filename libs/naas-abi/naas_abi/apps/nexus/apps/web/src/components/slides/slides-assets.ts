@@ -1,15 +1,33 @@
 import { authFetch } from '@/stores/auth';
 
-/** Relative deck asset, as stored in ``deck.html`` after seed extraction. */
-export const SLIDES_ASSET_REF_RE = /(?:(?:\.\.\/)+|\.\/)?assets\/[A-Za-z0-9._-]+/g;
+/**
+ * Relative ``assets/<file.ext>`` only, as stored in ``deck.html`` after seed
+ * extraction. The lookbehind rejects ``https://host/assets/images/logo.png``
+ * (a leading ``/``), which the old one-segment matcher treated as filename
+ * ``images`` and 404'd on GET /assets/images.
+ */
+export const SLIDES_ASSET_REF_RE =
+  /(?<![/\w])(?:(?:\.\.\/)+|\.\/)?assets\/[A-Za-z0-9][A-Za-z0-9._-]*\.[A-Za-z0-9]{1,8}/g;
 
-export function collectSlidesAssetRefs(html: string): string[] {
-  if (!html) return [];
-  return [...new Set(html.match(SLIDES_ASSET_REF_RE) || [])];
-}
+const SLIDES_ASSET_FILENAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 export function slidesAssetFilename(ref: string): string {
   return ref.replace(/^(?:(?:\.\.\/)+|\.\/)/, '').replace(/^assets\//, '');
+}
+
+export function isSlidesAssetFilename(filename: string): boolean {
+  return (
+    SLIDES_ASSET_FILENAME_RE.test(filename) &&
+    filename.includes('.') &&
+    !filename.includes('/')
+  );
+}
+
+export function collectSlidesAssetRefs(html: string): string[] {
+  if (!html) return [];
+  return [...new Set(html.match(SLIDES_ASSET_REF_RE) || [])].filter((ref) =>
+    isSlidesAssetFilename(slidesAssetFilename(ref)),
+  );
 }
 
 export function rewriteSlidesAssetUrls(
@@ -47,7 +65,9 @@ export async function inlineSlidesAssets(
   const map = new Map<string, string>();
   await Promise.all(
     refs.map(async (ref) => {
-      const dataUrl = await load(slidesAssetFilename(ref));
+      const filename = slidesAssetFilename(ref);
+      if (!isSlidesAssetFilename(filename)) return;
+      const dataUrl = await load(filename);
       if (dataUrl) map.set(ref, dataUrl);
     }),
   );
@@ -60,6 +80,7 @@ export async function loadSlidesAssetDataUrl(
   slug: string,
   filename: string,
 ): Promise<string | null> {
+  if (!isSlidesAssetFilename(filename)) return null;
   const res = await authFetch(slidesAssetApiPath(slug, workspaceId, filename));
   if (!res.ok) return null;
   return blobToDataUrl(await res.blob());

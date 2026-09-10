@@ -23,12 +23,49 @@ describe('buildSlidesEditMenu', () => {
       'sep-history',
       'duplicate',
       'delete',
+      'sep-manual-edit',
+      'manual-edit',
     ]);
     expect(items[0].disabled).toBe(true);
     expect(items[1].disabled).toBe(true);
     expect(items[3].label).toBe('Duplicate Slide');
     expect(items[4].label).toBe('Delete Slide');
     expect(items[4].shortcut).toBe('Del');
+    expect(items[6].label).toBe('Manual edit');
+    expect(items[6].checked).toBe(false);
+    expect(items[6].disabled).toBe(true);
+  });
+
+  it('checks Manual edit when on and toggles on click', () => {
+    const onManualEditChange = vi.fn();
+    const on = buildSlidesEditMenu({
+      canDuplicate: true,
+      canDelete: true,
+      mod: '⌘',
+      onDuplicate: vi.fn(),
+      onDelete: vi.fn(),
+      manualEdit: true,
+      canManualEdit: true,
+      onManualEditChange,
+    });
+    const item = on.find((entry) => entry.id === 'manual-edit');
+    expect(item?.checked).toBe(true);
+    expect(item?.disabled).toBe(false);
+    item?.onSelect?.();
+    expect(onManualEditChange).toHaveBeenCalledWith(false);
+
+    const off = buildSlidesEditMenu({
+      canDuplicate: true,
+      canDelete: true,
+      mod: '⌘',
+      onDuplicate: vi.fn(),
+      onDelete: vi.fn(),
+      manualEdit: false,
+      canManualEdit: true,
+      onManualEditChange,
+    });
+    off.find((entry) => entry.id === 'manual-edit')?.onSelect?.();
+    expect(onManualEditChange).toHaveBeenCalledWith(true);
   });
 
   it('disables Delete Slide on the last slide', () => {
@@ -94,6 +131,7 @@ describe('SlidesMenuBar', () => {
     expect(html).toContain('Insert');
     expect(html).toContain('data-testid="slides-menu-edit"');
     expect(html).toContain('data-testid="slides-menu-insert"');
+    expect(html).not.toContain('data-testid="slides-manual-edit-toggle"');
   });
 
   it('still shows Edit, View and Insert (disabled) on index-style pages', () => {

@@ -2,6 +2,69 @@
 
 <!-- version list -->
 
+## v2.65.0 (2026-09-10)
+
+### Bug Fixes
+
+- **quick-open**: Simplify quick open UI and update dependencies
+  ([`c2577e2`](https://github.com/jupyter-naas/abi/commit/c2577e291cc348688adcca61f88d04624591212c))
+
+- **shell**: Drop User/Business from the footer and open Workspaces in the column
+  ([`957a8b0`](https://github.com/jupyter-naas/abi/commit/957a8b075279df83f74d89dafa02b4de59545e51))
+
+- **slides**: Ignore preview edit-commit unless Manual edit is on
+  ([`2b67cc7`](https://github.com/jupyter-naas/abi/commit/2b67cc7fce241831aa113dd4378ca7ca7a0da490))
+
+### Features
+
+- **chat**: Add suggestions block above composer input
+  ([`35ee33e`](https://github.com/jupyter-naas/abi/commit/35ee33e50a946d5a40349d2f48d292db1dabaac9))
+
+- **chat**: Integrate files block and update chat interface UI
+  ([`4e7d36a`](https://github.com/jupyter-naas/abi/commit/4e7d36ab085232f0692a36664eceabb73bc53295))
+
+- **chat**: Update chat-agent-selector styles and presentation info block
+  ([`5f17875`](https://github.com/jupyter-naas/abi/commit/5f178750f0f9d015a60abaca9ed4b8583897a128))
+
+- **events**: Add a JSON and BFO graph canvas
+  ([`3e2c36d`](https://github.com/jupyter-naas/abi/commit/3e2c36d48c4bea06cc0b3828bcb80e9af571a8d6))
+
+- **events**: Move the events feed into the left column
+  ([`a346087`](https://github.com/jupyter-naas/abi/commit/a34608756de0ecd0d198d103d1ff4990f2ba1ea1))
+
+- **nexus**: Share Monaco between Slides Code and Events JSON
+  ([`063e60d`](https://github.com/jupyter-naas/abi/commit/063e60d679c11049b6e0096ac5856ce4bf70c25d))
+
+- **shell**: Add column resize handle component and improve chat pane UI
+  ([`b0960f1`](https://github.com/jupyter-naas/abi/commit/b0960f11c4d6e788be27035e81cf2d9c06f39fc2))
+
+- **shell**: Integrate topnav content provider and update header
+  ([`7aec8e7`](https://github.com/jupyter-naas/abi/commit/7aec8e761f02522304cce13ac07cffbac7b12a51))
+
+- **shell**: Update platform status footer and sidebar behavior
+  ([`b26a2fc`](https://github.com/jupyter-naas/abi/commit/b26a2fcecacc1250904c6167add7b33f9528b168))
+
+- **slides**: Attribute commits to connected user
+  ([`85cbd61`](https://github.com/jupyter-naas/abi/commit/85cbd61657cc77d01a074e86ac1fb4f9b419ade3))
+
+- **slides**: Fix asset matching and preview editing
+  ([`d9a879a`](https://github.com/jupyter-naas/abi/commit/d9a879ab05384ad5fe08fd6c3a9b452765ddf307))
+
+- **slides**: Track cumulative 0.x semver per commit in history
+  ([`50653bc`](https://github.com/jupyter-naas/abi/commit/50653bccc63e5a1bbba0f8b89a3358eb3d19c310))
+
+- **slides**: Update multiple slide-related components and tools
+  ([`83046e4`](https://github.com/jupyter-naas/abi/commit/83046e4543272805998cacbb1259a5617d1e9fc5))
+
+### Refactoring
+
+- Quick access topbar
+  ([`bf525fa`](https://github.com/jupyter-naas/abi/commit/bf525fad747d85a09010a462887b5d9a7b40bc29))
+
+- **slides**: Update slides tools with conventional commit messages
+  ([`33ac2a7`](https://github.com/jupyter-naas/abi/commit/33ac2a7331702a4585ce6d4bc6a9e594d5076924))
+
+
 ## v2.64.1 (2026-09-08)
 
 ### Bug Fixes
