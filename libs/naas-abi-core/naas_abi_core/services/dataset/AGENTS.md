@@ -98,6 +98,22 @@ the store. Modules that use the service declare `DatasetService` in `ModuleDepen
 
 Each write uses a fresh connection and retries the complete transaction up to 10 times for catalog locks/transaction conflicts. Backoff starts at 50 ms, doubles to a 1-second cap, and has +/-25% jitter. SQLite writers sharing one adapter are serialized before the cross-process retry boundary; PostgreSQL writers remain concurrent. PostgreSQL deployment credentials are rendered from the secret service; do not log the catalog DSN.
 
+Reads (`describe`, `list`, `list_snapshots`, and `query` without a pinned
+`snapshot_id`) do not pay that fresh-connection cost: they share one
+lazily-created, kept-open connection for the adapter's lifetime, each call
+using its own cursor off it. LOAD-ing the `ducklake`/`httpfs` extensions and
+ATTACH-ing the catalog dominates a single call's latency, and a long-held
+ATTACH observes commits made through other connections without
+re-attaching — so this is a pure latency win with no read-staleness
+trade-off. One caveat: because the connection is kept open for the process's
+lifetime, it does not re-run `_configure_object_store`'s `CREATE OR REPLACE
+SECRET`, so a deployment that rotates S3/MinIO credentials at runtime needs
+the process restarted (or the adapter recreated) to pick up new ones — a
+fresh-per-call connection previously did this implicitly. A pinned
+`query(snapshot_id=...)` (time travel) still gets its own fresh,
+snapshot-specific connection, since `SNAPSHOT_VERSION` is fixed at ATTACH
+time and can't be shared with the latest-snapshot read connection.
+
 Ambiguous object-store transport failures are not replayed automatically: a timeout
 may arrive after metadata committed, and replaying an append could duplicate rows.
 Such failures surface to the caller until the port has an idempotency or commit-status

@@ -170,6 +170,100 @@ class TestDatasetSecondaryAdapterDuckLake(DatasetSecondaryAdapterContract):
 
         assert written.snapshot_id == created.snapshot_id
 
+    def test_reads_reuse_a_single_connection_across_calls(self, adapter, monkeypatch):
+        import duckdb
+
+        adapter.create(
+            DatasetSpec(name="events", columns=(ColumnSpec(name="id", type="integer"),))
+        )
+        adapter.write("events", [{"id": 1}])
+
+        real_connect = duckdb.connect
+        connect_calls = []
+
+        def counting_connect(*args, **kwargs):
+            connect_calls.append((args, kwargs))
+            return real_connect(*args, **kwargs)
+
+        monkeypatch.setattr(duckdb, "connect", counting_connect)
+
+        adapter.describe("events")
+        adapter.list()
+        adapter.query("SELECT * FROM events")
+        adapter.list_snapshots()
+        adapter._snapshot_exists(1)
+
+        assert len(connect_calls) == 1
+
+    def test_reused_read_connection_sees_writes_from_other_connections(self, tmp_path):
+        catalog = f"sqlite:{tmp_path / 'datasets.sqlite'}"
+        data_path = str(tmp_path / "datasets")
+        reader = DatasetSecondaryAdapterDuckLake(catalog=catalog, data_path=data_path)
+        writer = DatasetSecondaryAdapterDuckLake(catalog=catalog, data_path=data_path)
+
+        reader.create(
+            DatasetSpec(name="events", columns=(ColumnSpec(name="id", type="integer"),))
+        )
+        # Warm the reader's cached connection before the other adapter writes.
+        assert reader.list() != []
+
+        writer.write("events", [{"id": 1}])
+
+        assert reader.query("SELECT id FROM events").rows == [{"id": 1}]
+
+    def test_a_failed_read_does_not_break_the_shared_connection(self, adapter):
+        adapter.create(
+            DatasetSpec(name="events", columns=(ColumnSpec(name="id", type="integer"),))
+        )
+        adapter.write("events", [{"id": 1}])
+
+        with pytest.raises(Exception):
+            adapter.query("SELECT * FROM not_a_real_table")
+
+        assert adapter.query("SELECT id FROM events").rows == [{"id": 1}]
+
+    def test_concurrent_reads_share_one_connection(self, adapter):
+        adapter.create(
+            DatasetSpec(name="events", columns=(ColumnSpec(name="id", type="integer"),))
+        )
+        adapter.write("events", [{"id": i} for i in range(20)])
+
+        def read(_: int) -> int:
+            return adapter.query("SELECT count(*) AS n FROM events").rows[0]["n"]
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            results = list(executor.map(read, range(40)))
+
+        assert results == [20] * 40
+
+    def test_pinned_snapshot_query_still_uses_its_own_connection(
+        self, adapter, monkeypatch
+    ):
+        """SNAPSHOT_VERSION is fixed at ATTACH time, so time travel can't share
+        the adapter's one cached, latest-snapshot read connection."""
+        import duckdb
+
+        created = adapter.create(
+            DatasetSpec(name="events", columns=(ColumnSpec(name="id", type="integer"),))
+        )
+        adapter.write("events", [{"id": 1}])
+        # Warm the shared read connection at the latest snapshot.
+        adapter.list()
+
+        real_connect = duckdb.connect
+        connect_calls = []
+
+        def counting_connect(*args, **kwargs):
+            connect_calls.append((args, kwargs))
+            return real_connect(*args, **kwargs)
+
+        monkeypatch.setattr(duckdb, "connect", counting_connect)
+
+        result = adapter.query("SELECT * FROM events", snapshot_id=created.snapshot_id)
+
+        assert result.rows == []
+        assert len(connect_calls) == 1
+
     def test_connect_owns_ducklake_catalog_migrations(self, adapter, monkeypatch):
         import duckdb
 

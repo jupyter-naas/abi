@@ -115,9 +115,18 @@ class _S3Settings:
 class DatasetSecondaryAdapterDuckLake(IDatasetPort):
     """Store datasets in one DuckLake catalog and data warehouse.
 
-    A fresh DuckDB connection is used for every operation. Retriable catalog
+    Writes use a fresh DuckDB connection per attempt. Retriable catalog
     conflicts replay the complete transaction against fresh state using bounded
     exponential backoff with jitter.
+
+    Reads (describe/list/query/list_snapshots) have no transaction to retry, so
+    they instead share one lazily-created, kept-open connection: LOAD-ing the
+    ducklake/httpfs extensions and ATTACH-ing the catalog is most of a read's
+    cost, and a long-held ATTACH sees commits from other connections without
+    re-attaching. Each call still gets its own cursor off that connection, so
+    concurrent reads are independent and one call's error can't poison another's.
+    A pinned ``query(snapshot_id=...)`` (time travel) still gets a fresh,
+    snapshot-specific connection, since SNAPSHOT_VERSION is fixed at ATTACH time.
     """
 
     def __init__(
@@ -172,6 +181,8 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         self._sqlite_write_lock = (
             threading.RLock() if self._catalog.startswith("sqlite:") else None
         )
+        self._read_connection: Any | None = None
+        self._read_connection_lock = threading.Lock()
         self._prepare_local_paths()
 
     def create(self, spec: DatasetSpec) -> DatasetInfo:
@@ -221,17 +232,15 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         return self._to_info(created, snapshot_id)
 
     def describe(self, name: str, *, namespace: str = "default") -> DatasetInfo:
-        con = self._connect()
-        try:
+        def read(con: Any) -> DatasetInfo:
             snapshot_id = self._current_snapshot(con)
             spec = self._load_spec(con, namespace, name)
             return self._to_info(spec, snapshot_id)
-        finally:
-            con.close()
+
+        return self._read(read)
 
     def list(self, *, namespace: str | None = None) -> list[DatasetInfo]:
-        con = self._connect()
-        try:
+        def read(con: Any) -> list[DatasetInfo]:
             snapshot_id = self._current_snapshot(con)
             sql = (
                 "SELECT schema_name, table_name, comment FROM duckdb_tables() "
@@ -246,8 +255,8 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
                 self._to_info(self._spec_from_comment(comment), snapshot_id)
                 for _, _, comment in con.execute(sql, parameters).fetchall()
             ]
-        finally:
-            con.close()
+
+        return self._read(read)
 
     def write(
         self,
@@ -307,39 +316,41 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         namespace: str = "default",
         snapshot_id: int | None = None,
     ) -> QueryResult:
-        if snapshot_id is not None and not self._snapshot_exists(snapshot_id):
-            raise DatasetSnapshotNotFoundError(snapshot_id)
+        if snapshot_id is None:
+            return self._read(lambda con: self._run_query(con, sql, namespace))
 
+        if not self._snapshot_exists(snapshot_id):
+            raise DatasetSnapshotNotFoundError(snapshot_id)
         try:
             con = self._connect(snapshot_id=snapshot_id)
         except Exception as exc:
-            if snapshot_id is not None:
-                raise DatasetSnapshotNotFoundError(snapshot_id) from exc
-            raise
+            raise DatasetSnapshotNotFoundError(snapshot_id) from exc
         try:
-            con.execute(f"USE {self._qualified_schema(namespace)}")
-            result = con.execute(sql)
-            description = result.description or []
-            columns = [str(column[0]) for column in description]
-            json_columns = {
-                index
-                for index, column in enumerate(description)
-                if str(column[1]).upper() == "JSON"
-            }
-            rows = [
-                {
-                    column: self._cell(value, index in json_columns)
-                    for index, (column, value) in enumerate(zip(columns, raw))
-                }
-                for raw in result.fetchall()
-            ]
-            return QueryResult(columns=columns, rows=rows)
+            return self._run_query(con, sql, namespace)
         finally:
             con.close()
 
+    def _run_query(self, con: Any, sql: str, namespace: str) -> QueryResult:
+        con.execute(f"USE {self._qualified_schema(namespace)}")
+        result = con.execute(sql)
+        description = result.description or []
+        columns = [str(column[0]) for column in description]
+        json_columns = {
+            index
+            for index, column in enumerate(description)
+            if str(column[1]).upper() == "JSON"
+        }
+        rows = [
+            {
+                column: self._cell(value, index in json_columns)
+                for index, (column, value) in enumerate(zip(columns, raw))
+            }
+            for raw in result.fetchall()
+        ]
+        return QueryResult(columns=columns, rows=rows)
+
     def list_snapshots(self) -> builtins.list[DatasetSnapshotInfo]:
-        con = self._connect()
-        try:
+        def read(con: Any) -> builtins.list[DatasetSnapshotInfo]:
             rows = con.execute(
                 "SELECT snapshot_id, snapshot_time "
                 "FROM abi_datasets.snapshots() "
@@ -349,8 +360,8 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
                 DatasetSnapshotInfo(snapshot_id=int(snapshot_id), created_at=created_at)
                 for snapshot_id, created_at in rows
             ]
-        finally:
-            con.close()
+
+        return self._read(read)
 
     def drop(self, name: str, *, namespace: str = "default") -> None:
         def operation(con: Any) -> None:
@@ -387,6 +398,38 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         except Exception:
             con.close()
             raise
+
+    def _get_read_connection(self) -> Any:
+        """Return the shared, kept-open connection used for unpinned reads.
+
+        Created lazily on first use and reused for the adapter's lifetime:
+        LOAD-ing extensions and ATTACH-ing the catalog is most of a read's
+        cost, and DuckLake read visibility does not require re-attaching to
+        observe commits made through other connections.
+        """
+        connection = self._read_connection
+        if connection is not None:
+            return connection
+        with self._read_connection_lock:
+            connection = self._read_connection
+            if connection is None:
+                connection = self._connect()
+                self._read_connection = connection
+            return connection
+
+    def _read(self, operation: Callable[[Any], _T]) -> _T:
+        """Run a read-only ``operation`` against the shared read connection.
+
+        Each call gets its own cursor off the shared connection: cursors run
+        independently, so concurrent reads don't block each other and one
+        cursor's error (bad SQL, a missing table) does not affect the shared
+        connection or any other cursor.
+        """
+        cursor = self._get_read_connection().cursor()
+        try:
+            return operation(cursor)
+        finally:
+            cursor.close()
 
     def _write_transaction(self, operation: Callable[[Any], _T]) -> tuple[_T, int]:
         if self._sqlite_write_lock is not None:
@@ -473,8 +516,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         return int(row[0])
 
     def _snapshot_exists(self, snapshot_id: int) -> bool:
-        con = self._connect()
-        try:
+        def read(con: Any) -> bool:
             return (
                 con.execute(
                     "SELECT 1 FROM abi_datasets.snapshots() WHERE snapshot_id = ?",
@@ -482,8 +524,8 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
                 ).fetchone()
                 is not None
             )
-        finally:
-            con.close()
+
+        return self._read(read)
 
     def _to_info(self, spec: DatasetSpec, snapshot_id: int) -> DatasetInfo:
         return DatasetInfo(
