@@ -25,6 +25,7 @@ export type BfoBuckets = Record<BfoColumnKey, string>;
 /** Top-level JSON keys that fill each table column. Same lists as the projection. */
 export const BFO_COLUMN_SOURCE_KEYS: Record<BfoColumnKey, readonly string[]> = {
   materialEntity: [
+    'actor_user_id',
     'user_id',
     'userId',
     'agent_name',
@@ -74,6 +75,38 @@ export interface PlatformEvent {
   [key: string]: unknown;
 }
 
+/** A user resolved from graph/nexus-identity (person carrying the account). */
+export interface EventIdentityUser {
+  user_id: string;
+  name?: string | null;
+  email?: string | null;
+  avatar_url?: string | null;
+  is_superadmin?: boolean;
+  /** Access role in the event's workspace: owner / admin / member / viewer. */
+  workspace_role?: string | null;
+}
+
+/**
+ * Names the API resolved for the ids in the payload (`_identity`). Payloads
+ * themselves only hold ids; this is attached per page by /admin/events/recent.
+ */
+export interface EventIdentity {
+  actor?: EventIdentityUser;
+  subject?: EventIdentityUser;
+  workspace?: { workspace_id: string; name?: string | null; slug?: string | null };
+  organization?: { organization_id: string; name?: string | null };
+}
+
+export function eventIdentity(event: PlatformEvent): EventIdentity | null {
+  const raw = event._identity;
+  return raw && typeof raw === 'object' ? (raw as EventIdentity) : null;
+}
+
+/** Keys naming the user an event happened for, most specific first. */
+const ACTOR_KEYS = ['actor_user_id', 'user_id', 'userId', 'actor_id', 'actorId'] as const;
+/** Keys naming the workspace an event happened in, most specific first. */
+const WORKSPACE_KEYS = ['target_workspace_id', 'actor_workspace_id', 'workspace_id', 'workspaceId'] as const;
+
 function shortClassUri(uri: string): string {
   const slashed = uri.split('/').filter(Boolean).pop() ?? uri;
   return slashed.split('#').pop() ?? slashed;
@@ -119,8 +152,11 @@ function iceRef(event: PlatformEvent): string {
 }
 
 function materialEntity(event: PlatformEvent): string {
+  const person = eventIdentity(event)?.actor?.name;
+  if (person) return person;
   return (
     firstField(event, [
+      'actor_user_id',
       'user_id',
       'userId',
       'agent_name',
@@ -333,6 +369,18 @@ function splitCamelCase(name: string): string[] {
     .filter(Boolean);
 }
 
+const IMPERATIVE_VERBS: Record<string, string> = {
+  Create: 'CREATED',
+  Update: 'UPDATED',
+  Delete: 'DELETED',
+  Add: 'ADDED',
+  Remove: 'REMOVED',
+  Change: 'CHANGED',
+  Configure: 'CONFIGURED',
+  Apply: 'APPLIED',
+};
+const LINKING_WORDS = new Set(['To', 'From', 'Of', 'In', 'On', 'For']);
+
 /**
  * Read a verb and an object off the event class name.
  *
@@ -344,10 +392,12 @@ function splitCamelCase(name: string): string[] {
 export function deriveProcessNaming(event: PlatformEvent): ProcessNaming {
   const className = shortClassUri(event._class_uri || '');
   const words = splitCamelCase(className);
-  const verb = words.length ? words[words.length - 1].toUpperCase() : UNKNOWN;
-  const nounWords = words
-    .slice(0, -1)
-    .filter((word, index) => !(index === 0 && word === 'Agent'));
+  // Nexus identity processes are named verb first (`ChangeWorkspaceMemberRole`).
+  const imperative = words.length > 1 ? IMPERATIVE_VERBS[words[0]] : undefined;
+  const verb = imperative ?? (words.length ? words[words.length - 1].toUpperCase() : UNKNOWN);
+  const nounWords = imperative
+    ? words.slice(1).map((word) => (LINKING_WORDS.has(word) ? word.toLowerCase() : word))
+    : words.slice(0, -1).filter((word, index) => !(index === 0 && word === 'Agent'));
   const object = firstField(event, OBJECT_FIELDS) ?? (nounWords.join(' ') || UNKNOWN);
   return { verb: verb || UNKNOWN, object, className: className || UNKNOWN };
 }
@@ -412,9 +462,19 @@ export function buildEventGraphPayload(event: PlatformEvent): EventGraphPayload 
   const field = (label: string, value: string): EventGraphField[] => [{ label, value }];
 
   // --- Material entity: who took part ------------------------------------
+  // The payload holds account ids; `_identity` names the person carrying each.
+  const identity = eventIdentity(event);
   const material: EventGraphNode[] = [];
-  const user = firstField(event, ['user_id', 'userId', 'actor_id', 'actorId']);
-  if (user) material.push(make('Material Entity', user, field('user_id', user), true, true));
+  const person = (key: string, id: string, resolved: EventIdentityUser | undefined): EventGraphNode => {
+    const fields: EventGraphField[] = [{ label: key, value: id }];
+    if (resolved?.email) fields.push({ label: 'account', value: resolved.email });
+    return make('Material Entity', resolved?.name || id, fields, true, true);
+  };
+  const actorKey = firstSourceKey(event, ACTOR_KEYS);
+  const user = actorKey ? firstField(event, [actorKey]) : null;
+  if (actorKey && user) material.push(person(actorKey, user, identity?.actor));
+  const subject = firstField(event, ['target_user_id']);
+  if (subject && subject !== user) material.push(person('target_user_id', subject, identity?.subject));
   const agent = firstField(event, ['agent_name', 'agentName']);
   if (agent) material.push(make('Material Entity', agent, field('agent_name', agent), true, true));
   const routedTo = firstField(event, ['routed_to', 'routedTo']);
@@ -445,8 +505,6 @@ export function buildEventGraphPayload(event: PlatformEvent): EventGraphPayload 
   const site: EventGraphNode[] = [];
   const host = firstField(event, ['_site', 'site', 'hostname', 'host']);
   if (host) site.push(make('Site', host, field('_site', host), true, true));
-  const workspace = firstField(event, ['workspace_id', 'workspaceId']);
-  if (workspace) site.push(make('Site', workspace, field('workspace_id', workspace), true, true));
 
   // --- Quality: how it went ----------------------------------------------
   const qualities: EventGraphNode[] = [];
@@ -464,6 +522,13 @@ export function buildEventGraphPayload(event: PlatformEvent): EventGraphPayload 
 
   // --- Realizable: the capability the process realized ---------------------
   const realizables: EventGraphNode[] = [];
+  const actorRole = identity?.actor?.workspace_role;
+  if (actorRole) {
+    realizables.push(make('Realizable', `Workspace ${actorRole}`, field('workspace_role', actorRole), true, true));
+  }
+  if (identity?.actor?.is_superadmin) {
+    realizables.push(make('Realizable', 'Platform superadmin', field('is_superadmin', 'true'), true, true));
+  }
   const tool = firstField(event, ['tool_name', 'toolName']);
   if (tool) realizables.push(make('Realizable', tool, field('tool_name', tool), true, true));
   const role = firstField(event, ['role', 'disposition', 'function', 'capability']);
@@ -473,6 +538,28 @@ export function buildEventGraphPayload(event: PlatformEvent): EventGraphPayload 
   // The stored log record is itself the ICE about this process, so this bucket
   // is always populated by at least one node.
   const gdc: EventGraphNode[] = [make('GDC', iceRef(event), field('_uri', event._uri))];
+  // A workspace is configured information (a GDC), not a site.
+  const workspaceKey = firstSourceKey(event, WORKSPACE_KEYS);
+  const workspace = workspaceKey ? firstField(event, [workspaceKey]) : null;
+  if (workspaceKey && workspace) {
+    const name = identity?.workspace?.name || workspace;
+    gdc.push(make('GDC', name, field(workspaceKey, workspace), true, true));
+  }
+  const organization = firstField(event, ['target_organization_id']);
+  if (organization) {
+    const name = identity?.organization?.name || organization;
+    gdc.push(make('GDC', name, field('target_organization_id', organization), true, true));
+  }
+  const newRole = firstField(event, ['membership_role']);
+  const oldRole = firstField(event, ['previous_membership_role']);
+  if (newRole) {
+    gdc.push(
+      make('GDC', oldRole ? `${oldRole} → ${newRole}` : `role: ${newRole}`, [
+        ...(oldRole ? [{ label: 'previous_membership_role', value: oldRole }] : []),
+        { label: 'membership_role', value: newRole },
+      ]),
+    );
+  }
   const content = firstField(event, ['content']);
   if (content) gdc.push(make('GDC', 'content', field('content', excerpt(content))));
   const toolArgs = firstField(event, ['tool_args', 'toolArgs']);

@@ -26,7 +26,14 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 
-agent_user_id: ContextVar[str | None] = ContextVar("agent_user_id", default=None)
+from naas_abi_core.services.event.context import (
+    event_actor_user_id,
+    event_actor_workspace_id,
+)
+
+# Same ContextVars as the event service's: identity set for an agent run is
+# stamped on every event published during it (EventService.publish).
+agent_user_id: ContextVar[str | None] = event_actor_user_id
 # Display identity for the acting user, alongside agent_user_id. Populated at
 # the same request boundary so tools that commit on the user's behalf (e.g.
 # Slides' upsert_file/upsert_files) can attribute the commit's git author to
@@ -35,9 +42,7 @@ agent_user_id: ContextVar[str | None] = ContextVar("agent_user_id", default=None
 agent_user_name: ContextVar[str | None] = ContextVar("agent_user_name", default=None)
 agent_user_email: ContextVar[str | None] = ContextVar("agent_user_email", default=None)
 agent_chat_id: ContextVar[str | None] = ContextVar("agent_chat_id", default=None)
-agent_workspace_id: ContextVar[str | None] = ContextVar(
-    "agent_workspace_id", default=None
-)
+agent_workspace_id: ContextVar[str | None] = event_actor_workspace_id
 
 # Coding-workspace bridge: base URL + bearer secret of the exec sidecar running
 # inside the caller's Coder coding workspace. Set at the request boundary (the

@@ -155,7 +155,9 @@ describe('buildEventGraphPayload', () => {
     );
     expect(payload.missing).toEqual([]);
     expect(summarizeBucket(payload, 'Material Entity')).toBe('alice · Abi');
-    expect(summarizeBucket(payload, 'Site')).toBe('nexus.localhost · ws-1');
+    // A workspace is a GDC (configured information), not a site.
+    expect(summarizeBucket(payload, 'Site')).toBe('nexus.localhost');
+    expect(summarizeBucket(payload, 'GDC')).toContain('ws-1');
     expect(summarizeBucket(payload, 'Quality')).toBe('len=128');
     expect(summarizeBucket(payload, 'Realizable')).toBe('search_web');
     expect(eventSentence(payload)).toBe('alice · CALLED · search_web');
@@ -191,5 +193,73 @@ describe('timestamp formatting', () => {
   it('falls back to Unknown rather than showing Invalid Date', () => {
     expect(formatEventClock('not-a-date')).toBe(UNKNOWN);
     expect(formatEventDate(null)).toBe(UNKNOWN);
+  });
+});
+
+describe('identity resolved from graph/nexus-identity', () => {
+  const identityEvent = (overrides: Partial<PlatformEvent> = {}): PlatformEvent =>
+    baseEvent({
+      _class_uri: 'http://ontology.naas.ai/nexus/ChangeWorkspaceMemberRole',
+      _site: 'bob.example.com',
+      actor_user_id: 'usr-1',
+      target_user_id: 'usr-2',
+      target_workspace_id: 'ws-1',
+      membership_role: 'admin',
+      previous_membership_role: 'member',
+      _identity: {
+        actor: {
+          user_id: 'usr-1',
+          name: 'Alice Martin',
+          email: 'alice@example.com',
+          is_superadmin: true,
+          workspace_role: 'owner',
+        },
+        subject: { user_id: 'usr-2', name: 'Bob Stone', email: 'bob@example.com', workspace_role: 'admin' },
+        workspace: { workspace_id: 'ws-1', name: 'Acme', slug: 'acme' },
+      },
+      ...overrides,
+    });
+
+  it('names the person behind the account, then who the process was for', () => {
+    const payload = buildEventGraphPayload(identityEvent());
+    expect(summarizeBucket(payload, 'Material Entity')).toBe('Alice Martin · Bob Stone');
+    const alice = payload.satellites.find((n) => n.label === 'Alice Martin');
+    expect(alice?.shared).toBe(true);
+    expect(alice?.fields).toContainEqual({ label: 'actor_user_id', value: 'usr-1' });
+  });
+
+  it('keeps the workspace in HOW WE KNOW, not WHERE', () => {
+    const payload = buildEventGraphPayload(identityEvent());
+    expect(summarizeBucket(payload, 'Site')).toBe('bob.example.com');
+    expect(summarizeBucket(payload, 'GDC')).toContain('Acme');
+  });
+
+  it('shows the access role the actor realized', () => {
+    const payload = buildEventGraphPayload(identityEvent());
+    expect(summarizeBucket(payload, 'Realizable')).toBe('Workspace owner · Platform superadmin');
+  });
+
+  it('shows a role change as the membership record it rewrote', () => {
+    const payload = buildEventGraphPayload(identityEvent());
+    expect(summarizeBucket(payload, 'GDC')).toContain('member → admin');
+  });
+
+  it('falls back to ids when the identity graph could not resolve them', () => {
+    const payload = buildEventGraphPayload(identityEvent({ _identity: undefined }));
+    expect(summarizeBucket(payload, 'Material Entity')).toBe('usr-1 · usr-2');
+    expect(summarizeBucket(payload, 'GDC')).toContain('ws-1');
+  });
+
+  it('reads imperative Nexus class names verb first', () => {
+    expect(deriveProcessNaming(identityEvent())).toMatchObject({
+      verb: 'CHANGED',
+      object: 'Workspace Member Role',
+    });
+    expect(
+      deriveProcessNaming(baseEvent({ _class_uri: 'http://ontology.naas.ai/nexus/AddUserToWorkspace' })),
+    ).toMatchObject({ verb: 'ADDED', object: 'User to Workspace' });
+    expect(eventSentence(buildEventGraphPayload(identityEvent()))).toBe(
+      'Alice Martin · CHANGED · Workspace Member Role',
+    );
   });
 });

@@ -23,6 +23,26 @@ ADMIN_EVENTS_ROOM = "admin_events"
 PLATFORM_EVENT = "platform_event"
 
 _relay_installed: bool = False
+_enricher: Any = None
+
+
+def _identity_enricher() -> Any:
+    """Cached resolver of payload ids to names (graph/nexus-identity), or None."""
+    global _enricher
+    if _enricher is None:
+        try:
+            from naas_abi import ABIModule
+            from naas_abi.apps.nexus.apps.api.app.services.identity_graph.resolver import (
+                CachedEventEnricher,
+                IdentityResolver,
+            )
+
+            triple_store = ABIModule.get_instance().engine.services.triple_store
+            _enricher = CachedEventEnricher(IdentityResolver(query=triple_store.query))
+        except Exception:
+            logger.debug("[admin-events] identity enrichment unavailable", exc_info=True)
+            return None
+    return _enricher
 
 
 def _emit_event_threadsafe(loop: asyncio.AbstractEventLoop, payload: dict[str, Any]) -> None:
@@ -30,6 +50,13 @@ def _emit_event_threadsafe(loop: asyncio.AbstractEventLoop, payload: dict[str, A
     from naas_abi.apps.nexus.apps.api.app.services.websocket.runtime import sio
 
     async def _emit() -> None:
+        # Resolve names here, off the publisher's thread: publish() must stay fast.
+        enricher = _identity_enricher()
+        if enricher is not None:
+            try:
+                await asyncio.to_thread(enricher.enrich, payload)
+            except Exception:
+                logger.debug("[admin-events] identity enrichment failed", exc_info=True)
         try:
             await sio.emit(PLATFORM_EVENT, payload, room=ADMIN_EVENTS_ROOM)
         except Exception:

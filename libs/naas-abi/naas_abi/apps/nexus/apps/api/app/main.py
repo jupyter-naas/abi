@@ -79,6 +79,109 @@ async def _sync_model_catalog() -> None:
         _log.exception("Background model catalog sync failed (non-fatal)")
 
 
+async def _sync_identity_graph() -> None:
+    """Rebuild graph/nexus-identity from Postgres and the running configuration:
+    users and persons, organizations, workspaces, memberships and access roles,
+    features and policies, and their setup processes. Event payloads only hold
+    ids; this graph resolves them to people.
+    """
+    _log = logging.getLogger(__name__)
+    try:
+        from naas_abi import ABIModule
+        from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+        from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+        from naas_abi.apps.nexus.apps.api.app.services.identity_graph.adapters.secondary.identity_graph__secondary_adapter__postgres import (  # noqa: E501
+            IdentitySourceSecondaryAdapterPostgres,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.identity_graph.adapters.secondary.identity_graph__secondary_adapter__settings import (  # noqa: E501
+            PlatformConfigurationSourceSettings,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.identity_graph.adapters.secondary.identity_graph__secondary_adapter__triplestore import (  # noqa: E501
+            IdentityGraphStoreSecondaryAdapterTripleStore,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.identity_graph.service import (
+            IdentityGraphService,
+        )
+
+        async with AsyncSessionLocal() as session:
+            service = IdentityGraphService(
+                source=IdentitySourceSecondaryAdapterPostgres(session),
+                store=IdentityGraphStoreSecondaryAdapterTripleStore(
+                    lambda: ABIModule.get_instance().engine.services.triple_store
+                ),
+                platform=PlatformConfigurationSourceSettings(
+                    settings_getter=live_settings,
+                    module_config_getter=lambda: ABIModule.get_instance().configuration,
+                ),
+            )
+            result = await service.sync()
+        _log.info(
+            "✓ Identity graph synced (%d users, %d organizations, %d workspaces, %d memberships, %d triples)",
+            result.users,
+            result.organizations,
+            result.workspaces,
+            result.memberships,
+            result.triples,
+        )
+    except Exception:
+        _log.exception("Background identity graph sync failed (non-fatal)")
+
+
+_identity_graph_sync_task: asyncio.Task | None = None
+
+
+def _schedule_identity_graph_sync(_published: int = 0, delay_seconds: float = 2.0) -> None:
+    """Rebuild the identity graph shortly after identity events, coalescing bursts
+    (a config seed or a bulk invite commits many changes in a row)."""
+    global _identity_graph_sync_task
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    if _identity_graph_sync_task is not None and not _identity_graph_sync_task.done():
+        return
+
+    async def _later() -> None:
+        await asyncio.sleep(delay_seconds)
+        await _sync_identity_graph()
+
+    _identity_graph_sync_task = loop.create_task(_later())
+
+
+def _install_identity_event_capture() -> None:
+    """Publish a nexus identity-and-access event for every committed change to
+    users, organizations, workspaces, memberships and workspace configuration."""
+    _log = logging.getLogger(__name__)
+    try:
+        from urllib.parse import urlsplit
+
+        from naas_abi import ABIModule
+        from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+        from naas_abi.apps.nexus.apps.api.app.services.identity_events.capture import (
+            IdentityEventCapture,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.identity_graph.iris import (
+            deployment_site_iri,
+        )
+
+        engine = ABIModule.get_instance().engine
+        if not engine.services.events_available():
+            _log.warning("EventService not configured; identity events disabled")
+            return
+        event_service = engine.services.events
+        host = urlsplit(getattr(live_settings(), "frontend_url", "") or "").hostname or "unknown"
+
+        IdentityEventCapture(
+            # Late-bound: the admin relay wraps publish() after this runs.
+            publish=lambda event: event_service.publish(event),
+            site_iri=str(deployment_site_iri(host)),
+            on_published=_schedule_identity_graph_sync,
+        ).install()
+        _log.info("✓ Identity event capture installed")
+    except Exception:
+        _log.exception("Unable to install identity event capture (non-fatal)")
+
+
 async def _prefetch_agent_class_registry() -> None:
     """Warm up the agent class registry in a thread-pool worker.
 
@@ -125,7 +228,19 @@ async def _startup(app: FastAPI) -> None:
     # Apply config-driven user/org/workspace seeds from config.yaml.
     from naas_abi.apps.nexus.apps.api.app.core.org_seed import apply_configuration_seeds
 
-    await apply_configuration_seeds(getattr(app.state, "secret_service", None))
+    # Before seeds: users, workspaces and memberships the configuration creates
+    # or changes are logged as identity events, triggered via "configuration".
+    _install_identity_event_capture()
+    from naas_abi_core.services.event.context import event_triggered_via
+
+    via = event_triggered_via.set("configuration")
+    try:
+        await apply_configuration_seeds(getattr(app.state, "secret_service", None))
+    finally:
+        event_triggered_via.reset(via)
+
+    # After seeds, so seeded users/workspaces are in the graph on first boot.
+    asyncio.create_task(_sync_identity_graph())
 
     try:
         start_chat_ingestion_consumer(app)
@@ -365,6 +480,13 @@ def _configure_middleware(app: FastAPI) -> None:
     )
 
     app.add_middleware(HttpActivityLogMiddleware)
+
+    # Who and which workspace each request acts for, stamped on every event.
+    from naas_abi.apps.nexus.apps.api.app.services.identity_events.middleware import (
+        RequestIdentityMiddleware,
+    )
+
+    app.add_middleware(RequestIdentityMiddleware)
 
 
 async def serve_app_html(path: str) -> FileResponse:

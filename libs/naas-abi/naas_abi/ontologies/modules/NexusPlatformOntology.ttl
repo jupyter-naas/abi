@@ -44,9 +44,9 @@ nexus:isWorkspaceOf a owl:ObjectProperty ;
 nexus:hasUser a owl:ObjectProperty ;
     rdfs:subPropertyOf abi:hasMemberPart ;
     rdfs:label "has user"@en ;
-    skos:definition "Relates an organization to a user account that is a member of it in the platform."@en ;
+    skos:definition "Relates an organization to a person who is a member of it in the platform. The person's user account is reached via nexus:hasUserAccount."@en ;
     rdfs:domain nexus:Organization ;
-    rdfs:range nexus:User .
+    rdfs:range abi:Person .
 
 # WHO — person carries user account (GDC)
 nexus:hasUserAccount a owl:ObjectProperty ;
@@ -562,9 +562,9 @@ nexus:viewedAt a owl:ObjectProperty ;
 nexus:viewedBy a owl:ObjectProperty ;
     rdfs:subPropertyOf abi:hasParticipant ;
     rdfs:label "viewed by"@en ;
-    skos:definition "Relates a page-view process to the user account that participates in it."@en ;
+    skos:definition "Relates a page-view process to the person who viewed the page (reached from the user account via nexus:isUserAccountOf)."@en ;
     rdfs:domain nexus:PageView ;
-    rdfs:range nexus:User .
+    rdfs:range abi:Person .
 
 # WHERE — process occurs in a user-side site context
 nexus:occursIn a owl:ObjectProperty ;
@@ -616,9 +616,9 @@ nexus:endedAt a owl:ObjectProperty ;
 nexus:startedBy a owl:ObjectProperty ;
     rdfs:subPropertyOf abi:hasParticipant ;
     rdfs:label "started by"@en ;
-    skos:definition "Relates a visit-session process to the user account that started it."@en ;
+    skos:definition "Relates a visit-session process to the person who started it (reached from the user account via nexus:isUserAccountOf)."@en ;
     rdfs:domain nexus:VisitSession ;
-    rdfs:range nexus:User .
+    rdfs:range abi:Person .
 
 # WHAT — platform process performs CRUD on a generically dependent continuant artifact
 nexus:creates a owl:ObjectProperty ;
@@ -797,7 +797,7 @@ nexus:Organization a owl:Class ;
         ] ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasUser ;
-          owl:allValuesFrom nexus:User
+          owl:allValuesFrom abi:Person
         ] ,
         [ a owl:Restriction ;
           owl:onProperty nexus:hasTenant ;
@@ -1526,7 +1526,7 @@ nexus:FrontEndEvent a owl:Class ;
 nexus:CreateUser a owl:Class ;
     rdfs:label "Create User"@en ;
     skos:definition "A process that creates a new user in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Process ,
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
         [ a owl:Restriction ;
           owl:onProperty nexus:createdAt ;
           owl:allValuesFrom abi:TemporalInstant
@@ -1547,7 +1547,7 @@ nexus:CreateUser a owl:Class ;
 nexus:CreateWorkspace a owl:Class ;
     rdfs:label "Create Workspace"@en ;
     skos:definition "A process that creates a new workspace in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Process ,
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
         [ a owl:Restriction ;
           owl:onProperty nexus:createdAt ;
           owl:allValuesFrom abi:TemporalInstant
@@ -1564,7 +1564,7 @@ nexus:CreateWorkspace a owl:Class ;
 nexus:AddUserToWorkspace a owl:Class ;
     rdfs:label "Add User to Workspace"@en ;
     skos:definition "A process that adds a user to a workspace in the Nexus platform."@en ;
-    rdfs:subClassOf abi:Process ,
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
         [ a owl:Restriction ;
           owl:onProperty nexus:createdAt ;
           owl:allValuesFrom abi:TemporalInstant
@@ -1598,7 +1598,7 @@ nexus:Login a owl:Class ;
         ] ,
         [ a owl:Restriction ;
           owl:onProperty nexus:createdBy ;
-          owl:someValuesFrom nexus:User
+          owl:someValuesFrom abi:Person
         ] ,
         [ a owl:Restriction ;
           owl:onProperty nexus:creates ;
@@ -1667,7 +1667,7 @@ nexus:VisitSession a owl:Class ;
         ] ,
         [ a owl:Restriction ;
           owl:onProperty nexus:startedBy ;
-          owl:someValuesFrom nexus:User
+          owl:someValuesFrom abi:Person
         ] ,
         [ a owl:Restriction ;
           owl:onProperty nexus:occursIn ;
@@ -1690,7 +1690,7 @@ nexus:PageView a owl:Class ;
         ] ,
         [ a owl:Restriction ;
           owl:onProperty nexus:viewedBy ;
-          owl:someValuesFrom nexus:User
+          owl:someValuesFrom abi:Person
         ] ,
         [ a owl:Restriction ;
           owl:onProperty nexus:occursIn ;
@@ -1729,7 +1729,7 @@ nexus:Logout a owl:Class ;
         ] ,
         [ a owl:Restriction ;
           owl:onProperty nexus:createdBy ;
-          owl:someValuesFrom nexus:User
+          owl:someValuesFrom abi:Person
         ] ,
         [ a owl:Restriction ;
           owl:onProperty nexus:terminates ;
@@ -1949,3 +1949,618 @@ nexus:referrer a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     skos:definition "The HTTP referrer (originating page or host) recorded at the time of a page-view process."@en ;
     skos:example "nexus.localhost", "https://google.com" .
+
+#################################################################
+#    Identity & access (BFO 7 buckets)
+#
+#    What Nexus knows about users, organizations and workspaces, from
+#    Postgres and from the naas_abi module configuration. The same process
+#    classes are used twice: rebuilt at boot into graph/nexus-identity, and
+#    published to the EventService when they happen at runtime.
+#
+#    WHO          abi:Person, nexus:Organization          (material entity)
+#    WHERE        nexus:DeploymentSite                     (site)
+#    HOW WE KNOW  accounts, workspaces, memberships,
+#                 configuration, features, policies         (GDC)
+#    WHY          superadmin / organization / workspace
+#                 access roles, borne by persons            (role)
+#    WHAT         nexus:IdentityAndAccessProcess subclasses (process)
+#    WHEN         nexus:createdAt → abi:TemporalInstant     (temporal region)
+#################################################################
+
+# --- Relations between information content entities -------------------------
+
+nexus:isAbout a owl:ObjectProperty ;
+    rdfs:label "is about"@en ;
+    skos:definition "Relates an information content entity to the entity it is about (same intent as CCO 'is about')."@en ;
+    rdfs:domain abi:GenericallyDependentContinuant .
+
+nexus:hasPart a owl:ObjectProperty ;
+    rdfs:subPropertyOf <http://purl.obolibrary.org/obo/BFO_0000178> ;
+    owl:inverseOf nexus:isPartOf ;
+    rdfs:label "has part"@en ;
+    skos:definition "Relates an information content entity to an information content entity that is a continuant part of it."@en ;
+    rdfs:domain abi:GenericallyDependentContinuant ;
+    rdfs:range abi:GenericallyDependentContinuant .
+
+nexus:isPartOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf <http://purl.obolibrary.org/obo/BFO_0000176> ;
+    owl:inverseOf nexus:hasPart ;
+    rdfs:label "is part of"@en ;
+    skos:definition "Relates an information content entity to the information content entity it is a continuant part of."@en ;
+    rdfs:domain abi:GenericallyDependentContinuant ;
+    rdfs:range abi:GenericallyDependentContinuant .
+
+# WHO ↔ HOW WE KNOW — an organization carries its Nexus profile
+nexus:hasOrganizationProfile a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf nexus:isOrganizationProfileOf ;
+    rdfs:label "has organization profile"@en ;
+    skos:definition "Relates an organization to the Nexus profile (name, slug, branding) that depends on it."@en ;
+    rdfs:domain nexus:Organization ;
+    rdfs:range nexus:OrganizationProfile .
+
+nexus:isOrganizationProfileOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf nexus:hasOrganizationProfile ;
+    rdfs:label "is organization profile of"@en ;
+    rdfs:domain nexus:OrganizationProfile ;
+    rdfs:range nexus:Organization .
+
+nexus:isMembershipOfAccount a owl:ObjectProperty ;
+    rdfs:subPropertyOf nexus:isAbout ;
+    rdfs:label "is membership of account"@en ;
+    skos:definition "Relates a membership record to the user account it grants access to."@en ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( nexus:WorkspaceMembership nexus:OrganizationMembership ) ] ;
+    rdfs:range nexus:User .
+
+nexus:isMembershipOfWorkspace a owl:ObjectProperty ;
+    rdfs:subPropertyOf nexus:isAbout ;
+    rdfs:label "is membership of workspace"@en ;
+    rdfs:domain nexus:WorkspaceMembership ;
+    rdfs:range nexus:Workspace .
+
+nexus:isMembershipOfOrganization a owl:ObjectProperty ;
+    rdfs:subPropertyOf nexus:isAbout ;
+    rdfs:label "is membership of organization"@en ;
+    rdfs:domain nexus:OrganizationMembership ;
+    rdfs:range nexus:Organization .
+
+nexus:enablesFeature a owl:ObjectProperty ;
+    rdfs:subPropertyOf nexus:isAbout ;
+    rdfs:label "enables feature"@en ;
+    skos:definition "Relates the platform configuration to a feature it turns on for the deployment."@en ;
+    rdfs:domain nexus:PlatformConfiguration ;
+    rdfs:range nexus:Feature .
+
+nexus:grantsFeature a owl:ObjectProperty ;
+    rdfs:subPropertyOf nexus:isAbout ;
+    rdfs:label "grants feature"@en ;
+    skos:definition "Relates a feature access policy to a feature the policy's role may use."@en ;
+    rdfs:domain nexus:FeatureAccessPolicy ;
+    rdfs:range nexus:Feature .
+
+nexus:appliesToOrganization a owl:ObjectProperty ;
+    rdfs:subPropertyOf nexus:isAbout ;
+    rdfs:label "applies to organization"@en ;
+    skos:definition "Relates an organization-level feature access policy to the organization it overlays."@en ;
+    rdfs:domain nexus:FeatureAccessPolicy ;
+    rdfs:range nexus:Organization .
+
+nexus:overridesFeature a owl:ObjectProperty ;
+    rdfs:subPropertyOf nexus:isAbout ;
+    rdfs:label "overrides feature"@en ;
+    rdfs:domain nexus:WorkspaceFeatureOverride ;
+    rdfs:range nexus:Feature .
+
+nexus:overridesWorkspace a owl:ObjectProperty ;
+    rdfs:subPropertyOf nexus:isAbout ;
+    rdfs:label "overrides workspace"@en ;
+    rdfs:domain nexus:WorkspaceFeatureOverride ;
+    rdfs:range nexus:Workspace .
+
+# --- WHO -------------------------------------------------------------------
+
+# An organization carries its Nexus profile. Its members are persons
+# (nexus:hasUser, a hasMemberPart), never user accounts.
+nexus:Organization rdfs:subClassOf
+    [ a owl:Restriction ;
+      owl:onProperty nexus:hasOrganizationProfile ;
+      owl:allValuesFrom nexus:OrganizationProfile
+    ] .
+
+# --- HOW WE KNOW -----------------------------------------------------------
+
+nexus:OrganizationProfile a owl:Class ;
+    rdfs:label "Organization Profile"@en ;
+    skos:definition "A generically dependent continuant recording an organization in the Nexus platform: its name, slug and login branding."@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isOrganizationProfileOf ;
+          owl:allValuesFrom nexus:Organization
+        ] .
+
+nexus:WorkspaceMembership a owl:Class ;
+    rdfs:label "Workspace Membership"@en ;
+    skos:definition "A generically dependent continuant recording that a user account has access to a workspace, with the access role granted (owner, admin, member or viewer)."@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isMembershipOfAccount ;
+          owl:someValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isMembershipOfWorkspace ;
+          owl:someValuesFrom nexus:Workspace
+        ] .
+
+nexus:OrganizationMembership a owl:Class ;
+    rdfs:label "Organization Membership"@en ;
+    skos:definition "A generically dependent continuant recording that a user account belongs to an organization, with the access role granted (owner, admin or member)."@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isMembershipOfAccount ;
+          owl:someValuesFrom nexus:User
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isMembershipOfOrganization ;
+          owl:someValuesFrom nexus:Organization
+        ] .
+
+nexus:PlatformConfiguration a owl:Class ;
+    rdfs:label "Platform Configuration"@en ;
+    skos:definition "A generically dependent continuant: the naas_abi module configuration a Nexus deployment runs with (models, enabled features, role baselines, tenant branding, seeds, settings). Secret values are never recorded."@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:enablesFeature ;
+          owl:allValuesFrom nexus:Feature
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:hasPart ;
+          owl:allValuesFrom [ a owl:Class ;
+              owl:unionOf ( nexus:ConfigurationSetting
+                            nexus:TenantBranding
+                            nexus:FeatureAccessPolicy
+                            nexus:WorkspaceFeatureOverride )
+          ]
+        ] .
+
+nexus:ConfigurationSetting a owl:Class ;
+    rdfs:label "Configuration Setting"@en ;
+    skos:definition "A generically dependent continuant: one key/value setting of the platform configuration."@en ;
+    skos:example "abi_agent_model = qwen-3.8", "magic_link_allow_signup = false"@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isPartOf ;
+          owl:someValuesFrom nexus:PlatformConfiguration
+        ] .
+
+nexus:TenantBranding a owl:Class ;
+    rdfs:label "Tenant Branding"@en ;
+    skos:definition "A generically dependent continuant: the deployment-wide look of Nexus (tab title, favicon, logos, colors, login card)."@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isPartOf ;
+          owl:someValuesFrom nexus:PlatformConfiguration
+        ] .
+
+nexus:Feature a owl:Class ;
+    rdfs:label "Feature"@en ;
+    skos:definition "A generically dependent continuant: a Nexus product feature that can be enabled per deployment, role and workspace."@en ;
+    skos:example "chat", "files", "slides", "ontology"@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant .
+
+nexus:FeatureAccessPolicy a owl:Class ;
+    rdfs:label "Feature Access Policy"@en ;
+    skos:definition "A generically dependent continuant listing the features an access role may use: the deployment role baseline, or an organization's overlay of it."@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:grantsFeature ;
+          owl:allValuesFrom nexus:Feature
+        ] .
+
+nexus:WorkspaceFeatureOverride a owl:Class ;
+    rdfs:label "Workspace Feature Override"@en ;
+    skos:definition "A generically dependent continuant turning one feature on or off for one workspace, over the role baseline."@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:overridesFeature ;
+          owl:someValuesFrom nexus:Feature
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:overridesWorkspace ;
+          owl:someValuesFrom nexus:Workspace
+        ] .
+
+nexus:WorkspaceAppConfiguration a owl:Class ;
+    rdfs:label "Workspace App Configuration"@en ;
+    skos:definition "A generically dependent continuant recording whether a catalog app is enabled in a workspace."@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isPartOf ;
+          owl:someValuesFrom nexus:Workspace
+        ] .
+
+nexus:WorkspaceAgentConfiguration a owl:Class ;
+    rdfs:label "Workspace Agent Configuration"@en ;
+    skos:definition "A generically dependent continuant recording an agent made available in a workspace: which class, which model, enabled, default."@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:isPartOf ;
+          owl:someValuesFrom nexus:Workspace
+        ] .
+
+# --- WHY -------------------------------------------------------------------
+# Access roles inhere in the person and concretize the record that grants
+# them. A workspace-scoped process reaches its workspace through the role it
+# realizes: process → realizes → role → concretizes → membership → workspace.
+
+nexus:PlatformSuperadminRole a owl:Class ;
+    rdfs:label "Platform Superadmin Role"@en ;
+    skos:definition "A role borne by a person, granted by the platform configuration, to administer the whole Nexus deployment regardless of workspace membership."@en ;
+    rdfs:subClassOf abi:Role ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:inheresIn ;
+          owl:allValuesFrom abi:Person
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:concretizes ;
+          owl:someValuesFrom nexus:PlatformConfiguration
+        ] .
+
+nexus:WorkspaceAccessRole a owl:Class ;
+    rdfs:label "Workspace Access Role"@en ;
+    skos:definition "A role borne by a person to act in one workspace, concretizing the workspace membership that grants it."@en ;
+    rdfs:subClassOf abi:Role ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:inheresIn ;
+          owl:allValuesFrom abi:Person
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:concretizes ;
+          owl:someValuesFrom nexus:WorkspaceMembership
+        ] .
+
+nexus:WorkspaceOwnerRole a owl:Class ;
+    rdfs:label "Workspace Owner Role"@en ;
+    skos:definition "The owner access role, borne by a person, in one workspace."@en ;
+    rdfs:subClassOf nexus:WorkspaceAccessRole ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:inheresIn ;
+          owl:allValuesFrom abi:Person
+        ] .
+
+nexus:WorkspaceAdminRole a owl:Class ;
+    rdfs:label "Workspace Admin Role"@en ;
+    skos:definition "The admin access role, borne by a person, in one workspace."@en ;
+    rdfs:subClassOf nexus:WorkspaceAccessRole ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:inheresIn ;
+          owl:allValuesFrom abi:Person
+        ] .
+
+nexus:WorkspaceMemberRole a owl:Class ;
+    rdfs:label "Workspace Member Role"@en ;
+    skos:definition "The member access role, borne by a person, in one workspace."@en ;
+    rdfs:subClassOf nexus:WorkspaceAccessRole ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:inheresIn ;
+          owl:allValuesFrom abi:Person
+        ] .
+
+nexus:WorkspaceViewerRole a owl:Class ;
+    rdfs:label "Workspace Viewer Role"@en ;
+    skos:definition "The viewer access role, borne by a person, in one workspace."@en ;
+    rdfs:subClassOf nexus:WorkspaceAccessRole ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:inheresIn ;
+          owl:allValuesFrom abi:Person
+        ] .
+
+nexus:OrganizationAccessRole a owl:Class ;
+    rdfs:label "Organization Access Role"@en ;
+    skos:definition "A role borne by a person to act in one organization, concretizing the organization membership that grants it."@en ;
+    rdfs:subClassOf abi:Role ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:inheresIn ;
+          owl:allValuesFrom abi:Person
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:concretizes ;
+          owl:someValuesFrom nexus:OrganizationMembership
+        ] .
+
+nexus:OrganizationOwnerRole a owl:Class ;
+    rdfs:label "Organization Owner Role"@en ;
+    skos:definition "The owner access role, borne by a person, in one organization."@en ;
+    rdfs:subClassOf nexus:OrganizationAccessRole ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:inheresIn ;
+          owl:allValuesFrom abi:Person
+        ] .
+
+nexus:OrganizationAdminRole a owl:Class ;
+    rdfs:label "Organization Admin Role"@en ;
+    skos:definition "The admin access role, borne by a person, in one organization."@en ;
+    rdfs:subClassOf nexus:OrganizationAccessRole ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:inheresIn ;
+          owl:allValuesFrom abi:Person
+        ] .
+
+nexus:OrganizationMemberRole a owl:Class ;
+    rdfs:label "Organization Member Role"@en ;
+    skos:definition "The member access role, borne by a person, in one organization."@en ;
+    rdfs:subClassOf nexus:OrganizationAccessRole ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:inheresIn ;
+          owl:allValuesFrom abi:Person
+        ] .
+
+# --- WHAT ------------------------------------------------------------------
+
+nexus:IdentityAndAccessProcess a owl:Class ;
+    rdfs:label "Identity and Access Process"@en ;
+    skos:definition "A process that creates, changes or removes a Nexus account, organization, workspace, membership or configuration. Each one is placed in all the buckets it touches: when it happened, which person did it and for whom, where it ran, which records it wrote, and which access role it realized."@en ;
+    rdfs:subClassOf abi:Process ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:createdAt ;
+          owl:allValuesFrom abi:TemporalInstant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:createdBy ;
+          owl:allValuesFrom abi:Person
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:createdFor ;
+          owl:allValuesFrom abi:Person
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:occursIn ;
+          owl:allValuesFrom nexus:DeploymentSite
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:creates ;
+          owl:allValuesFrom abi:GenericallyDependentContinuant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:updates ;
+          owl:allValuesFrom abi:GenericallyDependentContinuant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:deletes ;
+          owl:allValuesFrom abi:GenericallyDependentContinuant
+        ] ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:realizes ;
+          owl:allValuesFrom abi:Role
+        ] .
+
+# CreateUser, CreateWorkspace and AddUserToWorkspace (above) are identity and
+# access processes. Adding a user to a workspace also writes the membership.
+nexus:AddUserToWorkspace rdfs:subClassOf
+    [ a owl:Restriction ;
+      owl:onProperty nexus:createdFor ;
+      owl:allValuesFrom abi:Person
+    ] ,
+    [ a owl:Restriction ;
+      owl:onProperty nexus:creates ;
+      owl:someValuesFrom nexus:WorkspaceMembership
+    ] .
+
+nexus:ApplyPlatformConfiguration a owl:Class ;
+    rdfs:label "Apply Platform Configuration"@en ;
+    skos:definition "A process by which a Nexus deployment starts with its platform configuration: seeds users, organizations and workspaces, and turns on features and policies."@en ;
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
+        [ a owl:Restriction ;
+          owl:onProperty abi:concretizes ;
+          owl:someValuesFrom nexus:PlatformConfiguration
+        ] .
+
+nexus:UpdateUser a owl:Class ;
+    rdfs:label "Update User"@en ;
+    skos:definition "A process that changes a user account: profile fields or platform superadmin status."@en ;
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:updates ;
+          owl:someValuesFrom nexus:User
+        ] .
+
+nexus:DeleteUser a owl:Class ;
+    rdfs:label "Delete User"@en ;
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:deletes ;
+          owl:someValuesFrom nexus:User
+        ] .
+
+nexus:CreateOrganization a owl:Class ;
+    rdfs:label "Create Organization"@en ;
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:creates ;
+          owl:someValuesFrom nexus:OrganizationProfile
+        ] .
+
+nexus:UpdateOrganization a owl:Class ;
+    rdfs:label "Update Organization"@en ;
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:updates ;
+          owl:someValuesFrom nexus:OrganizationProfile
+        ] .
+
+nexus:DeleteOrganization a owl:Class ;
+    rdfs:label "Delete Organization"@en ;
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:deletes ;
+          owl:someValuesFrom nexus:OrganizationProfile
+        ] .
+
+nexus:AddUserToOrganization a owl:Class ;
+    rdfs:label "Add User to Organization"@en ;
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:creates ;
+          owl:someValuesFrom nexus:OrganizationMembership
+        ] .
+
+nexus:ChangeOrganizationMemberRole a owl:Class ;
+    rdfs:label "Change Organization Member Role"@en ;
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:updates ;
+          owl:someValuesFrom nexus:OrganizationMembership
+        ] .
+
+nexus:RemoveUserFromOrganization a owl:Class ;
+    rdfs:label "Remove User from Organization"@en ;
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:deletes ;
+          owl:someValuesFrom nexus:OrganizationMembership
+        ] .
+
+nexus:UpdateWorkspace a owl:Class ;
+    rdfs:label "Update Workspace"@en ;
+    skos:definition "A process that changes a workspace: name, slug, branding, drives or coding defaults."@en ;
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:updates ;
+          owl:someValuesFrom nexus:Workspace
+        ] .
+
+nexus:DeleteWorkspace a owl:Class ;
+    rdfs:label "Delete Workspace"@en ;
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:deletes ;
+          owl:someValuesFrom nexus:Workspace
+        ] .
+
+nexus:ChangeWorkspaceMemberRole a owl:Class ;
+    rdfs:label "Change Workspace Member Role"@en ;
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:updates ;
+          owl:someValuesFrom nexus:WorkspaceMembership
+        ] .
+
+nexus:RemoveUserFromWorkspace a owl:Class ;
+    rdfs:label "Remove User from Workspace"@en ;
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:deletes ;
+          owl:someValuesFrom nexus:WorkspaceMembership
+        ] .
+
+nexus:ConfigureWorkspaceApp a owl:Class ;
+    rdfs:label "Configure Workspace App"@en ;
+    skos:definition "A process that enables, disables, adds or removes a catalog app in a workspace."@en ;
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:updates ;
+          owl:someValuesFrom nexus:Workspace
+        ] .
+
+nexus:ConfigureWorkspaceAgent a owl:Class ;
+    rdfs:label "Configure Workspace Agent"@en ;
+    skos:definition "A process that adds, changes or removes an agent made available in a workspace."@en ;
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:updates ;
+          owl:someValuesFrom nexus:Workspace
+        ] .
+
+nexus:ConfigureOrganizationRoleFeatures a owl:Class ;
+    rdfs:label "Configure Organization Role Features"@en ;
+    skos:definition "A process that sets an organization's overlay of the role feature baseline."@en ;
+    rdfs:subClassOf nexus:IdentityAndAccessProcess ,
+        [ a owl:Restriction ;
+          owl:onProperty nexus:updates ;
+          owl:someValuesFrom nexus:FeatureAccessPolicy
+        ] .
+
+# --- Data properties -------------------------------------------------------
+
+# Account profile (users table, users seed config)
+nexus:avatar_url a owl:DatatypeProperty ; rdfs:label "avatar url"@en ; rdfs:domain nexus:User ; rdfs:range xsd:string .
+nexus:company a owl:DatatypeProperty ; rdfs:label "company"@en ; rdfs:domain nexus:User ; rdfs:range xsd:string .
+nexus:job_title a owl:DatatypeProperty ; rdfs:label "job title"@en ; rdfs:domain nexus:User ; rdfs:range xsd:string ;
+    skos:definition "The job title the user entered in their profile (users.role). Not an access role."@en .
+nexus:bio a owl:DatatypeProperty ; rdfs:label "bio"@en ; rdfs:domain nexus:User ; rdfs:range xsd:string .
+nexus:store_credentials_in_secrets a owl:DatatypeProperty ; rdfs:label "store credentials in secrets"@en ; rdfs:domain nexus:User ; rdfs:range xsd:boolean .
+
+# Organization profile, workspace and tenant branding
+nexus:organization_id a owl:DatatypeProperty ; rdfs:label "organization id"@en ; rdfs:domain nexus:OrganizationProfile ; rdfs:range xsd:string .
+nexus:organization_name a owl:DatatypeProperty ; rdfs:label "organization name"@en ; rdfs:domain nexus:OrganizationProfile ; rdfs:range xsd:string .
+nexus:slug a owl:DatatypeProperty ; rdfs:label "slug"@en ; rdfs:domain nexus:OrganizationProfile, nexus:Workspace ; rdfs:range xsd:string .
+nexus:logo_url rdfs:domain nexus:OrganizationProfile, nexus:TenantBranding .
+nexus:logo_rectangle_url a owl:DatatypeProperty ; rdfs:label "logo rectangle url"@en ; rdfs:domain nexus:OrganizationProfile, nexus:TenantBranding ; rdfs:range xsd:string .
+nexus:secondary_logo_url a owl:DatatypeProperty ; rdfs:label "secondary logo url"@en ; rdfs:domain nexus:OrganizationProfile ; rdfs:range xsd:string .
+nexus:logo_emoji a owl:DatatypeProperty ; rdfs:label "logo emoji"@en ; rdfs:domain nexus:OrganizationProfile, nexus:Workspace ; rdfs:range xsd:string .
+nexus:favicon_url a owl:DatatypeProperty ; rdfs:label "favicon url"@en ; rdfs:domain nexus:TenantBranding ; rdfs:range xsd:string .
+nexus:tab_title a owl:DatatypeProperty ; rdfs:label "tab title"@en ; rdfs:domain nexus:TenantBranding ; rdfs:range xsd:string .
+nexus:primary_color a owl:DatatypeProperty ; rdfs:label "primary color"@en ; rdfs:domain nexus:OrganizationProfile, nexus:Workspace, nexus:TenantBranding ; rdfs:range xsd:string .
+nexus:accent_color a owl:DatatypeProperty ; rdfs:label "accent color"@en ; rdfs:domain nexus:OrganizationProfile, nexus:Workspace, nexus:TenantBranding ; rdfs:range xsd:string .
+nexus:background_color a owl:DatatypeProperty ; rdfs:label "background color"@en ; rdfs:domain nexus:OrganizationProfile, nexus:Workspace, nexus:TenantBranding ; rdfs:range xsd:string .
+nexus:background_image_url a owl:DatatypeProperty ; rdfs:label "background image url"@en ; rdfs:domain nexus:Workspace ; rdfs:range xsd:string .
+nexus:sidebar_color a owl:DatatypeProperty ; rdfs:label "sidebar color"@en ; rdfs:domain nexus:Workspace ; rdfs:range xsd:string .
+nexus:font_family a owl:DatatypeProperty ; rdfs:label "font family"@en ; rdfs:domain nexus:OrganizationProfile, nexus:Workspace ; rdfs:range xsd:string .
+nexus:font_url a owl:DatatypeProperty ; rdfs:label "font url"@en ; rdfs:domain nexus:OrganizationProfile ; rdfs:range xsd:string .
+nexus:default_theme a owl:DatatypeProperty ; rdfs:label "default theme"@en ; rdfs:domain nexus:OrganizationProfile ; rdfs:range xsd:string .
+nexus:login_card_max_width a owl:DatatypeProperty ; rdfs:label "login card max width"@en ; rdfs:domain nexus:OrganizationProfile ; rdfs:range xsd:string .
+nexus:login_card_padding a owl:DatatypeProperty ; rdfs:label "login card padding"@en ; rdfs:domain nexus:OrganizationProfile ; rdfs:range xsd:string .
+nexus:login_card_color a owl:DatatypeProperty ; rdfs:label "login card color"@en ; rdfs:domain nexus:OrganizationProfile, nexus:TenantBranding ; rdfs:range xsd:string .
+nexus:login_text_color a owl:DatatypeProperty ; rdfs:label "login text color"@en ; rdfs:domain nexus:OrganizationProfile ; rdfs:range xsd:string .
+nexus:login_input_color a owl:DatatypeProperty ; rdfs:label "login input color"@en ; rdfs:domain nexus:OrganizationProfile, nexus:TenantBranding ; rdfs:range xsd:string .
+nexus:login_border_radius a owl:DatatypeProperty ; rdfs:label "login border radius"@en ; rdfs:domain nexus:OrganizationProfile, nexus:TenantBranding ; rdfs:range xsd:string .
+nexus:login_bg_image_url a owl:DatatypeProperty ; rdfs:label "login background image url"@en ; rdfs:domain nexus:OrganizationProfile ; rdfs:range xsd:string .
+nexus:login_footer_text a owl:DatatypeProperty ; rdfs:label "login footer text"@en ; rdfs:domain nexus:OrganizationProfile, nexus:TenantBranding ; rdfs:range xsd:string .
+nexus:show_terms_footer a owl:DatatypeProperty ; rdfs:label "show terms footer"@en ; rdfs:domain nexus:OrganizationProfile, nexus:TenantBranding ; rdfs:range xsd:boolean .
+nexus:show_powered_by a owl:DatatypeProperty ; rdfs:label "show powered by"@en ; rdfs:domain nexus:OrganizationProfile, nexus:TenantBranding ; rdfs:range xsd:boolean .
+nexus:show_logo_separator a owl:DatatypeProperty ; rdfs:label "show logo separator"@en ; rdfs:domain nexus:OrganizationProfile ; rdfs:range xsd:boolean .
+
+# Workspace settings (workspaces table, workspace seed config)
+nexus:platform_drive_enabled a owl:DatatypeProperty ; rdfs:label "platform drive enabled"@en ; rdfs:domain nexus:Workspace ; rdfs:range xsd:boolean .
+nexus:system_drive_enabled a owl:DatatypeProperty ; rdfs:label "system drive enabled"@en ; rdfs:domain nexus:Workspace ; rdfs:range xsd:boolean .
+nexus:coding_default_repo_id a owl:DatatypeProperty ; rdfs:label "coding default repo id"@en ; rdfs:domain nexus:Workspace ; rdfs:range xsd:string .
+nexus:default_agent a owl:DatatypeProperty ; rdfs:label "default agent"@en ; rdfs:domain nexus:Workspace ; rdfs:range xsd:string ;
+    skos:example "bob BobAgent" .
+nexus:seeded_agent a owl:DatatypeProperty ; rdfs:label "seeded agent"@en ; rdfs:domain nexus:Workspace ; rdfs:range xsd:string ;
+    skos:definition "An agent reference the platform configuration makes available in this workspace."@en .
+nexus:seeded_app a owl:DatatypeProperty ; rdfs:label "seeded app"@en ; rdfs:domain nexus:Workspace ; rdfs:range xsd:string ;
+    skos:definition "A catalog app id the platform configuration makes available in this workspace."@en .
+nexus:seeded_ontology a owl:DatatypeProperty ; rdfs:label "seeded ontology"@en ; rdfs:domain nexus:Workspace ; rdfs:range xsd:string ;
+    skos:definition "An ontology reference the platform configuration makes available in this workspace."@en .
+
+# Memberships, features and policies
+nexus:membership_role a owl:DatatypeProperty ; rdfs:label "membership role"@en ;
+    rdfs:domain nexus:WorkspaceMembership, nexus:OrganizationMembership, nexus:IdentityAndAccessProcess ; rdfs:range xsd:string ;
+    skos:example "owner", "admin", "member", "viewer" .
+nexus:previous_membership_role a owl:DatatypeProperty ; rdfs:label "previous membership role"@en ; rdfs:domain nexus:IdentityAndAccessProcess ; rdfs:range xsd:string .
+nexus:feature_key a owl:DatatypeProperty ; rdfs:label "feature key"@en ; rdfs:domain nexus:Feature ; rdfs:range xsd:string .
+nexus:feature_enabled a owl:DatatypeProperty ; rdfs:label "feature enabled"@en ; rdfs:domain nexus:WorkspaceFeatureOverride ; rdfs:range xsd:boolean .
+nexus:policy_role a owl:DatatypeProperty ; rdfs:label "policy role"@en ; rdfs:domain nexus:FeatureAccessPolicy ; rdfs:range xsd:string .
+nexus:app_id a owl:DatatypeProperty ; rdfs:label "app id"@en ; rdfs:domain nexus:WorkspaceAppConfiguration ; rdfs:range xsd:string .
+nexus:app_enabled a owl:DatatypeProperty ; rdfs:label "app enabled"@en ; rdfs:domain nexus:WorkspaceAppConfiguration ; rdfs:range xsd:boolean .
+nexus:agent_name a owl:DatatypeProperty ; rdfs:label "agent name"@en ; rdfs:domain nexus:WorkspaceAgentConfiguration ; rdfs:range xsd:string .
+nexus:class_name rdfs:domain nexus:WorkspaceAgentConfiguration .
+nexus:module_path rdfs:domain nexus:WorkspaceAgentConfiguration .
+nexus:model_id rdfs:domain nexus:WorkspaceAgentConfiguration .
+nexus:provider a owl:DatatypeProperty ; rdfs:label "provider"@en ; rdfs:domain nexus:WorkspaceAgentConfiguration ; rdfs:range xsd:string .
+nexus:agent_enabled a owl:DatatypeProperty ; rdfs:label "agent enabled"@en ; rdfs:domain nexus:WorkspaceAgentConfiguration ; rdfs:range xsd:boolean .
+nexus:is_default_agent a owl:DatatypeProperty ; rdfs:label "is default agent"@en ; rdfs:domain nexus:WorkspaceAgentConfiguration ; rdfs:range xsd:boolean .
+nexus:setting_key a owl:DatatypeProperty ; rdfs:label "setting key"@en ; rdfs:domain nexus:ConfigurationSetting ; rdfs:range xsd:string ;
+    skos:example "abi_agent_model", "nexus_config.magic_link_allow_signup" .
+nexus:setting_value a owl:DatatypeProperty ; rdfs:label "setting value"@en ; rdfs:domain nexus:ConfigurationSetting ; rdfs:range xsd:string .
+
+# What an identity and access process was about, as identifiers (the event
+# log keeps ids, never names or emails).
+nexus:target_user_id a owl:DatatypeProperty ; rdfs:label "target user id"@en ; rdfs:domain nexus:IdentityAndAccessProcess ; rdfs:range xsd:string .
+nexus:target_workspace_id a owl:DatatypeProperty ; rdfs:label "target workspace id"@en ; rdfs:domain nexus:IdentityAndAccessProcess ; rdfs:range xsd:string .
+nexus:target_organization_id a owl:DatatypeProperty ; rdfs:label "target organization id"@en ; rdfs:domain nexus:IdentityAndAccessProcess ; rdfs:range xsd:string .
+nexus:changed_fields a owl:DatatypeProperty ; rdfs:label "changed fields"@en ; rdfs:domain nexus:IdentityAndAccessProcess ; rdfs:range xsd:string ;
+    skos:definition "Names of the fields a process changed."@en .
+nexus:changes_json a owl:DatatypeProperty ; rdfs:label "changes (JSON)"@en ; rdfs:domain nexus:IdentityAndAccessProcess ; rdfs:range xsd:string ;
+    skos:definition "Before/after values of the changed fields, as JSON. Personal fields (name, email, avatar, bio, company, job title) only appear in changed_fields."@en .
