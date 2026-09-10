@@ -62,6 +62,10 @@ const EventsSection = dynamic(() => import('./events-section').then((m) => m.Eve
   ssr: false,
   loading: sectionLoading,
 });
+const WorkspacesSection = dynamic(
+  () => import('./workspaces-section').then((m) => m.WorkspacesSection),
+  { ssr: false, loading: sectionLoading },
+);
 
 function SectionContent({ section }: { section: SidebarSection }) {
   const canMaps = useFeature('maps');
@@ -89,6 +93,8 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'settings') return <SettingsSection collapsed={false} detailOnly />;
   // Superadmin-only route; the dock only offers it to superadmins.
   if (section === 'events') return <EventsSection collapsed={false} detailOnly />;
+  // Opened by the workspace mark (workspace-switcher.tsx).
+  if (section === 'workspaces') return <WorkspacesSection />;
   return null;
 }
 

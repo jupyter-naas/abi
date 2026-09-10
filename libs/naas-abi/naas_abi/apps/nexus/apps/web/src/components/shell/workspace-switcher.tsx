@@ -16,6 +16,7 @@ export function WorkspaceSwitcher() {
   const dockWidth = useWorkspaceStore((s) => s.dockWidth);
   const activePanelSection = useWorkspaceStore((s) => s.activePanelSection);
   const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
+  const closeWorkspacesPanel = useWorkspaceStore((s) => s.closeWorkspacesPanel);
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
   const labeled = dockShowsLabels(dockWidth);
   const open = activePanelSection === 'workspaces';
@@ -24,7 +25,8 @@ export function WorkspaceSwitcher() {
     <div className="relative flex h-14 w-full shrink-0 items-center justify-center border-b border-border/50">
       <button
         type="button"
-        onClick={() => setActivePanelSection(open ? null : 'workspaces')}
+        // Closing puts back the column Workspaces covered (e.g. the Events feed).
+        onClick={() => (open ? closeWorkspacesPanel() : setActivePanelSection('workspaces'))}
         aria-label="Workspaces"
         aria-expanded={open}
         title="Workspaces"

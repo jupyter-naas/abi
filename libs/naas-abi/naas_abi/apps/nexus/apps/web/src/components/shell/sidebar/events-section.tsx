@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, Eraser, Pause, Play } from 'lucide-react';
+import { Activity, Eraser, Pause, Play, Search } from 'lucide-react';
 import {
   EVENTS_PAGE_SIZE,
   EVENTS_POLL_INTERVAL_MS,
@@ -11,6 +11,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
 import { SidebarToolbar, SidebarToolbarButton } from './sidebar-toolbar';
 import { EventFeedItem } from './event-feed-item';
+import { EventTypePicker } from './event-type-picker';
 import { getWorkspacePath } from './utils';
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -83,27 +84,22 @@ export function EventsSection({ collapsed, detailOnly }: { collapsed: boolean; d
         </span>
       </SidebarToolbar>
 
-      <div className="space-y-1 px-1 pb-2">
-        <select
-          value={classFilter}
-          onChange={(e) => setClassFilter(e.target.value)}
-          className="w-full rounded border bg-transparent px-1.5 py-1 text-[11px]"
-          title="Filter by event type (server-side: returns the last N of this type)"
-        >
-          <option value="">All event types ({availableTypes.length})</option>
-          {availableTypes.map((type) => (
-            <option key={type.uri} value={type.uri}>
-              {type.label}
-            </option>
-          ))}
-        </select>
-        <input
-          type="text"
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Search payload (whole log)…"
-          className="w-full rounded border bg-transparent px-1.5 py-1 text-[11px]"
-        />
+      {/* Search row and type picker match QuickOpen in the top nav. */}
+      <div className="mb-1 border-b border-border pb-1">
+        <div className="flex items-center gap-2 px-3 py-2">
+          <Search size={14} className="shrink-0 opacity-70 text-muted-foreground" />
+          <input
+            type="search"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search payload (whole log)"
+            className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none focus-visible:ring-0 placeholder:text-muted-foreground"
+            aria-label="Search event payloads"
+          />
+        </div>
+        <div className="px-0.5">
+          <EventTypePicker types={availableTypes} value={classFilter} onChange={setClassFilter} />
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -140,7 +136,7 @@ export function EventsSection({ collapsed, detailOnly }: { collapsed: boolean; d
               <button
                 onClick={() => void loadOlder()}
                 disabled={loadingOlder}
-                className="rounded border px-3 py-1 text-[10px] hover:bg-accent disabled:opacity-50"
+                className="rounded border px-3 py-1 text-[10px] hover:bg-muted/70 disabled:opacity-50"
               >
                 {loadingOlder ? 'Loading…' : 'Load older'}
               </button>

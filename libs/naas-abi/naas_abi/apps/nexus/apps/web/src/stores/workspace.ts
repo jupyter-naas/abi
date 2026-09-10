@@ -239,6 +239,10 @@ interface WorkspaceState {
   activePanelSection: SidebarSection | null;
   setActivePanelSection: (section: SidebarSection | null) => void;
   lastActivePanelSection: SidebarSection | null;
+  /** The column the Workspaces list replaced (null = no column). Not persisted. */
+  panelSectionBeforeWorkspaces: SidebarSection | null;
+  /** Dismiss the mark-opened Workspaces list, putting back the column it covered. */
+  closeWorkspacesPanel: () => void;
   /** Icon order for the workspace nav. Settings stays pinned and is omitted. */
   sidebarNavOrder: SidebarSection[];
   setSidebarNavOrder: (order: SidebarSection[]) => void;
@@ -552,8 +556,18 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       section && !isTransientPanelSection(section)
         ? section
         : state.lastActivePanelSection,
+    panelSectionBeforeWorkspaces:
+      section === 'workspaces' && state.activePanelSection !== 'workspaces'
+        ? state.activePanelSection
+        : state.panelSectionBeforeWorkspaces,
   })),
   lastActivePanelSection: null,
+  panelSectionBeforeWorkspaces: null,
+  closeWorkspacesPanel: () => set((state) => (
+    state.activePanelSection === 'workspaces'
+      ? { activePanelSection: state.panelSectionBeforeWorkspaces }
+      : {}
+  )),
   sidebarNavOrder: [...DEFAULT_NAV_ORDER],
   setSidebarNavOrder: (order) => set({ sidebarNavOrder: mergeNavOrder(order) }),
 
