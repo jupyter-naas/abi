@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import Script from 'next/script';
 import { AnalyticsPageTracker } from '@/components/analytics-page-tracker';
+import { AuthSessionManager } from '@/components/auth-session-manager';
 import { ThemeProvider } from '@/components/theme-provider';
 import { TenantProvider } from '@/contexts/tenant-context';
 import { WebSocketProvider } from '@/contexts/websocket-context';
@@ -136,6 +137,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <TenantProvider>
+            <AuthSessionManager />
             <WebSocketProvider>
               <AnalyticsPageTracker />
               {children}
