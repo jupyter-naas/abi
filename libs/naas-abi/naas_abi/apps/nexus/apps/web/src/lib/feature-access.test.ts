@@ -4,6 +4,7 @@ import {
   getFeatureForWorkspacePath,
   getFirstAllowedWorkspacePath,
   getWorkspaceSwitchPath,
+  isWorkspaceAdminEventsPath,
   isWorkspacePathAllowed,
   mergeFeatureFlags,
   pathNeedsAgentCatalog,
@@ -225,5 +226,14 @@ describe('pathNeedsGraphExport', () => {
   it('is true only on graph routes', () => {
     expect(pathNeedsGraphExport('/workspace/ws1/graph/network')).toBe(true);
     expect(pathNeedsGraphExport('/workspace/ws1/apps')).toBe(false);
+  });
+});
+
+describe('isWorkspaceAdminEventsPath', () => {
+  it('matches only the Events admin route', () => {
+    expect(isWorkspaceAdminEventsPath('/workspace/ws1/admin/events')).toBe(true);
+    expect(isWorkspaceAdminEventsPath('/org/acme/workspace/ws1/admin/events')).toBe(true);
+    expect(isWorkspaceAdminEventsPath('/workspace/ws1/admin/services')).toBe(false);
+    expect(isWorkspaceAdminEventsPath('/workspace/ws1/chat')).toBe(false);
   });
 });

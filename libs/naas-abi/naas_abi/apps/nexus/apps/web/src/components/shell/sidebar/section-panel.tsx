@@ -1,7 +1,9 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { isWorkspaceAdminEventsPath } from '@/lib/feature-access';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFeature } from '@/hooks/use-feature';
 import { ColumnResizeHandle, useColumnResize } from '../column-resize-handle';
@@ -58,6 +60,10 @@ const SettingsSection = dynamic(() => import('./settings-section').then((m) => m
   ssr: false,
   loading: sectionLoading,
 });
+const EventsFeedSection = dynamic(
+  () => import('./events-feed-section').then((m) => m.EventsFeedSection),
+  { ssr: false, loading: sectionLoading },
+);
 const WorkspacesSection = dynamic(
   () => import('./workspaces-section').then((m) => m.WorkspacesSection),
   { ssr: false, loading: sectionLoading },
@@ -97,6 +103,8 @@ function SectionContent({ section }: { section: SidebarSection }) {
  * workspace mark instead of duplicating a header per column. See topnav.tsx.
  */
 export function SectionPanel() {
+  const pathname = usePathname();
+  const onEventsAdmin = isWorkspaceAdminEventsPath(pathname);
   const activePanelSection = useWorkspaceStore((s) => s.activePanelSection);
   const sectionPanelWidth = useWorkspaceStore((s) => s.sectionPanelWidth);
   const setSectionPanelWidth = useWorkspaceStore((s) => s.setSectionPanelWidth);
@@ -115,8 +123,19 @@ export function SectionPanel() {
         style={isOpen ? { width: sectionPanelWidth } : undefined}
       >
         {isOpen && activePanelSection && (
-          <nav className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
-            <SectionContent section={activePanelSection} />
+          <nav
+            className={cn(
+              'flex min-h-0 flex-1 flex-col p-2',
+              // Events: clip here so the card list, not this nav, is the scroller.
+              // Other sections still scroll the whole column.
+              onEventsAdmin ? 'overflow-hidden' : 'overflow-y-auto',
+            )}
+          >
+            {onEventsAdmin ? (
+              <EventsFeedSection />
+            ) : (
+              <SectionContent section={activePanelSection} />
+            )}
           </nav>
         )}
       </div>

@@ -9,7 +9,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useFeature } from '@/hooks/use-feature';
-import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
+import { isWorkspaceAdminEventsPath } from '@/lib/feature-access';
+import { isTransientPanelSection, useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFilesStore } from '@/stores/files';
 import { useOntologyStore } from '@/stores/ontology';
 import {
@@ -101,6 +102,7 @@ export function Sidebar() {
   const {
     currentWorkspaceId,
     activePanelSection,
+    lastActivePanelSection,
     setActivePanelSection,
     sidebarNavOrder,
     setSidebarNavOrder,
@@ -157,6 +159,16 @@ export function Sidebar() {
     if (lastReconciledPathRef.current === pathname) return;
     lastReconciledPathRef.current = pathname;
     if (!urlSection) {
+      if (isWorkspaceAdminEventsPath(pathname)) {
+        if (!activePanelSection) {
+          const restore =
+            lastActivePanelSection && !isTransientPanelSection(lastActivePanelSection)
+              ? lastActivePanelSection
+              : 'chat';
+          setActivePanelSection(restore);
+        }
+        return;
+      }
       if (pathname.includes('/admin/')) setActivePanelSection(null);
       return;
     }
@@ -545,7 +557,19 @@ export function Sidebar() {
           return (
             <button
               key={item.key}
-              onClick={() => { setActivePanelSection(null); router.push(base); }}
+              onClick={() => {
+                if (item.key === 'admin-events') {
+                  const restore =
+                    activePanelSection
+                    ?? (lastActivePanelSection && !isTransientPanelSection(lastActivePanelSection)
+                      ? lastActivePanelSection
+                      : 'chat');
+                  setActivePanelSection(restore);
+                } else {
+                  setActivePanelSection(null);
+                }
+                router.push(base);
+              }}
               onPointerEnter={(e) => showHoverTip({ id: item.key, ...item }, e.currentTarget)}
               onPointerLeave={hideHoverTip}
               onFocus={(e) => showHoverTip({ id: item.key, ...item }, e.currentTarget)}
