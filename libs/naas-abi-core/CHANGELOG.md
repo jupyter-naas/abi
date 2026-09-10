@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.34.1 (2026-09-10)
+
+### Performance Improvements
+
+- **core**: Reuse a shared connection for DuckLake dataset reads
+  ([`c9beaea`](https://github.com/jupyter-naas/abi/commit/c9beaeaf49a2dbd10b9d65c7f7cff1ca89cc5337))
+
+
 ## v2.34.0 (2026-09-10)
 
 ### Bug Fixes
