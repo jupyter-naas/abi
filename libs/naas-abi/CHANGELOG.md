@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.66.1 (2026-09-10)
+
+### Bug Fixes
+
+- **apply_nexus_platform_pipeline**: Handle Fuseki write lock busy error
+  ([`612e978`](https://github.com/jupyter-naas/abi/commit/612e9780b1e080bbe26b00b131c02f24d8a23996))
+
+
 ## v2.66.0 (2026-09-10)
 
 ### Features
