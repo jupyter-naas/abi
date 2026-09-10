@@ -675,7 +675,7 @@ export default function SlidesEditorPage() {
 
   const onManualEditCommit = useCallback(
     (edits: SlidesTextEdit[]) => {
-      if (!edits.length) return;
+      if (!Array.isArray(edits) || !edits.length) return;
       const baseline = new Map(
         collectSlidesTextEdits(htmlRef.current).map((edit) => [edit.path, edit.html]),
       );

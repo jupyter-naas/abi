@@ -10,6 +10,7 @@ import {
   deckBufferHasCover,
   extractFirstSlideHtml,
   extractSlideHtmlAt,
+  isSlidesPreviewMessage,
   prepareSlidesCoverHtml,
   prepareSlidesPreviewHtml,
   readDeckCoverHtml,
@@ -251,6 +252,31 @@ describe('sanitizeSlidesEditHtml', () => {
     expect(sanitizeSlidesEditHtml('<a href="https://example.com">x</a>')).toContain(
       'href="https://example.com"',
     );
+  });
+});
+
+describe('isSlidesPreviewMessage', () => {
+  it('accepts a well-formed edit-commit and rejects a loose payload', () => {
+    expect(
+      isSlidesPreviewMessage({
+        source: SLIDES_PREVIEW_MESSAGE_SOURCE,
+        type: 'edit-commit',
+        edits: [{ path: '0:h1:0', html: 'Hi' }],
+      }),
+    ).toBe(true);
+    expect(
+      isSlidesPreviewMessage({
+        source: SLIDES_PREVIEW_MESSAGE_SOURCE,
+        type: 'edit-commit',
+      }),
+    ).toBe(false);
+    expect(
+      isSlidesPreviewMessage({
+        source: SLIDES_PREVIEW_MESSAGE_SOURCE,
+        type: 'ready',
+        height: 720,
+      }),
+    ).toBe(true);
   });
 });
 

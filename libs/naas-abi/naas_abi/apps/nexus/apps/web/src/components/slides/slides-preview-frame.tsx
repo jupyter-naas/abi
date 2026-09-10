@@ -83,6 +83,7 @@ export const SlidesPreviewFrame = forwardRef<
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const manualEditRef = useRef(manualEdit);
   const onManualEditCommitRef = useRef(onManualEditCommit);
+  const acceptEditsUntilRef = useRef(0);
   const slideCountRef = useRef(1);
   const [scale, setScale] = useState(1);
   const [docHeight, setDocHeight] = useState(SLIDES_STAGE_HEIGHT);
@@ -154,6 +155,7 @@ export const SlidesPreviewFrame = forwardRef<
   const postManualEdit = useCallback((enabled: boolean) => {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
+    if (!enabled) acceptEditsUntilRef.current = Date.now() + 1500;
     const msg: SlidesPreviewFromParentMessage = {
       source: SLIDES_PREVIEW_MESSAGE_SOURCE,
       type: 'set-manual-edit',
@@ -183,6 +185,7 @@ export const SlidesPreviewFrame = forwardRef<
         return;
       }
       if (event.data.type === 'edit-commit') {
+        if (!manualEditRef.current && Date.now() > acceptEditsUntilRef.current) return;
         onManualEditCommitRef.current?.(event.data.edits);
         return;
       }

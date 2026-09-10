@@ -571,12 +571,24 @@ ${SLIDES_PREVIEW_PRINT_CSS}
   return next;
 }
 
+function isSlidesTextEdit(row: unknown): row is SlidesTextEdit {
+  if (!row || typeof row !== 'object') return false;
+  const edit = row as Partial<SlidesTextEdit>;
+  return typeof edit.path === 'string' && typeof edit.html === 'string';
+}
+
 export function isSlidesPreviewMessage(
   data: unknown,
 ): data is SlidesPreviewToParentMessage {
   if (!data || typeof data !== 'object') return false;
-  const msg = data as Partial<SlidesPreviewToParentMessage>;
-  return msg.source === SLIDES_PREVIEW_MESSAGE_SOURCE && typeof msg.type === 'string';
+  const msg = data as { source?: unknown; type?: unknown; edits?: unknown };
+  if (msg.source !== SLIDES_PREVIEW_MESSAGE_SOURCE || typeof msg.type !== 'string') {
+    return false;
+  }
+  if (msg.type === 'edit-commit') {
+    return Array.isArray(msg.edits) && msg.edits.every(isSlidesTextEdit);
+  }
+  return true;
 }
 
 const SECTION_RE = /<section\b([^>]*)>([\s\S]*?)<\/section>/gi;
