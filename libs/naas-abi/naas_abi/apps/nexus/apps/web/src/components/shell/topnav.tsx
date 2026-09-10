@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { PanelLeft, PanelRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { isWorkspaceAdminEventsPath } from '@/lib/feature-access';
 import { useWorkspaceStore, isTransientPanelSection } from '@/stores/workspace';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { TOPNAV_HEIGHT } from '@/lib/shell-columns';
@@ -24,8 +22,6 @@ import { getWorkspacePath } from './sidebar/utils';
  */
 export function TopNav() {
   const isMobile = useIsMobile();
-  const pathname = usePathname();
-  const onEventsAdmin = isWorkspaceAdminEventsPath(pathname);
   const { nav, actions } = useTopNavContent();
   const [mounted, setMounted] = useState(false);
 
@@ -54,13 +50,10 @@ export function TopNav() {
       : 'chat';
 
   const sectionTitleOpen = mounted && activePanelSection !== null;
-  const panelTitle = onEventsAdmin
-    ? 'Events'
-    : activePanelSection
-      ? SECTION_LABELS[activePanelSection]
-      : '';
+  // Title follows the open column, so Workspaces opened over Events reads Workspaces.
+  const panelTitle = activePanelSection ? SECTION_LABELS[activePanelSection] : '';
   const panelHref =
-    !onEventsAdmin && activePanelSection && SECTION_HOME_HREF[activePanelSection]
+    activePanelSection && SECTION_HOME_HREF[activePanelSection]
       ? getWorkspacePath(currentWorkspaceId, SECTION_HOME_HREF[activePanelSection])
       : null;
 

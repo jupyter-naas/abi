@@ -3,14 +3,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Folder, Database, Code, Presentation, LayoutGrid, Store, Settings, Activity, Boxes, Home,
+  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Folder, Database, Code, Presentation, LayoutGrid, Store, Settings, Activity, Home,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useFeature } from '@/hooks/use-feature';
-import { isWorkspaceAdminEventsPath } from '@/lib/feature-access';
-import { isTransientPanelSection, useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
+import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFilesStore } from '@/stores/files';
 import { useOntologyStore } from '@/stores/ontology';
 import {
@@ -102,7 +101,6 @@ export function Sidebar() {
   const {
     currentWorkspaceId,
     activePanelSection,
-    lastActivePanelSection,
     setActivePanelSection,
     sidebarNavOrder,
     setSidebarNavOrder,
@@ -159,17 +157,10 @@ export function Sidebar() {
     if (lastReconciledPathRef.current === pathname) return;
     lastReconciledPathRef.current = pathname;
     if (!urlSection) {
-      if (isWorkspaceAdminEventsPath(pathname)) {
-        if (!activePanelSection) {
-          const restore =
-            lastActivePanelSection && !isTransientPanelSection(lastActivePanelSection)
-              ? lastActivePanelSection
-              : 'chat';
-          setActivePanelSection(restore);
-        }
-        return;
-      }
-      if (pathname.includes('/admin/')) setActivePanelSection(null);
+      // Events is an admin route with its own feed panel; the rest of /admin/
+      // is full-bleed.
+      if (pathname.includes('/admin/events')) setActivePanelSection('events');
+      else if (pathname.includes('/admin/')) setActivePanelSection(null);
       return;
     }
     // Home is a desk, not a column. A mark-opened Workspaces panel may stay open.
@@ -241,6 +232,7 @@ export function Sidebar() {
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
       case 'settings':     return getWorkspacePath(currentWorkspaceId, '/settings');
       case 'workspaces':   return getWorkspacePath(currentWorkspaceId, '/home');
+      case 'events':       return getWorkspacePath(currentWorkspaceId, '/admin/events');
     }
   };
 
@@ -469,18 +461,15 @@ export function Sidebar() {
       <nav
         ref={navRef}
         className={cn(
-          'flex min-h-0 flex-1 flex-col py-3',
+          'flex flex-1 flex-col gap-1 py-3',
+          // overflow-x-hidden matters: `overflow-y: auto` forces overflow-x to
+          // compute to `auto` too, and at DOCK_WIDTH_MIN the vertical
+          // scrollbar leaves the 40px buttons + px-2 8px short — enough to
+          // raise a horizontal scrollbar across the foot of the dock.
+          draggingId ? 'overflow-visible' : 'overflow-y-auto overflow-x-hidden',
           labeled ? 'px-2' : 'items-center px-2'
         )}
       >
-        {/* Keep overflow on this shrink-wrapped list. A full-height overflow nav seams above Events. */}
-        <div
-          className={cn(
-            'flex max-h-full min-h-0 flex-col gap-1',
-            draggingId ? 'overflow-visible' : 'overflow-y-auto',
-            !labeled && 'items-center',
-          )}
-        >
         {orderedSections.map((section, index) => {
           const active = isSectionActive(section);
           const isDragging = draggingId === section.id;
@@ -539,37 +528,28 @@ export function Sidebar() {
             </button>
           );
         })}
-        </div>
       </nav>
 
+      {/*
+        Pinned below the scrolling list only because it must stay in view — it
+        is the same column of destinations, so it carries no divider and no top
+        padding of its own.
+      */}
       <nav
         className={cn(
-          'flex flex-shrink-0 flex-col gap-1 py-3',
+          'flex flex-shrink-0 flex-col gap-1 pb-3',
           labeled ? 'px-2' : 'items-center px-2'
         )}
       >
         {isSuperadmin && [
           { key: 'admin-events', href: '/admin/events', label: 'Events', description: 'Recent platform activity', icon: <Activity size={18} /> },
-          { key: 'admin-services', href: '/admin/services', label: 'Services', description: 'Backing service health and status', icon: <Boxes size={18} /> },
         ].map((item) => {
           const base = getWorkspacePath(currentWorkspaceId, item.href);
           const active = pathname.startsWith(base);
           return (
             <button
               key={item.key}
-              onClick={() => {
-                if (item.key === 'admin-events') {
-                  const restore =
-                    activePanelSection
-                    ?? (lastActivePanelSection && !isTransientPanelSection(lastActivePanelSection)
-                      ? lastActivePanelSection
-                      : 'chat');
-                  setActivePanelSection(restore);
-                } else {
-                  setActivePanelSection(null);
-                }
-                router.push(base);
-              }}
+              onClick={() => { setActivePanelSection('events'); router.push(base); }}
               onPointerEnter={(e) => showHoverTip({ id: item.key, ...item }, e.currentTarget)}
               onPointerLeave={hideHoverTip}
               onFocus={(e) => showHoverTip({ id: item.key, ...item }, e.currentTarget)}
@@ -612,9 +592,10 @@ export function Sidebar() {
         })}
       </nav>
 
+      {/* The avatar reads as its own thing without a rule drawn over it. */}
       <div
         className={cn(
-          'flex flex-shrink-0 flex-col py-2',
+          'flex flex-shrink-0 flex-col pb-2',
           labeled ? 'px-2' : 'items-center px-2',
         )}
       >

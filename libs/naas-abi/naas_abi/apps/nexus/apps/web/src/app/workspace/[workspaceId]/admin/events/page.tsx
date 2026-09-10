@@ -1,382 +1,202 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Header } from '@/components/shell/header';
-import { cn } from '@/lib/utils';
-import { authFetch } from '@/stores/auth';
-import { useAdminEventsLog } from './admin-events-log';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEventsStore, selectSelectedEvent } from '@/stores/events';
 import {
-  BFO_COLUMNS,
-  projectEventToBfo,
-  type PlatformEvent,
+  UNKNOWN,
+  buildEventGraphPayload,
+  eventTimestamp,
+  formatEventClock,
+  formatEventDate,
+  summarizeBucket,
 } from './bfo-event-projection';
-import { EventsGraphCanvas } from './events-graph-canvas';
-import { eventForGraph } from './events-graph';
-import { EventsJsonCanvas } from './events-json-canvas';
-import { EventsMenuBar } from './events-menu-bar';
+import {
+  buildEventGraphModel,
+  emptyFilters,
+  processLabel,
+  type GraphFilters,
+} from './event-graph-model';
+import {
+  DEFAULT_VIEW,
+  defaultGraphParams,
+  readStoredParams,
+  writeStoredParams,
+  type GraphParams,
+  type GraphView,
+} from './event-graph-params';
+import { EventGraphCanvas } from './event-graph-canvas';
 
-interface EventRow {
-  receivedAt: string;
-  event: PlatformEvent;
-}
-
-// Soft cap on rows held in memory. The live tail trims to this; "Load older"
-// can grow past it deliberately. With server-side filtering the stream is
-// usually quiet, so this rarely bites.
-const MAX_EVENTS = 2000;
-const PAGE_SIZE = 100;
-const POLL_INTERVAL_MS = 5000;
-const SEARCH_DEBOUNCE_MS = 300;
-
+/**
+ * Platform event stream, as BFO-shaped processes.
+ *
+ * The chronological feed lives in the second sidebar (`EventsSection`); this
+ * pane draws the processes it selects, with the Personnel Cockpit's filter and
+ * parameter surface over the top. Both read the same store, so the live tail
+ * keeps running whether or not the panel is open.
+ */
 export default function AdminEventsPage() {
-  const [authState, setAuthState] = useState<'checking' | 'authorized' | 'denied'>('checking');
-  const [events, setEvents] = useState<EventRow[]>([]);
-  const classFilter = useAdminEventsLog((s) => s.classFilter);
-  const searchInput = useAdminEventsLog((s) => s.searchInput);
-  const search = useAdminEventsLog((s) => s.search);
-  const setSearch = useAdminEventsLog((s) => s.setSearch);
-  const setAvailableTypes = useAdminEventsLog((s) => s.setAvailableTypes);
-  const [loadingOlder, setLoadingOlder] = useState(false);
-  const [hasMoreOlder, setHasMoreOlder] = useState(true);
-  const view = useAdminEventsLog((s) => s.view);
-  const setView = useAdminEventsLog((s) => s.setView);
-  const projection = useAdminEventsLog((s) => s.projection);
+  const authState = useEventsStore((s) => s.authState);
+  const subscribe = useEventsStore((s) => s.subscribe);
+  const selectedEvent = useEventsStore(selectSelectedEvent);
+  const selectEvent = useEventsStore((s) => s.selectEvent);
+  const rows = useEventsStore((s) => s.events);
 
-  // Track event URIs already shown so polling / load-older don't duplicate them.
-  const seenUrisRef = useRef<Set<string>>(new Set());
+  const [params, setParams] = useState<GraphParams>(() => defaultGraphParams(DEFAULT_VIEW));
+  const [filters, setFilters] = useState<GraphFilters>(emptyFilters);
+  const [search, setSearch] = useState('');
+  const [showRaw, setShowRaw] = useState(false);
 
-  // --- auth gate -----------------------------------------------------------
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await authFetch('/api/admin/me');
-        if (!res.ok) {
-          if (!cancelled) setAuthState('denied');
-          return;
-        }
-        const data = await res.json();
-        if (cancelled) return;
-        setAuthState(data.is_superadmin ? 'authorized' : 'denied');
-      } catch {
-        if (!cancelled) setAuthState('denied');
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  useEffect(() => subscribe(), [subscribe]);
+
+  // sessionStorage is client-only; hydrate after mount so SSR and the first
+  // client render agree.
+  useEffect(() => setParams(readStoredParams()), []);
+
+  const updateParams = useCallback((next: GraphParams) => {
+    setParams(next);
+    writeStoredParams(next);
   }, []);
 
-  // --- debounce the search box into the query-driving `search` -------------
-  useEffect(() => {
-    const id = setTimeout(() => setSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(id);
-  }, [searchInput, setSearch]);
-
-  // --- load the full event-type registry for the filter dropdown ----------
-  useEffect(() => {
-    if (authState !== 'authorized') return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await authFetch('/api/admin/events/types');
-        if (!res.ok || cancelled) return;
-        const data = await res.json();
-        if (!cancelled) setAvailableTypes(Array.isArray(data) ? data : []);
-      } catch {
-        /* non-fatal: dropdown just stays empty */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [authState, setAvailableTypes]);
-
-  const buildUrl = useCallback(
-    (beforeSeq?: number | null) => {
-      const p = new URLSearchParams();
-      p.set('limit', String(PAGE_SIZE));
-      if (classFilter) p.set('event_class', classFilter);
-      if (search) p.set('q', search);
-      if (beforeSeq != null) p.set('before_seq', String(beforeSeq));
-      return `/api/admin/events/recent?${p.toString()}`;
-    },
-    [classFilter, search],
+  const onParamChange = useCallback(
+    (key: string, value: string | number | boolean) =>
+      updateParams({ ...params, [key]: value } as GraphParams),
+    [params, updateParams],
   );
 
-  // Server returns oldest-first; present newest-first and drop already-seen.
-  const toRows = useCallback((batch: PlatformEvent[]): EventRow[] => {
-    const ordered = [...batch].reverse();
-    const fresh: EventRow[] = [];
-    for (const event of ordered) {
-      if (seenUrisRef.current.has(event._uri)) continue;
-      seenUrisRef.current.add(event._uri);
-      fresh.push({
-        receivedAt: event._stored_at || event.created_at || new Date().toISOString(),
-        event,
-      });
-    }
-    return fresh;
-  }, []);
-
-  // --- live tail; reloads from scratch whenever the filters change --------
-  useEffect(() => {
-    if (authState !== 'authorized') return;
-    let cancelled = false;
-
-    seenUrisRef.current = new Set();
-    setEvents([]);
-    setHasMoreOlder(true);
-
-    const poll = async () => {
-      try {
-        const res = await authFetch(buildUrl());
-        if (!res.ok || cancelled) return;
-        const batch: PlatformEvent[] = await res.json();
-        if (cancelled) return;
-        useAdminEventsLog.getState().setPollStatus(new Date(), POLL_INTERVAL_MS / 1000);
-        const fresh = toRows(batch);
-        if (fresh.length === 0) return;
-        setEvents((prev) => {
-          const next = [...fresh, ...prev];
-          return next.length > MAX_EVENTS ? next.slice(0, MAX_EVENTS) : next;
-        });
-      } catch {
-        /* non-fatal: next tick will try again */
-      }
-    };
-
-    poll();
-    const pollId = setInterval(poll, POLL_INTERVAL_MS);
-    const tickId = setInterval(() => {
-      useAdminEventsLog.getState().tickPollCountdown();
-    }, 1000);
-    return () => {
-      cancelled = true;
-      clearInterval(pollId);
-      clearInterval(tickId);
-    };
-  }, [authState, buildUrl, toRows]);
-
-  const loadOlder = useCallback(async () => {
-    if (loadingOlder) return;
-    let minSeq = Infinity;
-    for (const r of events) {
-      if (typeof r.event._seq === 'number' && r.event._seq < minSeq) {
-        minSeq = r.event._seq;
-      }
-    }
-    if (!Number.isFinite(minSeq)) return;
-    setLoadingOlder(true);
-    try {
-      const res = await authFetch(buildUrl(minSeq));
-      if (!res.ok) return;
-      const batch: PlatformEvent[] = await res.json();
-      setHasMoreOlder(batch.length >= PAGE_SIZE);
-      const fresh = toRows(batch);
-      if (fresh.length) setEvents((prev) => [...prev, ...fresh]);
-    } catch {
-      /* non-fatal */
-    } finally {
-      setLoadingOlder(false);
-    }
-  }, [events, loadingOlder, buildUrl, toRows]);
-
-  const selectedUri = useAdminEventsLog((s) => s.selectedUri);
-  const setLogEvents = useAdminEventsLog((s) => s.setEvents);
-  const graphEvent = useMemo(
-    () => eventForGraph(events.map((row) => row.event), selectedUri),
-    [events, selectedUri],
+  const onSwitchView = useCallback(
+    (view: GraphView) => updateParams({ ...defaultGraphParams(view), processCount: params.processCount }),
+    [params.processCount, updateParams],
   );
 
-  useEffect(() => {
-    setLogEvents(events.map((row) => row.event));
-  }, [events, setLogEvents]);
+  const onResetParams = useCallback(
+    () => updateParams(defaultGraphParams(params.view)),
+    [params.view, updateParams],
+  );
 
-  useEffect(() => {
-    return () => {
-      useAdminEventsLog.getState().clearSession();
-    };
-  }, []);
+  const events = useMemo(() => rows.map((row) => row.event), [rows]);
 
-  useEffect(() => {
-    if (!selectedUri) return;
-    const row = document.querySelector(`[data-event-uri="${CSS.escape(selectedUri)}"]`);
-    row?.scrollIntoView({ block: 'nearest' });
-  }, [selectedUri]);
+  const model = useMemo(
+    () =>
+      buildEventGraphModel(events, filters, {
+        focusUri: selectedEvent?._uri ?? null,
+        processCount: params.processCount,
+      }),
+    [events, filters, selectedEvent, params.processCount],
+  );
 
-  const filtering = Boolean(classFilter || search);
-  const menuBar = (
-    <Header
-      title="Events"
-      nav={
-        <EventsMenuBar
-          onLoadOlder={() => void loadOlder()}
-          loadOlderDisabled={!hasMoreOlder || events.length === 0}
-          loadOlderBusy={loadingOlder}
-        />
-      }
-    />
+  // Clicking a row in the feed puts that process in the search bar.
+  useEffect(() => {
+    setSearch(selectedEvent ? processLabel(selectedEvent) : '');
+  }, [selectedEvent]);
+
+  const payload = useMemo(
+    () => (selectedEvent ? buildEventGraphPayload(selectedEvent) : null),
+    [selectedEvent],
   );
 
   if (authState === 'checking') {
     return (
-      <div className="flex h-full flex-col">
-        {menuBar}
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          Checking access…
-        </div>
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        Checking access…
       </div>
     );
   }
 
   if (authState === 'denied') {
     return (
-      <div className="flex h-full flex-col">
-        {menuBar}
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
-          <h1 className="text-xl font-semibold">Forbidden</h1>
-          <p className="text-sm text-muted-foreground">
-            Platform superadmin role required. Set
-            <code className="mx-1 rounded bg-muted px-1 py-0.5">is_superadmin: true</code>
-            on the matching user in <code className="mx-1 rounded bg-muted px-1 py-0.5">config.local.yaml</code>
-            and restart the API to grant access.
-          </p>
-        </div>
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
+        <h1 className="text-xl font-semibold">Forbidden</h1>
+        <p className="text-sm text-muted-foreground">
+          Platform superadmin role required. Set
+          <code className="mx-1 rounded bg-muted px-1 py-0.5">is_superadmin: true</code>
+          on the matching user in <code className="mx-1 rounded bg-muted px-1 py-0.5">config.local.yaml</code>
+          and restart the API to grant access.
+        </p>
       </div>
     );
   }
 
+  if (!selectedEvent || !payload) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
+        <h1 className="text-lg font-semibold">Events</h1>
+        <p className="max-w-md text-sm text-muted-foreground">
+          {events.length === 0
+            ? 'No events recorded yet. Send a chat message or trigger a tool call, and the feed will fill in.'
+            : 'Pick a process in the feed to see its BFO 7-bucket graph.'}
+        </p>
+      </div>
+    );
+  }
+
+  const at = eventTimestamp(selectedEvent);
+
   return (
     <div className="flex h-full flex-col bg-background text-foreground">
-      {menuBar}
-      {view === 'graph' ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {events.length === 0 ? (
-            <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-              {filtering
-                ? 'No events match the current filters.'
-                : 'No events recorded yet. Waiting for live events…'}
-            </div>
-          ) : (
-            <EventsGraphCanvas
-              event={graphEvent}
-              projection={projection}
-              onViewJson={() => setView('json')}
-            />
-          )}
+      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b px-6 py-3">
+        <div className="min-w-0">
+          <h1 className="truncate text-base font-semibold">
+            {payload.naming.verb}
+            {payload.naming.object !== UNKNOWN && (
+              <span className="font-normal text-muted-foreground"> · {payload.naming.object}</span>
+            )}
+          </h1>
+          <p className="truncate text-xs text-muted-foreground">
+            {summarizeBucket(payload, 'Material Entity')}
+            {' · '}
+            {formatEventDate(at)} {formatEventClock(at)}
+            {' · in '}
+            {summarizeBucket(payload, 'Site')}
+            {' · '}
+            <span className="font-mono">{payload.naming.className}</span>
+          </p>
         </div>
-      ) : view === 'json' ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {events.length === 0 ? (
-            <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-              {filtering
-                ? 'No events match the current filters.'
-                : 'No events recorded yet. Waiting for live events…'}
-            </div>
-          ) : (
-            <EventsJsonCanvas event={graphEvent} />
+        <div className="flex items-center gap-3 text-xs">
+          <span className="text-muted-foreground">
+            {model.nodes.filter((node) => node.isProcess).length} of {model.matchedProcessCount} matching
+            processes drawn
+          </span>
+          {model.focusFiltered && (
+            // The focus is drawn regardless, so say why it is there: otherwise
+            // it reads as a filter that failed to apply.
+            <span className="rounded border border-dashed px-2 py-1 text-muted-foreground">
+              selected process is outside the current filters — kept as the focus
+            </span>
           )}
-        </div>
-      ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-3">
-          {events.length === 0 ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">
-              {filtering
-                ? 'No events match the current filters.'
-                : 'No events recorded yet. Waiting for live events…'}
-            </div>
-          ) : (
-            <>
-              <div className="overflow-x-auto rounded-lg border">
-                <table className="w-full min-w-[960px]">
-                  <thead>
-                    <tr className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
-                      {BFO_COLUMNS.map((col) => (
-                        <th
-                          key={col.key}
-                          className="whitespace-nowrap p-3 font-medium"
-                          title={
-                            col.key === 'ice'
-                              ? 'Information content entity (the stored log record)'
-                              : undefined
-                          }
-                        >
-                          {col.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {events.map((row) => (
-                      <EventTableRow
-                        key={`${row.receivedAt}-${row.event._uri}`}
-                        row={row}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="py-4 text-center">
-                {hasMoreOlder ? (
-                  <button
-                    type="button"
-                    onClick={() => void loadOlder()}
-                    disabled={loadingOlder}
-                    className="rounded border px-4 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
-                  >
-                    {loadingOlder ? 'Loading…' : 'Load older'}
-                  </button>
-                ) : (
-                  <span className="text-xs text-muted-foreground">End of log</span>
-                )}
-              </div>
-              <p className="shrink-0 pb-4 text-xs text-muted-foreground">
-                Projection over the EventService log; not full BFO individuals yet.
-                Unmapped buckets show <code className="rounded bg-muted px-1 py-0.5">Unknown</code>.
-              </p>
-            </>
+          {payload.missing.length > 0 && (
+            <span className="text-muted-foreground">
+              focus gaps: <span className="font-mono">{payload.missing.join(', ')}</span>
+            </span>
           )}
+          <button
+            onClick={() => setShowRaw((v) => !v)}
+            className="rounded border px-2 py-1 hover:bg-workspace-accent-10 hover:text-workspace-accent"
+          >
+            {showRaw ? 'Hide payload' : 'Raw payload'}
+          </button>
         </div>
+      </header>
+
+      <div className="min-h-0 flex-1">
+        <EventGraphCanvas
+          model={model}
+          params={params}
+          filters={filters}
+          searchValue={search}
+          onParamChange={onParamChange}
+          onSwitchView={onSwitchView}
+          onResetParams={onResetParams}
+          onFiltersChange={setFilters}
+          onSearchChange={setSearch}
+          onPickProcess={selectEvent}
+        />
+      </div>
+
+      {showRaw && (
+        <pre className="max-h-64 flex-shrink-0 overflow-auto whitespace-pre-wrap border-t px-6 py-3 font-mono text-[11px]">
+          {JSON.stringify(selectedEvent, null, 2)}
+        </pre>
       )}
     </div>
   );
 }
-
-function EventTableRow({ row }: { row: EventRow }) {
-  const selectedUri = useAdminEventsLog((s) => s.selectedUri);
-  const toggleUri = useAdminEventsLog((s) => s.toggleUri);
-  const buckets = projectEventToBfo(row.event);
-  const selected = row.event._uri === selectedUri;
-
-  return (
-    <>
-      <tr
-        data-event-uri={row.event._uri}
-        aria-selected={selected}
-        aria-expanded={selected}
-        onClick={() => toggleUri(row.event._uri)}
-        className={cn(
-          'cursor-pointer border-b font-mono text-[11px] text-foreground transition-colors last:border-0 hover:bg-muted/50',
-          selected && 'bg-muted shadow-[inset_2px_0_0_0_hsl(var(--foreground)/0.2)]',
-        )}
-      >
-        {BFO_COLUMNS.map((col) => (
-          <td key={col.key} className="max-w-[14rem] truncate p-3 align-top" title={buckets[col.key]}>
-            {buckets[col.key]}
-          </td>
-        ))}
-      </tr>
-      {selected && (
-        <tr className="border-b bg-muted/40 text-foreground">
-          <td colSpan={BFO_COLUMNS.length} className="p-0">
-            <pre className="max-h-96 overflow-auto whitespace-pre-wrap px-3 py-2 font-mono text-[11px]">
-              {JSON.stringify(row.event, null, 2)}
-            </pre>
-          </td>
-        </tr>
-      )}
-    </>
-  );
-}
-

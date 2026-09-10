@@ -19,13 +19,13 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const setCurrentWorkspace = useWorkspaceStore((s) => s.setCurrentWorkspace);
   const setActiveConversation = useWorkspaceStore((s) => s.setActiveConversation);
-  const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
+  const closeWorkspacesPanel = useWorkspaceStore((s) => s.closeWorkspacesPanel);
 
   const listed = useMemo(() => listWorkspaces(workspaces, query), [workspaces, query]);
 
   const pick = (workspace: Workspace) => {
     if (workspace.id === currentWorkspaceId) {
-      setActivePanelSection(null);
+      closeWorkspacesPanel();
       onPicked?.();
       return;
     }

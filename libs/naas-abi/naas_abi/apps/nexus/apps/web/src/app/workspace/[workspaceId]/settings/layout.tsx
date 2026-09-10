@@ -1,7 +1,12 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { Header } from '@/components/shell/header';
+
+// Service embeds want the full content area (width and height) instead of
+// the centered card layout every other settings page uses.
+const FULL_PAGE_PATTERN = /\/settings\/services\/[^/]+$/;
 
 export default function SettingsLayout({
   children,
@@ -11,6 +16,8 @@ export default function SettingsLayout({
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
+  const pathname = usePathname();
+  const isFullPage = FULL_PAGE_PATTERN.test(pathname ?? '');
 
   return (
     <div className="flex h-full flex-col">
@@ -19,9 +26,13 @@ export default function SettingsLayout({
         subtitle={currentWorkspace?.name || 'Configure your workspace'}
       />
 
-      <div className="flex-1 overflow-auto px-4 py-6">
-        <div className="mx-auto max-w-4xl">{children}</div>
-      </div>
+      {isFullPage ? (
+        <div className="flex-1 overflow-hidden">{children}</div>
+      ) : (
+        <div className="flex-1 overflow-auto px-4 py-6">
+          <div className="mx-auto max-w-4xl">{children}</div>
+        </div>
+      )}
     </div>
   );
 }

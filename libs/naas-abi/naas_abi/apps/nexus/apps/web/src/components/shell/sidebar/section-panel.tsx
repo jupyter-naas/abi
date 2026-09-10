@@ -1,9 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { isWorkspaceAdminEventsPath } from '@/lib/feature-access';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFeature } from '@/hooks/use-feature';
 import { ColumnResizeHandle, useColumnResize } from '../column-resize-handle';
@@ -60,10 +58,10 @@ const SettingsSection = dynamic(() => import('./settings-section').then((m) => m
   ssr: false,
   loading: sectionLoading,
 });
-const EventsFeedSection = dynamic(
-  () => import('./events-feed-section').then((m) => m.EventsFeedSection),
-  { ssr: false, loading: sectionLoading },
-);
+const EventsSection = dynamic(() => import('./events-section').then((m) => m.EventsSection), {
+  ssr: false,
+  loading: sectionLoading,
+});
 const WorkspacesSection = dynamic(
   () => import('./workspaces-section').then((m) => m.WorkspacesSection),
   { ssr: false, loading: sectionLoading },
@@ -93,6 +91,9 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'apps' && canApps) return <AppsSection collapsed={false} detailOnly />;
   if (section === 'marketplace' && canMarketplace) return <MarketplaceSection collapsed={false} detailOnly />;
   if (section === 'settings') return <SettingsSection collapsed={false} detailOnly />;
+  // Superadmin-only route; the dock only offers it to superadmins.
+  if (section === 'events') return <EventsSection collapsed={false} detailOnly />;
+  // Opened by the workspace mark (workspace-switcher.tsx).
   if (section === 'workspaces') return <WorkspacesSection />;
   return null;
 }
@@ -103,8 +104,6 @@ function SectionContent({ section }: { section: SidebarSection }) {
  * workspace mark instead of duplicating a header per column. See topnav.tsx.
  */
 export function SectionPanel() {
-  const pathname = usePathname();
-  const onEventsAdmin = isWorkspaceAdminEventsPath(pathname);
   const activePanelSection = useWorkspaceStore((s) => s.activePanelSection);
   const sectionPanelWidth = useWorkspaceStore((s) => s.sectionPanelWidth);
   const setSectionPanelWidth = useWorkspaceStore((s) => s.setSectionPanelWidth);
@@ -116,26 +115,15 @@ export function SectionPanel() {
       {isDragging && <div className="fixed inset-0 z-50 cursor-col-resize" />}
       <div
         className={cn(
-          'glass flex h-full min-h-0 flex-col overflow-hidden border-r border-border/50 flex-shrink-0',
+          'glass flex flex-col border-r border-border/50 overflow-hidden flex-shrink-0',
           !isDragging && 'transition-[width] duration-300',
           !isOpen && 'w-0 border-r-0'
         )}
         style={isOpen ? { width: sectionPanelWidth } : undefined}
       >
         {isOpen && activePanelSection && (
-          <nav
-            className={cn(
-              'flex min-h-0 flex-1 flex-col p-2',
-              // Events: clip here so the card list, not this nav, is the scroller.
-              // Other sections still scroll the whole column.
-              onEventsAdmin ? 'overflow-hidden' : 'overflow-y-auto',
-            )}
-          >
-            {onEventsAdmin ? (
-              <EventsFeedSection />
-            ) : (
-              <SectionContent section={activePanelSection} />
-            )}
+          <nav className="flex-1 overflow-y-auto p-2">
+            <SectionContent section={activePanelSection} />
           </nav>
         )}
       </div>

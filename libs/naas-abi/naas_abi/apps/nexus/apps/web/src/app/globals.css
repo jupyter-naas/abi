@@ -342,6 +342,74 @@ aside.glass :focus-visible {
 }
 
 /* ============================================
+ * DUAL-HANDLE RANGE (events graph temporal slicer)
+ * Two native range inputs stacked on one track, so both ends stay keyboard
+ * operable. The inputs themselves ignore pointer events — only the thumbs
+ * take them — which is what lets the lower one still be grabbed.
+ * ============================================ */
+.range-dual {
+  -webkit-appearance: none;
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.range-dual:focus {
+  outline: none;
+}
+
+.range-dual::-webkit-slider-runnable-track {
+  background: transparent;
+  border: none;
+  height: 100%;
+}
+
+.range-dual::-moz-range-track {
+  background: transparent;
+  border: none;
+  height: 100%;
+}
+
+.range-dual::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  height: 12px;
+  width: 12px;
+  border-radius: 9999px;
+  background: var(--workspace-accent, #22c55e);
+  border: 2px solid hsl(var(--background));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  cursor: ew-resize;
+}
+
+.range-dual::-moz-range-thumb {
+  pointer-events: auto;
+  height: 12px;
+  width: 12px;
+  border-radius: 9999px;
+  background: var(--workspace-accent, #22c55e);
+  border: 2px solid hsl(var(--background));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  cursor: ew-resize;
+}
+
+.range-dual:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--workspace-accent, #22c55e);
+  outline-offset: 2px;
+}
+
+.range-dual:focus-visible::-moz-range-thumb {
+  outline: 2px solid var(--workspace-accent, #22c55e);
+  outline-offset: 2px;
+}
+
+/* ============================================
  * ORGANIZATION BRANDING - BORDER RADIUS
  * Applies globally when data-org-branded="true" is set
  * ============================================ */

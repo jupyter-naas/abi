@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from naas_abi.apps.nexus.apps.api.app.services.analytics.adapters.secondary import (
+    AnalyticsSecondaryAdapterEventLog,
     AnalyticsSecondaryAdapterObjectStorage,
 )
 from naas_abi.apps.nexus.apps.api.app.services.analytics.port import (
@@ -89,10 +90,34 @@ def _get_object_storage(request: Request) -> ObjectStorageService:
         ) from exc
 
 
+def _get_event_service() -> Any | None:
+    """The engine's event log, or None when this deploy runs without one."""
+    try:
+        from naas_abi import ABIModule
+
+        engine = ABIModule.get_instance().engine
+        if not engine.services.events_available():
+            return None
+        return engine.services.events
+    except Exception as exc:
+        logger.debug(f"[analytics] event service unavailable: {exc}")
+        return None
+
+
 def get_analytics_service(
     storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> AnalyticsService:
-    return AnalyticsService(storage=AnalyticsSecondaryAdapterObjectStorage(object_storage=storage))
+    object_storage_adapter = AnalyticsSecondaryAdapterObjectStorage(object_storage=storage)
+    events = _get_event_service()
+    if events is None:
+        # No event log on this deploy: keep writing per-event pickles.
+        return AnalyticsService(storage=object_storage_adapter)
+    return AnalyticsService(
+        storage=AnalyticsSecondaryAdapterEventLog(
+            events=events,
+            object_storage_adapter=object_storage_adapter,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------

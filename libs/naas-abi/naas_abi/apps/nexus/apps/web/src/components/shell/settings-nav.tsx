@@ -1,5 +1,6 @@
 import {
   AppWindow,
+  Boxes,
   Bot,
   Brush,
   Cpu,
@@ -11,6 +12,7 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react';
+import { DOCKER_SERVICES } from '@/lib/docker-services';
 
 export type SettingsNavItem = {
   href: string;
@@ -24,7 +26,7 @@ export type SettingsNavGroup = {
 };
 
 /**
- * Workspace settings categories — shown both in the Settings sub-panel and
+ * Workspace settings categories, shown both in the Settings sub-panel and
  * driving the default redirect for /workspace/[id]/settings.
  *
  * Account and Organization live in standalone routes (linked from the
@@ -54,7 +56,15 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
       { href: '/settings/drives', label: 'Drives', icon: HardDrive },
     ],
   },
+  {
+    label: 'Services',
+    items: DOCKER_SERVICES.map((service) => ({
+      href: `/settings/services/${service.id}`,
+      label: service.label,
+      icon: Boxes,
+    })),
+  },
 ];
 
-/** First settings item — used as the default landing for /settings. */
+/** First settings item, used as the default landing for /settings. */
 export const DEFAULT_SETTINGS_PATH = SETTINGS_GROUPS[0].items[0].href;
