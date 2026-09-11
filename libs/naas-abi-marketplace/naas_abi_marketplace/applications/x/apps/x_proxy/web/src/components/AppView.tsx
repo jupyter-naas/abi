@@ -322,7 +322,6 @@ export function AppView({ page }: Props) {
         ) : null}
         {page === "tweets" ? (
           <TweetsPage
-            data={data.search}
             timezone={timezone}
             needle={needle}
             onNeedleChange={handleNeedleChange}
