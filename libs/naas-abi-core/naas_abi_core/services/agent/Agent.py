@@ -1192,15 +1192,23 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         ]
 
         try:
-            formatted_response = self._chat_model_with_tools.invoke(prompt)
+            # A formatting pass needs no tools. With tools bound, some models
+            # answer the formatting prompt with a tool call or an empty
+            # message, and the user's real answer was replaced by "".
+            formatted_response = self._chat_model.invoke(prompt)
             logger.debug(
                 f"Markdown pretty display response: {formatted_response.content}"
             )
 
-            if not isinstance(formatted_response.content, str):
+            formatted = formatted_response.content
+            if (
+                not isinstance(formatted, str)
+                or not formatted.strip()
+                or getattr(formatted_response, "tool_calls", None)
+            ):
                 return response
 
-            response.content = formatted_response.content.strip()
+            response.content = formatted.strip()
             return response
         except Exception as e:  # noqa: BLE001
             logger.warning(
@@ -1453,7 +1461,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
     def _strip_inbound_handoff_artifacts(
         self, messages: list[AnyMessage]
     ) -> list[AnyMessage]:
-        """Hide the parent's `transfer_to_<self>` call/response pair from the sub-agent's LLM.
+        """Hide inbound handoff call/response pairs from the sub-agent's LLM.
 
         When a supervisor hands off to this agent, two artifacts end up in the
         propagated message history:
@@ -1469,8 +1477,10 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         underlying tool result). This helper removes both so the sub-agent
         sees a clean user/assistant transcript.
 
-        Outbound handoffs that this agent emitted itself (to its OWN
-        sub-agents) are left untouched.
+        Through a chain of supervisors (Bob -> Abi -> Apps) the upstream pairs
+        (``transfer_to_Abi``) reach this agent too and read the same way, so
+        every handoff pair is removed except the outbound ones this agent
+        emitted itself (to its OWN sub-agents).
 
         The original ``state["messages"]`` is not mutated — this only adjusts
         what the LLM sees on this turn.
@@ -1478,13 +1488,18 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         if not messages:
             return messages
 
-        target_name = f"transfer_to_{self._name}"
+        outbound = {
+            f"transfer_to_{getattr(agent, '_name', '')}"
+            for agent in getattr(self, "_agents", None) or []
+        }
         inbound_ids: set[str] = set()
         for m in messages:
+            name = getattr(m, "name", None)
             if (
                 isinstance(m, ToolMessage)
-                and isinstance(getattr(m, "name", None), str)
-                and m.name == target_name
+                and isinstance(name, str)
+                and name.startswith("transfer_to_")
+                and name not in outbound
             ):
                 tcid = getattr(m, "tool_call_id", None)
                 if isinstance(tcid, str):
@@ -2244,6 +2259,13 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         # the main chat, where no deck is open yet at the start of the turn.
         if slides_turn_active():
             stream_config["recursion_limit"] = SLIDES_RECURSION_LIMIT
+        else:
+            # An agent may declare its own budget (class attribute). Grounded
+            # answers (read the code, then explain) and supervisor handoffs run
+            # past LangGraph's default 25 steps.
+            own_limit = getattr(self, "recursion_limit", None)
+            if isinstance(own_limit, int) and own_limit > 0:
+                stream_config["recursion_limit"] = own_limit
         for chunk in self.graph.stream(
             {"messages": [human_message]},
             config=stream_config,
@@ -2442,6 +2464,11 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             enable_default_tools=self._enable_default_tools,
             markdown_pretty_display=self._markdown_pretty_display,
         )
+        # Per-request copies must keep the agent's own step budget (a class
+        # attribute on the subclass the copy does not inherit from).
+        own_limit = getattr(self, "recursion_limit", None)
+        if isinstance(own_limit, int) and own_limit > 0:
+            new_agent.recursion_limit = own_limit
 
         return new_agent
 

@@ -880,5 +880,10 @@ If you endup with a single intent which is of type TOOL, you must call this tool
             enable_default_tools=self._enable_default_tools,
             markdown_pretty_display=self._markdown_pretty_display,
         )
+        # Per-request copies must keep the agent's own step budget (a class
+        # attribute on the subclass the copy does not inherit from).
+        own_limit = getattr(self, "recursion_limit", None)
+        if isinstance(own_limit, int) and own_limit > 0:
+            new_agent.recursion_limit = own_limit
 
         return new_agent
