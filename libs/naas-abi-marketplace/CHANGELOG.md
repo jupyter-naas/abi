@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.45.0 (2026-09-11)
+
+### Features
+
+- **x_proxy**: Add server-side tweet search with filtering and pagination
+  ([`b05c5af`](https://github.com/jupyter-naas/abi/commit/b05c5af4ef03d17052534182338f59f9a6f07ec9))
+
+
 ## v3.44.0 (2026-09-11)
 
 ### Features
