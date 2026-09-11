@@ -1,10 +1,11 @@
 from unittest.mock import MagicMock, patch
 
+from naas_abi_core.services.triple_store.TripleStorePorts import Exceptions
+
 from naas_abi.apply_nexus_platform_pipeline import (
     NEXUS_PLATFORM_GRAPH_URI,
     apply_nexus_platform_pipeline,
 )
-from naas_abi_core.services.triple_store.TripleStorePorts import Exceptions
 
 
 def test_disabled_pipeline_drops_nexus_graph_without_running():
