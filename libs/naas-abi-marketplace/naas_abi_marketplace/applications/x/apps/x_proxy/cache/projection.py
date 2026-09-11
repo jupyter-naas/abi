@@ -36,6 +36,7 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.cache.schema import (
     CACHE_PREFIX,
     ENVELOPE_PREFIX,
     MANIFEST_KEY,
+    PROCESSED_ENVELOPES_KEY,
     SCHEMA_VERSION,
     WATERMARK_KEY,
     author_schema,
@@ -64,6 +65,30 @@ def _read_manifest(object_storage: ObjectStorageService) -> dict[str, Any]:
     except (UnicodeDecodeError, ValueError):
         return {}
     return doc if isinstance(doc, dict) else {}
+
+
+def _read_processed_envelopes(object_storage: ObjectStorageService) -> set[str]:
+    """Exact completed envelope keys; timestamps alone are not gap-safe."""
+    try:
+        raw = object_storage.get_object(CACHE_PREFIX, PROCESSED_ENVELOPES_KEY)
+        doc = json.loads(raw.decode("utf-8"))
+    except Exception:  # noqa: BLE001 - absent before schema 3 / first build
+        return set()
+    keys = doc.get("keys") if isinstance(doc, dict) else None
+    return {str(key) for key in (keys or []) if str(key).strip()}
+
+
+def _write_processed_envelopes(
+    object_storage: ObjectStorageService, keys: set[str]
+) -> None:
+    object_storage.put_object(
+        CACHE_PREFIX,
+        PROCESSED_ENVELOPES_KEY,
+        json.dumps(
+            {"schema_version": SCHEMA_VERSION, "keys": sorted(keys)},
+            separators=(",", ":"),
+        ).encode("utf-8"),
+    )
 
 
 def _parse_watermark(raw: str | None) -> datetime | None:
@@ -226,12 +251,14 @@ def refresh(
         )
 
     keys = _envelope_keys(object_storage)
+    processed = set() if rebuild else _read_processed_envelopes(object_storage)
     pending: list[tuple[str, datetime | None]] = []
     for key in keys:
         moment = envelope_timestamp(key)
-        # An unreadable key is processed rather than skipped - better a redundant
-        # read than a silently dropped tick.
-        if watermark is not None and moment is not None and moment <= watermark:
+        # Correctness is based on exact keys. The timestamp remains useful for
+        # diagnostics and as the projection source-state watermark, but cannot
+        # reject a late-arriving object.
+        if key in processed:
             continue
         pending.append((key, moment))
 
@@ -283,6 +310,10 @@ def refresh(
 
     if newest is not None:
         _write_watermark(kv, newest)
+    # Commit the exact-key ledger only after every derived object above landed.
+    # A crash before this write merely replays an idempotently deduped envelope.
+    processed.update(key for key, _moment in pending)
+    _write_processed_envelopes(object_storage, processed)
 
     summary = {
         "envelopes_total": len(keys),
@@ -292,6 +323,7 @@ def refresh(
         "months_written": months_written,
         "full_rebuild": rebuild,
         "watermark": newest.isoformat() if newest else None,
+        "processed_envelopes": len(processed),
     }
     object_storage.put_object(
         CACHE_PREFIX,

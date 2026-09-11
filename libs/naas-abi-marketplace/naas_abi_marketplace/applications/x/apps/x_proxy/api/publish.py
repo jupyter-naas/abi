@@ -27,6 +27,9 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.api.globals import (
 from naas_abi_marketplace.applications.x.apps.x_proxy.api.search_recents_tweets import (
     publish_page as publish_search_page,
 )
+from naas_abi_marketplace.applications.x.apps.x_proxy.api.search_tweets import (
+    publish_page as publish_tweets_page,
+)
 from naas_abi_marketplace.applications.x.apps.x_proxy.api.search_users import (
     publish_page as publish_users_page,
 )
@@ -82,6 +85,7 @@ def publish_app(
     require_web: bool = True,
     full_users: bool = False,
     use_cache: bool = True,
+    direct_user_limit: int = 100,
 ) -> dict[str, Any]:
     """Run every page/element script and publish the web static export.
 
@@ -123,7 +127,10 @@ def publish_app(
     globals_doc = publish_globals(ctx)
     count_doc = publish_count_page(ctx)
     search_doc = publish_search_page(ctx)
-    users_doc = publish_users_page(ctx, full=full_users)
+    tweets_doc = publish_tweets_page(ctx)
+    users_doc = publish_users_page(
+        ctx, full=full_users, direct_user_limit=direct_user_limit
+    )
 
     web = upload_web_export(object_storage, ctx.app_prefix, required=require_web)
 
@@ -138,6 +145,7 @@ def publish_app(
             "globals": list(globals_doc.keys()),
             "count_recent_tweets": list(count_doc.keys()),
             "search_recents_tweets": list(search_doc.keys()),
+            "search_tweets": tweets_doc,
             # Counts rather than file names: the users dataset is 256 shards,
             # and how many of them actually changed is the useful signal when
             # this runs after every ingest tick. Carries ``skipped: true`` when

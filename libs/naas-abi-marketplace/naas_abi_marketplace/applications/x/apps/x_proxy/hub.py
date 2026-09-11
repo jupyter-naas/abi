@@ -89,7 +89,11 @@ class XAppHubBuilder:
         )
 
     def publish(
-        self, queries: Iterable[dict[str, Any]], *, full_users: bool = False
+        self,
+        queries: Iterable[dict[str, Any]],
+        *,
+        full_users: bool = False,
+        direct_user_limit: int = 100,
     ) -> dict[str, Any]:
         """Publish snapshots (+ web assets when this host has an export).
 
@@ -108,4 +112,5 @@ class XAppHubBuilder:
             app_prefix=self.app_prefix,
             require_web=False,
             full_users=full_users,
+            direct_user_limit=direct_user_limit,
         )

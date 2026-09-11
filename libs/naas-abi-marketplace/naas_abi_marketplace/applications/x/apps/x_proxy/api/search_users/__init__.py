@@ -6,7 +6,9 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.api.search_users import (
 )
 
 
-def publish_page(ctx: SnapshotContext, *, full: bool = False) -> dict:
+def publish_page(
+    ctx: SnapshotContext, *, full: bool = False, direct_user_limit: int = 100
+) -> dict:
     return {
-        "users": _users.publish(ctx, full=full),
+        "users": _users.publish(ctx, full=full, direct_user_limit=direct_user_limit),
     }

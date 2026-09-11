@@ -267,6 +267,30 @@ def test_only_envelopes_past_the_watermark_are_read():
     assert second["full_rebuild"] is False
 
 
+def test_late_envelope_older_than_watermark_is_still_projected():
+    storage, kv = _Storage(), _KV()
+    _store_envelope(
+        storage,
+        "2026-08-12T06:00:00+00:00_q.json",
+        _envelope(matched=[_tweet("2", "2026-08-12T06:00:00.000Z")]),
+    )
+    projection.refresh(storage, kv)  # type: ignore[arg-type]
+
+    # This object arrived later but carries an older archive timestamp. The old
+    # watermark-only gate silently skipped it forever.
+    _store_envelope(
+        storage,
+        "2026-08-12T05:00:00+00:00_q.json",
+        _envelope(matched=[_tweet("1", "2026-08-12T05:00:00.000Z")]),
+    )
+    second = projection.refresh(storage, kv)  # type: ignore[arg-type]
+
+    assert second["envelopes_new"] == 1
+    assert set(
+        CacheReader(storage).posts().get_column("tweet_id").to_list()  # type: ignore[arg-type]
+    ) == {"1", "2"}
+
+
 def test_an_incremental_run_appends_rather_than_replacing_the_month():
     """Overwriting the partition would delete the history already projected."""
     storage, kv = _Storage(), _KV()
@@ -621,8 +645,13 @@ def test_reads_are_scoped_to_one_query():
 
     reader = CacheReader(storage)  # type: ignore[arg-type]
     window = ("2026-08-12T00:00:00+00:00", "2026-08-13T00:00:00+00:00")
-    assert reader.known_query_slugs() == {"openai_or_anthropic_lang_en", "ships_lang_en"}
-    assert reader.count_in_window(*window, query_slug="openai_or_anthropic_lang_en") == 2
+    assert reader.known_query_slugs() == {
+        "openai_or_anthropic_lang_en",
+        "ships_lang_en",
+    }
+    assert (
+        reader.count_in_window(*window, query_slug="openai_or_anthropic_lang_en") == 2
+    )
     assert reader.count_in_window(*window, query_slug="ships_lang_en") == 1
     # Unscoped still spans both - the Users dataset wants every followed query.
     assert reader.count_in_window(*window) == 3

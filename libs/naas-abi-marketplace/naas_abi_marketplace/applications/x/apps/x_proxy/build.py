@@ -97,6 +97,15 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--artifact-batch-size",
+        type=int,
+        default=100,
+        help=(
+            "Maximum recent user/media artifacts materialized in this publish "
+            "(default: 100; use a small value for bounded backfill tests)."
+        ),
+    )
+    parser.add_argument(
         "--config",
         default=None,
         help=(
@@ -153,6 +162,7 @@ def main() -> None:
         module.engine.services.triple_store,
         queries,
         namespace=module.configuration.ontology_namespace,
+        direct_user_limit=max(0, args.artifact_batch_size),
     )
     print(json.dumps(result, indent=2))
 

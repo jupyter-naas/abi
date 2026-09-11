@@ -53,7 +53,7 @@ def test_run_build_cycle_resolves_abi_module():
 
     get_instance.assert_called_once_with()
     refresh.assert_called_once_with(module, full=True)
-    publish.assert_called_once_with(module, full_users=True)
+    publish.assert_called_once_with(module, full_users=True, direct_user_limit=100)
     assert summary == {
         "projection_rebuild": {"rebuilt": True},
         "app": {"ok": True},

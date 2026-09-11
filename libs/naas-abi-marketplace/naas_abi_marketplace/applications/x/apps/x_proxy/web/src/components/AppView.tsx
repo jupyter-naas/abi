@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppState } from "@/components/AppProvider";
 import { Shell } from "@/components/Shell";
 import { Filters } from "@/components/Filters";
+import { LoadingScreen } from "@/components/LoadingScreen";
 import { CountPage } from "@/components/pages/CountPage";
 import { ParametersPage } from "@/components/pages/ParametersPage";
 import { PostPage } from "@/components/pages/PostPage";
@@ -224,7 +225,7 @@ export function AppView({ page }: Props) {
   }, [data]);
 
   if (!data) {
-    return <div className="status">Loading snapshots…</div>;
+    return <LoadingScreen label="Loading X Proxy" />;
   }
 
   const snapshotWarning = error ? (
@@ -321,7 +322,6 @@ export function AppView({ page }: Props) {
         ) : null}
         {page === "tweets" ? (
           <TweetsPage
-            data={data.search}
             timezone={timezone}
             needle={needle}
             onNeedleChange={handleNeedleChange}

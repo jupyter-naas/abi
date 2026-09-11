@@ -12,6 +12,8 @@ import {
 
 type Props = {
   hits: TweetHit[];
+  /** True while the full whole-graph index is being fetched for a submitted needle. */
+  loading: boolean;
   needle: string;
   onNeedleChange: (needle: string) => void;
   /** Result page, 0-based. */
@@ -51,6 +53,7 @@ function formatInstant(iso: string, timezone: string): string {
  */
 export function TweetResults({
   hits,
+  loading,
   needle,
   onNeedleChange,
   page,
@@ -152,9 +155,11 @@ export function TweetResults({
 
       {!listed.length ? (
         <p className="user-empty">
-          {hits.length
-            ? "No post matches - try a shorter word, an author or a location."
-            : "No post in this publish yet."}
+          {loading
+            ? "Searching the whole graph…"
+            : hits.length
+              ? "No post matches - try a shorter word, an author or a location."
+              : "No post in this publish yet."}
         </p>
       ) : null}
 

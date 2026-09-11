@@ -19,12 +19,54 @@ export function emptySnapshots(): Snapshots {
 const BASE = "/app-html/x/apps/x_proxy";
 
 async function loadJson<T>(path: string): Promise<T> {
-  const res = await fetch(withAccessToken(`${BASE}/${path}`), { cache: "no-store" });
+  const res = await fetch(withAccessToken(`${BASE}/${path}`));
   if (!res.ok) throw new Error(`${path} HTTP ${res.status}`);
   return res.json() as Promise<T>;
 }
 
-export async function loadSnapshots(): Promise<Snapshots> {
+export async function loadSnapshots(
+  options: { lightweight?: boolean } = {},
+): Promise<Snapshots> {
+  const emptyCount = { kpis: [], barcharts: [], linecharts: [] };
+  const emptySearch = {
+    kpis: [],
+    barcharts: [],
+    linecharts: [],
+    tables: [],
+    facets: [],
+  };
+  if (options.lightweight) {
+    const [scenarios, queries, timezone, graph] = await Promise.all([
+      loadJson<{ updated_at?: string; scenarios?: Snapshots["scenarios"] }>(
+        "globals/scenarios.json",
+      ),
+      loadJson<{ updated_at?: string; queries?: Snapshots["queries"] }>(
+        "globals/queries.json",
+      ),
+      loadJson<{
+        updated_at?: string;
+        default?: string;
+        timezones?: Snapshots["timezones"];
+      }>("globals/timezone.json"),
+      loadJson<Partial<GraphTotals>>("globals/graph.json").catch(() => null),
+    ]);
+    return {
+      updatedAt: scenarios.updated_at || queries.updated_at || null,
+      graph: graph
+        ? {
+            posts: graph.posts || 0,
+            matched: graph.matched || 0,
+            referenced: graph.referenced || 0,
+          }
+        : null,
+      scenarios: scenarios.scenarios || [],
+      queries: queries.queries || [],
+      timezones: timezone.timezones || [],
+      defaultTimezone: timezone.default || "UTC",
+      count: emptyCount,
+      search: emptySearch,
+    };
+  }
   const [
     scenarios,
     queries,

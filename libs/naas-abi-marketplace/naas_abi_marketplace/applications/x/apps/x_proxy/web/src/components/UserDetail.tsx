@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useAppState } from "@/components/AppProvider";
 import { KpiGrid } from "@/components/KpiGrid";
+import { LoadingScreen } from "@/components/LoadingScreen";
 import { UserPostCard } from "@/components/UserPostCard";
 import { UserProfileCard } from "@/components/UserProfileCard";
 import {
@@ -144,6 +145,9 @@ export function UserDetail({
     return () => observer.disconnect();
   });
 
+  if (loading) {
+    return <LoadingScreen label={`Loading @${username}`} />;
+  }
 
   const profile = feed.profile || known;
   const total = feed.counts.all || known?.posts || 0;
@@ -247,7 +251,6 @@ export function UserDetail({
 
       <KpiGrid items={kpis} columns={3} accentFirst />
 
-      {loading ? <p className="user-empty">Loading posts…</p> : null}
       {!loading && !total ? (
         <p className="user-empty">No post found for this user.</p>
       ) : null}

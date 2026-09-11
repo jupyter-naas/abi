@@ -112,7 +112,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    loadSnapshots()
+    const lightweight = /\/(?:posts\/post|users\/search)\/?$/.test(
+      window.location.pathname,
+    );
+    loadSnapshots({ lightweight })
       .then((snap) => {
         if (cancelled) return;
         setData(snap);
