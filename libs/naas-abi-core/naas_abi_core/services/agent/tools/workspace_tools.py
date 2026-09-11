@@ -54,6 +54,19 @@ def _sanitize_workspace_read(path: str, result: dict[str, Any]) -> dict[str, Any
     content = result.get("content")
     if not isinstance(content, str):
         return result
+    normalized = path.replace("\\", "/").lstrip("./")
+    if "documents/" in normalized and normalized.endswith("document.html"):
+        # An 8k seed is under the char cap and still hangs the next model call
+        # when the agent tries to restyle the whole file by hand.
+        out = dict(result)
+        out["content"] = ""
+        out["html_omitted"] = True
+        out["warning"] = (
+            "This is a documents file. Call apply_documents_template for a "
+            "theme or template, or apply_document_commands / replace_in_document "
+            "to edit copy. Do not read_file document.html."
+        )
+        return out
     redacted, n_assets = _DATA_URL_RE.subn(_REDACTED_DATA_URL, content)
     if n_assets == 0 and len(redacted) <= _MAX_READ_CHARS:
         return result
@@ -67,7 +80,6 @@ def _sanitize_workspace_read(path: str, result: dict[str, Any]) -> dict[str, Any
         notes.append(f"Redacted {n_assets} embedded data-URLs.")
     if truncated:
         notes.append(f"Truncated after {_MAX_READ_CHARS} characters.")
-    normalized = path.replace("\\", "/")
     if "slides/" in normalized and normalized.endswith("deck.html"):
         notes.append(
             "This is a slides deck. Call transfer_to_Slides, or use "

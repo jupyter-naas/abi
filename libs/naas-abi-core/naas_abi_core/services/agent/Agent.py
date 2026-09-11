@@ -2,6 +2,7 @@ from __future__ import annotations
 
 # Standard library imports for type hints
 import atexit
+import concurrent.futures
 import json
 import os
 import re
@@ -169,6 +170,19 @@ def _friendly_model_invoke_error(exc: BaseException) -> str:
             "This request exceeded the model's context window. "
             "Do not load whole files with embedded images, then try again."
         )
+    if "timed out" in lowered or "timeouterror" in lowered.replace(" ", ""):
+        if documents_turn_active():
+            return (
+                "The model timed out on this step. Use apply_documents_template "
+                "for a theme or template, or apply_document_commands for 2 to 4 "
+                "headings. Do not read_file document.html."
+            )
+        if slides_turn_active():
+            return (
+                "The model timed out on this step. Write a few slides, then stop. "
+                "Do not read_file the whole deck.html."
+            )
+        return "The model timed out. Try a smaller request."
     if (
         "error code:" in lowered
         or "provider returned error" in lowered
@@ -176,6 +190,35 @@ def _friendly_model_invoke_error(exc: BaseException) -> str:
     ):
         return "The model provider failed. Pick another model and try again."
     return text or "The model provider failed. Pick another model and try again."
+
+
+# Documents/Slides ChatOpenAI registrations often use timeout=120 and
+# max_retries=3. Those retries stack to ~8 minutes on one hung generation.
+_OFFICE_MODEL_INVOKE_TIMEOUT_S = 90.0
+
+
+def _invoke_office_chat_model(chat_model: Any, messages: list[Any]) -> BaseMessage:
+    """One attempt, 90s cap. Do not let provider retries sit until the gateway dies."""
+    bound = chat_model
+    bind = getattr(chat_model, "bind", None)
+    if callable(bind):
+        try:
+            bound = bind(timeout=_OFFICE_MODEL_INVOKE_TIMEOUT_S, max_retries=0)
+        except Exception:  # noqa: BLE001
+            bound = chat_model
+    ctx = copy_context()
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        future = pool.submit(ctx.run, bound.invoke, messages)
+        try:
+            return future.result(timeout=_OFFICE_MODEL_INVOKE_TIMEOUT_S)
+        except concurrent.futures.TimeoutError as exc:
+            future.cancel()
+            raise TimeoutError(
+                f"Request timed out after {_OFFICE_MODEL_INVOKE_TIMEOUT_S:.0f}s"
+            ) from exc
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 # View-only shrink of prior ToolMessages before invoke. Not Claude Code /compact
@@ -1623,7 +1666,10 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             else self._chat_model_without_workspace_tools
         )
         try:
-            response: BaseMessage = chat_model.invoke(messages)
+            if documents_turn_active() or slides_turn_active():
+                response = _invoke_office_chat_model(chat_model, messages)
+            else:
+                response = chat_model.invoke(messages)
         except Exception as e:  # noqa: BLE001
             logger.error(f"Model invocation failed for agent '{self._name}': {e}")
             return Command(

@@ -22,6 +22,7 @@ def test_sections_agent_prompt_requires_research_then_write() -> None:
     assert "Research loop" in prompt
     assert "Plan, then write" in prompt
     assert "apply_document_commands" in prompt
+    assert "apply_documents_template" in prompt
     assert "Do not reread" in prompt
     assert "start writing immediately" not in prompt
     assert "Context / Approach / Plan" in prompt
@@ -53,6 +54,7 @@ def test_sections_agent_owns_the_write_and_research_tools() -> None:
     assert "create_documents_project" in names
     assert "write_document" in names
     assert "apply_document_commands" in names
+    assert "apply_documents_template" in names
     assert "insert_heading" in names
     assert "insert_paragraph" in names
     assert "replace_in_document" in names

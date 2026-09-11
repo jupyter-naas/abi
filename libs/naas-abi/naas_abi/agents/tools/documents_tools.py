@@ -1465,8 +1465,132 @@ COMMAND_TOOL_NAMES = frozenset(
         "insert_paragraph",
         "insert_page_break",
         "apply_paragraph_style",
+        "apply_documents_template",
     }
 )
+_TEMPLATE_KEY_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _template_key(raw: str) -> str:
+    return _TEMPLATE_KEY_RE.sub("-", (raw or "").strip().lower()).strip("-")
+
+
+def resolve_documents_template_id(
+    requested: str, catalog: list[dict[str, str]]
+) -> str | dict[str, Any]:
+    """Map a human name or id onto one catalog row.
+
+    "Portrait A4" matches that name, not the blank sibling.
+    """
+    raw = (requested or "").strip()
+    choices = [
+        {"id": str(row.get("id") or ""), "name": str(row.get("name") or "")}
+        for row in catalog
+        if str(row.get("id") or "").strip()
+    ]
+    if not raw:
+        return {
+            "error": "template_id is required. Pass a catalog name or id.",
+            "templates": choices,
+        }
+    stripped = re.sub(r"\b(theme|template|style|styles)\b", "", raw, flags=re.I)
+    needle = _template_key(stripped)
+    if not needle:
+        return {"error": "template_id is required.", "templates": choices}
+
+    def stem(tid: str) -> str:
+        return tid.split("/", 1)[-1]
+
+    for row in choices:
+        tid = row["id"]
+        if raw == tid or needle == _template_key(tid) or needle == _template_key(stem(tid)):
+            return tid
+    for row in choices:
+        if needle == _template_key(row["name"]):
+            return row["id"]
+
+    hits = [
+        row
+        for row in choices
+        if needle in _template_key(row["id"])
+        or needle in _template_key(row["name"])
+        or _template_key(stem(row["id"])).startswith(needle)
+    ]
+    if not hits:
+        return {"error": f"Unknown template {requested!r}.", "templates": choices}
+    if len(hits) == 1:
+        return hits[0]["id"]
+    if "blank" not in needle:
+        non_blank = [row for row in hits if "blank" not in _template_key(row["id"])]
+        if len(non_blank) == 1:
+            return non_blank[0]["id"]
+    return {"error": f"Ambiguous template {requested!r}.", "templates": hits}
+
+
+def _catalog_template_rows() -> list[dict[str, str]]:
+    try:
+        from naas_abi.apps.nexus.apps.api.app.services.documents.adapters.primary.documents__primary_adapter__FastAPI import (
+            _picker_template_records,
+        )
+
+        rows: list[dict[str, str]] = []
+        for row in _picker_template_records():
+            tid = str(row.get("id") or "").strip()
+            if tid:
+                rows.append({"id": tid, "name": str(row.get("name") or tid)})
+        return rows
+    except Exception:  # noqa: BLE001
+        return [{"id": "article-light-v1", "name": "Article Light"}]
+
+
+def _load_catalog_seed_html(template_id: str) -> str | dict[str, Any]:
+    try:
+        from naas_abi.apps.nexus.apps.api.app.services.documents.adapters.primary.documents__primary_adapter__FastAPI import (
+            _load_seed_html,
+        )
+
+        return _load_seed_html(template_id)
+    except Exception as exc:  # noqa: BLE001
+        detail = getattr(exc, "detail", None)
+        if isinstance(detail, str) and detail:
+            return {"error": detail}
+        if template_id in {"article-light-v1", "abi/article-light-v1"}:
+            seed = _load_seed_document_html()
+            if seed:
+                return seed
+        return {"error": f"Could not load template {template_id!r}: {exc}"}
+
+
+def _write_project_template_id(slug: str, template_id: str) -> None:
+    paths = _resolve_paths(slug)
+    if paths.get("error"):
+        return
+    sc = _get_source_control()
+    repo_id = _repo_id()
+    meta: dict[str, Any] = {}
+    try:
+        existing = sc.get_file(
+            repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
+        )
+        if existing.text:
+            meta = json.loads(existing.text)
+    except Exception:  # noqa: BLE001
+        meta = {}
+    if not isinstance(meta, dict):
+        meta = {}
+    meta["template_id"] = template_id
+    meta["slug"] = meta.get("slug") or slug
+    try:
+        sc.upsert_file(
+            repo_id=repo_id,
+            path=paths["project_path"],
+            content=json.dumps(meta, indent=2, ensure_ascii=False) + "\n",
+            message=f"chore(sections): apply template {template_id}",
+            branch=paths["branch"],
+            **_agent_author(),
+        )
+    except SourceControlError:
+        return
 
 
 def _view_for_llm(html: str) -> dict[str, Any]:
@@ -1628,10 +1752,14 @@ def documents_tools() -> list[BaseTool]:
                 )
             out: dict[str, Any] = {"projects": projects}
             if open_slug:
+                matched = [row for row in projects if row["slug"] == open_slug]
+                if matched:
+                    out["projects"] = matched
                 out["open_slug"] = open_slug
                 out["note"] = (
                     f"The user already has '{open_slug}' open. "
-                    "Edit that document; do not ask which document."
+                    "Edit that document. For a theme or template, call "
+                    "apply_documents_template. Do not list or read other documents."
                 )
             return out
         except Exception as exc:  # noqa: BLE001
@@ -2268,6 +2396,58 @@ def documents_tools() -> list[BaseTool]:
         )
 
     @tool
+    def apply_documents_template(template_id: str = "", slug: str = "") -> dict[str, Any]:
+        """Apply a catalog seed (Portrait A4, Landscape A4, ...) to the open document.
+
+        Use this when the user asks for a theme or template. Do not list other
+        documents and do not read_file their HTML. Replaces document.html with
+        the seed. Then write the brief with apply_document_commands in one batch
+        of 2 to 4 headings. Theme changes skip the research gate.
+        """
+        if not agent_user_id.get():
+            return {"error": "No authenticated user on this agent session."}
+        catalog = _catalog_template_rows()
+        resolved = resolve_documents_template_id(template_id, catalog)
+        if isinstance(resolved, dict):
+            return resolved
+        target = _resolve_slug(slug)
+        if isinstance(target, dict):
+            return target
+        seed = _load_catalog_seed_html(resolved)
+        if isinstance(seed, dict):
+            return seed
+        if not seed.strip():
+            return {"error": f"Template {resolved!r} is empty."}
+        try:
+            paths = _ensure_sections_write_paths(target)
+            if paths.get("error"):
+                return {"error": paths["error"]}
+            result = _persist_document(
+                target,
+                seed,
+                f"feat(sections): apply template {resolved}",
+                default_type="feat",
+            )
+            if result.get("error"):
+                return result
+            _write_project_template_id(target, resolved)
+            note_documents_write(f"template {resolved}")
+            return {
+                **_open_document_note(target),
+                **result,
+                "ok": True,
+                "template_id": resolved,
+                "wiped": True,
+                "note": (
+                    f"Applied {resolved}. document.html is the seed. "
+                    "Write the brief with apply_document_commands "
+                    "(2 to 4 headings plus paragraphs), then stop."
+                ),
+            }
+        except Exception as exc:  # noqa: BLE001
+            return _tool_error(exc)
+
+    @tool
     def sections_history(slug: str = "", limit: int = 10) -> dict[str, Any]:
         """List recent commits on a Documents project branch (Forgejo version history)."""
         if not agent_user_id.get():
@@ -2310,6 +2490,7 @@ def documents_tools() -> list[BaseTool]:
         read_document,
         write_document,
         apply_document_commands,
+        apply_documents_template,
         insert_heading,
         insert_paragraph,
         insert_page_break,

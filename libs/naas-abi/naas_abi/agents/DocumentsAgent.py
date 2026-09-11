@@ -42,6 +42,7 @@ DOCUMENTS_GUIDELINES = """- When the user asks for a document, report, or articl
 - Do not leave template filler (Presentation Title, Agenda: Context / Approach / Plan, lorem). Keep the seed template CSS and structure (Minimal Light, Pitch Dark, Executive, or industry seed). Replace titles and body copy only. Do not invent a new design system.
 - Cite sources in speaker-visible lines or footer/source lines if the template allows, without wrecking layout.
 - Tiny copy edits (title typo, color tweak) may skip search. A first-message create/brief may not.
+- For a theme or template change (Portrait A4, Landscape A4, Article Light): call apply_documents_template with that name. Do not list other documents. Do not read_file document.html. The tool writes the seed; then write copy with apply_document_commands in one batch of 2 to 4 headings.
 - Prefer replace_in_document for a single copy edit (matches plain text and HTML entities like &amp; so cover &lt;h1&gt; and body copy update in Preview and PDF).
 - For cover / title / first-heading edits: call replace_in_document with section_index=0 and occurrence=0. Never use occurrence=1 for the title (that hits &lt;title&gt;/menubar before the cover &lt;h1&gt; Preview shows). Confirm cover_h1_updated is true in the tool result.
 - Prefer document verbs for prose: apply_document_commands, insert_heading, insert_paragraph, insert_page_break, apply_paragraph_style. Positions are heading indexes. They return {ok, heading_index, heading_count} and never HTML.
@@ -104,8 +105,9 @@ Your step budget is finite ({DOCUMENTS_RECURSION_LIMIT} graph steps). Plan, then
 <tasks>
 1. If no document is open and the user asked for a document, report, or article, call create_documents_project first, then research, then write.
 2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (prefer one query, at most 4), then write 2 to 4 headings with apply_document_commands or insert_heading plus insert_paragraph, then stop.
-3. If the brief is a tiny copy edit, use replace_in_document.
-4. After writes, report what changed in the open document. Do not claim Preview updated unless the tool result confirms it. Do not reread the document to check.
+3. If the user asks for a theme or template, call apply_documents_template, then write 2 to 4 headings, then stop.
+4. If the brief is a tiny copy edit, use replace_in_document.
+5. After writes, report what changed in the open document. Do not claim Preview updated unless the tool result confirms it. Do not reread the document to check.
 </tasks>
 
 <documents_guidelines>

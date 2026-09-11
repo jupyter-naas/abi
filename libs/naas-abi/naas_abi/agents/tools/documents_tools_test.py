@@ -29,6 +29,7 @@ from naas_abi.agents.tools.documents_tools import (
     _redact_data_urls,
     _reorder_sections_html,
     _replace_string_pairs,
+    resolve_documents_template_id,
     _resolve_slug,
     _restore_redacted_data_urls,
     _section_meta,
@@ -1033,3 +1034,81 @@ def test_insert_heading_respects_research_gate(monkeypatch):
         documents_research_required.reset(tokens[-2])
         documents_research_queries.reset(tokens[-1])
         _reset_tokens(tokens[:-2])
+
+
+_CATALOG = [
+    {"id": "firm/portrait-a4-v1", "name": "Portrait A4"},
+    {"id": "firm/portrait-a4-blank-v1", "name": "Portrait A4 blank"},
+    {"id": "firm/landscape-a4-v1", "name": "Landscape A4"},
+]
+
+
+def test_resolve_documents_template_id_prefers_named_portrait():
+    assert (
+        resolve_documents_template_id("Portrait A4", _CATALOG)
+        == "firm/portrait-a4-v1"
+    )
+    assert (
+        resolve_documents_template_id("portrait a4 theme", _CATALOG)
+        == "firm/portrait-a4-v1"
+    )
+    assert (
+        resolve_documents_template_id("Portrait A4 blank", _CATALOG)
+        == "firm/portrait-a4-blank-v1"
+    )
+    missed = resolve_documents_template_id("", _CATALOG)
+    assert isinstance(missed, dict)
+    assert "templates" in missed
+
+
+def test_apply_documents_template_skips_research_gate(monkeypatch):
+    seed = "<html><body><h1>Portrait A4</h1><p>Introduction</p></body></html>"
+    sc = _seed_in_memory_document(_bind_in_memory_git(monkeypatch), _SAMPLE)
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.documents_tools._catalog_template_rows",
+        lambda: _CATALOG,
+    )
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.documents_tools._load_catalog_seed_html",
+        lambda template_id: seed,
+    )
+    tokens = _sections_context()
+    tokens.append(documents_research_required.set(True))
+    tokens.append(documents_research_queries.set([]))
+    try:
+        apply = next(
+            t for t in documents_tools() if t.name == "apply_documents_template"
+        )
+        result = apply.invoke({"template_id": "Portrait A4"})
+        assert "error" not in result, result
+        assert result["ok"] is True
+        assert result["template_id"] == "firm/portrait-a4-v1"
+        document = sc.get_file(
+            repo_id="abi/monorepo",
+            path="documents/ws-test/untitled-local/document.html",
+            ref="documents/ws-test/untitled-local",
+        )
+        assert "Portrait A4" in (document.text or "")
+        assert "Presentation Title" not in (document.text or "")
+    finally:
+        documents_research_required.reset(tokens[-2])
+        documents_research_queries.reset(tokens[-1])
+        _reset_tokens(tokens[:-2])
+
+
+def test_list_documents_projects_when_open_hides_other_docs(monkeypatch):
+    sc = _bind_in_memory_git(monkeypatch)
+    _seed_in_memory_document(sc, _SAMPLE, slug="untitled-local")
+    _seed_in_memory_document(sc, "<html></html>", slug="untitled-other")
+    tokens = _sections_context()
+    try:
+        listing = next(
+            t for t in documents_tools() if t.name == "list_documents_projects"
+        )
+        result = listing.invoke({})
+        assert "error" not in result, result
+        slugs = {row["slug"] for row in result["projects"]}
+        assert slugs == {"untitled-local"}
+        assert "apply_documents_template" in result["note"]
+    finally:
+        _reset_tokens(tokens)

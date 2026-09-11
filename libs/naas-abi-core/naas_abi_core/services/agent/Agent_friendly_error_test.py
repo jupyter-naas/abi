@@ -1,4 +1,11 @@
-from naas_abi_core.services.agent.Agent import _friendly_model_invoke_error
+import time
+
+import pytest
+from naas_abi_core.services.agent.Agent import (
+    _OFFICE_MODEL_INVOKE_TIMEOUT_S,
+    _friendly_model_invoke_error,
+    _invoke_office_chat_model,
+)
 from naas_abi_core.services.agent.context import (
     DOCUMENTS_RECURSION_LIMIT,
     SLIDES_RECURSION_LIMIT,
@@ -97,6 +104,39 @@ def test_friendly_model_invoke_error_recursion_names_finished_writes() -> None:
         slides_active_slug.reset(tokens[0])
         slides_writes_completed.reset(tokens[1])
         slides_research_queries.reset(tokens[2])
+
+
+def test_invoke_office_chat_model_fails_before_stacked_retries(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "naas_abi_core.services.agent.Agent._OFFICE_MODEL_INVOKE_TIMEOUT_S",
+        0.2,
+    )
+
+    class _Slow:
+        def bind(self, **kwargs):
+            del kwargs
+            return self
+
+        def invoke(self, messages):
+            del messages
+            time.sleep(2)
+            return "late"
+
+    started = time.monotonic()
+    with pytest.raises(TimeoutError, match="timed out"):
+        _invoke_office_chat_model(_Slow(), [])
+    assert time.monotonic() - started < 1.0
+    assert _OFFICE_MODEL_INVOKE_TIMEOUT_S == 90.0
+
+
+def test_friendly_model_invoke_error_timeout_on_documents() -> None:
+    token = documents_active_slug.set("untitled-mtx5hdh4")
+    try:
+        text = _friendly_model_invoke_error(Exception("Request timed out."))
+        assert "apply_documents_template" in text
+        assert "read_file" in text
+    finally:
+        documents_active_slug.reset(token)
 
 
 def test_friendly_model_invoke_error_context_window_on_documents() -> None:
