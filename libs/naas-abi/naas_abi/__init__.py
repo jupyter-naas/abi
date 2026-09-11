@@ -599,8 +599,24 @@ class ABIModule(BaseModule):
                           slug: "ops-workspace"
                           owner_email: "owner@example.com"
                           default_agent: "naas_abi AbiAgent"
+                          # The right chat pane binds each section's office
+                          # agent (Apps on /apps, ...). Home, Chat, and unlisted
+                          # sections use default_agent (Abi when none is set).
+                          # Full list: naas_abi/agents/feature/registry.py.
                           agents:
                             - "naas_abi AbiAgent"
+                            - "naas_abi SlidesAgent"
+                            - "naas_abi AppsAgent"
+                            - "naas_abi MarketplaceAgent"
+                            - "naas_abi OntologyAgent"
+                            - "naas_abi KnowledgeGraphAgent"
+                            - "naas_abi FilesAgent"
+                            - "naas_abi DatasetsAgent"
+                            - "naas_abi SearchAgent"
+                            - "naas_abi MapsAgent"
+                            - "naas_abi CodeAgent"
+                            - "naas_abi SettingsAgent"
+                            - "naas_abi AgentCatalogAgent"
                           apps:
                             - example.module:dashboard
                           members:
