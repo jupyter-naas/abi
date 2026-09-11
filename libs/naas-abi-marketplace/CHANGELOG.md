@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v3.44.0 (2026-09-11)
+
+### Features
+
+- **x-proxy**: Enhance tweet search UI and update dependencies
+  ([`69e679c`](https://github.com/jupyter-naas/abi/commit/69e679c5c59c5f8e67412e94c20d8fa6d269e303))
+
+- **x-proxy-app**: Commit staged changes for x-proxy app
+  ([`03ffe4d`](https://github.com/jupyter-naas/abi/commit/03ffe4d4c92e6812b86f39a0f01a313ce19b9c16))
+
+
 ## v3.43.2 (2026-09-10)
 
 ### Bug Fixes
