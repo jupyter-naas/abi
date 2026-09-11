@@ -13,7 +13,7 @@ import {
   SLIDES_PDF_STAGE_HEIGHT_PX,
   SLIDES_PDF_STAGE_WIDTH_PX,
   SLIDES_PDF_WIDTH_IN,
-} from './documents-pdf-from-dom';
+} from './documents-pptx-from-dom';
 
 const FIXTURE = `<!doctype html>
 <html><head><style>
@@ -50,7 +50,7 @@ function seedHtml(): string {
   const here = dirname(fileURLToPath(import.meta.url));
   const path = resolve(
     here,
-    '../../../../../assets/documents/templates/minimal-light-v1.html',
+    '../../../../../assets/documents/templates/article-light-v1.html',
   );
   return readFileSync(path, 'utf8');
 }
@@ -73,7 +73,7 @@ describe('planSectionsPptxFromHtml', () => {
     expect(plan.coverSubtitle).toBe('Exec team readout');
     expect(plan.colors.panel).toBe('ffffff');
     expect(plan.colors.ink).toBe('1a1a1a');
-    expect(plan.documents.map((s) => s.kind)).toEqual(['cover', 'agenda', 'cards']);
+    expect(plan.sections.map((s) => s.kind)).toEqual(['cover', 'agenda', 'cards']);
     expect(plan.sections[0].texts).toContain('Q3 Review');
     expect(plan.coverH1).not.toBe('Presentation Title');
   });
@@ -99,25 +99,22 @@ describe('planSectionsPptxFromHtml', () => {
 });
 
 describe('seed template contract', () => {
-  it('plans all Minimal Light sections and the cover h1 from HTML', () => {
+  it('plans Article Light heading blocks and the cover h1 from HTML', () => {
     const html = seedHtml();
     const plan = planSectionsPptxFromHtml(html);
-    expect(plan.sectionCount).toBe(10);
-    expect(plan.coverH1).toBe('Presentation Title');
+    expect(plan.sectionCount).toBe(3);
+    expect(plan.coverH1).toBe('Document Title');
     expect(plan.colors.panel).toBe('ffffff');
     expect(plan.sections[0].kind).toBe('cover');
-    expect(plan.documents.some((s) => s.kind === 'divider')).toBe(true);
     const edited = html.replace(
-      '<h1>Presentation Title</h1>',
+      '<h1>Document Title</h1>',
       '<h1>Board update</h1>',
     );
     expect(planSectionsPptxFromHtml(edited).coverH1).toBe('Board update');
   });
 
-  it('ships the DOM walker instead of a 4-section hardcoded export', () => {
+  it('keeps the seed free of a hardcoded 4-section export script', () => {
     const html = seedHtml();
-    expect(html).toContain(SLIDES_PDF_FROM_DOM_FINGERPRINT);
-    expect(html).toContain('querySelectorAll("main.document > section.section');
     expect(html).not.toContain('[["1","Context"],["2","Approach"]');
     expect(html).not.toContain('txt(s, "Presentation Title", 56, 380');
   });
@@ -128,7 +125,7 @@ describe('injected PDF-from-DOM script', () => {
     expect(SLIDES_PDF_FROM_DOM_SCRIPT).toContain(SLIDES_PDF_FROM_DOM_SCRIPT_ID);
     expect(SLIDES_PDF_FROM_DOM_SCRIPT).toContain(SLIDES_PDF_FROM_DOM_FINGERPRINT);
     expect(SLIDES_PDF_FROM_DOM_SCRIPT).toContain('window.buildPptx = buildPptx');
-    expect(SLIDES_PDF_FROM_DOM_FN).toContain('querySelectorAll("main.document > section.section');
+    expect(SLIDES_PDF_FROM_DOM_FN).toContain('querySelectorAll("main.document > section.page');
     expect(SLIDES_PDF_FROM_DOM_FN).toContain('prop("--panel"');
     expect(SLIDES_PDF_FROM_DOM_FN).toContain('classList.contains("cover")');
   });

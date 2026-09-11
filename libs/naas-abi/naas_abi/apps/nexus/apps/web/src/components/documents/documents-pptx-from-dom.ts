@@ -56,7 +56,7 @@ export type SectionsPptxPlan = {
 };
 
 const SECTION_RE =
-  /<section\b[^>]*\bclass=["'][^"']*\bsection\b[^"']*["'][^>]*>[\s\S]*?<\/section>/gi;
+  /<section\b[^>]*\bclass=["'][^"']*\b(?:page|section)\b[^"']*["'][^>]*>[\s\S]*?<\/section>/gi;
 const ROOT_RE = /:root\s*\{([\s\S]*?)\}/;
 const CSS_VAR_RE = /--([a-z0-9-]+)\s*:\s*([^;]+);/gi;
 const TAG_RE = /<[^>]+>/g;
@@ -228,8 +228,8 @@ export function planSectionsPptxFromHtml(html: string): SectionsPptxPlan {
 export const SLIDES_PDF_FROM_DOM_FN = `/* ${SLIDES_PDF_FROM_DOM_FINGERPRINT} */
 async function buildPptx() {
   if (typeof PptxGenJS === "undefined") throw new Error("PptxGenJS failed to load");
-  var sections = document.querySelectorAll("main.document > section.section, .document > section.section");
-  if (!sections.length) throw new Error("No .section sections to export");
+  var sections = document.querySelectorAll("main.document > section.page, main.document > section.section, .document > section.page, .document > section.section");
+  if (!sections.length) throw new Error("No document sections to export");
   var pdf = new PptxGenJS();
   pdf.defineLayout({ name: "LAYOUT_16x9", width: 13.333, height: 7.5 });
   pdf.layout = "LAYOUT_16x9";

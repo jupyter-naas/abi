@@ -3,26 +3,28 @@ import {
   SLIDES_PDF_FROM_DOM_SCRIPT_ID,
 } from './documents-pptx-from-dom';
 
-/** Canonical section stage used by Nexus document seeds. */
+/** Letter content width (8.5in at 96dpi). Reading column, not a 16:9 stage. */
+export const DOCUMENTS_PAGE_WIDTH = 816;
+/** Letter page height at 96dpi. Minimum paper, not a per-section canvas. */
+export const DOCUMENTS_PAGE_MIN_HEIGHT = 1056;
+export const DOCUMENTS_PREVIEW_GUTTER_PX = 48;
+
+/**
+ * Legacy names from the Slides fork. Preview and thumbs use DOCUMENTS_PAGE_*.
+ * PDF planner still reads these for the leftover 16:9 reconstruction path.
+ */
 export const SLIDES_STAGE_WIDTH = 1280;
 export const SLIDES_STAGE_HEIGHT = 720;
 
-/** Industry library paint box, contained into the 816px prose stage (scale 2/3). */
+/** Industry library paint box (unused by article seeds). */
 export const SLIDES_INDUSTRY_STAGE_WIDTH = 1920;
 export const SLIDES_INDUSTRY_STAGE_HEIGHT = 1080;
 export const SLIDES_INDUSTRY_STAGE_SCALE =
-  SLIDES_STAGE_WIDTH / SLIDES_INDUSTRY_STAGE_WIDTH;
+  DOCUMENTS_PAGE_WIDTH / SLIDES_INDUSTRY_STAGE_WIDTH;
 
-/**
- * 16:9 page used by File → Print / Save as PDF.
- *
- * Width and height are already landscape. Do not add the `landscape` keyword:
- * Chrome treats `size: W H landscape` as a swap (7.5in x 13.333in) or drops
- * the rule and falls back to Letter, then shrink-to-fit leaves the next section
- * on the same sheet.
- */
-export const SLIDES_PRINT_PAGE_WIDTH_IN = '13.333in';
-export const SLIDES_PRINT_PAGE_HEIGHT_IN = '7.5in';
+/** Letter sheet used by File → Print / Save as PDF. */
+export const SLIDES_PRINT_PAGE_WIDTH_IN = '8.5in';
+export const SLIDES_PRINT_PAGE_HEIGHT_IN = '11in';
 
 /** Parent waits this long for an iframe ack that print() was invoked. */
 export const SLIDES_PDF_EXPORT_ACK_MS = 8000;
@@ -48,6 +50,7 @@ export type SectionsPreviewToParentMessage =
        */
       type: 'ready' | 'metrics' | 'images-ready';
       height: number;
+      sectionTops?: number[];
     }
   | {
       source: typeof SLIDES_PREVIEW_MESSAGE_SOURCE;
@@ -117,39 +120,43 @@ const SLIDES_EDIT_HTML_ALLOWED = new Set([
 ]);
 
 /**
- * Present-style contain scale: fit one 16:9 stage into the available pane.
- * Letterboxing on the unused axis is expected.
+ * Width-only scale: fit the letter column into the pane. Height follows the
+ * prose, so the host scrolls like a Word page, not a 16:9 contain-fit.
  */
 export function computeSectionsPreviewScale(
   availWidth: number,
-  availHeight: number,
-  stageWidth = SLIDES_STAGE_WIDTH,
-  stageHeight = SLIDES_STAGE_HEIGHT,
+  _availHeight?: number,
+  pageWidth = DOCUMENTS_PAGE_WIDTH,
+  gutter = DOCUMENTS_PREVIEW_GUTTER_PX,
 ): number {
-  if (availWidth <= 0 || availHeight <= 0 || stageWidth <= 0 || stageHeight <= 0) {
+  if (availWidth <= 0 || pageWidth <= 0) {
     return 1;
   }
-  return Math.min(availWidth / stageWidth, availHeight / stageHeight);
+  return Math.max(0.05, (availWidth - gutter) / pageWidth);
 }
 
-/** Host scrollTop that brings ``index`` into view at the current contain scale. */
+/** Host scrollTop that brings a heading block into view at the current scale. */
 export function sectionsPreviewScrollTop(
   index: number,
   scale: number,
-  stageHeight = SLIDES_STAGE_HEIGHT,
+  sectionTop = 0,
 ): number {
-  if (index <= 0 || scale <= 0 || stageHeight <= 0) return 0;
-  return index * stageHeight * scale;
+  if (index <= 0 || scale <= 0) return 0;
+  return sectionTop * scale;
 }
 
 export function sectionsPreviewIndexFromScroll(
   scrollTop: number,
   scale: number,
-  stageHeight = SLIDES_STAGE_HEIGHT,
+  sectionTops: number[] = [],
 ): number {
-  const step = stageHeight * scale;
-  if (step <= 0) return 0;
-  return Math.max(0, Math.round(scrollTop / step));
+  if (scale <= 0 || !sectionTops.length) return 0;
+  const y = scrollTop / scale;
+  let best = 0;
+  for (let i = 0; i < sectionTops.length; i += 1) {
+    if (y + 32 >= sectionTops[i]) best = i;
+  }
+  return best;
 }
 
 /** CSS injected into preview srcDoc so fixed 816px prose sections fill the stage cleanly. */
@@ -159,21 +166,37 @@ export const SLIDES_PREVIEW_BRIDGE_SCRIPT_ID = 'nexus-documents-preview-bridge';
 const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
 (function () {
   var SOURCE = ${JSON.stringify(SLIDES_PREVIEW_MESSAGE_SOURCE)};
-  var STAGE_HEIGHT = ${SLIDES_STAGE_HEIGHT};
+  var PAGE_MIN_HEIGHT = ${DOCUMENTS_PAGE_MIN_HEIGHT};
+  function sectionNodes() {
+    return Array.prototype.slice.call(
+      document.querySelectorAll(
+        'main.document > section.page, main.document > section.section, .document > section.page, .document > section.section'
+      )
+    );
+  }
+  function measureHeight() {
+    var body = document.body;
+    var el = document.documentElement;
+    var measured = Math.max(
+      (body && body.scrollHeight) || 0,
+      (body && body.offsetHeight) || 0,
+      (el && el.scrollHeight) || 0,
+      (el && el.offsetHeight) || 0,
+      PAGE_MIN_HEIGHT
+    );
+    return measured;
+  }
   function reportMetrics() {
     try {
-      var body = document.body;
-      var el = document.documentElement;
-      var measured = Math.max(
-        (body && body.scrollHeight) || 0,
-        (body && body.offsetHeight) || 0,
-        (el && el.scrollHeight) || 0,
-        (el && el.offsetHeight) || 0,
-        STAGE_HEIGHT
-      );
-      var sections = Math.max(1, Math.round(measured / STAGE_HEIGHT));
       parent.postMessage(
-        { source: SOURCE, type: 'metrics', height: sections * STAGE_HEIGHT },
+        {
+          source: SOURCE,
+          type: 'metrics',
+          height: measureHeight(),
+          sectionTops: sectionNodes().map(function (node) {
+            return node.offsetTop || 0;
+          }),
+        },
         '*'
       );
     } catch (e) {}
@@ -198,7 +221,7 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
   }
   function onReady() {
     parent.postMessage(
-      { source: SOURCE, type: 'ready', height: STAGE_HEIGHT },
+      { source: SOURCE, type: 'ready', height: measureHeight() },
       '*'
     );
     reportMetrics();
@@ -206,7 +229,7 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
     setTimeout(reportMetrics, 250);
     waitForImages().then(function () {
       parent.postMessage(
-        { source: SOURCE, type: 'images-ready', height: STAGE_HEIGHT },
+        { source: SOURCE, type: 'images-ready', height: measureHeight() },
         '*'
       );
       reportMetrics();
@@ -217,7 +240,7 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
   var editEnabled = false;
   var editIdle = null;
   function sectionSections() {
-    return Array.prototype.slice.call(document.querySelectorAll('section.section'));
+    return sectionNodes();
   }
   function isNestedEditable(el, section) {
     var p = el.parentElement;
@@ -373,12 +396,12 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
   }
   function resetDocumentForPrint() {
     try {
-      var document = document.querySelector('main.document, .document');
-      if (document) {
-        document.style.transform = '';
-        document.style.marginLeft = '';
-        document.style.marginBottom = '';
-        document.style.width = '';
+      var root = document.querySelector('main.document, .document');
+      if (root) {
+        root.style.transform = '';
+        root.style.marginLeft = '';
+        root.style.marginBottom = '';
+        root.style.width = '';
       }
       document.body.style.minHeight = '';
     } catch (e) {}
@@ -400,10 +423,10 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
 })();
 </script>`;
 
-/** Print rules injected into every preview: one .section = one 16:9 page. */
+/** Print rules: continuous letter prose. The browser paginates; sections are headings. */
 export const SLIDES_PREVIEW_PRINT_CSS = `
   @media print {
-    @page { size: ${SLIDES_PRINT_PAGE_WIDTH_IN} ${SLIDES_PRINT_PAGE_HEIGHT_IN}; margin: 0; }
+    @page { size: letter; margin: 1in; }
     * {
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
@@ -411,73 +434,51 @@ export const SLIDES_PREVIEW_PRINT_CSS = `
     html, body {
       margin: 0 !important;
       padding: 0 !important;
-      width: ${SLIDES_PRINT_PAGE_WIDTH_IN} !important;
+      width: auto !important;
       height: auto !important;
       background: #fff !important;
       overflow: visible !important;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
     }
     .document-menubar,
     .section-index,
     .document-export-menu { display: none !important; }
-    iframe { overflow: hidden !important; }
     body.document-has-menubar .document,
     .document {
       display: block !important;
       padding: 0 !important;
       gap: 0 !important;
       margin: 0 !important;
-      width: ${SLIDES_PRINT_PAGE_WIDTH_IN} !important;
+      width: auto !important;
       max-width: none !important;
+      min-height: 0 !important;
+      box-shadow: none !important;
       transform: none !important;
       zoom: 1 !important;
       overflow: visible !important;
     }
-    .section {
+    .page, .section {
       display: block !important;
       position: relative !important;
-      box-sizing: border-box !important;
-      width: ${SLIDES_PRINT_PAGE_WIDTH_IN} !important;
-      height: ${SLIDES_PRINT_PAGE_HEIGHT_IN} !important;
+      width: auto !important;
+      height: auto !important;
+      min-height: 0 !important;
       max-width: none !important;
       max-height: none !important;
-      margin: 0 !important;
-      overflow: hidden !important;
-      contain: strict !important;
-      page-break-after: always !important;
-      break-after: page !important;
-      page-break-inside: avoid !important;
-      break-inside: avoid !important;
-      border: none !important;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-    }
-    .section.cover {
-      display: flex !important;
-      flex-direction: column !important;
-    }
-    .section:first-child {
-      page-break-before: auto !important;
-      break-before: auto !important;
-    }
-    .section:not(:first-child) {
-      page-break-before: always !important;
-      break-before: page !important;
-    }
-    .section:last-child {
+      margin: 0 0 1.25em !important;
+      padding: 0 !important;
+      overflow: visible !important;
+      contain: none !important;
       page-break-after: auto !important;
       break-after: auto !important;
+      page-break-inside: auto !important;
+      break-inside: auto !important;
+      border: none !important;
+      box-shadow: none !important;
+      background: transparent !important;
     }
-    .industry-stage {
-      width: ${SLIDES_INDUSTRY_STAGE_WIDTH}px !important;
-      height: ${SLIDES_INDUSTRY_STAGE_HEIGHT}px !important;
-      position: absolute !important;
-      top: 0 !important;
-      left: 0 !important;
-      transform: none !important;
-      zoom: ${SLIDES_INDUSTRY_STAGE_SCALE} !important;
-      overflow: hidden !important;
+    h1, h2, h3 {
+      page-break-after: avoid !important;
+      break-after: avoid !important;
     }
   }
 `;
@@ -497,40 +498,38 @@ export function prepareSectionsPreviewHtml(html: string): string {
   html, body {
     margin: 0 !important;
     overflow-x: hidden !important;
-    background: transparent !important;
+    background: #e8e6e1 !important;
     min-height: 0 !important;
   }
   body.document-has-menubar .document,
   .document {
-    padding: 0 !important;
+    display: block !important;
+    padding: 72px 80px 96px !important;
     gap: 0 !important;
     align-items: stretch !important;
-    width: ${SLIDES_STAGE_WIDTH}px !important;
-    max-width: ${SLIDES_STAGE_WIDTH}px !important;
-    /* Standalone seeds scale the document to the window. The parent iframe
-       already contain-scales the 1280 stage; a second scale() shrinks
-       text-on-white covers into a blank card. */
+    width: ${DOCUMENTS_PAGE_WIDTH}px !important;
+    max-width: ${DOCUMENTS_PAGE_WIDTH}px !important;
+    min-height: ${DOCUMENTS_PAGE_MIN_HEIGHT}px !important;
+    background: #fff !important;
+    box-shadow: 0 1px 3px rgba(26, 26, 26, 0.08) !important;
     transform: none !important;
-    margin-left: 0 !important;
+    margin: 0 auto !important;
+  }
+  .page, .section {
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 0 1.5em !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    overflow: visible !important;
+    flex-shrink: 1 !important;
+  }
+  .page:last-child, .section:last-child {
     margin-bottom: 0 !important;
-  }
-  .section {
-    width: ${SLIDES_STAGE_WIDTH}px !important;
-    height: ${SLIDES_STAGE_HEIGHT}px !important;
-    flex-shrink: 0 !important;
-    border-left: none !important;
-    border-right: none !important;
-    overflow: hidden !important;
-  }
-  .industry-stage {
-    width: ${SLIDES_INDUSTRY_STAGE_WIDTH}px !important;
-    height: ${SLIDES_INDUSTRY_STAGE_HEIGHT}px !important;
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    transform: scale(${SLIDES_INDUSTRY_STAGE_SCALE}) !important;
-    transform-origin: top left !important;
-    overflow: hidden !important;
   }
   html.nexus-documents-manual-edit [data-nexus-edit] {
     cursor: text;
@@ -592,12 +591,12 @@ export function isSectionsPreviewMessage(
 }
 
 const SECTION_RE = /<section\b([^>]*)>([\s\S]*?)<\/section>/gi;
-const SLIDE_CLASS_RE = /\bclass\s*=\s*["'][^"']*\bsection\b/i;
+const SLIDE_CLASS_RE = /\bclass\s*=\s*["'][^"']*\b(?:page|section)\b/i;
 const HEAD_RE = /<head\b[^>]*>([\s\S]*?)<\/head>/i;
 const HERO_RE = /hero:\s*"((?:\\.|[^"\\])*)"/;
 const HERO_MAX_CHARS = 80_000;
 
-/** The `index`-th `<section class="section">`, or null when that section is missing. */
+/** The `index`-th `<section class="page|section">`, or null when that block is missing. */
 export function extractSectionHtmlAt(html: string, index: number): string | null {
   if (!html || index < 0) return null;
   SECTION_RE.lastIndex = 0;
@@ -612,7 +611,7 @@ export function extractSectionHtmlAt(html: string, index: number): string | null
   return null;
 }
 
-/** First `<section class="section">` in a document, or null when none is complete. */
+/** First `<section class="page|section">` in a document, or null when none is complete. */
 export function extractFirstSectionHtml(html: string): string | null {
   return extractSectionHtmlAt(html, 0);
 }
@@ -655,9 +654,8 @@ export function coverHeroCss(html: string): string {
 export const SLIDES_COVER_FIT_STYLE_ID = 'nexus-documents-cover-fit';
 
 /**
- * One-section srcDoc for an index card or outline thumb: head styles plus
- * one `.section`, locked to the 816px prose stage. No print/PDF bridge.
- * `index` defaults to the cover (first section).
+ * Top-of-page srcDoc for an index card: letter column, no 16:9 lock, no print bridge.
+ * `index` defaults to the first heading block.
  */
 export function prepareSectionsCoverHtml(html: string, index = 0): string | null {
   const section = extractSectionHtmlAt(html, index);
@@ -670,31 +668,28 @@ export function prepareSectionsCoverHtml(html: string, index = 0): string | null
   html, body {
     margin: 0 !important;
     overflow: hidden !important;
-    background: transparent !important;
+    background: #e8e6e1 !important;
   }
   body.document-has-menubar .document,
   .document {
-    padding: 0 !important;
+    padding: 56px 64px 48px !important;
     gap: 0 !important;
     align-items: stretch !important;
-    width: ${SLIDES_STAGE_WIDTH}px !important;
-    max-width: ${SLIDES_STAGE_WIDTH}px !important;
+    width: ${DOCUMENTS_PAGE_WIDTH}px !important;
+    max-width: ${DOCUMENTS_PAGE_WIDTH}px !important;
+    min-height: ${DOCUMENTS_PAGE_MIN_HEIGHT}px !important;
+    background: #fff !important;
   }
-  .section {
-    width: ${SLIDES_STAGE_WIDTH}px !important;
-    height: ${SLIDES_STAGE_HEIGHT}px !important;
-    flex-shrink: 0 !important;
-    overflow: hidden !important;
-  }
-  .industry-stage {
-    width: ${SLIDES_INDUSTRY_STAGE_WIDTH}px !important;
-    height: ${SLIDES_INDUSTRY_STAGE_HEIGHT}px !important;
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    transform: scale(${SLIDES_INDUSTRY_STAGE_SCALE}) !important;
-    transform-origin: top left !important;
-    overflow: hidden !important;
+  .page, .section {
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    overflow: visible !important;
   }
 </style>`;
   return `<!doctype html><html><head>${head}${fit}</head><body><main class="document">${section}</main></body></html>`;
@@ -743,7 +738,7 @@ type SectionsEditNode = {
   inner: string;
 };
 
-/** Number of ``<section class="section">`` blocks. Used for preview height before metrics. */
+/** Number of ``<section class="page|section">`` blocks. */
 export function countSectionSections(html: string): number {
   if (!html) return 0;
   let index = 0;

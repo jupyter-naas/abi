@@ -14,7 +14,6 @@ import { cn } from '@/lib/utils';
 import { resolveDocumentsPreviewAssets } from './documents-assets';
 import {
   computeSectionsPreviewScale,
-  countSectionSections,
   isSectionsPreviewMessage,
   prepareSectionsPreviewHtml,
   sectionsPreviewIndexFromScroll,
@@ -22,8 +21,8 @@ import {
   SLIDES_PDF_EXPORT_ACK_MS,
   SLIDES_PREVIEW_IMAGES_READY_TIMEOUT_MS,
   SLIDES_PREVIEW_MESSAGE_SOURCE,
-  SLIDES_STAGE_HEIGHT,
-  SLIDES_STAGE_WIDTH,
+  DOCUMENTS_PAGE_MIN_HEIGHT,
+  DOCUMENTS_PAGE_WIDTH,
   type SectionsPreviewFromParentMessage,
   type DocumentsTextEdit,
 } from './documents-preview-fit';
@@ -46,10 +45,9 @@ export interface DocumentsPreviewFrameProps {
 }
 
 /**
- * Present-style preview: fixed 816px prose stage scaled with object-fit:contain
- * into the available center pane (letterbox OK). The full document scrolls at
- * that scale (PowerPoint Normal view). Filmstrip click jumps scroll; host
- * scroll updates the selected index.
+ * Word-like preview: letter-width column scaled to the pane width. Height
+ * follows the prose. Outline click jumps scroll; host scroll updates the
+ * selected heading.
  *
  * Sandbox omits allow-same-origin. Height, PDF, PDF, and Manual edit use
  * the postMessage bridge. allow-modals is required so File, Print / Save as
@@ -84,30 +82,21 @@ export const DocumentsPreviewFrame = forwardRef<
   const manualEditRef = useRef(manualEdit);
   const onManualEditCommitRef = useRef(onManualEditCommit);
   const acceptEditsUntilRef = useRef(0);
-  const sectionCountRef = useRef(1);
   const [scale, setScale] = useState(1);
-  const [docHeight, setDocHeight] = useState(SLIDES_STAGE_HEIGHT);
-  const [hostHeight, setHostHeight] = useState(0);
+  const [docHeight, setDocHeight] = useState(DOCUMENTS_PAGE_MIN_HEIGHT);
+  const [sectionTops, setSectionTops] = useState<number[]>([]);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [imagesReady, setImagesReady] = useState(false);
 
   manualEditRef.current = manualEdit;
   onManualEditCommitRef.current = onManualEditCommit;
 
-  const stageHeightForCount = (count: number) =>
-    Math.max(1, count) * SLIDES_STAGE_HEIGHT;
-
   useEffect(() => {
     let cancelled = false;
     setImagesReady(false);
-    const count = Math.max(1, countSectionSections(html));
-    sectionCountRef.current = count;
-    setDocHeight(stageHeightForCount(count));
+    setDocHeight(DOCUMENTS_PAGE_MIN_HEIGHT);
     void resolveDocumentsPreviewAssets(html, workspaceId, slug).then((resolved) => {
       if (cancelled) return;
-      const nextCount = Math.max(1, countSectionSections(resolved));
-      sectionCountRef.current = nextCount;
-      setDocHeight(stageHeightForCount(nextCount));
       setPreviewHtml(prepareSectionsPreviewHtml(resolved));
     });
     return () => {
@@ -135,9 +124,8 @@ export const DocumentsPreviewFrame = forwardRef<
   const measureHost = useCallback(() => {
     const host = hostRef.current;
     if (!host) return;
-    const { width, height } = host.getBoundingClientRect();
-    setHostHeight(height);
-    setScale(computeSectionsPreviewScale(width, height));
+    const { width } = host.getBoundingClientRect();
+    setScale(computeSectionsPreviewScale(width));
   }, []);
 
   useLayoutEffect(() => {
@@ -174,8 +162,11 @@ export const DocumentsPreviewFrame = forwardRef<
         event.data.type === 'images-ready'
       ) {
         if (typeof event.data.height === 'number' && event.data.height > 0) {
-          setDocHeight(
-            Math.max(event.data.height, stageHeightForCount(sectionCountRef.current)),
+          setDocHeight(Math.max(event.data.height, DOCUMENTS_PAGE_MIN_HEIGHT));
+        }
+        if (Array.isArray(event.data.sectionTops)) {
+          setSectionTops(
+            event.data.sectionTops.filter((n): n is number => typeof n === 'number'),
           );
         }
         if (event.data.type === 'images-ready') setImagesReady(true);
@@ -215,16 +206,20 @@ export const DocumentsPreviewFrame = forwardRef<
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const target = sectionsPreviewScrollTop(selectedIndex, scale);
+    const target = sectionsPreviewScrollTop(
+      selectedIndex,
+      scale,
+      sectionTops[selectedIndex] ?? 0,
+    );
     ignoreScrollRef.current = true;
-    if (Math.abs(host.scrollTop - target) >= SLIDES_STAGE_HEIGHT * scale * 0.25) {
+    if (Math.abs(host.scrollTop - target) >= 48) {
       host.scrollTo({ top: target });
     }
     const timer = window.setTimeout(() => {
       ignoreScrollRef.current = false;
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [selectedIndex, scale, previewHtml]);
+  }, [selectedIndex, scale, previewHtml, sectionTops]);
 
   useImperativeHandle(
     ref,
@@ -283,10 +278,9 @@ export const DocumentsPreviewFrame = forwardRef<
     [],
   );
 
-  const scaledW = SLIDES_STAGE_WIDTH * scale;
+  const scaledW = DOCUMENTS_PAGE_WIDTH * scale;
   const scaledH = docHeight * scale;
-  const fitsInHost = hostHeight > 0 && scaledH <= hostHeight + 0.5;
-  const topPad = fitsInHost ? Math.max(0, (hostHeight - scaledH) / 2) : 0;
+  const topPad = 24;
 
   return (
     <div
@@ -296,7 +290,7 @@ export const DocumentsPreviewFrame = forwardRef<
         if (!onSelectedIndexChange || ignoreScrollRef.current) return;
         const host = hostRef.current;
         if (!host) return;
-        const next = sectionsPreviewIndexFromScroll(host.scrollTop, scale);
+        const next = sectionsPreviewIndexFromScroll(host.scrollTop, scale, sectionTops);
         if (next !== selectedIndex) onSelectedIndexChange(next);
       }}
     >
@@ -319,7 +313,7 @@ export const DocumentsPreviewFrame = forwardRef<
               imagesReady ? 'opacity-100' : 'opacity-0',
             )}
             style={{
-              width: SLIDES_STAGE_WIDTH,
+              width: DOCUMENTS_PAGE_WIDTH,
               height: docHeight,
               transform: `scale(${scale})`,
               transformOrigin: 'top left',
@@ -332,7 +326,7 @@ export const DocumentsPreviewFrame = forwardRef<
             aria-hidden="true"
           >
             <Loader2 size={16} className="animate-spin" />
-            Loading sections…
+            Loading document…
           </div>
         )}
       </div>

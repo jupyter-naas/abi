@@ -30,6 +30,7 @@ const ID_RE = /\bid\s*=\s*["']([^"']+)["']/i;
 const CLASS_RE = /\bclass\s*=\s*["']([^"']+)["']/i;
 const LAYOUT_RE = /\bdata-layout\s*=\s*["']([^"']+)["']/i;
 const H1_RE = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i;
+const H2_RE = /<h2\b[^>]*>([\s\S]*?)<\/h2>/i;
 const DIVIDER_TITLE_RE =
   /<div\b[^>]*class=["'][^"']*\bdivider-title\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/i;
 const TAG_RE = /<[^>]+>/g;
@@ -69,8 +70,9 @@ export function parseDocumentsOutline(html: string): SectionOutlineItem[] {
     const attrs = match[1] || '';
     const body = match[2] || '';
     const h1 = H1_RE.exec(body)?.[1];
+    const h2 = H2_RE.exec(body)?.[1];
     const divider = DIVIDER_TITLE_RE.exec(body)?.[1];
-    const title = decodeEntities(stripTags(h1 || divider || ''));
+    const title = decodeEntities(stripTags(h1 || divider || h2 || ''));
     sections.push({
       index: sections.length,
       id: ID_RE.exec(attrs)?.[1] || null,

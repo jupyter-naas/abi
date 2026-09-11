@@ -109,6 +109,9 @@ def test_seed_template_is_prose_document() -> None:
     assert 'class="page' in html
     assert "Document Title" in html
     assert "Introduction" in html
+    assert "min-height: 400px" not in html
+    assert "Replace this placeholder" not in html
+    assert "816px" in html
 
 
 def test_seed_catalog_lists_all_templates() -> None:

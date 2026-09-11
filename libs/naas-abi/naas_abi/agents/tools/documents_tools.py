@@ -68,6 +68,7 @@ _SECTION_OPEN_RE = re.compile(r"<section\b([^>]*)>", re.IGNORECASE)
 _ATTR_ID_RE = re.compile(r"""\bid\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 _ATTR_CLASS_RE = re.compile(r"""\bclass\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 _H1_RE = re.compile(r"<h1\b[^>]*>(.*?)</h1>", re.IGNORECASE | re.DOTALL)
+_H2_RE = re.compile(r"<h2\b[^>]*>(.*?)</h2>", re.IGNORECASE | re.DOTALL)
 _TAG_RE = re.compile(r"<[^>]+>")
 _REDACTED_PLACEHOLDER = "[REDACTED_DATA_URL]"
 _SCRIPT_PLACEHOLDER = "<!-- REDACTED_SCRIPT -->"
@@ -183,12 +184,12 @@ def _conventional_message(message: str, *, default_type: str = "chore") -> str:
 
 
 def _load_seed_document_html() -> str | None:
-    """Same Minimal Light seed the UI New path writes."""
+    """Same Article Light seed the UI New path writes."""
     try:
         from importlib import resources
 
         root = resources.files("naas_abi.apps.nexus.assets.documents.templates")
-        text = (root / "minimal-light-v1.html").read_text(encoding="utf-8")
+        text = (root / "article-light-v1.html").read_text(encoding="utf-8")
         return text if text.strip() else None
     except Exception:  # noqa: BLE001
         return None
@@ -361,10 +362,11 @@ def _unique_slug(base: str, taken: set[str]) -> str:
 
 def _seed_document_with_title(html: str, title: str) -> str:
     """Put the requested title on the cover so the document opens named correctly."""
-    applied = _apply_replacements(html, "Presentation Title", title, 0)
-    if isinstance(applied, dict):
-        return html
-    return applied[0]
+    for placeholder in ("Document Title", "Presentation Title"):
+        applied = _apply_replacements(html, placeholder, title, 0)
+        if not isinstance(applied, dict):
+            return applied[0]
+    return html
 
 
 def _workspace_id() -> str | None:
@@ -950,24 +952,20 @@ _LAYOUT_ALIASES = {
 _KNOWN_LAYOUTS = frozenset({"cover", "section-divider", "content"})
 _LAYOUT_SKELETONS = {
     "cover": (
-        '<section class="section cover" data-layout="cover">'
-        '<div class="cover-content">'
-        '<div class="eyebrow">New section</div>'
+        '<section class="page cover" data-layout="cover">'
         "<h1>{title}</h1>"
-        '<p class="subtitle">Add a subtitle</p>'
-        "</div></section>"
+        '<p class="deck">A one-line summary the reader can scan before the body.</p>'
+        "</section>"
     ),
     "section-divider": (
-        '<section class="section section-divider" data-layout="section-divider">'
-        '<div class="divider-eyebrow">Section</div>'
-        '<div class="divider-title">{title}</div>'
+        '<section class="page" data-layout="section-divider">'
+        "<h2>{title}</h2>"
         "</section>"
     ),
     "content": (
-        '<section class="section" data-layout="content">'
-        '<div class="eyebrow">Section</div>'
-        "<h1>{title}</h1>"
-        "<p>Replace this copy.</p>"
+        '<section class="page" data-layout="content">'
+        "<h2>{title}</h2>"
+        "<p></p>"
         "</section>"
     ),
 }
@@ -1005,6 +1003,9 @@ def _section_meta(index: int, section_html: str) -> dict[str, Any]:
     if not title:
         divider_m = _DIVIDER_TITLE_RE.search(section_html)
         title = _strip_tags(divider_m.group(1)) if divider_m else ""
+    if not title:
+        h2_m = _H2_RE.search(section_html)
+        title = _strip_tags(h2_m.group(1)) if h2_m else ""
     redacted, n_assets = _redact_data_urls(section_html)
     return {
         "index": index,
@@ -1175,6 +1176,9 @@ def _set_section_title(section_html: str, title: str, layout: str) -> str:
         if match:
             return section_html[: match.start(1)] + safe + section_html[match.end(1) :]
     match = _H1_RE.search(section_html)
+    if match:
+        return section_html[: match.start(1)] + safe + section_html[match.end(1) :]
+    match = _H2_RE.search(section_html)
     if match:
         return section_html[: match.start(1)] + safe + section_html[match.end(1) :]
     open_m = _SECTION_OPEN_RE.search(section_html)
@@ -1511,7 +1515,7 @@ def documents_tools() -> list[BaseTool]:
                 "branch": paths["branch"],
                 "path": paths["document_path"],
                 "workspace_id": _workspace_id() or "",
-                "template_id": "minimal-light-v1",
+                "template_id": "article-light-v1",
                 "commit_sha": commit.sha,
                 "note": (
                     f"Created '{clean_title}'. This is now the open document. "

@@ -13,7 +13,7 @@ vi.mock('./documents-cover-thumb', () => ({
   SectionsCoverThumb: ({ title }: { title: string }) =>
     createElement(
       'div',
-      { 'data-testid': 'sections-cover-thumb', className: 'relative aspect-video' },
+      { 'data-testid': 'sections-cover-thumb', className: 'relative aspect-[8.5/11]' },
       title,
     ),
   SectionsCoverFallback: ({ title }: { title: string }) =>
@@ -32,7 +32,7 @@ function project(over: Partial<DocumentsProject> = {}): DocumentsProject {
 }
 
 describe('SectionsIndexCard', () => {
-  it('is an Apps-style glass card with a 16:9 thumb and the title', () => {
+  it('is an Apps-style glass card with a letter-page thumb and the title', () => {
     const html = renderToStaticMarkup(
       createElement(SectionsIndexCard, {
         project: project(),
@@ -42,7 +42,7 @@ describe('SectionsIndexCard', () => {
       }),
     );
     expect(html).toContain('glass-card');
-    expect(html).toContain('aspect-video');
+    expect(html).toContain('aspect-[8.5/11]');
     expect(html).toContain('Board update');
     expect(html).toContain('href="/workspace/ws-1/documents/document-one"');
     expect(html).not.toContain('document.html');

@@ -16,7 +16,6 @@ import {
   readDocumentCoverHtml,
   sanitizeDocumentsEditHtml,
   SLIDES_COVER_FIT_STYLE_ID,
-  SLIDES_INDUSTRY_STAGE_SCALE,
   SLIDES_PDF_EXPORT_ACK_MS,
   SLIDES_PREVIEW_BRIDGE_SCRIPT_ID,
   SLIDES_PREVIEW_FIT_STYLE_ID,
@@ -24,33 +23,34 @@ import {
   SLIDES_PREVIEW_PRINT_CSS,
   SLIDES_PRINT_PAGE_HEIGHT_IN,
   SLIDES_PRINT_PAGE_WIDTH_IN,
+  DOCUMENTS_PAGE_WIDTH,
+  DOCUMENTS_PREVIEW_GUTTER_PX,
   SLIDES_STAGE_HEIGHT,
-  SLIDES_STAGE_WIDTH,
 } from './documents-preview-fit';
-import { SLIDES_PDF_FROM_DOM_SCRIPT_ID } from './documents-pdf-from-dom';
+import { SLIDES_PDF_FROM_DOM_SCRIPT_ID } from './documents-pptx-from-dom';
 
 describe('computeSectionsPreviewScale', () => {
-  it('contains a 16:9 stage in a wide pane (letterbox top/bottom)', () => {
+  it('scales the letter column to pane width, ignoring height', () => {
+    const scale = computeSectionsPreviewScale(864, 400);
+    expect(scale).toBeCloseTo((864 - DOCUMENTS_PREVIEW_GUTTER_PX) / DOCUMENTS_PAGE_WIDTH, 5);
+  });
+
+  it('does not use 16:9 contain-fit', () => {
     const scale = computeSectionsPreviewScale(1600, 600);
-    expect(scale).toBeCloseTo(600 / SLIDES_STAGE_HEIGHT, 5);
+    expect(scale).not.toBeCloseTo(600 / SLIDES_STAGE_HEIGHT, 5);
+    expect(scale).toBeCloseTo((1600 - DOCUMENTS_PREVIEW_GUTTER_PX) / DOCUMENTS_PAGE_WIDTH, 5);
   });
 
-  it('contains a 16:9 stage in a tall pane (pillarbox left/right)', () => {
-    const scale = computeSectionsPreviewScale(800, 900);
-    expect(scale).toBeCloseTo(800 / SLIDES_STAGE_WIDTH, 5);
-  });
-
-  it('returns 1 for non-positive inputs', () => {
+  it('returns 1 for non-positive width', () => {
     expect(computeSectionsPreviewScale(0, 720)).toBe(1);
-    expect(computeSectionsPreviewScale(1280, -1)).toBe(1);
   });
 });
 
 describe('sectionsPreviewScrollTop', () => {
-  it('maps a selected index to host scroll at the current scale', () => {
-    expect(sectionsPreviewScrollTop(0, 0.5)).toBe(0);
-    expect(sectionsPreviewScrollTop(2, 0.5)).toBe(2 * SLIDES_STAGE_HEIGHT * 0.5);
-    expect(sectionsPreviewIndexFromScroll(SLIDES_STAGE_HEIGHT * 0.5, 0.5)).toBe(1);
+  it('maps a selected heading to host scroll from measured tops', () => {
+    expect(sectionsPreviewScrollTop(0, 0.5, 0)).toBe(0);
+    expect(sectionsPreviewScrollTop(2, 0.5, 400)).toBe(200);
+    expect(sectionsPreviewIndexFromScroll(200, 0.5, [0, 120, 400])).toBe(2);
   });
 });
 
@@ -63,15 +63,15 @@ describe('prepareSectionsPreviewHtml', () => {
     expect(once).toContain(`id="${SLIDES_PDF_FROM_DOM_SCRIPT_ID}"`);
     expect(once).toContain('window.buildPptx = buildPptx');
     expect(once).toContain(SLIDES_PREVIEW_MESSAGE_SOURCE);
-    expect(once).toContain(`${SLIDES_STAGE_WIDTH}px`);
+    expect(once).toContain(`${DOCUMENTS_PAGE_WIDTH}px`);
     const fitStart = once.indexOf(`id="${SLIDES_PREVIEW_FIT_STYLE_ID}"`);
     const screenPrintAt = once.indexOf('@media print', fitStart);
     const screenCss = once.slice(fitStart, screenPrintAt);
     expect(screenCss).toContain('transform: none !important');
-    expect(screenCss).toContain('margin-left: 0 !important');
-    expect(screenCss).toContain('margin-bottom: 0 !important');
-    expect(screenCss).toContain('.industry-stage');
-    expect(screenCss).toContain(`transform: scale(${SLIDES_INDUSTRY_STAGE_SCALE})`);
+    expect(screenCss).toContain('.page, .section');
+    expect(screenCss).toContain('height: auto !important');
+    expect(screenCss).toContain('min-height: 0 !important');
+    expect(screenCss).not.toContain(`height: ${SLIDES_STAGE_HEIGHT}px`);
     expect(screenCss).toContain('nexus-documents-manual-edit');
     expect(once).toContain('set-manual-edit');
     expect(once).toContain('edit-commit');
@@ -80,16 +80,14 @@ describe('prepareSectionsPreviewHtml', () => {
     expect(once).toContain('export-pdf');
     expect(once).toContain('window.print');
     expect(once).toContain('@media print');
-    expect(once).toContain(`size: ${SLIDES_PRINT_PAGE_WIDTH_IN} ${SLIDES_PRINT_PAGE_HEIGHT_IN}; margin: 0;`);
+    expect(once).toContain('size: letter; margin: 1in;');
     expect(once).not.toMatch(/@page \{[^}]*landscape/);
     expect(once).toContain('display: block !important');
     expect(once).toContain('.section-index');
-    expect(once).toContain('.industry-stage');
-    expect(once).toContain(`zoom: ${SLIDES_INDUSTRY_STAGE_SCALE}`);
     expect(once).toContain('print-color-adjust: exact');
-    expect(once).toContain('page-break-after: always');
-    expect(once).toContain('page-break-before: always');
-    expect(once).toContain('contain: strict');
+    expect(once).toContain('page-break-after: auto');
+    expect(once).not.toContain('page-break-after: always');
+    expect(once).not.toContain('contain: strict');
     expect(once).toContain('beforeprint');
     const ackAt = once.indexOf("type: 'export-pdf-result', ok: true");
     const printAt = once.lastIndexOf('window.print()');
@@ -158,23 +156,13 @@ const TWO_SLIDE_DECK = `<!doctype html><html><head>
 </body></html>`;
 
 describe('SLIDES_PREVIEW_PRINT_CSS', () => {
-  it('sizes the page and each section in the same inches, without landscape', () => {
-    expect(SLIDES_PREVIEW_PRINT_CSS).toContain(
-      `@page { size: ${SLIDES_PRINT_PAGE_WIDTH_IN} ${SLIDES_PRINT_PAGE_HEIGHT_IN}; margin: 0; }`,
-    );
+  it('prints letter and lets the browser paginate prose', () => {
+    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('@page { size: letter; margin: 1in; }');
     expect(SLIDES_PREVIEW_PRINT_CSS).not.toMatch(/@page \{[^}]*landscape/);
-    expect(SLIDES_PREVIEW_PRINT_CSS).toContain(`width: ${SLIDES_PRINT_PAGE_WIDTH_IN} !important`);
-    expect(SLIDES_PREVIEW_PRINT_CSS).toContain(`height: ${SLIDES_PRINT_PAGE_HEIGHT_IN} !important`);
-    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('max-width: none !important');
-    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('max-height: none !important');
-  });
-
-  it('uses zoom for the industry paint box so print layout is 816px prose', () => {
-    expect(SLIDES_PREVIEW_PRINT_CSS).toContain(`zoom: ${SLIDES_INDUSTRY_STAGE_SCALE} !important`);
-    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('transform: none !important');
-    expect(SLIDES_PREVIEW_PRINT_CSS).not.toContain(
-      `transform: scale(${SLIDES_INDUSTRY_STAGE_SCALE})`,
-    );
+    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('page-break-after: auto');
+    expect(SLIDES_PREVIEW_PRINT_CSS).not.toContain('page-break-after: always');
+    expect(SLIDES_PRINT_PAGE_WIDTH_IN).toBe('8.5in');
+    expect(SLIDES_PRINT_PAGE_HEIGHT_IN).toBe('11in');
   });
 });
 
@@ -185,8 +173,8 @@ describe('prepareSectionsCoverHtml', () => {
     expect(cover).toContain('id="section-cover"');
     expect(cover).not.toContain('Agenda');
     expect(cover).toContain(`id="${SLIDES_COVER_FIT_STYLE_ID}"`);
-    expect(cover).toContain('.industry-stage');
-    expect(cover).toContain(`transform: scale(${SLIDES_INDUSTRY_STAGE_SCALE})`);
+    expect(cover).toContain(`${DOCUMENTS_PAGE_WIDTH}px`);
+    expect(cover).toContain('.page, .section');
     expect(cover).not.toContain('pdfgen');
     expect(cover).not.toContain('export-pdf');
   });
@@ -220,16 +208,23 @@ describe('documentBufferHasCover', () => {
 });
 
 describe('extractFirstSectionHtml', () => {
-  it('skips a section that is not a section', () => {
+  it('skips a section that is not a page or section', () => {
     const html =
       '<section class="notes">skip</section><section class="section cover"><h1>Keep</h1></section>';
     expect(extractFirstSectionHtml(html)).toContain('Keep');
     expect(extractFirstSectionHtml(html)).not.toContain('skip');
   });
+
+  it('reads article-light page blocks', () => {
+    const html =
+      '<section class="page cover"><h1>Document Title</h1></section><section class="page"><h2>Introduction</h2></section>';
+    expect(extractFirstSectionHtml(html)).toContain('Document Title');
+    expect(countSectionSections(html)).toBe(2);
+  });
 });
 
 describe('countSectionSections', () => {
-  it('counts section sections only', () => {
+  it('counts page and section blocks only', () => {
     expect(countSectionSections(TWO_SLIDE_DECK)).toBe(2);
     expect(countSectionSections('<section class="notes">x</section>')).toBe(0);
   });

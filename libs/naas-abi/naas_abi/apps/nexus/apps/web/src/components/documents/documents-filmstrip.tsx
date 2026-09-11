@@ -2,14 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { resolveDocumentsPreviewAssets } from './documents-assets';
 import { type SectionOutlineItem } from './documents-outline';
-import { SectionsSectionThumb } from './documents-cover-thumb';
 
 export function DocumentsOutline({
-  html,
-  workspaceId,
-  slug,
+  html: _html,
+  workspaceId: _workspaceId,
+  slug: _slug,
   sections,
   selectedIndex,
   disabled,
@@ -26,21 +24,8 @@ export function DocumentsOutline({
   onReorder: (fromIndex: number, toIndex: number) => void;
 }) {
   const [dragging, setDragging] = useState<number | null>(null);
-  const [thumbHtml, setThumbHtml] = useState(html);
   const scrollerRef = useRef<HTMLOListElement>(null);
   const selectedRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setThumbHtml(html);
-    if (!html || !workspaceId || !slug) return;
-    void resolveDocumentsPreviewAssets(html, workspaceId, slug).then((resolved) => {
-      if (!cancelled) setThumbHtml(resolved);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [html, workspaceId, slug]);
 
   useEffect(() => {
     const scroller = scrollerRef.current;
@@ -63,19 +48,19 @@ export function DocumentsOutline({
   return (
     <div
       className="flex min-h-0 min-w-0 flex-1 flex-col"
-      aria-label="Section outline"
+      aria-label="Document outline"
       data-testid="documents-outline"
       data-orientation="vertical"
     >
       <ol
         ref={scrollerRef}
-        className="flex min-h-0 flex-1 flex-col items-center gap-2 overflow-y-auto px-2 py-2"
+        className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-2"
       >
         {sections.map((section) => {
           const active = section.index === selectedIndex;
-          const label = section.title || `Section ${section.index + 1}`;
+          const label = section.title || `Heading ${section.index + 1}`;
           return (
-            <li key={`${section.index}-${section.id || 'section'}`} className="w-full max-w-[12rem]">
+            <li key={`${section.index}-${section.id || 'section'}`} className="w-full">
               <button
                 ref={active ? selectedRef : undefined}
                 type="button"
@@ -95,28 +80,22 @@ export function DocumentsOutline({
                   setDragging(null);
                 }}
                 className={cn(
-                  'flex w-full flex-col items-center gap-1 rounded-sm text-left',
+                  'flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-left',
                   dragging === section.index && 'opacity-50',
+                  active
+                    ? 'bg-workspace-accent/10 text-workspace-accent'
+                    : 'text-foreground hover:bg-muted/70',
                 )}
               >
                 <span
                   className={cn(
-                    'block aspect-video w-full overflow-hidden rounded-[2px] bg-muted/30',
-                    active
-                      ? 'ring-2 ring-workspace-accent ring-offset-1 ring-offset-card'
-                      : 'ring-1 ring-border hover:ring-muted-foreground/50',
-                  )}
-                >
-                  <SectionsSectionThumb html={thumbHtml} index={section.index} title={label} />
-                </span>
-                <span
-                  className={cn(
-                    'text-[10px] tabular-nums leading-none',
-                    active ? 'font-semibold text-workspace-accent' : 'text-muted-foreground',
+                    'w-4 shrink-0 pt-0.5 text-[10px] tabular-nums leading-none',
+                    active ? 'font-semibold' : 'text-muted-foreground',
                   )}
                 >
                   {section.index + 1}
                 </span>
+                <span className="min-w-0 flex-1 truncate text-xs leading-snug">{label}</span>
               </button>
             </li>
           );

@@ -5,8 +5,8 @@ import {
   computeSectionsPreviewScale,
   prepareSectionsCoverHtml,
   readDocumentCoverHtml,
-  SLIDES_STAGE_HEIGHT,
-  SLIDES_STAGE_WIDTH,
+  DOCUMENTS_PAGE_MIN_HEIGHT,
+  DOCUMENTS_PAGE_WIDTH,
 } from './documents-preview-fit';
 import { resolveDocumentsPreviewAssets } from './documents-assets';
 import { authFetch } from '@/stores/auth';
@@ -119,7 +119,7 @@ export function SectionsCoverThumb({
     const host = hostRef.current;
     if (!host) return;
     const { width, height } = host.getBoundingClientRect();
-    setScale(computeSectionsPreviewScale(width, height));
+    setScale(computeSectionsPreviewScale(width, height, DOCUMENTS_PAGE_WIDTH, 0));
   }, []);
 
   useEffect(() => {
@@ -171,7 +171,7 @@ export function SectionsCoverThumb({
   return (
     <div
       ref={hostRef}
-      className="pointer-events-none relative aspect-video w-full overflow-hidden bg-muted/20"
+      className="pointer-events-none relative aspect-[8.5/11] w-full overflow-hidden bg-muted/20"
       data-testid="sections-cover-thumb"
     >
       {!coverHtml ? <SectionsCoverFallback title={title} preview={preview} /> : null}
@@ -182,8 +182,8 @@ export function SectionsCoverThumb({
           srcDoc={coverHtml}
           className="pointer-events-none block border-0"
           style={{
-            width: SLIDES_STAGE_WIDTH,
-            height: SLIDES_STAGE_HEIGHT,
+            width: DOCUMENTS_PAGE_WIDTH,
+            height: DOCUMENTS_PAGE_MIN_HEIGHT,
             transform: `scale(${scale})`,
             transformOrigin: 'top left',
           }}
@@ -193,7 +193,7 @@ export function SectionsCoverThumb({
   );
 }
 
-/** In-memory 16:9 thumb for one section. Loads srcDoc when the card is on screen. */
+/** In-memory letter thumb for one heading block. Loads srcDoc when the card is on screen. */
 export function SectionsSectionThumb({
   html,
   index,
@@ -212,7 +212,7 @@ export function SectionsSectionThumb({
     const host = hostRef.current;
     if (!host) return;
     const { width, height } = host.getBoundingClientRect();
-    setScale(computeSectionsPreviewScale(width, height));
+    setScale(computeSectionsPreviewScale(width, height, DOCUMENTS_PAGE_WIDTH, 0));
   }, []);
 
   useEffect(() => {
@@ -268,8 +268,8 @@ export function SectionsSectionThumb({
           srcDoc={srcDoc}
           className="pointer-events-none block border-0"
           style={{
-            width: SLIDES_STAGE_WIDTH,
-            height: SLIDES_STAGE_HEIGHT,
+            width: DOCUMENTS_PAGE_WIDTH,
+            height: DOCUMENTS_PAGE_MIN_HEIGHT,
             transform: `scale(${scale})`,
             transformOrigin: 'top left',
           }}

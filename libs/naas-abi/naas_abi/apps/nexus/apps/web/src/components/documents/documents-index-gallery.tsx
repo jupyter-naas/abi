@@ -144,7 +144,7 @@ export function SectionsTemplateStrip({
               onClick={() => onSelect(card.id)}
               className="w-[10.5rem] flex-shrink-0 text-left disabled:cursor-default disabled:opacity-50"
             >
-              <div className="relative aspect-video w-full overflow-hidden rounded-sm border border-border bg-background shadow-sm transition-shadow hover:shadow-md">
+              <div className="relative aspect-[8.5/11] w-full overflow-hidden rounded-sm border border-border bg-background shadow-sm transition-shadow hover:shadow-md">
                 {card.blank ? (
                   <div
                     className="absolute inset-0 flex items-center justify-center bg-white"

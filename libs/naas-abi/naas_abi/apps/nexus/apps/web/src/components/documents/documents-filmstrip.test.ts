@@ -4,17 +4,18 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const src = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), 'documents-outline.tsx'),
+  join(dirname(fileURLToPath(import.meta.url)), 'documents-filmstrip.tsx'),
   'utf8',
 );
 
 describe('DocumentsOutline', () => {
-  it('is a vertical thumb strip without command chrome', () => {
+  it('is a heading list without slide thumbs or command chrome', () => {
     expect(src).toContain('data-testid="documents-outline"');
     expect(src).toContain('data-orientation="vertical"');
     expect(src).toContain('flex-col');
     expect(src).toContain('overflow-y-auto');
-    expect(src).toContain('aspect-video');
+    expect(src).toContain('Document outline');
+    expect(src).not.toContain('aspect-video');
     expect(src).toContain('onReorder');
     expect(src).not.toContain('onInsert');
     expect(src).not.toContain('onDelete');

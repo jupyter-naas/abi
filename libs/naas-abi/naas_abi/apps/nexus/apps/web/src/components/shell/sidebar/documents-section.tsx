@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
-import { ChevronRight, FileText, FolderTree, LayoutGrid } from 'lucide-react';
+import { ChevronRight, FileText, FolderTree, List } from 'lucide-react';
 import {
   DEFAULT_DOCUMENTS_TEMPLATE_ID,
   openDocumentsAgentPane,
@@ -37,9 +37,9 @@ import { sectionsFilmstripEmptyCopy } from './documents-section-views';
 import { getWorkspacePath } from './utils';
 
 /**
- * Documents sidebar: Ontology-style view toolbar, then Documents or Filmstrip.
+ * Documents sidebar: Ontology-style view toolbar, then Documents or Outline.
  *
- * Documents is the file tree. Filmstrip is vertical thumbs for the open document.
+ * Documents is the file tree. Outline is headings for the open document.
  * Templates hang off the New Documents caret on the Documents view.
  */
 export function DocumentsSection({
@@ -278,8 +278,8 @@ export function DocumentsSection({
             onClick={() => setSidebarView('documents')}
           />
           <SidebarToolbarButton
-            icon={<LayoutGrid size={14} />}
-            label="Filmstrip"
+            icon={<List size={14} />}
+            label="Outline"
             active={sidebarView === 'outline'}
             pressed={sidebarView === 'outline'}
             testId="sections-sidebar-view-outline"

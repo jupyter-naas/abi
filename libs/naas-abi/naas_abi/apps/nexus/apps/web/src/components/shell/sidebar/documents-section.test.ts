@@ -10,11 +10,11 @@ const src = readFileSync(
 );
 
 describe('DocumentsSection sidebar views', () => {
-  it('copies the Ontology toolbar: Documents and Filmstrip under the title', () => {
+  it('copies the Ontology toolbar: Documents and Outline under the title', () => {
     expect(src).toContain('SidebarToolbar');
     expect(src).toContain('SidebarToolbarButton');
     expect(src).toContain('label="Documents"');
-    expect(src).toContain('label="Filmstrip"');
+    expect(src).toContain('label="Outline"');
     expect(src).toContain('data-testid="sections-sidebar-views"');
     expect(src).toContain('sections-sidebar-view-outline');
     expect(src).toContain('DocumentsOutline');

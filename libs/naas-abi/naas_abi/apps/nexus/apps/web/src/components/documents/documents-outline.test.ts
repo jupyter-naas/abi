@@ -37,6 +37,15 @@ describe('parseDocumentsOutline', () => {
   it('returns an empty list for empty html', () => {
     expect(parseDocumentsOutline('')).toEqual([]);
   });
+
+  it('uses h2 when a page block has no h1', () => {
+    const html =
+      '<main class="document"><section class="page cover"><h1>Document Title</h1></section><section class="page"><h2>Introduction</h2><p>Body</p></section></main>';
+    const sections = parseDocumentsOutline(html);
+    expect(sections).toHaveLength(2);
+    expect(sections[0].title).toBe('Document Title');
+    expect(sections[1].title).toBe('Introduction');
+  });
 });
 
 describe('sectionLayoutFromAttrs', () => {

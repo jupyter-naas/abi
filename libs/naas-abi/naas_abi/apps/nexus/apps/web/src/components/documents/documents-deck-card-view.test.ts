@@ -10,7 +10,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { DocumentsCardView } from './documents-card-view';
+import { DocumentsCardView } from './documents-deck-card-view';
 
 vi.mock('next/link', () => ({
   default: ({ children, ...props }: Record<string, unknown> & { children?: unknown }) =>

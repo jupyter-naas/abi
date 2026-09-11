@@ -538,13 +538,17 @@ _SECTION_SLIDE_RE = re.compile(
     r"<section\b([^>]*)>(.*?)</section>",
     re.IGNORECASE | re.DOTALL,
 )
-_SLIDE_CLASS_RE = re.compile(r"""\bclass\s*=\s*["'][^"']*\bpage\b""", re.IGNORECASE)
+_SLIDE_CLASS_RE = re.compile(
+    r"""\bclass\s*=\s*["'][^"']*\b(?:page|section)\b""",
+    re.IGNORECASE,
+)
 _SECTION_ID_RE = re.compile(r"""\bid\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 _EYEBROW_RE = re.compile(
     r"""<div\b[^>]*class=["'][^"']*\b(?:eyebrow|divider-eyebrow)\b[^"']*["'][^>]*>(.*?)</div>""",
     re.IGNORECASE | re.DOTALL,
 )
 _H1_RE = re.compile(r"<h1\b[^>]*>(.*?)</h1>", re.IGNORECASE | re.DOTALL)
+_H2_RE = re.compile(r"<h2\b[^>]*>(.*?)</h2>", re.IGNORECASE | re.DOTALL)
 _DIVIDER_TITLE_RE = re.compile(
     r"""<div\b[^>]*class=["'][^"']*\bdivider-title\b[^"']*["'][^>]*>(.*?)</div>""",
     re.IGNORECASE | re.DOTALL,
@@ -559,7 +563,7 @@ def _strip_html_text(raw: str) -> str:
 
 
 def _parse_section_outline(html: str) -> list[dict]:
-    """h1 / eyebrow (or divider title) per ``<section class="section">``."""
+    """h1 / h2 / eyebrow (or divider title) per ``<section class="page|section">``."""
     sections: list[dict] = []
     index = 0
     for match in _SECTION_SLIDE_RE.finditer(html or ""):
@@ -570,11 +574,16 @@ def _parse_section_outline(html: str) -> list[dict]:
         id_m = _SECTION_ID_RE.search(attrs)
         eyebrow_m = _EYEBROW_RE.search(body)
         h1_m = _H1_RE.search(body)
+        h2_m = _H2_RE.search(body)
         divider_m = _DIVIDER_TITLE_RE.search(body)
         title = (
             _strip_html_text(h1_m.group(1))
             if h1_m
-            else (_strip_html_text(divider_m.group(1)) if divider_m else "")
+            else (
+                _strip_html_text(divider_m.group(1))
+                if divider_m
+                else (_strip_html_text(h2_m.group(1)) if h2_m else "")
+            )
         )
         sections.append(
             {

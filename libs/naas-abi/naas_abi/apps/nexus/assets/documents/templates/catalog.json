@@ -3,7 +3,7 @@
     {
       "id": "article-light-v1",
       "name": "Article Light",
-      "description": "Clean prose document with cover and content sections.",
+      "description": "Letter-width article: title, summary, and heading-led sections.",
       "preview": {
         "bg": "#f7f6f3",
         "panel": "#ffffff",
