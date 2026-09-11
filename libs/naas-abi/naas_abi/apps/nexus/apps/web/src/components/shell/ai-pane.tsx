@@ -4,9 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { History, MessageSquare, MoreHorizontal, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { downloadConversationTranscript } from '@/lib/chat-transcript-export';
+import { usePathname } from 'next/navigation';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
-import { pickWorkspaceDefaultAgent } from '@/lib/pick-workspace-default-agent';
+import { useFeaturePaneStore } from '@/stores/feature-pane';
+import { useSlidesStore } from '@/stores/slides';
+import { bindFeaturePaneAgent } from '@/lib/feature-agent-pane';
+import { featureOpenResource, getPaneSurfaceForPath } from '@/lib/feature-office-agents';
+import { pickFeaturePaneAgent } from '@/lib/pick-workspace-default-agent';
 import { ColumnResizeHandle } from './column-resize-handle';
 import dynamic from 'next/dynamic';
 
@@ -45,6 +50,24 @@ export function AIPane() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Bind the agent of the section the pane opens on (Apps on /apps, Slides
+  // on a deck, ...). Home, Chat, and sections without one get the workspace
+  // default (Abi when there is none). An open item (deck, app, dataset)
+  // forces it over a picker choice.
+  const pathname = usePathname();
+  const surface = getPaneSurfaceForPath(pathname);
+  const slidesSlug = useSlidesStore((s) => s.selectedSlug);
+  const featureResource = useFeaturePaneStore((s) => s.resource);
+  const agents = useAgentsStore((s) => s.agents);
+  const openItemId =
+    surface === 'slides'
+      ? slidesSlug
+      : (featureOpenResource(pathname, featureResource)?.id ?? null);
+  useEffect(() => {
+    if (!contextPanelOpen) return;
+    bindFeaturePaneAgent(surface, { force: Boolean(openItemId) });
+  }, [contextPanelOpen, surface, openItemId, agents]);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -97,11 +120,11 @@ export function AIPane() {
   const handleNewChat = () => {
     const ws = useWorkspaceStore.getState();
     setPaneConversationId(null);
-    // New blank pane chat: restore the workspace default unless the user
-    // picked another agent in the selector (history tabs must not count as
-    // an explicit pick).
+    // New blank pane chat: restore this section's agent (or the workspace
+    // default) unless the user picked another agent in the selector
+    // (history tabs must not count as an explicit pick).
     if (!ws.paneAgentExplicitlySelected) {
-      const preferred = pickWorkspaceDefaultAgent(useAgentsStore.getState().agents);
+      const preferred = pickFeaturePaneAgent(useAgentsStore.getState().agents, surface);
       if (preferred) ws.setPaneAgent(preferred.id);
     }
     setShowHistory(false);

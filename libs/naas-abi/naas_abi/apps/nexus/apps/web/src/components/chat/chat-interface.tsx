@@ -14,9 +14,12 @@ import { nextChatUrl } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import {
+  pickFeaturePaneAgent,
   pickSlidesOfficeAgent,
   pickWorkspaceDefaultAgent,
 } from '@/lib/pick-workspace-default-agent';
+import { featureChatContext, getPaneSurfaceForPath } from '@/lib/feature-office-agents';
+import { useFeaturePaneStore } from '@/stores/feature-pane';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
@@ -981,13 +984,22 @@ export function ChatInterface({
     };
   }, [pathname, codeActiveBranch, codeSelectedRepo]);
 
+  // Pane only: the section the user is on and its open item (Apps, ...).
+  // Chat and Slides return null (orchestrator surface / own slides block).
+  const featureResource = useFeaturePaneStore((s) => s.resource);
+  const featurePaneContext = useMemo(
+    () => (isPane ? featureChatContext(pathname, featureResource) : null),
+    [isPane, pathname, featureResource],
+  );
+
   const chatRequestContext = useMemo(() => {
     const merged = {
       ...(slidesChatContext ?? {}),
       ...(codingChatContext ?? {}),
+      ...(featurePaneContext ?? {}),
     };
     return Object.keys(merged).length > 0 ? merged : null;
-  }, [slidesChatContext, codingChatContext]);
+  }, [slidesChatContext, codingChatContext, featurePaneContext]);
 
   useEffect(() => {
     if (!mounted || isPane) return;
@@ -1869,12 +1881,15 @@ export function ChatInterface({
     isSubmittingRef.current = true;
     let effectiveAgent = agentOverride ?? selectedAgent;
     // Pane can hydrate with paneAgent="" before agents sync; resolve the
-    // workspace default so the stream has a real agent id.
+    // section's office agent (else the workspace default) so the stream has
+    // a real agent id.
     if (!effectiveAgent) {
       const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
       const resolved = slidesChatContext
         ? (pickSlidesOfficeAgent(agents) ?? pickWorkspaceDefaultAgent(agents))
-        : pickWorkspaceDefaultAgent(agents);
+        : isPane
+          ? pickFeaturePaneAgent(agents, getPaneSurfaceForPath(pathname))
+          : pickWorkspaceDefaultAgent(agents);
       if (resolved) {
         effectiveAgent = resolved.id;
         if (isPane) {

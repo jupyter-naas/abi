@@ -176,7 +176,9 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     );
     if (!needsAgents || !currentWorkspaceId) return;
     const loadAgents = async () => {
-      const { useAgentsStore } = await import('@/stores/agents');
+      const { ensureAgentsSynced, useAgentsStore } = await import('@/stores/agents');
+      // The pane binds per-section office agents: pick up roster changes once.
+      if (contextPanelOpen) await ensureAgentsSynced(currentWorkspaceId);
       await useAgentsStore.getState().fetchAgents(currentWorkspaceId);
     };
     const loadSkills = async () => {

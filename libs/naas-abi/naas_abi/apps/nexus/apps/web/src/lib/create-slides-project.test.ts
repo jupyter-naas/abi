@@ -55,6 +55,15 @@ describe('pickWorkspaceDefaultAgent', () => {
     const abi = { id: 'abi', enabled: false, isDefault: false };
     expect(pickWorkspaceDefaultAgent([abi, orchestrator])?.id).toBe('default');
   });
+
+  it('falls back to Abi, then the first enabled agent, when there is no default', () => {
+    const maps = { id: 'maps', enabled: true, class_name: 'naas_abi.agents.MapsAgent/MapsAgent' };
+    const abi = { id: 'abi', enabled: true, class_name: 'naas_abi.agents.AbiAgent/AbiAgent' };
+    const lookalike = { id: 'acme', enabled: true, class_name: 'acme.agents.AbiAgent/AbiAgent' };
+    expect(pickWorkspaceDefaultAgent([maps, abi])?.id).toBe('abi');
+    expect(pickWorkspaceDefaultAgent([maps, lookalike])?.id).toBe('maps');
+    expect(pickWorkspaceDefaultAgent([maps, { ...abi, enabled: false }])?.id).toBe('maps');
+  });
 });
 
 describe('pickSlidesOfficeAgent', () => {

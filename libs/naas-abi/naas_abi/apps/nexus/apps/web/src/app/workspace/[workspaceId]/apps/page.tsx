@@ -13,6 +13,7 @@ import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { usePublishFeatureResource } from '@/stores/feature-pane';
 import { ViewBar } from './components/view-bar';
 import { DatabaseBody } from './components/views';
 import { useAppViews } from './components/use-app-views';
@@ -304,6 +305,12 @@ export default function AppsPage() {
   const [search, setSearch] = useState('');
 
   const views = useAppViews(urlWorkspaceId);
+
+  // The open app rides into the right chat pane: the Apps agent binds and its
+  // tools default to this app (no "which app?").
+  usePublishFeatureResource(
+    activeApp ? { feature: 'apps', kind: 'app', id: activeApp.id, label: activeApp.name } : null,
+  );
 
   useEffect(() => {
     return () => {

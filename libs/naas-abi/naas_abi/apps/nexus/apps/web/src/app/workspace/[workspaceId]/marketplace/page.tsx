@@ -14,6 +14,7 @@ import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
 import Link from 'next/link';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { usePublishFeatureResource } from '@/stores/feature-pane';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -666,6 +667,12 @@ export default function MarketplacePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMod, setSelectedMod] = useState<ModuleInfo | null>(null);
+  // The module detail open here rides into the Marketplace agent's pane.
+  usePublishFeatureResource(
+    selectedMod
+      ? { feature: 'marketplace', kind: 'module', id: selectedMod.module_path, label: selectedMod.name }
+      : null,
+  );
 
   useEffect(() => {
     const t = searchParams?.get('type') as ArtifactType | null;

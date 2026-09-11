@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useOntologyStore, type ReferenceClass, type ReferenceProperty, type OntologyItem, type EntityProperty, type EntityStatus, type EntityVisibility } from '@/stores/ontology';
+import { usePublishFeatureResource } from '@/stores/feature-pane';
 import { buildHoverTitle } from '@/components/graph/vis-network';
 
 type ViewMode = 'overview' | 'network' | 'classes' | 'relations' | 'editor' | 'create-entity' | 'create-relationship';
@@ -136,6 +137,12 @@ export default function OntologyPage() {
   const classItems = useMemo(() => items.filter((item) => item.type === 'entity'), [items]);
   const relationshipItems = useMemo(() => items.filter((item) => item.type === 'relationship'), [items]);
   const selectedOntologyPath = searchParams?.get('ontology') || null;
+  // The ontology open here (?ontology=) rides into the Ontology agent's pane.
+  usePublishFeatureResource(
+    selectedOntologyPath
+      ? { feature: 'ontology', kind: 'ontology', id: selectedOntologyPath, label: selectedOntologyPath.split(/[/:]/).pop() }
+      : null,
+  );
 
   // Graph data for Overview (lists) and Network tab
   const [overviewGraphNodes, setOverviewGraphNodes] = useState<OntologyOverviewGraphNode[]>([]);

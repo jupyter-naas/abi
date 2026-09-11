@@ -59,6 +59,7 @@ import {
   matchListedFile,
   parseFilesDeepLink,
 } from '../lib/files-route';
+import { usePublishFeatureResource } from '@/stores/feature-pane';
 import './browse.css';
 
 type FileWithRelativeDir = { file: File; relativeDir?: string };
@@ -164,6 +165,19 @@ export default function FilesPage() {
     starredNavigation,
     setStarredNavigation,
   } = useFilesStore();
+  const activeFile = useFilesStore((s) => s.activeFile);
+
+  // The open file (else folder) rides into the right chat pane so the Files
+  // agent's tools default to it. Only the drives its tools can reach.
+  const paneDrive =
+    activeSource === 'my-drive' ? 'my_drive:' : activeSource === 'workspace' ? '' : null;
+  usePublishFeatureResource(
+    paneDrive === null
+      ? null
+      : activeFile
+        ? { feature: 'files', kind: 'file', id: `${paneDrive}${activeFile}`, label: activeFile.split('/').pop() }
+        : { feature: 'files', kind: 'folder', id: `${paneDrive}${currentPath}`, label: currentPath || 'root' },
+  );
 
   const { prompt, dialog: promptDialog } = usePrompt();
   const { confirm, dialog: confirmDialog } = useConfirm();

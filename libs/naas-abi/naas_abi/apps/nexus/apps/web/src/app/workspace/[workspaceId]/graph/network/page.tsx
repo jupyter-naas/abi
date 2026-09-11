@@ -27,6 +27,7 @@ import {
 } from '@/stores/knowledge-graph';
 import { GraphDevBanner } from '@/components/graph/graph-dev-banner';
 import { buildHoverTitle, resolveNodeBucketKey } from '@/components/graph/vis-network';
+import { usePublishFeatureResource } from '@/stores/feature-pane';
 import {
   GraphNodeTable,
   type ApiNodeInstance,
@@ -1300,6 +1301,10 @@ export default function NetworkPage() {
   const [graphsLoading, setGraphsLoading] = useState(true);
   const [graphsError, setGraphsError] = useState<string | null>(null);
   const [kpis, setKpis] = useState<ApiGraphKpis | null>(null);
+  // The selected graph rides into the Knowledge Graph agent's pane.
+  usePublishFeatureResource(
+    selectedGraphId ? { feature: 'graph', kind: 'graph', id: selectedGraphId } : null,
+  );
 
   const allGraphs = useMemo<ApiGraphInfo[]>(() => {
     const seen = new Set<string>();
