@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Folder, Database, Code, Presentation, LayoutGrid, Store, Settings, Activity, Home,
+  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Folder, Database, Code, Presentation, LayoutGrid, Store, Settings, Activity, Home, Blocks,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -156,6 +156,10 @@ export function Sidebar() {
   useEffect(() => {
     if (lastReconciledPathRef.current === pathname) return;
     lastReconciledPathRef.current = pathname;
+    if (pathname.endsWith('/settings/infrastructure')) {
+      setActivePanelSection('infrastructure');
+      return;
+    }
     if (!urlSection) {
       // Events is an admin route with its own feed panel; the rest of /admin/
       // is full-bleed.
@@ -230,6 +234,7 @@ export function Sidebar() {
       case 'slides':   return getWorkspacePath(currentWorkspaceId, '/slides');
       case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
+      case 'infrastructure': return getWorkspacePath(currentWorkspaceId, '/settings/infrastructure');
       case 'settings':     return getWorkspacePath(currentWorkspaceId, '/settings');
       case 'workspaces':   return getWorkspacePath(currentWorkspaceId, '/home');
       case 'events':       return getWorkspacePath(currentWorkspaceId, '/admin/events');
@@ -541,20 +546,22 @@ export function Sidebar() {
           labeled ? 'px-2' : 'items-center px-2'
         )}
       >
-        {isSuperadmin && [
-          { key: 'admin-events', href: '/admin/events', label: 'Events', description: 'Recent platform activity', icon: <Activity size={18} /> },
-        ].map((item) => {
+        {[
+          { key: 'admin-events', href: '/admin/events', label: 'Events', description: 'Recent platform activity', icon: <Activity size={18} />, section: 'events' as SidebarSection, visible: isSuperadmin },
+          { key: 'infrastructure', href: '/settings/infrastructure', label: 'Infrastructure', description: 'Explore ABI layers, components and dependencies', icon: <Blocks size={18} />, section: 'infrastructure' as SidebarSection, visible: canSettingsWorkspace },
+        ].filter((item) => item.visible).map((item) => {
           const base = getWorkspacePath(currentWorkspaceId, item.href);
           const active = pathname.startsWith(base);
           return (
             <button
               key={item.key}
-              onClick={() => { setActivePanelSection('events'); router.push(base); }}
+              onClick={() => { setActivePanelSection(item.section); router.push(base); }}
               onPointerEnter={(e) => showHoverTip({ id: item.key, ...item }, e.currentTarget)}
               onPointerLeave={hideHoverTip}
               onFocus={(e) => showHoverTip({ id: item.key, ...item }, e.currentTarget)}
               onBlur={hideHoverTip}
               aria-label={item.label}
+              aria-current={active ? 'page' : undefined}
               className={cn(
                 'flex items-center rounded-lg transition-all outline-none focus-visible:ring-0',
                 'hover:bg-workspace-accent-10 hover:text-workspace-accent',
@@ -568,7 +575,7 @@ export function Sidebar() {
           );
         })}
         {BOTTOM_SECTIONS.filter((s) => isFeatureEnabled(s.feature)).map((section) => {
-          const active = isSectionActive(section);
+          const active = isSectionActive(section) && !pathname.startsWith(getWorkspacePath(currentWorkspaceId, '/settings/infrastructure'));
           return (
             <button
               key={section.id}

@@ -60,6 +60,7 @@ describe('getFeatureForWorkspacePath', () => {
     );
     expect(getFeatureForWorkspacePath('/workspace/ws1/settings/agents')).toBe('agents');
     expect(getFeatureForWorkspacePath('/workspace/ws1/settings/theme')).toBe('settings.workspace');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/settings/infrastructure')).toBe('settings.workspace');
     expect(getFeatureForWorkspacePath('/workspace/ws1/organization')).toBe('settings.organization');
     expect(getFeatureForWorkspacePath('/workspace/ws1/organization/billing')).toBe('settings.organization');
     expect(getFeatureForWorkspacePath('/workspace/ws1/apps')).toBe('apps');

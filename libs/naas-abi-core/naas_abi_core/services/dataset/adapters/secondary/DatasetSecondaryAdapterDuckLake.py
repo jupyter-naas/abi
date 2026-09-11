@@ -382,7 +382,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
             self._load_spec(con, namespace, name)
             metadata = self._ident(f"__ducklake_metadata_{CATALOG_ALIAS}")
             tables = con.execute(
-                f"SELECT i.table_name FROM {metadata}.ducklake_inlined_data_tables i "
+                f"SELECT i.table_name FROM {metadata}.ducklake_inlined_data_tables i "  # nosec B608
                 f"JOIN {metadata}.ducklake_table t ON i.table_id = t.table_id "
                 f"JOIN {metadata}.ducklake_schema s ON t.schema_id = s.schema_id "
                 "WHERE t.table_name = ? AND s.schema_name = ? "
@@ -392,7 +392,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
             count = sum(
                 int(
                     con.execute(
-                        f"SELECT count(*) FROM {metadata}.{self._ident(table)}"
+                        f"SELECT count(*) FROM {metadata}.{self._ident(table)}"  # nosec B608
                     ).fetchone()[0]
                 )
                 for (table,) in tables

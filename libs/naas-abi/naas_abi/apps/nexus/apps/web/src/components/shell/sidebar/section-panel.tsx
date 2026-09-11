@@ -54,6 +54,7 @@ const AppsSection = dynamic(() => import('./apps-section').then((m) => m.AppsSec
   ssr: false,
   loading: sectionLoading,
 });
+const InfrastructureSection = dynamic(() => import('@/app/workspace/[workspaceId]/settings/infrastructure/infrastructure-section').then(m => m.InfrastructureSection), { ssr: false, loading: sectionLoading });
 const SettingsSection = dynamic(() => import('./settings-section').then((m) => m.SettingsSection), {
   ssr: false,
   loading: sectionLoading,
@@ -68,6 +69,7 @@ const WorkspacesSection = dynamic(
 );
 
 function SectionContent({ section }: { section: SidebarSection }) {
+  const canSettings = useFeature('settings.workspace');
   const canMaps = useFeature('maps');
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
@@ -90,6 +92,7 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'slides' && canSlides) return <SlidesSection collapsed={false} detailOnly />;
   if (section === 'apps' && canApps) return <AppsSection collapsed={false} detailOnly />;
   if (section === 'marketplace' && canMarketplace) return <MarketplaceSection collapsed={false} detailOnly />;
+  if (section === 'infrastructure' && canSettings) return <InfrastructureSection />;
   if (section === 'settings') return <SettingsSection collapsed={false} detailOnly />;
   // Superadmin-only route; the dock only offers it to superadmins.
   if (section === 'events') return <EventsSection collapsed={false} detailOnly />;
