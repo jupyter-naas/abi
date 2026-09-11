@@ -5,6 +5,7 @@ from naas_abi_core.services.agent.Agent import (
     _OFFICE_MODEL_INVOKE_TIMEOUT_S,
     _friendly_model_invoke_error,
     _invoke_office_chat_model,
+    _office_chat_model_bind_kwargs,
 )
 from naas_abi_core.services.agent.context import (
     DOCUMENTS_RECURSION_LIMIT,
@@ -104,6 +105,29 @@ def test_friendly_model_invoke_error_recursion_names_finished_writes() -> None:
         slides_active_slug.reset(tokens[0])
         slides_writes_completed.reset(tokens[1])
         slides_research_queries.reset(tokens[2])
+
+
+def test_office_chat_model_bind_kwargs_omit_max_retries() -> None:
+    kwargs = _office_chat_model_bind_kwargs()
+    assert "max_retries" not in kwargs
+    assert kwargs == {"timeout": _OFFICE_MODEL_INVOKE_TIMEOUT_S}
+
+
+def test_invoke_office_chat_model_does_not_bind_max_retries() -> None:
+    seen: dict[str, object] = {}
+
+    class _Model:
+        def bind(self, **kwargs):
+            seen.update(kwargs)
+            return self
+
+        def invoke(self, messages):
+            del messages
+            return "ok"
+
+    assert _invoke_office_chat_model(_Model(), []) == "ok"
+    assert "max_retries" not in seen
+    assert seen == {"timeout": _OFFICE_MODEL_INVOKE_TIMEOUT_S}
 
 
 def test_invoke_office_chat_model_fails_before_stacked_retries(monkeypatch) -> None:

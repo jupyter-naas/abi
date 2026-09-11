@@ -197,13 +197,18 @@ def _friendly_model_invoke_error(exc: BaseException) -> str:
 _OFFICE_MODEL_INVOKE_TIMEOUT_S = 90.0
 
 
+def _office_chat_model_bind_kwargs() -> dict[str, float]:
+    """HTTP timeout only. Completions.create rejects max_retries."""
+    return {"timeout": _OFFICE_MODEL_INVOKE_TIMEOUT_S}
+
+
 def _invoke_office_chat_model(chat_model: Any, messages: list[Any]) -> BaseMessage:
     """One attempt, 90s cap. Do not let provider retries sit until the gateway dies."""
     bound = chat_model
     bind = getattr(chat_model, "bind", None)
     if callable(bind):
         try:
-            bound = bind(timeout=_OFFICE_MODEL_INVOKE_TIMEOUT_S, max_retries=0)
+            bound = bind(**_office_chat_model_bind_kwargs())
         except Exception:  # noqa: BLE001
             bound = chat_model
     ctx = copy_context()
