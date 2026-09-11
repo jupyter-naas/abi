@@ -475,6 +475,8 @@ class NexusConfig(BaseModel):
     documents_template_sources: list[DocumentsTemplateSourceConfig] = Field(
         default_factory=list
     )
+    documents_default_template_id: str | None = None
+    documents_hidden_template_ids: list[str] = Field(default_factory=list)
     users: list[UserSeedConfig] = Field(default_factory=list)
     organizations: list[OrganizationSeedConfig] = Field(default_factory=list)
 

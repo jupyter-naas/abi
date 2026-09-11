@@ -424,6 +424,15 @@ class Settings(BaseSettings):
     documents_template_sources: list[DocumentsTemplateSourceConfig] = Field(
         default_factory=list
     )
+    # Empty keeps ABI's own seed as the New Document default. A deploy that
+    # adds sources can point this at one of those ids so a plain create
+    # matches the picker, without ABI naming that source.
+    documents_default_template_id: str | None = Field(
+        default=None, max_length=96
+    )
+    # Qualified ids or bare stems omitted from the Documents picker. Create
+    # and apply still accept them, so existing documents keep working.
+    documents_hidden_template_ids: list[str] = Field(default_factory=list)
 
     # User seed configs (upserted by email on startup)
     users: list[UserSeedConfig] = Field(default_factory=list)

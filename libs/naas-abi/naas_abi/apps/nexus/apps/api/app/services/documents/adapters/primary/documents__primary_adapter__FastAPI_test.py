@@ -210,6 +210,82 @@ def test_configured_sources_do_not_leak_into_each_other(tmp_path, monkeypatch) -
     assert caught.value.status_code == 404
 
 
+def test_picker_hides_configured_ids_and_flags_the_default(
+    tmp_path, monkeypatch
+) -> None:
+    """A deploy can retire ABI's seed from the menu without deleting it."""
+    directory = _write_template_dir(tmp_path / "acme", "tenant-only-v1", "Tenant Only")
+    _configure_sources(monkeypatch, ("acme", directory))
+    monkeypatch.setattr(
+        documents_api.settings,
+        "documents_hidden_template_ids",
+        ["abi/article-light-v1"],
+        raising=False,
+    )
+    monkeypatch.setattr(
+        documents_api.settings,
+        "documents_default_template_id",
+        "acme/tenant-only-v1",
+        raising=False,
+    )
+
+    rows = documents_api._picker_template_records()
+
+    assert [row["id"] for row in rows] == ["acme/tenant-only-v1"]
+    assert rows[0]["is_default"] is True
+    assert "Tenant Only" in documents_api._load_seed_html("acme/tenant-only-v1")
+    assert "Document Title" in documents_api._load_seed_html("abi/article-light-v1")
+
+
+def test_create_omitting_template_id_uses_the_configured_default(
+    tmp_path, monkeypatch
+) -> None:
+    """A plain New Document click must not still seed ABI's own template."""
+    directory = _write_template_dir(tmp_path / "acme", "tenant-only-v1", "Tenant Only")
+    _configure_sources(monkeypatch, ("acme", directory))
+    monkeypatch.setattr(
+        documents_api.settings,
+        "documents_default_template_id",
+        "acme/tenant-only-v1",
+        raising=False,
+    )
+    sc = SourceControlService(InMemoryAdapter())
+    client = _sections_client(monkeypatch, sc)
+
+    created = client.post(
+        "/documents/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Untitled document",
+            "slug": "from-default",
+        },
+    )
+
+    assert created.status_code == 200, created.text
+    assert created.json()["template_id"] == "acme/tenant-only-v1"
+
+
+def test_create_omitting_template_id_keeps_abi_seed_without_override(
+    monkeypatch,
+) -> None:
+    """Zero-config installs still get ABI's own seed."""
+    _configure_sources(monkeypatch)
+    sc = SourceControlService(InMemoryAdapter())
+    client = _sections_client(monkeypatch, sc)
+
+    created = client.post(
+        "/documents/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Untitled document",
+            "slug": "abi-default",
+        },
+    )
+
+    assert created.status_code == 200, created.text
+    assert created.json()["template_id"] == "abi/article-light-v1"
+
+
 def test_an_unknown_namespace_is_a_miss_not_a_syntax_error(monkeypatch) -> None:
     """Which namespaces exist is configuration, so the grammar cannot judge it."""
     _configure_sources(monkeypatch)
@@ -339,6 +415,7 @@ def test_list_and_create_projects_seed_in_memory_repo(monkeypatch) -> None:
     assert all(t["source"] == "abi" for t in catalog)
     light = next(t for t in catalog if t["id"] == "abi/article-light-v1")
     assert light["name"] == "Article Light"
+    assert light["is_default"] is True
     assert any(s["title"] == "Document Title" for s in light["sections"])
     applied = client.post(
         "/documents/projects/untitled-local/apply-template",

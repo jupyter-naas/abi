@@ -4,6 +4,7 @@ import { DEFAULT_DOCUMENTS_TEMPLATE_ID } from './create-documents-project';
 import {
   DEFAULT_TEMPLATE_PREVIEW,
   SLIDES_HOME_BLANK_TEMPLATE_ID,
+  resolveDocumentsTemplateId,
   sectionsHomeTemplateCards,
   sectionsTemplateMenuRows,
   templateAssetLabel,
@@ -86,6 +87,35 @@ describe('templateNamespaceLabel', () => {
   });
 });
 
+describe('resolveDocumentsTemplateId', () => {
+  it('prefers an explicit pick', () => {
+    expect(
+      resolveDocumentsTemplateId(
+        [{ id: DEFAULT_DOCUMENTS_TEMPLATE_ID, is_default: true }],
+        'acme/house-v1',
+      ),
+    ).toBe('acme/house-v1');
+  });
+
+  it('uses the flagged default when the catalog hid ABI\'s seed', () => {
+    expect(
+      resolveDocumentsTemplateId([
+        { id: 'acme/house-v1', is_default: true },
+        { id: 'acme/memo-v1' },
+      ]),
+    ).toBe('acme/house-v1');
+  });
+
+  it('falls back to ABI\'s seed when it is still in the catalog', () => {
+    expect(
+      resolveDocumentsTemplateId([
+        { id: DEFAULT_DOCUMENTS_TEMPLATE_ID },
+        { id: 'acme/house-v1' },
+      ]),
+    ).toBe(DEFAULT_DOCUMENTS_TEMPLATE_ID);
+  });
+});
+
 describe('sectionsHomeTemplateCards', () => {
   it('pins Blank to the default seed even when the catalog is empty', () => {
     expect(sectionsHomeTemplateCards([])).toEqual([
@@ -94,20 +124,24 @@ describe('sectionsHomeTemplateCards', () => {
     expect(SLIDES_HOME_BLANK_TEMPLATE_ID).toBe(DEFAULT_DOCUMENTS_TEMPLATE_ID);
   });
 
-  it('puts Blank first, then catalog names in source order', () => {
+  it('puts Blank first when ABI\'s seed is still in the catalog', () => {
     const cards = sectionsHomeTemplateCards([
       { id: 'acme/industry-v2', name: 'Industry' },
-      { id: 'abi/minimal-light-v1', name: 'Minimal Light' },
-      { id: 'abi/pitch-dark-v1', name: 'Pitch Dark' },
+      { id: DEFAULT_DOCUMENTS_TEMPLATE_ID, name: 'Article Light' },
+      { id: 'acme/memo-v1', name: 'Memo' },
     ]);
-    expect(cards.map((card) => card.label)).toEqual([
-      'Blank',
-      'Industry',
-      'Pitch Dark',
-    ]);
-    expect(cards[0]?.id).toBe('abi/minimal-light-v1');
+    expect(cards.map((card) => card.label)).toEqual(['Blank', 'Industry', 'Memo']);
+    expect(cards[0]?.id).toBe(DEFAULT_DOCUMENTS_TEMPLATE_ID);
     expect(cards[1]?.id).toBe('acme/industry-v2');
     expect(cards.every((card) => !card.label.includes('/'))).toBe(true);
+  });
+
+  it('does not invent a Blank card when ABI\'s seed is absent', () => {
+    const cards = sectionsHomeTemplateCards([
+      { id: 'acme/industry-v2', name: 'Industry' },
+      { id: 'acme/memo-v1', name: 'Memo' },
+    ]);
+    expect(cards.map((card) => card.label)).toEqual(['Industry', 'Memo']);
   });
 });
 

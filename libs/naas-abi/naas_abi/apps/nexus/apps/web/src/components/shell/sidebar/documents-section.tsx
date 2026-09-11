@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { ChevronRight, FileText, FolderTree, List } from 'lucide-react';
 import {
-  DEFAULT_DOCUMENTS_TEMPLATE_ID,
   openDocumentsAgentPane,
   documentsApiErrorMessage,
   startNewDocument,
@@ -12,6 +11,7 @@ import {
 import { partitionDocumentsProjects, patchDocumentsProject } from '@/lib/documents-project-actions';
 import '@/app/workspace/[workspaceId]/chat/components/chat-components.css';
 import {
+  resolveDocumentsTemplateId,
   sectionsTemplateMenuRows,
   type DocumentsSeedTemplate,
 } from '@/lib/documents-templates';
@@ -225,7 +225,7 @@ export function DocumentsSection({
   );
 
   const createDocument = useCallback(
-    (templateId: string) => {
+    (templateId?: string) => {
       if (!workspaceId || creating) return;
       setCreating(true);
       setActionError(null);
@@ -306,7 +306,11 @@ export function DocumentsSection({
           <SidebarNewItem
             label="New document"
             title="New document"
-            onClick={() => createDocument(DEFAULT_DOCUMENTS_TEMPLATE_ID)}
+            onClick={() =>
+              createDocument(
+                templates.length > 0 ? resolveDocumentsTemplateId(templates) : undefined,
+              )
+            }
             disabled={creating}
             menuLabel="Choose a template"
             menuOptions={templateOptions}

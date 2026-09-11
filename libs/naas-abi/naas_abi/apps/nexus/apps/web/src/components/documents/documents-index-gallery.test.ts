@@ -83,7 +83,7 @@ describe('DocumentsIndexGallery', () => {
 });
 
 describe('SectionsTemplateStrip', () => {
-  it('shows Blank first, then catalog names, without fetching seed HTML', () => {
+  it('lists catalog names without inventing a Blank card or fetching seed HTML', () => {
     const html = renderToStaticMarkup(
       createElement(SectionsTemplateStrip, {
         templates: [
@@ -115,13 +115,13 @@ describe('SectionsTemplateStrip', () => {
     );
     expect(html).toContain('data-testid="sections-template-strip"');
     expect(html).toContain('Start a new document');
-    expect(html).toContain('Blank');
     expect(html).toContain('House style');
     expect(html).toContain('Industry');
-    expect(html).toContain('data-template-id="abi/minimal-light-v1"');
-    expect(html).toContain('data-testid="sections-template-blank-thumb"');
+    expect(html).toContain('data-template-id="acme/house-style-v1"');
+    expect(html).not.toContain('Blank');
+    expect(html).not.toContain('data-testid="sections-template-blank-thumb"');
     expect(html).not.toContain('>abi/');
     expect(html).not.toContain('/api/documents/projects');
-    expect(html.indexOf('Blank')).toBeLessThan(html.indexOf('House style'));
+    expect(html.indexOf('House style')).toBeLessThan(html.indexOf('Industry'));
   });
 });

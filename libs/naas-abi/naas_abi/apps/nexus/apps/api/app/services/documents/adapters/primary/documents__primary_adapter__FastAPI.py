@@ -894,6 +894,81 @@ def _known_template_ids() -> set[str]:
     return ids
 
 
+def _template_id_aliases(template_id: str) -> set[str]:
+    """Qualified id and bare stem, so config can name either form."""
+    raw = (template_id or "").strip()
+    if not raw:
+        return set()
+    aliases = {raw}
+    if "/" in raw:
+        aliases.add(raw.split("/", 1)[1])
+    else:
+        aliases.add(f"{_ABI_NAMESPACE}/{raw}")
+    return aliases
+
+
+def _hidden_template_aliases() -> set[str]:
+    aliases: set[str] = set()
+    for raw in getattr(settings, "documents_hidden_template_ids", None) or []:
+        aliases.update(_template_id_aliases(str(raw)))
+    return aliases
+
+
+def _configured_default_template_id() -> str:
+    """New Document seed when the client omits template_id.
+
+    Unset, unknown, or malformed config keeps ABI's own seed so a typo
+    cannot empty the create path.
+    """
+    raw = (getattr(settings, "documents_default_template_id", None) or "").strip()
+    if not raw:
+        return _DEFAULT_TEMPLATE_ID
+    try:
+        namespace, stem = _parse_template_ref(raw)
+    except HTTPException:
+        logger.warning(
+            "documents_default_template_id %r is not a valid template id",
+            raw,
+        )
+        return _DEFAULT_TEMPLATE_ID
+    qualified = _qualify_template_id(namespace or _ABI_NAMESPACE, stem)
+    known = _known_template_ids()
+    if qualified not in known and stem not in known:
+        logger.warning(
+            "documents_default_template_id %r is not a known seed",
+            raw,
+        )
+        return _DEFAULT_TEMPLATE_ID
+    return qualified
+
+
+def _resolve_create_template_id(template_id: str | None) -> str:
+    raw = (template_id or "").strip()
+    return raw or _configured_default_template_id()
+
+
+def _picker_template_records() -> list[dict]:
+    """Catalog rows the New Document menu should show.
+
+    Hidden ids stay loadable for existing documents. The configured default
+    is flagged so the client can match a plain create to a row. If that
+    default was hidden, the first remaining row takes the flag.
+    """
+    hidden = _hidden_template_aliases()
+    default_aliases = _template_id_aliases(_configured_default_template_id())
+    rows: list[dict] = []
+    for row in _list_seed_template_records():
+        tid = str(row.get("id") or "")
+        if _template_id_aliases(tid) & hidden:
+            continue
+        item = dict(row)
+        item["is_default"] = bool(_template_id_aliases(tid) & default_aliases)
+        rows.append(item)
+    if rows and not any(row.get("is_default") for row in rows):
+        rows[0]["is_default"] = True
+    return rows
+
+
 def _load_seed_html(template_id: str = _DEFAULT_TEMPLATE_ID) -> str:
     namespace, stem = _parse_template_ref(template_id)
     source = _source_named(namespace) if namespace else None
@@ -982,7 +1057,8 @@ class ProjectCreateRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     title: str = Field(..., min_length=1, max_length=120)
     slug: str | None = Field(default=None, max_length=64)
-    template_id: str = Field(default=_DEFAULT_TEMPLATE_ID, max_length=_TEMPLATE_ID_MAX_LEN)
+    # Empty means the configured default, then ABI's own seed.
+    template_id: str | None = Field(default=None, max_length=_TEMPLATE_ID_MAX_LEN)
 
 
 class ProjectResponse(BaseModel):
@@ -1443,16 +1519,17 @@ async def create_project(
             status_code=422,
             detail="Slug must be lowercase kebab-case (a-z, 0-9, hyphens).",
         )
-    if body.template_id not in _known_template_ids():
+    template_id = _resolve_create_template_id(body.template_id)
+    if template_id not in _known_template_ids():
         raise HTTPException(
             status_code=422,
-            detail=f"Unknown template_id '{body.template_id}'.",
+            detail=f"Unknown template_id '{template_id}'.",
         )
     sc, repo_id = _sections_sc(request)
     paths = _paths_for(body.workspace_id, slug, legacy=False)
     branch = paths["branch"]
     username = _forge_username(current_user.name or "", str(current_user.email))
-    seed, catalog_assets = _load_seed_bundle(body.template_id)
+    seed, catalog_assets = _load_seed_bundle(template_id)
     author_name = current_user.name or username
     author_email = str(current_user.email)
 
@@ -1494,7 +1571,7 @@ async def create_project(
             "slug": slug,
             "workspace_id": body.workspace_id,
             "title": body.title,
-            "template_id": body.template_id,
+            "template_id": template_id,
             "archived": False,
             "updated_at": None,
             "embedded_images": embedded,
@@ -1524,7 +1601,7 @@ async def create_project(
                 assets=catalog_assets,
                 meta=meta,
             ),
-            message=f"feat(sections): create {slug} from {body.template_id}",
+            message=f"feat(sections): create {slug} from {template_id}",
             branch=branch,
             author_name=author_name,
             author_email=author_email,
@@ -1533,7 +1610,7 @@ async def create_project(
             workspace_id=body.workspace_id,
             slug=slug,
             title=body.title,
-            template_id=body.template_id,
+            template_id=template_id,
             commit_sha=commit.sha or None,
         )
 
@@ -2916,6 +2993,7 @@ class SeedTemplateResponse(BaseModel):
     preview_ink: str = "#2d2d2d"
     sections: list[SectionOutlineItem] = Field(default_factory=list)
     assets: list[TemplateAssetItem] = Field(default_factory=list)
+    is_default: bool = False
 
 
 @router.get("/templates", response_model=list[SeedTemplateResponse])
@@ -2925,7 +3003,7 @@ async def list_seed_templates(
 ) -> list[SeedTemplateResponse]:
     """List seed templates with section outlines for the Documents sidebar."""
     await require_workspace_access(current_user.id, workspace_id)
-    return [SeedTemplateResponse(**row) for row in _list_seed_template_records()]
+    return [SeedTemplateResponse(**row) for row in _picker_template_records()]
 
 
 def _mutation_outline(html: str) -> tuple[list[SectionOutlineItem], list[str | None]]:

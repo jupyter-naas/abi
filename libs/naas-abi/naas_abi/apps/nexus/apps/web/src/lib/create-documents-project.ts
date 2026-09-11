@@ -120,9 +120,10 @@ export function openDocumentsAgentPane(opts?: {
 
 export async function createUntitledDocumentsProject(
   workspaceId: string,
-  templateId: string = DEFAULT_DOCUMENTS_TEMPLATE_ID,
+  templateId?: string,
 ): Promise<CreatedDocumentsProject> {
   let lastError = 'Failed to create document';
+  const chosen = (templateId || '').trim();
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const slug = untitledDocumentSlug(Date.now() + attempt);
     const res = await authFetch('/api/documents/projects', {
@@ -132,7 +133,7 @@ export async function createUntitledDocumentsProject(
         workspace_id: workspaceId,
         title: DEFAULT_DOCUMENTS_TITLE,
         slug,
-        template_id: templateId,
+        ...(chosen ? { template_id: chosen } : {}),
       }),
     });
     if (res.ok) {
@@ -151,11 +152,15 @@ export async function createUntitledDocumentsProject(
   throw new Error(lastError);
 }
 
-/** One click: seed a template (default Article Light), open the document, open the pane. */
+/** One click: seed a template, open the document, open the pane.
+ *
+ * Omit ``templateId`` so the server applies its configured default. Passing
+ * ABI's own seed here would ignore a deploy that hid it from the picker.
+ */
 export async function startNewDocument(
   workspaceId: string,
   navigate: (href: string) => void,
-  templateId: string = DEFAULT_DOCUMENTS_TEMPLATE_ID,
+  templateId?: string,
 ): Promise<CreatedDocumentsProject> {
   const created = await createUntitledDocumentsProject(workspaceId, templateId);
   useDocumentsStore.getState().setSelectedSlug(created.slug);

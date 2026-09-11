@@ -1,3 +1,5 @@
+import { DEFAULT_DOCUMENTS_TEMPLATE_ID } from './create-documents-project';
+
 export type SectionsTemplateSection = {
   index: number;
   id?: string | null;
@@ -24,6 +26,8 @@ export type DocumentsSeedTemplate = {
   preview_ink: string;
   sections: SectionsTemplateSection[];
   assets: SectionsTemplateAsset[];
+  /** True on the row the server uses for a plain New Document click. */
+  is_default?: boolean;
 };
 
 /**
@@ -75,7 +79,27 @@ export type SectionsTemplateMenuRow =
   | { kind: 'heading'; id: string; label: string }
   | { kind: 'template'; id: string; label: string; swatch?: string };
 
-export const SLIDES_HOME_BLANK_TEMPLATE_ID = 'abi/minimal-light-v1';
+export const SLIDES_HOME_BLANK_TEMPLATE_ID = DEFAULT_DOCUMENTS_TEMPLATE_ID;
+
+/**
+ * Seed a plain New Document click should send, given the live catalog.
+ *
+ * Prefers the row the API flagged. Falls back to ABI's own seed when that
+ * id is still in the catalog, then to the first remaining row. Callers that
+ * have no catalog yet should omit template_id and let the server decide.
+ */
+export function resolveDocumentsTemplateId(
+  templates: Array<Pick<DocumentsSeedTemplate, 'id'> & { is_default?: boolean }>,
+  explicit?: string | null,
+): string {
+  const wanted = (explicit || '').trim();
+  if (wanted) return wanted;
+  const flagged = templates.find((row) => row.is_default && (row.id || '').trim());
+  if (flagged?.id) return flagged.id;
+  const ids = templates.map((row) => (row.id || '').trim()).filter(Boolean);
+  if (ids.includes(DEFAULT_DOCUMENTS_TEMPLATE_ID)) return DEFAULT_DOCUMENTS_TEMPLATE_ID;
+  return ids[0] || DEFAULT_DOCUMENTS_TEMPLATE_ID;
+}
 
 export type SectionsHomeTemplateCard = {
   id: string;
@@ -84,21 +108,31 @@ export type SectionsHomeTemplateCard = {
 };
 
 /**
- * Home-page template strip: Blank first, then the catalog in source order.
- *
- * Blank always creates the default seed, even if that id is missing from the
- * catalog payload. Labels stay human names; no `source/` prefixes.
+ * Home-page template strip: catalog order, with Blank pinned first only when
+ * ABI's own seed is still in the payload. A deploy that hid that seed must
+ * not keep advertising it.
  */
 export function sectionsHomeTemplateCards(
   templates: Array<Pick<DocumentsSeedTemplate, 'id' | 'name'>>,
 ): SectionsHomeTemplateCard[] {
-  const seen = new Set<string>([
-    SLIDES_HOME_BLANK_TEMPLATE_ID,
-    templateStem(SLIDES_HOME_BLANK_TEMPLATE_ID),
-  ]);
-  const cards: SectionsHomeTemplateCard[] = [
-    { id: SLIDES_HOME_BLANK_TEMPLATE_ID, label: 'Blank', blank: true },
-  ];
+  if (templates.length === 0) {
+    return [{ id: SLIDES_HOME_BLANK_TEMPLATE_ID, label: 'Blank', blank: true }];
+  }
+
+  const blankId = SLIDES_HOME_BLANK_TEMPLATE_ID;
+  const blankStem = templateStem(blankId);
+  const blankInCatalog = templates.some((template) => {
+    const id = (template.id || '').trim();
+    return id === blankId || templateStem(id) === blankStem;
+  });
+
+  const seen = new Set<string>();
+  const cards: SectionsHomeTemplateCard[] = [];
+  if (blankInCatalog) {
+    cards.push({ id: blankId, label: 'Blank', blank: true });
+    seen.add(blankId);
+    seen.add(blankStem);
+  }
 
   for (const template of templates) {
     const stem = templateStem(template.id);
