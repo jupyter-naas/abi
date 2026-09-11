@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from naas_abi.agents.tools.slides_tools import (
     _DATA_URL_RE,
@@ -21,18 +23,25 @@ from naas_abi.agents.tools.slides_tools import (
     _ensure_coding_repo,
     _forget_active_slugs,
     _friendly_sc_error,
+    _image_dimensions,
+    _image_query_for_slide,
     _insert_slide_html,
     _join_sections,
+    _load_portrait_catalog,
     _parse_section_writes,
     _persist_deck,
     _redact_data_urls,
+    _replaceable_image_matches,
     _reorder_slides_html,
     _replace_string_pairs,
     _resolve_slug,
     _restore_redacted_data_urls,
     _download_remote_image,
+    _extract_profile_portrait_candidates,
+    _resolve_person_portrait,
     _replace_image_src_in_section,
     _section_meta,
+    _search_remote_images,
     _split_sections,
     _validate_section_edit,
     _view_for_llm,
@@ -151,6 +160,127 @@ def test_download_remote_image_returns_stable_local_asset_name(monkeypatch):
     assert result["filename"].endswith(".png")
 
 
+def test_image_dimensions_reads_png_header():
+    payload = (
+        b"\x89PNG\r\n\x1a\n"
+        + b"\x00\x00\x00\rIHDR"
+        + (1600).to_bytes(4, "big")
+        + (900).to_bytes(4, "big")
+    )
+    assert _image_dimensions(payload, "image/png") == (1600, 900)
+
+
+def test_search_remote_images_ignores_thumbnail_only_results(monkeypatch):
+    class FakeDDGS:
+        def images(self, _query, **_kwargs):
+            return [
+                {"thumbnail": "https://images.example/low.jpg"},
+                {
+                    "image": "https://images.example/original.jpg",
+                    "title": "Original photo",
+                },
+            ]
+
+    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=FakeDDGS))
+    result = _search_remote_images("Valeo electric mobility")
+    assert result == [
+        {
+            "image_url": "https://images.example/original.jpg",
+            "title": "Original photo",
+            "source_url": "",
+            "width": "",
+            "height": "",
+        }
+    ]
+
+
+def test_extract_profile_portrait_candidates_prefers_og_image():
+    html = """
+    <html><head>
+      <meta property="og:image" content="/media/christian-back.jpg">
+      <meta name="twitter:image" content="/media/social-card.jpg">
+    </head><body>
+      <img alt="Christian Back portrait" src="/media/portrait-thumb.jpg">
+    </body></html>
+    """
+    candidates = _extract_profile_portrait_candidates(
+        html, "https://www.forvismazars.com/de/en/users/christian-back", "Christian Back"
+    )
+    assert candidates
+    assert candidates[0]["image_url"] == "https://www.forvismazars.com/media/christian-back.jpg"
+    assert candidates[0]["source"] == "og:image"
+
+
+def test_resolve_person_portrait_uses_bob_catalog(monkeypatch):
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.slides_tools._load_portrait_catalog",
+        lambda: [
+            {
+                "name": "Christian Back",
+                "photo": "https://cdn.example.test/christian-back.webp",
+                "profile_url": "https://www.forvismazars.com/christian-back",
+            }
+        ],
+    )
+    result = _resolve_person_portrait("christian back")
+    assert result["image_url"] == "https://cdn.example.test/christian-back.webp"
+    assert result["source"] == "bob_person_photo_catalog"
+
+
+def test_load_portrait_catalog_reads_bob_partners_wrapper(tmp_path, monkeypatch):
+    catalog = tmp_path / "partner-photos.json"
+    catalog.write_text(
+        json.dumps(
+            {
+                "source": "public directory",
+                "partners": [
+                    {
+                        "name": "Jörg Maas",
+                        "photo": "https://cdn.example.test/jorg-maas.webp",
+                        "profileUrl": "https://example.test/jorg-maas",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.slides_tools._portrait_catalog_paths", lambda: [catalog]
+    )
+    entries = _load_portrait_catalog()
+    assert entries == [
+        {
+            "name": "Jörg Maas",
+            "photo": "https://cdn.example.test/jorg-maas.webp",
+            "profile_url": "https://example.test/jorg-maas",
+        }
+    ]
+
+
+def test_resolve_person_portrait_extracts_public_profile_image(monkeypatch):
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.slides_tools._load_portrait_catalog", lambda: []
+    )
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.slides_tools._fetch_public_profile_page",
+        lambda url: {
+            "final_url": url,
+            "html": '<meta property="og:image" content="/people/bryan-wright.jpg">',
+        },
+    )
+    result = _resolve_person_portrait(
+        "Bryan Wright", "https://forvismazars.us/people/bryan-wright"
+    )
+    assert result["image_url"] == "https://forvismazars.us/people/bryan-wright.jpg"
+    assert result["source"] == "og:image"
+
+
+def test_resolve_person_portrait_does_not_guess_when_person_is_unknown():
+    result = _resolve_person_portrait("Unknown Person")
+    assert "error" in result
+    assert "profile URL" in result["error"]
+
+
 def test_split_sections_preserves_prefix_suffix_and_ids():
     prefix, sections, suffix = _split_sections(_SAMPLE)
     assert "<main" in prefix
@@ -249,12 +379,30 @@ def test_apply_replacements_in_section_not_found_returns_target():
     assert updated["error"] == "old string not found in deck"
 
 
+def test_apply_replacements_rejects_html_in_plain_text_new_value():
+    applied = _apply_replacements(_SAMPLE, "Session details", "<p>New copy</p>", 0)
+    assert isinstance(applied, dict)
+    assert "plain visible text" in applied["error"]
+
+    escaped = _apply_replacements(_SAMPLE, "Session details", "&lt;p&gt;New copy&lt;/p&gt;", 0)
+    assert isinstance(escaped, dict)
+    assert "plain visible text" in escaped["error"]
+
+
 def test_validate_section_edit_rejects_nested_paragraph_in_heading():
     original = '<section id="s1"><h1 data-element-id="title">Old</h1></section>'
     updated = '<section id="s1"><h1 data-element-id="title"><p>New</p></h1></section>'
     error = _validate_section_edit(original, updated)
     assert error is not None
     assert "nest <p>" in error
+
+
+def test_validate_section_edit_rejects_visible_escaped_markup():
+    original = '<section id="s1"><div data-element-id="body" data-semantic-role="text-body"><p>Old</p></div></section>'
+    updated = '<section id="s1"><div data-element-id="body" data-semantic-role="text-body"><p>&lt;p style="color:red"&gt;New&lt;/p&gt;</p></div></section>'
+    error = _validate_section_edit(original, updated)
+    assert error is not None
+    assert "visible HTML markup" in error
 
 
 def test_validate_section_edit_allows_paragraph_after_heading():
@@ -331,6 +479,100 @@ def test_replace_image_src_can_choose_main_photo_without_internal_location():
     assert old_src == "assets/hero.jpg"
     assert 'src="assets/new-hero.jpg"' in updated
     assert 'src="assets/logo.svg"' in updated
+
+
+def test_replaceable_image_matches_excludes_logos_icons_and_decorative_images():
+    section = """
+    <section id="s1">
+      <img data-semantic-role="brand-logo" src="assets/logo.svg">
+      <img class="icon" src="assets/icon.svg">
+      <img data-semantic-role="decorative" src="assets/shape.png">
+      <img data-semantic-role="image" data-asset-role="hero-photo"
+           alt="vehicle assembly" src="assets/old.jpg">
+    </section>
+    """
+    matches = _replaceable_image_matches(section)
+    assert len(matches) == 1
+    assert "vehicle assembly" in matches[0][1]
+
+
+def test_image_query_for_slide_combines_theme_title_and_image_metadata():
+    section = '<section><h1>Electric mobility</h1><img alt="battery plant" src="old.jpg"></section>'
+    tag = _replaceable_image_matches(section)[0][1]
+    query = _image_query_for_slide("Valeo automotive", 2, section, tag)
+    assert query == "Valeo automotive Electric mobility battery plant"
+
+
+def test_adapt_deck_images_replaces_editorial_images_and_preserves_logo(monkeypatch):
+    sc = _bind_in_memory_git(monkeypatch)
+    html = """<!DOCTYPE html><html><body><main>
+    <section id="slide-one" class="slide"><h1>Electric mobility</h1>
+      <img data-semantic-role="brand-logo" src="assets/logo.svg">
+      <img data-semantic-role="image" alt="battery plant" src="assets/old-one.jpg"
+           style="position:absolute;left:10px;top:20px;width:400px;height:200px;object-fit:cover">
+    </section>
+    <section id="slide-two" class="slide"><h1>Smart mobility</h1>
+      <img data-semantic-role="image" alt="vehicle sensor" src="assets/old-two.jpg"
+           style="position:absolute;left:30px;top:40px;width:300px;height:180px;object-fit:cover">
+    </section>
+    </main></body></html>"""
+    _seed_in_memory_deck(sc, html)
+    tokens = _slides_context()
+    search_calls = []
+
+    def fake_search(query, _max_results):
+        search_calls.append(query)
+        number = len(search_calls)
+        return [
+            {
+                "image_url": f"https://images.example/low-{number}.png",
+                "title": "Low quality",
+            },
+            {
+                "image_url": f"https://images.example/high-{number}.png",
+                "title": query,
+            },
+        ]
+
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.slides_tools._search_remote_images", fake_search
+    )
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.slides_tools._download_remote_image",
+        lambda url: {
+            "bytes": b"\x89PNG\r\n\x1a\nvalid",
+            "filename": f"ai-{url.rsplit('/', 1)[-1]}",
+            "media_type": "image/png",
+            "final_url": url,
+            "width": 500 if "/low-" in url else 1600,
+            "height": 300 if "/low-" in url else 900,
+        },
+    )
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.slides_tools._persist_image_asset",
+        lambda _slug, filename, _payload, _message: {"asset_path": f"assets/{filename}"},
+    )
+    try:
+        adapt = next(tool for tool in slides_tools() if tool.name == "adapt_deck_images")
+        result = adapt.invoke({"theme": "Valeo automotive mobility"})
+        assert result["images_found"] == 2
+        assert result["images_replaced"] == 2
+        assert len(result["queries"]) == 2
+        assert all("Valeo automotive mobility" in query for query in search_calls)
+        deck = sc.get_file(
+            repo_id="abi/monorepo",
+            path="slides/ws-test/untitled-local/deck.html",
+            ref="slides/ws-test/untitled-local",
+        )
+        saved = deck.text or ""
+        assert 'src="assets/logo.svg"' in saved
+        assert 'src="assets/ai-high-1.png"' in saved
+        assert 'src="assets/ai-high-2.png"' in saved
+        assert 'src="assets/ai-low-1.png"' not in saved
+        assert 'src="assets/ai-low-2.png"' not in saved
+        assert 'style="position:absolute;left:10px;top:20px;width:400px;height:200px;object-fit:cover"' in saved
+    finally:
+        _reset_tokens(tokens)
 
 
 def test_replace_in_slides_deck_not_found_includes_target_section_html(monkeypatch):

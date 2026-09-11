@@ -24,9 +24,11 @@ import base64
 import hashlib
 import mimetypes
 import re
+import struct
 import unicodedata
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
+from pathlib import Path
+from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 from collections import OrderedDict
 from typing import Any
@@ -56,6 +58,7 @@ from naas_abi_core.services.agent.context import (
     slides_brief,
 )
 from naas_abi_core.services.agent.tools.workspace_tools import _call as _sidecar_call
+from naas_abi.agents.tools.web_tools import _blocked_host_reason, _http_only_opener
 from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNameConflictError,
     SourceControlError,
@@ -85,6 +88,10 @@ _NESTED_PARAGRAPH_RE = re.compile(
     r"<h[12]\b[^>]*>(?:(?!</?h[12]\b).)*?<p\b",
     re.IGNORECASE | re.DOTALL,
 )
+_VISIBLE_MARKUP_RE = re.compile(
+    r"</?(?:a|article|br|div|h[1-6]|li|ol|p|section|span|strong|em|table|tbody|td|th|tr|ul)\b[^>]*>",
+    re.IGNORECASE,
+)
 _PLACEHOLDER_TEXT = re.compile(
     r"\b(?:presentation title|your title|lorem ipsum|job title|location|view [12]|name)\b",
     re.IGNORECASE,
@@ -102,6 +109,8 @@ _REPO_ID_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 _WIPED_DECK_ERROR = "API restart wiped this deck. Click New, then retry."
 _REMOTE_IMAGE_MAX_BYTES = 5 * 1024 * 1024
 _REMOTE_IMAGE_TIMEOUT_SECONDS = 20
+_MIN_IMAGE_LONG_SIDE = 800
+_MIN_IMAGE_AREA = 350_000
 _IMAGE_EXTENSIONS = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -109,6 +118,301 @@ _IMAGE_EXTENSIONS = {
     "image/gif": ".gif",
     "image/svg+xml": ".svg",
 }
+_PROFILE_FETCH_MAX_BYTES = 200_000
+_PROFILE_FETCH_TIMEOUT_SECONDS = 15
+_PORTRAIT_CATALOG_RELATIVE = Path(
+    "src/personnel/carl_partners/apps/map/assets/partner-photos.json"
+)
+_HTML_ATTR_RE = re.compile(
+    r"""([:\w-]+)\s*=\s*([\"'])(.*?)\2""", re.IGNORECASE | re.DOTALL
+)
+_PROFILE_META_RE = re.compile(r"<meta\b[^>]*>", re.IGNORECASE | re.DOTALL)
+_PROFILE_IMAGE_RE = re.compile(r"<img\b[^>]*>", re.IGNORECASE | re.DOTALL)
+_PROFILE_JSONLD_RE = re.compile(
+    r"<script\b[^>]*type\s*=\s*[\"']application/ld\+json[\"'][^>]*>(.*?)</script>",
+    re.IGNORECASE | re.DOTALL,
+)
+_PORTRAIT_TERMS = (
+    "portrait",
+    "profile",
+    "headshot",
+    "contact",
+    "people",
+    "person",
+    "team",
+    "photograph",
+    "photo",
+)
+_NON_PORTRAIT_TERMS = ("logo", "icon", "banner", "hero", "og-image", "social")
+
+
+def _normalise_person_name(value: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", value or "")
+    ascii_name = decomposed.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", " ", ascii_name.casefold()).strip()
+
+
+def _portrait_catalog_paths() -> list[Path]:
+    """Find the public BOB personnel catalogue from a local checkout."""
+    paths: list[Path] = []
+    for root in (Path.cwd(), *Path.cwd().parents):
+        candidate = root / _PORTRAIT_CATALOG_RELATIVE
+        if candidate.is_file() and candidate not in paths:
+            paths.append(candidate)
+    return paths
+
+
+def _load_portrait_catalog() -> list[dict[str, str]]:
+    """Load public portrait metadata without requiring BOB at import time."""
+    for path in _portrait_catalog_paths():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            continue
+        if isinstance(payload, dict):
+            payload = payload.get("partners") or payload.get("people") or payload.get("items")
+        if not isinstance(payload, list):
+            continue
+        entries: list[dict[str, str]] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            photo = item.get("photo")
+            profile_url = item.get("profileUrl")
+            if isinstance(name, str) and isinstance(photo, str) and photo.strip():
+                entries.append(
+                    {
+                        "name": name.strip(),
+                        "photo": photo.strip(),
+                        "profile_url": profile_url.strip()
+                        if isinstance(profile_url, str)
+                        else "",
+                    }
+                )
+        if entries:
+            return entries
+    return []
+
+
+def _catalog_portrait(person_name: str) -> dict[str, str] | None:
+    wanted = _normalise_person_name(person_name)
+    if not wanted:
+        return None
+    entries = _load_portrait_catalog()
+    exact = [entry for entry in entries if _normalise_person_name(entry["name"]) == wanted]
+    if len(exact) == 1:
+        return exact[0]
+    wanted_tokens = set(wanted.split())
+    if len(wanted_tokens) < 2:
+        return None
+    partial = [
+        entry
+        for entry in entries
+        if wanted_tokens.issubset(set(_normalise_person_name(entry["name"]).split()))
+    ]
+    return partial[0] if len(partial) == 1 else None
+
+
+def _html_attrs(tag: str) -> dict[str, str]:
+    return {
+        name.casefold(): html_lib.unescape(value).strip()
+        for name, _quote, value in _HTML_ATTR_RE.findall(tag)
+    }
+
+
+def _add_profile_image_candidate(
+    candidates: list[tuple[int, str, str]],
+    seen: set[str],
+    raw_url: str,
+    base_url: str,
+    score: int,
+    source: str,
+    person_name: str,
+) -> None:
+    candidate = urljoin(base_url, html_lib.unescape((raw_url or "").strip()))
+    parsed = urlparse(candidate)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        return
+    if candidate in seen:
+        return
+    lowered = candidate.casefold()
+    if any(term in lowered for term in _NON_PORTRAIT_TERMS):
+        score -= 35
+    if any(term in lowered for term in _PORTRAIT_TERMS):
+        score += 20
+    name_tokens = [token for token in _normalise_person_name(person_name).split() if token]
+    if name_tokens and sum(token in lowered for token in name_tokens) >= 2:
+        score += 30
+    seen.add(candidate)
+    candidates.append((score, candidate, source))
+
+
+def _extract_profile_portrait_candidates(
+    html: str, profile_url: str, person_name: str
+) -> list[dict[str, str]]:
+    """Extract ranked image URLs from profile metadata without guessing CDN paths."""
+    candidates: list[tuple[int, str, str]] = []
+    seen: set[str] = set()
+    for tag in _PROFILE_META_RE.findall(html or ""):
+        attrs = _html_attrs(tag)
+        marker = (attrs.get("property") or attrs.get("name") or "").casefold()
+        if marker in {"og:image", "og:image:url"}:
+            _add_profile_image_candidate(
+                candidates, seen, attrs.get("content", ""), profile_url, 100, marker, person_name
+            )
+        elif marker == "twitter:image":
+            _add_profile_image_candidate(
+                candidates, seen, attrs.get("content", ""), profile_url, 90, marker, person_name
+            )
+
+    for tag in _PROFILE_IMAGE_RE.findall(html or ""):
+        attrs = _html_attrs(tag)
+        alt = attrs.get("alt", "").casefold()
+        for attr_name, score in (
+            ("src", 55),
+            ("data-src", 52),
+            ("data-lazy-src", 50),
+        ):
+            raw_url = attrs.get(attr_name, "")
+            if raw_url:
+                _add_profile_image_candidate(
+                    candidates,
+                    seen,
+                    raw_url,
+                    profile_url,
+                    score + (20 if any(term in alt for term in _PORTRAIT_TERMS) else 0),
+                    f"img:{attr_name}",
+                    person_name,
+                )
+        srcset = attrs.get("srcset", "")
+        if srcset:
+            first_url = srcset.split(",", 1)[0].strip().split(" ", 1)[0]
+            _add_profile_image_candidate(
+                candidates, seen, first_url, profile_url, 48, "img:srcset", person_name
+            )
+
+    def collect_json_images(value: Any) -> list[str]:
+        if isinstance(value, dict):
+            found: list[str] = []
+            for key, nested in value.items():
+                if str(key).casefold() == "image":
+                    if isinstance(nested, str):
+                        found.append(nested)
+                    elif isinstance(nested, dict):
+                        found.extend(collect_json_images(nested))
+                    elif isinstance(nested, list):
+                        found.extend(item for item in nested if isinstance(item, str))
+                else:
+                    found.extend(collect_json_images(nested))
+            return found
+        if isinstance(value, list):
+            found = []
+            for nested in value:
+                found.extend(collect_json_images(nested))
+            return found
+        return []
+
+    for block in _PROFILE_JSONLD_RE.findall(html or ""):
+        try:
+            payload = json.loads(html_lib.unescape(block.strip()))
+        except (json.JSONDecodeError, TypeError):
+            continue
+        for image_url in collect_json_images(payload):
+            _add_profile_image_candidate(
+                candidates, seen, image_url, profile_url, 80, "json-ld:image", person_name
+            )
+
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return [
+        {"image_url": image_url, "source": source, "score": str(score)}
+        for score, image_url, source in candidates
+        if score > 0
+    ]
+
+
+def _fetch_public_profile_page(url: str) -> dict[str, str]:
+    """Fetch raw public HTML for image metadata, with the web safety checks."""
+    parsed = urlparse((url or "").strip())
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        return {"error": "Profile URL must be an absolute http(s) URL."}
+    blocked = _blocked_host_reason(url)
+    if blocked is not None:
+        return {"error": f"Profile URL is not public: {blocked}."}
+    request = Request(
+        url,
+        headers={
+            "Accept": "text/html,application/xhtml+xml",
+            "User-Agent": "Nexus Slides portrait resolver/1.0",
+        },
+    )
+    try:
+        with _http_only_opener().open(request, timeout=_PROFILE_FETCH_TIMEOUT_SECONDS) as response:
+            final_url = response.geturl()
+            final_blocked = _blocked_host_reason(final_url)
+            if final_blocked is not None:
+                return {"error": f"Profile redirect is not public: {final_blocked}."}
+            raw = response.read(_PROFILE_FETCH_MAX_BYTES + 1)
+            content_type = response.headers.get("Content-Type", "")
+    except (HTTPError, URLError, TimeoutError, OSError) as exc:
+        return {"error": f"Unable to fetch profile page: {exc}"}
+    if len(raw) > _PROFILE_FETCH_MAX_BYTES:
+        return {"error": "Profile page exceeds the 200 KB safety limit."}
+    if "html" not in content_type.casefold() and not raw.lstrip().startswith(b"<"):
+        return {"error": "Profile URL did not return an HTML page."}
+    charset_match = re.search(r"charset\s*=\s*([\w.-]+)", content_type, re.IGNORECASE)
+    charset = charset_match.group(1) if charset_match else "utf-8"
+    try:
+        text = raw.decode(charset, errors="replace")
+    except (LookupError, UnicodeDecodeError):
+        text = raw.decode("utf-8", errors="replace")
+    return {"html": text, "final_url": final_url}
+
+
+def _resolve_person_portrait(person_name: str, profile_url: str = "") -> dict[str, Any]:
+    """Resolve a named person's direct public portrait URL."""
+    name = (person_name or "").strip()
+    if not name:
+        return {"error": "person_name must be a non-empty full name."}
+    catalog_entry = _catalog_portrait(name)
+    if catalog_entry:
+        return {
+            "person_name": name,
+            "image_url": catalog_entry["photo"],
+            "profile_url": catalog_entry.get("profile_url", ""),
+            "source": "bob_person_photo_catalog",
+            "verified_by": "replace_slide_image_binary_validation",
+        }
+    source_url = (profile_url or "").strip()
+    if not source_url:
+        return {
+            "error": (
+                f"No portrait catalogue entry found for {name}. Provide the public profile URL "
+                "returned by web_search, not a direct image URL."
+            )
+        }
+    page = _fetch_public_profile_page(source_url)
+    if page.get("error"):
+        return page
+    options = _extract_profile_portrait_candidates(
+        page.get("html", ""), page.get("final_url", source_url), name
+    )
+    if not options:
+        return {
+            "error": (
+                f"No direct portrait image metadata was found on the public profile page for {name}. "
+                "Use an approved direct image URL or attach the photo."
+            )
+        }
+    best = options[0]
+    return {
+        "person_name": name,
+        "image_url": best["image_url"],
+        "profile_url": page.get("final_url", source_url),
+        "source": best["source"],
+        "candidates": options[:5],
+        "verified_by": "replace_slide_image_binary_validation",
+    }
 
 
 def _image_payload_is_valid(payload: bytes, media_type: str) -> bool:
@@ -129,11 +433,89 @@ def _image_payload_is_valid(payload: bytes, media_type: str) -> bool:
     return False
 
 
+def _image_dimensions(payload: bytes, media_type: str) -> tuple[int, int] | None:
+    """Read pixel dimensions from common image formats without Pillow."""
+    try:
+        if media_type == "image/png" and len(payload) >= 24:
+            return struct.unpack(">II", payload[16:24])
+        if media_type == "image/gif" and len(payload) >= 10:
+            return struct.unpack("<HH", payload[6:10])
+        if media_type == "image/webp" and len(payload) >= 30:
+            chunk = payload[12:16]
+            if chunk == b"VP8X":
+                width = 1 + int.from_bytes(payload[24:27], "little")
+                height = 1 + int.from_bytes(payload[27:30], "little")
+                return width, height
+        if media_type == "image/jpeg" and payload.startswith(b"\xff\xd8\xff"):
+            offset = 2
+            sof_markers = set(range(0xC0, 0xC4)) | set(range(0xC5, 0xC8)) | set(
+                range(0xC9, 0xCC)
+            ) | set(range(0xCD, 0xD0))
+            while offset + 9 <= len(payload):
+                if payload[offset] != 0xFF:
+                    offset += 1
+                    continue
+                while offset < len(payload) and payload[offset] == 0xFF:
+                    offset += 1
+                if offset >= len(payload):
+                    break
+                marker = payload[offset]
+                offset += 1
+                if marker in {0xD8, 0xD9}:
+                    continue
+                if marker == 0xDA or offset + 2 > len(payload):
+                    break
+                segment_length = struct.unpack(">H", payload[offset : offset + 2])[0]
+                if segment_length < 2 or offset + segment_length > len(payload):
+                    break
+                if marker in sof_markers and segment_length >= 7:
+                    height, width = struct.unpack(">HH", payload[offset + 3 : offset + 7])
+                    return width, height
+                offset += segment_length
+        if media_type == "image/svg+xml":
+            head = payload[:4096].decode("utf-8", "ignore")
+            viewbox = re.search(
+                r"\bviewBox\s*=\s*[\"']\s*[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)",
+                head,
+                re.IGNORECASE,
+            )
+            if viewbox:
+                return round(float(viewbox.group(1))), round(float(viewbox.group(2)))
+            width = re.search(r"\bwidth\s*=\s*[\"']\s*([\d.]+)", head, re.IGNORECASE)
+            height = re.search(r"\bheight\s*=\s*[\"']\s*([\d.]+)", head, re.IGNORECASE)
+            if width and height:
+                return round(float(width.group(1))), round(float(height.group(1)))
+    except (IndexError, struct.error, ValueError, OverflowError):
+        return None
+    return None
+
+
+def _image_quality_score(
+    image: dict[str, Any], expected_aspect_ratio: float | None = None
+) -> float:
+    """Score a validated image for deck use, rewarding size and crop fit."""
+    width = int(image.get("width") or 0)
+    height = int(image.get("height") or 0)
+    if not width or not height:
+        return 1.0 if image.get("media_type") == "image/svg+xml" else -1.0
+    area = width * height
+    if max(width, height) < _MIN_IMAGE_LONG_SIDE or area < _MIN_IMAGE_AREA:
+        return -1.0
+    score = min(area / 1_000_000, 12.0) + min(max(width, height) / 1600, 4.0)
+    if expected_aspect_ratio and expected_aspect_ratio > 0:
+        actual = width / height
+        score -= min(abs(actual - expected_aspect_ratio) * 3.0, 6.0)
+    return score
+
+
 def _download_remote_image(url: str) -> dict[str, Any]:
     """Download one remote image and return validated bytes plus a stable name."""
     parsed = urlparse((url or "").strip())
     if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
         return {"error": "Image URL must be an absolute http(s) URL."}
+    blocked = _blocked_host_reason(url)
+    if blocked is not None:
+        return {"error": f"Image URL is not public: {blocked}."}
     request = Request(
         url,
         headers={
@@ -145,6 +527,9 @@ def _download_remote_image(url: str) -> dict[str, Any]:
         with urlopen(request, timeout=_REMOTE_IMAGE_TIMEOUT_SECONDS) as response:  # nosec B310
             declared = (response.headers.get_content_type() or "").lower()
             final_url = response.geturl()
+            final_blocked = _blocked_host_reason(final_url)
+            if final_blocked is not None:
+                return {"error": f"Image redirect is not public: {final_blocked}."}
             payload = response.read(_REMOTE_IMAGE_MAX_BYTES + 1)
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
         return {"error": f"Unable to download image URL: {exc}"}
@@ -161,13 +546,76 @@ def _download_remote_image(url: str) -> dict[str, Any]:
                 f"Received content type {declared or 'unknown'} after redirect."
             )
         }
+    dimensions = _image_dimensions(payload, media_type)
+    if dimensions:
+        width, height = dimensions
+        if max(width, height) < _MIN_IMAGE_LONG_SIDE or width * height < _MIN_IMAGE_AREA:
+            return {
+                "error": (
+                    "Remote image is too small for a slide: "
+                    f"{width}x{height}px; minimum is {_MIN_IMAGE_LONG_SIDE}px on the long side."
+                )
+            }
+    else:
+        width, height = 0, 0
     digest = hashlib.sha256(payload).hexdigest()[:16]
     return {
         "bytes": payload,
         "media_type": media_type,
         "filename": f"ai-{digest}{_IMAGE_EXTENSIONS[media_type]}",
         "final_url": final_url,
+        "width": width,
+        "height": height,
     }
+
+
+def _search_remote_images(query: str, max_results: int = 8) -> list[dict[str, str]] | dict[str, str]:
+    """Search for direct image URLs using the installed DuckDuckGo backend."""
+    search_query = (query or "").strip()
+    if not search_query:
+        return {"error": "Image search query must be non-empty."}
+    limit = min(max(1, int(max_results)), 12)
+    rows: list[dict[str, Any]] = []
+    try:
+        from ddgs import DDGS
+
+        rows = list(DDGS().images(search_query, max_results=limit))
+    except ImportError:
+        try:
+            from duckduckgo_search import DDGS as LegacyDDGS
+
+            rows = list(LegacyDDGS().images(keywords=search_query, max_results=limit))
+        except ImportError:
+            return {"error": "Image search requires the 'ddgs' package."}
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Image search failed: {exc}"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Image search failed: {exc}"}
+
+    candidates: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        # Thumbnails are often low-resolution proxy files. The image search
+        # backend's original ``image`` URL is the only acceptable candidate.
+        image_url = row.get("image") or ""
+        if not isinstance(image_url, str) or image_url in seen:
+            continue
+        parsed = urlparse(image_url)
+        if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+            continue
+        seen.add(image_url)
+        candidates.append(
+            {
+                "image_url": image_url,
+                "title": str(row.get("title") or ""),
+                "source_url": str(row.get("url") or row.get("source") or ""),
+                "width": str(row.get("width") or ""),
+                "height": str(row.get("height") or ""),
+            }
+        )
+    return candidates
 
 
 def _persist_image_asset(slug: str, filename: str, payload: bytes, message: str) -> dict[str, Any]:
@@ -292,6 +740,111 @@ def _replace_image_src_in_section(
     )
     updated = section_html[: match.start()] + replacement + section_html[match.end() :]
     return updated, html_lib.unescape(src_match.group(2))
+
+
+def _is_decorative_image_tag(tag: str) -> bool:
+    """Return whether an image is a logo, icon, or explicitly decorative."""
+    attrs = _html_attrs(tag)
+    semantic_values = " ".join(
+        attrs.get(name, "")
+        for name in (
+            "class",
+            "alt",
+            "data-semantic-role",
+            "data-asset-role",
+            "data-asset-name",
+        )
+    ).casefold()
+    markers = (
+        "brand-logo",
+        "logo",
+        "icon",
+        "decorative",
+        "favicon",
+    )
+    return any(marker in semantic_values for marker in markers)
+
+
+def _replaceable_image_matches(section_html: str) -> list[tuple[re.Match[str], str]]:
+    """Return all editorial images in document order, excluding decoration."""
+    matches: list[tuple[re.Match[str], str]] = []
+    for match in _IMG_TAG_RE.finditer(section_html):
+        tag = match.group(0)
+        if _is_decorative_image_tag(tag) or not _SRC_ATTR_RE.search(tag):
+            continue
+        matches.append((match, tag))
+    return matches
+
+
+def _image_query_for_slide(theme: str, section_index: int, section_html: str, tag: str) -> str:
+    """Build a useful, bounded image query from the theme and slide metadata."""
+    meta = _section_meta(section_index, section_html)
+    attrs = _html_attrs(tag)
+    descriptors = [
+        attrs.get("alt", ""),
+        attrs.get("data-asset-name", ""),
+        attrs.get("data-asset-role", ""),
+    ]
+    context = " ".join(value for value in descriptors if value).strip()
+    parts = [theme.strip(), meta.get("title", "") or f"slide {section_index + 1}", context]
+    return re.sub(r"\s+", " ", " ".join(part for part in parts if part)).strip()[:240]
+
+
+def _image_box_aspect_ratio(tag: str) -> float | None:
+    """Read an image box ratio from inline px dimensions when available."""
+    attrs = _html_attrs(tag)
+    style = attrs.get("style", "")
+    dimensions = {
+        name.casefold(): float(value)
+        for name, value in re.findall(
+            r"\b(width|height)\s*:\s*([\d.]+)px", style, re.IGNORECASE
+        )
+    }
+    if len(dimensions) == 2 and dimensions.get("height", 0) > 0:
+        return dimensions["width"] / dimensions["height"]
+    try:
+        width = float(attrs.get("width", ""))
+        height = float(attrs.get("height", ""))
+    except ValueError:
+        return None
+    return width / height if width > 0 and height > 0 else None
+
+
+def _catalog_portrait_for_tag(tag: str) -> dict[str, str] | None:
+    """Find an official portrait when the image metadata contains a catalog name."""
+    searchable = _normalise_person_name(" ".join(_html_attrs(tag).values()))
+    if not searchable:
+        return None
+    searchable_tokens = set(searchable.split())
+    matches = []
+    for entry in _load_portrait_catalog():
+        name_tokens = set(_normalise_person_name(entry.get("name", "")).split())
+        if len(name_tokens) >= 2 and name_tokens.issubset(searchable_tokens):
+            matches.append(entry)
+    return matches[0] if len(matches) == 1 else None
+
+
+def _replace_image_tags_in_section(
+    section_html: str, replacements: dict[int, str]
+) -> tuple[str, list[dict[str, str]]]:
+    """Apply src-only replacements keyed by original image tag offsets."""
+    changed: list[dict[str, str]] = []
+
+    def replace(match: re.Match[str]) -> str:
+        new_src = replacements.get(match.start())
+        if not new_src:
+            return match.group(0)
+        tag = match.group(0)
+        src_match = _SRC_ATTR_RE.search(tag)
+        if not src_match:
+            return tag
+        old_src = html_lib.unescape(src_match.group(2))
+        escaped_src = html_lib.escape(new_src, quote=True)
+        replacement = tag[: src_match.start(2)] + escaped_src + tag[src_match.end(2) :]
+        changed.append({"old_src": old_src, "new_src": new_src})
+        return replacement
+
+    return _IMG_TAG_RE.sub(replace, section_html), changed
 
 
 def _get_source_control():
@@ -1014,8 +1567,18 @@ def _apply_replacements(
     if not old:
         return {"error": "old must be a non-empty string"}
 
-    old_plain = html_lib.unescape(old)
     new_plain = html_lib.unescape(new)
+    markup_match = _VISIBLE_MARKUP_RE.search(new_plain)
+    if markup_match:
+        return {
+            "error": (
+                "new must be plain visible text; HTML markup is not allowed "
+                f"(found {markup_match.group(0)!r}). Use the existing element "
+                "shell and put only the replacement copy in new."
+            )
+        }
+
+    old_plain = html_lib.unescape(old)
     pattern = _entity_flex_pattern(old_plain)
     matches: list[tuple[int, int, str]] = [
         (m.start(), m.end(), _mirror_amp_encoding(m.group(0), new_plain))
@@ -1347,6 +1910,18 @@ def _validate_section_edit(original: str, updated: str) -> str | None:
         return (
             "Refusing to write section: do not nest <p> inside <h1> or <h2>. "
             "Put plain text directly in the semantic element."
+        )
+    original_visible_markup = _VISIBLE_MARKUP_RE.findall(
+        html_lib.unescape(_TAG_RE.sub(" ", original))
+    )
+    updated_visible_markup = _VISIBLE_MARKUP_RE.findall(
+        html_lib.unescape(_TAG_RE.sub(" ", updated))
+    )
+    if len(updated_visible_markup) > len(original_visible_markup):
+        return (
+            "Refusing to write section: visible HTML markup was introduced in "
+            "text content. Use plain visible copy, not escaped tags such as "
+            "&lt;p&gt;...&lt;/p&gt;."
         )
     for pattern, label in (
         (_ATTR_DATA_ELEMENT_ID_RE, "data-element-id"),
@@ -2078,6 +2653,226 @@ def slides_tools() -> list[BaseTool]:
             return _tool_error(exc)
 
     @tool
+    def adapt_deck_images(
+        theme: str,
+        slug: str = "",
+        max_images: int = 48,
+        candidates_per_image: int = 8,
+        message: str = "Adapt deck images via Abi",
+    ) -> dict[str, Any]:
+        """Replace all editorial deck images with web images matching a theme.
+
+        The tool searches separately for each replaceable image using the
+        requested theme plus the slide title and image metadata. Logos, icons,
+        and images marked decorative are left untouched. Each result is
+        downloaded, validated as a real image, cached in the deck assets, and
+        applied without changing the image layout or semantic attributes.
+        """
+        blocked = reject_unresearched_slides_write()
+        if blocked:
+            return blocked
+        if not agent_user_id.get():
+            return {"error": "No authenticated user on this agent session."}
+        if not (theme or "").strip():
+            return {"error": "theme must be a non-empty description."}
+        try:
+            limit = min(max(1, int(max_images)), 48)
+            candidate_limit = min(max(1, int(candidates_per_image)), 12)
+        except (TypeError, ValueError):
+            return {"error": "max_images and candidates_per_image must be integers."}
+        resolved = _resolve_slug(slug)
+        if isinstance(resolved, dict):
+            return resolved
+        try:
+            original, source = _load_deck_text(resolved)
+            if isinstance(original, dict):
+                return original
+            prefix, sections, suffix = _split_sections(original)
+            total_targets = sum(len(_replaceable_image_matches(section)) for section in sections)
+            if total_targets == 0:
+                return {"error": "No replaceable editorial images found in the deck."}
+
+            replacements_by_section: dict[int, dict[int, str]] = {}
+            failures: list[dict[str, Any]] = []
+            used_urls: set[str] = set()
+            used_assets: set[str] = set()
+            queries: list[str] = []
+            processed = 0
+            for section_index, section in enumerate(sections):
+                for match, tag in _replaceable_image_matches(section):
+                    if processed >= limit:
+                        failures.append(
+                            {
+                                "section_index": section_index,
+                                "error": f"max_images limit reached ({limit})",
+                            }
+                        )
+                        continue
+                    processed += 1
+                    query = _image_query_for_slide(theme, section_index, section, tag)
+                    queries.append(query)
+                    official_portrait = _catalog_portrait_for_tag(tag)
+                    search_result = _search_remote_images(query, candidate_limit)
+                    if isinstance(search_result, dict):
+                        if not official_portrait:
+                            failures.append(
+                                {"section_index": section_index, "query": query, **search_result}
+                            )
+                            continue
+                        search_result = []
+                    candidates: list[dict[str, str]] = []
+                    if official_portrait:
+                        candidates.append(
+                            {
+                                "image_url": official_portrait["photo"],
+                                "title": official_portrait["name"],
+                                "source_url": official_portrait.get("profile_url", ""),
+                                "source": "official_bob_person_photo_catalog",
+                            }
+                        )
+                    candidates.extend(search_result)
+                    expected_aspect_ratio = _image_box_aspect_ratio(tag)
+                    valid_candidates: list[tuple[float, dict[str, Any], dict[str, str]]] = []
+                    last_error = "No valid image candidate returned by image search."
+                    for candidate in candidates:
+                        image_url = candidate.get("image_url", "")
+                        if not image_url or image_url in used_urls:
+                            continue
+                        downloaded = _download_remote_image(image_url)
+                        if downloaded.get("error"):
+                            last_error = downloaded["error"]
+                            continue
+                        filename = downloaded["filename"]
+                        if filename in used_assets:
+                            continue
+                        score = _image_quality_score(downloaded, expected_aspect_ratio)
+                        if score < 0:
+                            last_error = "Image dimensions could not be verified."
+                            continue
+                        if candidate.get("source") == "official_bob_person_photo_catalog":
+                            score += 100
+                        valid_candidates.append((score, downloaded, candidate))
+                    if not valid_candidates:
+                        failures.append(
+                            {"section_index": section_index, "query": query, "error": last_error}
+                        )
+                        continue
+                    _score, downloaded, candidate = max(
+                        valid_candidates, key=lambda item: item[0]
+                    )
+                    filename = downloaded["filename"]
+                    asset_info = _persist_image_asset(
+                        resolved,
+                        filename,
+                        downloaded["bytes"],
+                        message or "Cache themed deck image via Abi",
+                    )
+                    if asset_info.get("error"):
+                        failures.append(
+                            {
+                                "section_index": section_index,
+                                "query": query,
+                                "error": asset_info["error"],
+                            }
+                        )
+                        continue
+                    used_urls.add(candidate["image_url"])
+                    used_assets.add(filename)
+                    selected = {
+                        "image_url": candidate["image_url"],
+                        "asset_path": f"assets/{filename}",
+                        "title": candidate.get("title", ""),
+                        "width": downloaded.get("width", 0),
+                        "height": downloaded.get("height", 0),
+                        "source": candidate.get("source", "web_image_search"),
+                    }
+                    replacements_by_section.setdefault(section_index, {})[
+                        match.start()
+                    ] = selected["asset_path"]
+
+            if not replacements_by_section:
+                return {
+                    "error": "No searched image could be validated and cached.",
+                    "images_found": total_targets,
+                    "images_replaced": 0,
+                    "failures": failures,
+                    "queries": queries,
+                }
+
+            replaced: list[dict[str, Any]] = []
+            for section_index, replacements in replacements_by_section.items():
+                updated_section, section_changes = _replace_image_tags_in_section(
+                    sections[section_index], replacements
+                )
+                validation_error = _validate_section_edit(
+                    sections[section_index], updated_section
+                )
+                if validation_error:
+                    failures.append(
+                        {"section_index": section_index, "error": validation_error}
+                    )
+                    continue
+                sections[section_index] = updated_section
+                replaced.extend(
+                    {"section_index": section_index, **change}
+                    for change in section_changes
+                )
+
+            if not replaced:
+                return {
+                    "error": "Image replacements failed structural validation.",
+                    "images_found": total_targets,
+                    "images_replaced": 0,
+                    "failures": failures,
+                    "queries": queries,
+                }
+            updated = _join_sections(prefix, sections, suffix)
+            result = _persist_deck(
+                resolved,
+                updated,
+                message or "Adapt deck images via Abi",
+                default_type="fix",
+            )
+            if "error" not in result:
+                note_slides_write(
+                    ", ".join(f"slide {item['section_index'] + 1}" for item in replaced)
+                )
+            result.update(
+                {
+                    "theme": theme.strip(),
+                    "images_found": total_targets,
+                    "images_replaced": len(replaced),
+                    "images_skipped": total_targets - len(replaced),
+                    "replacements": replaced,
+                    "failures": failures,
+                    "queries": queries,
+                    "layout_preserved": True,
+                    "read_source": source,
+                }
+            )
+            result.update(_open_deck_note(resolved))
+            return result
+        except Exception as exc:  # noqa: BLE001
+            return _tool_error(exc)
+
+    @tool
+    def resolve_person_portrait(
+        person_name: str,
+        profile_url: str = "",
+    ) -> dict[str, Any]:
+        """Resolve a named person's direct public portrait image URL.
+
+        Use this after ``web_search`` when a user asks for a named person's
+        photo. The resolver first checks BOB's public Forvis Mazars personnel
+        catalogue, then can inspect a public profile page's ``og:image``,
+        JSON-LD, or image attributes. It never treats a profile page URL as an
+        image URL and does not guess CDN paths. Pass the returned ``image_url``
+        to ``replace_slide_image``; that tool performs the final binary image
+        validation and local caching.
+        """
+        return _resolve_person_portrait(person_name, profile_url)
+
+    @tool
     def replace_slide_image(
         new_src: str,
         element_id: str = "",
@@ -2564,6 +3359,8 @@ def slides_tools() -> list[BaseTool]:
         read_slides_section,
         write_slides_section,
         write_slides_sections,
+        adapt_deck_images,
+        resolve_person_portrait,
         replace_slide_image,
         replace_in_slides_deck,
         read_slides_deck,

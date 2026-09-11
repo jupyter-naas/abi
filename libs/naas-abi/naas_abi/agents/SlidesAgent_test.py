@@ -22,6 +22,12 @@ def test_slides_agent_prompt_requires_research_then_write() -> None:
     assert "Research loop" in prompt
     assert "Plan, then write" in prompt
     assert "write_slides_sections" in prompt
+    assert "resolve_person_portrait" in prompt
+    assert "adapt_deck_images" in prompt
+    assert "all deck photos/images" in prompt
+    assert "named person's photo" in prompt
+    assert "plain visible text" in prompt
+    assert "Never escape the tags" in prompt
     assert "Do not re-read" in prompt
     assert "start writing immediately" not in prompt
     assert "Context / Approach / Plan" in prompt
@@ -54,6 +60,8 @@ def test_slides_agent_owns_the_write_and_research_tools() -> None:
     assert "write_slides_deck" in names
     assert "write_slides_section" in names
     assert "write_slides_sections" in names
+    assert "adapt_deck_images" in names
+    assert "resolve_person_portrait" in names
     assert "replace_slide_image" in names
     assert "replace_in_slides_deck" in names
     assert "web_search" in names
