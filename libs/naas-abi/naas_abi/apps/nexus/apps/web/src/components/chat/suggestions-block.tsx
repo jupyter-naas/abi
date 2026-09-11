@@ -19,8 +19,9 @@ const openState = createPersistedOpenState('nexus.chat.suggestionsOpenByAgent');
 /**
  * Agent-scoped "Suggestions" container above the composer: a single
  * clickable header that expands in place to reveal the full suggestion
- * list. Can stack with `FilesBlock` / `PresentationInfoBlock` and sits flush
- * on the composer input box below the stack — shared border, no gap — via
+ * list. Can stack with `FilesBlock` / `DocumentsFilesBlock` /
+ * `PresentationInfoBlock` / `DocumentInfoBlock` and sits flush
+ * on the composer input box below the stack: shared border, no gap, via
  * `.chat-composer-header-block` in chat-agent-selector.css. Whichever block
  * actually renders first in the stack (order varies, and siblings can hide
  * themselves) picks up the top border/radius via the `first:` variant, so no

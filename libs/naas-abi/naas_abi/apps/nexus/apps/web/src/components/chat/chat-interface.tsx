@@ -28,6 +28,8 @@ import {
   slidesDeckTitleFromToolOutput,
 } from '@/components/slides/slides-deck-card';
 import { SlidesDeckCardView } from '@/components/slides/slides-deck-card-view';
+import { DocumentInfoBlock } from './document-info-block';
+import { DocumentsFilesBlock } from './documents-files-block';
 import { FilesBlock } from './files-block';
 import { PresentationInfoBlock } from './presentation-info-block';
 import { SuggestionsBlock } from './suggestions-block';
@@ -2867,19 +2869,22 @@ export function ChatInterface({
     setInput('');
   }, [input, isLoading]);
 
-  // Whether the "Suggestions" / "Files" / deck-identity containers render
+  // Whether the "Suggestions" / "Files" / artifact-identity containers render
   // above the composer input box. Order is Suggestions, then Files, then
-  // the deck-identity strip last (directly touching the input) — each
-  // block picks up its own top border/radius via the CSS `first:` variant,
-  // so whichever one actually renders first "wins" it regardless of which
+  // the identity strip last (directly touching the input). Slides uses
+  // PresentationInfoBlock; Documents uses DocumentInfoBlock. Each block
+  // picks up its own top border/radius via the CSS `first:` variant, so
+  // whichever one actually renders first "wins" it regardless of which
   // siblings are hidden. Drives the input box dropping its own top
   // border/radius so the whole stack reads as one seamless card with no gap
-  // between them. FilesBlock hides itself when nothing has changed this
-  // session, so it does not factor into showComposerHeaderBlock below.
+  // between them. Files blocks hide themselves when nothing has changed this
+  // session, so they do not factor into showComposerHeaderBlock below.
   const showSuggestionsBlock =
     activeSuggestions(selectedAgentData?.suggestions as ChatSuggestion[] | undefined).length > 0;
   const showPresentationInfoBlock = isPane && !!slidesChatContext;
-  const showComposerHeaderBlock = showSuggestionsBlock || showPresentationInfoBlock;
+  const showDocumentInfoBlock = isPane && !!documentsChatContext;
+  const showComposerHeaderBlock =
+    showSuggestionsBlock || showPresentationInfoBlock || showDocumentInfoBlock;
 
   return (
     <div className="relative flex h-full min-h-0 flex-1">
@@ -2956,6 +2961,28 @@ export function ChatInterface({
               <PresentationInfoBlock
                 slug={slidesChatContext.slides.slug}
                 title={slidesChatContext.slides.title}
+                workspaceId={currentWorkspaceId}
+              />
+            </>
+          ) : isPane && documentsChatContext ? (
+            <>
+              {showSuggestionsBlock && (
+                <SuggestionsBlock
+                  agentId={selectedAgent}
+                  suggestions={selectedAgentData?.suggestions}
+                  onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
+                  onSuggestionHover={(value) => setInput(value)}
+                  onSuggestionLeave={() => setInput('')}
+                />
+              )}
+              <DocumentsFilesBlock
+                slug={documentsChatContext.documents.slug}
+                path={documentsChatContext.documents.path}
+                workspaceId={currentWorkspaceId}
+              />
+              <DocumentInfoBlock
+                slug={documentsChatContext.documents.slug}
+                title={documentsChatContext.documents.title}
                 workspaceId={currentWorkspaceId}
               />
             </>
@@ -3236,7 +3263,9 @@ export function ChatInterface({
                         ? 'Ask about the file...'
                         : slidesChatContext
                           ? 'Describe the deck: topic, audience, how many slides...'
-                          : 'Send a message...'
+                          : documentsChatContext
+                            ? 'Describe the document: topic, audience...'
+                            : 'Send a message...'
                   }
                   // placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
                   className="chat-composer-input max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
