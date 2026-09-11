@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.35.1 (2026-09-11)
+
+### Bug Fixes
+
+- **lint**: Nosec quoted DuckLake identifiers in inlined_row_count
+  ([`66c6899`](https://github.com/jupyter-naas/abi/commit/66c6899dfdb5cc10d52c9fb11c004e44d3c9f3a4))
+
+
 ## v2.35.0 (2026-09-10)
 
 ### Features
