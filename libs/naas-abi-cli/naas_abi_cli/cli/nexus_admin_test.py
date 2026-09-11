@@ -246,3 +246,4 @@ def test_help_lists_new_groups(runner: CliRunner) -> None:
     assert "workspace" in result.output
     assert "user" in result.output
     assert "org" in result.output
+    assert "slides" in result.output
