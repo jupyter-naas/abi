@@ -312,6 +312,11 @@ def _scan_apps_html_paths() -> dict[str, str]:
     return html_map
 
 
+def apps_catalog() -> tuple[AppInfo, ...]:
+    """The process-cached module catalog. The Apps agent tools read it too."""
+    return _scan_apps_catalog()
+
+
 def _app_exists(app_id: str) -> bool:
     return any(a.app_id == app_id for a in _scan_apps_catalog())
 
@@ -563,22 +568,11 @@ async def update_app_config(
     await require_workspace_access(current_user.id, workspace_id)
     _ensure_app_exists(app_id)
 
-    record = await apps_service.update_app_config(
+    record = await apps_service.upsert_app_config(
         workspace_id=workspace_id,
         app_id=app_id,
         updates=AppConfigUpdateInput(enabled=updates.enabled),
     )
-    if record is None:
-        # No existing row: create one. Missing fields fall back to defaults
-        # (enabled=False), then we apply the requested update on top.
-        enabled = False if updates.enabled is None else updates.enabled
-        record = await apps_service.create_app_config(
-            AppConfigCreateInput(
-                workspace_id=workspace_id,
-                app_id=app_id,
-                enabled=enabled,
-            )
-        )
     return _serialize_record(record)
 
 

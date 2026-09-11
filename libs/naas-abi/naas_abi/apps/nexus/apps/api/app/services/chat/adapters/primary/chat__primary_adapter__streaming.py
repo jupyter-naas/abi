@@ -316,6 +316,12 @@ async def stream_chat_response(
                         if mode:
                             slides_active_mode.set(mode)
 
+                # Open Nexus feature (Apps, Ontology, ...) so feature agent
+                # tools default to the open item. Slides-parity.
+                from naas_abi.agents.feature import bind_feature_context
+
+                bind_feature_context(client_ctx)
+
                 # Arm the research gate for both surfaces. With no deck open
                 # this also flags a deck requested from the main chat, so the
                 # agent gets a slides-sized step budget.

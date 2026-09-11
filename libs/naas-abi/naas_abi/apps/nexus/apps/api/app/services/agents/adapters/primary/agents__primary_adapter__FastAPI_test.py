@@ -95,6 +95,34 @@ def test_pick_workspace_chat_agent_rejects_foreign_and_disabled_ids() -> None:
     assert _workspace_agent_roster(None, None) == set()
 
 
+def test_pick_workspace_chat_agent_falls_back_to_abi_without_default() -> None:
+    maps = _agent(
+        agent_id="maps",
+        enabled=True,
+        name="Maps",
+        class_name="naas_abi.agents.MapsAgent/MapsAgent",
+    )
+    abi = _agent(agent_id="abi", enabled=True)
+    lookalike = _agent(
+        agent_id="acme",
+        enabled=True,
+        name="Acme",
+        class_name="acme.agents.AbiAgent/AbiAgent",
+    )
+    default = _agent(
+        agent_id="default",
+        is_default=True,
+        enabled=True,
+        name="Bob",
+        class_name="bob.agents.BobAgent/BobAgent",
+    )
+
+    assert pick_workspace_chat_agent_id([maps, abi], None) == "abi"
+    assert pick_workspace_chat_agent_id([maps, lookalike], None) == "maps"
+    assert pick_workspace_chat_agent_id([maps, _agent(agent_id="off")], None) == "maps"
+    assert pick_workspace_chat_agent_id([maps, abi, default], None) == "default"
+
+
 def test_pick_workspace_slides_agent_prefers_enabled_office_slides() -> None:
     default = _agent(agent_id="default", is_default=True, enabled=True, name="Orchestrator")
     slides = _agent(

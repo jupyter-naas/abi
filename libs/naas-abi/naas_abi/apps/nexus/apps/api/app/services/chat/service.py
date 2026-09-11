@@ -8,6 +8,7 @@ from typing import Any, Protocol
 from uuid import uuid4
 
 import numpy as np
+from naas_abi.agents.feature.context import render_feature_context_block
 from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthPersistencePort
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
     CompleteChatInput,
@@ -391,6 +392,9 @@ class ChatService:
         coding_block = _render_coding_context_block(client_context)
         if coding_block:
             system_prompt += coding_block
+        feature_block = render_feature_context_block(client_context)
+        if feature_block:
+            system_prompt += feature_block
 
         has_prior_assistant = any(getattr(m, "role", None) == "assistant" for m in prior_messages)
         if has_prior_assistant:
@@ -427,6 +431,10 @@ class ChatService:
         coding_block = _render_coding_context_block(client_context)
         if coding_block.strip():
             parts.append(coding_block.strip())
+
+        feature_block = render_feature_context_block(client_context)
+        if feature_block.strip():
+            parts.append(feature_block.strip())
 
         has_prior_assistant = any(getattr(m, "role", None) == "assistant" for m in prior_messages)
         if has_prior_assistant:
@@ -1068,11 +1076,13 @@ class ChatService:
                         client_context=request.context,
                     )
 
+                from naas_abi.agents.feature import bind_feature_context
                 from naas_abi.agents.slides import (
                     apply_slides_model_override,
                     bind_slides_research_policy,
                 )
 
+                bind_feature_context(request.context)
                 has_prior_assistant = any(
                     getattr(m, "role", None) == "assistant" for m in prior_messages
                 )

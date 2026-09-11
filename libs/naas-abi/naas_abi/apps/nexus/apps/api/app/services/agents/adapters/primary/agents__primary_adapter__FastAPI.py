@@ -203,7 +203,8 @@ def pick_workspace_chat_agent_id(
     """Use the requested agent only if it belongs to this workspace and is on.
 
     A leftover picker id from another workspace (or a disabled row) must not
-    run. Fall back to the workspace default, then the first enabled agent.
+    run. Fall back to the workspace default, then Abi (the Nexus orchestrator),
+    then the first enabled agent.
     """
     if requested_id:
         requested = next((agent for agent in agents if agent.id == requested_id), None)
@@ -212,8 +213,17 @@ def pick_workspace_chat_agent_id(
     default = next((agent for agent in agents if agent.is_default), None)
     if default is not None:
         return default.id
+    abi = next((agent for agent in agents if agent.enabled and _is_nexus_abi_agent(agent)), None)
+    if abi is not None:
+        return abi.id
     enabled = next((agent for agent in agents if agent.enabled), None)
     return enabled.id if enabled else None
+
+
+def _is_nexus_abi_agent(agent: AgentRecord) -> bool:
+    """True for the naas_abi AbiAgent, not an AbiAgent class from another module."""
+    class_name = agent.class_name or ""
+    return class_name.endswith("/AbiAgent") and class_name.startswith("naas_abi.")
 
 
 def _is_nexus_slides_agent(agent: AgentRecord) -> bool:

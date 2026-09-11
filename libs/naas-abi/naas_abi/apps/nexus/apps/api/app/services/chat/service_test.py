@@ -1204,6 +1204,43 @@ async def test_build_abi_injection_preamble_namespaces_deck_when_path_omitted() 
     assert "slides/untitled-mtsg9zse/deck.html" not in preamble
 
 
+_APPS_PANE_CONTEXT = {
+    "feature": {
+        "key": "apps",
+        "path": "/workspace/ws-1/apps",
+        "resource": {"kind": "app", "id": "acme.module:wsr", "label": "WSR"},
+    }
+}
+
+
+@pytest.mark.asyncio
+async def test_abi_preamble_carries_the_open_feature() -> None:
+    service = ChatService(adapter=SimpleNamespace())
+    preamble = await service.build_abi_injection_preamble(
+        prior_messages=[SimpleNamespace(role="assistant", content="Hello")],
+        user_id="user-1",
+        workspace_id="ws-1",
+        client_context=_APPS_PANE_CONTEXT,
+    )
+    assert preamble is not None
+    assert "## Open Nexus feature" in preamble
+    assert "- open_app_id: acme.module:wsr" in preamble
+
+
+@pytest.mark.asyncio
+async def test_system_prompt_carries_the_open_feature() -> None:
+    service = ChatService(adapter=SimpleNamespace())
+    prompt = await service.build_system_prompt(
+        agent="aia",
+        explicit_system_prompt=None,
+        prior_messages=[SimpleNamespace(role="assistant", content="Hello")],
+        user_id="user-1",
+        workspace_id="ws-1",
+        client_context=_APPS_PANE_CONTEXT,
+    )
+    assert "- feature: apps" in prompt
+
+
 def test_render_slides_context_block_carries_selected_slide() -> None:
     block = _render_slides_context_block(
         {"slides": {"slug": "q3-br", "selected_index": 4, "slide_count": 12}},
