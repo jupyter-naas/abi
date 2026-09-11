@@ -81,11 +81,13 @@ export type UserFeed = {
 
 let indexPromise: Promise<UserIndex> | null = null;
 const shardPromises = new Map<string, Promise<ShardDoc | null>>();
+const directUserPromises = new Map<string, Promise<UserBundle | null>>();
+const directPostPromises = new Map<string, Promise<TweetRow | null>>();
 
 async function getJson<T>(path: string): Promise<T | null> {
   let res: Response;
   try {
-    res = await fetch(withAccessToken(`${BASE}/${path}`), { cache: "no-store" });
+    res = await fetch(withAccessToken(`${BASE}/${path}`));
   } catch {
     return null;
   }
@@ -95,6 +97,34 @@ async function getJson<T>(path: string): Promise<T | null> {
   } catch {
     return null;
   }
+}
+
+export function artifactUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) return path;
+  return withAccessToken(`${BASE}/${path.replace(/^\/+/, "")}`);
+}
+
+export function loadPostArtifact(tweetId: string): Promise<TweetRow | null> {
+  let pending = directPostPromises.get(tweetId);
+  if (!pending) {
+    pending = getJson<{ post?: TweetRow }>(
+      `posts/by-id/${encodeURIComponent(tweetId)}/post.json`,
+    ).then((doc) => doc?.post || null);
+    directPostPromises.set(tweetId, pending);
+  }
+  return pending;
+}
+
+function loadDirectUser(username: string): Promise<UserBundle | null> {
+  const key = username.toLowerCase();
+  let pending = directUserPromises.get(key);
+  if (!pending) {
+    pending = getJson<{ bundle?: UserBundle }>(
+      `users/by-handle/${encodeURIComponent(key)}/user.json`,
+    ).then((doc) => doc?.bundle || null);
+    directUserPromises.set(key, pending);
+  }
+  return pending;
 }
 
 /** Every author in the tweet graph, busiest first. Memoised per session. */
@@ -149,6 +179,8 @@ function loadShard(shard: string): Promise<ShardDoc | null> {
 export async function loadUserBundle(
   username: string,
 ): Promise<UserBundle | null> {
+  const direct = await loadDirectUser(username);
+  if (direct) return direct;
   const { shardOf } = await loadUserIndex();
   const shard = shardOf.get(username);
   if (!shard) return null;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { artifactUrl } from "@/lib/userSearch";
 
 /** True when *href* points at a playable video (MP4 / X video CDN). */
 export function isVideoUrl(href: string): boolean {
@@ -41,12 +42,13 @@ export function MediaCarousel({ value }: { value: string }) {
 
   const count = urls.length;
   const current = Math.min(index, count - 1);
-  const href = urls[current];
+  const source = urls[current];
+  const href = artifactUrl(source);
   const go = (delta: number) =>
     setIndex((i) => (Math.min(i, count - 1) + delta + count) % count);
 
   const markBroken = () =>
-    setBroken((prev) => ({ ...prev, [href]: true }));
+    setBroken((prev) => ({ ...prev, [source]: true }));
 
   return (
     <div
@@ -66,7 +68,7 @@ export function MediaCarousel({ value }: { value: string }) {
       }}
     >
       <div className="media-frame">
-        {broken[href] ? (
+        {broken[source] ? (
           <a
             className="media-fallback"
             href={href}

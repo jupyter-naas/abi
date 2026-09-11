@@ -30,6 +30,7 @@ Served through ``/app-html/x/apps/x_proxy/…`` before the Nexus static catch-al
 
 from __future__ import annotations
 
+import hashlib
 import mimetypes
 import re
 
@@ -58,6 +59,11 @@ LEGACY_APP_HTML_PREFIX = "/app-html/x/apps/x/"
 _SNAPSHOT_RE = re.compile(
     r"^(globals|count_recent_tweets|search_recents_tweets|search_users)"
     r"(/[A-Za-z0-9_-]+)?/[A-Za-z0-9_.-]+\.json$"
+)
+_DIRECT_ARTIFACT_RE = re.compile(
+    r"^(?:posts/by-id/\d+/(?:post\.json|media/[a-f0-9]{64}\.[a-z0-9]{1,5})"
+    r"|users/by-handle/[a-z0-9_]{1,64}/"
+    r"(?:user\.json|media/(?:avatar|banner)-[a-f0-9]{64}\.[a-z0-9]{1,5}))$"
 )
 # Legacy data/*.json paths (older hub publishes) - keep serving if present.
 _LEGACY_DATA_RE = re.compile(r"^data/[A-Za-z0-9_.-]+\.json$")
@@ -118,11 +124,7 @@ def _media_type(name: str, default: str = "application/octet-stream") -> str:
 def _storage_prefixes(app_prefix: str, subdir: str | None = None) -> tuple[str, ...]:
     """Preferred object-storage prefix, then the other app root (rename fallback)."""
     primary = app_prefix.rstrip("/")
-    alt = (
-        LEGACY_APP_PREFIX
-        if primary == DEFAULT_APP_PREFIX
-        else DEFAULT_APP_PREFIX
-    )
+    alt = LEGACY_APP_PREFIX if primary == DEFAULT_APP_PREFIX else DEFAULT_APP_PREFIX
     if subdir:
         return (f"{primary}/{subdir}", f"{alt}/{subdir}")
     return (primary, alt)
@@ -144,10 +146,20 @@ def _serve_object(
         except Exceptions.ObjectNotFound as exc:
             last_exc = exc
             continue
+        etag = f'"{hashlib.sha256(content).hexdigest()}"'
+        headers = _frame_ancestor_headers(request)
+        headers["ETag"] = etag
+        full_path = f"{prefix}/{name}"
+        if "/media/" in full_path or "/_next/static/" in full_path:
+            headers["Cache-Control"] = "private, max-age=31536000, immutable"
+        else:
+            headers["Cache-Control"] = "private, max-age=0, must-revalidate"
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers=headers)
         return Response(
             content=content,
             media_type=media_type,
-            headers=_frame_ancestor_headers(request),
+            headers=headers,
         )
     raise HTTPException(status_code=404, detail=str(last_exc)) from last_exc
 
@@ -214,7 +226,9 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
             request,
         )
 
-    def _page(self, rel: str, request: Request, *, app_prefix: str = DEFAULT_APP_PREFIX):
+    def _page(
+        self, rel: str, request: Request, *, app_prefix: str = DEFAULT_APP_PREFIX
+    ):
         """The exported HTML for one page of the app.
 
         A page the current publish does not carry falls back to the app root,
@@ -291,6 +305,14 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                 rel,
                 request,
                 "application/json; charset=utf-8",
+                app_prefix=app_prefix,
+            )
+
+        if _DIRECT_ARTIFACT_RE.fullmatch(rel):
+            return _serve_relative(
+                self._object_storage,
+                rel,
+                request,
                 app_prefix=app_prefix,
             )
 

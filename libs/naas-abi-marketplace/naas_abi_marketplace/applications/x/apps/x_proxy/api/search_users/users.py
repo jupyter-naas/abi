@@ -45,6 +45,10 @@ from collections.abc import Iterable
 from typing import Any
 
 from naas_abi_core import logger
+from naas_abi_marketplace.applications.x.apps.x_proxy.api.artifacts import (
+    is_recent_post,
+    publish_user,
+)
 from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import (
     USER_SHARD_COUNT,
     USER_SHARD_HEX,
@@ -94,6 +98,69 @@ DATASET_FORMAT = 3
 # them at 160 characters anyway; the cap is what bounds this column's share of
 # a ~60k-row index.
 MAX_DESCRIPTION_CHARS = 160
+
+
+def _continue_direct_backfill(
+    ctx: SnapshotContext,
+    shards: dict[str, Any],
+    source_state: dict[str, Any],
+    limit: int,
+) -> int:
+    """Materialize another bounded batch from already-published user shards."""
+    budget = max(0, limit)
+    if not budget or not shards:
+        return 0
+    state = ctx.read_json("direct_artifacts", "backfill.json") or {}
+    if state.get("source_state") != source_state:
+        state = {}
+    if state.get("complete"):
+        return 0
+
+    resume_shard = str(state.get("shard") or "")
+    resume_username = str(state.get("username") or "")
+    written = 0
+    for shard in sorted(shards):
+        if resume_shard and shard < resume_shard:
+            continue
+        doc = ctx.read_json("search_users/posts", f"{shard}.json") or {}
+        authors = doc.get("authors") or {}
+        for username in sorted(authors):
+            if (
+                shard == resume_shard
+                and resume_username
+                and username <= resume_username
+            ):
+                continue
+            bundle = authors[username]
+            if any(is_recent_post(post) for post in bundle.get("posts") or []):
+                result = publish_user(ctx.object_storage, username, bundle)
+                if not result.get("skipped"):
+                    written += 1
+            if written >= budget:
+                ctx.save_json_compact(
+                    "direct_artifacts",
+                    "backfill.json",
+                    {
+                        "format": DATASET_FORMAT,
+                        "source_state": source_state,
+                        "shard": shard,
+                        "username": username,
+                        "complete": False,
+                    },
+                )
+                return written
+        resume_username = ""
+
+    ctx.save_json_compact(
+        "direct_artifacts",
+        "backfill.json",
+        {
+            "format": DATASET_FORMAT,
+            "source_state": source_state,
+            "complete": True,
+        },
+    )
+    return written
 
 
 def _index_row(
@@ -167,7 +234,9 @@ def _shard_fingerprint(shard_authors: list[dict[str, Any]]) -> str:
     return content_digest(encode_compact(rows))
 
 
-def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
+def publish(
+    ctx: SnapshotContext, *, full: bool = False, direct_user_limit: int = 100
+) -> dict:
     """Write the Users dataset and return a summary.
 
     Deliberately *not* scoped by followed query or scenario window: the Users
@@ -205,6 +274,9 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
         and previous_doc.get("source_state") == source_state
         and previous_doc.get("index_columns") == INDEX_COLUMNS
     ):
+        direct_users = _continue_direct_backfill(
+            ctx, previous, source_state, direct_user_limit
+        )
         logger.info(
             f"X app users dataset: source unchanged ({source_state}) - "
             "kept the published dataset"
@@ -216,6 +288,7 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
             "shards_rebuilt": 0,
             "shards_written": 0,
             "shards_unchanged": len(previous),
+            "direct_users": direct_users,
         }
 
     if cache is not None:
@@ -311,6 +384,7 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
     total_posts = 0
     written = 0
     unchanged = 0
+    direct_users = 0
     stale_set = set(stale)
     for shard in sorted(by_shard):
         if shard not in stale_set:
@@ -329,6 +403,13 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
             }
             for author in by_shard[shard]
         }
+        for username, bundle in shard_authors.items():
+            if direct_users >= max(0, direct_user_limit):
+                break
+            if any(is_recent_post(post) for post in bundle["posts"]):
+                result = publish_user(ctx.object_storage, username, bundle)
+                if not result.get("skipped"):
+                    direct_users += 1
         # Serialized once: the same bytes decide whether to write and are what
         # gets written.
         payload = encode_compact(
@@ -375,14 +456,13 @@ def publish(ctx: SnapshotContext, *, full: bool = False) -> dict:
         "shards_rebuilt": len(stale),
         "shards_written": written,
         "shards_unchanged": unchanged,
+        "direct_users": direct_users,
     }
     logger.info(f"X app users dataset: {summary}")
     return summary
 
 
-def warm_usernames(
-    ctx: SnapshotContext, usernames: Iterable[str]
-) -> dict[str, Any]:
+def warm_usernames(ctx: SnapshotContext, usernames: Iterable[str]) -> dict[str, Any]:
     """Refresh ``search_users/posts/<shard>.json`` for report-linked authors.
 
     Merges into any existing shard payload so unrelated authors in the same
@@ -390,11 +470,7 @@ def warm_usernames(
     returns ``skipped`` without raising.
     """
     wanted = sorted(
-        {
-            str(raw).strip().lstrip("@")
-            for raw in usernames
-            if str(raw or "").strip()
-        }
+        {str(raw).strip().lstrip("@") for raw in usernames if str(raw or "").strip()}
     )
     if not wanted:
         return {"warmed_usernames": 0, "shards_touched": 0}
@@ -402,7 +478,9 @@ def warm_usernames(
     previous_doc = ctx.read_json("search_users", "shards.json") or {}
     previous_shards = previous_doc.get("shards") or {}
     if not previous_shards:
-        logger.info("X app users dataset: warm_usernames skipped (no published dataset)")
+        logger.info(
+            "X app users dataset: warm_usernames skipped (no published dataset)"
+        )
         return {"warmed_usernames": 0, "shards_touched": 0, "skipped": True}
 
     cache = getattr(ctx, "cache", None)
@@ -429,6 +507,8 @@ def warm_usernames(
 
     touched = 0
     for shard, authors in by_shard.items():
+        for username, bundle in authors.items():
+            publish_user(ctx.object_storage, username, bundle, force_posts=True)
         existing = ctx.read_json("search_users/posts", f"{shard}.json") or {}
         merged_authors = dict(existing.get("authors") or {})
         merged_authors.update(authors)

@@ -245,7 +245,7 @@ def test_an_unchanged_tweet_graph_skips_the_rebuild_entirely():
     written_before = dict(storage.objects)
 
     ctx = _RecordingContext(storage, [_A, _B], graph_state=_STATE)
-    summary = users.publish(ctx)
+    summary = users.publish(ctx, direct_user_limit=0)
 
     assert summary["skipped"] is True
     assert summary["users"] == 2
@@ -370,3 +370,51 @@ def test_no_authors_writes_an_empty_manifest():
     }
     assert _manifest(storage)["shards"] == {}
     assert ctx.posts_queried == []
+
+
+def test_direct_artifact_publication_is_bounded(monkeypatch):
+    storage = _FakeObjectStorage()
+    authors = [_author(f"user{i}", 1, "2026-09-11T12:00:00+00:00") for i in range(6)]
+    published: list[str] = []
+    monkeypatch.setattr(users, "is_recent_post", lambda _post: True)
+    monkeypatch.setattr(
+        users,
+        "publish_user",
+        lambda _storage, username, _bundle: (
+            published.append(username) or {"username": username, "skipped": False}
+        ),
+    )
+
+    summary = users.publish(
+        _RecordingContext(storage, authors),
+        direct_user_limit=2,
+    )
+
+    assert summary["direct_users"] == 2
+    assert len(published) == 2
+
+
+def test_unchanged_source_continues_bounded_direct_backfill(monkeypatch):
+    storage = _FakeObjectStorage()
+    authors = [_author(f"user{i}", 1, "2026-09-11T12:00:00+00:00") for i in range(4)]
+    published: set[str] = set()
+
+    def _publish(_storage, username, _bundle):
+        skipped = username in published
+        published.add(username)
+        return {"username": username, "skipped": skipped}
+
+    monkeypatch.setattr(users, "is_recent_post", lambda _post: True)
+    monkeypatch.setattr(users, "publish_user", _publish)
+    users.publish(
+        _RecordingContext(storage, authors, graph_state=_STATE),
+        direct_user_limit=1,
+    )
+    second = users.publish(
+        _RecordingContext(storage, authors, graph_state=_STATE),
+        direct_user_limit=1,
+    )
+
+    assert second["skipped"] is True
+    assert second["direct_users"] == 1
+    assert len(published) == 2

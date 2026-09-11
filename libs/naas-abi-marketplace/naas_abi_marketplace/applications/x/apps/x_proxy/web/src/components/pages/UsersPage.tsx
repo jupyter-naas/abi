@@ -44,7 +44,12 @@ export function UsersPage({
   // The index is every author in the tweet graph - a few MB, fetched once when
   // the page first opens and memoised for the rest of the session.
   useEffect(() => {
+    if (selected) {
+      setIndexLoading(false);
+      return;
+    }
     let live = true;
+    setIndexLoading(true);
     loadUserIndex()
       .then((index) => {
         if (live) setUsers(index.users);
@@ -55,7 +60,7 @@ export function UsersPage({
     return () => {
       live = false;
     };
-  }, []);
+  }, [selected]);
 
   // A new needle starts again at the first page of results.
   const handleNeedleChange = (value: string) => {

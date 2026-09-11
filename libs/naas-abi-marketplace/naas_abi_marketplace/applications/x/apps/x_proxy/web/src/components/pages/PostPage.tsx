@@ -3,11 +3,16 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useAppState } from "@/components/AppProvider";
+import { LoadingScreen } from "@/components/LoadingScreen";
 import { UserPostCard } from "@/components/UserPostCard";
 import { hrefFor } from "@/lib/routes";
 import { postLink } from "@/lib/pins";
 import { findHit, hitAsRow } from "@/lib/tweetSearch";
-import { findPost, loadUserBundle } from "@/lib/userSearch";
+import {
+  findPost,
+  loadPostArtifact,
+  loadUserBundle,
+} from "@/lib/userSearch";
 import type { Snapshots, TweetRow, UserBundle } from "@/lib/types";
 
 type Props = {
@@ -63,20 +68,30 @@ export function PostPage({
   const author = username || hit?.username || null;
 
   const [bundle, setBundle] = useState<UserBundle | null>(null);
-  const [loading, setLoading] = useState(Boolean(author));
+  const [directPost, setDirectPost] = useState<TweetRow | null>(null);
+  const [loading, setLoading] = useState(Boolean(postId));
 
   // The shard carries the whole post - full text, every media - where a table
   // row carries what the table needed. Given an author, prefer it.
   useEffect(() => {
-    if (!author) {
+    if (!postId) {
       setLoading(false);
       return;
     }
     let live = true;
     setLoading(true);
-    loadUserBundle(author)
-      .then((res) => {
-        if (live) setBundle(res);
+    setDirectPost(null);
+    setBundle(null);
+    loadPostArtifact(postId)
+      .then(async (found) => {
+        if (!live) return;
+        if (found) {
+          setDirectPost(found);
+          return;
+        }
+        if (author) {
+          setBundle(await loadUserBundle(author));
+        }
       })
       .finally(() => {
         if (live) setLoading(false);
@@ -84,7 +99,7 @@ export function PostPage({
     return () => {
       live = false;
     };
-  }, [author]);
+  }, [author, postId]);
 
   // Opened from the Search Tweets results: back belongs to that search.
   const toSearch = from === "tweets";
@@ -103,7 +118,7 @@ export function PostPage({
     });
 
   const post: TweetRow | null =
-    findPost(bundle, postId) || (hit ? hitAsRow(hit) : null);
+    directPost || findPost(bundle, postId) || (hit ? hitAsRow(hit) : null);
   const pinned = Boolean(postId) && pinnedIds.posts.includes(`p:${postId}`);
 
   if (!postId) {
@@ -115,6 +130,10 @@ export function PostPage({
         </p>
       </div>
     );
+  }
+
+  if (loading && !post) {
+    return <LoadingScreen label="Loading post" />;
   }
 
   return (
@@ -178,8 +197,6 @@ export function PostPage({
           </Link>
         </div>
       </div>
-
-      {loading && !post ? <p className="user-empty">Loading the post…</p> : null}
 
       {post ? (
         <UserPostCard
