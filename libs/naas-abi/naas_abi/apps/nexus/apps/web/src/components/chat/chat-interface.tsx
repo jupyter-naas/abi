@@ -3645,30 +3645,33 @@ function ToolCallsDropdown({
 
   return (
     <div className="mb-2 w-full">
-      <button
-        type="button"
-        onClick={() => setIsOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <Wrench size={11} className="shrink-0" />
-        <span className="flex-1 truncate text-left">{headerLabel}</span>
-        {isProcessing && (
-          <span className="inline-flex shrink-0">
-            <TypingDots />
-          </span>
-        )}
+      <div className="flex w-full items-center gap-1.5 text-[11px] text-muted-foreground">
+        <button
+          type="button"
+          onClick={() => setIsOpen((v) => !v)}
+          aria-expanded={isOpen}
+          className="flex min-w-0 flex-1 items-center gap-1.5 transition-colors hover:text-foreground"
+        >
+          <Wrench size={11} className="shrink-0" />
+          <span className="flex-1 truncate text-left">{headerLabel}</span>
+          {isProcessing && (
+            <span className="inline-flex shrink-0">
+              <TypingDots />
+            </span>
+          )}
+          <ChevronDown size={11} className={cn('shrink-0 transition-transform', isOpen && 'rotate-180')} />
+        </button>
         {isProcessing && showStop && (
           <button
             type="button"
-            className="ml-1 shrink-0 rounded px-1.5 py-0.5 text-xs hover:bg-muted"
-            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onStop(); }}
+            className="shrink-0 rounded px-1.5 py-0.5 text-xs hover:bg-muted hover:text-foreground"
+            onClick={() => onStop()}
             title="Stop generation"
           >
             Stop
           </button>
         )}
-        <ChevronDown size={11} className={cn('shrink-0 transition-transform', isOpen && 'rotate-180')} />
-      </button>
+      </div>
 
       {isOpen && (
         <div className="mt-1.5 overflow-hidden rounded-lg border border-border/50 bg-background/50 divide-y divide-border/30">
