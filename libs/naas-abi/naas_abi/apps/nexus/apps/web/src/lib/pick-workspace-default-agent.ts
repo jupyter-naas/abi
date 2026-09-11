@@ -59,3 +59,15 @@ export function pickDocumentsOfficeAgent<T extends DocumentsOfficeAgent>(
   const documents = agents.find((agent) => agent.enabled && isNexusDocumentsAgent(agent));
   return documents ?? pickWorkspaceDefaultAgent(agents);
 }
+
+/** Right-pane office bind: Slides on a deck, Documents on a file, else default. */
+export function pickPaneOfficeAgent<
+  T extends SlidesOfficeAgent & DocumentsOfficeAgent,
+>(
+  agents: T[],
+  surface: { onSlides?: boolean; onDocuments?: boolean },
+): T | undefined {
+  if (surface.onSlides) return pickSlidesOfficeAgent(agents);
+  if (surface.onDocuments) return pickDocumentsOfficeAgent(agents);
+  return pickWorkspaceDefaultAgent(agents);
+}

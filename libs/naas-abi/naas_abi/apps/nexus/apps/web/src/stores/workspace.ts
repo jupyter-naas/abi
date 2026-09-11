@@ -324,7 +324,7 @@ interface WorkspaceState {
   closePaneTab: (id: string) => void;
   createConversation: (
     projectId?: string,
-    options?: { surface?: 'main' | 'pane'; slidesSlug?: string },
+    options?: { surface?: 'main' | 'pane'; slidesSlug?: string; documentsSlug?: string },
   ) => string;
   setActiveConversation: (id: string | null) => void;
   /** Record the latest agent used in a conversation (mirrors the backend,
@@ -701,7 +701,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       };
     }),
 
-  createConversation: (projectId?: string, options?: { surface?: 'main' | 'pane'; slidesSlug?: string }) => {
+  createConversation: (projectId?: string, options?: { surface?: 'main' | 'pane'; slidesSlug?: string; documentsSlug?: string }) => {
     const id = generateConversationId();
     const workspaceId = get().currentWorkspaceId;
     const surface = options?.surface ?? 'main';
@@ -711,6 +711,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     }
     const agent = surface === 'pane' ? get().paneAgent : get().selectedAgent;
     const slidesSlug = options?.slidesSlug?.trim() || undefined;
+    const documentsSlug = options?.documentsSlug?.trim() || undefined;
     const newConversation: Conversation = {
       id,
       workspaceId,
@@ -723,10 +724,15 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       projectId,
       isDraft: true,
       slidesSlug,
+      documentsSlug,
     };
     const slidesKey =
       slidesSlug && surface === 'pane'
         ? slidesPaneConversationKey(workspaceId, slidesSlug)
+        : null;
+    const documentsKey =
+      documentsSlug && surface === 'pane'
+        ? documentsPaneConversationKey(workspaceId, documentsSlug)
         : null;
     set((state) => ({
       conversations: [newConversation, ...state.conversations],
@@ -743,6 +749,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             slidesPaneConversationByKey: {
               ...state.slidesPaneConversationByKey,
               [slidesKey]: id,
+            },
+          }
+        : {}),
+      ...(documentsKey
+        ? {
+            documentsPaneConversationByKey: {
+              ...state.documentsPaneConversationByKey,
+              [documentsKey]: id,
             },
           }
         : {}),

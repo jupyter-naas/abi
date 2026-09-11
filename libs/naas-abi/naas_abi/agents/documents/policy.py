@@ -63,7 +63,7 @@ _RESEARCH_RE = re.compile(
 _CREATE_RE = re.compile(
     r"\b("
     r"create|make|build|write|draft|generate|"
-    r"document|document|sections|brief"
+    r"document|report|rapport|article|brief"
     r")\b",
     re.IGNORECASE,
 )
@@ -259,8 +259,8 @@ def documents_brief_requires_research(message: str, has_prior_assistant: bool) -
 
 
 _DECK_NOUN_RE = re.compile(
-    r"\b(document|document|document|sections|document|sectionshow|pitch"
-    r"|document|exposé)\b",
+    r"\b(document|documents|report|rapport|article|memo|paper|briefing"
+    r"|sections)\b",
     re.IGNORECASE,
 )
 # French verbs matter: a brief written in French must arm the sections path too,

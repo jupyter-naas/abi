@@ -871,6 +871,9 @@ export function ChatInterface({
         slidesSlug: isPane
           ? useSlidesStore.getState().selectedSlug ?? undefined
           : undefined,
+        documentsSlug: isPane
+          ? useDocumentsStore.getState().selectedSlug ?? undefined
+          : undefined,
       }),
     [createConversation, surface, isPane]
   );
@@ -1025,6 +1028,15 @@ export function ChatInterface({
     };
     return Object.keys(merged).length > 0 ? merged : null;
   }, [slidesChatContext, documentsChatContext, codingChatContext]);
+
+  useEffect(() => {
+    if (!isPane || !documentsChatContext) return;
+    const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+    const documents = pickDocumentsOfficeAgent(agents);
+    if (documents && useWorkspaceStore.getState().paneAgent !== documents.id) {
+      useWorkspaceStore.getState().setPaneAgent(documents.id);
+    }
+  }, [isPane, documentsChatContext]);
 
   useEffect(() => {
     if (!mounted || isPane) return;

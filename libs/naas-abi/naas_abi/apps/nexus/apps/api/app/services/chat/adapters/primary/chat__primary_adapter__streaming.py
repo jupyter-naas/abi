@@ -304,10 +304,12 @@ async def stream_chat_response(
                     slides_active_title,
                 )
                 agent_user_id.set(str(current_user.id))
-                if current_user.name:
-                    agent_user_name.set(current_user.name)
-                if current_user.email:
-                    agent_user_email.set(str(current_user.email))
+                name = getattr(current_user, "name", None)
+                email = getattr(current_user, "email", None)
+                if name:
+                    agent_user_name.set(name)
+                if email:
+                    agent_user_email.set(str(email))
                 agent_chat_id.set(str(conversation_id))
                 if request.workspace_id is not None:
                     agent_workspace_id.set(str(request.workspace_id))
@@ -499,9 +501,27 @@ async def stream_chat_response(
     #             )
     #             break
 
+    from naas_abi.agents.documents import apply_documents_model_override
+    from naas_abi.agents.documents.policy import open_documents_slug
     from naas_abi.agents.slides import apply_slides_model_override
+    from naas_abi.agents.slides.policy import open_slides_slug
 
     incoming_llm = getattr(provider, "llm_model", None) or request.llm_model
+    # Slides first when a deck is open or the brief is a deck request, so
+    # Documents does not steal an existing slides turn. Documents claims an
+    # open file, or a main-chat report/document brief slides did not take.
+    if open_documents_slug(client_ctx) and not open_slides_slug(client_ctx):
+        routed_llm = apply_documents_model_override(
+            incoming_llm, client_ctx, request.message
+        )
+    else:
+        routed_llm = apply_slides_model_override(
+            incoming_llm, client_ctx, request.message
+        )
+        if routed_llm == incoming_llm:
+            routed_llm = apply_documents_model_override(
+                incoming_llm, client_ctx, request.message
+            )
     provider_config = ProviderConfig(
         id=provider.id,
         name=provider.name,
@@ -511,9 +531,9 @@ async def stream_chat_response(
         api_key=provider.api_key,
         account_id=provider.account_id,
         model=provider.model,
-        # Pass the brief: with no deck open it is the only signal that this
-        # turn is a deck request, and that turn writes the whole deck.
-        llm_model=apply_slides_model_override(incoming_llm, client_ctx, request.message),
+        # Pass the brief: with no file open it is the only signal that this
+        # turn writes a whole deck or document.
+        llm_model=routed_llm,
     )
 
     assistant_msg_id = ""

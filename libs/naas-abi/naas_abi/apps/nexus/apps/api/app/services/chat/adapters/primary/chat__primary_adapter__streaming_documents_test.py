@@ -143,7 +143,7 @@ async def _run_turn(
     )
     response = await streaming.stream_chat_response(
         request=request,
-        current_user=SimpleNamespace(id="user-1"),
+        current_user=SimpleNamespace(id="user-1", name=None, email=None),
     )
     async for chunk in response.body_iterator:
         text = chunk.decode() if isinstance(chunk, bytes) else str(chunk)
@@ -197,7 +197,7 @@ async def test_open_document_still_upgrades_the_model(
     capture = await _run_turn(
         monkeypatch,
         "ajoute une section sur les risques",
-        context={"sections": {"slug": "souverainete-numerique"}},
+        context={"documents": {"slug": "souverainete-numerique"}},
     )
     assert capture.llm_model == configured_documents_model()
 

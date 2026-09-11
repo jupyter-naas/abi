@@ -201,12 +201,12 @@ def test_apply_documents_model_override_when_document_open() -> None:
     """
     assert apply_documents_model_override("gpt-4.1-mini", None, None) == "gpt-4.1-mini"
     assert (
-        apply_documents_model_override("gpt-4.1-mini", {"sections": {}}, None) == "gpt-4.1-mini"
+        apply_documents_model_override("gpt-4.1-mini", {"documents": {}}, None) == "gpt-4.1-mini"
     )
     assert (
         apply_documents_model_override(
             "gpt-4.1-mini",
-            {"sections": {"slug": "iran-now"}},
+            {"documents": {"slug": "iran-now"}},
             None,
         )
         == configured_documents_model()
@@ -214,7 +214,7 @@ def test_apply_documents_model_override_when_document_open() -> None:
     assert (
         apply_documents_model_override(
             "gpt-5.2",
-            {"sections": {"slug": "iran-now"}},
+            {"documents": {"slug": "iran-now"}},
             None,
         )
         == configured_documents_model()
@@ -326,7 +326,7 @@ def test_write_gate_opens_when_no_search_tool_can_be_bound() -> None:
         bind_documents_research_policy(
             "create a document about what's going on in iran now",
             has_prior_assistant=False,
-            client_context={"sections": {"slug": "iran-now"}},
+            client_context={"documents": {"slug": "iran-now"}},
         )
         try:
             assert documents_research_queries.get() == []
@@ -354,7 +354,7 @@ def test_bind_policy_sets_gate_for_open_document() -> None:
     required = bind_documents_research_policy(
         "create a document about what's going on in iran now",
         has_prior_assistant=False,
-        client_context={"sections": {"slug": "iran-now"}},
+        client_context={"documents": {"slug": "iran-now"}},
     )
     assert required is True
     assert documents_research_required.get() is True
@@ -392,7 +392,8 @@ def test_documents_creation_requested_detects_a_document_brief_in_main_chat() ->
 
     assert documents_creation_requested("create a document about the latest news about AI")
     assert documents_creation_requested("Make me a document on Q3 revenue")
-    assert documents_creation_requested("build sections on the Iran situation")
+    assert documents_creation_requested("build a report on the Iran situation")
+    assert documents_creation_requested("write me a competitive report")
     # Not a document request.
     assert not documents_creation_requested("what is the capital of France?")
     assert not documents_creation_requested("summarise this document")
@@ -404,9 +405,9 @@ def test_documents_creation_requested_detects_a_french_document_brief() -> None:
     from naas_abi.agents.documents.policy import documents_creation_requested
 
     assert documents_creation_requested(
-        "fais des sections sur les matériaux de construction"
+        "fais un rapport de la concurrence entre les cabinets"
     )
-    assert documents_creation_requested("crée une document sur Saint-Gobain")
+    assert documents_creation_requested("crée un document sur Saint-Gobain")
     assert documents_creation_requested("prépare un document sur l'hydrogène vert")
     # Not a document request.
     assert not documents_creation_requested("quelle est la capitale de la France ?")
@@ -852,7 +853,7 @@ def test_bind_documents_research_policy_resets_the_read_budget() -> None:
         bind_documents_research_policy(
             "adapt this document for Sanofi",
             has_prior_assistant=True,
-            client_context={"sections": {"slug": "untitled-mtsqs99k"}},
+            client_context={"documents": {"slug": "untitled-mtsqs99k"}},
         )
         assert documents_list_calls.get() == 0
         assert documents_section_read_indexes.get() == []

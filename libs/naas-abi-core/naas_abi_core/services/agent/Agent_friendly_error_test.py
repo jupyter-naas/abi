@@ -1,6 +1,11 @@
 from naas_abi_core.services.agent.Agent import _friendly_model_invoke_error
 from naas_abi_core.services.agent.context import (
+    DOCUMENTS_RECURSION_LIMIT,
     SLIDES_RECURSION_LIMIT,
+    documents_active_slug,
+    documents_research_queries,
+    documents_writes_completed,
+    note_documents_write,
     note_slides_write,
     slides_active_slug,
     slides_research_queries,
@@ -92,3 +97,37 @@ def test_friendly_model_invoke_error_recursion_names_finished_writes() -> None:
         slides_active_slug.reset(tokens[0])
         slides_writes_completed.reset(tokens[1])
         slides_research_queries.reset(tokens[2])
+
+
+def test_friendly_model_invoke_error_context_window_on_documents() -> None:
+    token = documents_active_slug.set("untitled-mtsg9zse")
+    try:
+        raw = (
+            "Error code: 400 - ContextWindowExceededError: maximum context length"
+        )
+        text = _friendly_model_invoke_error(Exception(raw))
+        assert "list_document_sections" in text
+        assert "read_file" in text
+    finally:
+        documents_active_slug.reset(token)
+
+
+def test_friendly_model_invoke_error_recursion_names_finished_document_writes() -> None:
+    tokens = (
+        documents_active_slug.set("untitled-mtrxak0l"),
+        documents_writes_completed.set(None),
+        documents_research_queries.set(None),
+    )
+    try:
+        note_documents_write("section 1")
+        note_documents_write("section 2")
+        documents_research_queries.set(["iran 2026", "hormuz"])
+        text = _friendly_model_invoke_error(Exception("Recursion limit of 80 reached."))
+        assert f"{DOCUMENTS_RECURSION_LIMIT}-step limit" in text
+        assert "Finished: 2 web searches; wrote section 1, section 2." in text
+        assert "The remaining sections were not written." in text
+        assert "send the brief again" not in text
+    finally:
+        documents_active_slug.reset(tokens[0])
+        documents_writes_completed.reset(tokens[1])
+        documents_research_queries.reset(tokens[2])

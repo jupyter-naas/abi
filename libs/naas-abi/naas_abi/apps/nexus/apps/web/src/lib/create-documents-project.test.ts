@@ -7,6 +7,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 
 import {
   pickDocumentsOfficeAgent,
+  pickPaneOfficeAgent,
   pickWorkspaceDefaultAgent,
 } from './pick-workspace-default-agent';
 import {
@@ -86,6 +87,40 @@ describe('pickDocumentsOfficeAgent', () => {
       class_name: 'acme.office.agents.SheetDocumentsAgent/SheetDocumentsAgent',
     };
     expect(pickDocumentsOfficeAgent([orchestrator, other])?.id).toBe('default');
+  });
+});
+
+describe('pickPaneOfficeAgent', () => {
+  const orchestrator = { id: 'default', enabled: true, isDefault: true, name: 'Bob' };
+  const slides = {
+    id: 'slides',
+    enabled: true,
+    isDefault: false,
+    name: 'Slides',
+    class_name: 'naas_abi.agents.SlidesAgent/SlidesAgent',
+  };
+  const documents = {
+    id: 'documents',
+    enabled: true,
+    isDefault: false,
+    name: 'Documents',
+    class_name: 'naas_abi.agents.DocumentsAgent/DocumentsAgent',
+  };
+
+  it('pins Documents on an open document, not the workspace default', () => {
+    expect(
+      pickPaneOfficeAgent([orchestrator, slides, documents], { onDocuments: true })?.id,
+    ).toBe('documents');
+  });
+
+  it('keeps Slides on an open deck', () => {
+    expect(
+      pickPaneOfficeAgent([orchestrator, slides, documents], { onSlides: true })?.id,
+    ).toBe('slides');
+  });
+
+  it('uses the workspace default off those surfaces', () => {
+    expect(pickPaneOfficeAgent([orchestrator, slides, documents], {})?.id).toBe('default');
   });
 });
 

@@ -127,5 +127,5 @@ def test_abi_get_intents_include_sections_handoff() -> None:
 
     assert sections_intents
     assert "create a document" in values
-    assert "fais des sections" in values
+    assert "fais un rapport" in values
     assert DocumentsAgent.description in {intent.intent_value for intent in sections_intents}

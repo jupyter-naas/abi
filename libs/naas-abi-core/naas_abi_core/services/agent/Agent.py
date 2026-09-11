@@ -57,11 +57,14 @@ from langgraph.graph.message import MessagesState
 from langgraph.types import Command
 from naas_abi_core.engine.context import get_default_event_service
 from naas_abi_core.services.agent.context import (
+    DOCUMENTS_RECURSION_LIMIT,
     SLIDES_RECURSION_LIMIT,
     agent_chat_id,
     agent_user_id,
     agent_workspace_id,
     coder_workspace_base,
+    documents_step_limit_message,
+    documents_turn_active,
     slides_step_limit_message,
     slides_turn_active,
 )
@@ -130,6 +133,8 @@ def _friendly_model_invoke_error(exc: BaseException) -> str:
     if "recursion limit" in lowered:
         if slides_turn_active():
             return slides_step_limit_message()
+        if documents_turn_active():
+            return documents_step_limit_message()
         return (
             "The agent hit its step limit before finishing. "
             "Try a smaller request, or continue from what already landed."
@@ -153,6 +158,12 @@ def _friendly_model_invoke_error(exc: BaseException) -> str:
                 "This deck is too large to load in one read. "
                 "Use list_slides_sections and write_slides_sections; "
                 "do not read_file the whole deck.html."
+            )
+        if documents_turn_active():
+            return (
+                "This document is too large to load in one read. "
+                "Use list_document_sections and write_document_sections; "
+                "do not read_file the whole document.html."
             )
         return (
             "This request exceeded the model's context window. "
@@ -2238,12 +2249,14 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         stream_config: RunnableConfig = {
             "configurable": {"thread_id": self._state.thread_id}
         }
-        # Default LangGraph limit is 25. A slides turn (search, then one
-        # batched deck write) needs more. 160 is the slides-specific budget
-        # (see SLIDES_RECURSION_LIMIT). This also covers a deck requested from
-        # the main chat, where no deck is open yet at the start of the turn.
+        # Default LangGraph limit is 25. A slides or documents turn (search,
+        # then one batched write) needs more. 160 is the office-agent budget.
+        # This also covers a deck or document requested from the main chat,
+        # where no file is open yet at the start of the turn.
         if slides_turn_active():
             stream_config["recursion_limit"] = SLIDES_RECURSION_LIMIT
+        elif documents_turn_active():
+            stream_config["recursion_limit"] = DOCUMENTS_RECURSION_LIMIT
         for chunk in self.graph.stream(
             {"messages": [human_message]},
             config=stream_config,

@@ -26,7 +26,7 @@ class _NoopEmbeddings(Embeddings):
         return [0.0]
 
 
-DOCUMENTS_GUIDELINES = """- When the user asks for a document, document, or sections and no document is open (the ordinary chat surface, no open-document context), call create_documents_project first with a short human title taken from their brief. That creates the document, seeds the template, and makes it the document you edit. Then follow the research loop below and write the documents. Never reply that they should open Documents first, and never ask which document to edit.
+DOCUMENTS_GUIDELINES = """- When the user asks for a document, report, or article and no document is open (the ordinary chat surface, no open-document context), call create_documents_project first with a short human title taken from their brief. That creates the document, seeds the template, and makes it the document you edit. Then follow the research loop below and write the document. Never reply that they should open Documents first, and never ask which document to edit.
 - Name the document after its topic, in the same language as the brief: "fais des sections sur les materiaux de construction" gives "Materiaux de construction", not "Untitled document" and not the whole sentence. Keep it 3 to 8 words with no leading article. That name is what the user sees in the sidebar tree, on the chat card, and in the document URL, so it has to read like a title. Put the same title in the cover h1 when you write section 1.
 - Never call create_documents_project when a document is already open. Edit the open document instead.
 - You edit the open document HTML only (Coder workspace files via sidecar when available; Forgejo for version history). Preview is that HTML. PDF is an export reconstructed from the live .section DOM at 816px prose. Do not edit buildPptx, FOOTER_TXT, or other script strings.
@@ -57,17 +57,19 @@ DOCUMENTS_GUIDELINES = """- When the user asks for a document, document, or sect
 
 _HANDOFF_PHRASES = (
     "create a document",
-    "create a document",
-    "make sections",
-    "build sections",
     "write a document",
-    "fais des sections",
-    "crée une document",
-    "crée une document",
+    "write a report",
+    "create a report",
+    "make a report",
+    "draft a document",
+    "fais un rapport",
+    "fais-moi un rapport",
+    "fais moi un rapport",
+    "crée un document",
     "prépare un document",
     "prepare un document",
-    "monte un document",
-    "rédige une document",
+    "rédige un rapport",
+    "rédige un document",
 )
 
 
@@ -83,7 +85,7 @@ class DocumentsAgent(IntentAgent):
     name: str = "Documents"
     description: str = (
         "Office agent for Nexus Documents. Creates and edits documents and "
-        "documents. Researches with web_search, then writes document.html. "
+        "reports. Researches with web_search, then writes document.html. "
         "HTML is the live source; PDF is export from the DOM."
     )
     logo_url: str = (
@@ -104,13 +106,13 @@ Your step budget is finite ({DOCUMENTS_RECURSION_LIMIT} graph steps). Plan, then
 </context>
 
 <tasks>
-1. If no document is open and the user asked for a document, document, or sections, call create_documents_project first, then research, then write.
+1. If no document is open and the user asked for a document, report, or article, call create_documents_project first, then research, then write.
 2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (2 to 4 queries), then list_document_sections once, then write the whole document in one write_document_sections or write_document.
 3. If the brief is a tiny copy edit, inspect the open section and use replace_in_document.
 4. After writes, report what changed in the open document. Do not claim Preview updated unless the tool result confirms it. Do not re-read the document to check.
 </tasks>
 
-<sections_guidelines>
+<documents_guidelines>
 {DOCUMENTS_GUIDELINES}
 </documents_guidelines>
 
