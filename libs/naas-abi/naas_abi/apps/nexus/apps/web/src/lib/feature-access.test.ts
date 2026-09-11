@@ -224,6 +224,8 @@ describe('pathNeedsAgentCatalog', () => {
     expect(pathNeedsAgentCatalog('/workspace/ws1/chat/conv-1')).toBe(true);
     expect(pathNeedsAgentCatalog('/workspace/ws1/settings/agents')).toBe(true);
     expect(pathNeedsAgentCatalog('/workspace/ws1/lab')).toBe(false);
+    expect(pathNeedsAgentCatalog('/workspace/ws1/slides')).toBe(true);
+    expect(pathNeedsAgentCatalog('/workspace/ws1/documents/untitled-1')).toBe(true);
   });
 
   it('is false on apps and other sections', () => {

@@ -179,7 +179,12 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
 /** Surfaces that need the agent catalog (chat and agent settings). Apps does not. */
 export function pathNeedsAgentCatalog(pathname: string | null | undefined): boolean {
   const feature = getFeatureForWorkspacePath(pathname || '');
-  return feature === 'chat' || feature === 'agents';
+  return (
+    feature === 'chat' ||
+    feature === 'agents' ||
+    feature === 'slides' ||
+    feature === 'documents'
+  );
 }
 
 /** Graph export toasts are only meaningful on graph routes. */

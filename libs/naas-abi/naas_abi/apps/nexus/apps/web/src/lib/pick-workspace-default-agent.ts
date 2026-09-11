@@ -46,7 +46,7 @@ type DocumentsOfficeAgent = {
   class_name?: string | null;
 };
 
-function isNexusDocumentsAgent(agent: DocumentsOfficeAgent): boolean {
+export function isNexusDocumentsAgent(agent: DocumentsOfficeAgent): boolean {
   if (agent.name === 'Documents') return true;
   const className = agent.class_name ?? '';
   return className.endsWith('/DocumentsAgent') && className.includes('naas_abi');
@@ -67,7 +67,7 @@ export function pickPaneOfficeAgent<
   agents: T[],
   surface: { onSlides?: boolean; onDocuments?: boolean },
 ): T | undefined {
-  if (surface.onSlides) return pickSlidesOfficeAgent(agents);
   if (surface.onDocuments) return pickDocumentsOfficeAgent(agents);
+  if (surface.onSlides) return pickSlidesOfficeAgent(agents);
   return pickWorkspaceDefaultAgent(agents);
 }

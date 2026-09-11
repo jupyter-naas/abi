@@ -122,6 +122,15 @@ describe('pickPaneOfficeAgent', () => {
   it('uses the workspace default off those surfaces', () => {
     expect(pickPaneOfficeAgent([orchestrator, slides, documents], {})?.id).toBe('default');
   });
+
+  it('prefers Documents when both office surfaces claim a slug', () => {
+    expect(
+      pickPaneOfficeAgent([orchestrator, slides, documents], {
+        onSlides: true,
+        onDocuments: true,
+      })?.id,
+    ).toBe('documents');
+  });
 });
 
 describe('openDocumentsAgentPane', () => {

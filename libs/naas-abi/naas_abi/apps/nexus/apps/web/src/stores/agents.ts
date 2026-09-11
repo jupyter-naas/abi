@@ -254,13 +254,27 @@ export const useAgentsStore = create<AgentsState>()(
             // Right AI pane pins the workspace default unless the user picked
             // another agent still in this workspace. A leftover id from
             // another workspace must not stick.
-            const { pickPaneOfficeAgent } = await import(
+            const { isNexusDocumentsAgent, pickPaneOfficeAgent } = await import(
               '@/lib/pick-workspace-default-agent'
             );
             const { useSlidesStore } = await import('./slides');
             const { useDocumentsStore } = await import('./documents');
-            const onSlides = Boolean(useSlidesStore.getState().selectedSlug);
-            const onDocuments = Boolean(useDocumentsStore.getState().selectedSlug);
+            const path =
+              typeof window !== 'undefined' ? window.location.pathname : '';
+            const onDocuments =
+              path.includes('/documents') &&
+              Boolean(useDocumentsStore.getState().selectedSlug);
+            // A leftover slides slug must not steal the Documents pane.
+            const onSlides =
+              !onDocuments && Boolean(useSlidesStore.getState().selectedSlug);
+            if (
+              onDocuments &&
+              !force &&
+              !formattedAgents.some((agent) => agent.enabled && isNexusDocumentsAgent(agent))
+            ) {
+              await get().fetchAgents(workspaceId, true);
+              return;
+            }
             const panePreferred =
               pickPaneOfficeAgent(formattedAgents, { onSlides, onDocuments }) ??
               preferred;
