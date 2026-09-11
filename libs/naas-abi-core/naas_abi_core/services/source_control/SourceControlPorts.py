@@ -64,10 +64,14 @@ class FileContent:
 
 @dataclass(frozen=True)
 class FileWrite:
-    """One path to create or replace in a tree write."""
+    """One path to create or replace in a tree write, or to remove (``delete``).
+
+    A delete of a path that does not exist is a no-op.
+    """
 
     path: str
     content: str | bytes
+    delete: bool = False
 
 
 @dataclass(frozen=True)

@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from naas_abi.apps.nexus.apps.api.app.api.router import api_router
 from naas_abi.apps.nexus.apps.api.app.core.config import settings, validate_settings_on_startup
 from naas_abi.apps.nexus.apps.api.app.core.database import init_db
+from naas_abi.apps.nexus.apps.api.app.core.frame_headers import embed_csp, is_embeddable
 from naas_abi.apps.nexus.apps.api.app.core.logging import configure_logging
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_worker import (
     start_chat_ingestion_consumer,
@@ -334,8 +335,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             # Prevent MIME type sniffing
             response.headers["X-Content-Type-Options"] = "nosniff"
 
-            # Prevent clickjacking — allow /app-html/ assets to be embedded in iframes
-            if request.url.path.startswith("/app-html/"):
+            # Prevent clickjacking — allow /app-html/ and /app-preview/ assets
+            # to be embedded in iframes.
+            embeddable = is_embeddable(request.url.path)
+            if embeddable:
                 ancestors = ["'self'"]
                 frontend = str(getattr(settings, "frontend_url", "") or "").rstrip("/")
                 if frontend:
@@ -357,8 +360,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                             ancestors.append(ref_origin)
                     except Exception:
                         pass
-                response.headers["Content-Security-Policy"] = (
-                    f"frame-ancestors {' '.join(ancestors)};"
+                response.headers["Content-Security-Policy"] = embed_csp(
+                    response.headers.get("Content-Security-Policy"), ancestors
                 )
             else:
                 response.headers["X-Frame-Options"] = "DENY"
@@ -375,8 +378,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                     "max-age=31536000; includeSubDomains"
                 )
 
-            # CSP (if configured) — skip bundled app HTML; embed CSP set above.
-            if not request.url.path.startswith("/app-html/"):
+            # CSP (if configured) — skip bundled and preview app HTML; embed CSP set above.
+            if not embeddable:
                 if settings.content_security_policy:
                     response.headers["Content-Security-Policy"] = settings.content_security_policy
                 elif settings.environment == "production":
@@ -538,6 +541,13 @@ def _register_routes(app: FastAPI) -> None:
     app.add_api_route("/api/ollama/pull", ollama_pull_model, methods=["POST"])
     app.add_api_route("/api/ollama/ensure-ready", ollama_ensure_ready, methods=["POST"])
     app.add_api_route("/app-html/{path:path}", serve_app_html, methods=["GET"])
+    from naas_abi.apps.nexus.apps.api.app.services.apps.projects.adapters.primary.app_projects__primary_adapter__FastAPI import (
+        redirect_app_preview_root,
+        serve_app_preview,
+    )
+
+    app.add_api_route("/app-preview/{token}/{path:path}", serve_app_preview, methods=["GET"])
+    app.add_api_route("/app-preview/{token}", redirect_app_preview_root, methods=["GET"])
     app.add_api_route("/provider-logos/{provider_id}", serve_provider_logo, methods=["GET"])
 
 

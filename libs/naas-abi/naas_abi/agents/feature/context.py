@@ -25,6 +25,8 @@ _MAX_PATH = 512
 _MAX_KIND = 64
 _MAX_ID = 512
 _MAX_LABEL = 200
+_MAX_ERRORS = 5
+_MAX_ERROR = 300
 
 nexus_feature_context: ContextVar[dict[str, Any] | None] = ContextVar(
     "nexus_feature_context", default=None
@@ -60,6 +62,18 @@ def normalize_feature_context(client_context: object) -> dict[str, Any] | None:
             if label:
                 item["label"] = label
             out["resource"] = item
+    # Recent runtime errors of the open item (the Apps preview reports them).
+    raw_errors = raw.get("errors")
+    if isinstance(raw_errors, list):
+        errors = [
+            cleaned
+            for cleaned in (
+                _clean(e, _MAX_ERROR) for e in raw_errors if isinstance(e, str)
+            )
+            if cleaned
+        ][:_MAX_ERRORS]
+        if errors:
+            out["errors"] = errors
     return out
 
 
@@ -79,6 +93,12 @@ def active_feature_resource_id(kind: str) -> str | None:
     return str(resource.get("id") or "").strip() or None
 
 
+def active_feature_errors() -> list[str]:
+    """Runtime errors the open item reported (newest last), else ``[]``."""
+    ctx = nexus_feature_context.get() or {}
+    return list(ctx.get("errors") or [])
+
+
 def render_feature_context_block(client_context: object) -> str:
     """Prompt block naming the open feature and item, or ``""``."""
     ctx = normalize_feature_context(client_context)
@@ -93,6 +113,8 @@ def render_feature_context_block(client_context: object) -> str:
         lines.append(f"- open_{kind}_id: {resource['id']}")
         if resource.get("label"):
             lines.append(f"- open_{kind}_label: {resource['label']}")
+    for error in ctx.get("errors") or []:
+        lines.append(f"- preview_error: {error}")
     return (
         "\n\n## Open Nexus feature\n"
         "The user opened the chat pane on this Nexus feature. Answer about this "

@@ -111,6 +111,28 @@ COMPETENCY_QUESTIONS: dict[str, tuple[CompetencyQuestion, ...]] = {
             "operate",
             terms=("activ", "enable"),
         ),
+        _q(
+            "Can I build my own app in Nexus Apps? How does it work?",
+            "capabilities",
+            terms=("preview", "editor", "éditeur"),
+        ),
+        _q(
+            "In the Nexus Apps editor, how is the live preview kept away from the Nexus session? Read the code and cite the files.",
+            "implementation",
+            SOURCE_TOOLS,
+            ("sandbox",),
+        ),
+        _q(
+            "List the app projects of this Nexus workspace.",
+            "operate",
+            ("list_app_projects",),
+            ("project", "projet", "no app", "none"),
+        ),
+        _q(
+            "Comment modifier une app existante d'un module dans Nexus ? Explique seulement, ne crée rien.",
+            "other",
+            terms=("copie", "copy", "dupli"),
+        ),
     ),
     "Marketplace": (
         _q(

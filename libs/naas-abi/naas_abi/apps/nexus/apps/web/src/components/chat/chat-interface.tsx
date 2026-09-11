@@ -24,6 +24,7 @@ import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
 import { dispatchSlidesDeckUpdated, isSlidesWriteTool, useSlidesStore } from '@/stores/slides';
+import { noteAppProjectToolResult, noteAppProjectToolStart } from '@/stores/app-projects';
 import {
   slidesDeckCardFromToolCalls,
   slidesDeckTitleFromToolOutput,
@@ -2183,6 +2184,7 @@ export function ChatInterface({
           if (isSlidesWriteTool(rawTool)) {
             useSlidesStore.getState().setAgentWriting(true);
           }
+          noteAppProjectToolStart(rawTool);
         };
 
         const handleToolResponseEvent = (output: string) => {
@@ -2232,6 +2234,8 @@ export function ChatInterface({
           ) {
             dispatchCodeFileUpdated({ source: target.rawName || target.toolName });
           }
+          // After the Apps agent edits a project, reload the editor and preview.
+          noteAppProjectToolResult(target.rawName || target.toolName || '', output);
 
           const toolUrls = extractUrlsFromContent(output);
           if (toolUrls.length > 0) {

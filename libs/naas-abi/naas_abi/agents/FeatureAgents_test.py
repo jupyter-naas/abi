@@ -265,3 +265,33 @@ def test_abi_budget_covers_a_handoff_that_reads_code() -> None:
 @pytest.mark.parametrize("spec", GENERIC, ids=_ids)
 def test_agent_knows_its_roster_line(spec: FeatureAgentSpec) -> None:
     assert f'"naas_abi {spec.class_name}"' in spec.load().system_prompt
+
+
+def test_app_builder_write_tools_match_the_web_list() -> None:
+    """The editor refreshes after exactly these tools (isAppProjectWriteTool)."""
+    from naas_abi.agents.tools.app_builder_tools import (
+        APP_PROJECT_WRITE_TOOLS,
+        app_builder_tools,
+    )
+
+    names = {t.name for t in app_builder_tools()}
+    assert set(APP_PROJECT_WRITE_TOOLS) <= names
+    web = WEB_ROOT / "src/lib/app-projects.ts"
+    if not web.is_file():
+        pytest.skip("web sources not shipped")
+    block = web.read_text(encoding="utf-8").split("APP_PROJECT_WRITE_TOOLS = [", 1)[1]
+    listed = set(re.findall(r"'([a-z_]+)'", block.split("]", 1)[0]))
+    assert listed == set(APP_PROJECT_WRITE_TOOLS)
+
+
+def test_apps_agent_builds_apps() -> None:
+    from naas_abi.agents.AppsAgent import AppsAgent
+
+    names = {t.name for t in AppsAgent.get_tools()}
+    assert {
+        "create_app_project",
+        "edit_module_app",
+        "write_app_file",
+        "check_app",
+    } <= names
+    assert "<app_building>" in AppsAgent.system_prompt

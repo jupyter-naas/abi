@@ -163,6 +163,28 @@ describe('featureChatContext', () => {
     });
   });
 
+  it('sends the open app project and its recent preview errors', () => {
+    const editor = '/workspace/ws-1/apps/p/budget-tracker';
+    expect(getPaneSurfaceForPath(editor)).toBe('apps');
+    const errors = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6'];
+    expect(
+      featureChatContext(editor, {
+        feature: 'apps',
+        kind: 'app_project',
+        id: 'budget-tracker',
+        label: 'Budget Tracker',
+        errors,
+      }),
+    ).toEqual({
+      feature: {
+        key: 'apps',
+        path: editor,
+        resource: { kind: 'app_project', id: 'budget-tracker', label: 'Budget Tracker' },
+        errors: errors.slice(-5),
+      },
+    });
+  });
+
   it('sends the section alone when nothing is open', () => {
     expect(featureChatContext(path, null)).toEqual({ feature: { key: 'apps', path } });
   });

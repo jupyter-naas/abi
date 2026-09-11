@@ -452,6 +452,17 @@ class Settings(BaseSettings):
     # HMAC secret for opening Cloudflare Pages portals from Nexus (empty = off).
     pages_sso_secret: str = ""
     pages_sso_expire_seconds: int = Field(default=300, ge=30, le=15 * 60)
+    # Apps builder: "Submit" sends an app project to its source repository
+    # (GitHub owner/name) as a review branch. Off unless both the repo and
+    # APPS_SUBMIT_TOKEN (env only, never in config files) are set.
+    apps_submit_repo: str = ""
+    apps_submit_base_branch: str = "main"
+    apps_submit_token: str = ""
+    apps_submit_open_pull_request: bool = True
+    apps_submit_api_base: str = "https://api.github.com"
+    apps_submit_web_base: str = "https://github.com"
+    # Lifetime of an /app-preview/ token (the editor re-mints on reload).
+    app_preview_token_expire_minutes: int = Field(default=60, ge=1, le=24 * 60)
     magic_link_expire_minutes: int = 15
     magic_link_max_active: int = 5
     magic_link_path: str = "/auth/magic-link"

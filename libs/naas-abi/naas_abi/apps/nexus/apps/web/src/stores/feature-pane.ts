@@ -34,10 +34,18 @@ export function usePublishFeatureResource(resource: FeatureResource | null): voi
   const kind = resource?.kind;
   const id = resource?.id;
   const label = resource?.label;
+  const errorsKey = JSON.stringify(resource?.errors ?? []);
   useEffect(() => {
     if (!feature || !kind || !id) return;
-    const published: FeatureResource = { feature, kind, id, ...(label ? { label } : {}) };
+    const errors = JSON.parse(errorsKey) as string[];
+    const published: FeatureResource = {
+      feature,
+      kind,
+      id,
+      ...(label ? { label } : {}),
+      ...(errors.length ? { errors } : {}),
+    };
     useFeaturePaneStore.getState().setResource(published);
     return () => useFeaturePaneStore.getState().clearResource(published);
-  }, [feature, kind, id, label]);
+  }, [feature, kind, id, label, errorsKey]);
 }

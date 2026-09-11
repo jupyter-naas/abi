@@ -19,6 +19,9 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints import (
     websocket,
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents.handlers import router as agents_router
+from naas_abi.apps.nexus.apps.api.app.services.apps.projects.handlers import (
+    router as app_projects_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.apps.handlers import router as apps_router
 from naas_abi.apps.nexus.apps.api.app.services.auth.handlers import router as auth_router
 from naas_abi.apps.nexus.apps.api.app.services.chat.handlers import router as chat_router
@@ -71,6 +74,7 @@ api_router.include_router(agents_router, prefix="/agents", tags=["agents"])
 api_router.include_router(skills_router, prefix="/skills", tags=["skills"])
 api_router.include_router(modules_router, prefix="/modules", tags=["modules"])
 api_router.include_router(apps_router, prefix="/apps", tags=["apps"])
+api_router.include_router(app_projects_router, prefix="/app-projects", tags=["app-projects"])
 api_router.include_router(files_router, prefix="/files", tags=["files"])
 api_router.include_router(datasets_router, prefix="/datasets", tags=["datasets"])
 api_router.include_router(secrets.router, prefix="/secrets", tags=["secrets"])

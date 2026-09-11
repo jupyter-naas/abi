@@ -317,6 +317,26 @@ def apps_catalog() -> tuple[AppInfo, ...]:
     return _scan_apps_catalog()
 
 
+def module_app_dir(app_id: str) -> Path | None:
+    """Folder on disk of a catalog app (``<module_path>:<app_name>``).
+
+    Read from the browser asset map, so a module that reshapes discovery
+    (Bob's nested ``apps/<library>/<name>``) resolves like the Apps page.
+    App projects use it to copy a module app ("Edit").
+    """
+    module_path, sep, app_name = app_id.partition(":")
+    if not sep or not module_path or not app_name:
+        return None
+    key = f"{module_path.replace('.', '/')}/{app_name}/manifest.json"
+    found = _scan_apps_html_paths().get(key)
+    return Path(found).parent if found else None
+
+
+def loaded_modules() -> list[Any]:
+    """Every loaded module, root ABIModule first (the catalog's discovery order)."""
+    return list(_iter_loaded_modules())
+
+
 def _app_exists(app_id: str) -> bool:
     return any(a.app_id == app_id for a in _scan_apps_catalog())
 

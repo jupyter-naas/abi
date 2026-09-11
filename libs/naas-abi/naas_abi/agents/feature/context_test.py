@@ -1,6 +1,7 @@
 import contextvars
 
 from naas_abi.agents.feature.context import (
+    active_feature_errors,
     active_feature_resource_id,
     bind_feature_context,
     nexus_feature_context,
@@ -80,3 +81,42 @@ def test_render_names_the_feature_and_open_item() -> None:
 
 def test_render_is_empty_without_feature() -> None:
     assert render_feature_context_block({"coding": {"repo_id": "a/b"}}) == ""
+
+
+PROJECT_OPEN = {
+    "feature": {
+        "key": "apps",
+        "resource": {"kind": "app_project", "id": "budget-tracker", "label": "Budget"},
+        "errors": [
+            "TypeError: x is undefined (app.js:3)",
+            "ignored: not a string" and 42,
+            "line\nbreak " + "y" * 400,
+            "4",
+            "5",
+            "6",
+        ],
+    }
+}
+
+
+def test_preview_errors_are_kept_short_and_capped() -> None:
+    ctx = normalize_feature_context(PROJECT_OPEN)
+    assert ctx is not None
+    errors = ctx["errors"]
+    assert errors[0] == "TypeError: x is undefined (app.js:3)"
+    assert all(isinstance(e, str) and "\n" not in e and len(e) <= 300 for e in errors)
+    assert len(errors) == 5
+    assert "errors" not in (normalize_feature_context(APPS_OPEN) or {})
+
+
+def test_active_errors_and_render_show_the_preview_errors() -> None:
+    def _run() -> None:
+        bind_feature_context(PROJECT_OPEN)
+        assert active_feature_errors()[0].startswith("TypeError")
+        bind_feature_context(APPS_OPEN)
+        assert active_feature_errors() == []
+
+    contextvars.copy_context().run(_run)
+    block = render_feature_context_block(PROJECT_OPEN)
+    assert "- open_app_project_id: budget-tracker" in block
+    assert "- preview_error: TypeError: x is undefined (app.js:3)" in block

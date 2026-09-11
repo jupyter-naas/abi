@@ -5,7 +5,7 @@ import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
 import { appsPath, nextAppsRestoreUrl, shouldSkipAppsRestore } from './lib/apps-route';
 import {
-  AppWindow, ArrowLeft, ExternalLink, RefreshCw, AlertTriangle, Info,
+  AppWindow, ArrowLeft, ExternalLink, RefreshCw, AlertTriangle, Info, Pencil, Plus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isBundledAppHtmlUrl, resolveAppEmbedUrl, resolveAppExternalUrl, appHtmlPathPrefix, pagesSsoAudience, withAppHtmlAccessToken, withPagesSsoToken } from '@/lib/app-html';
@@ -14,6 +14,8 @@ import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { usePublishFeatureResource } from '@/stores/feature-pane';
+import { usePrompt } from '@/components/ui/dialogs';
+import { appEditorPath, appProjectsApi, type AppProject } from '@/lib/app-projects';
 import { ViewBar } from './components/view-bar';
 import { DatabaseBody } from './components/views';
 import { useAppViews } from './components/use-app-views';
@@ -26,7 +28,16 @@ import {
 // Embed view
 // ---------------------------------------------------------------------------
 
-function EmbedView({ record, onBack }: { record: AppRecord; onBack: () => void }) {
+function EmbedView({
+  record,
+  onBack,
+  onEdit,
+}: {
+  record: AppRecord;
+  onBack: () => void;
+  /** Module apps only: duplicate into an app project and open the editor. */
+  onEdit?: () => void;
+}) {
   const url = record.url;
   const baseEmbedUrl = useMemo(() => resolveAppEmbedUrl(url), [url]);
   const [embedUrl, setEmbedUrl] = useState<string | null>(
@@ -172,6 +183,17 @@ function EmbedView({ record, onBack }: { record: AppRecord; onBack: () => void }
         }
         actions={
           <>
+            {onEdit && (
+              <button
+                type="button"
+                onClick={onEdit}
+                title="Edit a copy of this app in the Apps editor"
+                className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-all hover:bg-muted hover:text-foreground"
+              >
+                <Pencil size={14} />
+                Edit
+              </button>
+            )}
             <button
               type="button"
               onClick={toggleDetail}
@@ -287,6 +309,46 @@ function EmptyState({ filtered }: { filtered: boolean }) {
 }
 
 // ---------------------------------------------------------------------------
+// App projects (built or copied in Nexus)
+// ---------------------------------------------------------------------------
+
+function AppProjectsStrip({ projects, onOpen }: { projects: AppProject[]; onOpen: (p: AppProject) => void }) {
+  if (!projects.length) return null;
+  return (
+    <section className="mb-6">
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        App projects
+      </h2>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-2">
+        {projects.map((project) => (
+          <button
+            key={project.slug}
+            type="button"
+            onClick={() => onOpen(project)}
+            className="flex items-start gap-2 border border-border bg-background p-3 text-left transition-colors hover:border-workspace-accent/50 hover:bg-muted/40"
+          >
+            <span className="text-lg leading-none">{project.icon_emoji || '✨'}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-foreground">{project.title}</span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {project.submission
+                  ? `Submitted · ${project.submission.branch}`
+                  : project.origin
+                    ? `Copy of ${project.origin.app_id}`
+                    : 'Built in Nexus'}
+              </span>
+            </span>
+            {project.dirty && (
+              <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-500" title="Unsaved changes" />
+            )}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -303,8 +365,42 @@ export default function AppsPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeApp, setActiveApp] = useState<AppRecord | null>(null);
   const [search, setSearch] = useState('');
+  const [projects, setProjects] = useState<AppProject[]>([]);
+  const [projectError, setProjectError] = useState<string | null>(null);
+  const { prompt, dialog: promptDialog } = usePrompt();
 
   const views = useAppViews(urlWorkspaceId);
+
+  // App projects need git storage; without it the section stays hidden.
+  useEffect(() => {
+    if (!urlWorkspaceId) return;
+    appProjectsApi.list(urlWorkspaceId).then(setProjects).catch(() => setProjects([]));
+  }, [urlWorkspaceId]);
+
+  const handleNewApp = async () => {
+    const title = await prompt({
+      title: 'New app',
+      description: 'A static app (HTML, CSS, JavaScript) you build with the Apps agent.',
+      placeholder: 'Budget tracker',
+      confirmLabel: 'Create',
+    });
+    if (!title) return;
+    try {
+      const created = await appProjectsApi.create(urlWorkspaceId, title.trim());
+      router.push(appEditorPath(urlWorkspaceId, created.slug));
+    } catch (e) {
+      setProjectError((e as Error).message);
+    }
+  };
+
+  const handleEditModuleApp = async (record: AppRecord) => {
+    try {
+      const copy = await appProjectsApi.importModuleApp(urlWorkspaceId, record.id);
+      router.push(appEditorPath(urlWorkspaceId, copy.slug));
+    } catch (e) {
+      setProjectError((e as Error).message);
+    }
+  };
 
   // The open app rides into the right chat pane: the Apps agent binds and its
   // tools default to this app (no "which app?").
@@ -419,7 +515,16 @@ export default function AppsPage() {
   if (activeApp) {
     return (
       <div className="flex h-full flex-col">
-        <EmbedView record={activeApp} onBack={handleClose} />
+        {projectError && (
+          <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-600">
+            {projectError}
+          </div>
+        )}
+        <EmbedView
+          record={activeApp}
+          onBack={handleClose}
+          onEdit={activeApp.source === 'module' ? () => void handleEditModuleApp(activeApp) : undefined}
+        />
       </div>
     );
   }
@@ -428,7 +533,27 @@ export default function AppsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <Header title="Apps" subtitle="Your installed and configured apps" />
+      <Header
+        title="Apps"
+        subtitle="Your installed and configured apps"
+        actions={
+          <button
+            type="button"
+            onClick={() => void handleNewApp()}
+            title="Build a new app with the Apps agent"
+            className="flex h-8 items-center gap-1.5 rounded-md bg-workspace-accent px-2.5 text-xs font-semibold text-white transition-colors hover:bg-workspace-accent/90"
+          >
+            <Plus size={14} />
+            New app
+          </button>
+        }
+      />
+      {promptDialog}
+      {projectError && (
+        <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-600">
+          {projectError}
+        </div>
+      )}
 
       <ViewBar
         api={views}
@@ -450,6 +575,10 @@ export default function AppsPage() {
               Failed to load: {error}
             </div>
           )}
+          <AppProjectsStrip
+            projects={projects}
+            onOpen={(project) => router.push(appEditorPath(urlWorkspaceId, project.slug))}
+          />
           {isEmpty && <EmptyState filtered={records.length > 0} />}
           {!loading && !error && visibleCount > 0 && (
             <DatabaseBody view={view} groups={groups} onOpen={handleOpen} />

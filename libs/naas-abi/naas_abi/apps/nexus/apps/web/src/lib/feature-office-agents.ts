@@ -68,6 +68,8 @@ export type FeatureResource = {
   kind: string;
   id: string;
   label?: string;
+  /** Recent runtime errors of the open item (the Apps editor preview). */
+  errors?: string[];
 };
 
 function decode(segment: string | undefined): string {
@@ -122,6 +124,7 @@ export type FeatureChatContext = {
     key: FeatureKey;
     path: string;
     resource?: { kind: string; id: string; label?: string };
+    errors?: string[];
   };
 };
 
@@ -143,5 +146,6 @@ export function featureChatContext(
   const resource = open
     ? { kind: open.kind, id: open.id, ...(open.label ? { label: open.label } : {}) }
     : undefined;
-  return { feature: { key, path, ...(resource ? { resource } : {}) } };
+  const errors = open?.errors?.length ? { errors: open.errors.slice(-5) } : {};
+  return { feature: { key, path, ...(resource ? { resource } : {}), ...errors } };
 }
