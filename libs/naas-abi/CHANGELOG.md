@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.67.0 (2026-09-11)
+
+### Bug Fixes
+
+- **lint**: Sort apply_nexus_platform_pipeline_test imports
+  ([`8f28056`](https://github.com/jupyter-naas/abi/commit/8f280561fa4e21bc9eb234b8b737bb255ce50158))
+
+
 ## v2.66.1 (2026-09-10)
 
 ### Bug Fixes

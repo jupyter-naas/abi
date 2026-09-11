@@ -4,9 +4,9 @@ import { usePathname } from 'next/navigation';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { Header } from '@/components/shell/header';
 
-// Service embeds want the full content area (width and height) instead of
+// Service embeds and architecture visualization use the full content area instead of
 // the centered card layout every other settings page uses.
-const FULL_PAGE_PATTERN = /\/settings\/services\/[^/]+$/;
+const FULL_PAGE_PATTERN = /\/settings\/(?:services\/[^/]+|infrastructure)$/;
 
 export default function SettingsLayout({
   children,
@@ -21,10 +21,10 @@ export default function SettingsLayout({
 
   return (
     <div className="flex h-full flex-col">
-      <Header
+      {!pathname?.endsWith('/settings/infrastructure') && <Header
         title="Settings"
         subtitle={currentWorkspace?.name || 'Configure your workspace'}
-      />
+      />}
 
       {isFullPage ? (
         <div className="flex-1 overflow-hidden">{children}</div>

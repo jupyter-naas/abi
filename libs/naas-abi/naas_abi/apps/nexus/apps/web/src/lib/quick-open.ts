@@ -37,6 +37,7 @@ export const QUICK_OPEN_SECTIONS: readonly QuickOpenSection[] = [
   { id: 'code', label: 'Code', href: '/code', feature: 'code' },
   { id: 'marketplace', label: 'Marketplace', href: '/marketplace', feature: 'marketplace' },
   { id: 'settings', label: 'Settings', href: '/settings', feature: 'settings.workspace' },
+  { id: 'infrastructure', label: 'Infrastructure', href: '/settings/infrastructure', feature: 'settings.workspace' },
 ];
 
 export const QUICK_OPEN_GROUP_LABEL: Record<QuickOpenGroup, string> = {
