@@ -7,10 +7,11 @@ const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'page.tsx
 
 describe('sections editor page', () => {
   it('publishes the outline to the sidebar and keeps section actions on the menus', () => {
-    expect(src).not.toContain('DocumentsOutline');
+    expect(src).not.toContain("from '@/components/documents/documents-filmstrip'");
     expect(src).toContain('setOutline');
     expect(src).toContain('setReorderOpenDocument');
-    expect(src).toContain('onInsertSection');
+    expect(src).toContain('onInsert={insertBlock}');
+    expect(src).toContain('applyDocumentCommands');
     expect(src).toContain('onDuplicateSection');
     expect(src).toContain('onDeleteSection');
     expect(src).toContain('onExportHtml');

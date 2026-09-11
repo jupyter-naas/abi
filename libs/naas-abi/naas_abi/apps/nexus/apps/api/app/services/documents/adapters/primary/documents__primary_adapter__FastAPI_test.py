@@ -112,6 +112,8 @@ def test_seed_template_is_prose_document() -> None:
     assert "min-height: 400px" not in html
     assert "Replace this placeholder" not in html
     assert "816px" in html
+    assert "data-nexus-page-break" in html
+    assert "page-break-before" in html
 
 
 def test_seed_catalog_lists_all_templates() -> None:
@@ -1053,6 +1055,48 @@ def test_section_mutations_insert_delete_duplicate_reorder(monkeypatch) -> None:
     )
     assert document.status_code == 200
     assert "Risks" in document.json()["html"]
+
+
+def test_document_commands_insert_page_break_and_heading(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _sections_client(monkeypatch, sc)
+    created = client.post(
+        "/documents/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Command document",
+            "slug": "command-document",
+            "template_id": "article-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    outline = client.get(
+        "/documents/projects/command-document/outline",
+        params={"workspace_id": "ws-test"},
+    )
+    assert outline.status_code == 200, outline.text
+    titles = [row["title"] for row in outline.json()["outline"]]
+    assert "Document Title" in titles
+    assert outline.json()["heading_count"] >= 2
+
+    applied = client.post(
+        "/documents/projects/command-document/commands",
+        json={
+            "workspace_id": "ws-test",
+            "requests": [
+                {"type": "insert_page_break", "after_heading": 1},
+                {"type": "insert_heading", "after_heading": 1, "title": "Annex", "level": 2},
+            ],
+        },
+    )
+    assert applied.status_code == 200, applied.text
+    body = applied.json()
+    assert body["ok"] is True
+    assert body["applied"] == ["insert_page_break", "insert_heading"]
+    assert "Annex" in (body.get("html") or "")
+    assert "data-nexus-page-break" in (body.get("html") or "")
+    assert any(row.get("title") == "Annex" for row in body["outline"])
 
 
 def test_delete_last_section_is_refused(monkeypatch) -> None:

@@ -36,7 +36,14 @@
     background: transparent;
     min-height: 0;
   }
-  .page + .page { margin-top: 1.75em; }
+  .page-break {
+    break-before: page;
+    page-break-before: always;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
   h1 {
     margin: 0 0 10px;
     font-size: 32px;
@@ -81,20 +88,23 @@
       padding: 0;
       box-shadow: none;
     }
+    .page-break {
+      break-before: page;
+      page-break-before: always;
+    }
   }
 </style>
 </head>
 <body>
 <main class="document">
-  <section class="page cover">
+  <section class="page cover" data-layout="cover">
     <h1>Document Title</h1>
     <p class="deck">A one-line summary the reader can scan before the body.</p>
-  </section>
-  <section class="page content">
     <h2>Introduction</h2>
     <p>State the situation in a few sentences. Write for someone who will read this on a page, not a board: complete thoughts, then the next heading.</p>
   </section>
-  <section class="page content">
+  <section class="page content" data-layout="content">
+    <div class="page-break" data-nexus-page-break></div>
     <h2>Discussion</h2>
     <p>Develop the argument or findings here. Keep paragraphs short. Use a list only when the items are parallel.</p>
     <ul>

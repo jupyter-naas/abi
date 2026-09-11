@@ -102,7 +102,7 @@ describe('seed template contract', () => {
   it('plans Article Light heading blocks and the cover h1 from HTML', () => {
     const html = seedHtml();
     const plan = planSectionsPptxFromHtml(html);
-    expect(plan.sectionCount).toBe(3);
+    expect(plan.sectionCount).toBe(2);
     expect(plan.coverH1).toBe('Document Title');
     expect(plan.colors.panel).toBe('ffffff');
     expect(plan.sections[0].kind).toBe('cover');
@@ -125,6 +125,7 @@ describe('injected PDF-from-DOM script', () => {
     expect(SLIDES_PDF_FROM_DOM_SCRIPT).toContain(SLIDES_PDF_FROM_DOM_SCRIPT_ID);
     expect(SLIDES_PDF_FROM_DOM_SCRIPT).toContain(SLIDES_PDF_FROM_DOM_FINGERPRINT);
     expect(SLIDES_PDF_FROM_DOM_SCRIPT).toContain('window.buildPptx = buildPptx');
+    expect(SLIDES_PDF_FROM_DOM_FN).toContain('querySelectorAll("main.document > .letter-page');
     expect(SLIDES_PDF_FROM_DOM_FN).toContain('querySelectorAll("main.document > section.page');
     expect(SLIDES_PDF_FROM_DOM_FN).toContain('prop("--panel"');
     expect(SLIDES_PDF_FROM_DOM_FN).toContain('classList.contains("cover")');

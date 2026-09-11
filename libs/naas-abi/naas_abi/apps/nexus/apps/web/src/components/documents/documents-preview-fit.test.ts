@@ -11,6 +11,7 @@ import {
   extractFirstSectionHtml,
   extractSectionHtmlAt,
   isSectionsPreviewMessage,
+  planLetterPages,
   prepareSectionsCoverHtml,
   prepareSectionsPreviewHtml,
   readDocumentCoverHtml,
@@ -28,6 +29,31 @@ import {
   SLIDES_STAGE_HEIGHT,
 } from './documents-preview-fit';
 import { SLIDES_PDF_FROM_DOM_SCRIPT_ID } from './documents-pptx-from-dom';
+
+describe('planLetterPages', () => {
+  it('soft-paginates by height and hard-breaks on page-break blocks', () => {
+    expect(planLetterPages([{ height: 200, hardBreak: false }], 400)).toEqual([[0]]);
+    expect(
+      planLetterPages(
+        [
+          { height: 300, hardBreak: false },
+          { height: 0, hardBreak: true },
+          { height: 120, hardBreak: false },
+        ],
+        400,
+      ),
+    ).toEqual([[0], [2]]);
+    expect(
+      planLetterPages(
+        [
+          { height: 300, hardBreak: false },
+          { height: 200, hardBreak: false },
+        ],
+        400,
+      ),
+    ).toEqual([[0], [1]]);
+  });
+});
 
 describe('computeSectionsPreviewScale', () => {
   it('scales the letter column to pane width, ignoring height', () => {
@@ -80,13 +106,14 @@ describe('prepareSectionsPreviewHtml', () => {
     expect(once).toContain('export-pdf');
     expect(once).toContain('window.print');
     expect(once).toContain('@media print');
-    expect(once).toContain('size: letter; margin: 1in;');
+    expect(once).toContain('size: letter; margin: 0;');
     expect(once).not.toMatch(/@page \{[^}]*landscape/);
     expect(once).toContain('display: block !important');
     expect(once).toContain('.section-index');
     expect(once).toContain('print-color-adjust: exact');
-    expect(once).toContain('page-break-after: auto');
-    expect(once).not.toContain('page-break-after: always');
+    expect(once).toContain('letter-page');
+    expect(once).toContain('page-break-after: always');
+    expect(once).toContain('break-before: page');
     expect(once).not.toContain('contain: strict');
     expect(once).toContain('beforeprint');
     const ackAt = once.indexOf("type: 'export-pdf-result', ok: true");
@@ -156,11 +183,11 @@ const TWO_SLIDE_DECK = `<!doctype html><html><head>
 </body></html>`;
 
 describe('SLIDES_PREVIEW_PRINT_CSS', () => {
-  it('prints letter and lets the browser paginate prose', () => {
-    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('@page { size: letter; margin: 1in; }');
+  it('prints each letter sheet and honors hard page breaks', () => {
+    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('@page { size: letter; margin: 0; }');
     expect(SLIDES_PREVIEW_PRINT_CSS).not.toMatch(/@page \{[^}]*landscape/);
-    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('page-break-after: auto');
-    expect(SLIDES_PREVIEW_PRINT_CSS).not.toContain('page-break-after: always');
+    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('page-break-after: always');
+    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('break-before: page');
     expect(SLIDES_PRINT_PAGE_WIDTH_IN).toBe('8.5in');
     expect(SLIDES_PRINT_PAGE_HEIGHT_IN).toBe('11in');
   });

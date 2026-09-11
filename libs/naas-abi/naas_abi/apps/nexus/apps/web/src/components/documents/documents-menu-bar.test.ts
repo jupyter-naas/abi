@@ -9,7 +9,7 @@ import {
 } from './documents-menu-bar';
 
 describe('buildSectionsEditMenu', () => {
-  it('keeps Undo/Redo disabled and groups Duplicate / Delete Section', () => {
+  it('keeps Undo/Redo disabled and groups Duplicate / Delete page', () => {
     const items = buildSectionsEditMenu({
       canDuplicate: true,
       canDelete: true,
@@ -28,8 +28,8 @@ describe('buildSectionsEditMenu', () => {
     ]);
     expect(items[0].disabled).toBe(true);
     expect(items[1].disabled).toBe(true);
-    expect(items[3].label).toBe('Duplicate Section');
-    expect(items[4].label).toBe('Delete Section');
+    expect(items[3].label).toBe('Duplicate page');
+    expect(items[4].label).toBe('Delete page');
     expect(items[4].shortcut).toBe('Del');
     expect(items[6].label).toBe('Manual edit');
     expect(items[6].checked).toBe(false);
@@ -68,7 +68,7 @@ describe('buildSectionsEditMenu', () => {
     expect(onManualEditChange).toHaveBeenCalledWith(true);
   });
 
-  it('disables Delete Section on the last section', () => {
+  it('disables Delete page on the last page', () => {
     const items = buildSectionsEditMenu({
       canDuplicate: true,
       canDelete: false,
@@ -81,7 +81,7 @@ describe('buildSectionsEditMenu', () => {
 });
 
 describe('buildSectionsInsertMenu', () => {
-  it('offers New Section layouts then Duplicate Section', () => {
+  it('offers Page break, Heading, Paragraph, then Duplicate page', () => {
     const onInsert = vi.fn();
     const items = buildSectionsInsertMenu({
       canInsert: true,
@@ -89,11 +89,19 @@ describe('buildSectionsInsertMenu', () => {
       onInsert,
       onDuplicate: vi.fn(),
     });
-    expect(items[0].label).toBe('New Section');
-    expect(items[0].items?.map((item) => item.label)).toEqual(['Content', 'Cover', 'Section']);
-    expect(items[1].label).toBe('Duplicate Section');
-    items[0].items?.[1].onSelect?.();
-    expect(onInsert).toHaveBeenCalledWith('cover');
+    expect(items.map((item) => item.id)).toEqual([
+      'page-break',
+      'heading',
+      'paragraph',
+      'sep-dup',
+      'duplicate',
+    ]);
+    expect(items[0].label).toBe('Page break');
+    expect(items[1].label).toBe('Heading');
+    expect(items[2].label).toBe('Paragraph');
+    expect(items[4].label).toBe('Duplicate page');
+    items[0].onSelect?.();
+    expect(onInsert).toHaveBeenCalledWith('page-break');
   });
 });
 

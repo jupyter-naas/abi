@@ -45,9 +45,9 @@ export interface DocumentsPreviewFrameProps {
 }
 
 /**
- * Word-like preview: letter-width column scaled to the pane width. Height
- * follows the prose. Outline click jumps scroll; host scroll updates the
- * selected heading.
+ * Word-like preview: stacked letter sheets (816 x 1056) with a desk gap.
+ * Soft pagination fills a sheet; a .page-break starts the next one.
+ * Outline click jumps scroll; host scroll updates the selected heading.
  *
  * Sandbox omits allow-same-origin. Height, PDF, PDF, and Manual edit use
  * the postMessage bridge. allow-modals is required so File, Print / Save as

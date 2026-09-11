@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   clampSectionIndex,
+  insertPageBreakHtml,
+  parseDocumentsHeadingOutline,
   parseDocumentsOutline,
+  parseDocumentsSectionOutline,
   sectionLayoutFromAttrs,
 } from './documents-outline';
 
@@ -19,19 +22,20 @@ const SAMPLE = `<!DOCTYPE html><html><body>
 </main></body></html>`;
 
 describe('parseDocumentsOutline', () => {
-  it('lists sections with id, title, and layout', () => {
-    const sections = parseDocumentsOutline(SAMPLE);
-    expect(sections).toHaveLength(3);
-    expect(sections[0]).toEqual({
-      index: 0,
-      id: 'section-cover',
-      title: 'Presentation Title & Overview',
-      layout: 'cover',
-    });
-    expect(sections[1].title).toBe('Context');
-    expect(sections[1].layout).toBe('section-divider');
-    expect(sections[2].id).toBe('section-agenda');
-    expect(sections[2].layout).toBe('content');
+  it('lists headings in the prose flow', () => {
+    const headings = parseDocumentsOutline(SAMPLE);
+    expect(headings.map((row) => row.title)).toEqual([
+      'Presentation Title & Overview',
+      'Agenda',
+    ]);
+    expect(parseDocumentsSectionOutline(SAMPLE)).toHaveLength(3);
+    expect(parseDocumentsHeadingOutline(SAMPLE)).toHaveLength(2);
+  });
+
+  it('inserts a page-break after a heading block', () => {
+    const next = insertPageBreakHtml(SAMPLE, 0);
+    expect(next).toContain('data-nexus-page-break');
+    expect(next.indexOf('Presentation Title')).toBeLessThan(next.indexOf('data-nexus-page-break'));
   });
 
   it('returns an empty list for empty html', () => {

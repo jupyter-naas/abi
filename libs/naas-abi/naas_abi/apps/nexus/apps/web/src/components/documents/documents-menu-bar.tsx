@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { SLIDE_LAYOUTS, type SectionLayout } from './documents-outline';
+import { type DocumentsInsertKind } from './documents-outline';
 
 export type DocumentsEditorMode = 'preview' | 'code';
 
@@ -58,13 +58,13 @@ export function buildSectionsEditMenu(opts: {
     { id: 'sep-history', separator: true },
     {
       id: 'duplicate',
-      label: 'Duplicate Section',
+      label: 'Duplicate page',
       disabled: !opts.canDuplicate,
       onSelect: opts.onDuplicate,
     },
     {
       id: 'delete',
-      label: 'Delete Section',
+      label: 'Delete page',
       shortcut: 'Del',
       disabled: !opts.canDelete,
       onSelect: opts.onDelete,
@@ -83,24 +83,32 @@ export function buildSectionsEditMenu(opts: {
 export function buildSectionsInsertMenu(opts: {
   canInsert: boolean;
   canDuplicate: boolean;
-  onInsert: (layout: SectionLayout) => void;
+  onInsert: (kind: DocumentsInsertKind) => void;
   onDuplicate: () => void;
 }): SectionsMenuEntry[] {
   return [
     {
-      id: 'new-section',
-      label: 'New Section',
+      id: 'page-break',
+      label: 'Page break',
       disabled: !opts.canInsert,
-      items: SLIDE_LAYOUTS.map((layout) => ({
-        id: `layout-${layout.id}`,
-        label: layout.label,
-        disabled: !opts.canInsert,
-        onSelect: () => opts.onInsert(layout.id),
-      })),
+      onSelect: () => opts.onInsert('page-break'),
     },
     {
+      id: 'heading',
+      label: 'Heading',
+      disabled: !opts.canInsert,
+      onSelect: () => opts.onInsert('heading'),
+    },
+    {
+      id: 'paragraph',
+      label: 'Paragraph',
+      disabled: !opts.canInsert,
+      onSelect: () => opts.onInsert('paragraph'),
+    },
+    { id: 'sep-dup', separator: true },
+    {
       id: 'duplicate',
-      label: 'Duplicate Section',
+      label: 'Duplicate page',
       disabled: !opts.canDuplicate,
       onSelect: opts.onDuplicate,
     },
@@ -257,8 +265,10 @@ export interface DocumentsMenuBarProps {
   /** File → Export HTML. Omit when not on an open document. */
   onExportHtml?: () => void;
   exportDisabled?: boolean;
-  /** Edit / Insert section actions. Omit on index/new pages. */
-  onInsertSection?: (layout: SectionLayout) => void;
+  /** Edit / Insert page-break and heading. Omit on index/new pages. */
+  onInsert?: (kind: DocumentsInsertKind) => void;
+  /** @deprecated leftover name; use onInsert */
+  onInsertSection?: (kind: DocumentsInsertKind) => void;
   insertSectionDisabled?: boolean;
   onDuplicateSection?: () => void;
   duplicateSectionDisabled?: boolean;
@@ -279,7 +289,7 @@ export interface DocumentsMenuBarProps {
 }
 
 /**
- * Lean PowerPoint-style menu bar: File, Edit, View, Insert. All four always
+ * Lean document menu bar: File, Edit, View, Insert. All four always
  * render. On pages with no open document yet (index/new) the Edit/View/Insert
  * items are just disabled rather than the menus disappearing, so the bar
  * looks the same on every Documents page.
@@ -295,6 +305,7 @@ export function DocumentsMenuBar({
   onExportPptx,
   onExportHtml,
   exportDisabled,
+  onInsert,
   onInsertSection,
   insertSectionDisabled,
   onDuplicateSection,
@@ -397,10 +408,11 @@ export function DocumentsMenuBar({
     onManualEditChange,
   });
 
+  const insertHandler = onInsert || onInsertSection;
   const insertItems = buildSectionsInsertMenu({
-    canInsert: Boolean(onInsertSection) && !insertSectionDisabled,
+    canInsert: Boolean(insertHandler) && !insertSectionDisabled,
     canDuplicate: Boolean(onDuplicateSection) && !duplicateSectionDisabled,
-    onInsert: (layout) => onInsertSection?.(layout),
+    onInsert: (kind) => insertHandler?.(kind),
     onDuplicate: () => onDuplicateSection?.(),
   });
 

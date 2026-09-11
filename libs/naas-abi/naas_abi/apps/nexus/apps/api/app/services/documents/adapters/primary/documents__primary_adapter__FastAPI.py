@@ -2856,6 +2856,48 @@ class SectionsListResponse(BaseModel):
     sections: list[SectionOutlineItem] = Field(default_factory=list)
 
 
+class HeadingOutlineItem(BaseModel):
+    index: int
+    title: str = ""
+    tag: str = "h2"
+
+
+class DocumentCommandItem(BaseModel):
+    type: str = Field(..., min_length=1, max_length=64)
+    after_heading: int = -1
+    heading_index: int | None = None
+    text: str = Field(default="", max_length=20_000)
+    title: str = Field(default="", max_length=500)
+    level: int = 2
+    style: str = Field(default="", max_length=32)
+    find: str = Field(default="", max_length=8_000)
+    replace: str = Field(default="", max_length=8_000)
+
+
+class DocumentCommandsRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    requests: list[DocumentCommandItem] = Field(..., min_length=1)
+
+
+class DocumentCommandsResponse(BaseModel):
+    ok: bool = True
+    slug: str
+    applied: list[str] = Field(default_factory=list)
+    heading_index: int = 0
+    heading_count: int = 0
+    outline: list[HeadingOutlineItem] = Field(default_factory=list)
+    html: str | None = None
+    commit_sha: str | None = None
+    source: str | None = None
+
+
+class DocumentOutlineResponse(BaseModel):
+    ok: bool = True
+    slug: str
+    heading_count: int = 0
+    outline: list[HeadingOutlineItem] = Field(default_factory=list)
+
+
 class TemplateAssetItem(BaseModel):
     name: str
     kind: str = "embedded"
@@ -3151,4 +3193,119 @@ async def reorder_sections(
             order=body.order,
         ),
         message=f"style(sections): reorder sections in {slug}",
+    )
+
+
+@router.get("/projects/{slug}/outline", response_model=DocumentOutlineResponse)
+async def get_document_outline(
+    slug: str,
+    workspace_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentOutlineResponse:
+    """Heading outline (Pandoc Header walk). Not the leftover section list."""
+    from naas_abi.agents.tools.documents_commands import heading_outline
+
+    await require_workspace_access(current_user.id, workspace_id)
+    if not _SLUG_RE.match(slug):
+        raise HTTPException(status_code=422, detail="Invalid slug")
+    sc, repo_id = _sections_sc(request)
+    sidecar_base, sidecar_secret = await lookup_documents_sidecar(
+        db,
+        workspace_id=workspace_id,
+        user_id=current_user.id,
+        slug=slug,
+    )
+
+    def _list() -> DocumentOutlineResponse:
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
+        )
+        if paths is None:
+            raise RepoNotFoundError(f"documents project {slug}")
+        html = _read_live_document_html(
+            sc,
+            repo_id=repo_id,
+            paths=paths,
+            sidecar_base=sidecar_base,
+            sidecar_secret=sidecar_secret,
+        )
+        items = heading_outline(html)
+        return DocumentOutlineResponse(
+            ok=True,
+            slug=slug,
+            heading_count=len(items),
+            outline=[
+                HeadingOutlineItem(
+                    index=int(item["index"]),
+                    title=str(item.get("title") or ""),
+                    tag=str(item.get("tag") or "h2"),
+                )
+                for item in items
+            ],
+        )
+
+    try:
+        return await run_in_threadpool(_list)
+    except RepoNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except SourceControlError as exc:
+        raise _source_control_http_error(exc) from exc
+
+
+@router.post("/projects/{slug}/commands", response_model=DocumentCommandsResponse)
+async def apply_document_commands_route(
+    slug: str,
+    body: DocumentCommandsRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentCommandsResponse:
+    """Google Docs batchUpdate analog on the HTML store. See COMMANDS.md."""
+    from naas_abi.agents.tools.documents_commands import apply_document_commands
+
+    await require_workspace_access(current_user.id, body.workspace_id)
+    if not _SLUG_RE.match(slug):
+        raise HTTPException(status_code=422, detail="Invalid slug")
+
+    payloads = [item.model_dump() for item in body.requests]
+    for item in payloads:
+        if item.get("heading_index") is None:
+            item.pop("heading_index", None)
+
+    def _mutate(html: str) -> dict:
+        return apply_document_commands(html, payloads)
+
+    mutated = await _run_section_html_mutation(
+        slug=slug,
+        workspace_id=body.workspace_id,
+        request=request,
+        current_user=current_user,
+        db=db,
+        mutate=_mutate,
+        message=f"feat(document): apply commands in {slug}",
+    )
+    from naas_abi.agents.tools.documents_commands import heading_outline
+
+    items = heading_outline(mutated.html or "")
+    return DocumentCommandsResponse(
+        ok=True,
+        slug=slug,
+        applied=[item.type for item in body.requests],
+        heading_index=mutated.section_index,
+        heading_count=len(items),
+        outline=[
+            HeadingOutlineItem(
+                index=int(item["index"]),
+                title=str(item.get("title") or ""),
+                tag=str(item.get("tag") or "h2"),
+            )
+            for item in items
+        ],
+        html=mutated.html,
+        commit_sha=mutated.commit_sha,
+        source=mutated.source,
     )

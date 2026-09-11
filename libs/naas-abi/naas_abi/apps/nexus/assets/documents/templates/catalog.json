@@ -3,7 +3,7 @@
     {
       "id": "article-light-v1",
       "name": "Article Light",
-      "description": "Letter-width article: title, summary, and heading-led sections.",
+      "description": "Letter pages: title, summary, a hard page break, and heading-led prose.",
       "preview": {
         "bg": "#f7f6f3",
         "panel": "#ffffff",

@@ -874,6 +874,13 @@ def test_insert_section_rejects_unknown_layout():
     assert "html" not in result
 
 
+def test_insert_section_page_break_layout_uses_catalog_marker():
+    result = _insert_section_html(_SAMPLE, after_index=-1, layout="page-break", title="After")
+    assert result["ok"] is True
+    assert 'data-nexus-page-break' in result["html"]
+    assert "After" in result["html"]
+
+
 def test_delete_section_refuses_last():
     one = (
         "<!DOCTYPE html><html><body><main>"

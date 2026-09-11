@@ -943,13 +943,15 @@ _DIVIDER_TITLE_RE = re.compile(
     r"""<div\b[^>]*class=["'][^"']*\bdivider-title\b[^"']*["'][^>]*>(.*?)</div>""",
     re.IGNORECASE | re.DOTALL,
 )
-_DEFAULT_INSERT_TITLE = "New section"
+_DEFAULT_INSERT_TITLE = "Heading"
 _LAYOUT_ALIASES = {
     "blank": "content",
     "divider": "section-divider",
     "section": "section-divider",
+    "page": "page-break",
+    "pagebreak": "page-break",
 }
-_KNOWN_LAYOUTS = frozenset({"cover", "section-divider", "content"})
+_KNOWN_LAYOUTS = frozenset({"cover", "section-divider", "content", "page-break"})
 _LAYOUT_SKELETONS = {
     "cover": (
         '<section class="page cover" data-layout="cover">'
@@ -964,6 +966,13 @@ _LAYOUT_SKELETONS = {
     ),
     "content": (
         '<section class="page" data-layout="content">'
+        "<h2>{title}</h2>"
+        "<p></p>"
+        "</section>"
+    ),
+    "page-break": (
+        '<section class="page" data-layout="page-break">'
+        '<div class="page-break" data-nexus-page-break></div>'
         "<h2>{title}</h2>"
         "<p></p>"
         "</section>"
@@ -1116,7 +1125,7 @@ def _normalize_layout(layout: str) -> str | dict[str, str]:
     if name not in _KNOWN_LAYOUTS:
         return {
             "error": (
-                f"Unknown layout {layout!r}. Use cover, section-divider, or content."
+                f"Unknown layout {layout!r}. Use cover, section-divider, content, or page-break."
             )
         }
     return name
@@ -2003,6 +2012,126 @@ def documents_tools() -> list[BaseTool]:
         except Exception as exc:  # noqa: BLE001
             return _tool_error(exc)
 
+    def _run_document_commands(requests: list[dict[str, Any]], slug: str, message: str) -> dict[str, Any]:
+        from naas_abi.agents.tools.documents_commands import (
+            apply_document_commands as apply_commands,
+        )
+
+        result = _run_section_mutation(
+            slug,
+            lambda html: apply_commands(html, requests),
+            message,
+            "document commands",
+            default_type="feat",
+        )
+        if "error" not in result:
+            result["heading_index"] = result.get("section_index")
+            result["heading_count"] = result.get("section_count")
+        return result
+
+    @tool
+    def apply_document_commands(
+        requests_json: str,
+        slug: str = "",
+        message: str = "feat(document): apply commands via Abi",
+    ) -> dict[str, Any]:
+        """Apply an ordered list of document commands (JSON array).
+
+        Each item needs type. Supported: insert_text, insert_paragraph,
+        insert_heading, insert_page_break, delete_range, replace_text,
+        update_paragraph_style. Positions use after_heading or heading_index.
+        Returns {ok, heading_index, heading_count}. Never HTML.
+        """
+        try:
+            payload = json.loads(requests_json or "[]")
+        except json.JSONDecodeError as exc:
+            return {"error": f"requests_json is not valid JSON: {exc}"}
+        if not isinstance(payload, list):
+            return {"error": "requests_json must be a JSON array"}
+        result = _run_document_commands(
+            payload, slug, message or "feat(document): apply commands via Abi"
+        )
+        if "error" not in result:
+            result["heading_index"] = result.get("section_index")
+            result["heading_count"] = result.get("section_count")
+        return result
+
+    @tool
+    def insert_page_break(
+        after_heading: int = -1,
+        slug: str = "",
+        message: str = "feat(document): insert page break via Abi",
+    ) -> dict[str, Any]:
+        """Insert a hard page break after after_heading (-1 = last heading).
+
+        Same primitive as Google Docs insertPageBreak and ODF fo:break-before=page.
+        Not a new section and not a slide.
+        """
+        return _run_document_commands(
+            [{"type": "insert_page_break", "after_heading": after_heading}],
+            slug,
+            message or "feat(document): insert page break via Abi",
+        )
+
+    @tool
+    def insert_heading(
+        title: str = "Heading",
+        level: int = 2,
+        after_heading: int = -1,
+        slug: str = "",
+        message: str = "feat(document): insert heading via Abi",
+    ) -> dict[str, Any]:
+        """Insert a heading (level 1-3) after after_heading. Pandoc Header analog."""
+        return _run_document_commands(
+            [
+                {
+                    "type": "insert_heading",
+                    "title": title,
+                    "level": level,
+                    "after_heading": after_heading,
+                }
+            ],
+            slug,
+            message or "feat(document): insert heading via Abi",
+        )
+
+    @tool
+    def insert_paragraph(
+        text: str = "",
+        after_heading: int = -1,
+        slug: str = "",
+        message: str = "feat(document): insert paragraph via Abi",
+    ) -> dict[str, Any]:
+        """Insert a paragraph after after_heading. Pandoc Para / ODF addParagraph."""
+        return _run_document_commands(
+            [{"type": "insert_paragraph", "text": text, "after_heading": after_heading}],
+            slug,
+            message or "feat(document): insert paragraph via Abi",
+        )
+
+    @tool
+    def apply_paragraph_style(
+        heading_index: int,
+        style: str,
+        slug: str = "",
+        message: str = "style(document): apply paragraph style via Abi",
+    ) -> dict[str, Any]:
+        """Retag a heading: heading1, heading2, heading3, or paragraph.
+
+        Google Docs updateParagraphStyle analog.
+        """
+        return _run_document_commands(
+            [
+                {
+                    "type": "update_paragraph_style",
+                    "heading_index": heading_index,
+                    "style": style,
+                }
+            ],
+            slug,
+            message or "style(document): apply paragraph style via Abi",
+        )
+
     @tool
     def insert_section(
         after_index: int = -1,
@@ -2011,11 +2140,13 @@ def documents_tools() -> list[BaseTool]:
         slug: str = "",
         message: str = "feat(sections): insert section via Abi",
     ) -> dict[str, Any]:
-        """Insert a section after after_index. after_index=-1 appends.
+        """Leftover slide-shaped insert of a <section> block.
 
-        layout is cover, section-divider, or content. Clones a matching
-        skeleton from the open document when one exists; otherwise a tiny catalog
-        stub. Returns {ok, section_index, section_count, ids}. Never HTML.
+        Prefer insert_heading, insert_paragraph, insert_page_break, or
+        apply_document_commands. layout cover / section-divider / content
+        clones a skeleton. page-break is accepted but insert_page_break is
+        the document verb. Returns {ok, section_index, section_count, ids}.
+        Never HTML.
         """
         return _run_section_mutation(
             slug,

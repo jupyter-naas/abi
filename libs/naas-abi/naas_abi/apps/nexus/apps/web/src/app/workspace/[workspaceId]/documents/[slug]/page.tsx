@@ -26,10 +26,12 @@ import {
   clampSectionIndex,
   deleteSection,
   duplicateSection,
-  insertSection,
+  applyDocumentCommands,
+  parseDocumentsHeadingOutline,
   parseDocumentsOutline,
+  parseDocumentsSectionOutline,
   reorderSections,
-  type SectionLayout,
+  type DocumentsInsertKind,
   type SectionMutationResult,
 } from '@/components/documents/documents-outline';
 import { DocumentsStatusBar } from '@/components/documents/documents-status-bar';
@@ -560,7 +562,9 @@ export default function SectionsEditorPage() {
   };
 
   const sections = useMemo(() => parseDocumentsOutline(html), [html]);
+  const sectionBlocks = useMemo(() => parseDocumentsSectionOutline(html), [html]);
   const currentIndex = clampSectionIndex(selectedIndex, sections.length);
+  const pageMutationsAligned = sections.length === sectionBlocks.length;
 
   // Publish the section count so the chat pane can tell Abi "section N of M".
   useEffect(() => {
@@ -572,7 +576,7 @@ export default function SectionsEditorPage() {
       if (!workspaceId || !slug) return;
       if (dirtyRef.current) {
         const ok = window.confirm(
-          'Unsaved code edits will be replaced by this section change. Continue?',
+          'Unsaved code edits will be replaced by this page change. Continue?',
         );
         if (!ok) return;
       }
@@ -614,9 +618,16 @@ export default function SectionsEditorPage() {
   useEffect(() => {
     setReorderOpenDocument((fromIndex, toIndex) => {
       if (fromIndex === toIndex) return;
+      const source = htmlRef.current;
+      if (
+        parseDocumentsHeadingOutline(source).length !==
+        parseDocumentsSectionOutline(source).length
+      ) {
+        return;
+      }
       void applyMutation(
         () => reorderSections(workspaceId, slug, fromIndex, toIndex),
-        'Moved section',
+        'Moved page',
       );
     });
   }, [workspaceId, slug, applyMutation, setReorderOpenDocument]);
@@ -687,27 +698,42 @@ export default function SectionsEditorPage() {
 
   const sectionActionsDisabled = mutating || loading || !html;
 
-  const insertSelectedSection = (layout: SectionLayout) => {
+  const insertBlock = (kind: DocumentsInsertKind) => {
     const after = sections.length ? currentIndex : -1;
-    void applyMutation(
-      () => insertSection(workspaceId, slug, after, layout),
-      'Inserted section',
-    );
+    const request =
+      kind === 'page-break'
+        ? { type: 'insert_page_break' as const, after_heading: after }
+        : kind === 'heading'
+          ? { type: 'insert_heading' as const, after_heading: after, title: 'Heading', level: 2 }
+          : { type: 'insert_paragraph' as const, after_heading: after, text: '' };
+    const label =
+      kind === 'page-break'
+        ? 'Inserted page break'
+        : kind === 'heading'
+          ? 'Inserted heading'
+          : 'Inserted paragraph';
+    void applyMutation(() => applyDocumentCommands(workspaceId, slug, [request]), label);
   };
 
   const duplicateSelectedSection = () => {
+    const sectionIndex = clampSectionIndex(
+      currentIndex,
+      parseDocumentsSectionOutline(htmlRef.current).length,
+    );
     void applyMutation(
-      () => duplicateSection(workspaceId, slug, currentIndex),
-      'Duplicated section',
+      () => duplicateSection(workspaceId, slug, sectionIndex),
+      'Duplicated page',
     );
   };
 
   const deleteSelectedSection = () => {
-    if (sections.length <= 1) return;
-    if (!window.confirm('Delete the selected section?')) return;
+    const sectionCount = parseDocumentsSectionOutline(htmlRef.current).length;
+    if (sectionCount <= 1) return;
+    if (!window.confirm('Delete the selected page?')) return;
+    const sectionIndex = clampSectionIndex(currentIndex, sectionCount);
     void applyMutation(
-      () => deleteSection(workspaceId, slug, currentIndex),
-      'Deleted section',
+      () => deleteSection(workspaceId, slug, sectionIndex),
+      'Deleted page',
     );
   };
   deleteSelectedSectionRef.current = deleteSelectedSection;
@@ -728,12 +754,16 @@ export default function SectionsEditorPage() {
       onExportPptx={() => void exportPptx()}
       onExportHtml={() => void exportHtml()}
       exportDisabled={exporting || loading}
-      onInsertSection={insertSelectedSection}
+      onInsert={insertBlock}
       insertSectionDisabled={sectionActionsDisabled}
       onDuplicateSection={duplicateSelectedSection}
-      duplicateSectionDisabled={sectionActionsDisabled || !sections.length}
+      duplicateSectionDisabled={
+        sectionActionsDisabled || !sectionBlocks.length || !pageMutationsAligned
+      }
       onDeleteSection={deleteSelectedSection}
-      deleteSectionDisabled={sectionActionsDisabled || sections.length <= 1}
+      deleteSectionDisabled={
+        sectionActionsDisabled || sectionBlocks.length <= 1 || !pageMutationsAligned
+      }
       mode={mode}
       onModeChange={(next) => {
         setMode(next);
@@ -783,7 +813,7 @@ export default function SectionsEditorPage() {
     <div className="flex h-full flex-col">
       <Header
         title={title}
-        subtitle={`HTML source · PDF is a 816px prose reconstruction (closest fit)`}
+        subtitle={`HTML source · letter pages (8.5 x 11 in)`}
         nav={menuBar}
       />
 

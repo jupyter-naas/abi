@@ -228,7 +228,10 @@ export function planSectionsPptxFromHtml(html: string): SectionsPptxPlan {
 export const SLIDES_PDF_FROM_DOM_FN = `/* ${SLIDES_PDF_FROM_DOM_FINGERPRINT} */
 async function buildPptx() {
   if (typeof PptxGenJS === "undefined") throw new Error("PptxGenJS failed to load");
-  var sections = document.querySelectorAll("main.document > section.page, main.document > section.section, .document > section.page, .document > section.section");
+  var sections = document.querySelectorAll("main.document > .letter-page, .document > .letter-page");
+  if (!sections.length) {
+    sections = document.querySelectorAll("main.document > section.page, main.document > section.section, .document > section.page, .document > section.section");
+  }
   if (!sections.length) throw new Error("No document sections to export");
   var pdf = new PptxGenJS();
   pdf.defineLayout({ name: "LAYOUT_16x9", width: 13.333, height: 7.5 });

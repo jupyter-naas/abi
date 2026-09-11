@@ -45,6 +45,11 @@ describe('isDocumentsWriteTool', () => {
     expect(isDocumentsWriteTool('delete_section')).toBe(true);
     expect(isDocumentsWriteTool('duplicate_section')).toBe(true);
     expect(isDocumentsWriteTool('reorder_sections')).toBe(true);
+    expect(isDocumentsWriteTool('apply_document_commands')).toBe(true);
+    expect(isDocumentsWriteTool('insert_page_break')).toBe(true);
+    expect(isDocumentsWriteTool('insert_heading')).toBe(true);
+    expect(isDocumentsWriteTool('insert_paragraph')).toBe(true);
+    expect(isDocumentsWriteTool('apply_paragraph_style')).toBe(true);
     expect(isDocumentsWriteTool('create_documents_project')).toBe(true);
   });
 

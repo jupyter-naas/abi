@@ -168,6 +168,11 @@ export function isDocumentsWriteTool(rawName: string | null | undefined): boolea
     raw.includes('delete_section') ||
     raw.includes('duplicate_section') ||
     raw.includes('reorder_sections') ||
+    raw.includes('apply_document_commands') ||
+    raw.includes('insert_page_break') ||
+    raw.includes('insert_heading') ||
+    raw.includes('insert_paragraph') ||
+    raw.includes('apply_paragraph_style') ||
     raw.includes('create_documents_project')
   );
 }

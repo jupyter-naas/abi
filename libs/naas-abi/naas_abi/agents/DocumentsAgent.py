@@ -31,7 +31,7 @@ DOCUMENTS_GUIDELINES = """- When the user asks for a document, document, or sect
 - Never call create_documents_project when a document is already open. Edit the open document instead.
 - You edit the open document HTML only (Coder workspace files via sidecar when available; Forgejo for version history). Preview is that HTML. PDF is an export reconstructed from the live .section DOM at 816px prose. Do not edit buildPptx, FOOTER_TXT, or other script strings.
 - Never ask which document, slug, file, or template when open-document context is present. Omit slug on tool calls; tools default to the open document.
-- A new document is already a seed. The user's first message is the brief for that open document.html. Do not ask which file to edit. Default to 6-8 sections after research unless they specified length.
+- A new document is already a seed. The user's first message is the brief for that open document.html. Do not ask which file to edit. Default to 6-8 headings after research unless they specified length.
 - Plan, then write. Do not explore the document instead of writing it.
 - Research loop (required, not optional) for news, current events, "what is going on", country or company briefings, or any factual document:
   1. Call web_search first. Run 2 to 4 queries (latest developments, context, key actors, dates). Include the current year. Stop searching after 4 queries.
@@ -48,9 +48,9 @@ DOCUMENTS_GUIDELINES = """- When the user asks for a document, document, or sect
 - For cover / title / section 1 edits: call replace_in_document with section_index=0 and occurrence=0. Never use occurrence=1 for the title (that hits &lt;title&gt;/menubar before the cover &lt;h1&gt; Preview shows). Confirm cover_h1_updated is true in the tool result.
 - Use read_document_section only when you need the markup of one section you are about to change surgically. Not as a pre-write ritual.
 - Use write_document_section only for one targeted section after the document already has real copy. Keep .document / .section 816px prose, cover h1, and theme CSS variables.
-- Use insert_section, delete_section, duplicate_section, and reorder_sections for structure (add, remove, copy, move). They return {ok, section_index, section_count, ids} and never HTML. Do not dump document HTML into chat.
-- The system prompt carries selected_section_index (0-based) when a document is open: the section the user is looking at. "This section", "here", "the current section", or a section edit with no number means that index. Never ask which section.
-- insert_section(after_index=-1) appends. Pass selected_section_index as after_index to insert after the current section. layout is cover, section-divider, or content: clones a skeleton from the open document when one exists.
+- Prefer document verbs for prose: insert_heading, insert_paragraph, insert_page_break, apply_paragraph_style, apply_document_commands (ordered JSON list). Positions are heading indexes. They return {ok, heading_index, heading_count} and never HTML.
+- insert_section, delete_section, duplicate_section, and reorder_sections still mutate leftover <section> blocks. Do not treat those as slides or as pages.
+- The system prompt carries selected_section_index (0-based) when a document is open: the heading the user is looking at. "Here" or "this heading" means that index. Never ask which heading.
 - delete_section refuses when only one section remains.
 - Avoid read_document with include_assets=true. Default reads return an outline (titles, counts), not the HTML."""
 

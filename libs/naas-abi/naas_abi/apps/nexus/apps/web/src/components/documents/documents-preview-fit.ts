@@ -5,9 +5,64 @@ import {
 
 /** Letter content width (8.5in at 96dpi). Reading column, not a 16:9 stage. */
 export const DOCUMENTS_PAGE_WIDTH = 816;
-/** Letter page height at 96dpi. Minimum paper, not a per-section canvas. */
+/** Letter page height at 96dpi. Soft pagination fills this sheet. */
 export const DOCUMENTS_PAGE_MIN_HEIGHT = 1056;
+export const DOCUMENTS_PAGE_PADDING_TOP = 72;
+export const DOCUMENTS_PAGE_PADDING_X = 80;
+export const DOCUMENTS_PAGE_PADDING_BOTTOM = 96;
+/** Gap between stacked letter sheets in the preview (Word / Docs print layout). */
+export const DOCUMENTS_PAGE_GAP_PX = 32;
+export const DOCUMENTS_PAGE_CONTENT_HEIGHT =
+  DOCUMENTS_PAGE_MIN_HEIGHT - DOCUMENTS_PAGE_PADDING_TOP - DOCUMENTS_PAGE_PADDING_BOTTOM;
 export const DOCUMENTS_PREVIEW_GUTTER_PX = 48;
+
+/** Hard page break in source HTML. Print and the paginator honor this, not a section. */
+export const PAGE_BREAK_HTML = '<div class="page-break" data-nexus-page-break></div>';
+
+export type DocumentsFlowBlock = {
+  height: number;
+  hardBreak: boolean;
+};
+
+/**
+ * Group flow blocks into letter pages. A hard break is ODF fo:break-before=page
+ * / Google Docs PageBreak / Word w:br w:type="page": start a new sheet, same section.
+ */
+export function planLetterPages(
+  blocks: DocumentsFlowBlock[],
+  contentHeight = DOCUMENTS_PAGE_CONTENT_HEIGHT,
+): number[][] {
+  if (!blocks.length) return [[]];
+  const pages: number[][] = [[]];
+  let used = 0;
+  blocks.forEach((block, index) => {
+    if (block.hardBreak) {
+      if (pages[pages.length - 1].length) {
+        pages.push([]);
+        used = 0;
+      }
+      return;
+    }
+    const height = Math.max(0, block.height);
+    const current = pages[pages.length - 1];
+    if (!current.length) {
+      current.push(index);
+      used = height;
+      return;
+    }
+    if (contentHeight > 0 && used + height > contentHeight) {
+      pages.push([index]);
+      used = height;
+      return;
+    }
+    current.push(index);
+    used += height;
+  });
+  if (pages.length > 1 && pages[pages.length - 1].length === 0) {
+    pages.pop();
+  }
+  return pages;
+}
 
 /**
  * Legacy names from the Slides fork. Preview and thumbs use DOCUMENTS_PAGE_*.
@@ -174,10 +229,102 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
       )
     );
   }
+  function headingNodes() {
+    return Array.prototype.slice.call(
+      document.querySelectorAll('.letter-page h1, .letter-page h2, .letter-page h3, main.document > section h1, main.document > section h2, main.document > section h3')
+    );
+  }
+  function isPageBreak(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (el.getAttribute && el.getAttribute('data-nexus-page-break') != null) return true;
+    return !!(el.classList && el.classList.contains('page-break'));
+  }
+  function isLetterPage(el) {
+    return !!(el && el.nodeType === 1 && el.classList && el.classList.contains('letter-page'));
+  }
+  function meaningfulNode(n) {
+    if (!n) return false;
+    if (n.nodeType === 1) return true;
+    if (n.nodeType === 3) return /\\S/.test(n.textContent || '');
+    return false;
+  }
+  function makeLetterPage() {
+    var el = document.createElement('div');
+    el.className = 'letter-page';
+    el.setAttribute('data-nexus-letter-page', '');
+    return el;
+  }
+  function collectFlow(root) {
+    var flow = [];
+    Array.prototype.slice.call(root.childNodes).forEach(function (child) {
+      if (child.nodeType === 1 && child.matches && child.matches('section.page, section.section')) {
+        Array.prototype.slice.call(child.childNodes).forEach(function (n) {
+          if (isLetterPage(n)) {
+            Array.prototype.slice.call(n.childNodes).forEach(function (inner) {
+              if (meaningfulNode(inner)) flow.push(inner);
+            });
+          } else if (meaningfulNode(n)) {
+            flow.push(n);
+          }
+        });
+      } else if (isLetterPage(child)) {
+        Array.prototype.slice.call(child.childNodes).forEach(function (inner) {
+          if (meaningfulNode(inner)) flow.push(inner);
+        });
+      } else if (meaningfulNode(child)) {
+        flow.push(child);
+      }
+    });
+    return flow;
+  }
+  function paginateDocument() {
+    var root = document.querySelector('main.document, .document');
+    if (!root) return;
+    tagEditTargets();
+    var flow = collectFlow(root);
+    if (!flow.length) return;
+    var holders = sectionNodes();
+    while (root.firstChild) root.removeChild(root.firstChild);
+    var page = makeLetterPage();
+    root.appendChild(page);
+    flow.forEach(function (node) {
+      if (isPageBreak(node)) {
+        if (page.childNodes.length) {
+          page = makeLetterPage();
+          root.appendChild(page);
+        }
+        return;
+      }
+      page.appendChild(node);
+      if (page.scrollHeight > page.clientHeight && page.childNodes.length > 1) {
+        page.removeChild(node);
+        page = makeLetterPage();
+        root.appendChild(page);
+        page.appendChild(node);
+      }
+    });
+    if (!page.childNodes.length && root.childNodes.length > 1) {
+      root.removeChild(page);
+    }
+    holders.forEach(function (sec) {
+      if (!sec.parentNode) {
+        sec.setAttribute('data-nexus-empty-section', '');
+        sec.style.display = 'none';
+        root.appendChild(sec);
+      }
+    });
+    root.setAttribute('data-nexus-paginated', '1');
+  }
   function measureHeight() {
     var body = document.body;
     var el = document.documentElement;
+    var pages = document.querySelectorAll('.letter-page');
+    var stacked = 0;
+    if (pages.length) {
+      stacked = pages.length * PAGE_MIN_HEIGHT + Math.max(0, pages.length - 1) * ${DOCUMENTS_PAGE_GAP_PX};
+    }
     var measured = Math.max(
+      stacked,
       (body && body.scrollHeight) || 0,
       (body && body.offsetHeight) || 0,
       (el && el.scrollHeight) || 0,
@@ -186,6 +333,13 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
     );
     return measured;
   }
+  function outlineTops() {
+    var heads = headingNodes();
+    if (heads.length) {
+      return heads.map(function (node) { return node.offsetTop || 0; });
+    }
+    return sectionNodes().map(function (node) { return node.offsetTop || 0; });
+  }
   function reportMetrics() {
     try {
       parent.postMessage(
@@ -193,9 +347,7 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
           source: SOURCE,
           type: 'metrics',
           height: measureHeight(),
-          sectionTops: sectionNodes().map(function (node) {
-            return node.offsetTop || 0;
-          }),
+          sectionTops: outlineTops(),
         },
         '*'
       );
@@ -220,6 +372,7 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
     );
   }
   function onReady() {
+    paginateDocument();
     parent.postMessage(
       { source: SOURCE, type: 'ready', height: measureHeight() },
       '*'
@@ -228,6 +381,7 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
     setTimeout(reportMetrics, 50);
     setTimeout(reportMetrics, 250);
     waitForImages().then(function () {
+      paginateDocument();
       parent.postMessage(
         { source: SOURCE, type: 'images-ready', height: measureHeight() },
         '*'
@@ -251,6 +405,8 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
     return false;
   }
   function tagEditTargets() {
+    var existing = document.querySelectorAll('[' + EDIT_ATTR + ']');
+    if (existing.length) return Array.prototype.slice.call(existing);
     var list = [];
     sectionSections().forEach(function (section, si) {
       var counts = {};
@@ -423,10 +579,10 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
 })();
 </script>`;
 
-/** Print rules: continuous letter prose. The browser paginates; sections are headings. */
+/** Print: each letter sheet is one page. Hard .page-break markers still force a page. */
 export const SLIDES_PREVIEW_PRINT_CSS = `
   @media print {
-    @page { size: letter; margin: 1in; }
+    @page { size: letter; margin: 0; }
     * {
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
@@ -452,9 +608,44 @@ export const SLIDES_PREVIEW_PRINT_CSS = `
       max-width: none !important;
       min-height: 0 !important;
       box-shadow: none !important;
+      background: transparent !important;
       transform: none !important;
       zoom: 1 !important;
       overflow: visible !important;
+    }
+    .letter-page {
+      display: block !important;
+      width: 8.5in !important;
+      height: 11in !important;
+      min-height: 11in !important;
+      max-height: 11in !important;
+      margin: 0 !important;
+      padding: 1in !important;
+      overflow: hidden !important;
+      box-shadow: none !important;
+      border: none !important;
+      background: #fff !important;
+      page-break-after: always !important;
+      break-after: page !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    .letter-page:last-of-type {
+      page-break-after: auto !important;
+      break-after: auto !important;
+    }
+    .page-break, [data-nexus-page-break] {
+      display: block !important;
+      height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none !important;
+      page-break-before: always !important;
+      break-before: page !important;
+    }
+    .page[data-nexus-empty-section],
+    .section[data-nexus-empty-section] {
+      display: none !important;
     }
     .page, .section {
       display: block !important;
@@ -464,14 +655,10 @@ export const SLIDES_PREVIEW_PRINT_CSS = `
       min-height: 0 !important;
       max-width: none !important;
       max-height: none !important;
-      margin: 0 0 1.25em !important;
+      margin: 0 !important;
       padding: 0 !important;
       overflow: visible !important;
       contain: none !important;
-      page-break-after: auto !important;
-      break-after: auto !important;
-      page-break-inside: auto !important;
-      break-inside: auto !important;
       border: none !important;
       box-shadow: none !important;
       background: transparent !important;
@@ -504,7 +691,7 @@ export function prepareSectionsPreviewHtml(html: string): string {
   body.document-has-menubar .document,
   .document {
     display: block !important;
-    padding: 72px 80px 96px !important;
+    padding: ${DOCUMENTS_PAGE_PADDING_TOP}px ${DOCUMENTS_PAGE_PADDING_X}px ${DOCUMENTS_PAGE_PADDING_BOTTOM}px !important;
     gap: 0 !important;
     align-items: stretch !important;
     width: ${DOCUMENTS_PAGE_WIDTH}px !important;
@@ -514,6 +701,16 @@ export function prepareSectionsPreviewHtml(html: string): string {
     box-shadow: 0 1px 3px rgba(26, 26, 26, 0.08) !important;
     transform: none !important;
     margin: 0 auto !important;
+  }
+  .document[data-nexus-paginated="1"] {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: ${DOCUMENTS_PAGE_GAP_PX}px !important;
+    padding: 0 0 8px !important;
+    min-height: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
   }
   .page, .section {
     width: auto !important;
@@ -527,6 +724,36 @@ export function prepareSectionsPreviewHtml(html: string): string {
     background: transparent !important;
     overflow: visible !important;
     flex-shrink: 1 !important;
+  }
+  .document[data-nexus-paginated="1"] > .page,
+  .document[data-nexus-paginated="1"] > .section {
+    display: none !important;
+    margin: 0 !important;
+  }
+  .letter-page {
+    display: block !important;
+    box-sizing: border-box !important;
+    width: ${DOCUMENTS_PAGE_WIDTH}px !important;
+    height: ${DOCUMENTS_PAGE_MIN_HEIGHT}px !important;
+    min-height: ${DOCUMENTS_PAGE_MIN_HEIGHT}px !important;
+    max-height: ${DOCUMENTS_PAGE_MIN_HEIGHT}px !important;
+    padding: ${DOCUMENTS_PAGE_PADDING_TOP}px ${DOCUMENTS_PAGE_PADDING_X}px ${DOCUMENTS_PAGE_PADDING_BOTTOM}px !important;
+    margin: 0 !important;
+    border: none !important;
+    background: #fff !important;
+    box-shadow: 0 1px 3px rgba(26, 26, 26, 0.10), 0 12px 32px rgba(26, 26, 26, 0.12) !important;
+    overflow: hidden !important;
+    flex-shrink: 0 !important;
+  }
+  .page-break, [data-nexus-page-break] {
+    display: block !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    visibility: hidden !important;
+    page-break-before: always !important;
+    break-before: page !important;
   }
   .page:last-child, .section:last-child {
     margin-bottom: 0 !important;
