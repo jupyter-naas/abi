@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.67.1 (2026-09-11)
+
+### Bug Fixes
+
+- **app-html**: Extend app_html_access_token_expire_minutes limit to 7 days
+  ([`80a7e39`](https://github.com/jupyter-naas/abi/commit/80a7e39b0584bd6f789dea6f306046446e4abb63))
+
+
 ## v2.67.0 (2026-09-11)
 
 ### Bug Fixes
