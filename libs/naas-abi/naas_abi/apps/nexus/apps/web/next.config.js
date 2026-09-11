@@ -3,7 +3,7 @@ const path = require('path');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@nexus/ui', '@embedpdf/snippet'],
+  transpilePackages: ['@nexus/ui', '@embedpdf/snippet', 'three'],
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
