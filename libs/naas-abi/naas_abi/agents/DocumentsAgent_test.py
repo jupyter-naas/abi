@@ -21,8 +21,8 @@ def test_sections_agent_prompt_requires_research_then_write() -> None:
     assert "web_search" in prompt
     assert "Research loop" in prompt
     assert "Plan, then write" in prompt
-    assert "write_document_sections" in prompt
-    assert "Do not re-read" in prompt
+    assert "apply_document_commands" in prompt
+    assert "Do not reread" in prompt
     assert "start writing immediately" not in prompt
     assert "Context / Approach / Plan" in prompt
     assert "document.html" in prompt
@@ -52,14 +52,46 @@ def test_sections_agent_owns_the_write_and_research_tools() -> None:
     names = {tool.name for tool in DocumentsAgent.get_tools()}
     assert "create_documents_project" in names
     assert "write_document" in names
-    assert "write_document_section" in names
-    assert "write_document_sections" in names
+    assert "apply_document_commands" in names
+    assert "insert_heading" in names
+    assert "insert_paragraph" in names
     assert "replace_in_document" in names
     assert "web_search" in names
     assert "web_fetch" in names
+    leftover = {
+        "list_document_sections",
+        "read_document_section",
+        "write_document_section",
+        "write_document_sections",
+    }
+    assert leftover.isdisjoint(names)
     source = inspect.getsource(DocumentsAgent.get_tools)
     assert "naas_abi.agents.tools.web_tools" in source or "documents_research_tools" in source
     assert "nexus_admin_tools" not in source
+
+
+def test_write_report_turn_cannot_loop_leftover_section_tools() -> None:
+    """A write-report prompt must not bind leftover list/read/write section tools.
+
+    Those leftovers are how a Documents turn burns the 160-step cap. When the
+    command API is available, they stay off the agent.
+    """
+    names = {tool.name for tool in DocumentsAgent.get_tools()}
+    leftover = {
+        "list_document_sections",
+        "read_document_section",
+        "write_document_section",
+        "write_document_sections",
+        "insert_section",
+        "delete_section",
+        "duplicate_section",
+        "reorder_sections",
+    }
+    assert leftover.isdisjoint(names)
+    assert "apply_document_commands" in names
+    assert "insert_heading" in names
+    assert "insert_paragraph" in names
+    assert "insert_page_break" in names
 
 
 def test_sections_agent_has_no_module_create_agent() -> None:
@@ -111,6 +143,7 @@ def test_new_loads_the_sections_model_and_keeps_write_tools(monkeypatch) -> None
     assert isinstance(agent, DocumentsAgent)
     assert agent.name == "Documents"
     assert "create_documents_project" in names
+    assert "apply_document_commands" in names
     assert "web_search" in names
 
 

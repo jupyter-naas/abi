@@ -9,13 +9,15 @@ from naas_abi.agents.tools.documents_tools import (
     _DATA_URL_RE,
     _REDACTED_PLACEHOLDER,
     _WIPED_DECK_ERROR,
+    COMMAND_TOOL_NAMES,
+    LEFTOVER_SECTION_TOOL_NAMES,
     _apply_replacements,
     _apply_replacements_in_section,
     _apply_section_writes,
     _cover_h1_text,
     _cover_subtitle_text,
-    _document_path,
     _delete_section_html,
+    _document_path,
     _duplicate_section_html,
     _ensure_coding_repo,
     _forget_active_slugs,
@@ -32,6 +34,7 @@ from naas_abi.agents.tools.documents_tools import (
     _section_meta,
     _split_sections,
     _view_for_llm,
+    documents_agent_tools,
     documents_tools,
 )
 from naas_abi_core.services.agent.context import (
@@ -956,3 +959,77 @@ def test_structure_tools_persist_without_returning_html(monkeypatch):
         assert "Risks" in (document.text or "")
     finally:
         _reset_tokens(tokens)
+
+
+def test_documents_tools_include_command_api():
+    names = {t.name for t in documents_tools()}
+    assert COMMAND_TOOL_NAMES <= names
+    assert LEFTOVER_SECTION_TOOL_NAMES <= names
+
+
+def test_documents_agent_tools_hide_leftover_section_crud_when_commands_exist():
+    """A write-report turn cannot call list_document_sections at all."""
+    catalog = {t.name for t in documents_tools()}
+    bound = {t.name for t in documents_agent_tools()}
+    assert "apply_document_commands" in catalog
+    assert LEFTOVER_SECTION_TOOL_NAMES.isdisjoint(bound)
+    assert COMMAND_TOOL_NAMES <= bound
+    assert "list_document_sections" not in bound
+
+
+def test_apply_document_commands_persists_without_returning_html(monkeypatch):
+    sc = _seed_in_memory_document(_bind_in_memory_git(monkeypatch), _SAMPLE)
+    tokens = _sections_context()
+    try:
+        apply = next(
+            t for t in documents_tools() if t.name == "apply_document_commands"
+        )
+        result = apply.invoke(
+            {
+                "requests_json": json.dumps(
+                    [
+                        {
+                            "type": "insert_heading",
+                            "title": "Scope",
+                            "level": 2,
+                            "after_heading": -1,
+                        },
+                        {
+                            "type": "insert_paragraph",
+                            "text": "Audit AI covers fieldwork planning.",
+                            "after_heading": -1,
+                        },
+                    ]
+                )
+            }
+        )
+        assert "error" not in result, result
+        assert result["ok"] is True
+        assert result["heading_count"] >= 2
+        assert "html" not in result
+        assert "<section" not in json.dumps(result)
+        document = sc.get_file(
+            repo_id="abi/monorepo",
+            path="documents/ws-test/untitled-local/document.html",
+            ref="documents/ws-test/untitled-local",
+        )
+        assert "Scope" in (document.text or "")
+        assert "Audit AI covers fieldwork planning." in (document.text or "")
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_insert_heading_respects_research_gate(monkeypatch):
+    _seed_in_memory_document(_bind_in_memory_git(monkeypatch), _SAMPLE)
+    tokens = _sections_context()
+    tokens.append(documents_research_required.set(True))
+    tokens.append(documents_research_queries.set([]))
+    try:
+        insert = next(t for t in documents_tools() if t.name == "insert_heading")
+        blocked = insert.invoke({"title": "Findings"})
+        assert blocked is not None
+        assert "web_search" in blocked["error"]
+    finally:
+        documents_research_required.reset(tokens[-2])
+        documents_research_queries.reset(tokens[-1])
+        _reset_tokens(tokens[:-2])

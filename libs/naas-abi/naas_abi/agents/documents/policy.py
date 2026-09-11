@@ -78,17 +78,17 @@ MAX_DOCUMENTS_SEARCHES = 4
 MAX_DOCUMENTS_SECTION_READS = 3
 _SEARCH_BUDGET_MESSAGE = (
     "Search budget reached (4 queries). Do not call web_search or web_fetch "
-    "again. Call list_document_sections once, then write the open document.html in "
-    "one write_document_sections or write_document. Do not read every section."
+    "again. Write with apply_document_commands (2 to 4 headings plus "
+    "paragraphs), then stop. Do not list or read leftover sections."
 )
 _LIST_ONCE_MESSAGE = (
     "list_document_sections already ran this turn. Use that outline. "
-    "Do not list again. Write with write_document_sections or write_document."
+    "Do not list again. Write with apply_document_commands, then stop."
 )
 _SECTION_READ_BUDGET_MESSAGE = (
     f"read_document_section budget reached ({MAX_DOCUMENTS_SECTION_READS} sections "
-    "this turn). Do not read every section. Write the document with "
-    "write_document_sections or write_document, or replace_in_document "
+    "this turn). Do not read leftover sections. Write with "
+    "apply_document_commands, then stop, or replace_in_document "
     "for one copy edit."
 )
 _SECTION_REREAD_MESSAGE = (

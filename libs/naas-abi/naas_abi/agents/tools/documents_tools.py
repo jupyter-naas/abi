@@ -809,10 +809,10 @@ def _apply_replacements(
         return {
             "error": "old string not found in document",
             "hint": (
-                "Try list_document_sections + read_document_section to locate "
-                "exact text (tools also match HTML entities like &amp;, "
-                "&mdash;, &#8212;). For cover/title edits on section 1, pass "
-                "section_index=0."
+                "Try read_document for the heading outline, then "
+                "replace_in_document with the exact visible text (tools also "
+                "match HTML entities like &amp;, &mdash;, &#8212;). For "
+                "cover/title edits on the first heading, pass section_index=0."
             ),
         }
     if occurrence == 0:
@@ -1443,6 +1443,32 @@ def _restore_redacted_data_urls(new_html: str, original_html: str) -> str:
     return re.sub(re.escape(_REDACTED_PLACEHOLDER), _sub, new_html)
 
 
+# Slide-shaped leftovers. REST and unit tests still call them. DocumentsAgent
+# must not bind them once the command API is available, or a write-report turn
+# lists/reads/writes leftover <section> blocks until the 160-step cap.
+LEFTOVER_SECTION_TOOL_NAMES = frozenset(
+    {
+        "list_document_sections",
+        "read_document_section",
+        "write_document_section",
+        "write_document_sections",
+        "insert_section",
+        "delete_section",
+        "duplicate_section",
+        "reorder_sections",
+    }
+)
+COMMAND_TOOL_NAMES = frozenset(
+    {
+        "apply_document_commands",
+        "insert_heading",
+        "insert_paragraph",
+        "insert_page_break",
+        "apply_paragraph_style",
+    }
+)
+
+
 def _view_for_llm(html: str) -> dict[str, Any]:
     """Outline-only document view. Full HTML belongs in one targeted section read."""
     scripts_redacted_html, n_scripts = _redact_scripts(html)
@@ -1458,8 +1484,8 @@ def _view_for_llm(html: str) -> dict[str, Any]:
         "note": (
             "Outline only. HTML is omitted on purpose: a 25-section industry "
             "document is ~160k characters and blows the next model call. "
-            "Read at most 3 sections, then write with write_document_sections "
-            "or write_document. Do not edit buildPptx. Preview is HTML; "
+            "Write with apply_document_commands (2 to 4 headings plus "
+            "paragraphs), then stop. Do not edit buildPptx. Preview is HTML; "
             "PDF is derived at export."
         ),
     }
@@ -1919,8 +1945,8 @@ def documents_tools() -> list[BaseTool]:
         """Read a compact outline of the HTML document (titles, counts, no HTML).
 
         Omit slug when a document is open. Default omits the file body: a 25-section
-        industry document is ~160k characters. Prefer list_document_sections, then
-        write. Set include_assets=true only if you must see scripts or
+        industry document is ~160k characters. Prefer apply_document_commands,
+        then stop. Set include_assets=true only if you must see scripts or
         embedded images (that path can exceed the model context window).
         """
         if not agent_user_id.get():
@@ -1962,9 +1988,9 @@ def documents_tools() -> list[BaseTool]:
         slug: str = "",
         message: str = "refactor(sections): rewrite document via Abi",
     ) -> dict[str, Any]:
-        """Write the full HTML document. Prefer this or write_document_sections for a whole-document brief.
+        """Write the full HTML document. Prefer apply_document_commands for a report.
 
-        Omit slug when a document is open. Do not follow with per-section writes.
+        Omit slug when a document is open. Do not follow with leftover section writes.
         For a single copy edit, use replace_in_document instead.
 
         For news, current events, or factual briefs: call web_search once this
@@ -2013,6 +2039,9 @@ def documents_tools() -> list[BaseTool]:
             return _tool_error(exc)
 
     def _run_document_commands(requests: list[dict[str, Any]], slug: str, message: str) -> dict[str, Any]:
+        blocked = reject_unresearched_documents_write()
+        if blocked:
+            return blocked
         from naas_abi.agents.tools.documents_commands import (
             apply_document_commands as apply_commands,
         )
@@ -2037,10 +2066,16 @@ def documents_tools() -> list[BaseTool]:
     ) -> dict[str, Any]:
         """Apply an ordered list of document commands (JSON array).
 
+        Prefer this for a write-report turn. Put 2 to 4 insert_heading and
+        insert_paragraph items in one call, then stop. Do not reread the
+        document. A longer report continues on the next turn.
+
         Each item needs type. Supported: insert_text, insert_paragraph,
         insert_heading, insert_page_break, delete_range, replace_text,
         update_paragraph_style. Positions use after_heading or heading_index.
         Returns {ok, heading_index, heading_count}. Never HTML.
+
+        For news or factual briefs: call web_search once this turn first.
         """
         try:
             payload = json.loads(requests_json or "[]")
@@ -2081,7 +2116,11 @@ def documents_tools() -> list[BaseTool]:
         slug: str = "",
         message: str = "feat(document): insert heading via Abi",
     ) -> dict[str, Any]:
-        """Insert a heading (level 1-3) after after_heading. Pandoc Header analog."""
+        """Insert a heading (level 1-3) after after_heading. Pandoc Header analog.
+
+        Prefer apply_document_commands for a batch of 2 to 4 headings. A few
+        insert_heading calls are fine. Then stop. Do not reread.
+        """
         return _run_document_commands(
             [
                 {
@@ -2102,7 +2141,10 @@ def documents_tools() -> list[BaseTool]:
         slug: str = "",
         message: str = "feat(document): insert paragraph via Abi",
     ) -> dict[str, Any]:
-        """Insert a paragraph after after_heading. Pandoc Para / ODF addParagraph."""
+        """Insert a paragraph after after_heading. Pandoc Para / ODF addParagraph.
+
+        Batch with apply_document_commands when writing a report. Then stop.
+        """
         return _run_document_commands(
             [{"type": "insert_paragraph", "text": text, "after_heading": after_heading}],
             slug,
@@ -2267,9 +2309,28 @@ def documents_tools() -> list[BaseTool]:
         replace_in_document,
         read_document,
         write_document,
+        apply_document_commands,
+        insert_heading,
+        insert_paragraph,
+        insert_page_break,
+        apply_paragraph_style,
         insert_section,
         delete_section,
         duplicate_section,
         reorder_sections,
         sections_history,
     ]
+
+
+def documents_agent_tools() -> list[BaseTool]:
+    """Tools DocumentsAgent binds.
+
+    Leftover slide-shaped section CRUD is omitted when the command API is
+    present, so a write-report turn cannot list/read/write leftover sections
+    until the step cap.
+    """
+    tools = documents_tools()
+    names = {tool.name for tool in tools}
+    if "apply_document_commands" in names:
+        return [tool for tool in tools if tool.name not in LEFTOVER_SECTION_TOOL_NAMES]
+    return tools
