@@ -16,6 +16,7 @@ from .org import org
 from .run import run
 from .secret import secrets
 from .setup import setup
+from .slides import slides
 from .snapshot import snapshot
 from .stack import logs, stack, start, stop
 from .user import user
@@ -47,6 +48,7 @@ _main.add_command(dev)
 _main.add_command(workspace)
 _main.add_command(user)
 _main.add_command(org)
+_main.add_command(slides)
 ran = False
 
 
