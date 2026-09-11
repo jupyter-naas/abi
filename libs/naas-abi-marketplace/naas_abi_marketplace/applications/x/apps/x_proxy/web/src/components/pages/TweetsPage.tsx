@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { TweetResults } from "@/components/TweetResults";
-import { loadTweetIndex, loadTweetPreview, type TweetHit } from "@/lib/tweetSearch";
+import {
+  loadTweetPreview,
+  loadTweetSearchPage,
+  type TweetHit,
+  type TweetSearchPage,
+} from "@/lib/tweetSearch";
 
 type Props = {
   timezone: string;
@@ -23,8 +28,9 @@ type Props = {
 export function TweetsPage({ timezone, needle, onNeedleChange }: Props) {
   const [page, setPage] = useState(0);
   const [preview, setPreview] = useState<TweetHit[]>([]);
-  const [full, setFull] = useState<TweetHit[] | null>(null);
-  const [loadingFull, setLoadingFull] = useState(false);
+  const [remote, setRemote] = useState<TweetSearchPage | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let live = true;
@@ -38,37 +44,58 @@ export function TweetsPage({ timezone, needle, onNeedleChange }: Props) {
 
   const submitted = needle.trim();
   useEffect(() => {
-    if (!submitted || full) return;
+    if (!submitted && page === 0) {
+      setRemote(null);
+      setError("");
+      return;
+    }
     let live = true;
-    setLoadingFull(true);
-    loadTweetIndex()
-      .then((hits) => {
-        if (live) setFull(hits);
+    setLoading(true);
+    setError("");
+    loadTweetSearchPage(submitted, page)
+      .then((result) => {
+        if (live) setRemote(result);
+      })
+      .catch((reason: unknown) => {
+        if (live) {
+          setRemote(null);
+          setError(reason instanceof Error ? reason.message : "Search failed");
+        }
       })
       .finally(() => {
-        if (live) setLoadingFull(false);
+        if (live) setLoading(false);
       });
     return () => {
       live = false;
     };
-  }, [submitted, full]);
+  }, [submitted, page]);
 
-  const hits = full || preview;
+  const serverPaged = Boolean(submitted || page > 0);
+  const hits = serverPaged ? remote?.hits || [] : preview;
 
   // A new needle starts again at the first page of results.
   const handleNeedleChange = (value: string) => {
     onNeedleChange(value);
+    setRemote(null);
     setPage(0);
+  };
+
+  const handlePageChange = (value: number) => {
+    setRemote(null);
+    setPage(value);
   };
 
   return (
     <TweetResults
       hits={hits}
-      loading={loadingFull && !full}
+      loading={loading}
+      error={error}
+      total={remote?.count}
+      serverPaged={serverPaged}
       needle={needle}
       onNeedleChange={handleNeedleChange}
       page={page}
-      onPageChange={setPage}
+      onPageChange={handlePageChange}
       timezone={timezone}
     />
   );

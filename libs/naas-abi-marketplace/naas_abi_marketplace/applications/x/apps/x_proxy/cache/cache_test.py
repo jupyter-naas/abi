@@ -463,6 +463,21 @@ def _seeded_reader() -> CacheReader:
     return CacheReader(storage)  # type: ignore[arg-type]
 
 
+def test_server_side_tweet_search_filters_and_pages_projection():
+    reader = _seeded_reader()
+
+    total, rows = reader.search_tweets("alice", limit=10)
+    assert total == 1
+    assert rows[0]["tweet_id"] == "1"
+    assert rows[0]["username"] == "alice"
+
+    total, first = reader.search_tweets("post", limit=1)
+    _, second = reader.search_tweets("post", offset=1, limit=1)
+    assert total == 3
+    assert first[0]["tweet_id"] == "1"
+    assert second[0]["tweet_id"] == "2"
+
+
 def test_window_counts_split_matched_from_referenced():
     reader = _seeded_reader()
     start, end = "2026-08-12T00:00:00+00:00", "2026-08-13T00:00:00+00:00"

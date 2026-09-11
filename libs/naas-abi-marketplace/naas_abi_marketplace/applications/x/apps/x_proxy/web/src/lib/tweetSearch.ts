@@ -171,7 +171,6 @@ async function getPostIndex(path: string): Promise<TweetHit[]> {
 }
 
 let previewPromise: Promise<TweetHit[]> | null = null;
-let fullIndexPromise: Promise<TweetHit[]> | null = null;
 
 /**
  * The newest 1 000 published posts, whole graph - fast first paint for the
@@ -184,15 +183,60 @@ export function loadTweetPreview(): Promise<TweetHit[]> {
   return previewPromise;
 }
 
-/**
- * Every published post, whole graph - fetched once a needle is submitted, so
- * a page that never searches never pays for it. Memoised per session.
- */
-export function loadTweetIndex(): Promise<TweetHit[]> {
-  if (!fullIndexPromise) {
-    fullIndexPromise = getPostIndex("posts.json").catch(() => []);
-  }
-  return fullIndexPromise;
+export type TweetSearchPage = {
+  count: number;
+  page: number;
+  perPage: number;
+  hits: TweetHit[];
+};
+
+/** Search one server-side projection page without downloading the full index. */
+export async function loadTweetSearchPage(
+  needle: string,
+  page: number,
+): Promise<TweetSearchPage> {
+  const params = new URLSearchParams({
+    q: needle,
+    page: String(page),
+    per_page: String(TWEET_RESULTS_PAGE_SIZE),
+  });
+  const response = await fetch(
+    withAccessToken(`${SEARCH_TWEETS_BASE}/query.json?${params}`),
+  );
+  if (!response.ok) throw new Error(`query.json HTTP ${response.status}`);
+  const doc = (await response.json()) as PostIndexDoc & {
+    page?: number;
+    per_page?: number;
+  };
+  return {
+    count: Number(doc.count) || 0,
+    page: Number(doc.page) || 0,
+    perPage: Number(doc.per_page) || TWEET_RESULTS_PAGE_SIZE,
+    hits: (doc.posts || []).map((row) =>
+      Array.isArray(row) ? hitFromIndexRow(row) : hitFromSearchPost(row),
+    ),
+  };
+}
+
+function hitFromSearchPost(post: Record<string, unknown>): TweetHit {
+  const tweetId = cell(post, "tweet_id");
+  const username = cell(post, "username");
+  const queries = post.queries;
+  return {
+    id: tweetId || null,
+    text: cell(post, "text"),
+    url: tweetId && username ? `https://x.com/${username}/status/${tweetId}` : "",
+    username,
+    createdAt: cell(post, "created_at"),
+    location: cell(post, "location"),
+    verifiedType: cell(post, "verified_type"),
+    referenced: Boolean(post.referenced),
+    mediaCount: Number(post.media_count) || 0,
+    mediaUrl: "",
+    queries: Array.isArray(queries)
+      ? queries.filter((value): value is string => typeof value === "string")
+      : [],
+  };
 }
 
 /**

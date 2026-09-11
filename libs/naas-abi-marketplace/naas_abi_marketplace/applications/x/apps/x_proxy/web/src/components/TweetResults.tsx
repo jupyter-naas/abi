@@ -14,6 +14,9 @@ type Props = {
   hits: TweetHit[];
   /** True while the full whole-graph index is being fetched for a submitted needle. */
   loading: boolean;
+  error?: string;
+  total?: number;
+  serverPaged?: boolean;
   needle: string;
   onNeedleChange: (needle: string) => void;
   /** Result page, 0-based. */
@@ -54,6 +57,9 @@ function formatInstant(iso: string, timezone: string): string {
 export function TweetResults({
   hits,
   loading,
+  error,
+  total,
+  serverPaged = false,
   needle,
   onNeedleChange,
   page,
@@ -75,8 +81,12 @@ export function TweetResults({
   }, [needle]);
 
   const submitted = needle.trim();
-  const matches = useMemo(() => rankTweets(hits, submitted), [hits, submitted]);
+  const matches = useMemo(
+    () => (serverPaged ? hits : rankTweets(hits, submitted)),
+    [hits, serverPaged, submitted],
+  );
   const graphTotal = graph?.posts ?? null;
+  const resultTotal = total ?? graphTotal;
 
   const goToPage = (next: number) => {
     onPageChange(next);
@@ -88,13 +98,15 @@ export function TweetResults({
     Math.ceil(matches.length / TWEET_RESULTS_PAGE_SIZE),
   );
   const graphPages =
-    graphTotal != null
-      ? Math.max(1, Math.ceil(graphTotal / TWEET_RESULTS_PAGE_SIZE))
+    resultTotal != null
+      ? Math.max(1, Math.ceil(resultTotal / TWEET_RESULTS_PAGE_SIZE))
       : browsablePages;
-  const pages = submitted ? browsablePages : graphPages;
+  const pages = serverPaged || !submitted ? graphPages : browsablePages;
   const current = Math.min(page, pages - 1);
   const start = current * TWEET_RESULTS_PAGE_SIZE;
-  const listed = matches.slice(start, start + TWEET_RESULTS_PAGE_SIZE);
+  const listed = serverPaged
+    ? matches
+    : matches.slice(start, start + TWEET_RESULTS_PAGE_SIZE);
 
   return (
     <div className="results">
@@ -140,8 +152,8 @@ export function TweetResults({
           this publish carries. A submitted needle pages its own matches. */}
       <p className="results-count">
         {submitted
-          ? `${matches.length.toLocaleString()} result${
-              matches.length === 1 ? "" : "s"
+          ? `${(total ?? matches.length).toLocaleString()} result${
+              (total ?? matches.length) === 1 ? "" : "s"
             } for “${submitted}”`
           : graphTotal != null
             ? `${graphTotal.toLocaleString()} result${
@@ -157,9 +169,11 @@ export function TweetResults({
         <p className="user-empty">
           {loading
             ? "Searching the whole graph…"
+            : error
+              ? `Search unavailable: ${error}`
             : hits.length
               ? "No post matches - try a shorter word, an author or a location."
-              : "No post in this publish yet."}
+              : "No published post was returned."}
         </p>
       ) : null}
 

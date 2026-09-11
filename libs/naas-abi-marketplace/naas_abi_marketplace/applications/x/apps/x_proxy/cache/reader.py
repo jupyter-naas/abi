@@ -581,6 +581,115 @@ class CacheReader:
             out.append(post)
         return out
 
+    def search_tweets(
+        self,
+        query: str,
+        *,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> tuple[int, list[dict[str, Any]]]:
+        """Search and page the projection without serializing its full index."""
+        import polars as pl
+
+        posts = self.posts()
+        if posts.is_empty():
+            return 0, []
+        rows = (
+            posts.with_columns((pl.col("kind") == KIND_MATCHED).alias("_is_match"))
+            .sort(["_is_match", "created_at"], descending=[True, True])
+            .unique(subset=["tweet_id"], keep="first")
+            .with_columns(
+                pl.col("tweet_id")
+                .fill_null("")
+                .cast(pl.String)
+                .str.to_lowercase()
+                .alias("_search_tweet_id"),
+                pl.col("username")
+                .fill_null("")
+                .cast(pl.String)
+                .str.to_lowercase()
+                .alias("_search_username"),
+                pl.col("location")
+                .fill_null("")
+                .cast(pl.String)
+                .str.to_lowercase()
+                .alias("_search_location"),
+                pl.coalesce(
+                    pl.col("full_text"),
+                    pl.col("text"),
+                    pl.lit(""),
+                )
+                .cast(pl.String)
+                .str.to_lowercase()
+                .alias("_search_text"),
+            )
+        )
+        needle = query.strip().lower().lstrip("@")
+        if needle:
+            tweet_id = pl.col("_search_tweet_id")
+            username = pl.col("_search_username")
+            text = pl.col("_search_text")
+            location = pl.col("_search_location")
+            rows = (
+                rows.with_columns(
+                    pl.when(tweet_id == needle)
+                    .then(pl.lit(-1))
+                    .when(tweet_id.str.starts_with(needle))
+                    .then(pl.lit(0))
+                    .when(username == needle)
+                    .then(pl.lit(1))
+                    .when(username.str.starts_with(needle))
+                    .then(pl.lit(2))
+                    .when(username.str.contains(needle, literal=True))
+                    .then(pl.lit(3))
+                    .when(text.str.contains(needle, literal=True))
+                    .then(pl.lit(4))
+                    .when(location.str.contains(needle, literal=True))
+                    .then(pl.lit(5))
+                    .otherwise(pl.lit(None))
+                    .alias("_score")
+                )
+                .filter(pl.col("_score").is_not_null())
+                .sort(["_score", "created_at"], descending=[False, True])
+            )
+        else:
+            rows = rows.sort("created_at", descending=True)
+
+        total = rows.height
+        page = rows.slice(max(0, offset), max(1, min(limit, 100)))
+        ids = page.get_column("tweet_id").to_list()
+        matched_queries: dict[str, list[str]] = {}
+        if ids:
+            matched_queries = {
+                row["tweet_id"]: [value for value in row["queries"] if value]
+                for row in (
+                    posts.filter(
+                        pl.col("tweet_id").is_in(ids) & (pl.col("kind") == KIND_MATCHED)
+                    )
+                    .group_by("tweet_id")
+                    .agg(pl.col("query_slug").unique().sort().alias("queries"))
+                    .iter_rows(named=True)
+                )
+            }
+
+        out: list[dict[str, Any]] = []
+        for row in page.iter_rows(named=True):
+            media = " ".join(str(row["media_urls"] or "").split())
+            out.append(
+                {
+                    "tweet_id": row["tweet_id"],
+                    "created_at": row["created_at"].isoformat(),
+                    "text": row["full_text"] or row["text"] or "",
+                    "username": row["username"] or "",
+                    "location": row["location"] or "",
+                    "verified_type": row["verified_type"] or "",
+                    "referenced": row["kind"] == KIND_REFERENCED,
+                    "media_count": len(media.split()) if media else 0,
+                    "queries": matched_queries.get(row["tweet_id"], []),
+                }
+            )
+        return total, out
+
     def accounts_by_username(self) -> dict[str, dict[str, Any]]:
         """Full profile per username, shaped like the published Users payload."""
         authors = self.authors()

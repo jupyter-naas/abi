@@ -31,8 +31,10 @@ Served through ``/app-html/x/apps/x_proxy/…`` before the Nexus static catch-al
 from __future__ import annotations
 
 import hashlib
+import json
 import mimetypes
 import re
+import threading
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import Response
@@ -43,6 +45,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import (
     DEFAULT_APP_PREFIX,
 )
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
 APP_HTML_INDEX_PATH = "/app-html/x/apps/x_proxy/index.html"
@@ -57,7 +60,7 @@ LEGACY_APP_HTML_PREFIX = "/app-html/x/apps/x/"
 # Dataset JSON. ``search_users/posts/<shard>.json`` is one level deeper than the
 # page snapshots, hence the optional second segment.
 _SNAPSHOT_RE = re.compile(
-    r"^(globals|count_recent_tweets|search_recents_tweets|search_users)"
+    r"^(globals|count_recent_tweets|search_recents_tweets|search_tweets|search_users)"
     r"(/[A-Za-z0-9_-]+)?/[A-Za-z0-9_.-]+\.json$"
 )
 _DIRECT_ARTIFACT_RE = re.compile(
@@ -216,6 +219,35 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, object_storage_service: ObjectStorageService) -> None:
         super().__init__(app)
         self._object_storage = object_storage_service
+        self._search_reader = None
+        self._search_state: dict = {}
+        self._search_lock = threading.Lock()
+
+    def _search_tweets(self, query: str, page: int, per_page: int) -> bytes:
+        from naas_abi_marketplace.applications.x.apps.x_proxy.cache.reader import (
+            CacheReader,
+        )
+
+        with self._search_lock:
+            current = CacheReader(self._object_storage)
+            state = current.projection_state()
+            if self._search_reader is None or state != self._search_state:
+                self._search_reader = current
+                self._search_state = state
+            total, posts = self._search_reader.search_tweets(
+                query,
+                offset=page * per_page,
+                limit=per_page,
+            )
+        return json.dumps(
+            {
+                "count": total,
+                "page": page,
+                "per_page": per_page,
+                "posts": posts,
+            },
+            separators=(",", ":"),
+        ).encode()
 
     def _index(self, request: Request, *, app_prefix: str = DEFAULT_APP_PREFIX):
         return _serve_object(
@@ -257,6 +289,29 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
         if matched is None:
             return await call_next(request)
         app_prefix, rel = matched
+
+        if rel == "search_tweets/query.json":
+            query = str(request.query_params.get("q") or "")[:200]
+            try:
+                page = max(0, int(request.query_params.get("page") or 0))
+                per_page = max(
+                    1, min(100, int(request.query_params.get("per_page") or 100))
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400, detail="page and per_page must be integers"
+                ) from exc
+            content = await run_in_threadpool(
+                self._search_tweets, query, page, per_page
+            )
+            return Response(
+                content=content,
+                media_type="application/json; charset=utf-8",
+                headers={
+                    **_frame_ancestor_headers(request),
+                    "Cache-Control": "private, max-age=30",
+                },
+            )
 
         if not rel or rel == "index.html":
             try:
