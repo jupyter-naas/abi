@@ -32,6 +32,9 @@ class IDatasetPort:
     def list(*, namespace=None) -> list[DatasetInfo]
     def write(name, rows, *, namespace="default", mode="append"|"replace"|"upsert", snapshot_id=None) -> DatasetInfo
     def query(sql, *, namespace="default", snapshot_id=None) -> QueryResult
+    def compact(name, *, namespace="default") -> QueryResult
+    def flush(name, *, namespace="default") -> QueryResult
+    def inlined_row_count(name, *, namespace="default") -> int
     def list_snapshots() -> list[DatasetSnapshotInfo]
     def drop(name, *, namespace="default") -> None
 ```
@@ -60,12 +63,19 @@ services:
       config:
         catalog: "sqlite:storage/datasets.sqlite"
         data_path: "storage/datasets/"
+        data_inlining_row_limit: 1000
         max_retries: 10
         retry_base_delay_seconds: 0.05
         retry_max_delay_seconds: 1.0
 ```
 
 Default is that block.
+
+The adapter passes `DATA_INLINING_ROW_LIMIT` on every connection, including fresh
+connections used by retries. It is a per-insert row limit, not an accumulated
+catalog limit. Set it to 0 to disable inlining. Persisted DuckLake table, schema,
+or catalog overrides take precedence; this default does not rewrite those options
+or change connections opened outside the service. Larger inserts still use Parquet.
 
 `data_path` may instead use an `s3://` or `s3a://` URI, which keeps table data
 wherever the deployment persists datasets rather than on a container disk. Other
@@ -98,6 +108,22 @@ the store. Modules that use the service declare `DatasetService` in `ModuleDepen
 
 Each write uses a fresh connection and retries the complete transaction up to 10 times for catalog locks/transaction conflicts. Backoff starts at 50 ms, doubles to a 1-second cap, and has +/-25% jitter. SQLite writers sharing one adapter are serialized before the cross-process retry boundary; PostgreSQL writers remain concurrent. PostgreSQL deployment credentials are rendered from the secret service; do not log the catalog DSN.
 
+Reads (`describe`, `list`, `list_snapshots`, and `query` without a pinned
+`snapshot_id`) do not pay that fresh-connection cost: they share one
+lazily-created, kept-open connection for the adapter's lifetime, each call
+using its own cursor off it. LOAD-ing the `ducklake`/`httpfs` extensions and
+ATTACH-ing the catalog dominates a single call's latency, and a long-held
+ATTACH observes commits made through other connections without
+re-attaching — so this is a pure latency win with no read-staleness
+trade-off. One caveat: because the connection is kept open for the process's
+lifetime, it does not re-run `_configure_object_store`'s `CREATE OR REPLACE
+SECRET`, so a deployment that rotates S3/MinIO credentials at runtime needs
+the process restarted (or the adapter recreated) to pick up new ones — a
+fresh-per-call connection previously did this implicitly. A pinned
+`query(snapshot_id=...)` (time travel) still gets its own fresh,
+snapshot-specific connection, since `SNAPSHOT_VERSION` is fixed at ATTACH
+time and can't be shared with the latest-snapshot read connection.
+
 Ambiguous object-store transport failures are not replayed automatically: a timeout
 may arrive after metadata committed, and replaying an append could duplicate rows.
 Such failures surface to the caller until the port has an idempotency or commit-status
@@ -111,6 +137,40 @@ Every connection attaches with `AUTOMATIC_MIGRATION`, so the adapter initializes
 - `abi stack snapshot create` stops the stack, then captures `postgres_data` and `storage/`; this produces a coherent local-deployment backup for both PostgreSQL and SQLite catalogs.
 - Flush inlined rows before storage-only maintenance with `CALL ducklake_flush_inlined_data('abi_datasets')`.
 - Compact adjacent small files with `CALL ducklake_merge_adjacent_files('abi_datasets')`.
+- Application callers can use `service.compact(name, namespace="default")`, which
+  returns maintenance statistics and uses the adapter's write conflict retries.
+  It preserves partitions and snapshots and does not flush inlined data or delete
+  old files. Missing datasets raise `DatasetNotFoundError`.
+- Dagster registers `dataset_compaction_job` when the service is enabled. Launch it
+  manually or use `dataset_compaction_daily` (02:00 UTC, running by default).
+  The job calls `flush` before `compact` for each dataset, even for small totals.
+  Flushing and compaction are separate transactions, both with adapter retries.
+  A failed flush prevents compaction of that dataset. A failed compaction leaves
+  successfully flushed data intact for the next run.
+  Flush retires this adapter's cached read connection because DuckLake can drop
+  old inline tables. If another process flushes, an affected cached reader can
+  report a stale inline-table error once; the adapter retires that connection so
+  the next call reattaches. Arbitrary `query()` SQL is not replayed automatically
+  because it can contain writes or multiple statements.
+  Optional op config selects `namespace` and `name`; otherwise it processes all
+  service datasets. See `../../apps/dagster/AGENTS.md` for run config and semantics.
+- `inlined_row_count` reads DuckLake's inline-table registry and counts insertion
+  records across schema versions, including deleted/historical records still in
+  the inline tables. It does not scan Parquet. It excludes separate inline delete
+  markers and does not measure catalog bytes or total metadata/history overhead.
+  The adapter owns access to these DuckLake 1.0 metadata tables.
+- `service.check_catalog_pressure(name, namespace=..., threshold_records=100_000)`
+  logs a warning and publishes `DatasetCatalogPressure` through the engine-wired
+  event service on each check at or above the threshold. This follows the existing
+  core service `ServiceBase` event wiring convention. Publication is fail-open;
+  failures are logged. Without an event service, the warning is still logged.
+  The event is defined under `ontologies/classes/ontology_naas_ai/abi/dataset/` and
+  described by `ontologies/modules/DatasetEventOntology.ttl`; it inherits the
+  canonical `LogProcess` contract. It signals accumulation, not data loss.
+- `dataset_catalog_monitor_hourly` checks all datasets hourly without flushing.
+  The daily maintenance job also checks before flushing. Both schedules default
+  to running but require the Dagster daemon; persisted stopped overrides remain
+  stopped. Checks are outside the write path and warnings repeat while over limit.
 - Configure a retention window with DuckLake's `expire_older_than` option, then run `CALL ducklake_expire_snapshots('abi_datasets')` followed by `CALL ducklake_cleanup_old_files('abi_datasets')`. Never expire snapshots still required by restore/audit policy.
 - Moving from a SQLite catalog to PostgreSQL is a metadata migration. A DSN change alone loses snapshot history and any inlined rows.
 

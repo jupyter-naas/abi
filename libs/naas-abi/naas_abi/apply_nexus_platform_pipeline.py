@@ -9,6 +9,7 @@ from naas_abi_core import logger
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
+from naas_abi_core.services.triple_store.TripleStorePorts import Exceptions
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from rdflib import URIRef
 
@@ -43,4 +44,17 @@ def apply_nexus_platform_pipeline(
     )
     # DROP SILENT avoids list_graphs() (which can NPE on a dangling TDB2 node)
     # and is a no-op if the named graph is already gone.
-    triple_store.query(f"DROP SILENT GRAPH <{NEXUS_PLATFORM_GRAPH_URI}>")
+    #
+    # Best-effort only: another process may hold the Fuseki distributed write
+    # lock (Dagster, a previous API worker, compact). Startup must not fail if
+    # cleanup cannot run right now.
+    try:
+        triple_store.query(f"DROP SILENT GRAPH <{NEXUS_PLATFORM_GRAPH_URI}>")
+    except Exceptions.RequestError as exc:
+        if exc.operation == "acquire_write_lock":
+            logger.warning(
+                "Skipping Nexus graph cleanup; Fuseki write lock busy: {}",
+                exc,
+            )
+            return
+        raise

@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.43.2 (2026-09-10)
+
+### Bug Fixes
+
+- **x-pipelines**: Improve TweetLanguage individual linking in graph builder
+  ([`1a21d63`](https://github.com/jupyter-naas/abi/commit/1a21d632005891587eb9bfb88ab6454d6ba497b3))
+
+
 ## v3.43.1 (2026-09-10)
 
 ### Bug Fixes
