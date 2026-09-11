@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, File, FileCode2, Folder, Image as ImageIcon, Presentation } from 'lucide-react';
+import { ChevronRight, File, FileCode2, FileText, Folder, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DocumentsProjectOverflowMenu } from '@/components/documents/documents-project-menu';
 import { shellTokens } from '../tokens';
@@ -420,7 +420,7 @@ export function SectionsTreeView({
               : 'text-muted-foreground',
           )}
         >
-          <Presentation size={12} className="flex-shrink-0 text-muted-foreground" />
+          <FileText size={12} className="flex-shrink-0 text-muted-foreground" />
           <span className="truncate">{SLIDES_ALL_ROW_LABEL}</span>
         </Link>
       </li>

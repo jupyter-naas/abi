@@ -151,7 +151,7 @@ export async function createUntitledDocumentsProject(
   throw new Error(lastError);
 }
 
-/** One click: seed a template (default Minimal Light), open the document, open the pane. */
+/** One click: seed a template (default Article Light), open the document, open the pane. */
 export async function startNewDocument(
   workspaceId: string,
   navigate: (href: string) => void,

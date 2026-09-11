@@ -125,10 +125,13 @@ describe('DocumentsMenuBar', () => {
         onRefresh: () => {},
       }),
     );
+    expect(html).toContain('>Documents</span>');
+    expect(html).not.toContain('>Sections</span>');
     expect(html).toContain('File');
     expect(html).toContain('Edit');
     expect(html).toContain('View');
     expect(html).toContain('Insert');
+    expect(html).not.toContain('New Presentation');
     expect(html).toContain('data-testid="sections-menu-edit"');
     expect(html).toContain('data-testid="sections-menu-insert"');
     expect(html).not.toContain('data-testid="sections-manual-edit-toggle"');

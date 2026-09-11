@@ -21,7 +21,7 @@ describe('DocumentsSection sidebar views', () => {
   });
 
   it('does not treat a leftover selected slug as a loading outline', () => {
-    expect(sectionsFilmstripEmptyCopy(false)).toBe('Open a document to see documents.');
+    expect(sectionsFilmstripEmptyCopy(false)).toBe('Open a document to see its sections.');
     expect(sectionsFilmstripEmptyCopy(true)).toBe('Loading sections…');
   });
 });

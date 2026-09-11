@@ -49,7 +49,7 @@ describe('sections tree root', () => {
   });
 
   it('names the gallery row the same way Apps names All apps', () => {
-    expect(SLIDES_ALL_ROW_LABEL).toBe('All sections');
+    expect(SLIDES_ALL_ROW_LABEL).toBe('All documents');
   });
 });
 

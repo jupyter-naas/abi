@@ -24,6 +24,7 @@ KNOWN_FEATURE_KEYS: tuple[str, ...] = (
     # Business slides (Forgejo decks + Monaco). On for workspace members by
     # default, like files; never shows Coder chrome.
     "slides",
+    # Business documents (Forgejo HTML + Monaco). Same default grant as slides.
     "documents",
 )
 

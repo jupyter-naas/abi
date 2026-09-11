@@ -68,6 +68,10 @@ export default function SectionsIndexPage() {
           authFetch(`/api/documents/templates?workspace_id=${encodeURIComponent(workspaceId)}`),
         ]);
         if (!projRes.ok) {
+          if (projRes.status === 404) {
+            setProjects([]);
+            return;
+          }
           const body = (await projRes.json().catch(() => ({}))) as { detail?: unknown };
           throw new Error(documentsApiErrorMessage(body.detail, `Failed (${projRes.status})`));
         }

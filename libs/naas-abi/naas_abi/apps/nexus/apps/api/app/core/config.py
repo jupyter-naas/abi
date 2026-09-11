@@ -229,6 +229,7 @@ FeatureKey = Literal[
     "settings",
     "code",
     "slides",
+    "documents",
 ]
 
 
@@ -252,6 +253,7 @@ class FeatureFlagsConfig(BaseModel):
             "datasets",
             "settings",
             "slides",
+            "documents",
         ]
     )
     role_baseline: dict[str, list[FeatureKey]] = Field(
@@ -270,6 +272,7 @@ class FeatureFlagsConfig(BaseModel):
                 "datasets",
                 "settings",
                 "slides",
+                "documents",
             ],
             "admin": [
                 "maps",
@@ -285,9 +288,10 @@ class FeatureFlagsConfig(BaseModel):
                 "datasets",
                 "settings",
                 "slides",
+                "documents",
             ],
-            "member": ["maps", "chat", "files", "datasets", "skills", "slides"],
-            "viewer": ["maps", "chat", "files", "datasets", "skills", "slides"],
+            "member": ["maps", "chat", "files", "datasets", "skills", "slides", "documents"],
+            "viewer": ["maps", "chat", "files", "datasets", "skills", "slides", "documents"],
         }
     )
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)

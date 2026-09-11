@@ -76,7 +76,7 @@ describe('SectionsTreeView', () => {
 
   it('shows one root folder holding the documents', () => {
     const html = markup();
-    expect(html).toContain('>sections</span>');
+    expect(html).toContain('>documents</span>');
     expect((html.match(/data-testid="documents-tree-root"/g) ?? []).length).toBe(1);
   });
 
@@ -114,9 +114,9 @@ describe('SectionsTreeView', () => {
     expect(html).toContain('bg-workspace-accent-15');
   });
 
-  it('puts All sections first and marks it current on the gallery', () => {
+  it('puts All documents first and marks it current on the gallery', () => {
     const html = markup({ currentPath: '/workspace/ws-1/documents' });
-    expect(html).toContain('>All sections</span>');
+    expect(html).toContain('>All documents</span>');
     expect(html.indexOf('documents-tree-all')).toBeLessThan(html.indexOf('documents-tree-root'));
     expect(html).toMatch(
       /data-testid="documents-tree-all"[^>]*aria-current="page"|aria-current="page"[^>]*data-testid="documents-tree-all"/,
@@ -124,7 +124,7 @@ describe('SectionsTreeView', () => {
     expect(html).toContain('href="/workspace/ws-1/documents"');
   });
 
-  it('does not highlight All sections on an open document', () => {
+  it('does not highlight All documents on an open document', () => {
     const html = markup();
     const all = html.match(/<a[^>]*data-testid="documents-tree-all"[^>]*>/g) ?? [];
     expect(all.length).toBe(1);
@@ -155,12 +155,12 @@ describe('SectionsTreeView', () => {
   it('hides the whole tree when the root is collapsed', () => {
     const html = markup({ rootExpanded: false });
     expect(html).not.toContain('Matériaux de construction');
-    expect(html).toContain('>sections</span>');
+    expect(html).toContain('>documents</span>');
   });
 
   it('gives every folder a real disclosure button', () => {
     const html = markup();
-    expect(html).toContain('aria-label="Collapse sections"');
+    expect(html).toContain('aria-label="Collapse documents"');
     expect(html).toContain('aria-label="Collapse Matériaux de construction"');
     expect(html).toContain('aria-label="Expand Latest Ai News 2"');
     expect(html).toContain('aria-label="Expand assets"');

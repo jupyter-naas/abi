@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
-import { ChevronRight, FolderTree, LayoutGrid, Presentation } from 'lucide-react';
+import { ChevronRight, FileText, FolderTree, LayoutGrid } from 'lucide-react';
 import {
   DEFAULT_DOCUMENTS_TEMPLATE_ID,
   openDocumentsAgentPane,
@@ -260,9 +260,9 @@ export function DocumentsSection({
   return (
     <CollapsibleSection
       id="documents"
-      icon={<Presentation size={18} />}
+      icon={<FileText size={18} />}
       label="Documents"
-      description="Presentations in this workspace"
+      description="Documents in this workspace"
       href={sectionsBase}
       collapsed={collapsed}
       detailOnly={detailOnly}
@@ -304,7 +304,7 @@ export function DocumentsSection({
       ) : (
         <>
           <SidebarNewItem
-            label="New Documents"
+            label="New document"
             title="New document"
             onClick={() => createDocument(DEFAULT_DOCUMENTS_TEMPLATE_ID)}
             disabled={creating}

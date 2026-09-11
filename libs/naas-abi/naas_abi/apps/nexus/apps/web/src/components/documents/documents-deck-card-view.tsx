@@ -33,7 +33,7 @@ export function DocumentsCardView({
           {card.title}
         </span>
         <span className="block text-xs text-muted-foreground">
-          Presentation. Open in Documents to view and export PDF.
+          Document. Open in Documents to view and export PDF.
         </span>
       </span>
     </Link>

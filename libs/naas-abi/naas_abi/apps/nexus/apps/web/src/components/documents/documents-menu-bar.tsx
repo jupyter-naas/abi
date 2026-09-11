@@ -242,7 +242,7 @@ function modKey(): string {
 }
 
 export interface DocumentsMenuBarProps {
-  /** File → New Presentation */
+  /** File → New document */
   onNewPresentation: () => void;
   /** File → Save (git commit under the hood). Omit on index/new pages. */
   onCommit?: () => void;
@@ -327,7 +327,7 @@ export function DocumentsMenuBar({
   const fileItems: SectionsMenuEntry[] = [
     {
       id: 'new',
-      label: 'New Presentation',
+      label: 'New document',
       onSelect: onNewPresentation,
     },
   ];
@@ -432,7 +432,7 @@ export function DocumentsMenuBar({
 
   return (
     <div ref={rootRef} className="flex min-w-0 items-center gap-1" data-testid="documents-menu-bar">
-      <span className="mr-1 hidden text-xs font-semibold text-foreground sm:inline">Sections</span>
+      <span className="mr-1 hidden text-xs font-semibold text-foreground sm:inline">Documents</span>
       <MenuDropdown
         label="File"
         menuKey="file"

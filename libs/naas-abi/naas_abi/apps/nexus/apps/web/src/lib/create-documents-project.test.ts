@@ -28,8 +28,8 @@ describe('untitledDocumentSlug', () => {
 });
 
 describe('DEFAULT_DOCUMENTS_TEMPLATE_ID', () => {
-  it('seeds Minimal Light', () => {
-    expect(DEFAULT_DOCUMENTS_TEMPLATE_ID).toBe('abi/minimal-light-v1');
+  it('seeds Article Light', () => {
+    expect(DEFAULT_DOCUMENTS_TEMPLATE_ID).toBe('abi/article-light-v1');
   });
 });
 

@@ -51,14 +51,14 @@ export type SectionsTreeDocumentNode = {
  * Root label.
  *
  * The documents live under `documents/<workspace>/<slug>` in the workspace repo, so
- * `sections` is the one folder that genuinely contains all of them. Naming the
+ * `documents` is the one folder that genuinely contains all of them. Naming the
  * root after the real directory keeps the tree honest instead of inventing a
  * marketing label.
  */
 export const SLIDES_TREE_ROOT_LABEL = 'documents';
 
 /** First sidebar row: cover gallery, same idea as Apps' "All apps". */
-export const SLIDES_ALL_ROW_LABEL = 'All sections';
+export const SLIDES_ALL_ROW_LABEL = 'All documents';
 
 /** The file a document opens in the Documents pane. */
 export const SLIDES_DECK_FILE_NAME = 'document.html';

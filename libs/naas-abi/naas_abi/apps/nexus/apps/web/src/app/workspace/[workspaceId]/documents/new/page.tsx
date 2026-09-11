@@ -27,7 +27,7 @@ export default function NewDocumentsProjectPage() {
   return (
     <div className="flex h-full flex-col">
       <Header
-        title="New Presentation"
+        title="New document"
         nav={<DocumentsMenuBar onNewPresentation={() => router.push(`${base}/new`)} />}
       />
       {error && (
@@ -37,7 +37,7 @@ export default function NewDocumentsProjectPage() {
       )}
       <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
         {!error && <Loader2 size={16} className="animate-spin" />}
-        {error || 'Opening Minimal Light…'}
+        {error || 'Opening document…'}
       </div>
       <DocumentsStatusBar />
     </div>
