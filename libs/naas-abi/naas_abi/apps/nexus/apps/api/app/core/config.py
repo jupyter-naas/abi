@@ -448,7 +448,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30  # 30 minutes (short-lived)
     refresh_token_expire_days: int = 30  # 30 days (long-lived)
     # Short-lived JWT for opening /app-html apps (Bearer or ?token=).
-    app_html_access_token_expire_minutes: int = Field(default=60, ge=1, le=24 * 60)
+    app_html_access_token_expire_minutes: int = Field(default=60, ge=1, le=7 * 24 * 60)
     # HMAC secret for opening Cloudflare Pages portals from Nexus (empty = off).
     pages_sso_secret: str = ""
     pages_sso_expire_seconds: int = Field(default=300, ge=30, le=15 * 60)

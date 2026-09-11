@@ -13,6 +13,8 @@ from naas_abi_core.apps.api.abi_api_key_auth import register_app_html_token_vali
 from starlette.requests import Request
 
 APP_HTML_TOKEN_SCOPE = "app-html"
+# Counter-UAS daily digest emails mint scoped tokens for map + X Proxy links (7d).
+APP_HTML_ACCESS_TOKEN_MAX_MINUTES = 7 * 24 * 60
 
 
 def validate_app_html_jwt(token: str, request: Request) -> bool:
@@ -45,7 +47,7 @@ def mint_app_html_access_token(
 ) -> tuple[str, int]:
     """Return ``(jwt, expires_in_seconds)`` for ``/app-html/`` access."""
     minutes = expires_minutes or settings.app_html_access_token_expire_minutes
-    minutes = max(1, min(minutes, 24 * 60))
+    minutes = max(1, min(minutes, APP_HTML_ACCESS_TOKEN_MAX_MINUTES))
     claims: dict[str, str] = {
         "sub": user_id,
         "scope": APP_HTML_TOKEN_SCOPE,

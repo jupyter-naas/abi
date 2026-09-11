@@ -355,7 +355,7 @@ class AppHtmlAccessTokenRequest(BaseModel):
     expires_minutes: int | None = Field(
         default=None,
         ge=1,
-        le=24 * 60,
+        le=7 * 24 * 60,
         description="Lifetime; defaults to app_html_access_token_expire_minutes",
     )
     path_prefix: str | None = Field(
