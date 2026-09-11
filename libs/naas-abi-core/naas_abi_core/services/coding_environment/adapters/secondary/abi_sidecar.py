@@ -7,6 +7,7 @@ HTTP. Used by ``local_directory`` coding workspaces and Slides/Coder runtimes.
 from __future__ import annotations
 
 import hmac
+import base64
 import json
 import os
 import subprocess
@@ -31,10 +32,18 @@ def _resolve(rel_path: str) -> str:
 
 def _write_file(body: dict) -> dict:
     path = body["path"]
-    content = body.get("content", "")
     target = _resolve(path)
     os.makedirs(os.path.dirname(target) or ROOT, exist_ok=True)
-    data = content.encode("utf-8")
+    if body.get("content_base64") is not None:
+        try:
+            data = base64.b64decode(body["content_base64"], validate=True)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("content_base64 must be valid base64") from exc
+    else:
+        content = body.get("content", "")
+        if not isinstance(content, str):
+            raise ValueError("content must be text")
+        data = content.encode("utf-8")
     with open(target, "wb") as fh:
         fh.write(data)
     return {"ok": True, "path": os.path.relpath(target, ROOT), "bytes": len(data)}

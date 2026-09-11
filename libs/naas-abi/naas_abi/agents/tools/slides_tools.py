@@ -20,8 +20,14 @@ from __future__ import annotations
 
 import html as html_lib
 import json
+import base64
+import hashlib
+import mimetypes
 import re
 import unicodedata
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 from collections import OrderedDict
 from typing import Any
 
@@ -65,14 +71,227 @@ _SCRIPT_RE = re.compile(r"<script\b[^>]*>.*?</script>", re.IGNORECASE | re.DOTAL
 _MAIN_RE = re.compile(r"(<main\b[^>]*>)(.*?)(</main>)", re.IGNORECASE | re.DOTALL)
 _SECTION_SPLIT_RE = re.compile(r"(?=<section\b)", re.IGNORECASE)
 _SECTION_OPEN_RE = re.compile(r"<section\b([^>]*)>", re.IGNORECASE)
+_IMG_TAG_RE = re.compile(r"<img\b[^>]*>", re.IGNORECASE | re.DOTALL)
+_SRC_ATTR_RE = re.compile(r"\bsrc\s*=\s*([\"'])(.*?)\1", re.IGNORECASE | re.DOTALL)
 _ATTR_ID_RE = re.compile(r"""\bid\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 _ATTR_CLASS_RE = re.compile(r"""\bclass\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
+_ATTR_DATA_ELEMENT_ID_RE = re.compile(
+    r"""\bdata-element-id\s*=\s*["']([^"']+)["']""", re.IGNORECASE
+)
+_ATTR_SEMANTIC_ROLE_RE = re.compile(
+    r"""\bdata-semantic-role\s*=\s*["']([^"']+)["']""", re.IGNORECASE
+)
+_NESTED_PARAGRAPH_RE = re.compile(
+    r"<h[12]\b[^>]*>(?:(?!</?h[12]\b).)*?<p\b",
+    re.IGNORECASE | re.DOTALL,
+)
+_PLACEHOLDER_TEXT = re.compile(
+    r"\b(?:presentation title|your title|lorem ipsum|job title|location|view [12]|name)\b",
+    re.IGNORECASE,
+)
 _H1_RE = re.compile(r"<h1\b[^>]*>(.*?)</h1>", re.IGNORECASE | re.DOTALL)
 _TAG_RE = re.compile(r"<[^>]+>")
 _REDACTED_PLACEHOLDER = "[REDACTED_DATA_URL]"
 _SCRIPT_PLACEHOLDER = "<!-- REDACTED_SCRIPT -->"
+# Per-process guard against the agent re-reading sections in a replace-failure
+# loop (each read of a PPTX-converted slide is large, and the loop is what
+# bloats context until the model call times out). Capped so a genuinely large
+# deck edit still gets through; a runaway loop gets a hard stop instead.
+_READ_SECTION_BUDGET = 6
 _REPO_ID_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 _WIPED_DECK_ERROR = "API restart wiped this deck. Click New, then retry."
+_REMOTE_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+_REMOTE_IMAGE_TIMEOUT_SECONDS = 20
+_IMAGE_EXTENSIONS = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "image/svg+xml": ".svg",
+}
+
+
+def _image_payload_is_valid(payload: bytes, media_type: str) -> bool:
+    """Reject successful HTML/error pages masquerading as image responses."""
+    if not payload or not media_type.startswith("image/"):
+        return False
+    if media_type == "image/jpeg":
+        return payload.startswith(b"\xff\xd8\xff")
+    if media_type == "image/png":
+        return payload.startswith(b"\x89PNG\r\n\x1a\n")
+    if media_type == "image/gif":
+        return payload.startswith((b"GIF87a", b"GIF89a"))
+    if media_type == "image/webp":
+        return payload[:4] == b"RIFF" and payload[8:12] == b"WEBP"
+    if media_type == "image/svg+xml":
+        head = payload[:4096].decode("utf-8", "ignore").lstrip("\ufeff \t\r\n")
+        return bool(re.match(r"(?is)<(?:\?xml[^>]*>\s*)?<svg\b", head))
+    return False
+
+
+def _download_remote_image(url: str) -> dict[str, Any]:
+    """Download one remote image and return validated bytes plus a stable name."""
+    parsed = urlparse((url or "").strip())
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        return {"error": "Image URL must be an absolute http(s) URL."}
+    request = Request(
+        url,
+        headers={
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*;q=0.8",
+            "User-Agent": "Nexus Slides image asset fetcher/1.0",
+        },
+    )
+    try:
+        with urlopen(request, timeout=_REMOTE_IMAGE_TIMEOUT_SECONDS) as response:  # nosec B310
+            declared = (response.headers.get_content_type() or "").lower()
+            final_url = response.geturl()
+            payload = response.read(_REMOTE_IMAGE_MAX_BYTES + 1)
+    except (HTTPError, URLError, TimeoutError, OSError) as exc:
+        return {"error": f"Unable to download image URL: {exc}"}
+    if len(payload) > _REMOTE_IMAGE_MAX_BYTES:
+        return {"error": "Remote image exceeds the 5 MB safety limit."}
+    media_type = declared
+    if media_type not in _IMAGE_EXTENSIONS:
+        guessed = mimetypes.guess_type(urlparse(final_url).path)[0] or ""
+        media_type = guessed.lower()
+    if not _image_payload_is_valid(payload, media_type):
+        return {
+            "error": (
+                "Remote URL did not return a supported, decodable image. "
+                f"Received content type {declared or 'unknown'} after redirect."
+            )
+        }
+    digest = hashlib.sha256(payload).hexdigest()[:16]
+    return {
+        "bytes": payload,
+        "media_type": media_type,
+        "filename": f"ai-{digest}{_IMAGE_EXTENSIONS[media_type]}",
+        "final_url": final_url,
+    }
+
+
+def _persist_image_asset(slug: str, filename: str, payload: bytes, message: str) -> dict[str, Any]:
+    """Write one binary image to the live workspace and Forgejo snapshot."""
+    paths = _ensure_slides_write_paths(slug)
+    if paths.get("error"):
+        return paths
+    asset_path = f"{paths['deck_path'].rsplit('/', 1)[0]}/assets/{filename}"
+    results: dict[str, Any] = {"asset_path": asset_path}
+    if _sidecar_available():
+        encoded = base64.b64encode(payload).decode("ascii")
+        sidecar = _sidecar_call(
+            "write_file",
+            {"path": asset_path, "content_base64": encoded},
+        )
+        if sidecar.get("error") or sidecar.get("ok") is False:
+            return {"error": sidecar.get("error") or "sidecar asset write failed"}
+        results["sidecar"] = True
+    try:
+        commit = _get_source_control().upsert_file(
+            repo_id=_repo_id(),
+            path=asset_path,
+            content=payload,
+            message=message,
+            branch=paths["branch"],
+        )
+        results["forgejo"] = True
+        results["asset_commit_sha"] = commit.sha
+    except SourceControlError as exc:
+        if results.get("sidecar"):
+            results["forgejo_error"] = _friendly_sc_error(exc)
+        else:
+            return {"error": _friendly_sc_error(exc)}
+    return results
+
+
+def _replace_image_src_in_section(
+    section_html: str,
+    new_src: str,
+    *,
+    element_id: str = "",
+    asset_name: str = "",
+    target: str = "",
+) -> tuple[str, str] | dict[str, str]:
+    """Replace one image src without changing its layout attributes."""
+    candidate = (new_src or "").strip()
+    if not candidate:
+        return {"error": "new_src must be a non-empty image URL or asset path"}
+    if re.match(r"(?i)\s*(?:javascript|vbscript):", candidate):
+        return {"error": "new_src must not contain an executable URL scheme"}
+    if not re.match(r"(?i)^(?:https?://|data:image/|assets/|/src/assets/)", candidate):
+        return {
+            "error": (
+                "new_src must be an https URL, data:image URL, or a deck asset path "
+                "starting with assets/"
+            )
+        }
+    wanted_id = (element_id or "").strip()
+    wanted_name = (asset_name or "").strip()
+    target_text = (target or "").strip().casefold()
+
+    matches: list[tuple[re.Match[str], str]] = []
+    for match in _IMG_TAG_RE.finditer(section_html):
+        tag = match.group(0)
+        id_match = _ATTR_DATA_ELEMENT_ID_RE.search(tag)
+        name_match = re.search(
+            r"""\bdata-asset-name\s*=\s*["']([^"']+)["']""", tag, re.IGNORECASE
+        )
+        if (wanted_id and id_match and id_match.group(1) == wanted_id) or (
+            wanted_name and name_match and name_match.group(1) == wanted_name
+        ):
+            matches.append((match, tag))
+    if not wanted_id and not wanted_name:
+        scored: list[tuple[int, re.Match[str], str]] = []
+        for match in _IMG_TAG_RE.finditer(section_html):
+            tag = match.group(0)
+            role = re.search(
+                r"""\bdata-semantic-role\s*=\s*["']([^"']+)["']""", tag, re.IGNORECASE
+            )
+            asset_role = re.search(
+                r"""\bdata-asset-role\s*=\s*["']([^"']+)["']""", tag, re.IGNORECASE
+            )
+            haystack = tag.casefold()
+            if any(
+                value in haystack
+                for value in ("brand-logo", "logo", "decorative", "icon")
+            ):
+                continue
+            score = 0
+            if target_text and target_text not in {"main image", "main photo", "photo"}:
+                if target_text in haystack:
+                    score += 100
+            if role and role.group(1).casefold() in {"hero_image", "image"}:
+                score += 20
+            if asset_role and "photo" in asset_role.group(1).casefold():
+                score += 10
+            style = re.search(r"\bstyle\s*=\s*([\"'])(.*?)\1", tag, re.IGNORECASE | re.DOTALL)
+            if style:
+                dimensions = re.findall(r"\b(width|height)\s*:\s*([\d.]+)px", style.group(2), re.IGNORECASE)
+                if len(dimensions) == 2:
+                    score += int(float(dimensions[0][1]) * float(dimensions[1][1]) / 10000)
+            scored.append((score, match, tag))
+        if not scored:
+            return {"error": "No replaceable photo found in the targeted slide"}
+        scored.sort(key=lambda item: item[0], reverse=True)
+        if len(scored) > 1 and scored[0][0] == scored[1][0]:
+            return {"error": "Main image target is ambiguous; provide a target description"}
+        matches = [(scored[0][1], scored[0][2])]
+    if not matches:
+        return {"error": "No matching image found in the targeted slide"}
+    if len(matches) > 1:
+        return {"error": "Image target is ambiguous; provide element_id"}
+    match, tag = matches[0]
+    src_match = _SRC_ATTR_RE.search(tag)
+    if not src_match:
+        return {"error": "Target image has no src attribute"}
+    escaped_src = html_lib.escape(candidate, quote=True)
+    replacement = (
+        tag[: src_match.start(2)]
+        + escaped_src
+        + tag[src_match.end(2) :]
+    )
+    updated = section_html[: match.start()] + replacement + section_html[match.end() :]
+    return updated, html_lib.unescape(src_match.group(2))
 
 
 def _get_source_control():
@@ -1092,14 +1311,70 @@ def _apply_section_writes(
         )
         if isinstance(resolved_idx, dict):
             return resolved_idx
-        sections[resolved_idx] = _restore_redacted_data_urls(
+        updated_section = _restore_redacted_data_urls(
             str(item["html"]).strip(), sections[resolved_idx]
         )
+        validation_error = _validate_section_edit(
+            sections[resolved_idx], updated_section
+        )
+        if validation_error:
+            return {"error": validation_error}
+        sections[resolved_idx] = updated_section
         written.append(resolved_idx)
     new_html = _join_sections(prefix, sections, suffix)
     if _MAIN_RE.search(original) and not _MAIN_RE.search(new_html):
         return {"error": "Refusing to write: reconstructed HTML lost <main>."}
     return new_html, written
+
+
+def _validate_section_edit(original: str, updated: str) -> str | None:
+    """Reject destructive HTML rewrites before they reach the live preview.
+
+    Slides are edited through semantic HTML. A model rewrite may look valid to
+    an HTML parser while silently removing the stable handles used by the
+    editor, or while putting block paragraphs inside headings. Keep this
+    validator deliberately structural; copy-length fitting remains a browser
+    concern handled by the seed runtime.
+    """
+    original_id = _section_id(original)
+    updated_id = _section_id(updated)
+    if original_id and updated_id != original_id:
+        return (
+            f"Refusing to write section: its id changed from {original_id!r} "
+            f"to {updated_id!r}. Preserve the existing <section> id."
+        )
+    if _NESTED_PARAGRAPH_RE.search(updated):
+        return (
+            "Refusing to write section: do not nest <p> inside <h1> or <h2>. "
+            "Put plain text directly in the semantic element."
+        )
+    for pattern, label in (
+        (_ATTR_DATA_ELEMENT_ID_RE, "data-element-id"),
+        (_ATTR_SEMANTIC_ROLE_RE, "data-semantic-role"),
+    ):
+        before = set(pattern.findall(original))
+        after = set(pattern.findall(updated))
+        missing = sorted(before - after)
+        if missing:
+            shown = ", ".join(repr(value) for value in missing[:5])
+            suffix = " ..." if len(missing) > 5 else ""
+            return (
+                f"Refusing to write section: preserve existing {label} values "
+                f"({shown}{suffix}). Change copy inside the existing element."
+            )
+    old_placeholders = {
+        match.group(0).casefold() for match in _PLACEHOLDER_TEXT.finditer(original)
+    }
+    new_placeholders = {
+        match.group(0).casefold() for match in _PLACEHOLDER_TEXT.finditer(updated)
+    }
+    introduced = sorted(new_placeholders - old_placeholders)
+    if introduced:
+        return (
+            "Refusing to write section: introduced template placeholder text "
+            f"({', '.join(introduced)}). Replace it with real copy or remove it."
+        )
+    return None
 
 
 def _section_id(section_html: str) -> str | None:
@@ -1453,6 +1728,14 @@ def _view_for_llm(html: str) -> dict[str, Any]:
 
 
 def slides_tools() -> list[BaseTool]:
+    """Build the Slides toolset.
+
+    The nested tools share per-process state (the section-read budget) as an
+    attribute on this function so a runaway replace->read loop is capped
+    instead of bloating the model context until the call times out.
+    """
+    if not hasattr(slides_tools, "_read_section_calls"):
+        slides_tools._read_section_calls = 0
     @tool
     def create_slides_project(title: str) -> dict[str, Any]:
         """Create a new Slides presentation and make it the deck you are editing.
@@ -1641,6 +1924,18 @@ def slides_tools() -> list[BaseTool]:
 
         Omit slug when a deck is open in the Slides UI.
         """
+        if slides_tools._read_section_calls >= _READ_SECTION_BUDGET:
+            return {
+                "error": (
+                    "Too many slide reads this turn. Stop reading and act on the "
+                    "sections you already have: use write_slides_sections for a "
+                    "full-deck rewrite, or replace_in_slides_deck with the exact "
+                    "old/new text (its 'target_section_html' after a failed "
+                    "replace tells you the precise text to search for). "
+                    "Re-reading will not change the outcome."
+                )
+            }
+        slides_tools._read_section_calls += 1
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
         resolved = _resolve_slug(slug)
@@ -1783,6 +2078,117 @@ def slides_tools() -> list[BaseTool]:
             return _tool_error(exc)
 
     @tool
+    def replace_slide_image(
+        new_src: str,
+        element_id: str = "",
+        asset_name: str = "",
+        target: str = "main image",
+        slug: str = "",
+        section_index: int | None = None,
+        section_id: str | None = None,
+        message: str = "Replace slide image via Abi",
+    ) -> dict[str, Any]:
+        """Replace one image while preserving its existing layout exactly.
+
+        ``new_src`` may be an https URL, a ``data:image`` URL, or a relative
+        deck asset path such as ``assets/automotive-ev.jpg``. HTTPS images are
+        downloaded, validated, and stored in the deck's local ``assets/`` folder
+        before the HTML is changed. Targeting can be
+        explicit with ``element_id``/``asset_name`` or natural with ``target``
+        such as ``main photo`` or ``hero image``. The tool changes only the
+        image's ``src`` attribute; position, dimensions, crop mode, semantic
+        attributes, and surrounding markup remain untouched.
+        """
+        blocked = reject_unresearched_slides_write()
+        if blocked:
+            return blocked
+        if not agent_user_id.get():
+            return {"error": "No authenticated user on this agent session."}
+        resolved = _resolve_slug(slug)
+        if isinstance(resolved, dict):
+            return resolved
+        try:
+            original, source = _load_deck_text(resolved)
+            if isinstance(original, dict):
+                return original
+            prefix, sections, suffix = _split_sections(original)
+            candidates: list[int] = []
+            if section_index is not None or section_id:
+                resolved_index = _resolve_section_index(
+                    sections, section_index, section_id
+                )
+                if isinstance(resolved_index, dict):
+                    return resolved_index
+                candidates = [resolved_index]
+            else:
+                for idx, section in enumerate(sections):
+                    if (element_id and element_id in section) or (
+                        asset_name and asset_name in section
+                    ):
+                        candidates.append(idx)
+                    elif not element_id and not asset_name and section_index is not None:
+                        candidates.append(idx)
+                if len(candidates) != 1:
+                    return {
+                        "error": (
+                            "Image target must resolve to exactly one slide; provide "
+                            "section_index or section_id"
+                        )
+                    }
+            idx = candidates[0]
+            stored_src = new_src.strip()
+            asset_info: dict[str, Any] | None = None
+            if re.match(r"(?i)^https?://", stored_src):
+                downloaded = _download_remote_image(stored_src)
+                if downloaded.get("error"):
+                    return downloaded
+                asset_info = _persist_image_asset(
+                    resolved,
+                    downloaded["filename"],
+                    downloaded["bytes"],
+                    message or "Cache slide image asset via Abi",
+                )
+                if asset_info.get("error"):
+                    return asset_info
+                stored_src = f"assets/{downloaded['filename']}"
+            applied = _replace_image_src_in_section(
+                sections[idx],
+                stored_src,
+                element_id=element_id,
+                asset_name=asset_name,
+                target=target,
+            )
+            if isinstance(applied, dict):
+                return applied
+            updated_section, old_src = applied
+            validation_error = _validate_section_edit(sections[idx], updated_section)
+            if validation_error:
+                return {"error": validation_error}
+            sections[idx] = updated_section
+            updated = _join_sections(prefix, sections, suffix)
+            result = _persist_deck(
+                resolved, updated, message or "Replace slide image via Abi"
+            )
+            result.update(
+                {
+                    "section_index": idx,
+                    "element_id": element_id or None,
+                    "asset_name": asset_name or None,
+                    "target": target,
+                    "old_src": old_src,
+                    "new_src": stored_src,
+                    "source_url": new_src if asset_info else None,
+                    "asset_path": asset_info.get("asset_path") if asset_info else None,
+                    "layout_preserved": True,
+                    "read_source": source,
+                }
+            )
+            result.update(_open_deck_note(resolved))
+            return result
+        except Exception as exc:  # noqa: BLE001
+            return _tool_error(exc)
+
+    @tool
     def replace_in_slides_deck(
         old: str,
         new: str,
@@ -1838,8 +2244,37 @@ def slides_tools() -> list[BaseTool]:
                 applied["source"] = source
                 applied["cover_h1_before"] = cover_before
                 applied["cover_subtitle_before"] = subtitle_before
+                # Self-serve the failure: hand the model the exact (redacted)
+                # HTML of the section it targeted so it can fix old/new without
+                # a separate read_slides_section round-trip (that loop is what
+                # bloats context until the model call times out).
+                if "error" in applied and applied.get("error") == "old string not found in deck":
+                    _prefix, _secs, _suffix = _split_sections(html)
+                    try:
+                        _idx = _resolve_section_index(_secs, section_index, section_id)
+                        if isinstance(_idx, int) and 0 <= _idx < len(_secs):
+                            _target_html, _n_assets = _redact_data_urls(_secs[_idx])
+                            applied["target_section_index"] = _idx
+                            applied["target_section_html"] = _target_html
+                            applied["target_redacted_assets"] = _n_assets
+                    except Exception:  # noqa: BLE001
+                        pass
                 return applied
             updated, count, replaced, resolved_section = applied
+            _prefix, original_sections, _suffix = _split_sections(html)
+            _prefix, updated_sections, _suffix = _split_sections(updated)
+            if resolved_section >= 0 and resolved_section < len(original_sections):
+                validation_error = _validate_section_edit(
+                    original_sections[resolved_section],
+                    updated_sections[resolved_section],
+                )
+                if validation_error:
+                    return {
+                        "error": validation_error,
+                        "matches_found": count,
+                        "replacements": 0,
+                        "section_index": resolved_section,
+                    }
             result = _persist_deck(
                 resolved,
                 updated,
@@ -2129,6 +2564,7 @@ def slides_tools() -> list[BaseTool]:
         read_slides_section,
         write_slides_section,
         write_slides_sections,
+        replace_slide_image,
         replace_in_slides_deck,
         read_slides_deck,
         write_slides_deck,

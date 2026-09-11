@@ -54,6 +54,7 @@ def test_slides_agent_owns_the_write_and_research_tools() -> None:
     assert "write_slides_deck" in names
     assert "write_slides_section" in names
     assert "write_slides_sections" in names
+    assert "replace_slide_image" in names
     assert "replace_in_slides_deck" in names
     assert "web_search" in names
     assert "web_fetch" in names

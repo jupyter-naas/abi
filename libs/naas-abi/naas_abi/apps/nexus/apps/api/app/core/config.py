@@ -443,6 +443,24 @@ class Settings(BaseSettings):
     # App
     app_name: str = "NEXUS API"
     debug: bool = False
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def _coerce_debug_flag(cls, value: Any) -> Any:
+        """Accept the ABI runtime's release/development mode values.
+
+        ``abi dev up`` may expose ``DEBUG=release`` as a runtime mode. The
+        application setting is a boolean, so map the mode explicitly instead
+        of failing during API startup and leaving chat unavailable.
+        """
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "production", "prod", "false", "0", "no", "off"}:
+                return False
+            if normalized in {"development", "dev", "true", "1", "yes", "on"}:
+                return True
+        return value
+
     environment: str = "development"
     nexus_env: str = "local"  # Environment name (local, cloudflare, staging)
 

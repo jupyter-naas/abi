@@ -3000,8 +3000,6 @@ export function ChatInterface({
                   agentId={selectedAgent}
                   suggestions={selectedAgentData?.suggestions}
                   onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
-                  onSuggestionHover={(value) => setInput(value)}
-                  onSuggestionLeave={() => setInput('')}
                 />
               )}
               <FilesBlock
@@ -3043,8 +3041,6 @@ export function ChatInterface({
                 agentId={selectedAgent}
                 suggestions={selectedAgentData?.suggestions}
                 onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
-                onSuggestionHover={(value) => setInput(value)}
-                onSuggestionLeave={() => setInput('')}
               />
             )
           )}
@@ -3273,7 +3269,7 @@ export function ChatInterface({
                 <textarea
                   ref={textareaRef}
                   value={input}
-                  onChange={(e) => handleInputChange(e.target.value)}
+                  onInput={(e) => handleInputChange(e.currentTarget.value)}
                   onKeyDown={(e) => {
                     if (showSlashMenu) {
                       if (e.key === 'ArrowDown') {
