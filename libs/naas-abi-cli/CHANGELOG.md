@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.22.2 (2026-09-12)
+
+### Bug Fixes
+
+- **docker-compose**: Update MinIO image source to quay.io
+  ([`2c7bcdc`](https://github.com/jupyter-naas/abi/commit/2c7bcdcef3e964165bb8cd73581c9bf8ba2c9dcd))
+
+
 ## v2.22.1 (2026-09-12)
 
 ### Bug Fixes
