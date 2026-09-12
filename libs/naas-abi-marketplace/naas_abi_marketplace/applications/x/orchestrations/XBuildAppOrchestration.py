@@ -25,6 +25,13 @@ from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestrati
 _JOB_NAME = "x_build_app_x_proxy"
 _OP_NAME = "x_build_app_x_proxy_op"
 _SCHEDULE_NAME = "x_build_app_x_proxy_hourly"
+_DAILY_REPORT_JOB_PREFIX = "report_send_counter_uas_daily_"
+_IN_PROGRESS_STATUSES = [
+    dg.DagsterRunStatus.QUEUED,
+    dg.DagsterRunStatus.NOT_STARTED,
+    dg.DagsterRunStatus.STARTING,
+    dg.DagsterRunStatus.STARTED,
+]
 
 
 _BUILD_APP_OP_CONFIG_SCHEMA = {
@@ -135,11 +142,18 @@ class XBuildAppOrchestration(DagsterOrchestration):
             default_status=dg.DefaultScheduleStatus.RUNNING,
         )
         def x_build_app_x_proxy_hourly(context: dg.ScheduleEvaluationContext):
-            from axi.utils.dagster_guards import daily_report_skip_reason
-
-            skip = daily_report_skip_reason(context)
-            if skip is not None:
-                return skip
+            runs = context.instance.get_runs(
+                filters=dg.RunsFilter(statuses=_IN_PROGRESS_STATUSES),
+                limit=100,
+            )
+            if any(
+                (run.job_name or "").startswith(_DAILY_REPORT_JOB_PREFIX)
+                for run in runs
+            ):
+                return dg.SkipReason(
+                    "A daily Counter-UAS report is in progress; "
+                    "deferring X Proxy rebuild."
+                )
             return dg.RunRequest(run_key=None)
 
         schedule = x_build_app_x_proxy_hourly

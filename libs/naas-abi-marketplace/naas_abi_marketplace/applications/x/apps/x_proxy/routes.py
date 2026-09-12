@@ -35,6 +35,7 @@ import json
 import mimetypes
 import re
 import threading
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import Response
@@ -47,6 +48,11 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import (
 )
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
+
+if TYPE_CHECKING:
+    from naas_abi_marketplace.applications.x.apps.x_proxy.cache.reader import (
+        CacheReader,
+    )
 
 APP_HTML_INDEX_PATH = "/app-html/x/apps/x_proxy/index.html"
 APP_HTML_INDEX_DIR = "/app-html/x/apps/x_proxy/"
@@ -219,7 +225,7 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, object_storage_service: ObjectStorageService) -> None:
         super().__init__(app)
         self._object_storage = object_storage_service
-        self._search_reader = None
+        self._search_reader: CacheReader | None = None
         self._search_state: dict = {}
         self._search_lock = threading.Lock()
 
