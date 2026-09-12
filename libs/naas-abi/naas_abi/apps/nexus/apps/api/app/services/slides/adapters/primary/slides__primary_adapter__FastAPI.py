@@ -11,6 +11,7 @@ Coder.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import html as html_lib
 import json
@@ -28,7 +29,7 @@ from urllib.parse import quote
 from urllib.request import Request as UrlRequest
 from urllib.request import urlopen
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
@@ -40,7 +41,7 @@ from naas_abi.apps.nexus.apps.api.app.core.config import (
     ABI_SLIDES_TEMPLATE_NAMESPACE,
     settings,
 )
-from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, get_db
 from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import create_access_token
 from naas_abi_core.services.coding_environment.adapters.secondary.CoderAdapter import (
@@ -105,6 +106,18 @@ _SLIDES_TEMPLATE_NAMES = ("abi-slides", "abi-code-server", "local-directory")
 # wait; a single probe races "running" phase and falsely marks degraded.
 _SIDECAR_WAIT_ATTEMPTS = 2
 _SIDECAR_WAIT_INTERVAL_S = 0.5
+# One provision at a time per deck: create starts this in the
+# background, and the editor POSTs /runtime as soon as HTML is up.
+_runtime_ensure_locks: dict[tuple[str, str], asyncio.Lock] = {}
+
+
+def _runtime_ensure_lock(workspace_id: str, slug: str) -> asyncio.Lock:
+    key = (workspace_id, slug)
+    lock = _runtime_ensure_locks.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _runtime_ensure_locks[key] = lock
+    return lock
 
 
 def _get_source_control(request: Request) -> SourceControlService:
@@ -1424,8 +1437,8 @@ async def list_projects(
 async def create_project(
     body: ProjectCreateRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
 ) -> ProjectResponse:
     await require_workspace_access(current_user.id, body.workspace_id)
     slug = body.slug or _slugify(body.title)
@@ -1529,27 +1542,27 @@ async def create_project(
         )
 
     try:
+        seed_started = time.perf_counter()
         project = await run_in_threadpool(_create)
+        logger.info(
+            "slides create seed %.3fs slug=%s",
+            time.perf_counter() - seed_started,
+            slug,
+        )
     except BranchNameConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SourceControlError as exc:
         raise _source_control_http_error(exc) from exc
 
-    try:
-        runtime = await _ensure_runtime_impl(
-            request=request,
-            workspace_id=body.workspace_id,
-            slug=slug,
-            current_user=current_user,
-            db=db,
-        )
-        if not runtime.ensured:
-            logger.warning(
-                "slides runtime not ensured for %s: %s", slug, runtime.detail
-            )
-    except Exception:
-        logger.exception("slides runtime ensure failed for %s", slug)
-
+    # HTML is already on the branch. Do not hold the create response for
+    # Coder: the editor reads Forgejo immediately; sidecar warms behind it.
+    _schedule_created_runtime(
+        background_tasks,
+        request=request,
+        workspace_id=body.workspace_id,
+        slug=slug,
+        current_user=current_user,
+    )
     return project
 
 
@@ -2673,6 +2686,77 @@ async def _ensure_runtime_impl(
     )
 
 
+async def _ensure_runtime_serialized(
+    *,
+    request: Request,
+    workspace_id: str,
+    slug: str,
+    current_user: User,
+    db: AsyncSession | None,
+) -> RuntimeResponse:
+    async with _runtime_ensure_lock(workspace_id, slug):
+        return await _ensure_runtime_impl(
+            request=request,
+            workspace_id=workspace_id,
+            slug=slug,
+            current_user=current_user,
+            db=db,
+        )
+
+
+async def _ensure_created_runtime(
+    request: Request,
+    workspace_id: str,
+    slug: str,
+    current_user: User,
+) -> None:
+    """Warm the Coder sidecar after create. Must not delay the create response."""
+    started = time.perf_counter()
+    try:
+        async with AsyncSessionLocal() as db:
+            runtime = await _ensure_runtime_serialized(
+                request=request,
+                workspace_id=workspace_id,
+                slug=slug,
+                current_user=current_user,
+                db=db,
+            )
+            elapsed = time.perf_counter() - started
+            if not runtime.ensured:
+                logger.warning(
+                    "slides runtime not ensured for %s after %.3fs: %s",
+                    slug,
+                    elapsed,
+                    runtime.detail,
+                )
+            else:
+                logger.info(
+                    "slides runtime ready in %.3fs slug=%s sidecar_ready=%s",
+                    elapsed,
+                    slug,
+                    runtime.sidecar_ready,
+                )
+    except Exception:
+        logger.exception("slides runtime ensure failed for %s", slug)
+
+
+def _schedule_created_runtime(
+    background_tasks: BackgroundTasks,
+    *,
+    request: Request,
+    workspace_id: str,
+    slug: str,
+    current_user: User,
+) -> None:
+    background_tasks.add_task(
+        _ensure_created_runtime,
+        request,
+        workspace_id,
+        slug,
+        current_user,
+    )
+
+
 @router.post("/projects/{slug}/runtime", response_model=RuntimeResponse)
 async def ensure_runtime(
     slug: str,
@@ -2684,7 +2768,7 @@ async def ensure_runtime(
     await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
-    return await _ensure_runtime_impl(
+    return await _ensure_runtime_serialized(
         request=request,
         workspace_id=workspace_id,
         slug=slug,

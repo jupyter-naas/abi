@@ -383,6 +383,45 @@ def test_list_and_create_projects_seed_in_memory_repo(monkeypatch) -> None:
     assert namespaced.json()["template_id"] == "abi/executive-v1"
 
 
+def test_create_project_returns_before_runtime_ensure(monkeypatch) -> None:
+    """Create is done when branch + deck.html exist. Coder waits in back."""
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    scheduled: dict[str, str] = {}
+
+    def _schedule(background_tasks, **kwargs):
+        del background_tasks
+        scheduled["slug"] = str(kwargs["slug"])
+        scheduled["workspace_id"] = str(kwargs["workspace_id"])
+
+    async def _boom(**kwargs):
+        del kwargs
+        raise AssertionError("create must not await runtime ensure")
+
+    monkeypatch.setattr(slides_api, "_schedule_created_runtime", _schedule)
+    monkeypatch.setattr(slides_api, "_ensure_runtime_impl", _boom)
+    monkeypatch.setattr(slides_api, "_ensure_runtime_serialized", _boom)
+
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Untitled presentation",
+            "slug": "fast-create",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["slug"] == "fast-create"
+    assert scheduled == {"slug": "fast-create", "workspace_id": "ws-test"}
+    deck = client.get(
+        "/slides/projects/fast-create/deck",
+        params={"workspace_id": "ws-test"},
+    )
+    assert deck.status_code == 200, deck.text
+    assert deck.json()["html"]
+
+
 def test_patch_project_renames_and_archives_without_changing_slug(monkeypatch) -> None:
     sc = SourceControlService(InMemoryAdapter())
     client = _slides_client(monkeypatch, sc)

@@ -40,7 +40,11 @@ import {
   documentsApiErrorMessage,
 } from '@/lib/create-documents-project';
 import { OfficeCreateLoader } from '@/components/office/office-create-loader';
-import { pushOfficeCreate, useOfficeCreateStore } from '@/components/office/office-create-state';
+import {
+  clearOfficeCreate,
+  pushOfficeCreate,
+  useOfficeCreateStore,
+} from '@/components/office/office-create-state';
 import { copyDocumentToMyDrive } from '@/lib/documents-my-drive';
 import { authFetch } from '@/stores/auth';
 import {
@@ -343,6 +347,7 @@ export default function SectionsEditorPage() {
         }
         setLoading(false);
         setRefreshing(false);
+        clearOfficeCreate();
         if (ensureRuntime) {
           const runtime = await ensureDocumentsRuntime(workspaceId, slug, quiet ? 2 : 6);
           if (gen !== loadGenRef.current) return;

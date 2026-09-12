@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   beginOfficeCreate,
   clearOfficeCreate,
+  isOfficeCreateNewPath,
+  isOfficeCreateProjectPath,
   officeCreateKindFromHref,
   pushOfficeCreate,
   useOfficeCreateStore,
@@ -80,6 +82,29 @@ describe('officeCreateKindFromHref', () => {
     expect(officeCreateKindFromHref('/workspace/ws-1/documents/new')).toBe('document');
     expect(officeCreateKindFromHref('/workspace/ws-1/slides/new?template=x')).toBe('deck');
     expect(officeCreateKindFromHref('/workspace/ws-1/documents')).toBeNull();
+  });
+});
+
+describe('office create overlay hold', () => {
+  it('holds on /new and the new project route, not the gallery', () => {
+    expect(isOfficeCreateNewPath('/workspace/ws-1/documents/new')).toBe(true);
+    expect(isOfficeCreateNewPath('/workspace/ws-1/slides/new')).toBe(true);
+    expect(isOfficeCreateNewPath('/workspace/ws-1/documents/untitled-1')).toBe(false);
+    expect(isOfficeCreateNewPath('/workspace/ws-1/documents')).toBe(false);
+    expect(isOfficeCreateProjectPath('/workspace/ws-1/documents/untitled-1')).toBe(true);
+    expect(isOfficeCreateProjectPath('/workspace/ws-1/slides/untitled-1')).toBe(true);
+    expect(isOfficeCreateProjectPath('/workspace/ws-1/documents')).toBe(false);
+    expect(isOfficeCreateProjectPath('/workspace/ws-1/home')).toBe(false);
+  });
+
+  it('keeps the overlay on the project route and clears after HTML loads', () => {
+    const overlay = source('./office-create-overlay.tsx');
+    expect(overlay).toContain('isOfficeCreateProjectPath(pathname)');
+    expect(overlay).toContain('isOfficeCreateNewPath(pathname)');
+    const docPage = source('../../app/workspace/[workspaceId]/documents/[slug]/page.tsx');
+    expect(docPage).toContain('clearOfficeCreate()');
+    const slidesPage = source('../../app/workspace/[workspaceId]/slides/[slug]/page.tsx');
+    expect(slidesPage).toContain('clearOfficeCreate()');
   });
 });
 

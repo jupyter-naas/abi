@@ -6,6 +6,8 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { OfficeCreateLoader } from './office-create-loader';
 import {
   clearOfficeCreate,
+  isOfficeCreateNewPath,
+  isOfficeCreateProjectPath,
   prefetchOfficeCreate,
   useOfficeCreateStore,
 } from './office-create-state';
@@ -35,8 +37,13 @@ function useOfficeCreateRouteSync(pathname: string | null) {
       seenNew.current = false;
       return;
     }
-    if (/\/(documents|slides)\/new\/?$/.test(pathname || '')) {
+    if (isOfficeCreateNewPath(pathname)) {
       seenNew.current = true;
+      return;
+    }
+    // Hold the letter overlay until the editor fetches HTML. Sidecar can
+    // still be starting; the page clears this flag after the GET succeeds.
+    if (seenNew.current && isOfficeCreateProjectPath(pathname)) {
       return;
     }
     if (seenNew.current) clearOfficeCreate();

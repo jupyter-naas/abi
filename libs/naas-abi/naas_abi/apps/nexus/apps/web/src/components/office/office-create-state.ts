@@ -81,3 +81,13 @@ export function officeCreateKindFromHref(href: string): OfficeCreateKind | null 
   if (href.includes('/slides/new')) return 'deck';
   return null;
 }
+
+/** File > New landing: `/documents/new` or `/slides/new`. */
+export function isOfficeCreateNewPath(pathname: string | null | undefined): boolean {
+  return /\/(documents|slides)\/new\/?$/.test(pathname || '');
+}
+
+/** Editor route for a just-created project. `/new` is also a slug. */
+export function isOfficeCreateProjectPath(pathname: string | null | undefined): boolean {
+  return /\/(documents|slides)\/[^/]+\/?$/.test(pathname || '');
+}

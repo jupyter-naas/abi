@@ -38,7 +38,11 @@ import {
   slidesApiErrorMessage,
 } from '@/lib/create-slides-project';
 import { OfficeCreateLoader } from '@/components/office/office-create-loader';
-import { pushOfficeCreate, useOfficeCreateStore } from '@/components/office/office-create-state';
+import {
+  clearOfficeCreate,
+  pushOfficeCreate,
+  useOfficeCreateStore,
+} from '@/components/office/office-create-state';
 import { copyDeckToMyDrive } from '@/lib/slides-my-drive';
 import { authFetch } from '@/stores/auth';
 import {
@@ -341,6 +345,7 @@ export default function SlidesEditorPage() {
         }
         setLoading(false);
         setRefreshing(false);
+        clearOfficeCreate();
         if (ensureRuntime) {
           const runtime = await ensureSlidesRuntime(workspaceId, slug, quiet ? 2 : 6);
           if (gen !== loadGenRef.current) return;
