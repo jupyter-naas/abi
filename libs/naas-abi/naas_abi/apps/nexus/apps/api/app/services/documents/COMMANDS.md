@@ -77,9 +77,10 @@ When the user asks for a memo or report on an untitled seed:
    - Colour swatches stay only as brand specimens. For a memo, replace
      the palette (`replace_class` on `palette`) with a real table or
      delete it
-3. Writes go into `.doc-body` via `apply_document_commands` /
-   `replace_text` / `replace_class` / heading plus paragraph. Never
-   concatenate HTML after `</footer>`.
+3. Writes go into `.doc-body` via one `apply_document_commands` batch
+   (`replace_text`, `replace_class`, heading plus paragraph). Replace
+   each entire seed slot. Do not prefix or append leftover instructional
+   tails. Never concatenate HTML after `</footer>`.
 4. If `leftover_placeholders` is not empty, or `incomplete` is true,
    replace those slots. Do not stop while instructional seed copy remains.
 

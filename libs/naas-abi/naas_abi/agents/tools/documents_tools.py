@@ -622,9 +622,18 @@ def _persist_document(
     section") still buckets into the right semver bump instead of always
     falling back to the non-bumping "chore" type.
     """
-    from naas_abi.agents.tools.documents_commands import normalize_document_flow
+    from naas_abi.agents.tools.documents_commands import (
+        leftover_write_note,
+        normalize_document_flow,
+    )
 
     html = normalize_document_flow(html)
+
+    def _with_leftovers(payload: dict[str, Any]) -> dict[str, Any]:
+        if payload.get("error"):
+            return payload
+        payload.update(leftover_write_note(html))
+        return payload
     sources: list[str] = []
     sidecar_result: dict[str, Any] | None = None
     if _sidecar_available():
@@ -638,15 +647,17 @@ def _persist_document(
         forgejo = _commit_document_forgejo(slug, html, message, default_type=default_type)
         if forgejo.get("error"):
             if sidecar_result and sidecar_result.get("ok"):
-                return {
-                    **sidecar_result,
-                    "sources": sources,
-                    "forgejo_error": forgejo.get("error"),
-                    "note": (
-                        "Updated Coder workspace (live edit); Forgejo snapshot failed. "
-                        "Preview should follow sidecar. Use File → Save later for history."
-                    ),
-                }
+                return _with_leftovers(
+                    {
+                        **sidecar_result,
+                        "sources": sources,
+                        "forgejo_error": forgejo.get("error"),
+                        "note": (
+                            "Updated Coder workspace (live edit); Forgejo snapshot failed. "
+                            "Preview should follow sidecar. Use File → Save later for history."
+                        ),
+                    }
+                )
             return {**forgejo, "sources": sources}
         sources.append("forgejo")
         result = {**forgejo, "sources": sources}
@@ -660,18 +671,20 @@ def _persist_document(
             result["note"] = (
                 "Updated Coder workspace (live edit) and committed Forgejo snapshot."
             )
-        return result
+        return _with_leftovers(result)
     except Exception as exc:  # noqa: BLE001
         if sidecar_result and sidecar_result.get("ok"):
-            return {
-                **sidecar_result,
-                "sources": sources,
-                "forgejo_error": _friendly_sc_error(exc),
-                "note": (
-                    "Updated Coder workspace (live edit); Forgejo snapshot failed. "
-                    "Preview should follow sidecar. Use File → Save later for history."
-                ),
-            }
+            return _with_leftovers(
+                {
+                    **sidecar_result,
+                    "sources": sources,
+                    "forgejo_error": _friendly_sc_error(exc),
+                    "note": (
+                        "Updated Coder workspace (live edit); Forgejo snapshot failed. "
+                        "Preview should follow sidecar. Use File → Save later for history."
+                    ),
+                }
+            )
         return {"error": _friendly_sc_error(exc), "sources": sources}
 
 
@@ -1825,9 +1838,25 @@ def documents_tools() -> list[BaseTool]:
 
         After creating it, research the topic with web_search and then write the
         documents. Do not ask the user which document to edit.
+
+        If a document is already open, this returns that slug and creates nothing.
         """
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
+        open_slug = (documents_active_slug.get() or "").strip()
+        if open_slug:
+            return {
+                "ok": True,
+                "created": False,
+                "slug": open_slug,
+                "title": (documents_active_title.get() or "").strip(),
+                **_open_document_note(open_slug),
+                "note": (
+                    "A document is already open. Do not create another. "
+                    "Fill the open template with one apply_document_commands batch. "
+                    "Replace each entire seed slot. Do not append leftover instructional tails."
+                ),
+            }
         # The document name shows up in the sidebar tree, the chat card, and the
         # URL, so never keep template filler or a whole sentence.
         clean_title = resolve_document_title(title, documents_brief.get() or "")

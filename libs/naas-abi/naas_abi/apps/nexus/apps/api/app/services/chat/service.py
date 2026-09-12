@@ -383,8 +383,11 @@ def _render_documents_context_block(
         "3. Fill the open template. Do not leave seed placeholder copy. "
         "Do not append after the footer. Adapt every seed slot (cover H1, "
         "subtitle, intro, headings, tables, quotes, lists) with "
-        "apply_document_commands (replace_text, replace_class, insert_heading, "
-        "insert_paragraph) or replace_in_document. Writes go into .doc-body.\n"
+        "one apply_document_commands batch (replace_text, replace_class, "
+        "insert_heading, insert_paragraph). Replace each entire seed slot. "
+        "Do not prefix or append leftover instructional tails. "
+        "Do not spend the step budget on dozens of replace_in_document calls. "
+        "Writes go into .doc-body.\n"
         "4. After that write, stop only if leftover_placeholders is empty. "
         "If it is not empty, replace those slots this turn. Do not reread.\n"
         + _untitled_documents_rename_hint(title, slug)

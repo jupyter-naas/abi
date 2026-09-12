@@ -1270,6 +1270,7 @@ async def test_build_abi_injection_preamble_includes_open_document() -> None:
     assert "Plan, then write" in preamble
     assert "apply_document_commands" in preamble
     assert "Fill the open template" in preamble
+    assert "entire seed" in preamble.lower()
     assert "Do not append after the footer" in preamble
     assert "leftover_placeholders is empty" in preamble
     assert "list_document_sections" not in preamble

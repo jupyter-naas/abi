@@ -501,6 +501,36 @@ def test_replace_write_path_matches_ui_create(monkeypatch):
             ref="documents/ws-test/untitled-local",
         )
         assert _cover_h1_text(document.text or "") == "Iran briefing"
+        assert result.get("leftover_placeholders") == []
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_replace_in_document_reports_leftover_seed_copy(monkeypatch):
+    sc = _bind_in_memory_git(monkeypatch)
+    html = (
+        "<!DOCTYPE html><html><body><main>"
+        '<section class="page cover"><div class="doc-body">'
+        "<h1>Document title</h1>"
+        '<p class="subtitle">Industry or service line</p>'
+        "</div></section></main></body></html>"
+    )
+    _seed_in_memory_document(sc, html)
+    tokens = _sections_context()
+    try:
+        replace = next(t for t in documents_tools() if t.name == "replace_in_document")
+        result = replace.invoke(
+            {
+                "old": "Document title",
+                "new": "Board memo",
+                "section_index": 0,
+                "occurrence": 0,
+            }
+        )
+        assert "error" not in result, result
+        assert result.get("incomplete") is True
+        assert "Industry or service line" in result.get("leftover_placeholders", [])
+        assert "INCOMPLETE" in (result.get("warning") or "")
     finally:
         _reset_tokens(tokens)
 
@@ -583,6 +613,20 @@ def test_create_documents_project_from_main_chat_without_an_open_document(monkey
         listed = sections.invoke({})
         assert "error" not in listed, listed
         assert listed["slug"] == slug
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_create_documents_project_keeps_the_open_document(monkeypatch):
+    sc = _bind_in_memory_git(monkeypatch)
+    tokens = _sections_context(slug="untitled-loop3")
+    try:
+        create = next(t for t in documents_tools() if t.name == "create_documents_project")
+        result = create.invoke({"title": "Should not create"})
+        assert result.get("created") is False
+        assert result["slug"] == "untitled-loop3"
+        assert "already open" in result["note"].lower()
+        assert sc is not None
     finally:
         _reset_tokens(tokens)
 

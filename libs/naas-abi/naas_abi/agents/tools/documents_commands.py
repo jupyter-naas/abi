@@ -90,6 +90,10 @@ SEED_PLACEHOLDER_PHRASES = (
     "Shaded",
     "Supporting detail",
     "A narrower point",
+    "in a few sentences so the reader can scan",
+    "Keep paragraphs short",
+    "This heading uses the official",
+    "Body copy stays Outer Space",
 )
 
 KNOWN_COMMANDS = frozenset(

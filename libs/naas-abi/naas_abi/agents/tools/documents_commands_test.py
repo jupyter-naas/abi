@@ -204,6 +204,21 @@ def test_leftover_placeholders_lists_seed_copy() -> None:
     assert "Findings" in found
 
 
+def test_leftover_placeholders_flags_concatenated_seed_tails() -> None:
+    html = (
+        "<p>Synthèse hebdomadaire. in a few sentences so the reader can scan "
+        "the page before the body.</p>"
+        "<p>Topic sentence. Keep paragraphs short. This heading uses the official "
+        "Heading 1 style.</p>"
+        "<p>Body copy stays Outer Space. Secondary colours are for charts.</p>"
+    )
+    found = leftover_placeholders(html)
+    assert "in a few sentences so the reader can scan" in found
+    assert "Keep paragraphs short" in found
+    assert "This heading uses the official" in found
+    assert "Body copy stays Outer Space" in found
+
+
 def test_leftover_write_note_marks_incomplete() -> None:
     from naas_abi.agents.tools.documents_commands import leftover_write_note
 
