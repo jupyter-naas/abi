@@ -72,7 +72,7 @@ When the user asks for a memo or report on an untitled seed:
    - Cover H1, kicker or subtitle, intro paragraphs
    - Official heading styles
    - Tables: replace headers and rows with topic data (no
-     "Assumption / Replace with…")
+     "Assumption / Replace with the working premise")
    - Quotes, lists, discussion blocks
    - Colour swatches stay only as brand specimens. For a memo, replace
      the palette (`replace_class` on `palette`) with a real table or
