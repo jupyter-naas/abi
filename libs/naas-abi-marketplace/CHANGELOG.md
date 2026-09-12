@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.45.1 (2026-09-12)
+
+### Bug Fixes
+
+- **x_proxy**: Optimize post indexing and update schedule
+  ([`94abc97`](https://github.com/jupyter-naas/abi/commit/94abc97bd439dd99d2b4b9e942fe904a32d1b2a9))
+
+
 ## v3.45.0 (2026-09-11)
 
 ### Features
