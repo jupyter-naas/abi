@@ -100,6 +100,20 @@ SEED_PLACEHOLDER_PHRASES = (
     "must stand apart from the body",
     "Hyperlinks in copy look like",
     "Replace the labels",
+    "Heading 1 style",
+    "Outer Space. Use it when",
+)
+_SEED_TH_RE = re.compile(
+    r"<th\b[^>]*>\s*(Topic|Owner|Status|Item|Note)\s*</th>",
+    re.IGNORECASE,
+)
+_SEED_TABLE_CLASS_RE = (
+    ("fm-table", re.compile(r"<th\b[^>]*>\s*Topic\s*</th>", re.I)),
+    ("fm-shaded", re.compile(r"<th\b[^>]*>\s*Item\s*</th>", re.I)),
+)
+_BLOCK_RE = re.compile(
+    r"<(p|li|h[1-4]|td|th|blockquote|span)\b[^>]*>.*?</\1>",
+    re.IGNORECASE | re.DOTALL,
 )
 
 KNOWN_COMMANDS = frozenset(
@@ -230,20 +244,56 @@ def leftover_placeholders(html: str) -> list[str]:
         title = match.group(1).strip()
         if title not in found:
             found.append(title)
+    for match in _SEED_TH_RE.finditer(html):
+        header = match.group(1).strip()
+        if header not in found:
+            found.append(header)
     return found
+
+
+def leftover_slots(html: str) -> list[dict[str, str]]:
+    """Find strings and class names for one apply_document_commands fill."""
+    slots: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for phrase in leftover_placeholders(html):
+        key = ("find", phrase)
+        if key in seen:
+            continue
+        seen.add(key)
+        slots.append({"type": "replace_text", "find": phrase})
+    if _PALETTE_CLASS_RE.search(html or ""):
+        key = ("class", "palette")
+        if key not in seen:
+            seen.add(key)
+            slots.append({"type": "replace_class", "class_name": "palette"})
+    for class_name, marker in _SEED_TABLE_CLASS_RE:
+        if marker.search(html or ""):
+            key = ("class", class_name)
+            if key not in seen:
+                seen.add(key)
+                slots.append({"type": "replace_class", "class_name": class_name})
+    return slots
 
 
 def leftover_write_note(html: str) -> dict[str, Any]:
     """Tool-result fields so a fill turn cannot treat leftovers as done."""
     leftovers = leftover_placeholders(html)
-    note: dict[str, Any] = {"leftover_placeholders": leftovers}
+    slots = leftover_slots(html)
+    note: dict[str, Any] = {
+        "leftover_placeholders": leftovers,
+        "leftover_slots": slots,
+    }
     if leftovers:
         note["incomplete"] = True
         note["warning"] = (
             "INCOMPLETE: seed placeholder copy remains: "
             + ", ".join(leftovers)
-            + ". This fill turn allows one apply_document_commands. Stop. "
-            "Do not apply again. Do not reread."
+            + ". leftover_slots is the find/class_name list for one "
+            "apply_document_commands (replace_text on each find; "
+            "replace_class on palette, fm-table, fm-shaded). "
+            "replace_text find may be a leftover phrase; it replaces "
+            "that whole seed block. This fill turn allows one apply. "
+            "Stop. Do not apply again. Do not reread."
         )
     return note
 
@@ -381,12 +431,55 @@ def delete_heading_range(html: str, heading_index: int) -> str | dict[str, str]:
     return html[:start] + html[end:]
 
 
+def _resolve_find_needle(html: str, find: str) -> str | None:
+    """Exact find, else a leftover phrase that is in both the find and the HTML."""
+    if not html or not find:
+        return None
+    if find in html:
+        return find
+    contained = [p for p in SEED_PLACEHOLDER_PHRASES if p in find and p in html]
+    if contained:
+        return max(contained, key=len)
+    containers = [p for p in SEED_PLACEHOLDER_PHRASES if find in p and p in html]
+    if containers:
+        return max(containers, key=len)
+    return None
+
+
+def _replace_blocks_containing(html: str, needle: str, replacement: str) -> tuple[str, int]:
+    """Replace each p/li/heading/td/th/quote/span that still holds needle."""
+    count = 0
+
+    def _repl(match: re.Match[str]) -> str:
+        nonlocal count
+        block = match.group(0)
+        if needle not in block:
+            return block
+        count += 1
+        tag = match.group(1)
+        if (replacement or "").lstrip().startswith("<"):
+            return replacement
+        open_tag = re.match(r"<[^>]+>", block)
+        if not open_tag:
+            return replacement
+        return f"{open_tag.group(0)}{html_lib.escape(replacement)}</{tag}>"
+
+    return _BLOCK_RE.sub(_repl, html), count
+
+
 def replace_text(html: str, find: str, replace: str) -> str | dict[str, str]:
     if not find:
         return {"error": "find is required"}
-    if find not in html:
+    needle = _resolve_find_needle(html or "", find)
+    if needle is None:
         return {"error": f"Text not found: {find!r}"}
-    return html.replace(find, replace)
+    if needle in SEED_PLACEHOLDER_PHRASES:
+        updated, n = _replace_blocks_containing(html, needle, replace)
+        if n:
+            return updated
+    if needle in html:
+        return html.replace(needle, replace)
+    return {"error": f"Text not found: {find!r}"}
 
 
 def update_document_title(html: str, title: str) -> str | dict[str, str]:
@@ -459,6 +552,7 @@ def apply_document_commands(
         return {"error": "requests must be a non-empty list of command objects"}
     next_html = html
     applied: list[str] = []
+    skipped: list[str] = []
     heading_index = 0
     for i, raw in enumerate(requests):
         if not isinstance(raw, dict):
@@ -533,9 +627,23 @@ def apply_document_commands(
             return {"error": f"Unhandled command {typ!r}"}
 
         if isinstance(result, dict):
+            err = str(result.get("error") or "")
+            if typ == "replace_text" and err.startswith("Text not found"):
+                skipped.append(err)
+                continue
             return result
         next_html = result
         applied.append(typ)
+
+    if not applied:
+        return {
+            "error": (
+                "No commands applied. leftover_slots lists find and "
+                "class_name values for one apply_document_commands."
+            ),
+            "skipped": skipped,
+            **leftover_write_note(html),
+        }
 
     next_html = normalize_document_flow(next_html)
     outline = heading_outline(next_html)
@@ -545,6 +653,7 @@ def apply_document_commands(
         "ok": True,
         "html": next_html,
         "applied": applied,
+        "skipped": skipped,
         "outline": outline,
         "heading_index": heading_index,
         "heading_count": len(outline),

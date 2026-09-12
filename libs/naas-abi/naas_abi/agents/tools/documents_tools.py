@@ -1806,9 +1806,16 @@ def _write_project_template_id(slug: str, template_id: str) -> None:
 
 def _view_for_llm(html: str) -> dict[str, Any]:
     """Outline-only document view. Full HTML belongs in one targeted section read."""
+    from naas_abi.agents.tools.documents_commands import (
+        leftover_placeholders,
+        leftover_slots,
+    )
+
     scripts_redacted_html, n_scripts = _redact_scripts(html)
     redacted, n_assets = _redact_data_urls(scripts_redacted_html)
     _prefix, sections, _suffix = _split_sections(html)
+    leftovers = leftover_placeholders(html)
+    slots = leftover_slots(html)
     return {
         "chars": len(html),
         "chars_redacted": len(redacted),
@@ -1816,11 +1823,15 @@ def _view_for_llm(html: str) -> dict[str, Any]:
         "sections": [_section_meta(i, sec) for i, sec in enumerate(sections)],
         "redacted_scripts": n_scripts,
         "redacted_assets": n_assets,
+        "leftover_placeholders": leftovers,
+        "leftover_slots": slots,
         "note": (
             "Outline only. HTML is omitted on purpose: a 25-section industry "
             "document is ~160k characters and blows the next model call. "
-            "Fill the open template with apply_document_commands "
-            "(replace_text, replace_class, insert_heading, insert_paragraph). "
+            "Fill the open template with one apply_document_commands. "
+            "leftover_slots is the find/class_name list: replace_text on each "
+            "find (a leftover phrase replaces that whole seed block), "
+            "replace_class on palette, fm-table, fm-shaded. "
             "Do not leave seed placeholder copy. Do not append after the footer. "
             "Do not edit buildPptx. Preview is HTML; PDF is derived at export."
         ),
@@ -2438,12 +2449,13 @@ def documents_tools() -> list[BaseTool]:
     ) -> dict[str, Any]:
         """Apply an ordered list of document commands (JSON array).
 
-        Fill the open template. Prefer replace_text on seed slots and
-        replace_class for specimen blocks (palette). Insert a heading only
-        when the brief needs a section the seed does not have. Writes land
-        inside .doc-body. Do not append after the footer. If
-        leftover_placeholders is not empty after this call, stop. Do not
-        apply again this turn.
+        Fill the open template in this one batch. Prefer replace_text on
+        leftover_slots find values (a leftover phrase replaces that whole
+        seed block) and replace_class on palette, fm-table, fm-shaded.
+        Insert a heading only when the brief needs a section the seed does
+        not have. Writes land inside .doc-body. Do not append after the
+        footer. If leftover_placeholders is not empty after this call, stop.
+        Do not apply again this turn.
 
         Each item needs type. Supported: insert_text, insert_paragraph,
         insert_heading, insert_page_break, delete_range, replace_text,

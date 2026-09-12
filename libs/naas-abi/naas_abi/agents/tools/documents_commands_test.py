@@ -7,8 +7,11 @@ from naas_abi.agents.tools.documents_commands import (
     insert_paragraph,
     last_rename_document_title,
     leftover_placeholders,
+    leftover_slots,
+    leftover_write_note,
     normalize_document_flow,
     replace_class,
+    replace_text,
     update_document_title,
 )
 
@@ -234,13 +237,64 @@ def test_leftover_placeholders_flags_concatenated_seed_tails() -> None:
 
 
 def test_leftover_write_note_marks_incomplete() -> None:
-    from naas_abi.agents.tools.documents_commands import leftover_write_note
-
     note = leftover_write_note(_SEEDED_PAGE)
     assert note["incomplete"] is True
     assert note["leftover_placeholders"]
+    assert note["leftover_slots"]
     assert "INCOMPLETE" in note["warning"]
     assert leftover_write_note("<h1>Board memo</h1>")["leftover_placeholders"] == []
+
+
+def test_leftover_placeholders_flags_seed_table_headers() -> None:
+    html = (
+        '<table class="fm-table"><thead><tr>'
+        "<th>Topic</th><th>Owner</th><th>Status</th>"
+        "</tr></thead></table>"
+        '<table class="fm-shaded"><thead><tr>'
+        "<th>Item</th><th>Note</th></tr></thead></table>"
+        "<p>Heading 1 style leftover.</p>"
+        "<p>Outer Space. Use it when the section is still the same topic.</p>"
+    )
+    found = leftover_placeholders(html)
+    assert "Topic" in found
+    assert "Owner" in found
+    assert "Item" in found
+    assert "Heading 1 style" in found
+    assert "Outer Space. Use it when" in found
+    classes = {slot["class_name"] for slot in leftover_slots(html) if "class_name" in slot}
+    assert "fm-table" in classes
+    assert "fm-shaded" in classes
+
+
+def test_replace_text_leftover_phrase_replaces_the_whole_block() -> None:
+    html = (
+        '<p class="intro">Introduction. State the situation in a few sentences '
+        "so the reader can scan the page before the body.</p>"
+    )
+    updated = replace_text(html, "State the situation in a few sentences so the reader can scan.", "ASIC opened five inquiries.")
+    assert isinstance(updated, str)
+    assert "State the situation" not in updated
+    assert "the page before the body" not in updated
+    assert "ASIC opened five inquiries." in updated
+
+
+def test_apply_skips_a_missing_find_and_keeps_the_batch() -> None:
+    result = apply_document_commands(
+        _SEEDED_PAGE,
+        [
+            {"type": "replace_text", "find": "Kicker or subtitle", "replace": "Audit"},
+            {"type": "replace_text", "find": "Replace with the working premise", "replace": "PE is buying the mid-tier."},
+            {"type": "rename_document", "title": "Board memo"},
+        ],
+    )
+    assert result["ok"] is True
+    assert "replace_text" in result["applied"]
+    assert "rename_document" in result["applied"]
+    assert result["skipped"]
+    assert "Kicker or subtitle" in result["skipped"][0]
+    assert "PE is buying the mid-tier." in result["html"]
+    assert "Replace with the working premise" not in result["html"]
+    assert "Board memo" in result["html"]
 
 
 def test_last_rename_document_title_reads_the_batch() -> None:
