@@ -193,8 +193,25 @@ describe('office pane agent bind', () => {
     expect(chat).toContain('officeSurfaceFromPath');
     expect(chat).toContain('pickPaneOfficeAgent');
     expect(chat).not.toMatch(/if \(!isPane \|\| !documentsChatContext\) return/);
+    expect(chat).toContain('officeSurface.onSlides');
+    expect(chat).toContain('officeSurface.onDocuments');
     const index = source('../../app/workspace/[workspaceId]/slides/page.tsx');
     expect(index).toContain('pickPaneOfficeAgent');
     expect(index).toContain('onSlides: true');
+    expect(index).toContain('withOfficeListRetry');
+  });
+
+  it('rebinds Documents from the route so a leftover Slides face cannot stay', () => {
+    const index = source('../../app/workspace/[workspaceId]/documents/page.tsx');
+    expect(index).toContain('pickPaneOfficeAgent');
+    expect(index).toContain('onDocuments: true');
+    expect(index).toContain('withOfficeListRetry');
+  });
+
+  it('binds the pane from the route segment, not leftover selected slugs', () => {
+    const agents = source('../../stores/agents.ts');
+    expect(agents).toContain('officeSurfaceFromPath');
+    expect(agents).not.toContain('useSlidesStore.getState().selectedSlug');
+    expect(agents).not.toContain('useDocumentsStore.getState().selectedSlug');
   });
 });

@@ -12,6 +12,7 @@ import {
   sectionsTemplateMenuRows,
   type DocumentsSeedTemplate,
 } from '@/lib/documents-templates';
+import { withOfficeListRetry } from '@/lib/office-list-retry';
 import { authFetch } from '@/stores/auth';
 import {
   DOCUMENTS_UPDATED_EVENT,
@@ -79,30 +80,45 @@ export function DocumentsSection({
   const fetchProjects = useCallback(async () => {
     if (!workspaceId) return;
     try {
-      const res = await authFetch(
-        `/api/documents/projects?workspace_id=${encodeURIComponent(workspaceId)}`,
-      );
-      if (res.ok) setProjects((await res.json()) as DocumentsProject[]);
+      await withOfficeListRetry(async () => {
+        const res = await authFetch(
+          `/api/documents/projects?workspace_id=${encodeURIComponent(workspaceId)}`,
+        );
+        if (!res.ok) {
+          if (res.status >= 500 || res.status === 429) {
+            throw new Error(`Failed (${res.status})`);
+          }
+          return;
+        }
+        setProjects((await res.json()) as DocumentsProject[]);
+      });
     } catch {
-      // ignore
+      // Recovery retries on focus / online / next navigation.
     }
   }, [workspaceId]);
 
   const fetchTemplates = useCallback(async () => {
     if (!workspaceId) return;
     try {
-      const res = await authFetch(
-        `/api/documents/templates?workspace_id=${encodeURIComponent(workspaceId)}`,
-      );
-      if (!res.ok) return;
-      const body = (await res.json()) as DocumentsSeedTemplate[];
-      setTemplates(
-        body.map((row) => ({
-          ...row,
-          sections: row.sections ?? [],
-          assets: row.assets ?? [],
-        })),
-      );
+      await withOfficeListRetry(async () => {
+        const res = await authFetch(
+          `/api/documents/templates?workspace_id=${encodeURIComponent(workspaceId)}`,
+        );
+        if (!res.ok) {
+          if (res.status >= 500 || res.status === 429) {
+            throw new Error(`Failed (${res.status})`);
+          }
+          return;
+        }
+        const body = (await res.json()) as DocumentsSeedTemplate[];
+        setTemplates(
+          body.map((row) => ({
+            ...row,
+            sections: row.sections ?? [],
+            assets: row.assets ?? [],
+          })),
+        );
+      });
     } catch {
       // ignore
     }
@@ -128,9 +144,23 @@ export function DocumentsSection({
   );
 
   useEffect(() => {
+    setProjects([]);
     void fetchProjects();
     void fetchTemplates();
   }, [fetchProjects, fetchTemplates, pathname]);
+
+  useEffect(() => {
+    const refresh = () => {
+      void fetchProjects();
+      void fetchTemplates();
+    };
+    window.addEventListener('focus', refresh);
+    window.addEventListener('online', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('online', refresh);
+    };
+  }, [fetchProjects, fetchTemplates]);
 
   // Abi names a still-untitled document on its first write, so the tree label has
   // to come back from the server instead of waiting for the next navigation.

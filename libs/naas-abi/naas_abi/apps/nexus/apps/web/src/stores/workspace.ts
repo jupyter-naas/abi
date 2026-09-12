@@ -14,6 +14,8 @@ import {
 } from '@/lib/slides-pane-conversation';
 import { conversationTitleFromPrompt } from '@/lib/office-auto-title';
 import { useAuthStore } from './auth';
+import { useDocumentsStore } from './documents';
+import { useSlidesStore } from './slides';
 import { getApiUrl } from '@/lib/config';
 
 // Throttled localStorage wrapper: prevents browser freeze during streaming.
@@ -1045,6 +1047,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   },
 
   setCurrentWorkspace: (id) => {
+    const previousId = get().currentWorkspaceId;
     set((state) => ({
       currentWorkspaceId: id,
       recentWorkspaceIds: pushRecentWorkspaceId(
@@ -1060,6 +1063,25 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         ? { paneConversationId: null, paneOpenTabIds: [] as string[] }
         : {}),
     }));
+    if (previousId !== id) {
+      // Selected slugs are not workspace-keyed. A leftover deck/doc from the
+      // previous workspace made the sidebar treat a missing row as open and
+      // let preferred-agent logic pin the wrong office face.
+      useSlidesStore.setState({
+        selectedSlug: null,
+        selectedTitle: null,
+        filmstrip: null,
+        selectedIndex: 0,
+        slideCount: 0,
+      });
+      useDocumentsStore.setState({
+        selectedSlug: null,
+        selectedTitle: null,
+        outline: null,
+        selectedIndex: 0,
+        sectionCount: 0,
+      });
+    }
   },
 
   syncWorkspaceConversations: async (workspaceId) => {

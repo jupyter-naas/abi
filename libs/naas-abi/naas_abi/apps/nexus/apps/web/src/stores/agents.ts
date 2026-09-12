@@ -254,19 +254,15 @@ export const useAgentsStore = create<AgentsState>()(
             // Right AI pane pins the workspace default unless the user picked
             // another agent still in this workspace. A leftover id from
             // another workspace must not stick.
-            const { isNexusDocumentsAgent, pickPaneOfficeAgent } = await import(
-              '@/lib/pick-workspace-default-agent'
-            );
-            const { useSlidesStore } = await import('./slides');
-            const { useDocumentsStore } = await import('./documents');
+            const { isNexusDocumentsAgent, officeSurfaceFromPath, pickPaneOfficeAgent } =
+              await import('@/lib/pick-workspace-default-agent');
             const path =
               typeof window !== 'undefined' ? window.location.pathname : '';
-            const onDocuments =
-              path.includes('/documents') &&
-              Boolean(useDocumentsStore.getState().selectedSlug);
-            // A leftover slides slug must not steal the Documents pane.
-            const onSlides =
-              !onDocuments && Boolean(useSlidesStore.getState().selectedSlug);
+            // Route segment only. A leftover selectedSlug from the other
+            // office surface must not pin Documents on /slides or Slides on
+            // /documents, and a slug like board-documents must not flip the
+            // surface.
+            const { onSlides, onDocuments } = officeSurfaceFromPath(path);
             if (
               onDocuments &&
               !force &&

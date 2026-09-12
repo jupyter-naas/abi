@@ -72,14 +72,16 @@ export function pickPaneOfficeAgent<
   return pickWorkspaceDefaultAgent(agents);
 }
 
-/** Office surface from the route, not leftover store slugs. */
+/** Office surface from the route segment, not leftover store slugs or slug text. */
 export function officeSurfaceFromPath(pathname: string | null | undefined): {
   onSlides: boolean;
   onDocuments: boolean;
 } {
-  const path = pathname || '';
+  const parts = (pathname || '').split(/[?#]/)[0].split('/').filter(Boolean);
+  const workspaceIndex = parts.indexOf('workspace');
+  const feature = workspaceIndex >= 0 ? parts[workspaceIndex + 2] : '';
   return {
-    onSlides: path.includes('/slides'),
-    onDocuments: path.includes('/documents'),
+    onSlides: feature === 'slides',
+    onDocuments: feature === 'documents',
   };
 }

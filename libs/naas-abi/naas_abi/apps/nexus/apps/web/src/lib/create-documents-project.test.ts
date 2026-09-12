@@ -152,6 +152,21 @@ describe('officeSurfaceFromPath', () => {
       onDocuments: true,
     });
   });
+
+  it('does not treat slug text as the office surface', () => {
+    expect(officeSurfaceFromPath('/workspace/ws-1/slides/board-documents')).toEqual({
+      onSlides: true,
+      onDocuments: false,
+    });
+    expect(officeSurfaceFromPath('/workspace/ws-1/documents/q3-slides')).toEqual({
+      onSlides: false,
+      onDocuments: true,
+    });
+    expect(officeSurfaceFromPath('/workspace/ws-1/chat')).toEqual({
+      onSlides: false,
+      onDocuments: false,
+    });
+  });
 });
 
 describe('openDocumentsAgentPane', () => {

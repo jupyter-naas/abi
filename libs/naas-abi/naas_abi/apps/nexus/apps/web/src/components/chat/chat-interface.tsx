@@ -873,16 +873,22 @@ export function ChatInterface({
   }, [isPane]);
 
   const createSurfaceConversation = useCallback(
-    (projectId?: string) =>
-      createConversation(projectId, {
+    (projectId?: string) => {
+      const officeSurface = officeSurfaceFromPath(
+        typeof window !== 'undefined' ? window.location.pathname : '',
+      );
+      return createConversation(projectId, {
         surface,
-        slidesSlug: isPane
-          ? useSlidesStore.getState().selectedSlug ?? undefined
-          : undefined,
-        documentsSlug: isPane
-          ? useDocumentsStore.getState().selectedSlug ?? undefined
-          : undefined,
-      }),
+        slidesSlug:
+          isPane && officeSurface.onSlides
+            ? useSlidesStore.getState().selectedSlug ?? undefined
+            : undefined,
+        documentsSlug:
+          isPane && officeSurface.onDocuments
+            ? useDocumentsStore.getState().selectedSlug ?? undefined
+            : undefined,
+      });
+    },
     [createConversation, surface, isPane]
   );
 
@@ -952,8 +958,7 @@ export function ChatInterface({
   const slidesSelectedIndex = useSlidesStore((s) => s.selectedIndex);
   const slidesSlideCount = useSlidesStore((s) => s.slideCount);
   const slidesChatContext = useMemo(() => {
-    const onSlides =
-      typeof pathname === 'string' && pathname.includes('/slides') && Boolean(slidesSlug);
+    const onSlides = officeSurfaceFromPath(pathname).onSlides && Boolean(slidesSlug);
     if (!onSlides || !slidesSlug) return null;
     return {
       slides: {
@@ -984,8 +989,7 @@ export function ChatInterface({
   const documentsSelectedIndex = useDocumentsStore((s) => s.selectedIndex);
   const documentsSectionCount = useDocumentsStore((s) => s.sectionCount);
   const documentsChatContext = useMemo(() => {
-    const onDocuments =
-      typeof pathname === 'string' && pathname.includes('/documents') && Boolean(documentsSlug);
+    const onDocuments = officeSurfaceFromPath(pathname).onDocuments && Boolean(documentsSlug);
     if (!onDocuments || !documentsSlug) return null;
     return {
       documents: {

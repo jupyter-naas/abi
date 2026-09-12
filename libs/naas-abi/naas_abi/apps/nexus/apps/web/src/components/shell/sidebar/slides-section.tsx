@@ -14,6 +14,7 @@ import {
   slidesTemplateMenuRows,
   type SlidesSeedTemplate,
 } from '@/lib/slides-templates';
+import { withOfficeListRetry } from '@/lib/office-list-retry';
 import { authFetch } from '@/stores/auth';
 import {
   SLIDES_DECK_UPDATED_EVENT,
@@ -81,30 +82,45 @@ export function SlidesSection({
   const fetchProjects = useCallback(async () => {
     if (!workspaceId) return;
     try {
-      const res = await authFetch(
-        `/api/slides/projects?workspace_id=${encodeURIComponent(workspaceId)}`,
-      );
-      if (res.ok) setProjects((await res.json()) as SlidesProject[]);
+      await withOfficeListRetry(async () => {
+        const res = await authFetch(
+          `/api/slides/projects?workspace_id=${encodeURIComponent(workspaceId)}`,
+        );
+        if (!res.ok) {
+          if (res.status >= 500 || res.status === 429) {
+            throw new Error(`Failed (${res.status})`);
+          }
+          return;
+        }
+        setProjects((await res.json()) as SlidesProject[]);
+      });
     } catch {
-      // ignore
+      // Recovery retries on focus / online / next navigation.
     }
   }, [workspaceId]);
 
   const fetchTemplates = useCallback(async () => {
     if (!workspaceId) return;
     try {
-      const res = await authFetch(
-        `/api/slides/templates?workspace_id=${encodeURIComponent(workspaceId)}`,
-      );
-      if (!res.ok) return;
-      const body = (await res.json()) as SlidesSeedTemplate[];
-      setTemplates(
-        body.map((row) => ({
-          ...row,
-          slides: row.slides ?? [],
-          assets: row.assets ?? [],
-        })),
-      );
+      await withOfficeListRetry(async () => {
+        const res = await authFetch(
+          `/api/slides/templates?workspace_id=${encodeURIComponent(workspaceId)}`,
+        );
+        if (!res.ok) {
+          if (res.status >= 500 || res.status === 429) {
+            throw new Error(`Failed (${res.status})`);
+          }
+          return;
+        }
+        const body = (await res.json()) as SlidesSeedTemplate[];
+        setTemplates(
+          body.map((row) => ({
+            ...row,
+            slides: row.slides ?? [],
+            assets: row.assets ?? [],
+          })),
+        );
+      });
     } catch {
       // ignore
     }
@@ -130,9 +146,23 @@ export function SlidesSection({
   );
 
   useEffect(() => {
+    setProjects([]);
     void fetchProjects();
     void fetchTemplates();
   }, [fetchProjects, fetchTemplates, pathname]);
+
+  useEffect(() => {
+    const refresh = () => {
+      void fetchProjects();
+      void fetchTemplates();
+    };
+    window.addEventListener('focus', refresh);
+    window.addEventListener('online', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('online', refresh);
+    };
+  }, [fetchProjects, fetchTemplates]);
 
   // Abi names a still-untitled deck on its first write, so the tree label has
   // to come back from the server instead of waiting for the next navigation.

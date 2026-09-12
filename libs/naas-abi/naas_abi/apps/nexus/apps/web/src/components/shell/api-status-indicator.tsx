@@ -9,13 +9,17 @@ import {
   type CSSProperties,
 } from 'react';
 import { createPortal } from 'react-dom';
+import {
+  API_HEALTH_OFFLINE_POLL_MS,
+  API_HEALTH_POLL_MS,
+  createHealthCheckGate,
+} from '@/lib/api-health-check';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { useNetworkActivityStore } from '@/stores/network-activity';
 
 type Status = 'checking' | 'online' | 'offline';
 
-const POLL_INTERVAL_MS = 15_000;
 const REQUEST_TIMEOUT_MS = 5_000;
 const MAX_VISIBLE_SATELLITES = 12;
 
@@ -74,6 +78,7 @@ export function ApiStatusIndicator({ compact = false }: { compact?: boolean } = 
   const totalCompleted = useNetworkActivityStore((state) => state.totalCompleted);
   const sessionStartedAt = useNetworkActivityStore((state) => state.sessionStartedAt);
   const mountedRef = useRef(true);
+  const healthGateRef = useRef(createHealthCheckGate());
 
   const keepOpen = useCallback(() => {
     if (closeTimerRef.current) {
@@ -90,6 +95,7 @@ export function ApiStatusIndicator({ compact = false }: { compact?: boolean } = 
   }, []);
 
   const check = useCallback(async () => {
+    const requestId = healthGateRef.current.begin();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
@@ -98,34 +104,51 @@ export function ApiStatusIndicator({ compact = false }: { compact?: boolean } = 
         signal: controller.signal,
         cache: 'no-store',
       });
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || !healthGateRef.current.isCurrent(requestId)) return;
       setStatus(response.ok ? 'online' : 'offline');
     } catch {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || !healthGateRef.current.isCurrent(requestId)) return;
       setStatus('offline');
     } finally {
       clearTimeout(timer);
-      if (mountedRef.current) setLastCheckedAt(new Date());
+      if (mountedRef.current && healthGateRef.current.isCurrent(requestId)) {
+        setLastCheckedAt(new Date());
+      }
     }
   }, [apiUrl]);
 
   useEffect(() => {
     mountedRef.current = true;
-    check();
-    const interval = setInterval(check, POLL_INTERVAL_MS);
-    const onFocus = () => check();
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') check();
-    };
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onVisible);
     return () => {
       mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    void check();
+    const intervalMs = status === 'offline' ? API_HEALTH_OFFLINE_POLL_MS : API_HEALTH_POLL_MS;
+    const interval = setInterval(() => {
+      void check();
+    }, intervalMs);
+    const onFocus = () => {
+      void check();
+    };
+    const onOnline = () => {
+      void check();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void check();
+    };
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onOnline);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
       clearInterval(interval);
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onOnline);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [check]);
+  }, [check, status]);
 
   useEffect(() => {
     return () => {
@@ -189,11 +212,11 @@ export function ApiStatusIndicator({ compact = false }: { compact?: boolean } = 
   );
 
   const handleClick = () => {
-    if (status === 'offline') {
+    const wasOffline = status === 'offline';
+    setStatus('checking');
+    void check();
+    if (wasOffline) {
       window.open(apiUrl, '_blank', 'noopener,noreferrer');
-    } else {
-      setStatus('checking');
-      check();
     }
   };
 

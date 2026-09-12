@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Header } from '@/components/shell/header';
@@ -16,7 +16,11 @@ import {
 } from '@/lib/create-documents-project';
 import { partitionDocumentsProjects, patchDocumentsProject } from '@/lib/documents-project-actions';
 import type { DocumentsSeedTemplate } from '@/lib/documents-templates';
+import { useOfficeListRecovery, withOfficeListRetry } from '@/lib/office-list-retry';
+import { pickPaneOfficeAgent } from '@/lib/pick-workspace-default-agent';
+import { useAgentsStore } from '@/stores/agents';
 import { authFetch } from '@/stores/auth';
+import { useWorkspaceStore } from '@/stores/workspace';
 import {
   DOCUMENTS_UPDATED_EVENT,
   useDocumentsStore,
@@ -39,6 +43,7 @@ export default function SectionsIndexPage() {
   const setSelectedTitle = useDocumentsStore((s) => s.setSelectedTitle);
   const { active, archived } = partitionDocumentsProjects(projects);
   const visibleProjects = showArchived ? archived : active;
+  const loadGen = useRef(0);
 
   const onCreateFromTemplate = useCallback(
     (templateId?: string) => {
@@ -50,38 +55,46 @@ export default function SectionsIndexPage() {
   const load = useCallback(
     async (opts?: { quiet?: boolean }) => {
       if (!workspaceId) return;
+      const gen = ++loadGen.current;
       const quiet = Boolean(opts?.quiet);
       if (!quiet) {
         setLoading(true);
         setError(null);
       }
       try {
-        const [projRes, tmplRes] = await Promise.all([
-          authFetch(`/api/documents/projects?workspace_id=${encodeURIComponent(workspaceId)}`),
-          authFetch(`/api/documents/templates?workspace_id=${encodeURIComponent(workspaceId)}`),
-        ]);
-        if (!projRes.ok) {
-          if (projRes.status === 404) {
-            setProjects([]);
-            return;
+        await withOfficeListRetry(async () => {
+          const [projRes, tmplRes] = await Promise.all([
+            authFetch(`/api/documents/projects?workspace_id=${encodeURIComponent(workspaceId)}`),
+            authFetch(`/api/documents/templates?workspace_id=${encodeURIComponent(workspaceId)}`),
+          ]);
+          if (gen !== loadGen.current) return;
+          if (!projRes.ok) {
+            if (projRes.status === 404) {
+              setProjects([]);
+              setError(null);
+              return;
+            }
+            const body = (await projRes.json().catch(() => ({}))) as { detail?: unknown };
+            throw new Error(documentsApiErrorMessage(body.detail, `Failed (${projRes.status})`));
           }
-          const body = (await projRes.json().catch(() => ({}))) as { detail?: unknown };
-          throw new Error(documentsApiErrorMessage(body.detail, `Failed (${projRes.status})`));
-        }
-        setProjects((await projRes.json()) as DocumentsProject[]);
-        if (tmplRes.ok) {
-          const body = (await tmplRes.json()) as DocumentsSeedTemplate[];
-          setTemplates(
-            body.map((row) => ({
-              ...row,
-              sections: row.sections ?? [],
-              assets: row.assets ?? [],
-            })),
-          );
-        }
+          setProjects((await projRes.json()) as DocumentsProject[]);
+          setError(null);
+          if (tmplRes.ok) {
+            const body = (await tmplRes.json()) as DocumentsSeedTemplate[];
+            setTemplates(
+              body.map((row) => ({
+                ...row,
+                sections: row.sections ?? [],
+                assets: row.assets ?? [],
+              })),
+            );
+          }
+        });
       } catch (e) {
+        if (gen !== loadGen.current) return;
         if (!quiet) setError((e as Error).message);
       } finally {
+        if (gen !== loadGen.current) return;
         if (!quiet) setLoading(false);
       }
     },
@@ -89,8 +102,22 @@ export default function SectionsIndexPage() {
   );
 
   useEffect(() => {
+    setProjects([]);
     void load();
   }, [load]);
+
+  useOfficeListRecovery(load, error);
+
+  // Rebind Documents on the index even when the chat pane is closed. The pane
+  // ChatInterface is unmounted then, so a leftover Slides bind would
+  // otherwise persist until a document is opened.
+  useEffect(() => {
+    const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+    const documents = pickPaneOfficeAgent(agents, { onDocuments: true });
+    if (documents && useWorkspaceStore.getState().paneAgent !== documents.id) {
+      useWorkspaceStore.getState().setPaneAgent(documents.id);
+    }
+  }, [workspaceId]);
 
   useEffect(() => {
     if (archived.length === 0 && showArchived) setShowArchived(false);

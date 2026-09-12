@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { useDocumentsStore } from './documents';
+import { useSlidesStore } from './slides';
 import { useWorkspaceStore } from './workspace';
 
 describe('pane send workspace scoping', () => {
@@ -15,6 +17,36 @@ describe('pane send workspace scoping', () => {
       selectedAgent: 'agent-main',
       paneAgent: 'agent-pane',
     });
+  });
+
+  it('drops leftover office slugs when switching workspace', () => {
+    useSlidesStore.setState({
+      selectedSlug: 'deck-from-a',
+      selectedTitle: 'Deck from A',
+      filmstrip: {
+        workspaceId: 'ws-a',
+        slug: 'deck-from-a',
+        html: '<html></html>',
+        disabled: false,
+      },
+    });
+    useDocumentsStore.setState({
+      selectedSlug: 'doc-from-a',
+      selectedTitle: 'Doc from A',
+      outline: {
+        workspaceId: 'ws-a',
+        slug: 'doc-from-a',
+        html: '<html></html>',
+        disabled: false,
+      },
+    });
+
+    useWorkspaceStore.getState().setCurrentWorkspace('ws-b');
+
+    expect(useSlidesStore.getState().selectedSlug).toBeNull();
+    expect(useSlidesStore.getState().filmstrip).toBeNull();
+    expect(useDocumentsStore.getState().selectedSlug).toBeNull();
+    expect(useDocumentsStore.getState().outline).toBeNull();
   });
 
   it('clears pane conversation when switching workspace', () => {

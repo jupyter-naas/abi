@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Header } from '@/components/shell/header';
@@ -14,6 +14,7 @@ import {
   openSlidesAgentPane,
   slidesApiErrorMessage,
 } from '@/lib/create-slides-project';
+import { useOfficeListRecovery, withOfficeListRetry } from '@/lib/office-list-retry';
 import { pickPaneOfficeAgent } from '@/lib/pick-workspace-default-agent';
 import { partitionSlidesProjects, patchSlidesProject } from '@/lib/slides-project-actions';
 import type { SlidesSeedTemplate } from '@/lib/slides-templates';
@@ -42,6 +43,7 @@ export default function SlidesIndexPage() {
   const setSelectedTitle = useSlidesStore((s) => s.setSelectedTitle);
   const { active, archived } = partitionSlidesProjects(projects);
   const visibleProjects = showArchived ? archived : active;
+  const loadGen = useRef(0);
 
   const onCreateFromTemplate = useCallback(
     (templateId?: string) => {
@@ -53,34 +55,41 @@ export default function SlidesIndexPage() {
   const load = useCallback(
     async (opts?: { quiet?: boolean }) => {
       if (!workspaceId) return;
+      const gen = ++loadGen.current;
       const quiet = Boolean(opts?.quiet);
       if (!quiet) {
         setLoading(true);
         setError(null);
       }
       try {
-        const [projRes, tmplRes] = await Promise.all([
-          authFetch(`/api/slides/projects?workspace_id=${encodeURIComponent(workspaceId)}`),
-          authFetch(`/api/slides/templates?workspace_id=${encodeURIComponent(workspaceId)}`),
-        ]);
-        if (!projRes.ok) {
-          const body = (await projRes.json().catch(() => ({}))) as { detail?: unknown };
-          throw new Error(slidesApiErrorMessage(body.detail, `Failed (${projRes.status})`));
-        }
-        setProjects((await projRes.json()) as SlidesProject[]);
-        if (tmplRes.ok) {
-          const body = (await tmplRes.json()) as SlidesSeedTemplate[];
-          setTemplates(
-            body.map((row) => ({
-              ...row,
-              slides: row.slides ?? [],
-              assets: row.assets ?? [],
-            })),
-          );
-        }
+        await withOfficeListRetry(async () => {
+          const [projRes, tmplRes] = await Promise.all([
+            authFetch(`/api/slides/projects?workspace_id=${encodeURIComponent(workspaceId)}`),
+            authFetch(`/api/slides/templates?workspace_id=${encodeURIComponent(workspaceId)}`),
+          ]);
+          if (gen !== loadGen.current) return;
+          if (!projRes.ok) {
+            const body = (await projRes.json().catch(() => ({}))) as { detail?: unknown };
+            throw new Error(slidesApiErrorMessage(body.detail, `Failed (${projRes.status})`));
+          }
+          setProjects((await projRes.json()) as SlidesProject[]);
+          setError(null);
+          if (tmplRes.ok) {
+            const body = (await tmplRes.json()) as SlidesSeedTemplate[];
+            setTemplates(
+              body.map((row) => ({
+                ...row,
+                slides: row.slides ?? [],
+                assets: row.assets ?? [],
+              })),
+            );
+          }
+        });
       } catch (e) {
+        if (gen !== loadGen.current) return;
         if (!quiet) setError((e as Error).message);
       } finally {
+        if (gen !== loadGen.current) return;
         if (!quiet) setLoading(false);
       }
     },
@@ -88,8 +97,11 @@ export default function SlidesIndexPage() {
   );
 
   useEffect(() => {
+    setProjects([]);
     void load();
   }, [load]);
+
+  useOfficeListRecovery(load, error);
 
   // Rebind Slides on the index even when the chat pane is closed. The pane
   // ChatInterface is unmounted then, so a leftover Documents bind would
@@ -100,7 +112,7 @@ export default function SlidesIndexPage() {
     if (slides && useWorkspaceStore.getState().paneAgent !== slides.id) {
       useWorkspaceStore.getState().setPaneAgent(slides.id);
     }
-  }, []);
+  }, [workspaceId]);
 
   useEffect(() => {
     if (archived.length === 0 && showArchived) setShowArchived(false);
