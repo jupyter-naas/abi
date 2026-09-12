@@ -242,8 +242,8 @@ def leftover_write_note(html: str) -> dict[str, Any]:
         note["warning"] = (
             "INCOMPLETE: seed placeholder copy remains: "
             + ", ".join(leftovers)
-            + ". Call apply_document_commands once with replace_text or "
-            "replace_class for every remaining slot. Do not reread. Do not stop."
+            + ". This fill turn allows one apply_document_commands. Stop. "
+            "Do not apply again. Do not reread."
         )
     return note
 

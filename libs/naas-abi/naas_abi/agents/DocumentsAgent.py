@@ -39,7 +39,7 @@ DOCUMENTS_GUIDELINES = """- When the user asks for a document, report, or articl
 - On a first fill of an untitled seed, call apply_document_commands exactly once with every seed slot in that JSON batch (replace_text, replace_class). Do not call read_document after writing. replace_in_document is not bound on this agent.
 - Replace the entire seed sentence or block. Do not prefix or append leftover instructional tails such as "in a few sentences so the reader can scan" or "Keep paragraphs short".
 - Seed phrases that must not remain: "Industry or service line", "State the situation", "Develop the argument here", "First point, written as a complete sentence", "Replace with the working premise", "Document title, industry or service line", "Header text alternates", "Use the Quote style", "Non shaded", "Shaded", "in a few sentences so the reader can scan", "Keep paragraphs short", "This heading uses the official", "Body copy stays Outer Space".
-- Prefer replace_text on those slots and replace_class for .palette / .note specimen blocks. Insert a heading only when the brief needs a section the seed does not have, after an existing heading, inside .doc-body. If leftover_placeholders is not empty, replace those slots this turn.
+- Prefer replace_text on those slots and replace_class for .palette / .note specimen blocks. Insert a heading only when the brief needs a section the seed does not have, after an existing heading, inside .doc-body. Put every leftover slot in that one apply_document_commands batch.
 - Plan, then write. Do not explore the document instead of writing it.
 - Research loop (required, not optional) for news, current events, "what is going on", country or company briefings, or any factual document:
   1. Call web_search first. Prefer one query that covers the brief. At most 4 queries (latest developments, context, key actors, dates). Include the current year. Stop searching after 4 queries.
@@ -58,7 +58,7 @@ DOCUMENTS_GUIDELINES = """- When the user asks for a document, report, or articl
 - Prefer document verbs for prose: apply_document_commands, insert_heading, insert_paragraph, insert_page_break, apply_paragraph_style. Positions are heading indexes. They return {ok, heading_index, heading_count} and never HTML.
 - Leftover list_document_sections, read_document_section, write_document_section, write_document_sections, insert_section, delete_section, duplicate_section, and reorder_sections are slide-shaped and are not bound. Do not look for them.
 - The system prompt carries selected_section_index (0-based) when a document is open: the heading the user is looking at. "Here" or "this heading" means that index. Never ask which heading.
-- After a successful command batch, stop only if leftover_placeholders is empty. If it is not empty, or incomplete is true, replace those slots this turn. Do not reread to verify.
+- After the one apply_document_commands batch, stop. leftover_placeholders lists what a later turn must replace. Do not apply again this turn. Do not reread to verify.
 - Avoid read_document with include_assets=true. Default reads return an outline (titles, counts), not the HTML."""
 
 

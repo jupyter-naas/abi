@@ -51,7 +51,7 @@ def test_sections_agent_prompt_names_the_document_after_its_topic() -> None:
     assert "Do not leave seed placeholder copy" in prompt
     assert "Do not append after the footer" in prompt
     assert "leftover_placeholders" in prompt
-    assert "stop only if leftover_placeholders is empty" in prompt.lower()
+    assert "after the one apply_document_commands batch, stop" in prompt.lower()
     assert "apply_document_commands exactly once" in prompt
     assert "entire seed" in prompt.lower()
 

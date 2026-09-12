@@ -388,8 +388,8 @@ def _render_documents_context_block(
         "Do not prefix or append leftover instructional tails. "
         "Do not call read_document after writing. "
         "replace_in_document is not bound. Writes go into .doc-body.\n"
-        "4. After that write, stop only if leftover_placeholders is empty. "
-        "If it is not empty, replace those slots this turn. Do not reread.\n"
+        "4. After that one write, stop. leftover_placeholders lists what a "
+        "later turn must replace. Do not apply again this turn. Do not reread.\n"
         + _untitled_documents_rename_hint(title, slug)
         + "\n".join(lines)
         + "\n"

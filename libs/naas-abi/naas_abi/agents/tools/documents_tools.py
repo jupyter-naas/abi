@@ -35,6 +35,7 @@ from naas_abi.agents.documents import (
     reject_documents_section_read,
     reject_read_document,
     reject_repeat_list_document_sections,
+    reject_repeat_apply_document_commands,
     reject_replace_in_document_on_fill,
     reject_unresearched_documents_write,
     resolve_document_title,
@@ -2441,8 +2442,8 @@ def documents_tools() -> list[BaseTool]:
         replace_class for specimen blocks (palette). Insert a heading only
         when the brief needs a section the seed does not have. Writes land
         inside .doc-body. Do not append after the footer. If
-        leftover_placeholders is not empty, or incomplete is true, replace
-        those slots this turn. Do not stop.
+        leftover_placeholders is not empty after this call, stop. Do not
+        apply again this turn.
 
         Each item needs type. Supported: insert_text, insert_paragraph,
         insert_heading, insert_page_break, delete_range, replace_text,
@@ -2453,6 +2454,9 @@ def documents_tools() -> list[BaseTool]:
 
         For news or factual briefs: call web_search once this turn first.
         """
+        repeat = reject_repeat_apply_document_commands()
+        if repeat:
+            return repeat
         try:
             payload = json.loads(requests_json or "[]")
         except json.JSONDecodeError as exc:

@@ -116,6 +116,10 @@ _REPLACE_ON_FILL_MESSAGE = (
     "Call apply_document_commands once with replace_text and replace_class "
     "for every leftover seed slot. Do not reread."
 )
+_REPEAT_APPLY_MESSAGE = (
+    "apply_document_commands already ran this turn. Stop. "
+    "Do not call it again. Do not reread. Report leftover_placeholders."
+)
 
 
 def configured_documents_model() -> str:
@@ -362,6 +366,16 @@ def reject_replace_in_document_on_fill() -> dict[str, Any] | None:
     """Force apply_document_commands on a research/fill Documents turn."""
     if documents_turn_active() and documents_research_required.get():
         return {"error": _REPLACE_ON_FILL_MESSAGE}
+    return None
+
+
+def reject_repeat_apply_document_commands() -> dict[str, Any] | None:
+    """One apply_document_commands persist per research/fill Documents turn."""
+    if not (documents_turn_active() and documents_research_required.get()):
+        return None
+    written = documents_writes_completed.get() or []
+    if "document commands" in written:
+        return {"error": _REPEAT_APPLY_MESSAGE}
     return None
 
 
