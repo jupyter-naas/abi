@@ -89,26 +89,38 @@ def publish(ctx: SnapshotContext) -> dict:
             "preview": int(previous_doc.get("preview") or 0),
         }
 
-    posts = _read_posts(ctx)
+    posts: list[Any] = _read_posts(ctx)
     preview_limit = DEFAULT_TWEET_LIMIT
-    preview = posts[:preview_limit]
+    preview = [_index_row(post) for post in posts[:preview_limit]]
+
+    # Keep peak memory bounded when the projection contains millions of posts.
+    # Replacing each source dict in place avoids retaining a second full list of
+    # compact rows alongside the already-large source dataset.
+    for index, post in enumerate(posts):
+        posts[index] = _index_row(post)
 
     index_body = {
         "format": DATASET_FORMAT,
         "count": len(posts),
         "preview": len(preview),
         "columns": INDEX_COLUMNS,
-        "posts": [_index_row(p) for p in posts],
+        "posts": posts,
     }
-    index_hash = content_digest(encode_compact(index_body))
+    index_bytes = encode_compact(
+        {"updated_at": ctx.built_at.isoformat(), **index_body}
+    )
+    index_hash = content_digest(index_bytes)
     preview_body = {
         "format": DATASET_FORMAT,
         "count": len(posts),
         "preview": len(preview),
         "columns": INDEX_COLUMNS,
-        "posts": [_index_row(p) for p in preview],
+        "posts": preview,
     }
-    preview_hash = content_digest(encode_compact(preview_body))
+    preview_bytes = encode_compact(
+        {"updated_at": ctx.built_at.isoformat(), **preview_body}
+    )
+    preview_hash = content_digest(preview_bytes)
 
     index_written = previous_doc.get("index_hash") != index_hash
     preview_written = previous_doc.get("preview_hash") != preview_hash
@@ -117,13 +129,13 @@ def publish(ctx: SnapshotContext) -> dict:
         ctx.save_bytes(
             "search_tweets",
             "posts.json",
-            encode_compact({"updated_at": ctx.built_at.isoformat(), **index_body}),
+            index_bytes,
         )
     if preview_written:
         ctx.save_bytes(
             "search_tweets",
             "posts_preview.json",
-            encode_compact({"updated_at": ctx.built_at.isoformat(), **preview_body}),
+            preview_bytes,
         )
 
     manifest = {

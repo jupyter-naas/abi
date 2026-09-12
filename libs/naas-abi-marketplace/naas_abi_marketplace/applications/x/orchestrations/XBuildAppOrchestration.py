@@ -127,13 +127,22 @@ class XBuildAppOrchestration(DagsterOrchestration):
         def build_job():
             build_op()
 
-        schedule = dg.ScheduleDefinition(
+        @dg.schedule(
             name=_SCHEDULE_NAME,
             job=build_job,
             cron_schedule="0 * * * *",  # top of every hour
             execution_timezone="UTC",
             default_status=dg.DefaultScheduleStatus.RUNNING,
         )
+        def x_build_app_x_proxy_hourly(context: dg.ScheduleEvaluationContext):
+            from axi.utils.dagster_guards import daily_report_skip_reason
+
+            skip = daily_report_skip_reason(context)
+            if skip is not None:
+                return skip
+            return dg.RunRequest(run_key=None)
+
+        schedule = x_build_app_x_proxy_hourly
 
         return cls(
             definitions=dg.Definitions(

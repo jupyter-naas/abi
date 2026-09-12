@@ -232,9 +232,12 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
             current = CacheReader(self._object_storage)
             state = current.projection_state()
             if self._search_reader is None or state != self._search_state:
-                self._search_reader = current
+                reader = current
+                self._search_reader = reader
                 self._search_state = state
-            total, posts = self._search_reader.search_tweets(
+            else:
+                reader = self._search_reader
+            total, posts = reader.search_tweets(
                 query,
                 offset=page * per_page,
                 limit=per_page,
