@@ -20,6 +20,12 @@ describe('SlidesSection sidebar views', () => {
     expect(src).toContain('SlidesFilmstrip');
   });
 
+  it('applies a rename title from the deck-updated event before refetch', () => {
+    expect(src).toContain('SLIDES_DECK_UPDATED_EVENT');
+    expect(src).toContain('detail?.title');
+    expect(src).toContain('setSelectedTitle(title)');
+  });
+
   it('does not treat a leftover selected slug as a loading filmstrip', () => {
     expect(slidesFilmstripEmptyCopy(false)).toBe('Open a deck to see slides.');
     expect(slidesFilmstripEmptyCopy(true)).toBe('Loading slides…');

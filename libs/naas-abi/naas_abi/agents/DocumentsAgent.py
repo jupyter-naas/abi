@@ -2,9 +2,9 @@ from langchain_core.embeddings import Embeddings
 from naas_abi.agents.documents import (
     bind_documents_reasoning,
     configured_documents_model,
+    documents_research_tools,
     load_documents_chat_model,
     resolve_documents_llm_model,
-    documents_research_tools,
 )
 from naas_abi_core.services.agent.context import DOCUMENTS_RECURSION_LIMIT
 from naas_abi_core.services.agent.IntentAgent import (

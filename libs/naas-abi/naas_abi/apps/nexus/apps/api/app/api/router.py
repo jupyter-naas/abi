@@ -31,6 +31,9 @@ from naas_abi.apps.nexus.apps.api.app.services.coding_environment.handlers impor
 from naas_abi.apps.nexus.apps.api.app.services.datasets.handlers import (
     router as datasets_router,
 )
+from naas_abi.apps.nexus.apps.api.app.services.documents.handlers import (
+    router as documents_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.files.handlers import router as files_router
 from naas_abi.apps.nexus.apps.api.app.services.modules.handlers import router as modules_router
 from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.handlers import (
@@ -41,9 +44,6 @@ from naas_abi.apps.nexus.apps.api.app.services.platform.handlers import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.providers.handlers import router as providers_router
 from naas_abi.apps.nexus.apps.api.app.services.skills.handlers import router as skills_router
-from naas_abi.apps.nexus.apps.api.app.services.documents.handlers import (
-    router as documents_router,
-)
 from naas_abi.apps.nexus.apps.api.app.services.slides.handlers import router as slides_router
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.handlers import (
     router as workspaces_router,

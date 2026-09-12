@@ -7,6 +7,36 @@ This note is the verb set. It is inspired by Google Docs
 `documents.batchUpdate`, OASIS OpenDocument text operations, and the
 Pandoc AST. It is not an ODF writer and not a Google Docs clone.
 
+## Architecture
+
+HTTP is the public contract. Named verbs (`rename_document`,
+`insert_heading`, `apply_template`, …) are the product surface. The
+agent calls those same names. A future `abi documents <verb>` would
+wrap the same HTTP routes. That is API first, with CLI-shaped verbs
+on top. It is not a CLI that owns the logic.
+
+`POST /api/documents/projects/{slug}/commands` applies an ordered
+list of verbs (Google Docs `batchUpdate` style). That is not a shell
+CLI. There is no `abi documents rename` today. The `abi` Click CLI
+is workspace, user, stack, and dev. Do not invent a Documents Click
+group until a wrapper is a product need, and do not put business
+logic in the agent.
+
+What actually runs:
+
+1. Verb functions live in `documents_commands.py` (HTML).
+   `rename_document` also writes `project.json` `title`.
+2. FastAPI `POST /commands` calls those verbs and writes the
+   git-backed store (sidecar plus Forgejo).
+3. Agent tools use the same names and the same Python mutators. They
+   talk to sidecar and git directly. They are not HTTP clients of
+   the API.
+4. The web UI calls the HTTP API (PATCH for a sidebar-typed rename,
+   `POST /commands` for outline edits).
+
+Target: one named command per user-facing function, callable from
+HTTP and from the agent. A later CLI is a thin wrapper of the API.
+
 ## Supported commands
 
 `POST /api/documents/projects/{slug}/commands` applies an ordered list.

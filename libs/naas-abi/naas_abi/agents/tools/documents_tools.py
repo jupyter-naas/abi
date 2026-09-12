@@ -31,8 +31,8 @@ from naas_abi.agents.documents import (
     is_placeholder_document_title,
     note_documents_list,
     note_documents_section_read,
-    reject_repeat_list_document_sections,
     reject_documents_section_read,
+    reject_repeat_list_document_sections,
     reject_unresearched_documents_write,
     resolve_document_title,
 )
@@ -43,11 +43,11 @@ from naas_abi_core.services.agent.context import (
     agent_user_name,
     agent_workspace_id,
     coder_workspace_base,
-    note_documents_write,
     documents_active_mode,
     documents_active_slug,
     documents_active_title,
     documents_brief,
+    note_documents_write,
 )
 from naas_abi_core.services.agent.tools.workspace_tools import _call as _sidecar_call
 from naas_abi_core.services.source_control.SourceControlPorts import (
@@ -1495,7 +1495,7 @@ def resolve_documents_template_id(
             "error": "template_id is required. Pass a catalog name or id.",
             "templates": choices,
         }
-    stripped = re.sub(r"\b(theme|template|style|styles)\b", "", raw, flags=re.I)
+    stripped = re.sub(r"\b(theme|template|style|styles)\b", "", raw, flags=re.IGNORECASE)
     needle = _template_key(stripped)
     if not needle:
         return {"error": "template_id is required.", "templates": choices}
@@ -2306,6 +2306,8 @@ def documents_tools() -> list[BaseTool]:
             return blocked
         from naas_abi.agents.tools.documents_commands import (
             apply_document_commands as apply_commands,
+        )
+        from naas_abi.agents.tools.documents_commands import (
             last_rename_document_title,
         )
 

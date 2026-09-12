@@ -238,7 +238,7 @@ def apply_document_commands(
             after = int(after)
         except (TypeError, ValueError):
             return {"error": f"requests[{i}].after_heading must be an integer"}
-        target = raw.get("heading_index", after if after >= 0 else 0)
+        target = raw.get("heading_index", max(after, 0))
         try:
             target = int(target)
         except (TypeError, ValueError):
@@ -265,7 +265,7 @@ def apply_document_commands(
             heading_index = min(after + 1 if after >= 0 else len(outline) - 1, len(outline) - 1)
         elif typ == "insert_page_break":
             result = insert_page_break(next_html, after)
-            heading_index = after if after >= 0 else 0
+            heading_index = max(after, 0)
         elif typ == "delete_range":
             result = delete_heading_range(next_html, target)
             if isinstance(result, str):

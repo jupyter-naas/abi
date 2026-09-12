@@ -15,22 +15,21 @@ from naas_abi.agents.documents.policy import (
     bind_documents_reasoning,
     bind_documents_research_policy,
     configured_documents_model,
-    load_documents_chat_model,
-    note_documents_list,
-    note_documents_section_read,
-    note_documents_web_search,
-    reject_repeat_list_document_sections,
-    reject_documents_section_read,
-    reject_unresearched_documents_write,
-    resolve_documents_llm_model,
     documents_brief_requires_research,
     documents_research_tools,
     documents_search_budget_remaining,
     documents_search_tool_bound,
+    load_documents_chat_model,
+    note_documents_list,
+    note_documents_section_read,
+    note_documents_web_search,
+    reject_documents_section_read,
+    reject_repeat_list_document_sections,
+    reject_unresearched_documents_write,
+    resolve_documents_llm_model,
     validate_configured_documents_model,
 )
 from naas_abi_core.services.agent.context import (
-    note_documents_write,
     documents_active_slug,
     documents_brief,
     documents_list_calls,
@@ -38,6 +37,7 @@ from naas_abi_core.services.agent.context import (
     documents_research_required,
     documents_section_read_indexes,
     documents_writes_completed,
+    note_documents_write,
 )
 
 

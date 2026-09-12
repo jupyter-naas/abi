@@ -445,6 +445,72 @@ def test_patch_project_renames_and_archives_without_changing_slug(monkeypatch) -
     assert missing.status_code == 404
 
 
+def test_slide_commands_rename_updates_project_title(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Untitled presentation",
+            "slug": "untitled-rename",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    applied = client.post(
+        "/slides/projects/untitled-rename/commands",
+        json={
+            "workspace_id": "ws-test",
+            "requests": [{"type": "rename_deck", "title": "Forvis Mazars Story"}],
+        },
+    )
+    assert applied.status_code == 200, applied.text
+    body = applied.json()
+    assert body["ok"] is True
+    assert body["title"] == "Forvis Mazars Story"
+    assert body["project_renamed"] is True
+    assert body["slug_changed"] is False
+    assert "<h1>Forvis Mazars Story</h1>" in (body.get("html") or "")
+
+    listed = client.get("/slides/projects", params={"workspace_id": "ws-test"})
+    assert listed.status_code == 200, listed.text
+    row = next(p for p in listed.json() if p["slug"] == "untitled-rename")
+    assert row["title"] == "Forvis Mazars Story"
+    assert row["slug"] == "untitled-rename"
+
+
+def test_slide_commands_update_title_leaves_project_name(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Untitled presentation",
+            "slug": "untitled-heading",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    applied = client.post(
+        "/slides/projects/untitled-heading/commands",
+        json={
+            "workspace_id": "ws-test",
+            "requests": [{"type": "update_title", "title": "Cover only"}],
+        },
+    )
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["project_renamed"] is False
+    assert "<h1>Cover only</h1>" in (applied.json().get("html") or "")
+
+    listed = client.get("/slides/projects", params={"workspace_id": "ws-test"})
+    row = next(p for p in listed.json() if p["slug"] == "untitled-heading")
+    assert row["title"] == "Untitled presentation"
+
+
 def test_friendly_git_detail_hides_pushrejected_dump() -> None:
     raw = (
         "Forgejo API request failed (500): PushRejected ... "

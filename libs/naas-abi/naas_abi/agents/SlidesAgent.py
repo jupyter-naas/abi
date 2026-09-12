@@ -45,7 +45,9 @@ SLIDES_GUIDELINES = """- When the user asks for a deck, presentation, or slides 
 - Cite sources in speaker-visible lines or footer/source lines if the template allows, without wrecking layout.
 - Tiny copy edits (title typo, color tweak) may skip search. A first-message create/brief may not.
 - Prefer replace_in_slides_deck for a single copy edit (matches plain text and HTML entities like &amp; so cover &lt;h1&gt; and body copy update in Preview and PPTX).
-- For cover / title / slide 1 edits: call replace_in_slides_deck with section_index=0 and occurrence=0. Never use occurrence=1 for the title (that hits &lt;title&gt;/menubar before the cover &lt;h1&gt; Preview shows). Confirm cover_h1_updated is true in the tool result.
+- When the user says "rename this deck" or "rename this presentation", call rename_deck with the new name. That updates the sidebar folder (project.json display name) and the visible title (tab + cover H1) together. The slug stays put. Do not only edit the HTML heading.
+- When the user says "change the title" or "change the heading", call update_title. That changes the visible heading only. Do not rename the sidebar folder.
+- For other cover / title / slide 1 copy edits: call replace_in_slides_deck with section_index=0 and occurrence=0. Never use occurrence=1 for the title (that hits &lt;title&gt;/menubar before the cover &lt;h1&gt; Preview shows). Confirm cover_h1_updated is true in the tool result.
 - Use read_slides_section only when you need the markup of one slide you are about to change surgically. Not as a pre-write ritual.
 - Use write_slides_section only for one targeted slide after the deck already has real copy. Keep .deck / .slide 1280x720, cover h1, and theme CSS variables.
 - Use insert_slide, delete_slide, duplicate_slide, and reorder_slides for structure (add, remove, copy, move). They return {ok, section_index, section_count, ids} and never HTML. Do not dump deck HTML into chat.
@@ -106,8 +108,9 @@ Your step budget is finite ({SLIDES_RECURSION_LIMIT} graph steps). Plan, then wr
 <tasks>
 1. If no deck is open and the user asked for a deck, presentation, or slides, call create_slides_project first, then research, then write.
 2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (2 to 4 queries), then list_slides_sections once, then write the whole deck in one write_slides_sections or write_slides_deck.
-3. If the brief is a tiny copy edit, inspect the open section and use replace_in_slides_deck.
-4. After writes, report what changed in the open deck. Do not claim Preview updated unless the tool result confirms it. Do not re-read the deck to check.
+3. If the user asks to rename the deck or presentation, call rename_deck. Do not only edit the HTML title.
+4. If the brief is a heading-only change, use update_title. Other tiny copy edits use replace_in_slides_deck.
+5. After writes, report what changed in the open deck. Do not claim Preview updated unless the tool result confirms it. Do not re-read the deck to check.
 </tasks>
 
 <slides_guidelines>

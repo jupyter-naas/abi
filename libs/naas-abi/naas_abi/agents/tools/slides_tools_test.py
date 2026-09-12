@@ -689,6 +689,51 @@ def _stored_title(sc) -> str:
     return json.loads(meta.text or "{}").get("title", "")
 
 
+def _stored_html(sc) -> str:
+    file = sc.get_file(
+        repo_id="abi/monorepo",
+        path="slides/ws-test/untitled-local/deck.html",
+        ref="slides/ws-test/untitled-local",
+    )
+    return file.text or ""
+
+
+def test_rename_deck_updates_sidebar_name_and_cover(monkeypatch):
+    """Rename this deck updates project.json and the visible heading."""
+    sc = _bind_in_memory_git(monkeypatch)
+    _seed_untitled_deck(sc)
+    tokens = _slides_context()
+    try:
+        rename = next(t for t in slides_tools() if t.name == "rename_deck")
+        result = rename.invoke({"title": "Forvis Mazars Story"})
+        assert "error" not in result, result
+        assert result["title"] == "Forvis Mazars Story"
+        assert result["project_renamed"] is True
+        assert result["slug_changed"] is False
+        assert result["slug"] == "untitled-local"
+        assert _stored_title(sc) == "Forvis Mazars Story"
+        html = _stored_html(sc)
+        assert "<h1>Forvis Mazars Story</h1>" in html
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_update_title_leaves_the_sidebar_folder(monkeypatch):
+    """Change the heading updates HTML only."""
+    sc = _bind_in_memory_git(monkeypatch)
+    _seed_untitled_deck(sc)
+    tokens = _slides_context()
+    try:
+        update = next(t for t in slides_tools() if t.name == "update_title")
+        result = update.invoke({"title": "Cover only"})
+        assert "error" not in result, result
+        assert result["project_renamed"] is False
+        assert _stored_title(sc) == "Untitled presentation"
+        assert "<h1>Cover only</h1>" in _stored_html(sc)
+    finally:
+        _reset_tokens(tokens)
+
+
 def test_write_names_a_still_untitled_deck_after_the_brief(monkeypatch):
     """A deck created by the UI New button starts untitled. Name it on write."""
     sc = _bind_in_memory_git(monkeypatch)

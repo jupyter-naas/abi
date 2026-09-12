@@ -29,7 +29,6 @@ from naas_abi.agents.tools.documents_tools import (
     _redact_data_urls,
     _reorder_sections_html,
     _replace_string_pairs,
-    resolve_documents_template_id,
     _resolve_slug,
     _restore_redacted_data_urls,
     _section_meta,
@@ -37,6 +36,7 @@ from naas_abi.agents.tools.documents_tools import (
     _view_for_llm,
     documents_agent_tools,
     documents_tools,
+    resolve_documents_template_id,
 )
 from naas_abi_core.services.agent.context import (
     agent_user_id,

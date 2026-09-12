@@ -38,6 +38,7 @@ export const SLIDES_DECK_UPDATED_EVENT = 'slides-deck-updated';
 export type SlidesDeckUpdatedDetail = {
   slug?: string;
   source?: string;
+  title?: string;
 };
 
 export type SlidesDeckSource = 'sidecar' | 'forgejo' | null;
@@ -168,7 +169,9 @@ export function isSlidesWriteTool(rawName: string | null | undefined): boolean {
     raw.includes('delete_slide') ||
     raw.includes('duplicate_slide') ||
     raw.includes('reorder_slides') ||
-    raw.includes('create_slides_project')
+    raw.includes('create_slides_project') ||
+    raw.includes('rename_deck') ||
+    raw.includes('update_title')
   );
 }
 

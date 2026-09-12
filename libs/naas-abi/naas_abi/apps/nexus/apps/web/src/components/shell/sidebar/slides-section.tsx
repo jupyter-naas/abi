@@ -140,14 +140,21 @@ export function SlidesSection({
   // The same write can add a file, so the open deck's tree is refetched too.
   useEffect(() => {
     const onUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ slug?: string; title?: string }>).detail;
+      const slug = detail?.slug || openSlug || '';
+      const title = (detail?.title || '').trim();
+      if (title && slug) {
+        setProjects((current) =>
+          current.map((row) => (row.slug === slug ? { ...row, title } : row)),
+        );
+        if (selectedSlug === slug || openSlug === slug) setSelectedTitle(title);
+      }
       void fetchProjects();
-      const slug =
-        (event as CustomEvent<{ slug?: string }>).detail?.slug || openSlug || '';
       if (slug) void fetchTree(slug);
     };
     window.addEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
     return () => window.removeEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
-  }, [fetchProjects, fetchTree, openSlug]);
+  }, [fetchProjects, fetchTree, openSlug, selectedSlug, setSelectedTitle]);
 
   useEffect(() => {
     if (routeSlug) setSelectedSlug(routeSlug);

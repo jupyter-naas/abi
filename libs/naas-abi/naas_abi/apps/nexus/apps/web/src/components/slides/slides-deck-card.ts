@@ -22,7 +22,9 @@ function isSlidesDeckTool(rawName: string | null | undefined): boolean {
   return (
     raw.includes(CREATE_TOOL) ||
     raw.includes('write_slides') ||
-    raw.includes('replace_in_slides')
+    raw.includes('replace_in_slides') ||
+    raw.includes('rename_deck') ||
+    raw.includes('update_title')
   );
 }
 

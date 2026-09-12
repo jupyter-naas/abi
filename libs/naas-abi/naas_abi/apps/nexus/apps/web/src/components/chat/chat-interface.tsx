@@ -2261,10 +2261,16 @@ export function ChatInterface({
           if (isSlidesWriteTool(raw)) {
             let slug: string | undefined;
             let writeFailed = false;
+            let projectRenamed = false;
             try {
-              const parsed = JSON.parse(output) as { slug?: string; error?: unknown };
+              const parsed = JSON.parse(output) as {
+                slug?: string;
+                error?: unknown;
+                project_renamed?: unknown;
+              };
               if (typeof parsed?.slug === 'string') slug = parsed.slug;
               if (parsed && parsed.error) writeFailed = true;
+              if (parsed?.project_renamed === true) projectRenamed = true;
             } catch {
               /* tool output may be plain text */
             }
@@ -2274,7 +2280,11 @@ export function ChatInterface({
               // write, so pick the new name up for the pane and sidebar.
               const deckTitle = slidesDeckTitleFromToolOutput(output);
               if (deckTitle) useSlidesStore.getState().setSelectedTitle(deckTitle);
-              dispatchSlidesDeckUpdated({ slug, source: target.rawName || target.toolName });
+              dispatchSlidesDeckUpdated({
+                slug,
+                source: target.rawName || target.toolName,
+                title: projectRenamed ? deckTitle : undefined,
+              });
             }
           }
           if (isDocumentsWriteTool(raw)) {
