@@ -254,58 +254,106 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
     el.setAttribute('data-nexus-letter-page', '');
     return el;
   }
-  function collectFlow(root) {
-    var flow = [];
-    Array.prototype.slice.call(root.childNodes).forEach(function (child) {
-      if (child.nodeType === 1 && child.matches && child.matches('section.page, section.section')) {
-        Array.prototype.slice.call(child.childNodes).forEach(function (n) {
-          if (isLetterPage(n)) {
-            Array.prototype.slice.call(n.childNodes).forEach(function (inner) {
-              if (meaningfulNode(inner)) flow.push(inner);
-            });
-          } else if (meaningfulNode(n)) {
-            flow.push(n);
-          }
-        });
-      } else if (isLetterPage(child)) {
-        Array.prototype.slice.call(child.childNodes).forEach(function (inner) {
-          if (meaningfulNode(inner)) flow.push(inner);
-        });
-      } else if (meaningfulNode(child)) {
-        flow.push(child);
+  function isDocHeader(el) {
+    return !!(el && el.nodeType === 1 && (
+      (el.classList && el.classList.contains('doc-header')) ||
+      (el.tagName === 'HEADER' && !(el.classList && el.classList.contains('doc-footer')))
+    ));
+  }
+  function isDocFooter(el) {
+    return !!(el && el.nodeType === 1 && (
+      (el.classList && el.classList.contains('doc-footer')) ||
+      el.tagName === 'FOOTER'
+    ));
+  }
+  function isChromeClone(el) {
+    return !!(el && el.getAttribute && el.getAttribute('data-nexus-chrome-clone') != null);
+  }
+  function cloneChrome(node) {
+    if (!node) return null;
+    var copy = node.cloneNode(true);
+    if (copy.setAttribute) copy.setAttribute('data-nexus-chrome-clone', '');
+    return copy;
+  }
+  function decorateLetterPage(page, header, footer, clone) {
+    var body = document.createElement('div');
+    body.className = 'doc-body';
+    if (header) page.appendChild(clone ? cloneChrome(header) : header);
+    page.appendChild(body);
+    if (footer) page.appendChild(clone ? cloneChrome(footer) : footer);
+    return body;
+  }
+  function collectRuns(root) {
+    var runs = [];
+    var current = { header: null, footer: null, nodes: [] };
+    function flush() {
+      if (current.header || current.footer || current.nodes.length) {
+        runs.push(current);
+        current = { header: null, footer: null, nodes: [] };
       }
-    });
-    return flow;
+    }
+    function takeKids(parent) {
+      Array.prototype.slice.call(parent.childNodes).forEach(absorb);
+    }
+    function absorb(n) {
+      if (!meaningfulNode(n)) return;
+      if (isLetterPage(n)) {
+        takeKids(n);
+        return;
+      }
+      if (n.nodeType === 1 && n.matches && n.matches('section.page, section.section')) {
+        flush();
+        takeKids(n);
+        flush();
+        return;
+      }
+      if (isChromeClone(n)) return;
+      if (isPageBreak(n)) {
+        flush();
+        return;
+      }
+      if (isDocHeader(n)) {
+        if (current.header || current.footer || current.nodes.length) flush();
+        current.header = n;
+        return;
+      }
+      if (isDocFooter(n)) {
+        current.footer = n;
+        return;
+      }
+      if (n.nodeType === 1 && n.classList && n.classList.contains('doc-body')) {
+        takeKids(n);
+        return;
+      }
+      current.nodes.push(n);
+    }
+    Array.prototype.slice.call(root.childNodes).forEach(absorb);
+    flush();
+    return runs;
   }
   function paginateDocument() {
     var root = document.querySelector('main.document, .document');
     if (!root) return;
     tagEditTargets();
-    var flow = collectFlow(root);
-    if (!flow.length) return;
+    var runs = collectRuns(root);
+    if (!runs.length) return;
     var holders = sectionNodes();
     while (root.firstChild) root.removeChild(root.firstChild);
-    var page = makeLetterPage();
-    root.appendChild(page);
-    flow.forEach(function (node) {
-      if (isPageBreak(node)) {
-        if (page.childNodes.length) {
+    runs.forEach(function (run) {
+      var page = makeLetterPage();
+      root.appendChild(page);
+      var bodyEl = decorateLetterPage(page, run.header, run.footer, false);
+      run.nodes.forEach(function (node) {
+        bodyEl.appendChild(node);
+        if (page.scrollHeight > page.clientHeight && bodyEl.childNodes.length > 1) {
+          bodyEl.removeChild(node);
           page = makeLetterPage();
           root.appendChild(page);
+          bodyEl = decorateLetterPage(page, run.header, run.footer, true);
+          bodyEl.appendChild(node);
         }
-        return;
-      }
-      page.appendChild(node);
-      if (page.scrollHeight > page.clientHeight && page.childNodes.length > 1) {
-        page.removeChild(node);
-        page = makeLetterPage();
-        root.appendChild(page);
-        page.appendChild(node);
-      }
+      });
     });
-    if (!page.childNodes.length && root.childNodes.length > 1) {
-      root.removeChild(page);
-    }
     holders.forEach(function (sec) {
       if (!sec.parentNode) {
         sec.setAttribute('data-nexus-empty-section', '');
@@ -614,7 +662,9 @@ export const SLIDES_PREVIEW_PRINT_CSS = `
       overflow: visible !important;
     }
     .letter-page {
-      display: block !important;
+      position: relative !important;
+      display: flex !important;
+      flex-direction: column !important;
       width: 8.5in !important;
       height: 11in !important;
       min-height: 11in !important;
@@ -633,6 +683,24 @@ export const SLIDES_PREVIEW_PRINT_CSS = `
     .letter-page:last-of-type {
       page-break-after: auto !important;
       break-after: auto !important;
+    }
+    .letter-page > .doc-header {
+      position: absolute !important;
+      top: 0.3in !important;
+      right: 0.5in !important;
+      margin: 0 !important;
+    }
+    .letter-page > .doc-footer {
+      position: absolute !important;
+      left: 0.5in !important;
+      right: 0.5in !important;
+      bottom: 0.3in !important;
+      margin: 0 !important;
+    }
+    .letter-page > .doc-footer ~ .doc-header,
+    .letter-page > .doc-footer .brand-logo,
+    .letter-page > .doc-footer .wordmark {
+      display: none !important;
     }
     .page-break, [data-nexus-page-break] {
       display: block !important;
@@ -711,6 +779,11 @@ export function prepareSectionsPreviewHtml(html: string): string {
     min-height: 0 !important;
     background: transparent !important;
     box-shadow: none !important;
+    counter-reset: fm-page;
+  }
+  .document[data-nexus-paginated="1"] > .page,
+  .document[data-nexus-paginated="1"] > .section {
+    counter-increment: none !important;
   }
   .page, .section {
     width: auto !important;
@@ -731,7 +804,9 @@ export function prepareSectionsPreviewHtml(html: string): string {
     margin: 0 !important;
   }
   .letter-page {
-    display: block !important;
+    position: relative !important;
+    display: flex !important;
+    flex-direction: column !important;
     box-sizing: border-box !important;
     width: ${DOCUMENTS_PAGE_WIDTH}px !important;
     height: ${DOCUMENTS_PAGE_MIN_HEIGHT}px !important;
@@ -744,6 +819,50 @@ export function prepareSectionsPreviewHtml(html: string): string {
     box-shadow: 0 1px 3px rgba(26, 26, 26, 0.10), 0 12px 32px rgba(26, 26, 26, 0.12) !important;
     overflow: hidden !important;
     flex-shrink: 0 !important;
+    counter-increment: fm-page;
+  }
+  .letter-page > .doc-header {
+    position: absolute !important;
+    top: 28px !important;
+    right: 48px !important;
+    left: auto !important;
+    z-index: 2 !important;
+    display: flex !important;
+    justify-content: flex-end !important;
+    align-items: flex-start !important;
+    margin: 0 !important;
+    flex: 0 0 auto !important;
+  }
+  .letter-page > .doc-body {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+  }
+  .letter-page > .doc-footer {
+    position: absolute !important;
+    left: 48px !important;
+    right: 48px !important;
+    bottom: 28px !important;
+    z-index: 2 !important;
+    margin: 0 !important;
+    flex: 0 0 auto !important;
+  }
+  .letter-page .brand-logo,
+  .letter-page .wordmark {
+    display: block !important;
+    width: 118px !important;
+    max-width: 118px !important;
+    height: auto !important;
+    max-height: 50px !important;
+    flex: 0 0 auto !important;
+  }
+  .letter-page > .doc-footer .brand-logo,
+  .letter-page > .doc-footer .wordmark,
+  .letter-page > .doc-footer svg,
+  .letter-page > .doc-footer ~ .doc-header,
+  .letter-page > .doc-footer ~ .brand-logo,
+  .letter-page > .doc-footer ~ .wordmark,
+  .letter-page > .doc-footer ~ svg {
+    display: none !important;
   }
   .page-break, [data-nexus-page-break] {
     display: block !important;
@@ -908,11 +1027,14 @@ export function prepareSectionsCoverHtml(html: string, index = 0): string | null
     background: #fff !important;
   }
   .page, .section {
+    position: relative !important;
+    display: flex !important;
+    flex-direction: column !important;
     width: auto !important;
     height: auto !important;
-    min-height: 0 !important;
+    min-height: ${DOCUMENTS_PAGE_MIN_HEIGHT}px !important;
     margin: 0 !important;
-    padding: 0 !important;
+    padding: 88px 64px 56px !important;
     border: none !important;
     box-shadow: none !important;
     background: transparent !important;

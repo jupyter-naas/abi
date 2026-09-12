@@ -112,6 +112,13 @@ describe('prepareSectionsPreviewHtml', () => {
     expect(once).toContain('.section-index');
     expect(once).toContain('print-color-adjust: exact');
     expect(once).toContain('letter-page');
+    expect(once).toContain('isDocHeader');
+    expect(once).toContain('collectRuns');
+    expect(once).toContain('data-nexus-chrome-clone');
+    expect(once).toContain('.letter-page > .doc-header');
+    expect(once).toContain('.letter-page > .doc-footer');
+    expect(once).toContain('.letter-page > .doc-footer ~ .doc-header');
+    expect(once).toContain('position: relative !important');
     expect(once).toContain('page-break-after: always');
     expect(once).toContain('break-before: page');
     expect(once).not.toContain('contain: strict');
