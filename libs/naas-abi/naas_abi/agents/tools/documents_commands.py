@@ -307,24 +307,48 @@ def leftover_slots(html: str) -> list[dict[str, str]]:
         if key in seen:
             continue
         seen.add(key)
-        slots.append({"type": "replace_text", "find": phrase})
+        slots.append(
+            {
+                "type": "replace_text",
+                "find": phrase,
+                "replace_required": "non-empty topic sentence",
+            }
+        )
     if _PALETTE_CLASS_RE.search(prose):
         key = ("class", "palette")
         if key not in seen:
             seen.add(key)
-            slots.append({"type": "replace_class", "class_name": "palette"})
+            slots.append(
+                {
+                    "type": "replace_class",
+                    "class_name": "palette",
+                    "replace_required": "non-empty topic sentence",
+                }
+            )
     for class_name, marker in _SEED_TABLE_CLASS_RE:
         if marker.search(prose):
             key = ("class", class_name)
             if key not in seen:
                 seen.add(key)
-                slots.append({"type": "replace_class", "class_name": class_name})
+                slots.append(
+                    {
+                        "type": "replace_class",
+                        "class_name": class_name,
+                        "replace_required": "non-empty topic sentence",
+                    }
+                )
     for class_name, marker in _EMPTY_CLASS_RES:
         if marker.search(prose):
             key = ("class", class_name)
             if key not in seen:
                 seen.add(key)
-                slots.append({"type": "replace_class", "class_name": class_name})
+                slots.append(
+                    {
+                        "type": "replace_class",
+                        "class_name": class_name,
+                        "replace_required": "non-empty topic sentence",
+                    }
+                )
     if re.search(r'data-layout=["\']tables["\']', prose, re.I) and not re.search(
         r"<table\b", prose, re.I
     ):
@@ -332,7 +356,22 @@ def leftover_slots(html: str) -> list[dict[str, str]]:
             key = ("class", class_name)
             if key not in seen:
                 seen.add(key)
-                slots.append({"type": "replace_class", "class_name": class_name})
+                slots.append(
+                    {
+                        "type": "replace_class",
+                        "class_name": class_name,
+                        "replace_required": "non-empty topic sentence",
+                    }
+                )
+    leftovers = leftover_placeholders(html)
+    if leftovers and not slots:
+        slots.append(
+            {
+                "type": "replace_text",
+                "find": leftovers[0],
+                "replace_required": "non-empty topic sentence",
+            }
+        )
     return slots
 
 
@@ -349,12 +388,14 @@ def leftover_write_note(html: str) -> dict[str, Any]:
         note["warning"] = (
             "INCOMPLETE: seed placeholder copy remains: "
             + ", ".join(leftovers)
-            + ". leftover_slots lists exact find snippets and class_name "
-            "values. One apply_document_commands: replace_text on each find "
-            "with non-empty topic copy; replace_class on palette, fm-table, "
-            "fm-shaded, intro, subtitle, note. Empty replace is skipped. "
-            "This fill turn allows one apply. Stop. Do not apply again. "
-            "Do not reread."
+            + ". leftover_slots is the required batch (exact find snippets "
+            "and class_name values). leftover_slots is empty only when those "
+            "slots have real topic prose. One apply_document_commands: "
+            "replace_text on each find with a full topic sentence; "
+            "replace_class on palette, fm-table, fm-shaded, intro, subtitle, "
+            "note. Empty replace is skipped. Do not write the memo only in "
+            "chat. This fill turn allows one apply. Stop. Do not apply "
+            "again. Do not reread."
         )
     return note
 

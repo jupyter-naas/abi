@@ -242,7 +242,16 @@ def test_leftover_write_note_marks_incomplete() -> None:
     assert note["leftover_placeholders"]
     assert note["leftover_slots"]
     assert "INCOMPLETE" in note["warning"]
-    assert leftover_write_note("<h1>Board memo</h1>")["leftover_placeholders"] == []
+    assert "required batch" in note["warning"]
+    assert all(
+        slot.get("replace_required") == "non-empty topic sentence"
+        for slot in note["leftover_slots"]
+    )
+    clean = leftover_write_note("<h1>Board memo</h1>")
+    assert clean["leftover_placeholders"] == []
+    assert clean["leftover_slots"] == []
+    if note["leftover_placeholders"]:
+        assert note["leftover_slots"]
 
 
 def test_leftover_placeholders_flags_seed_table_headers() -> None:

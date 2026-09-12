@@ -1829,9 +1829,10 @@ def _view_for_llm(html: str) -> dict[str, Any]:
             "Outline only. HTML is omitted on purpose: a 25-section industry "
             "document is ~160k characters and blows the next model call. "
             "Fill the open template with one apply_document_commands. "
-            "leftover_slots is the find/class_name list: replace_text on each "
-            "find (a leftover phrase replaces that whole seed block), "
-            "replace_class on palette, fm-table, fm-shaded. "
+            "leftover_slots is the required batch: copy every find and "
+            "class_name. Each replace must be a full topic sentence. "
+            "leftover_slots is empty only when those slots have real prose. "
+            "Do not write the memo only in chat. "
             "Do not leave seed placeholder copy. Do not append after the footer. "
             "Do not edit buildPptx. Preview is HTML; PDF is derived at export."
         ),
@@ -2449,12 +2450,15 @@ def documents_tools() -> list[BaseTool]:
     ) -> dict[str, Any]:
         """Apply an ordered list of document commands (JSON array).
 
-        Fill the open template in this one batch. Prefer replace_text on
-        leftover_slots find values (a leftover phrase replaces that whole
-        seed block) and replace_class on palette, fm-table, fm-shaded.
-        Insert a heading only when the brief needs a section the seed does
-        not have. Writes land inside .doc-body. Do not append after the
-        footer. If leftover_placeholders is not empty after this call, stop.
+        Fill the open template in this one batch. leftover_slots is the
+        required batch: every find and class_name, each with a non-empty
+        topic-sentence replace. leftover_slots is empty only when those
+        slots have real prose. Do not write the memo only in chat.
+        A leftover phrase replaces that whole seed block. replace_class
+        on palette, fm-table, fm-shaded, intro, subtitle, note. Insert a
+        heading only when the brief needs a section the seed does not have.
+        Writes land inside .doc-body. Do not append after the footer.
+        If leftover_placeholders is not empty after this call, stop.
         Do not apply again this turn.
 
         Each item needs type. Supported: insert_text, insert_paragraph,
