@@ -257,7 +257,8 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
   function isDocHeader(el) {
     return !!(el && el.nodeType === 1 && (
       (el.classList && el.classList.contains('doc-header')) ||
-      (el.tagName === 'HEADER' && !(el.classList && el.classList.contains('doc-footer')))
+      (el.tagName === 'HEADER' && !(el.classList && el.classList.contains('doc-footer'))) ||
+      (el.classList && (el.classList.contains('brand-logo') || el.classList.contains('wordmark')))
     ));
   }
   function isDocFooter(el) {
@@ -265,6 +266,20 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
       (el.classList && el.classList.contains('doc-footer')) ||
       el.tagName === 'FOOTER'
     ));
+  }
+  function isHardBreak(el) {
+    if (isPageBreak(el)) return true;
+    if (!el || el.nodeType !== 1) return false;
+    try {
+      var style = window.getComputedStyle(el);
+      var before = String(style.breakBefore || style.pageBreakBefore || '').toLowerCase();
+      return before === 'page' || before === 'always';
+    } catch (e) {
+      return false;
+    }
+  }
+  function bodyOverflows(bodyEl) {
+    return !!(bodyEl && bodyEl.scrollHeight > bodyEl.clientHeight + 1);
   }
   function isChromeClone(el) {
     return !!(el && el.getAttribute && el.getAttribute('data-nexus-chrome-clone') != null);
@@ -309,7 +324,7 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
       }
       if (isChromeClone(n)) return;
       if (isPageBreak(n)) {
-        flush();
+        current.nodes.push(n);
         return;
       }
       if (isDocHeader(n)) {
@@ -343,9 +358,21 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
       var page = makeLetterPage();
       root.appendChild(page);
       var bodyEl = decorateLetterPage(page, run.header, run.footer, false);
+      var filled = false;
       run.nodes.forEach(function (node) {
+        if (isHardBreak(node)) {
+          if (filled) {
+            page = makeLetterPage();
+            root.appendChild(page);
+            bodyEl = decorateLetterPage(page, run.header, run.footer, true);
+            filled = false;
+          }
+          bodyEl.appendChild(node);
+          return;
+        }
         bodyEl.appendChild(node);
-        if (page.scrollHeight > page.clientHeight && bodyEl.childNodes.length > 1) {
+        filled = true;
+        if (bodyEl.childNodes.length > 1 && bodyOverflows(bodyEl)) {
           bodyEl.removeChild(node);
           page = makeLetterPage();
           root.appendChild(page);
@@ -670,7 +697,7 @@ export const SLIDES_PREVIEW_PRINT_CSS = `
       min-height: 11in !important;
       max-height: 11in !important;
       margin: 0 !important;
-      padding: 1in !important;
+      padding: 0.3in 0.5in !important;
       overflow: hidden !important;
       box-shadow: none !important;
       border: none !important;
@@ -685,17 +712,26 @@ export const SLIDES_PREVIEW_PRINT_CSS = `
       break-after: auto !important;
     }
     .letter-page > .doc-header {
-      position: absolute !important;
-      top: 0.3in !important;
-      right: 0.5in !important;
-      margin: 0 !important;
+      position: static !important;
+      top: auto !important;
+      right: auto !important;
+      left: auto !important;
+      flex: 0 0 auto !important;
+      align-self: flex-end !important;
+      margin: 0 0 12pt !important;
+    }
+    .letter-page > .doc-body {
+      flex: 1 1 auto !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
     }
     .letter-page > .doc-footer {
-      position: absolute !important;
-      left: 0.5in !important;
-      right: 0.5in !important;
-      bottom: 0.3in !important;
-      margin: 0 !important;
+      position: static !important;
+      left: auto !important;
+      right: auto !important;
+      bottom: auto !important;
+      flex: 0 0 auto !important;
+      margin: 12pt 0 0 !important;
     }
     .letter-page > .doc-footer ~ .doc-header,
     .letter-page > .doc-footer .brand-logo,
@@ -812,7 +848,7 @@ export function prepareSectionsPreviewHtml(html: string): string {
     height: ${DOCUMENTS_PAGE_MIN_HEIGHT}px !important;
     min-height: ${DOCUMENTS_PAGE_MIN_HEIGHT}px !important;
     max-height: ${DOCUMENTS_PAGE_MIN_HEIGHT}px !important;
-    padding: ${DOCUMENTS_PAGE_PADDING_TOP}px ${DOCUMENTS_PAGE_PADDING_X}px ${DOCUMENTS_PAGE_PADDING_BOTTOM}px !important;
+    padding: 28px ${DOCUMENTS_PAGE_PADDING_X}px !important;
     margin: 0 !important;
     border: none !important;
     background: #fff !important;
@@ -822,28 +858,32 @@ export function prepareSectionsPreviewHtml(html: string): string {
     counter-increment: fm-page;
   }
   .letter-page > .doc-header {
-    position: absolute !important;
-    top: 28px !important;
-    right: 48px !important;
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
     left: auto !important;
+    bottom: auto !important;
     z-index: 2 !important;
     display: flex !important;
     justify-content: flex-end !important;
     align-items: flex-start !important;
-    margin: 0 !important;
+    align-self: flex-end !important;
+    margin: 0 0 16px !important;
     flex: 0 0 auto !important;
   }
   .letter-page > .doc-body {
     flex: 1 1 auto !important;
     min-height: 0 !important;
+    overflow: hidden !important;
   }
   .letter-page > .doc-footer {
-    position: absolute !important;
-    left: 48px !important;
-    right: 48px !important;
-    bottom: 28px !important;
+    position: static !important;
+    left: auto !important;
+    right: auto !important;
+    top: auto !important;
+    bottom: auto !important;
     z-index: 2 !important;
-    margin: 0 !important;
+    margin: 16px 0 0 !important;
     flex: 0 0 auto !important;
   }
   .letter-page .brand-logo,

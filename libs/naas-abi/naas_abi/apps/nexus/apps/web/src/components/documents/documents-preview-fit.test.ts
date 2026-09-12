@@ -52,6 +52,7 @@ describe('planLetterPages', () => {
         400,
       ),
     ).toEqual([[0], [1]]);
+    expect(planLetterPages([{ height: 500, hardBreak: false }], 400)).toEqual([[0]]);
   });
 });
 
@@ -118,6 +119,12 @@ describe('prepareSectionsPreviewHtml', () => {
     expect(once).toContain('.letter-page > .doc-header');
     expect(once).toContain('.letter-page > .doc-footer');
     expect(once).toContain('.letter-page > .doc-footer ~ .doc-header');
+    expect(once).toContain('bodyOverflows');
+    expect(once).toContain('current.nodes.push(n)');
+    expect(screenCss).toContain('.letter-page > .doc-body');
+    expect(screenCss).toContain('overflow: hidden !important');
+    expect(screenCss).toMatch(/\.letter-page > \.doc-footer[\s\S]*flex: 0 0 auto/);
+    expect(screenCss).toMatch(/\.letter-page > \.doc-footer[\s\S]*position: static/);
     expect(once).toContain('position: relative !important');
     expect(once).toContain('page-break-after: always');
     expect(once).toContain('break-before: page');
