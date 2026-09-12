@@ -49,6 +49,27 @@ _SWATCH_HEX_RE = re.compile(
     re.IGNORECASE,
 )
 _SECTION_RE = re.compile(r"<section\b[^>]*>.*?</section>", re.IGNORECASE | re.DOTALL)
+_STYLE_OR_SVG_RE = re.compile(
+    r"<(style|script|svg)\b[^>]*>.*?</\1>",
+    re.IGNORECASE | re.DOTALL,
+)
+_EMPTY_CLASS_RES = (
+    ("intro", re.compile(
+        r"<p\b[^>]*\bclass\s*=\s*[\"'][^\"']*\bintro\b[^\"']*[\"'][^>]*>\s*</p>",
+        re.IGNORECASE,
+    )),
+    ("subtitle", re.compile(
+        r"<p\b[^>]*\bclass\s*=\s*[\"'][^\"']*\bsubtitle\b[^\"']*[\"'][^>]*>\s*</p>",
+        re.IGNORECASE,
+    )),
+    ("note", re.compile(
+        r"<p\b[^>]*\bclass\s*=\s*[\"'][^\"']*\bnote\b[^\"']*[\"'][^>]*>\s*</p>",
+        re.IGNORECASE,
+    )),
+)
+_EMPTY_HEADING_RE = re.compile(r"<h[2-4]\b[^>]*>\s*</h[2-4]>", re.IGNORECASE)
+_LABEL_ONLY_LEFTOVERS = frozenset({"colour palette", "swatch hex"})
+_EMPTY_REPLACE_ERROR = "replace must be non-empty topic copy"
 _VOID_TAGS = frozenset(
     {
         "area",
@@ -231,43 +252,83 @@ def _clamp_insert_into_doc_body(html: str, at: int) -> int:
     return at
 
 
+def _prose_html(html: str) -> str:
+    """Document copy only: drop CSS, scripts, and SVG so leftover scans stay honest."""
+    return _STYLE_OR_SVG_RE.sub("", html or "")
+
+
 def leftover_placeholders(html: str) -> list[str]:
     """Seed phrases still sitting in the stored HTML."""
     if not html:
         return []
-    found = [phrase for phrase in SEED_PLACEHOLDER_PHRASES if phrase in html]
-    if _PALETTE_CLASS_RE.search(html):
+    prose = _prose_html(html)
+    found = [phrase for phrase in SEED_PLACEHOLDER_PHRASES if phrase in prose]
+    if _PALETTE_CLASS_RE.search(prose):
         found.append("colour palette")
-    if _SWATCH_HEX_RE.search(html) and "colour palette" not in found:
+    if _SWATCH_HEX_RE.search(prose) and "colour palette" not in found:
         found.append("swatch hex")
-    for match in _SEED_HEADING_RE.finditer(html):
+    for match in _SEED_HEADING_RE.finditer(prose):
         title = match.group(1).strip()
         if title not in found:
             found.append(title)
-    for match in _SEED_TH_RE.finditer(html):
+    for match in _SEED_TH_RE.finditer(prose):
         header = match.group(1).strip()
         if header not in found:
             found.append(header)
+    for class_name, marker in _EMPTY_CLASS_RES:
+        if marker.search(prose):
+            label = f"empty {class_name}"
+            if label not in found:
+                found.append(label)
+    if _EMPTY_HEADING_RE.search(prose):
+        if "empty heading" not in found:
+            found.append("empty heading")
+    if re.search(r'data-layout=["\']tables["\']', prose, re.I) and not re.search(
+        r"<table\b", prose, re.I
+    ):
+        if "missing tables" not in found:
+            found.append("missing tables")
     return found
 
 
 def leftover_slots(html: str) -> list[dict[str, str]]:
-    """Find strings and class names for one apply_document_commands fill."""
+    """Find snippets and class names for one apply_document_commands fill."""
     slots: list[dict[str, str]] = []
     seen: set[tuple[str, str]] = set()
+    prose = _prose_html(html)
     for phrase in leftover_placeholders(html):
+        if phrase in _LABEL_ONLY_LEFTOVERS or phrase.startswith("empty "):
+            continue
+        if phrase == "missing tables":
+            continue
+        if phrase not in prose:
+            continue
         key = ("find", phrase)
         if key in seen:
             continue
         seen.add(key)
         slots.append({"type": "replace_text", "find": phrase})
-    if _PALETTE_CLASS_RE.search(html or ""):
+    if _PALETTE_CLASS_RE.search(prose):
         key = ("class", "palette")
         if key not in seen:
             seen.add(key)
             slots.append({"type": "replace_class", "class_name": "palette"})
     for class_name, marker in _SEED_TABLE_CLASS_RE:
-        if marker.search(html or ""):
+        if marker.search(prose):
+            key = ("class", class_name)
+            if key not in seen:
+                seen.add(key)
+                slots.append({"type": "replace_class", "class_name": class_name})
+    for class_name, marker in _EMPTY_CLASS_RES:
+        if marker.search(prose):
+            key = ("class", class_name)
+            if key not in seen:
+                seen.add(key)
+                slots.append({"type": "replace_class", "class_name": class_name})
+    if re.search(r'data-layout=["\']tables["\']', prose, re.I) and not re.search(
+        r"<table\b", prose, re.I
+    ):
+        for class_name in ("fm-table", "fm-shaded"):
             key = ("class", class_name)
             if key not in seen:
                 seen.add(key)
@@ -288,12 +349,12 @@ def leftover_write_note(html: str) -> dict[str, Any]:
         note["warning"] = (
             "INCOMPLETE: seed placeholder copy remains: "
             + ", ".join(leftovers)
-            + ". leftover_slots is the find/class_name list for one "
-            "apply_document_commands (replace_text on each find; "
-            "replace_class on palette, fm-table, fm-shaded). "
-            "replace_text find may be a leftover phrase; it replaces "
-            "that whole seed block. This fill turn allows one apply. "
-            "Stop. Do not apply again. Do not reread."
+            + ". leftover_slots lists exact find snippets and class_name "
+            "values. One apply_document_commands: replace_text on each find "
+            "with non-empty topic copy; replace_class on palette, fm-table, "
+            "fm-shaded, intro, subtitle, note. Empty replace is skipped. "
+            "This fill turn allows one apply. Stop. Do not apply again. "
+            "Do not reread."
         )
     return note
 
@@ -333,10 +394,12 @@ def normalize_document_flow(html: str) -> str:
 
 
 def replace_class(html: str, class_name: str, replacement: str) -> str | dict[str, str]:
-    """Replace the first element with ``class_name``. Empty replacement deletes it."""
+    """Replace the first element with ``class_name``. Empty replacement deletes palette only."""
     token = (class_name or "").strip().lstrip(".")
     if not token or not re.fullmatch(r"[A-Za-z][\w-]{0,62}", token):
         return {"error": "class_name is required"}
+    if not (replacement or "").strip() and token != "palette":
+        return {"error": _EMPTY_REPLACE_ERROR}
     safe = re.escape(token)
     open_re = re.compile(
         rf"<([a-z][a-z0-9]*)\b[^>]*\bclass\s*=\s*[\"'][^\"']*\b{safe}\b[^\"']*[\"'][^>]*>",
@@ -470,6 +533,8 @@ def _replace_blocks_containing(html: str, needle: str, replacement: str) -> tupl
 def replace_text(html: str, find: str, replace: str) -> str | dict[str, str]:
     if not find:
         return {"error": "find is required"}
+    if not (replace or "").strip():
+        return {"error": _EMPTY_REPLACE_ERROR}
     needle = _resolve_find_needle(html or "", find)
     if needle is None:
         return {"error": f"Text not found: {find!r}"}
@@ -628,7 +693,9 @@ def apply_document_commands(
 
         if isinstance(result, dict):
             err = str(result.get("error") or "")
-            if typ == "replace_text" and err.startswith("Text not found"):
+            if typ in {"replace_text", "replace_class"} and (
+                err.startswith("Text not found") or err.startswith(_EMPTY_REPLACE_ERROR)
+            ):
                 skipped.append(err)
                 continue
             return result

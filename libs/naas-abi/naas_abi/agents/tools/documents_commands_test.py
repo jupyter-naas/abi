@@ -308,3 +308,50 @@ def test_last_rename_document_title_reads_the_batch() -> None:
         == "Forvis Mazars Story"
     )
     assert last_rename_document_title([{"type": "update_title", "title": "X"}]) == ""
+
+
+def test_leftover_placeholders_ignores_css_and_svg_hex() -> None:
+    html = (
+        "<style>.swatch.ink { background: #464B4B; } .true { color: #0072CE; }</style>"
+        '<svg><path fill="#171c8f"/></svg>'
+        "<main><p>Board memo this week.</p></main>"
+    )
+    found = leftover_placeholders(html)
+    assert "swatch hex" not in found
+    assert "colour palette" not in found
+    finds = [slot.get("find") for slot in leftover_slots(html)]
+    assert "swatch hex" not in finds
+
+
+def test_leftover_placeholders_flags_empty_seed_blocks() -> None:
+    html = (
+        '<section class="page cover"><p class="intro"></p>'
+        '<p class="subtitle"></p></section>'
+        '<section class="page tables" data-layout="tables">'
+        "<h2></h2></section>"
+    )
+    found = leftover_placeholders(html)
+    assert "empty intro" in found
+    assert "empty subtitle" in found
+    assert "empty heading" in found
+    assert "missing tables" in found
+    classes = {slot["class_name"] for slot in leftover_slots(html) if "class_name" in slot}
+    assert "intro" in classes
+    assert "fm-table" in classes
+    assert "fm-shaded" in classes
+
+
+def test_apply_skips_empty_replace_and_keeps_seed_copy() -> None:
+    result = apply_document_commands(
+        _SEEDED_PAGE,
+        [
+            {"type": "replace_text", "find": "Replace with the working premise", "replace": ""},
+            {"type": "rename_document", "title": "Board memo"},
+        ],
+    )
+    assert result["ok"] is True
+    assert "rename_document" in result["applied"]
+    assert result["skipped"]
+    assert "non-empty topic copy" in result["skipped"][0]
+    assert "Replace with the working premise" in result["html"]
+    assert "Board memo" in result["html"]
