@@ -91,6 +91,29 @@ def test_preview_is_capped_at_default_tweet_limit():
     assert len(_preview(storage)["posts"]) == DEFAULT_TWEET_LIMIT
 
 
+def test_projection_publish_writes_bounded_preview_with_total_count():
+    storage = _FakeObjectStorage()
+    context = _RecordingContext(storage, [])
+
+    class _Cache:
+        def projection_state(self):
+            return {"watermark": "2026-09-12T00:00:00+00:00"}
+
+        def search_tweets(self, query, *, offset=0, limit=100):
+            assert query == ""
+            assert offset == 0
+            assert limit == DEFAULT_TWEET_LIMIT
+            return 1_071_573, [_post("1", "2026-09-12T00:00:00+00:00")]
+
+    context.cache = _Cache()
+    summary = posts.publish(context)
+
+    assert summary["posts"] == 1_071_573
+    assert len(_index(storage)["posts"]) == 1
+    assert _index(storage)["count"] == 1_071_573
+    assert len(_preview(storage)["posts"]) == 1
+
+
 def test_unchanged_source_skips_rebuild():
     storage = _FakeObjectStorage()
     state = {"watermark": "2026-07-07T12:00:00+00:00"}

@@ -598,7 +598,10 @@ class CacheReader:
             posts.with_columns((pl.col("kind") == KIND_MATCHED).alias("_is_match"))
             .sort(["_is_match", "created_at"], descending=[True, True])
             .unique(subset=["tweet_id"], keep="first")
-            .with_columns(
+        )
+        needle = query.strip().lower().lstrip("@")
+        if needle:
+            rows = rows.with_columns(
                 pl.col("tweet_id")
                 .fill_null("")
                 .cast(pl.String)
@@ -623,9 +626,6 @@ class CacheReader:
                 .str.to_lowercase()
                 .alias("_search_text"),
             )
-        )
-        needle = query.strip().lower().lstrip("@")
-        if needle:
             tweet_id = pl.col("_search_tweet_id")
             username = pl.col("_search_username")
             text = pl.col("_search_text")
@@ -656,7 +656,7 @@ class CacheReader:
             rows = rows.sort("created_at", descending=True)
 
         total = rows.height
-        page = rows.slice(max(0, offset), max(1, min(limit, 100)))
+        page = rows.slice(max(0, offset), max(1, min(limit, 1000)))
         ids = page.get_column("tweet_id").to_list()
         matched_queries: dict[str, list[str]] = {}
         if ids:

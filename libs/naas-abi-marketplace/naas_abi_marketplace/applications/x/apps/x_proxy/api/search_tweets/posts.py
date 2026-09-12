@@ -10,14 +10,16 @@ The Search Tweets page is not scoped by scenario or query. It must search the
 whole graph, not the newest 1 000 rows per window that ``tables.json`` carries
 for the Search Recent Tweets table.
 
-Built from the Parquet projection when one exists (a column scan over resident
-rows); otherwise one uncapped SPARQL read. Re-publishing is skipped when the
-projection watermark has not moved since the last publish.
+Built from the Parquet projection when one exists. The current web app searches
+that projection through ``query.json``, so the published JSON is a bounded
+newest-post preview rather than a duplicate million-row search index. The
+uncapped SPARQL fallback remains for deployments without the projection.
+Re-publishing is skipped when the source watermark has not moved.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from naas_abi_core import logger
 from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import (
@@ -89,22 +91,29 @@ def publish(ctx: SnapshotContext) -> dict:
             "preview": int(previous_doc.get("preview") or 0),
         }
 
-    posts: list[Any] = _read_posts(ctx)
     preview_limit = DEFAULT_TWEET_LIMIT
-    preview = [_index_row(post) for post in posts[:preview_limit]]
+    cache = getattr(ctx, "cache", None)
+    posts: list[Any]
+    if cache is not None:
+        total_posts, posts = cache.search_tweets("", limit=preview_limit)
+    else:
+        posts = _read_posts(ctx)
+        total_posts = len(posts)
+    mutable_posts = cast(list[Any], posts)
+    preview = [_index_row(post) for post in mutable_posts[:preview_limit]]
 
     # Keep peak memory bounded when the projection contains millions of posts.
     # Replacing each source dict in place avoids retaining a second full list of
     # compact rows alongside the already-large source dataset.
-    for index, post in enumerate(posts):
-        posts[index] = _index_row(post)
+    for index, post in enumerate(mutable_posts):
+        mutable_posts[index] = _index_row(post)
 
     index_body = {
         "format": DATASET_FORMAT,
-        "count": len(posts),
+        "count": total_posts,
         "preview": len(preview),
         "columns": INDEX_COLUMNS,
-        "posts": posts,
+        "posts": mutable_posts,
     }
     index_bytes = encode_compact(
         {"updated_at": ctx.built_at.isoformat(), **index_body}
@@ -112,7 +121,7 @@ def publish(ctx: SnapshotContext) -> dict:
     index_hash = content_digest(index_bytes)
     preview_body = {
         "format": DATASET_FORMAT,
-        "count": len(posts),
+        "count": total_posts,
         "preview": len(preview),
         "columns": INDEX_COLUMNS,
         "posts": preview,
@@ -141,7 +150,7 @@ def publish(ctx: SnapshotContext) -> dict:
     manifest = {
         "updated_at": ctx.built_at.isoformat(),
         "format": DATASET_FORMAT,
-        "count": len(posts),
+        "count": total_posts,
         "preview": len(preview),
         "source_state": source_state,
         "index_hash": index_hash,
@@ -151,7 +160,7 @@ def publish(ctx: SnapshotContext) -> dict:
     ctx.save_json_compact("search_tweets", "manifest.json", manifest)
 
     summary = {
-        "posts": len(posts),
+        "posts": total_posts,
         "preview": len(preview),
         "index_written": index_written,
         "preview_written": preview_written,
