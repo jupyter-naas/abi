@@ -8,6 +8,7 @@ from typing import Any, Protocol
 from uuid import uuid4
 
 import numpy as np
+from naas_abi.agents.conversation_title import conversation_title_from_prompt
 from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthPersistencePort
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
     CompleteChatInput,
@@ -196,6 +197,32 @@ def _selected_slide_lines(slides: dict) -> list[str]:
     return lines
 
 
+def _untitled_slides_rename_hint(title: str, slug: str) -> str:
+    try:
+        from naas_abi.agents.slides.title import is_placeholder_deck_title
+    except Exception:
+        return ""
+    if not is_placeholder_deck_title(title or slug):
+        return ""
+    return (
+        "If the open deck is still Untitled, call rename_deck first with a "
+        "short topic title, then write.\n"
+    )
+
+
+def _untitled_documents_rename_hint(title: str, slug: str) -> str:
+    try:
+        from naas_abi.agents.documents.title import is_placeholder_document_title
+    except Exception:
+        return ""
+    if not is_placeholder_document_title(title or slug):
+        return ""
+    return (
+        "If the open document is still Untitled, call rename_document first "
+        "with a short topic title, then write.\n"
+    )
+
+
 def _render_slides_context_block(
     client_context: dict | None,
     workspace_id: str | None = None,
@@ -261,7 +288,8 @@ def _render_slides_context_block(
         "4. After that write, report what changed. Do not list or read the "
         "whole deck again. No lorem. No Context / Approach / Plan filler when "
         "the user asked for a situation brief.\n"
-        "Keep the seed template CSS and structure. Cite sources in footer or "
+        + _untitled_slides_rename_hint(title, slug)
+        + "Keep the seed template CSS and structure. Cite sources in footer or "
         "source lines if the layout allows. "
         "A tiny copy edit (title typo, color tweak) may skip search. "
         "Edit HTML sections only. Preview is the HTML stage. PPTX export "
@@ -354,6 +382,7 @@ def _render_documents_context_block(
         "3. Write 2 to 4 headings plus paragraphs with apply_document_commands "
         "(or insert_heading and insert_paragraph), then stop.\n"
         "4. After that write, report what changed. Do not reread. No lorem or template filler.\n"
+        + _untitled_documents_rename_hint(title, slug)
         + "\n".join(lines)
         + "\n"
     )
@@ -859,7 +888,7 @@ class ChatService:
                 created = await self.create_conversation(
                     context=context,
                     workspace_id=workspace_id,
-                    title=request_message[:50] + ("..." if len(request_message) > 50 else ""),
+                    title=conversation_title_from_prompt(request_message),
                     agent=agent,
                     now=now,
                 )
@@ -878,7 +907,7 @@ class ChatService:
                 context=context,
                 conversation_id=conversation_id,
                 workspace_id=workspace_id,
-                title=request_message[:50] + ("..." if len(request_message) > 50 else ""),
+                title=conversation_title_from_prompt(request_message),
                 agent=agent,
                 now=now,
             )
@@ -896,7 +925,7 @@ class ChatService:
         created = await self.create_conversation(
             context=context,
             workspace_id=workspace_id,
-            title=request_message[:50] + ("..." if len(request_message) > 50 else ""),
+            title=conversation_title_from_prompt(request_message),
             agent=agent,
             now=now,
         )

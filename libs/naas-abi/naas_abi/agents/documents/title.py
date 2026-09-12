@@ -21,8 +21,9 @@ MAX_TITLE_WORDS = 8
 MAX_TITLE_CHARS = 64
 
 _DECK_NOUN_RE = re.compile(
-    r"\b(?:pr[ée]sentations?|documents?|section\s*documents?|sectionshows?|sections?"
-    r"|documents?|pitchs?|expos[ée]s?)\b",
+    r"\b(?:pr[ée]sentations?|documents?|section\s*documents?|sections?"
+    r"|m[ée]mos?|memorandums?|reports?|rapports?|articles?|briefings?"
+    r"|notes?|papers?|essays?|pitchs?|expos[ée]s?)\b",
     re.IGNORECASE,
 )
 
@@ -194,3 +195,18 @@ def resolve_document_title(title: str, brief: str = "") -> str:
         if not _looks_like_a_request(candidate):
             return _tidy_topic(candidate) or candidate
     return derive_document_title(brief)
+
+
+def auto_document_title(brief: str) -> str:
+    """Title for an untitled document after the first prompt.
+
+    Prefer the topic extracted from a document, memo, or report request. If
+    the brief is not shaped that way, use the same first-line clip Chat uses
+    so the file still gets a name.
+    """
+    from naas_abi.agents.conversation_title import conversation_title_from_prompt
+
+    derived = derive_document_title(brief)
+    if derived:
+        return derived
+    return conversation_title_from_prompt(brief)

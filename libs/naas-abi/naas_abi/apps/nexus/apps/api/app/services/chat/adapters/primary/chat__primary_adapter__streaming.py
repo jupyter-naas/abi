@@ -45,6 +45,42 @@ OPENAI_COMPATIBLE = [
 SUPPORTED_STREAMING = ["ollama", "cloudflare", "abi", *OPENAI_COMPATIBLE]
 
 
+def _first_prompt_for_office_title(request: ChatRequest) -> str:
+    from naas_abi.agents.conversation_title import first_user_prompt
+
+    return first_user_prompt(request.message, request.messages)
+
+
+def _apply_office_auto_title(request: ChatRequest) -> None:
+    """Name a still-untitled document or deck from the first prompt, like Chat."""
+    brief = _first_prompt_for_office_title(request)
+    if not brief or brief.startswith("/"):
+        return
+    client_ctx = request.context if isinstance(request.context, dict) else {}
+    documents_ctx = client_ctx.get("documents") if isinstance(client_ctx, dict) else None
+    slides_ctx = client_ctx.get("slides") if isinstance(client_ctx, dict) else None
+    if isinstance(documents_ctx, dict):
+        slug = str(documents_ctx.get("slug") or "").strip()
+        if slug:
+            from naas_abi.agents.tools.documents_tools import maybe_auto_title_open_document
+            from naas_abi_core.services.agent.context import documents_active_title
+
+            new_title = maybe_auto_title_open_document(brief, slug)
+            if new_title:
+                documents_ctx["title"] = new_title
+                documents_active_title.set(new_title)
+    if isinstance(slides_ctx, dict):
+        slug = str(slides_ctx.get("slug") or "").strip()
+        if slug:
+            from naas_abi.agents.tools.slides_tools import maybe_auto_title_open_deck
+            from naas_abi_core.services.agent.context import slides_active_title
+
+            new_title = maybe_auto_title_open_deck(brief, slug)
+            if new_title:
+                slides_ctx["title"] = new_title
+                slides_active_title.set(new_title)
+
+
 def _format_tool_name(raw: str) -> str:
     words = raw.replace("_", " ").split()
     return " ".join(w[0].upper() + w[1:] for w in words if w)
@@ -403,6 +439,13 @@ async def stream_chat_response(
                             open_document_slug,
                             exc_info=True,
                         )
+
+                try:
+                    from starlette.concurrency import run_in_threadpool
+
+                    await run_in_threadpool(_apply_office_auto_title, request)
+                except Exception:
+                    logger.warning("Failed to auto-title office project", exc_info=True)
 
                 coding_ctx = (
                     client_ctx.get("coding") if isinstance(client_ctx, dict) else None

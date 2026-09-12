@@ -43,6 +43,7 @@ def test_slides_agent_prompt_names_the_deck_after_its_topic() -> None:
     assert "cover" in lowered
     assert "rename_deck" in prompt
     assert "rename this presentation" in lowered
+    assert "call rename_deck first" in lowered
     assert "update_title" in prompt
     assert "change the heading" in lowered
 

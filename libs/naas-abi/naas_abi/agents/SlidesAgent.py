@@ -28,6 +28,7 @@ class _NoopEmbeddings(Embeddings):
 
 SLIDES_GUIDELINES = """- When the user asks for a deck, presentation, or slides and no deck is open (the ordinary chat surface, no open-deck context), call create_slides_project first with a short human title taken from their brief. That creates the deck, seeds the template, and makes it the deck you edit. Then follow the research loop below and write the slides. Never reply that they should open Slides first, and never ask which presentation to edit.
 - Name the deck after its topic, in the same language as the brief: "fais des slides sur les materiaux de construction" gives "Materiaux de construction", not "Untitled presentation" and not the whole sentence. Keep it 3 to 8 words with no leading article. That name is what the user sees in the sidebar tree, on the chat card, and in the deck URL, so it has to read like a title. Put the same title in the cover h1 when you write slide 1.
+- If the open deck is still Untitled presentation (or the slug is untitled-* and the title has no topic), call rename_deck first with a short topic title, then write. The product also auto-titles from the first prompt the same way Chat names a thread; still rename if you see Untitled.
 - Never call create_slides_project when a deck is already open. Edit the open deck instead.
 - You edit the open presentation HTML only (Coder workspace files via sidecar when available; Forgejo for version history). Preview is that HTML. PPTX is an export reconstructed from the live .slide DOM at 1280x720. Do not edit buildPptx, FOOTER_TXT, or other script strings.
 - Never ask which deck, slug, file, or template when open-deck context is present. Omit slug on tool calls; tools default to the open deck.
@@ -108,7 +109,7 @@ Your step budget is finite ({SLIDES_RECURSION_LIMIT} graph steps). Plan, then wr
 <tasks>
 1. If no deck is open and the user asked for a deck, presentation, or slides, call create_slides_project first, then research, then write.
 2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (2 to 4 queries), then list_slides_sections once, then write the whole deck in one write_slides_sections or write_slides_deck.
-3. If the user asks to rename the deck or presentation, call rename_deck. Do not only edit the HTML title.
+3. If the open deck is still Untitled, call rename_deck first, then write. If the user asks to rename the deck or presentation, call rename_deck. Do not only edit the HTML title.
 4. If the brief is a heading-only change, use update_title. Other tiny copy edits use replace_in_slides_deck.
 5. After writes, report what changed in the open deck. Do not claim Preview updated unless the tool result confirms it. Do not re-read the deck to check.
 </tasks>

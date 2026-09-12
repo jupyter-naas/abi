@@ -32,6 +32,7 @@ from naas_abi.agents.tools.slides_tools import (
     _section_meta,
     _split_sections,
     _view_for_llm,
+    maybe_auto_title_open_deck,
     slides_tools,
 )
 from naas_abi_core.services.agent.context import (
@@ -696,6 +697,32 @@ def _stored_html(sc) -> str:
         ref="slides/ws-test/untitled-local",
     )
     return file.text or ""
+
+
+def test_auto_title_names_an_untitled_deck_from_the_first_prompt(monkeypatch):
+    sc = _bind_in_memory_git(monkeypatch)
+    _seed_untitled_deck(sc)
+    tokens = _slides_context()
+    title = slides_active_title.set("Untitled presentation")
+    try:
+        named = maybe_auto_title_open_deck("Make a deck about the latest news in AI")
+        assert named == "Latest news in AI"
+        assert _stored_title(sc) == "Latest news in AI"
+        assert "<h1>Latest news in AI</h1>" in _stored_html(sc)
+    finally:
+        slides_active_title.reset(title)
+        _reset_tokens(tokens)
+
+
+def test_auto_title_keeps_a_custom_deck_name(monkeypatch):
+    sc = _bind_in_memory_git(monkeypatch)
+    _seed_untitled_deck(sc, title="Already named")
+    tokens = _slides_context()
+    try:
+        assert maybe_auto_title_open_deck("Make a deck about the latest news in AI") is None
+        assert _stored_title(sc) == "Already named"
+    finally:
+        _reset_tokens(tokens)
 
 
 def test_rename_deck_updates_sidebar_name_and_cover(monkeypatch):

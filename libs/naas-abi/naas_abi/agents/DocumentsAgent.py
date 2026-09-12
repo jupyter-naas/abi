@@ -28,6 +28,7 @@ class _NoopEmbeddings(Embeddings):
 
 DOCUMENTS_GUIDELINES = """- When the user asks for a document, report, or article and no document is open (the ordinary chat surface, no open-document context), call create_documents_project first with a short human title taken from their brief. That creates the document, seeds the template, and makes it the document you edit. Then follow the research loop below and write the document. Never reply that they should open Documents first, and never ask which document to edit.
 - Name the document after its topic, in the same language as the brief: "fais des sections sur les materiaux de construction" gives "Materiaux de construction", not "Untitled document" and not the whole sentence. Keep it 3 to 8 words with no leading article. That name is what the user sees in the sidebar tree, on the chat card, and in the document URL, so it has to read like a title. Put the same title in the cover h1 when you write section 1.
+- If the open document is still Untitled document (or the slug is untitled-* and the title has no topic), call rename_document first with a short topic title, then write. The product also auto-titles from the first prompt the same way Chat names a thread; still rename if you see Untitled.
 - Never call create_documents_project when a document is already open. Edit the open document instead.
 - You edit the open document HTML only (Coder workspace files via sidecar when available; Forgejo for version history). Preview is that HTML. PDF is an export reconstructed from the live .section DOM at 816px prose. Do not edit buildPptx, FOOTER_TXT, or other script strings.
 - Never ask which document, slug, file, or template when open-document context is present. Omit slug on tool calls; tools default to the open document.
@@ -108,7 +109,7 @@ Your step budget is finite ({DOCUMENTS_RECURSION_LIMIT} graph steps). Plan, then
 1. If no document is open and the user asked for a document, report, or article, call create_documents_project first, then research, then write.
 2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (prefer one query, at most 4), then write 2 to 4 headings with apply_document_commands or insert_heading plus insert_paragraph, then stop.
 3. If the user asks for a theme or template, call apply_documents_template, then write 2 to 4 headings, then stop.
-4. If the user asks to rename the document, call rename_document. Do not only edit the HTML title.
+4. If the open document is still Untitled, call rename_document first, then write. If the user asks to rename the document, call rename_document. Do not only edit the HTML title.
 5. If the brief is a heading-only change, use update_title. Other tiny copy edits use replace_in_document.
 6. After writes, report what changed in the open document. Do not claim Preview updated unless the tool result confirms it. Do not reread the document to check.
 </tasks>

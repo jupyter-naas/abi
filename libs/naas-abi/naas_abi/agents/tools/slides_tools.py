@@ -27,6 +27,7 @@ from typing import Any
 
 from langchain_core.tools import BaseTool, tool
 from naas_abi.agents.slides import (
+    auto_deck_title,
     derive_deck_title,
     is_placeholder_deck_title,
     note_slides_list,
@@ -325,6 +326,56 @@ def _write_project_title(slug: str, title: str) -> str | dict[str, Any]:
         return {"error": _friendly_sc_error(exc)}
     slides_active_title.set(clean)
     return clean
+
+
+def _stored_display_title(slug: str) -> str:
+    """project.json title for the open deck, or empty."""
+    paths = _resolve_paths(slug)
+    if paths.get("error"):
+        return ""
+    try:
+        existing = _get_source_control().get_file(
+            repo_id=_repo_id(), path=paths["project_path"], ref=paths["branch"]
+        )
+        if not existing.text:
+            return ""
+        meta = json.loads(existing.text)
+    except (SourceControlError, json.JSONDecodeError, TypeError):
+        return ""
+    if not isinstance(meta, dict):
+        return ""
+    return str(meta.get("title") or "").strip()
+
+
+def maybe_auto_title_open_deck(brief: str, slug: str = "") -> str | None:
+    """Name a still-untitled open deck from the first prompt, like Chat.
+
+    Persists through rename_deck so the sidebar display name and cover H1
+    move together. A title the user already chose is never overwritten.
+    """
+    text = (brief or "").strip()
+    if not text or text.startswith("/"):
+        return None
+    resolved = _resolve_slug(slug)
+    if isinstance(resolved, dict):
+        return None
+    current = (
+        _stored_display_title(resolved) or (slides_active_title.get() or "").strip()
+    )
+    if current and not is_placeholder_deck_title(current):
+        return None
+    title = auto_deck_title(text)
+    if not title or is_placeholder_deck_title(title):
+        return None
+    result = _rename_or_update_deck(
+        title,
+        resolved,
+        rename_project=True,
+        message="feat(slides): auto-title from first prompt",
+    )
+    if result.get("error"):
+        return None
+    return str(result.get("title") or title)
 
 
 def _apply_rename_project(result: dict[str, Any], title: str) -> dict[str, Any]:

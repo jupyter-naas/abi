@@ -12,6 +12,7 @@ import {
   dropSlidesPaneConversationKeys,
   slidesPaneConversationKey,
 } from '@/lib/slides-pane-conversation';
+import { conversationTitleFromPrompt } from '@/lib/office-auto-title';
 import { useAuthStore } from './auth';
 import { getApiUrl } from '@/lib/config';
 
@@ -806,7 +807,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               updatedAt: new Date(),
               title:
                 conv.messages.length === 0 && message.role === 'user'
-                  ? message.content.slice(0, 50) + (message.content.length > 50 ? '...' : '')
+                  ? conversationTitleFromPrompt(message.content)
                   : conv.title,
               isDraft: false,
             }

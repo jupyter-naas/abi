@@ -1289,6 +1289,30 @@ async def test_build_abi_injection_preamble_namespaces_document_when_path_omitte
     assert "documents/untitled-mtsg9zse/document.html" not in preamble
 
 
+def test_render_documents_context_block_asks_to_rename_when_untitled() -> None:
+    block = _render_documents_context_block(
+        {"documents": {"slug": "untitled-abc", "title": "Untitled document"}},
+        "ws-1",
+    )
+    assert "rename_document first" in block
+
+
+def test_render_documents_context_block_skips_rename_hint_when_named() -> None:
+    block = _render_documents_context_block(
+        {"documents": {"slug": "untitled-abc", "title": "Already named"}},
+        "ws-1",
+    )
+    assert "rename_document first" not in block
+
+
+def test_render_slides_context_block_asks_to_rename_when_untitled() -> None:
+    block = _render_slides_context_block(
+        {"slides": {"slug": "untitled-abc", "title": "Untitled presentation"}},
+        "ws-1",
+    )
+    assert "rename_deck first" in block
+
+
 def test_render_documents_context_block_carries_selected_section() -> None:
     block = _render_documents_context_block(
         {"documents": {"slug": "q3-br", "selected_index": 4, "section_count": 12}},

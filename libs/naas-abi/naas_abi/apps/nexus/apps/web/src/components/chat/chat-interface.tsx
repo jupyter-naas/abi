@@ -52,7 +52,10 @@ import {
   reservedOutputTokensForModel,
   resolveContextWindow,
 } from '@/lib/chat-context-usage';
+import { autoTitleOpenDocumentIfNeeded } from '@/lib/documents-project-actions';
+import { firstUserPrompt } from '@/lib/office-auto-title';
 import { openDocumentBranch, openDocumentPath } from '@/lib/documents-pane-conversation';
+import { autoTitleOpenDeckIfNeeded } from '@/lib/slides-project-actions';
 import { slidesOpenDeckBranch, slidesOpenDeckPath } from '@/lib/slides-pane-conversation';
 import { ContextUsageMeter } from './context-usage-meter';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
@@ -2072,6 +2075,26 @@ export function ChatInterface({
     });
 
     const userMessage = sourceText.trim() || (currentImages.length > 0 ? 'What is in this image?' : '');
+    const conversationAfterSend = useWorkspaceStore
+      .getState()
+      .conversations.find((conversation) => conversation.id === conversationId);
+    const officeTitleBrief = firstUserPrompt(userMessage, conversationAfterSend?.messages);
+    if (workspaceIdForSend && documentsChatContext?.documents) {
+      void autoTitleOpenDocumentIfNeeded({
+        workspaceId: workspaceIdForSend,
+        slug: documentsChatContext.documents.slug,
+        title: documentsChatContext.documents.title,
+        brief: officeTitleBrief,
+      });
+    }
+    if (workspaceIdForSend && slidesChatContext?.slides) {
+      void autoTitleOpenDeckIfNeeded({
+        workspaceId: workspaceIdForSend,
+        slug: slidesChatContext.slides.slug,
+        title: slidesChatContext.slides.title,
+        brief: officeTitleBrief,
+      });
+    }
     // Only clear the input field if the message came from the input
     if (messageOverride === undefined) {
       handleInputChange('');

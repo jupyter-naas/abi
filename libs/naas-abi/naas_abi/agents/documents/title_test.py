@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from naas_abi.agents.documents.title import (
+    auto_document_title,
     derive_document_title,
     is_placeholder_document_title,
     resolve_document_title,
@@ -99,3 +100,16 @@ def test_resolve_falls_back_to_the_turn_brief():
 def test_resolve_returns_empty_when_there_is_nothing_to_go_on():
     assert resolve_document_title("   ", brief="  ") == ""
     assert resolve_document_title("Untitled document", brief="hello") == ""
+
+
+def test_derives_the_topic_from_an_executive_memo_brief():
+    assert (
+        derive_document_title("Write an executive memo on two audit firms")
+        == "Two audit firms"
+    )
+
+
+def test_auto_title_falls_back_to_the_chat_clip():
+    brief = "What is going on in France right now?"
+    assert derive_document_title(brief) == ""
+    assert auto_document_title(brief) == brief

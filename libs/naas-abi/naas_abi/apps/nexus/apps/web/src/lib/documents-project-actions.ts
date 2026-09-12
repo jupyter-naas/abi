@@ -1,4 +1,9 @@
 import { documentsApiErrorMessage } from '@/lib/create-documents-project';
+import {
+  autoDocumentTitle,
+  isPlaceholderDocumentTitle,
+  shouldAutoTitleDocument,
+} from '@/lib/office-auto-title';
 import { authFetch } from '@/stores/auth';
 import { dispatchDocumentUpdated, useDocumentsStore, type DocumentsProject } from '@/stores/documents';
 
@@ -45,4 +50,52 @@ export async function patchDocumentsProject(
   }
   dispatchDocumentUpdated({ slug, title: patch.title ? project.title : undefined });
   return project;
+}
+
+export async function renameDocumentsProjectViaCommand(
+  workspaceId: string,
+  slug: string,
+  title: string,
+): Promise<string> {
+  const res = await authFetch(`/api/documents/projects/${encodeURIComponent(slug)}/commands`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspace_id: workspaceId,
+      requests: [{ type: 'rename_document', title }],
+    }),
+  });
+  const payload = (await res.json().catch(() => ({}))) as {
+    title?: string;
+    detail?: unknown;
+  };
+  if (!res.ok) {
+    throw new Error(documentsApiErrorMessage(payload.detail, `Failed (${res.status})`));
+  }
+  const nextTitle = (payload.title || title).trim();
+  if (useDocumentsStore.getState().selectedSlug === slug) {
+    useDocumentsStore.getState().setSelectedTitle(nextTitle);
+  }
+  dispatchDocumentUpdated({ slug, title: nextTitle, source: 'rename_document' });
+  return nextTitle;
+}
+
+export async function autoTitleOpenDocumentIfNeeded(opts: {
+  workspaceId: string;
+  slug: string;
+  title?: string | null;
+  brief: string;
+}): Promise<string | null> {
+  const brief = (opts.brief || '').trim();
+  if (!opts.workspaceId || !opts.slug || !brief || brief.startsWith('/')) return null;
+  if (!shouldAutoTitleDocument(opts.title, opts.slug)) return null;
+  const next = autoDocumentTitle(brief);
+  if (!next || isPlaceholderDocumentTitle(next)) return null;
+  useDocumentsStore.getState().setSelectedTitle(next);
+  dispatchDocumentUpdated({ slug: opts.slug, title: next, source: 'auto_title' });
+  try {
+    return await renameDocumentsProjectViaCommand(opts.workspaceId, opts.slug, next);
+  } catch {
+    return next;
+  }
 }

@@ -12,7 +12,9 @@ export type DocumentCommand = {
     | 'insert_text'
     | 'delete_range'
     | 'replace_text'
-    | 'update_paragraph_style';
+    | 'update_paragraph_style'
+    | 'update_title'
+    | 'rename_document';
   after_heading?: number;
   heading_index?: number;
   text?: string;

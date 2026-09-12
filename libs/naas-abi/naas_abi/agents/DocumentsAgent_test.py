@@ -44,6 +44,7 @@ def test_sections_agent_prompt_names_the_document_after_its_topic() -> None:
     assert "cover" in lowered
     assert "rename_document" in prompt
     assert "rename this document" in lowered
+    assert "call rename_document first" in lowered
     assert "update_title" in prompt
     assert "change the heading" in lowered
 

@@ -36,6 +36,7 @@ from naas_abi.agents.tools.documents_tools import (
     _view_for_llm,
     documents_agent_tools,
     documents_tools,
+    maybe_auto_title_open_document,
     resolve_documents_template_id,
 )
 from naas_abi_core.services.agent.context import (
@@ -765,6 +766,34 @@ def _stored_html(sc) -> str:
         ref="documents/ws-test/untitled-local",
     )
     return file.text or ""
+
+
+def test_auto_title_names_an_untitled_document_from_the_first_prompt(monkeypatch):
+    sc = _bind_in_memory_git(monkeypatch)
+    _seed_untitled_document(sc)
+    tokens = _sections_context()
+    title = documents_active_title.set("Untitled document")
+    try:
+        named = maybe_auto_title_open_document(
+            "Write an executive memo on two audit firms"
+        )
+        assert named == "Two audit firms"
+        assert _stored_title(sc) == "Two audit firms"
+        assert "<h1>Two audit firms</h1>" in _stored_html(sc)
+    finally:
+        documents_active_title.reset(title)
+        _reset_tokens(tokens)
+
+
+def test_auto_title_keeps_a_custom_document_name(monkeypatch):
+    sc = _bind_in_memory_git(monkeypatch)
+    _seed_untitled_document(sc, title="Already named")
+    tokens = _sections_context()
+    try:
+        assert maybe_auto_title_open_document("Write an executive memo on two firms") is None
+        assert _stored_title(sc) == "Already named"
+    finally:
+        _reset_tokens(tokens)
 
 
 def test_rename_document_updates_sidebar_name_and_cover(monkeypatch):

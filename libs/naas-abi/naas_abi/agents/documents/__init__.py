@@ -25,6 +25,7 @@ from naas_abi.agents.documents.policy import (
     validate_configured_documents_model,
 )
 from naas_abi.agents.documents.title import (
+    auto_document_title,
     derive_document_title,
     is_placeholder_document_title,
     resolve_document_title,
@@ -36,6 +37,7 @@ __all__ = [
     "MAX_DOCUMENTS_SECTION_READS",
     "apply_documents_model_override",
     "attach_documents_research_note",
+    "auto_document_title",
     "bind_documents_reasoning",
     "bind_documents_research_policy",
     "configured_documents_model",
