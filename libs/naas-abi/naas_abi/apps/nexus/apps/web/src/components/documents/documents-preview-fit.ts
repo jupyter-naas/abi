@@ -64,6 +64,11 @@ export function planLetterPages(
   return pages;
 }
 
+/** True when a flow run has something other than a hard page-break to paint. */
+export function letterRunHasContent(blocks: DocumentsFlowBlock[]): boolean {
+  return blocks.some((block) => !block.hardBreak);
+}
+
 /**
  * Legacy names from the Slides fork. Preview and thumbs use DOCUMENTS_PAGE_*.
  * PDF planner still reads these for the leftover 16:9 reconstruction path.
@@ -281,6 +286,29 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
   function bodyOverflows(bodyEl) {
     return !!(bodyEl && bodyEl.scrollHeight > bodyEl.clientHeight + 1);
   }
+  function nodeHasBodyContent(n) {
+    if (!n) return false;
+    if (n.nodeType === 3) return /\\S/.test(n.textContent || '');
+    if (n.nodeType !== 1) return false;
+    if (isPageBreak(n) || isHardBreak(n)) return false;
+    if (isDocHeader(n) || isDocFooter(n) || isChromeClone(n)) return false;
+    if (n.querySelector && n.querySelector('img, canvas, video, svg')) return true;
+    return /\\S/.test(n.textContent || '');
+  }
+  function bodyHasContent(bodyEl) {
+    if (!bodyEl) return false;
+    return Array.prototype.slice.call(bodyEl.childNodes).some(nodeHasBodyContent);
+  }
+  function runHasContent(run) {
+    return !!(run && run.nodes && run.nodes.some(nodeHasBodyContent));
+  }
+  function discardEmptyPage(page, bodyEl) {
+    if (page && page.parentNode && !bodyHasContent(bodyEl)) {
+      page.parentNode.removeChild(page);
+      return true;
+    }
+    return false;
+  }
   function isChromeClone(el) {
     return !!(el && el.getAttribute && el.getAttribute('data-nexus-chrome-clone') != null);
   }
@@ -328,7 +356,9 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
         return;
       }
       if (isDocHeader(n)) {
-        if (current.header || current.footer || current.nodes.length) flush();
+        var pendingContent = current.nodes.some(function (x) { return !isPageBreak(x); });
+        if (current.header || current.footer || pendingContent) flush();
+        else current.nodes = [];
         current.header = n;
         return;
       }
@@ -355,6 +385,7 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
     var holders = sectionNodes();
     while (root.firstChild) root.removeChild(root.firstChild);
     runs.forEach(function (run) {
+      if (!runHasContent(run)) return;
       var page = makeLetterPage();
       root.appendChild(page);
       var bodyEl = decorateLetterPage(page, run.header, run.footer, false);
@@ -367,19 +398,23 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
             bodyEl = decorateLetterPage(page, run.header, run.footer, true);
             filled = false;
           }
-          bodyEl.appendChild(node);
           return;
         }
         bodyEl.appendChild(node);
         filled = true;
         if (bodyEl.childNodes.length > 1 && bodyOverflows(bodyEl)) {
           bodyEl.removeChild(node);
+          if (discardEmptyPage(page, bodyEl)) {
+            page = null;
+            bodyEl = null;
+          }
           page = makeLetterPage();
           root.appendChild(page);
           bodyEl = decorateLetterPage(page, run.header, run.footer, true);
           bodyEl.appendChild(node);
         }
       });
+      discardEmptyPage(page, bodyEl);
     });
     holders.forEach(function (sec) {
       if (!sec.parentNode) {
@@ -747,6 +782,11 @@ export const SLIDES_PREVIEW_PRINT_CSS = `
       page-break-before: always !important;
       break-before: page !important;
     }
+    .letter-page .page-break,
+    .letter-page [data-nexus-page-break] {
+      page-break-before: auto !important;
+      break-before: auto !important;
+    }
     .page[data-nexus-empty-section],
     .section[data-nexus-empty-section] {
       display: none !important;
@@ -913,6 +953,11 @@ export function prepareSectionsPreviewHtml(html: string): string {
     visibility: hidden !important;
     page-break-before: always !important;
     break-before: page !important;
+  }
+  .letter-page .page-break,
+  .letter-page [data-nexus-page-break] {
+    page-break-before: auto !important;
+    break-before: auto !important;
   }
   .page:last-child, .section:last-child {
     margin-bottom: 0 !important;

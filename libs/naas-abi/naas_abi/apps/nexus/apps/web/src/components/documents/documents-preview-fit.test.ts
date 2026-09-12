@@ -11,6 +11,7 @@ import {
   extractFirstSectionHtml,
   extractSectionHtmlAt,
   isSectionsPreviewMessage,
+  letterRunHasContent,
   planLetterPages,
   prepareSectionsCoverHtml,
   prepareSectionsPreviewHtml,
@@ -53,6 +54,34 @@ describe('planLetterPages', () => {
       ),
     ).toEqual([[0], [1]]);
     expect(planLetterPages([{ height: 500, hardBreak: false }], 400)).toEqual([[0]]);
+    expect(
+      planLetterPages(
+        [
+          { height: 200, hardBreak: false },
+          { height: 0, hardBreak: true },
+        ],
+        400,
+      ),
+    ).toEqual([[0]]);
+    expect(
+      planLetterPages(
+        [
+          { height: 0, hardBreak: true },
+          { height: 200, hardBreak: false },
+        ],
+        400,
+      ),
+    ).toEqual([[1]]);
+  });
+
+  it('does not treat a page-break-only run as a letter sheet', () => {
+    expect(letterRunHasContent([{ height: 0, hardBreak: true }])).toBe(false);
+    expect(
+      letterRunHasContent([
+        { height: 0, hardBreak: true },
+        { height: 120, hardBreak: false },
+      ]),
+    ).toBe(true);
   });
 });
 
@@ -120,6 +149,11 @@ describe('prepareSectionsPreviewHtml', () => {
     expect(once).toContain('.letter-page > .doc-footer');
     expect(once).toContain('.letter-page > .doc-footer ~ .doc-header');
     expect(once).toContain('bodyOverflows');
+    expect(once).toContain('runHasContent');
+    expect(once).toContain('bodyHasContent');
+    expect(once).toContain('discardEmptyPage');
+    expect(once).toContain('pendingContent');
+    expect(once).toContain('.letter-page .page-break');
     expect(once).toContain('current.nodes.push(n)');
     expect(screenCss).toContain('.letter-page > .doc-body');
     expect(screenCss).toContain('overflow: hidden !important');
