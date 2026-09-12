@@ -42,6 +42,10 @@ def test_sections_agent_prompt_names_the_document_after_its_topic() -> None:
     assert "same language as the brief" in lowered
     assert "untitled" in lowered
     assert "cover" in lowered
+    assert "rename_document" in prompt
+    assert "rename this document" in lowered
+    assert "update_title" in prompt
+    assert "change the heading" in lowered
 
 
 def test_sections_agent_default_model_is_the_policy_fallback() -> None:
@@ -58,6 +62,8 @@ def test_sections_agent_owns_the_write_and_research_tools() -> None:
     assert "insert_heading" in names
     assert "insert_paragraph" in names
     assert "replace_in_document" in names
+    assert "rename_document" in names
+    assert "update_title" in names
     assert "web_search" in names
     assert "web_fetch" in names
     leftover = {

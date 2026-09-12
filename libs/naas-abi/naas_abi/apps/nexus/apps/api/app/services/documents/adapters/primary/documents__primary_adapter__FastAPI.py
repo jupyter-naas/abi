@@ -1682,6 +1682,48 @@ async def get_project(
         raise _source_control_http_error(exc) from exc
 
 
+def _write_project_display_title(
+    sc: SourceControlService,
+    *,
+    repo_id: str,
+    paths: dict[str, str],
+    slug: str,
+    workspace_id: str,
+    title: str,
+    current_user: User,
+    username: str,
+    author_name: str,
+    author_email: str,
+) -> dict:
+    """Set project.json title. Slug and git folder stay put."""
+    meta = _load_project_meta(
+        sc, repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
+    )
+    if meta is None:
+        raise RepoNotFoundError(f"sections project {slug}")
+    from datetime import UTC, datetime
+
+    meta["title"] = title.strip()
+    meta["workspace_id"] = workspace_id
+    meta["slug"] = meta.get("slug") or slug
+    meta["updated_at"] = datetime.now(UTC).isoformat()
+    sc.ensure_user(
+        external_id=current_user.id,
+        email=author_email,
+        username=username,
+    )
+    sc.upsert_file(
+        repo_id=repo_id,
+        path=paths["project_path"],
+        content=json.dumps(meta, indent=2) + "\n",
+        message=f"chore(document): rename project {slug}",
+        branch=paths["branch"],
+        author_name=author_name,
+        author_email=author_email,
+    )
+    return meta
+
+
 @router.patch("/projects/{slug}", response_model=ProjectResponse)
 async def update_project(
     slug: str,
@@ -2966,6 +3008,9 @@ class DocumentCommandsResponse(BaseModel):
     html: str | None = None
     commit_sha: str | None = None
     source: str | None = None
+    title: str | None = None
+    project_renamed: bool = False
+    slug_changed: bool = False
 
 
 class DocumentOutlineResponse(BaseModel):
@@ -3366,7 +3411,46 @@ async def apply_document_commands_route(
         mutate=_mutate,
         message=f"feat(document): apply commands in {slug}",
     )
-    from naas_abi.agents.tools.documents_commands import heading_outline
+    from naas_abi.agents.tools.documents_commands import (
+        heading_outline,
+        last_rename_document_title,
+    )
+
+    payloads_for_title = [item.model_dump() for item in body.requests]
+    rename_title = last_rename_document_title(payloads_for_title)
+    project_renamed = False
+    if rename_title:
+        sc, repo_id = _sections_sc(request)
+        username = _forge_username(current_user.name or "", str(current_user.email))
+        author_name = current_user.name or username
+        author_email = str(current_user.email)
+
+        def _rename() -> None:
+            paths = _resolve_project_paths(
+                sc, repo_id=repo_id, workspace_id=body.workspace_id, slug=slug
+            )
+            if paths is None:
+                raise RepoNotFoundError(f"sections project {slug}")
+            _write_project_display_title(
+                sc,
+                repo_id=repo_id,
+                paths=paths,
+                slug=slug,
+                workspace_id=body.workspace_id,
+                title=rename_title,
+                current_user=current_user,
+                username=username,
+                author_name=author_name,
+                author_email=author_email,
+            )
+
+        try:
+            await run_in_threadpool(_rename)
+            project_renamed = True
+        except RepoNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except SourceControlError as exc:
+            raise _source_control_http_error(exc) from exc
 
     items = heading_outline(mutated.html or "")
     return DocumentCommandsResponse(
@@ -3386,4 +3470,7 @@ async def apply_document_commands_route(
         html=mutated.html,
         commit_sha=mutated.commit_sha,
         source=mutated.source,
+        title=rename_title or None,
+        project_renamed=project_renamed,
+        slug_changed=False,
     )

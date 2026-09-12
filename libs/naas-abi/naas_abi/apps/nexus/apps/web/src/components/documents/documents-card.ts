@@ -22,7 +22,9 @@ function isDocumentsWriteTool(rawName: string | null | undefined): boolean {
   return (
     raw.includes(CREATE_TOOL) ||
     raw.includes('write_document') ||
-    raw.includes('replace_in_document')
+    raw.includes('replace_in_document') ||
+    raw.includes('rename_document') ||
+    raw.includes('update_title')
   );
 }
 

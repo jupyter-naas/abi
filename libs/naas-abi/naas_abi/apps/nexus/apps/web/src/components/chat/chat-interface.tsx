@@ -23,6 +23,7 @@ import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
 import { dispatchDocumentUpdated, isDocumentsWriteTool, useDocumentsStore } from '@/stores/documents';
 import { dispatchSlidesDeckUpdated, isSlidesWriteTool, useSlidesStore } from '@/stores/slides';
+import { sectionsDocumentTitleFromToolOutput } from '@/components/documents/documents-card';
 import {
   slidesDeckCardFromToolCalls,
   slidesDeckTitleFromToolOutput,
@@ -2288,7 +2289,13 @@ export function ChatInterface({
             }
             useDocumentsStore.getState().setAgentWriting(false);
             if (!writeFailed) {
-              dispatchDocumentUpdated({ slug, source: target.rawName || target.toolName });
+              const documentTitle = sectionsDocumentTitleFromToolOutput(output);
+              if (documentTitle) useDocumentsStore.getState().setSelectedTitle(documentTitle);
+              dispatchDocumentUpdated({
+                slug,
+                source: target.rawName || target.toolName,
+                title: documentTitle || undefined,
+              });
             }
           }
           if (

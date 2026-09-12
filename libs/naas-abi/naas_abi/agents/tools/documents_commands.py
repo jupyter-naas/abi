@@ -22,6 +22,9 @@ _BOUNDARY_RE = re.compile(
     re.IGNORECASE,
 )
 _TAG_RE = re.compile(r"<[^>]+>")
+_TITLE_TAG_RE = re.compile(r"<title\b[^>]*>.*?</title>", re.IGNORECASE | re.DOTALL)
+_H1_OPEN_RE = re.compile(r"<h1\b[^>]*>", re.IGNORECASE)
+_H1_FULL_RE = re.compile(r"<h1\b[^>]*>.*?</h1>", re.IGNORECASE | re.DOTALL)
 
 KNOWN_COMMANDS = frozenset(
     {
@@ -32,6 +35,8 @@ KNOWN_COMMANDS = frozenset(
         "delete_range",
         "replace_text",
         "update_paragraph_style",
+        "update_title",
+        "rename_document",
     }
 )
 
@@ -150,6 +155,44 @@ def replace_text(html: str, find: str, replace: str) -> str | dict[str, str]:
     return html.replace(find, replace)
 
 
+def update_document_title(html: str, title: str) -> str | dict[str, str]:
+    """Set the tab ``<title>`` and the first cover ``<h1>`` to the same name.
+
+    ``update_title`` and ``rename_document`` share this HTML step. The project
+    display name (sidebar folder) is applied by the wrapper, not here.
+    """
+    clean = (title or "").strip()
+    if not clean:
+        return {"error": "title is required"}
+    safe = _escape(clean)
+    next_html = html or ""
+    changed = False
+    if _TITLE_TAG_RE.search(next_html):
+        next_html = _TITLE_TAG_RE.sub(f"<title>{safe}</title>", next_html, count=1)
+        changed = True
+    h1_open = _H1_OPEN_RE.search(next_html)
+    if h1_open:
+        next_html = _H1_FULL_RE.sub(f"{h1_open.group(0)}{safe}</h1>", next_html, count=1)
+        changed = True
+    if not changed:
+        return {"error": "No document title or cover heading to update."}
+    return next_html
+
+
+def last_rename_document_title(requests: list[dict[str, Any]]) -> str:
+    """Last ``rename_document`` title in a command batch, or empty."""
+    title = ""
+    for raw in requests:
+        if not isinstance(raw, dict):
+            continue
+        if str(raw.get("type") or "").strip().lower() != "rename_document":
+            continue
+        candidate = str(raw.get("title") or raw.get("text") or "").strip()
+        if candidate:
+            title = candidate
+    return title
+
+
 def update_paragraph_style(
     html: str, heading_index: int, style: str
 ) -> str | dict[str, str]:
@@ -237,6 +280,11 @@ def apply_document_commands(
                 next_html, target, str(raw.get("style") or "")
             )
             heading_index = target
+        elif typ in {"update_title", "rename_document"}:
+            result = update_document_title(
+                next_html, str(raw.get("title") or raw.get("text") or "")
+            )
+            heading_index = 0
         else:
             return {"error": f"Unhandled command {typ!r}"}
 

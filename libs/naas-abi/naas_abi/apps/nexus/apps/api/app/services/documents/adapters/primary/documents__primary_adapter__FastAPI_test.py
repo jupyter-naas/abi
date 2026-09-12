@@ -1176,6 +1176,72 @@ def test_document_commands_insert_page_break_and_heading(monkeypatch) -> None:
     assert any(row.get("title") == "Annex" for row in body["outline"])
 
 
+def test_document_commands_rename_updates_project_title(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _sections_client(monkeypatch, sc)
+    created = client.post(
+        "/documents/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Untitled document",
+            "slug": "untitled-rename",
+            "template_id": "article-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    applied = client.post(
+        "/documents/projects/untitled-rename/commands",
+        json={
+            "workspace_id": "ws-test",
+            "requests": [{"type": "rename_document", "title": "Forvis Mazars Story"}],
+        },
+    )
+    assert applied.status_code == 200, applied.text
+    body = applied.json()
+    assert body["ok"] is True
+    assert body["title"] == "Forvis Mazars Story"
+    assert body["project_renamed"] is True
+    assert body["slug_changed"] is False
+    assert "<h1>Forvis Mazars Story</h1>" in (body.get("html") or "")
+
+    listed = client.get("/documents/projects", params={"workspace_id": "ws-test"})
+    assert listed.status_code == 200, listed.text
+    row = next(p for p in listed.json() if p["slug"] == "untitled-rename")
+    assert row["title"] == "Forvis Mazars Story"
+    assert row["slug"] == "untitled-rename"
+
+
+def test_document_commands_update_title_leaves_project_name(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _sections_client(monkeypatch, sc)
+    created = client.post(
+        "/documents/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Untitled document",
+            "slug": "untitled-heading",
+            "template_id": "article-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    applied = client.post(
+        "/documents/projects/untitled-heading/commands",
+        json={
+            "workspace_id": "ws-test",
+            "requests": [{"type": "update_title", "title": "Cover only"}],
+        },
+    )
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["project_renamed"] is False
+    assert "<h1>Cover only</h1>" in (applied.json().get("html") or "")
+
+    listed = client.get("/documents/projects", params={"workspace_id": "ws-test"})
+    row = next(p for p in listed.json() if p["slug"] == "untitled-heading")
+    assert row["title"] == "Untitled document"
+
+
 def test_delete_last_section_is_refused(monkeypatch) -> None:
     sc = SourceControlService(InMemoryAdapter())
     client = _sections_client(monkeypatch, sc)

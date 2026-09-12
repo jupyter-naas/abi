@@ -44,7 +44,9 @@ DOCUMENTS_GUIDELINES = """- When the user asks for a document, report, or articl
 - Tiny copy edits (title typo, color tweak) may skip search. A first-message create/brief may not.
 - For a theme or template change (Portrait A4, Landscape A4, Article Light): call apply_documents_template with that name. Do not list other documents. Do not read_file document.html. The tool writes the seed; then write copy with apply_document_commands in one batch of 2 to 4 headings.
 - Prefer replace_in_document for a single copy edit (matches plain text and HTML entities like &amp; so cover &lt;h1&gt; and body copy update in Preview and PDF).
-- For cover / title / first-heading edits: call replace_in_document with section_index=0 and occurrence=0. Never use occurrence=1 for the title (that hits &lt;title&gt;/menubar before the cover &lt;h1&gt; Preview shows). Confirm cover_h1_updated is true in the tool result.
+- When the user says "rename this doc" or "rename this document", call rename_document with the new name. That updates the sidebar folder (project.json display name) and the visible title (tab + cover H1) together. The slug stays put. Do not only edit the HTML heading.
+- When the user says "change the title" or "change the heading", call update_title. That changes the visible heading only. Do not rename the sidebar folder.
+- For other cover / first-heading copy edits: call replace_in_document with section_index=0 and occurrence=0. Never use occurrence=1 for the title (that hits &lt;title&gt;/menubar before the cover &lt;h1&gt; Preview shows). Confirm cover_h1_updated is true in the tool result.
 - Prefer document verbs for prose: apply_document_commands, insert_heading, insert_paragraph, insert_page_break, apply_paragraph_style. Positions are heading indexes. They return {ok, heading_index, heading_count} and never HTML.
 - Leftover list_document_sections, read_document_section, write_document_section, write_document_sections, insert_section, delete_section, duplicate_section, and reorder_sections are slide-shaped and are not bound. Do not look for them.
 - The system prompt carries selected_section_index (0-based) when a document is open: the heading the user is looking at. "Here" or "this heading" means that index. Never ask which heading.
@@ -106,8 +108,9 @@ Your step budget is finite ({DOCUMENTS_RECURSION_LIMIT} graph steps). Plan, then
 1. If no document is open and the user asked for a document, report, or article, call create_documents_project first, then research, then write.
 2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (prefer one query, at most 4), then write 2 to 4 headings with apply_document_commands or insert_heading plus insert_paragraph, then stop.
 3. If the user asks for a theme or template, call apply_documents_template, then write 2 to 4 headings, then stop.
-4. If the brief is a tiny copy edit, use replace_in_document.
-5. After writes, report what changed in the open document. Do not claim Preview updated unless the tool result confirms it. Do not reread the document to check.
+4. If the user asks to rename the document, call rename_document. Do not only edit the HTML title.
+5. If the brief is a heading-only change, use update_title. Other tiny copy edits use replace_in_document.
+6. After writes, report what changed in the open document. Do not claim Preview updated unless the tool result confirms it. Do not reread the document to check.
 </tasks>
 
 <documents_guidelines>

@@ -51,6 +51,8 @@ describe('isDocumentsWriteTool', () => {
     expect(isDocumentsWriteTool('insert_paragraph')).toBe(true);
     expect(isDocumentsWriteTool('apply_paragraph_style')).toBe(true);
     expect(isDocumentsWriteTool('create_documents_project')).toBe(true);
+    expect(isDocumentsWriteTool('rename_document')).toBe(true);
+    expect(isDocumentsWriteTool('update_title')).toBe(true);
   });
 
   it('ignores read-only and unrelated tools', () => {

@@ -758,6 +758,72 @@ def test_write_does_not_rename_a_document_from_an_edit_instruction(monkeypatch):
         _reset_tokens(tokens)
 
 
+def _stored_html(sc) -> str:
+    file = sc.get_file(
+        repo_id="abi/monorepo",
+        path="documents/ws-test/untitled-local/document.html",
+        ref="documents/ws-test/untitled-local",
+    )
+    return file.text or ""
+
+
+def test_rename_document_updates_sidebar_name_and_cover(monkeypatch):
+    """Rename this document updates project.json and the visible heading."""
+    sc = _bind_in_memory_git(monkeypatch)
+    _seed_untitled_document(sc)
+    tokens = _sections_context()
+    try:
+        rename = next(t for t in documents_tools() if t.name == "rename_document")
+        result = rename.invoke({"title": "Forvis Mazars Story"})
+        assert "error" not in result, result
+        assert result["title"] == "Forvis Mazars Story"
+        assert result["project_renamed"] is True
+        assert result["slug_changed"] is False
+        assert result["slug"] == "untitled-local"
+        assert _stored_title(sc) == "Forvis Mazars Story"
+        html = _stored_html(sc)
+        assert "<h1>Forvis Mazars Story</h1>" in html
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_update_title_leaves_the_sidebar_folder(monkeypatch):
+    """Change the heading updates HTML only."""
+    sc = _bind_in_memory_git(monkeypatch)
+    _seed_untitled_document(sc)
+    tokens = _sections_context()
+    try:
+        update = next(t for t in documents_tools() if t.name == "update_title")
+        result = update.invoke({"title": "Cover only"})
+        assert "error" not in result, result
+        assert result["project_renamed"] is False
+        assert _stored_title(sc) == "Untitled document"
+        assert "<h1>Cover only</h1>" in _stored_html(sc)
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_apply_commands_rename_document_updates_project(monkeypatch):
+    sc = _bind_in_memory_git(monkeypatch)
+    _seed_untitled_document(sc)
+    tokens = _sections_context()
+    try:
+        apply = next(t for t in documents_tools() if t.name == "apply_document_commands")
+        result = apply.invoke(
+            {
+                "requests_json": json.dumps(
+                    [{"type": "rename_document", "title": "Forvis Mazars Story"}]
+                )
+            }
+        )
+        assert "error" not in result, result
+        assert result.get("project_renamed") is True
+        assert _stored_title(sc) == "Forvis Mazars Story"
+        assert "<h1>Forvis Mazars Story</h1>" in _stored_html(sc)
+    finally:
+        _reset_tokens(tokens)
+
+
 def test_create_documents_project_rejects_an_empty_title(monkeypatch):
     _bind_in_memory_git(monkeypatch)
     tokens = _main_chat_context()

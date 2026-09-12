@@ -38,6 +38,7 @@ export const DOCUMENTS_UPDATED_EVENT = 'sections-document-updated';
 export type DocumentsUpdatedDetail = {
   slug?: string;
   source?: string;
+  title?: string;
 };
 
 export type DocumentsSource = 'sidecar' | 'forgejo' | null;
@@ -173,7 +174,9 @@ export function isDocumentsWriteTool(rawName: string | null | undefined): boolea
     raw.includes('insert_heading') ||
     raw.includes('insert_paragraph') ||
     raw.includes('apply_paragraph_style') ||
-    raw.includes('create_documents_project')
+    raw.includes('create_documents_project') ||
+    raw.includes('rename_document') ||
+    raw.includes('update_title')
   );
 }
 

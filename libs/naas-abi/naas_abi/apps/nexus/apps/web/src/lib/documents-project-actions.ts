@@ -43,6 +43,6 @@ export async function patchDocumentsProject(
   if (patch.title && useDocumentsStore.getState().selectedSlug === slug) {
     useDocumentsStore.getState().setSelectedTitle(project.title);
   }
-  dispatchDocumentUpdated({ slug });
+  dispatchDocumentUpdated({ slug, title: patch.title ? project.title : undefined });
   return project;
 }

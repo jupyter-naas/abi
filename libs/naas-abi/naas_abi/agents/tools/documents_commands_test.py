@@ -5,8 +5,9 @@ from naas_abi.agents.tools.documents_commands import (
     insert_heading,
     insert_page_break,
     insert_paragraph,
+    last_rename_document_title,
+    update_document_title,
 )
-
 
 _SAMPLE = """<!doctype html><html><body>
 <main class="document">
@@ -91,3 +92,45 @@ def test_unknown_command_is_rejected() -> None:
 
 def test_empty_requests_rejected() -> None:
     assert "error" in apply_document_commands(_SAMPLE, [])
+
+
+def test_update_document_title_sets_tab_and_cover() -> None:
+    html = "<html><head><title>Document Title</title></head><body>" + _SAMPLE + "</body></html>"
+    updated = update_document_title(html, "Forvis Mazars Story")
+    assert isinstance(updated, str)
+    assert "<title>Forvis Mazars Story</title>" in updated
+    assert "<h1>Forvis Mazars Story</h1>" in updated
+    assert "<h2>Introduction</h2>" in updated
+
+
+def test_rename_document_command_updates_html_title() -> None:
+    result = apply_document_commands(
+        _SAMPLE,
+        [{"type": "rename_document", "title": "Forvis Mazars Story"}],
+    )
+    assert result["ok"] is True
+    assert "<h1>Forvis Mazars Story</h1>" in result["html"]
+    assert result["applied"] == ["rename_document"]
+
+
+def test_update_title_command_is_heading_only_html() -> None:
+    result = apply_document_commands(
+        _SAMPLE,
+        [{"type": "update_title", "title": "Cover only"}],
+    )
+    assert result["ok"] is True
+    assert "<h1>Cover only</h1>" in result["html"]
+    assert last_rename_document_title([{"type": "update_title", "title": "Cover only"}]) == ""
+
+
+def test_last_rename_document_title_reads_the_batch() -> None:
+    assert (
+        last_rename_document_title(
+            [
+                {"type": "update_title", "title": "Heading only"},
+                {"type": "rename_document", "title": "Forvis Mazars Story"},
+            ]
+        )
+        == "Forvis Mazars Story"
+    )
+    assert last_rename_document_title([{"type": "update_title", "title": "X"}]) == ""

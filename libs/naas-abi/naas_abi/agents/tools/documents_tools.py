@@ -1466,6 +1466,8 @@ COMMAND_TOOL_NAMES = frozenset(
         "insert_page_break",
         "apply_paragraph_style",
         "apply_documents_template",
+        "rename_document",
+        "update_title",
     }
 )
 _TEMPLATE_KEY_RE = re.compile(r"[^a-z0-9]+")
@@ -1559,6 +1561,138 @@ def _load_catalog_seed_html(template_id: str) -> str | dict[str, Any]:
             if seed:
                 return seed
         return {"error": f"Could not load template {template_id!r}: {exc}"}
+
+
+def _write_project_title(slug: str, title: str) -> str | dict[str, Any]:
+    """Force-update project.json display name. Slug and git folder stay put.
+
+    The sidebar tree reads this title, not the slug. ``Untitled document`` is a
+    display name. A user rename must overwrite it even when the brief looks
+    like an edit instruction.
+    """
+    clean = (title or "").strip()
+    if not clean:
+        return {"error": "title is required"}
+    if is_placeholder_document_title(clean):
+        return {"error": "title must be a real name, not Untitled document"}
+    paths = _resolve_paths(slug)
+    if paths.get("error"):
+        return {"error": paths["error"]}
+    sc = _get_source_control()
+    repo_id = _repo_id()
+    meta: dict[str, Any] = {}
+    try:
+        existing = sc.get_file(
+            repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
+        )
+        if existing.text:
+            meta = json.loads(existing.text)
+    except (SourceControlError, json.JSONDecodeError, TypeError):
+        meta = {}
+    if not isinstance(meta, dict):
+        meta = {}
+    from datetime import UTC, datetime
+
+    ws = _workspace_id()
+    meta = {
+        **meta,
+        "slug": meta.get("slug") or slug,
+        "workspace_id": str(meta.get("workspace_id") or ws or ""),
+        "title": clean,
+        "updated_at": datetime.now(UTC).isoformat(),
+    }
+    try:
+        sc.upsert_file(
+            repo_id=repo_id,
+            path=paths["project_path"],
+            content=json.dumps(meta, indent=2, ensure_ascii=False) + "\n",
+            message=f"chore(document): rename project {slug}",
+            branch=paths["branch"],
+            **_agent_author(),
+        )
+    except SourceControlError as exc:
+        return {"error": _friendly_sc_error(exc)}
+    documents_active_title.set(clean)
+    return clean
+
+
+def _apply_rename_project(result: dict[str, Any], title: str) -> dict[str, Any]:
+    """Write the sidebar display name after a successful HTML rename."""
+    slug = str(result.get("slug") or "").strip()
+    if not slug or not title:
+        return result
+    written = _write_project_title(slug, title)
+    if isinstance(written, dict):
+        result["project_rename_error"] = written.get("error")
+        result["project_renamed"] = False
+        return result
+    result["title"] = written
+    result["project_renamed"] = True
+    result["slug_changed"] = False
+    return result
+
+
+def _rename_or_update_document(
+    title: str,
+    slug: str,
+    *,
+    rename_project: bool,
+    message: str,
+) -> dict[str, Any]:
+    """Shared path for rename_document (project + HTML) and update_title (HTML)."""
+    from naas_abi.agents.tools.documents_commands import update_document_title
+
+    if not agent_user_id.get():
+        return {"error": "No authenticated user on this agent session."}
+    resolved = _resolve_slug(slug)
+    if isinstance(resolved, dict):
+        return resolved
+    clean = (title or "").strip()
+    if not clean:
+        return {"error": "title is required"}
+    if rename_project and is_placeholder_document_title(clean):
+        return {"error": "title must be a real name, not Untitled document"}
+    try:
+        html, source = _load_document_text(resolved)
+        if isinstance(html, dict):
+            return html
+        cover_before = _cover_h1_text(html)
+        updated = update_document_title(html, clean)
+        if isinstance(updated, dict):
+            return updated
+        result: dict[str, Any]
+        if updated != html:
+            result = _persist_document(resolved, updated, message, default_type="feat")
+            if "error" in result:
+                return result
+        else:
+            result = {
+                "ok": True,
+                "slug": resolved,
+                "source": source,
+                "title": clean,
+            }
+        cover_after = _cover_h1_text(updated)
+        result["ok"] = True
+        result["slug"] = resolved
+        result["cover_h1_before"] = cover_before
+        result["cover_h1_after"] = cover_after
+        result["cover_h1_updated"] = bool(
+            cover_before is not None
+            and cover_after is not None
+            and cover_before != cover_after
+        )
+        result["slug_changed"] = False
+        if rename_project:
+            result = _apply_rename_project(result, clean)
+        else:
+            result["title"] = clean
+            result["project_renamed"] = False
+        note_documents_write("rename document" if rename_project else "document title")
+        result.update(_open_document_note(resolved))
+        return result
+    except Exception as exc:  # noqa: BLE001
+        return _tool_error(exc)
 
 
 def _write_project_template_id(slug: str, template_id: str) -> None:
@@ -2172,6 +2306,7 @@ def documents_tools() -> list[BaseTool]:
             return blocked
         from naas_abi.agents.tools.documents_commands import (
             apply_document_commands as apply_commands,
+            last_rename_document_title,
         )
 
         result = _run_section_mutation(
@@ -2184,6 +2319,9 @@ def documents_tools() -> list[BaseTool]:
         if "error" not in result:
             result["heading_index"] = result.get("section_index")
             result["heading_count"] = result.get("section_count")
+            rename_title = last_rename_document_title(requests)
+            if rename_title:
+                result = _apply_rename_project(result, rename_title)
         return result
 
     @tool
@@ -2200,8 +2338,10 @@ def documents_tools() -> list[BaseTool]:
 
         Each item needs type. Supported: insert_text, insert_paragraph,
         insert_heading, insert_page_break, delete_range, replace_text,
-        update_paragraph_style. Positions use after_heading or heading_index.
-        Returns {ok, heading_index, heading_count}. Never HTML.
+        update_paragraph_style, update_title, rename_document. Positions use
+        after_heading or heading_index. rename_document also updates the
+        sidebar display name. Returns {ok, heading_index, heading_count}.
+        Never HTML.
 
         For news or factual briefs: call web_search once this turn first.
         """
@@ -2277,6 +2417,47 @@ def documents_tools() -> list[BaseTool]:
             [{"type": "insert_paragraph", "text": text, "after_heading": after_heading}],
             slug,
             message or "feat(document): insert paragraph via Abi",
+        )
+
+    @tool
+    def rename_document(
+        title: str,
+        slug: str = "",
+        message: str = "feat(document): rename document via Abi",
+    ) -> dict[str, Any]:
+        """Rename the open document: sidebar folder and visible title together.
+
+        Use this when the user says "rename this doc" or "rename this document".
+        Updates project.json display name and the HTML tab plus cover H1 to the
+        same name. The slug and git folder stay put.
+
+        For a heading-only change ("change the title", "change the heading"),
+        use update_title instead.
+        """
+        return _rename_or_update_document(
+            title,
+            slug,
+            rename_project=True,
+            message=message or "feat(document): rename document via Abi",
+        )
+
+    @tool
+    def update_title(
+        title: str,
+        slug: str = "",
+        message: str = "feat(document): update title via Abi",
+    ) -> dict[str, Any]:
+        """Change the visible document title (tab + cover H1) only.
+
+        Use this when the user says "change the title" or "change the heading".
+        Does not rename the sidebar folder. Use rename_document when they say
+        "rename this doc".
+        """
+        return _rename_or_update_document(
+            title,
+            slug,
+            rename_project=False,
+            message=message or "feat(document): update title via Abi",
         )
 
     @tool
@@ -2491,6 +2672,8 @@ def documents_tools() -> list[BaseTool]:
         write_document,
         apply_document_commands,
         apply_documents_template,
+        rename_document,
+        update_title,
         insert_heading,
         insert_paragraph,
         insert_page_break,

@@ -21,10 +21,27 @@ The first error aborts the batch (same idea as Docs `batchUpdate`).
 | `delete_range` | Delete a heading block (that heading through the next) | Docs `deleteContentRange` |
 | `replace_text` | Replace a substring | Docs `replaceAllText` |
 | `update_paragraph_style` | Retag a heading (`heading1`/`heading2`/`heading3`/`paragraph`) | Docs `updateParagraphStyle` |
+| `update_title` | Change the tab `<title>` and cover H1 only | heading-only retitle |
+| `rename_document` | Sidebar display name plus tab `<title>` and cover H1 | "rename this document" |
 
 Positioning is a heading index (`after_heading` / `heading_index`), not a
 UTF-16 offset. That matches ODF "insert relative to a paragraph" more
 than Docs character indexes.
+
+## Rename vs heading
+
+"Rename this document" (or "rename this doc") is one product action:
+`rename_document`. It updates the project display name the sidebar tree
+reads (`project.json` `title`) and the visible document title (tab and
+cover H1). The slug and git folder stay put. `Untitled document` is that
+display name, not only the slug.
+
+"Change the title" or "change the heading" is heading-only: `update_title`.
+It does not rename the sidebar folder.
+
+Agent tools use the same names. Internal helpers can still split
+project write vs HTML write; the command the agent and the user see
+must not.
 
 Read and project verbs already exist:
 
@@ -40,7 +57,8 @@ Read and project verbs already exist:
 
 Agent tools with the same names call the same mutators:
 `insert_page_break`, `insert_heading`, `insert_paragraph`,
-`apply_paragraph_style`, `apply_document_commands`.
+`apply_paragraph_style`, `apply_document_commands`, `rename_document`,
+`update_title`.
 
 ## Leftover section API
 
