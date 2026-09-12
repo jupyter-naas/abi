@@ -145,4 +145,14 @@ describe('SlidesMenuBar', () => {
     expect(html).toContain('data-testid="slides-menu-insert"');
     expect(html).toContain('data-testid="slides-menu-view"');
   });
+
+  it('marks File New as locked while a deck is being created', () => {
+    const html = renderToStaticMarkup(
+      createElement(SlidesMenuBar, {
+        onNewPresentation: () => {},
+        newDisabled: true,
+      }),
+    );
+    expect(html).toContain('data-new-disabled="true"');
+  });
 });

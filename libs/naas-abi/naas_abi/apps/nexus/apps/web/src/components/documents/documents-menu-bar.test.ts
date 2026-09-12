@@ -156,4 +156,14 @@ describe('DocumentsMenuBar', () => {
     expect(html).toContain('data-testid="sections-menu-insert"');
     expect(html).toContain('data-testid="sections-menu-view"');
   });
+
+  it('marks File New as locked while a document is being created', () => {
+    const html = renderToStaticMarkup(
+      createElement(DocumentsMenuBar, {
+        onNewPresentation: () => {},
+        newDisabled: true,
+      }),
+    );
+    expect(html).toContain('data-new-disabled="true"');
+  });
 });

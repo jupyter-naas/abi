@@ -38,8 +38,9 @@ import { DocumentsStatusBar } from '@/components/documents/documents-status-bar'
 import {
   openDocumentsAgentPane,
   documentsApiErrorMessage,
-  startNewDocument,
 } from '@/lib/create-documents-project';
+import { OfficeCreateLoader } from '@/components/office/office-create-loader';
+import { officeCreateHref } from '@/components/office/office-create';
 import { copyDocumentToMyDrive } from '@/lib/documents-my-drive';
 import { authFetch } from '@/stores/auth';
 import {
@@ -207,6 +208,7 @@ export default function SectionsEditorPage() {
   const [manualEdit, setManualEdit] = useState(false);
   const [holdPreview, setHoldPreview] = useState(false);
   const [mutating, setMutating] = useState(false);
+  const [creating, setCreating] = useState(false);
   const previewRef = useRef<DocumentsPreviewFrameHandle>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [previewHtml, setPreviewHtml] = useState('');
@@ -741,11 +743,11 @@ export default function SectionsEditorPage() {
   const menuBar = (
     <DocumentsMenuBar
       onNewPresentation={() => {
-        if (!workspaceId) return;
-        void startNewDocument(workspaceId, (href) => router.push(href)).catch((e) => {
-          setError(documentsApiErrorMessage((e as Error).message, 'Could not create the document.'));
-        });
+        if (!workspaceId || creating) return;
+        setCreating(true);
+        router.push(officeCreateHref('document', workspaceId));
       }}
+      newDisabled={creating}
       onCommit={() => void save()}
       commitDisabled={saving || !dirty || loading}
       onSaveToMyDrive={() => void saveToMyDrive()}
@@ -792,6 +794,16 @@ export default function SectionsEditorPage() {
     />
   );
 
+  if (creating) {
+    return (
+      <div className="flex h-full flex-col">
+        <Header title="New document" nav={menuBar} />
+        <OfficeCreateLoader kind="document" phase="creating" />
+        <DocumentsStatusBar />
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex h-full flex-col">
@@ -800,10 +812,7 @@ export default function SectionsEditorPage() {
           subtitle={slug ? `documents/${slug}/document.html` : undefined}
           nav={menuBar}
         />
-        <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
-          <Loader2 size={16} className="animate-spin" />
-          Loading document…
-        </div>
+        <OfficeCreateLoader kind="document" phase="opening" />
         <DocumentsStatusBar />
       </div>
     );

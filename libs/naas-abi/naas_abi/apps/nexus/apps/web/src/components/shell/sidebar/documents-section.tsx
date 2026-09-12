@@ -3,11 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { ChevronRight, FileText, FolderTree, List } from 'lucide-react';
-import {
-  openDocumentsAgentPane,
-  documentsApiErrorMessage,
-  startNewDocument,
-} from '@/lib/create-documents-project';
+import { officeCreateHref } from '@/components/office/office-create';
+import { openDocumentsAgentPane } from '@/lib/create-documents-project';
 import { partitionDocumentsProjects, patchDocumentsProject } from '@/lib/documents-project-actions';
 import '@/app/workspace/[workspaceId]/chat/components/chat-components.css';
 import {
@@ -61,7 +58,7 @@ export function DocumentsSection({
   const [rootExpanded, setRootExpanded] = useState(true);
   const [expandedDocuments, setExpandedDocuments] = useState<string[]>([]);
   const [expandedDirs, setExpandedDirs] = useState<string[]>([]);
-  const [creating, setCreating] = useState(false);
+  const creating = pathname === `${sectionsBase}/new`;
   const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -234,22 +231,10 @@ export function DocumentsSection({
   const createDocument = useCallback(
     (templateId?: string) => {
       if (!workspaceId || creating) return;
-      setCreating(true);
       setActionError(null);
-      void startNewDocument(workspaceId, (href) => router.push(href), templateId)
-        .then(() => {
-          void fetchProjects();
-        })
-        .catch((e) => {
-          setActionError(
-            documentsApiErrorMessage((e as Error).message, 'Could not create the document.'),
-          );
-        })
-        .finally(() => {
-          setCreating(false);
-        });
+      router.push(officeCreateHref('document', workspaceId, templateId));
     },
-    [workspaceId, creating, router, fetchProjects],
+    [workspaceId, creating, router],
   );
 
   const templateOptions: SidebarNewItemMenuOption[] = sectionsTemplateMenuRows(templates).map(

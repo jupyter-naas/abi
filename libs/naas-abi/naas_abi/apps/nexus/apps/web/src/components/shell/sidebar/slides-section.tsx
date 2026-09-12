@@ -3,11 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { ChevronRight, FolderTree, LayoutGrid, Presentation } from 'lucide-react';
+import { officeCreateHref } from '@/components/office/office-create';
 import {
   DEFAULT_SLIDES_TEMPLATE_ID,
   openSlidesAgentPane,
-  slidesApiErrorMessage,
-  startNewPresentation,
 } from '@/lib/create-slides-project';
 import { partitionSlidesProjects, patchSlidesProject } from '@/lib/slides-project-actions';
 import '@/app/workspace/[workspaceId]/chat/components/chat-components.css';
@@ -61,7 +60,7 @@ export function SlidesSection({
   const [rootExpanded, setRootExpanded] = useState(true);
   const [expandedDecks, setExpandedDecks] = useState<string[]>([]);
   const [expandedDirs, setExpandedDirs] = useState<string[]>([]);
-  const [creating, setCreating] = useState(false);
+  const creating = pathname === `${slidesBase}/new`;
   const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -234,22 +233,10 @@ export function SlidesSection({
   const createDeck = useCallback(
     (templateId: string) => {
       if (!workspaceId || creating) return;
-      setCreating(true);
       setActionError(null);
-      void startNewPresentation(workspaceId, (href) => router.push(href), templateId)
-        .then(() => {
-          void fetchProjects();
-        })
-        .catch((e) => {
-          setActionError(
-            slidesApiErrorMessage((e as Error).message, 'Could not create the deck.'),
-          );
-        })
-        .finally(() => {
-          setCreating(false);
-        });
+      router.push(officeCreateHref('deck', workspaceId, templateId));
     },
-    [workspaceId, creating, router, fetchProjects],
+    [workspaceId, creating, router],
   );
 
   const templateOptions: SidebarNewItemMenuOption[] = slidesTemplateMenuRows(templates).map(

@@ -8,10 +8,11 @@ import { DocumentsIndexGallery, SectionsTemplateStrip } from '@/components/docum
 import { invalidateSectionsCover } from '@/components/documents/documents-cover-thumb';
 import { DocumentsMenuBar } from '@/components/documents/documents-menu-bar';
 import { DocumentsStatusBar } from '@/components/documents/documents-status-bar';
+import { OfficeCreateLoader } from '@/components/office/office-create-loader';
+import { officeCreateHref } from '@/components/office/office-create';
 import {
   openDocumentsAgentPane,
   documentsApiErrorMessage,
-  startNewDocument,
 } from '@/lib/create-documents-project';
 import { partitionDocumentsProjects, patchDocumentsProject } from '@/lib/documents-project-actions';
 import type { DocumentsSeedTemplate } from '@/lib/documents-templates';
@@ -40,16 +41,11 @@ export default function SectionsIndexPage() {
   const visibleProjects = showArchived ? archived : active;
 
   const onCreateFromTemplate = useCallback(
-    async (templateId?: string) => {
+    (templateId?: string) => {
       if (!workspaceId || creating) return;
       setCreating(true);
       setError(null);
-      try {
-        await startNewDocument(workspaceId, (href) => router.push(href), templateId);
-      } catch (e) {
-        setError(documentsApiErrorMessage((e as Error).message, 'Could not create the document.'));
-        setCreating(false);
-      }
+      router.push(officeCreateHref('document', workspaceId, templateId));
     },
     [workspaceId, creating, router],
   );
@@ -150,7 +146,12 @@ export default function SectionsIndexPage() {
     <div className="flex h-full flex-col">
       <Header
         title="Documents"
-        nav={<DocumentsMenuBar onNewPresentation={() => void onCreateFromTemplate()} />}
+        nav={
+          <DocumentsMenuBar
+            onNewPresentation={() => onCreateFromTemplate()}
+            newDisabled={creating}
+          />
+        }
       />
 
       {error && (
@@ -159,7 +160,10 @@ export default function SectionsIndexPage() {
         </div>
       )}
 
-      <div className="flex-1 overflow-auto">
+      {creating ? (
+        <OfficeCreateLoader kind="document" phase="creating" />
+      ) : (
+        <div className="flex-1 overflow-auto">
         {loading ? (
           <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
             <Loader2 size={16} className="mr-2 animate-spin" />
@@ -219,7 +223,8 @@ export default function SectionsIndexPage() {
             </div>
           </>
         )}
-      </div>
+        </div>
+      )}
       <DocumentsStatusBar />
     </div>
   );

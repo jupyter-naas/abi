@@ -8,10 +8,11 @@ import { SlidesIndexGallery, SlidesTemplateStrip } from '@/components/slides/sli
 import { invalidateSlidesCover } from '@/components/slides/slides-cover-thumb';
 import { SlidesMenuBar } from '@/components/slides/slides-menu-bar';
 import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
+import { OfficeCreateLoader } from '@/components/office/office-create-loader';
+import { officeCreateHref } from '@/components/office/office-create';
 import {
   openSlidesAgentPane,
   slidesApiErrorMessage,
-  startNewPresentation,
 } from '@/lib/create-slides-project';
 import { partitionSlidesProjects, patchSlidesProject } from '@/lib/slides-project-actions';
 import type { SlidesSeedTemplate } from '@/lib/slides-templates';
@@ -40,16 +41,11 @@ export default function SlidesIndexPage() {
   const visibleProjects = showArchived ? archived : active;
 
   const onCreateFromTemplate = useCallback(
-    async (templateId?: string) => {
+    (templateId?: string) => {
       if (!workspaceId || creating) return;
       setCreating(true);
       setError(null);
-      try {
-        await startNewPresentation(workspaceId, (href) => router.push(href), templateId);
-      } catch (e) {
-        setError(slidesApiErrorMessage((e as Error).message, 'Could not create the deck.'));
-        setCreating(false);
-      }
+      router.push(officeCreateHref('deck', workspaceId, templateId));
     },
     [workspaceId, creating, router],
   );
@@ -146,7 +142,12 @@ export default function SlidesIndexPage() {
     <div className="flex h-full flex-col">
       <Header
         title="Slides"
-        nav={<SlidesMenuBar onNewPresentation={() => void onCreateFromTemplate()} />}
+        nav={
+          <SlidesMenuBar
+            onNewPresentation={() => onCreateFromTemplate()}
+            newDisabled={creating}
+          />
+        }
       />
 
       {error && (
@@ -155,7 +156,10 @@ export default function SlidesIndexPage() {
         </div>
       )}
 
-      <div className="flex-1 overflow-auto">
+      {creating ? (
+        <OfficeCreateLoader kind="deck" phase="creating" />
+      ) : (
+        <div className="flex-1 overflow-auto">
         {loading ? (
           <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
             <Loader2 size={16} className="mr-2 animate-spin" />
@@ -215,7 +219,8 @@ export default function SlidesIndexPage() {
             </div>
           </>
         )}
-      </div>
+        </div>
+      )}
       <SlidesStatusBar />
     </div>
   );
