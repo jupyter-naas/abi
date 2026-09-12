@@ -14,7 +14,9 @@ import { nextChatUrl } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import {
+  officeSurfaceFromPath,
   pickDocumentsOfficeAgent,
+  pickPaneOfficeAgent,
   pickSlidesOfficeAgent,
   pickWorkspaceDefaultAgent,
 } from '@/lib/pick-workspace-default-agent';
@@ -1036,13 +1038,15 @@ export function ChatInterface({
   }, [slidesChatContext, documentsChatContext, codingChatContext]);
 
   useEffect(() => {
-    if (!isPane || !documentsChatContext) return;
+    if (!isPane) return;
+    const surface = officeSurfaceFromPath(pathname);
+    if (!surface.onDocuments && !surface.onSlides) return;
     const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
-    const documents = pickDocumentsOfficeAgent(agents);
-    if (documents && useWorkspaceStore.getState().paneAgent !== documents.id) {
-      useWorkspaceStore.getState().setPaneAgent(documents.id);
+    const picked = pickPaneOfficeAgent(agents, surface);
+    if (picked && useWorkspaceStore.getState().paneAgent !== picked.id) {
+      useWorkspaceStore.getState().setPaneAgent(picked.id);
     }
-  }, [isPane, documentsChatContext]);
+  }, [isPane, pathname]);
 
   useEffect(() => {
     if (!mounted || isPane) return;
@@ -1923,15 +1927,14 @@ export function ChatInterface({
     if ((!sourceText.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading) return;
     isSubmittingRef.current = true;
     let effectiveAgent = agentOverride ?? selectedAgent;
+    const officeSurface = officeSurfaceFromPath(pathname);
     // Pane can hydrate with paneAgent="" before agents sync; resolve the
-    // workspace default so the stream has a real agent id.
+    // workspace default so the stream has a real agent id. Route wins over a
+    // leftover Documents/Slides bind from the other office surface.
     if (!effectiveAgent) {
       const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
-      const resolved = slidesChatContext
-        ? (pickSlidesOfficeAgent(agents) ?? pickWorkspaceDefaultAgent(agents))
-        : documentsChatContext
-          ? (pickDocumentsOfficeAgent(agents) ?? pickWorkspaceDefaultAgent(agents))
-          : pickWorkspaceDefaultAgent(agents);
+      const resolved =
+        pickPaneOfficeAgent(agents, officeSurface) ?? pickWorkspaceDefaultAgent(agents);
       if (resolved) {
         effectiveAgent = resolved.id;
         if (isPane) {
@@ -1940,7 +1943,7 @@ export function ChatInterface({
           useWorkspaceStore.getState().setSelectedAgent(resolved.id);
         }
       }
-    } else if (slidesChatContext) {
+    } else if (officeSurface.onSlides) {
       const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
       const slides = pickSlidesOfficeAgent(agents);
       if (slides) {
@@ -1949,7 +1952,7 @@ export function ChatInterface({
           useWorkspaceStore.getState().setPaneAgent(slides.id);
         }
       }
-    } else if (documentsChatContext) {
+    } else if (officeSurface.onDocuments) {
       const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
       const documents = pickDocumentsOfficeAgent(agents);
       if (documents) {
@@ -2936,7 +2939,7 @@ export function ChatInterface({
           <EmptyState
             selectedAgentName={selectedAgentData?.name || selectedAgent}
             logoUrl={selectedAgentData?.logoUrl ?? undefined}
-            slidesOpen={Boolean(slidesChatContext)}
+            slidesOpen={officeSurfaceFromPath(pathname).onSlides}
           />
         ) : (
           <div className="mx-auto max-w-3xl space-y-6">
@@ -3301,9 +3304,9 @@ export function ChatInterface({
                       ? 'Ask about the image...'
                       : pendingFileAttachments.length > 0
                         ? 'Ask about the file...'
-                        : slidesChatContext
+                        : officeSurfaceFromPath(pathname).onSlides
                           ? 'Describe the deck: topic, audience, how many slides...'
-                          : documentsChatContext
+                          : officeSurfaceFromPath(pathname).onDocuments
                             ? 'Describe the document: topic, audience...'
                             : 'Send a message...'
                   }

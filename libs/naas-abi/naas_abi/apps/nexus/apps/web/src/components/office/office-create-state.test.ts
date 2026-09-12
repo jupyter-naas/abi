@@ -186,3 +186,15 @@ describe('New document click paths', () => {
     expect(src).not.toContain('beginOfficeCreate(createKind)');
   });
 });
+
+describe('office pane agent bind', () => {
+  it('rebinds Slides from the route so a leftover Documents face cannot stay', () => {
+    const chat = source('../chat/chat-interface.tsx');
+    expect(chat).toContain('officeSurfaceFromPath');
+    expect(chat).toContain('pickPaneOfficeAgent');
+    expect(chat).not.toMatch(/if \(!isPane \|\| !documentsChatContext\) return/);
+    const index = source('../../app/workspace/[workspaceId]/slides/page.tsx');
+    expect(index).toContain('pickPaneOfficeAgent');
+    expect(index).toContain('onSlides: true');
+  });
+});

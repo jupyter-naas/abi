@@ -6,6 +6,7 @@ import { useDocumentsStore } from '@/stores/documents';
 import { useWorkspaceStore } from '@/stores/workspace';
 
 import {
+  officeSurfaceFromPath,
   pickDocumentsOfficeAgent,
   pickPaneOfficeAgent,
   pickWorkspaceDefaultAgent,
@@ -130,6 +131,26 @@ describe('pickPaneOfficeAgent', () => {
         onDocuments: true,
       })?.id,
     ).toBe('documents');
+  });
+});
+
+describe('officeSurfaceFromPath', () => {
+  it('binds Slides from the slides route, not a leftover document slug', () => {
+    expect(officeSurfaceFromPath('/workspace/ws-1/slides')).toEqual({
+      onSlides: true,
+      onDocuments: false,
+    });
+    expect(officeSurfaceFromPath('/workspace/ws-1/slides/untitled-1')).toEqual({
+      onSlides: true,
+      onDocuments: false,
+    });
+  });
+
+  it('binds Documents only on the documents route', () => {
+    expect(officeSurfaceFromPath('/workspace/ws-1/documents')).toEqual({
+      onSlides: false,
+      onDocuments: true,
+    });
   });
 });
 

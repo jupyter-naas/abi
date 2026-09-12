@@ -71,3 +71,15 @@ export function pickPaneOfficeAgent<
   if (surface.onSlides) return pickSlidesOfficeAgent(agents);
   return pickWorkspaceDefaultAgent(agents);
 }
+
+/** Office surface from the route, not leftover store slugs. */
+export function officeSurfaceFromPath(pathname: string | null | undefined): {
+  onSlides: boolean;
+  onDocuments: boolean;
+} {
+  const path = pathname || '';
+  return {
+    onSlides: path.includes('/slides'),
+    onDocuments: path.includes('/documents'),
+  };
+}

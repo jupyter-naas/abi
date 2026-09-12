@@ -14,9 +14,12 @@ import {
   openSlidesAgentPane,
   slidesApiErrorMessage,
 } from '@/lib/create-slides-project';
+import { pickPaneOfficeAgent } from '@/lib/pick-workspace-default-agent';
 import { partitionSlidesProjects, patchSlidesProject } from '@/lib/slides-project-actions';
 import type { SlidesSeedTemplate } from '@/lib/slides-templates';
+import { useAgentsStore } from '@/stores/agents';
 import { authFetch } from '@/stores/auth';
+import { useWorkspaceStore } from '@/stores/workspace';
 import {
   SLIDES_DECK_UPDATED_EVENT,
   useSlidesStore,
@@ -87,6 +90,17 @@ export default function SlidesIndexPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Rebind Slides on the index even when the chat pane is closed. The pane
+  // ChatInterface is unmounted then, so a leftover Documents bind would
+  // otherwise persist until a deck is opened.
+  useEffect(() => {
+    const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+    const slides = pickPaneOfficeAgent(agents, { onSlides: true });
+    if (slides && useWorkspaceStore.getState().paneAgent !== slides.id) {
+      useWorkspaceStore.getState().setPaneAgent(slides.id);
+    }
+  }, []);
 
   useEffect(() => {
     if (archived.length === 0 && showArchived) setShowArchived(false);
