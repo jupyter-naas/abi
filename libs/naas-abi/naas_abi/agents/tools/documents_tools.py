@@ -1439,9 +1439,9 @@ def _run_section_mutation(
         if "error" not in result:
             note_documents_write(write_label)
             result["ok"] = True
-            result["section_index"] = mutated["section_index"]
-            result["section_count"] = mutated["section_count"]
-            result["ids"] = mutated["ids"]
+            result["section_index"] = mutated.get("section_index", 0)
+            result["section_count"] = mutated.get("section_count", 0)
+            result["ids"] = mutated.get("ids") or []
             leftovers = mutated.get("leftover_placeholders")
             result["leftover_placeholders"] = leftovers or []
             if mutated.get("incomplete"):
@@ -1490,7 +1490,7 @@ LEFTOVER_SECTION_TOOL_NAMES = frozenset(
         "reorder_sections",
     }
 )
-FILL_TURN_HIDDEN_TOOL_NAMES = frozenset({"replace_in_document"})
+FILL_TURN_HIDDEN_TOOL_NAMES = frozenset({"replace_in_document", "write_document"})
 COMMAND_TOOL_NAMES = frozenset(
     {
         "apply_document_commands",

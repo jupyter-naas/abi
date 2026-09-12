@@ -102,6 +102,8 @@ def test_fill_document_slots_clears_seed_copy() -> None:
     assert leftover_placeholders(html) == []
     assert result["missing_slots"] == []
     assert result["incomplete"] is False
+    assert "section_index" in result
+    assert result["section_count"] >= 1
     assert "Memo executif audit et conseil" in html
     assert "Faits marquants" in html
     assert "Signaux de la semaine" in html

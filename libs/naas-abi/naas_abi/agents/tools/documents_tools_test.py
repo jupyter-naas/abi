@@ -1116,6 +1116,7 @@ def test_documents_agent_tools_hide_leftover_section_crud_when_commands_exist():
     assert COMMAND_TOOL_NAMES <= bound
     assert "list_document_sections" not in bound
     assert "replace_in_document" not in bound
+    assert "write_document" not in bound
 
 
 def test_apply_document_commands_persists_without_returning_html(monkeypatch):

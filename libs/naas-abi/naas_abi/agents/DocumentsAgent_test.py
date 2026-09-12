@@ -65,7 +65,7 @@ def test_sections_agent_default_model_is_the_policy_fallback() -> None:
 def test_sections_agent_owns_the_write_and_research_tools() -> None:
     names = {tool.name for tool in DocumentsAgent.get_tools()}
     assert "create_documents_project" in names
-    assert "write_document" in names
+    assert "write_document" not in names
     assert "apply_document_commands" in names
     assert "fill_document_slots" in names
     assert "apply_documents_template" in names

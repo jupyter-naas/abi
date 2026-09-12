@@ -11,6 +11,7 @@ import re
 from typing import Any
 
 from naas_abi.agents.tools.documents_commands import (
+    heading_outline,
     leftover_placeholders,
     leftover_slots,
     leftover_write_note,
@@ -485,6 +486,7 @@ def fill_document_slots(html: str, payload: dict[str, Any]) -> dict[str, Any]:
         }
 
     next_html = normalize_document_flow(next_html)
+    outline = heading_outline(next_html)
     note = leftover_write_note(next_html)
     leftovers = leftover_placeholders(next_html)
     incomplete = bool(missing or leftovers)
@@ -501,6 +503,9 @@ def fill_document_slots(html: str, payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "ok": True,
         "html": next_html,
+        "section_index": 0,
+        "section_count": len(outline),
+        "ids": [None] * len(outline),
         "filled": filled,
         "missing_slots": missing,
         "leftover_placeholders": leftovers,
