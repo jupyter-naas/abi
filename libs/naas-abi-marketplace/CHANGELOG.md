@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.45.3 (2026-09-12)
+
+### Bug Fixes
+
+- **x_proxy**: Update search tweets publish and cache reader
+  ([`4f16a55`](https://github.com/jupyter-naas/abi/commit/4f16a551cf19da2c5a1c166f55730a3f0dff5c3e))
+
+
 ## v3.45.2 (2026-09-12)
 
 ### Bug Fixes
