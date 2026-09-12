@@ -1,69 +1,46 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Header } from '@/components/shell/header';
-import { DocumentsMenuBar } from '@/components/documents/documents-menu-bar';
-import { DocumentsStatusBar } from '@/components/documents/documents-status-bar';
+import { useEffect, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { OfficeCreateLoader } from '@/components/office/office-create-loader';
 import { officeCreateTemplateId } from '@/components/office/office-create';
-import { documentsApiErrorMessage, startNewDocument } from '@/lib/create-documents-project';
+import {
+  beginOfficeCreate,
+  failOfficeCreate,
+  setOfficeCreatePhase,
+  useOfficeCreateStore,
+} from '@/components/office/office-create-state';
 
 export default function NewDocumentsProjectPage() {
   const params = useParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
-  const [error, setError] = useState<string | null>(null);
-  const [phase, setPhase] = useState<'creating' | 'opening'>('creating');
   const started = useRef(false);
-
-  const begin = useCallback(
-    (templateId?: string) => {
-      if (!workspaceId) return;
-      setError(null);
-      setPhase('creating');
-      void startNewDocument(
-        workspaceId,
-        (href) => {
-          setPhase('opening');
-          router.replace(href);
-        },
-        templateId,
-      ).catch((e) => {
-        setError(documentsApiErrorMessage((e as Error).message, 'Could not create the document.'));
-      });
-    },
-    [workspaceId, router],
-  );
+  const phase = useOfficeCreateStore((s) => s.phase);
+  const error = useOfficeCreateStore((s) => s.error);
 
   useEffect(() => {
     if (!workspaceId || started.current) return;
     started.current = true;
-    begin(officeCreateTemplateId(searchParams));
-  }, [workspaceId, begin, searchParams]);
+    if (!useOfficeCreateStore.getState().kind) beginOfficeCreate('document');
+    const templateId = officeCreateTemplateId(
+      typeof window === 'undefined' ? null : new URLSearchParams(window.location.search),
+    );
+    void import('@/lib/create-documents-project').then(({ documentsApiErrorMessage, startNewDocument }) =>
+      startNewDocument(
+        workspaceId,
+        (href) => {
+          setOfficeCreatePhase('opening');
+          router.replace(href);
+        },
+        templateId,
+      ).catch((e) => {
+        failOfficeCreate(
+          documentsApiErrorMessage((e as Error).message, 'Could not create the document.'),
+        );
+      }),
+    );
+  }, [workspaceId, router]);
 
-  return (
-    <div className="flex h-full flex-col">
-      <Header
-        title="New document"
-        nav={
-          <DocumentsMenuBar
-            onNewPresentation={() => {
-              if (!error) return;
-              begin();
-            }}
-            newDisabled={!error}
-          />
-        }
-      />
-      {error && (
-        <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-600">
-          {error}
-        </div>
-      )}
-      <OfficeCreateLoader kind="document" phase={phase} error={error} />
-      <DocumentsStatusBar />
-    </div>
-  );
+  return <OfficeCreateLoader kind="document" phase={phase} error={error} />;
 }

@@ -18,6 +18,7 @@ describe('DocumentsSection sidebar views', () => {
     expect(src).toContain('data-testid="sections-sidebar-views"');
     expect(src).toContain('sections-sidebar-view-outline');
     expect(src).toContain('DocumentsOutline');
+    expect(src).toContain("pushOfficeCreate(router, 'document'");
   });
 
   it('does not treat a leftover selected slug as a loading outline', () => {

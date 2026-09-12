@@ -38,7 +38,7 @@ import {
   slidesApiErrorMessage,
 } from '@/lib/create-slides-project';
 import { OfficeCreateLoader } from '@/components/office/office-create-loader';
-import { officeCreateHref } from '@/components/office/office-create';
+import { pushOfficeCreate, useOfficeCreateStore } from '@/components/office/office-create-state';
 import { copyDeckToMyDrive } from '@/lib/slides-my-drive';
 import { authFetch } from '@/stores/auth';
 import {
@@ -206,7 +206,7 @@ export default function SlidesEditorPage() {
   const [manualEdit, setManualEdit] = useState(false);
   const [holdPreview, setHoldPreview] = useState(false);
   const [mutating, setMutating] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const creating = useOfficeCreateStore((s) => s.kind === 'deck');
   const previewRef = useRef<SlidesPreviewFrameHandle>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [previewHtml, setPreviewHtml] = useState('');
@@ -717,9 +717,7 @@ export default function SlidesEditorPage() {
   const menuBar = (
     <SlidesMenuBar
       onNewPresentation={() => {
-        if (!workspaceId || creating) return;
-        setCreating(true);
-        router.push(officeCreateHref('deck', workspaceId));
+        pushOfficeCreate(router, 'deck', workspaceId);
       }}
       newDisabled={creating}
       onCommit={() => void save()}

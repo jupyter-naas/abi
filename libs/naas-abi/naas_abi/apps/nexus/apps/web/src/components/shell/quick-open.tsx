@@ -21,6 +21,7 @@ import {
 } from '@/lib/quick-open';
 import { useAppsStore } from '@/stores/apps';
 import { useFilesStore } from '@/stores/files';
+import { beginOfficeCreate, officeCreateKindFromHref } from '@/components/office/office-create-state';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 
 export function QuickOpen() {
@@ -62,6 +63,7 @@ export function QuickOpen() {
   const canGraph = useFeature('graph');
   const canCode = useFeature('code');
   const canSlides = useFeature('slides');
+  const canDocuments = useFeature('documents');
   const canSettingsWorkspace = useFeature('settings.workspace');
 
   const featureOn: Record<string, boolean> = {
@@ -75,6 +77,7 @@ export function QuickOpen() {
     graph: canGraph,
     datasets: canDatasets,
     slides: canSlides,
+    documents: canDocuments,
     code: canCode,
     marketplace: canMarketplace,
     'settings.workspace': canSettingsWorkspace,
@@ -163,6 +166,7 @@ export function QuickOpen() {
       id: section.id,
       label: section.label,
       href: getWorkspacePath(currentWorkspaceId, section.href),
+      panel: section.panel,
     }));
     const chats = conversations
       .filter((c) => c.workspaceId === currentWorkspaceId && !c.archived)
@@ -208,6 +212,7 @@ export function QuickOpen() {
     canGraph,
     canCode,
     canSlides,
+    canDocuments,
     canSettingsWorkspace,
   ]);
 
@@ -267,6 +272,11 @@ export function QuickOpen() {
       }
       if (action.panel === null) setActivePanelSection(null);
       else if (action.panel) setActivePanelSection(action.panel as SidebarSection);
+      const createKind = officeCreateKindFromHref(action.href);
+      if (createKind && !beginOfficeCreate(createKind)) {
+        close();
+        return;
+      }
       router.push(action.href);
       close();
     },

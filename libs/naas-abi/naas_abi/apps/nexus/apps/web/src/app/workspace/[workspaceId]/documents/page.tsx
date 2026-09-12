@@ -9,7 +9,7 @@ import { invalidateSectionsCover } from '@/components/documents/documents-cover-
 import { DocumentsMenuBar } from '@/components/documents/documents-menu-bar';
 import { DocumentsStatusBar } from '@/components/documents/documents-status-bar';
 import { OfficeCreateLoader } from '@/components/office/office-create-loader';
-import { officeCreateHref } from '@/components/office/office-create';
+import { pushOfficeCreate, useOfficeCreateStore } from '@/components/office/office-create-state';
 import {
   openDocumentsAgentPane,
   documentsApiErrorMessage,
@@ -32,7 +32,7 @@ export default function SectionsIndexPage() {
   const [projects, setProjects] = useState<DocumentsProject[]>([]);
   const [templates, setTemplates] = useState<DocumentsSeedTemplate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
+  const creating = useOfficeCreateStore((s) => s.kind === 'document');
   const [error, setError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const setSelectedSlug = useDocumentsStore((s) => s.setSelectedSlug);
@@ -42,12 +42,9 @@ export default function SectionsIndexPage() {
 
   const onCreateFromTemplate = useCallback(
     (templateId?: string) => {
-      if (!workspaceId || creating) return;
-      setCreating(true);
-      setError(null);
-      router.push(officeCreateHref('document', workspaceId, templateId));
+      pushOfficeCreate(router, 'document', workspaceId, templateId);
     },
-    [workspaceId, creating, router],
+    [workspaceId, router],
   );
 
   const load = useCallback(

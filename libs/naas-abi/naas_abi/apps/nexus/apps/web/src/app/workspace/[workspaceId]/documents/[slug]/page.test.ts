@@ -17,5 +17,7 @@ describe('sections editor page', () => {
     expect(src).toContain('onExportHtml');
     expect(src).toContain("from '@/components/monaco/monaco-editor'");
     expect(src).not.toContain('@monaco-editor/react');
+    expect(src).toContain("pushOfficeCreate(router, 'document'");
+    expect(src).not.toContain('setCreating(true)');
   });
 });

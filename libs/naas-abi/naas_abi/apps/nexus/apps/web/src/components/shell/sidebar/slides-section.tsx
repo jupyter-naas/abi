@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { ChevronRight, FolderTree, LayoutGrid, Presentation } from 'lucide-react';
-import { officeCreateHref } from '@/components/office/office-create';
+import { pushOfficeCreate, useOfficeCreateStore } from '@/components/office/office-create-state';
 import {
   DEFAULT_SLIDES_TEMPLATE_ID,
   openSlidesAgentPane,
@@ -60,7 +60,7 @@ export function SlidesSection({
   const [rootExpanded, setRootExpanded] = useState(true);
   const [expandedDecks, setExpandedDecks] = useState<string[]>([]);
   const [expandedDirs, setExpandedDirs] = useState<string[]>([]);
-  const creating = pathname === `${slidesBase}/new`;
+  const creating = useOfficeCreateStore((s) => s.kind === 'deck');
   const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -232,11 +232,10 @@ export function SlidesSection({
 
   const createDeck = useCallback(
     (templateId: string) => {
-      if (!workspaceId || creating) return;
       setActionError(null);
-      router.push(officeCreateHref('deck', workspaceId, templateId));
+      pushOfficeCreate(router, 'deck', workspaceId, templateId);
     },
-    [workspaceId, creating, router],
+    [workspaceId, router],
   );
 
   const templateOptions: SidebarNewItemMenuOption[] = slidesTemplateMenuRows(templates).map(

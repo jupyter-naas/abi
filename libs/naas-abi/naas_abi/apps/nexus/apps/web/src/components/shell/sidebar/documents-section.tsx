@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { ChevronRight, FileText, FolderTree, List } from 'lucide-react';
-import { officeCreateHref } from '@/components/office/office-create';
+import { pushOfficeCreate, useOfficeCreateStore } from '@/components/office/office-create-state';
 import { openDocumentsAgentPane } from '@/lib/create-documents-project';
 import { partitionDocumentsProjects, patchDocumentsProject } from '@/lib/documents-project-actions';
 import '@/app/workspace/[workspaceId]/chat/components/chat-components.css';
@@ -58,7 +58,7 @@ export function DocumentsSection({
   const [rootExpanded, setRootExpanded] = useState(true);
   const [expandedDocuments, setExpandedDocuments] = useState<string[]>([]);
   const [expandedDirs, setExpandedDirs] = useState<string[]>([]);
-  const creating = pathname === `${sectionsBase}/new`;
+  const creating = useOfficeCreateStore((s) => s.kind === 'document');
   const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -230,11 +230,10 @@ export function DocumentsSection({
 
   const createDocument = useCallback(
     (templateId?: string) => {
-      if (!workspaceId || creating) return;
       setActionError(null);
-      router.push(officeCreateHref('document', workspaceId, templateId));
+      pushOfficeCreate(router, 'document', workspaceId, templateId);
     },
-    [workspaceId, creating, router],
+    [workspaceId, router],
   );
 
   const templateOptions: SidebarNewItemMenuOption[] = sectionsTemplateMenuRows(templates).map(

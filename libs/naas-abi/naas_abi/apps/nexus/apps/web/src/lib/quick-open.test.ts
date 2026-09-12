@@ -6,6 +6,7 @@ import {
   filterQuickOpenItems,
   groupQuickOpenItems,
   QUICK_OPEN_EVENT,
+  QUICK_OPEN_SECTIONS,
   requestQuickOpen,
   scoreQuickOpen,
   type QuickOpenItem,
@@ -136,6 +137,20 @@ describe('buildQuickOpenItems', () => {
       href: '/workspace/ws-1/apps?open=acme-portal',
       panel: 'apps',
     });
+  });
+});
+
+describe('QUICK_OPEN_SECTIONS', () => {
+  it('lists Documents and the two office create actions', () => {
+    const ids = QUICK_OPEN_SECTIONS.map((row) => row.id);
+    expect(ids).toContain('documents');
+    expect(ids).toContain('new-document');
+    expect(ids).toContain('new-presentation');
+    expect(QUICK_OPEN_SECTIONS.find((row) => row.id === 'new-document')?.href).toBe(
+      '/documents/new',
+    );
+    expect(QUICK_OPEN_SECTIONS.find((row) => row.id === 'new-document')?.panel).toBe('documents');
+    expect(QUICK_OPEN_SECTIONS.find((row) => row.id === 'new-presentation')?.panel).toBe('slides');
   });
 });
 

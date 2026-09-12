@@ -20,6 +20,8 @@ export type QuickOpenSection = {
   label: string;
   href: string;
   feature?: string;
+  /** Sidebar section to open. Defaults to `id`, or none for Home. */
+  panel?: string | null;
 };
 
 /** Surfaces the palette can jump to. Hrefs are workspace-relative. */
@@ -34,6 +36,21 @@ export const QUICK_OPEN_SECTIONS: readonly QuickOpenSection[] = [
   { id: 'graph', label: 'Knowledge Graph', href: '/graph/network', feature: 'graph' },
   { id: 'datasets', label: 'Datasets', href: '/datasets', feature: 'datasets' },
   { id: 'slides', label: 'Slides', href: '/slides', feature: 'slides' },
+  { id: 'documents', label: 'Documents', href: '/documents', feature: 'documents' },
+  {
+    id: 'new-document',
+    label: 'New document',
+    href: '/documents/new',
+    feature: 'documents',
+    panel: 'documents',
+  },
+  {
+    id: 'new-presentation',
+    label: 'New presentation',
+    href: '/slides/new',
+    feature: 'slides',
+    panel: 'slides',
+  },
   { id: 'code', label: 'Code', href: '/code', feature: 'code' },
   { id: 'marketplace', label: 'Marketplace', href: '/marketplace', feature: 'marketplace' },
   { id: 'settings', label: 'Settings', href: '/settings', feature: 'settings.workspace' },
@@ -101,7 +118,7 @@ export function groupQuickOpenItems(
 export function buildQuickOpenItems(input: {
   workspaceId: string;
   workspaces: { id: string; name: string }[];
-  sections: { id: string; label: string; href: string }[];
+  sections: { id: string; label: string; href: string; panel?: string | null }[];
   apps: { id: string; name: string }[];
   chats: { id: string; title: string }[];
   files: { source: string; path: string; name: string; type: 'file' | 'folder' }[];
@@ -113,7 +130,11 @@ export function buildQuickOpenItems(input: {
       id: `nav:${section.id}`,
       group: 'navigate',
       label: section.label,
-      action: { kind: 'href', href: section.href, panel: section.id === 'home' ? null : section.id },
+      action: {
+        kind: 'href',
+        href: section.href,
+        panel: section.panel !== undefined ? section.panel : section.id === 'home' ? null : section.id,
+      },
     });
   }
 

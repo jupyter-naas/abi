@@ -9,7 +9,7 @@ import { invalidateSlidesCover } from '@/components/slides/slides-cover-thumb';
 import { SlidesMenuBar } from '@/components/slides/slides-menu-bar';
 import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
 import { OfficeCreateLoader } from '@/components/office/office-create-loader';
-import { officeCreateHref } from '@/components/office/office-create';
+import { pushOfficeCreate, useOfficeCreateStore } from '@/components/office/office-create-state';
 import {
   openSlidesAgentPane,
   slidesApiErrorMessage,
@@ -32,7 +32,7 @@ export default function SlidesIndexPage() {
   const [projects, setProjects] = useState<SlidesProject[]>([]);
   const [templates, setTemplates] = useState<SlidesSeedTemplate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
+  const creating = useOfficeCreateStore((s) => s.kind === 'deck');
   const [error, setError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const setSelectedSlug = useSlidesStore((s) => s.setSelectedSlug);
@@ -42,12 +42,9 @@ export default function SlidesIndexPage() {
 
   const onCreateFromTemplate = useCallback(
     (templateId?: string) => {
-      if (!workspaceId || creating) return;
-      setCreating(true);
-      setError(null);
-      router.push(officeCreateHref('deck', workspaceId, templateId));
+      pushOfficeCreate(router, 'deck', workspaceId, templateId);
     },
-    [workspaceId, creating, router],
+    [workspaceId, router],
   );
 
   const load = useCallback(

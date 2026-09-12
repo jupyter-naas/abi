@@ -40,7 +40,7 @@ import {
   documentsApiErrorMessage,
 } from '@/lib/create-documents-project';
 import { OfficeCreateLoader } from '@/components/office/office-create-loader';
-import { officeCreateHref } from '@/components/office/office-create';
+import { pushOfficeCreate, useOfficeCreateStore } from '@/components/office/office-create-state';
 import { copyDocumentToMyDrive } from '@/lib/documents-my-drive';
 import { authFetch } from '@/stores/auth';
 import {
@@ -208,7 +208,7 @@ export default function SectionsEditorPage() {
   const [manualEdit, setManualEdit] = useState(false);
   const [holdPreview, setHoldPreview] = useState(false);
   const [mutating, setMutating] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const creating = useOfficeCreateStore((s) => s.kind === 'document');
   const previewRef = useRef<DocumentsPreviewFrameHandle>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [previewHtml, setPreviewHtml] = useState('');
@@ -743,9 +743,7 @@ export default function SectionsEditorPage() {
   const menuBar = (
     <DocumentsMenuBar
       onNewPresentation={() => {
-        if (!workspaceId || creating) return;
-        setCreating(true);
-        router.push(officeCreateHref('document', workspaceId));
+        pushOfficeCreate(router, 'document', workspaceId);
       }}
       newDisabled={creating}
       onCommit={() => void save()}
