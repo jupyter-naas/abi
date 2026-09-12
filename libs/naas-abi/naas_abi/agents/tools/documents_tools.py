@@ -1425,8 +1425,11 @@ def _run_section_mutation(
             result["section_count"] = mutated["section_count"]
             result["ids"] = mutated["ids"]
             leftovers = mutated.get("leftover_placeholders")
-            if leftovers is not None:
-                result["leftover_placeholders"] = leftovers
+            result["leftover_placeholders"] = leftovers or []
+            if mutated.get("incomplete"):
+                result["incomplete"] = True
+            if mutated.get("warning"):
+                result["warning"] = mutated["warning"]
         result.pop("html", None)
         result.update(_open_document_note(resolved))
         return result
@@ -2398,7 +2401,8 @@ def documents_tools() -> list[BaseTool]:
         replace_class for specimen blocks (palette). Insert a heading only
         when the brief needs a section the seed does not have. Writes land
         inside .doc-body. Do not append after the footer. If
-        leftover_placeholders is not empty, replace those slots this turn.
+        leftover_placeholders is not empty, or incomplete is true, replace
+        those slots this turn. Do not stop.
 
         Each item needs type. Supported: insert_text, insert_paragraph,
         insert_heading, insert_page_break, delete_range, replace_text,

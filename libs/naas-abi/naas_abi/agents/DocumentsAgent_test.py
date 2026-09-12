@@ -51,6 +51,7 @@ def test_sections_agent_prompt_names_the_document_after_its_topic() -> None:
     assert "Do not leave seed placeholder copy" in prompt
     assert "Do not append after the footer" in prompt
     assert "leftover_placeholders" in prompt
+    assert "stop only if leftover_placeholders is empty" in prompt.lower()
 
 
 def test_sections_agent_default_model_is_the_policy_fallback() -> None:

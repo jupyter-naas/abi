@@ -40,6 +40,14 @@ _PALETTE_CLASS_RE = re.compile(
     r"<[a-z][a-z0-9]*\b[^>]*\bclass\s*=\s*[\"'][^\"']*\bpalette\b[^\"']*[\"']",
     re.IGNORECASE,
 )
+_SEED_HEADING_RE = re.compile(
+    r"<h2\b[^>]*>\s*(Discussion|Findings)\s*</h2>",
+    re.IGNORECASE,
+)
+_SWATCH_HEX_RE = re.compile(
+    r"#(?:464B4B|0072CE|171C8F|4AA7B7|27B093|5D93CD|B1B3B3|F4F4F4)",
+    re.IGNORECASE,
+)
 _SECTION_RE = re.compile(r"<section\b[^>]*>.*?</section>", re.IGNORECASE | re.DOTALL)
 _VOID_TAGS = frozenset(
     {
@@ -206,7 +214,27 @@ def leftover_placeholders(html: str) -> list[str]:
     found = [phrase for phrase in SEED_PLACEHOLDER_PHRASES if phrase in html]
     if _PALETTE_CLASS_RE.search(html):
         found.append("colour palette")
+    if _SWATCH_HEX_RE.search(html) and "colour palette" not in found:
+        found.append("swatch hex")
+    for match in _SEED_HEADING_RE.finditer(html):
+        title = match.group(1).strip()
+        if title not in found:
+            found.append(title)
     return found
+
+
+def leftover_write_note(html: str) -> dict[str, Any]:
+    """Tool-result fields so a fill turn cannot treat leftovers as done."""
+    leftovers = leftover_placeholders(html)
+    note: dict[str, Any] = {"leftover_placeholders": leftovers}
+    if leftovers:
+        note["incomplete"] = True
+        note["warning"] = (
+            "INCOMPLETE: seed placeholder copy remains: "
+            + ", ".join(leftovers)
+            + ". Replace those slots with replace_text or replace_class now. Do not stop."
+        )
+    return note
 
 
 def _relocate_stray_in_section(section: str) -> str:
@@ -502,7 +530,6 @@ def apply_document_commands(
     outline = heading_outline(next_html)
     if heading_index >= len(outline):
         heading_index = max(0, len(outline) - 1)
-    leftovers = leftover_placeholders(next_html)
     return {
         "ok": True,
         "html": next_html,
@@ -514,5 +541,5 @@ def apply_document_commands(
         "section_count": len(outline),
         "ids": [None] * len(outline),
         "sections": outline,
-        "leftover_placeholders": leftovers,
+        **leftover_write_note(next_html),
     }

@@ -80,8 +80,8 @@ When the user asks for a memo or report on an untitled seed:
 3. Writes go into `.doc-body` via `apply_document_commands` /
    `replace_text` / `replace_class` / heading plus paragraph. Never
    concatenate HTML after `</footer>`.
-4. If `leftover_placeholders` is not empty, replace those slots. Do
-   not stop while instructional seed copy remains.
+4. If `leftover_placeholders` is not empty, or `incomplete` is true,
+   replace those slots. Do not stop while instructional seed copy remains.
 
 Fill the open template. Do not leave seed placeholder copy. Do not
 append after the footer.

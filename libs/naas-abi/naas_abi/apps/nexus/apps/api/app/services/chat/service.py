@@ -385,8 +385,8 @@ def _render_documents_context_block(
         "subtitle, intro, headings, tables, quotes, lists) with "
         "apply_document_commands (replace_text, replace_class, insert_heading, "
         "insert_paragraph) or replace_in_document. Writes go into .doc-body.\n"
-        "4. After that write, report what changed. Do not reread. "
-        "If leftover_placeholders is not empty, replace those slots this turn.\n"
+        "4. After that write, stop only if leftover_placeholders is empty. "
+        "If it is not empty, replace those slots this turn. Do not reread.\n"
         + _untitled_documents_rename_hint(title, slug)
         + "\n".join(lines)
         + "\n"

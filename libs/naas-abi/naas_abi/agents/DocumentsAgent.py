@@ -56,7 +56,7 @@ DOCUMENTS_GUIDELINES = """- When the user asks for a document, report, or articl
 - Prefer document verbs for prose: apply_document_commands, insert_heading, insert_paragraph, insert_page_break, apply_paragraph_style. Positions are heading indexes. They return {ok, heading_index, heading_count} and never HTML.
 - Leftover list_document_sections, read_document_section, write_document_section, write_document_sections, insert_section, delete_section, duplicate_section, and reorder_sections are slide-shaped and are not bound. Do not look for them.
 - The system prompt carries selected_section_index (0-based) when a document is open: the heading the user is looking at. "Here" or "this heading" means that index. Never ask which heading.
-- After a successful command batch, stop and report what changed. Do not reread to verify.
+- After a successful command batch, stop only if leftover_placeholders is empty. If it is not empty, or incomplete is true, replace those slots this turn. Do not reread to verify.
 - Avoid read_document with include_assets=true. Default reads return an outline (titles, counts), not the HTML."""
 
 

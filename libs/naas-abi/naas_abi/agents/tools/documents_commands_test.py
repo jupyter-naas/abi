@@ -201,6 +201,17 @@ def test_leftover_placeholders_lists_seed_copy() -> None:
     assert "Replace with the working premise" in found
     assert "Document title, industry or service line" in found
     assert "Shaded" in found
+    assert "Findings" in found
+
+
+def test_leftover_write_note_marks_incomplete() -> None:
+    from naas_abi.agents.tools.documents_commands import leftover_write_note
+
+    note = leftover_write_note(_SEEDED_PAGE)
+    assert note["incomplete"] is True
+    assert note["leftover_placeholders"]
+    assert "INCOMPLETE" in note["warning"]
+    assert leftover_write_note("<h1>Board memo</h1>")["leftover_placeholders"] == []
 
 
 def test_last_rename_document_title_reads_the_batch() -> None:
