@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.22.1 (2026-09-12)
+
+### Bug Fixes
+
+- **x_proxy**: Add type checking and improve orchestration scheduling
+  ([`74067df`](https://github.com/jupyter-naas/abi/commit/74067df90cfc589fb095475ceffbc3de6dbc35a0))
+
+
 ## v2.22.0 (2026-09-11)
 
 ### Features
