@@ -219,7 +219,8 @@ def _untitled_documents_rename_hint(title: str, slug: str) -> str:
         return ""
     return (
         "If the open document is still Untitled, call rename_document first "
-        "with a short topic title, then write.\n"
+        "with a short topic title, then fill the open template. "
+        "Do not leave seed placeholder copy. Do not append after the footer.\n"
     )
 
 
@@ -379,9 +380,13 @@ def _render_documents_context_block(
         "Plan, then write. For news, current events, or factual briefs:\n"
         f"1. Call web_search once first (at most 4). Include {year}. Then write.\n"
         "2. Do not list leftover sections. Do not read or write leftover <section> blocks.\n"
-        "3. Write 2 to 4 headings plus paragraphs with apply_document_commands "
-        "(or insert_heading and insert_paragraph), then stop.\n"
-        "4. After that write, report what changed. Do not reread. No lorem or template filler.\n"
+        "3. Fill the open template. Do not leave seed placeholder copy. "
+        "Do not append after the footer. Adapt every seed slot (cover H1, "
+        "subtitle, intro, headings, tables, quotes, lists) with "
+        "apply_document_commands (replace_text, replace_class, insert_heading, "
+        "insert_paragraph) or replace_in_document. Writes go into .doc-body.\n"
+        "4. After that write, report what changed. Do not reread. "
+        "If leftover_placeholders is not empty, replace those slots this turn.\n"
         + _untitled_documents_rename_hint(title, slug)
         + "\n".join(lines)
         + "\n"

@@ -78,12 +78,13 @@ MAX_DOCUMENTS_SEARCHES = 4
 MAX_DOCUMENTS_SECTION_READS = 3
 _SEARCH_BUDGET_MESSAGE = (
     "Search budget reached (4 queries). Do not call web_search or web_fetch "
-    "again. Write with apply_document_commands (2 to 4 headings plus "
-    "paragraphs), then stop. Do not list or read leftover sections."
+    "again. Fill the open template with apply_document_commands. "
+    "Do not leave seed placeholder copy. Do not append after the footer."
 )
 _LIST_ONCE_MESSAGE = (
     "list_document_sections already ran this turn. Use that outline. "
-    "Do not list again. Write with apply_document_commands, then stop."
+    "Do not list again. Fill the open template with apply_document_commands. "
+    "Do not append after the footer."
 )
 _SECTION_READ_BUDGET_MESSAGE = (
     f"read_document_section budget reached ({MAX_DOCUMENTS_SECTION_READS} sections "

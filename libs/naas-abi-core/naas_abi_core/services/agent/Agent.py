@@ -174,8 +174,8 @@ def _friendly_model_invoke_error(exc: BaseException) -> str:
         if documents_turn_active():
             return (
                 "The model timed out on this step. Use apply_documents_template "
-                "for a theme or template, or apply_document_commands for 2 to 4 "
-                "headings. Do not read_file document.html."
+                "for a theme or template, or apply_document_commands to fill "
+                "the open template. Do not read_file document.html."
             )
         if slides_turn_active():
             return (

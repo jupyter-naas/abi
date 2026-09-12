@@ -50,13 +50,41 @@ The first error aborts the batch (same idea as Docs `batchUpdate`).
 | `insert_page_break` | Insert a hard page break (same section) | Docs `insertPageBreak`; ODF `fo:break-before=page`; Word `w:br w:type="page"`; Pandoc pagebreak |
 | `delete_range` | Delete a heading block (that heading through the next) | Docs `deleteContentRange` |
 | `replace_text` | Replace a substring | Docs `replaceAllText` |
+| `replace_class` | Replace or delete the first element with that class | fill a seed slot (palette, note) |
 | `update_paragraph_style` | Retag a heading (`heading1`/`heading2`/`heading3`/`paragraph`) | Docs `updateParagraphStyle` |
 | `update_title` | Change the tab `<title>` and cover H1 only | heading-only retitle |
-| `rename_document` | Sidebar display name plus tab `<title>` and cover H1 | "rename this document" |
+| `rename_document` | Sidebar display name plus tab `<title>`, cover H1, and footer titles | "rename this document" |
 
 Positioning is a heading index (`after_heading` / `heading_index`), not a
 UTF-16 offset. That matches ODF "insert relative to a paragraph" more
 than Docs character indexes.
+
+Inserts land inside the `.doc-body` that owns the heading. They never
+concatenate markup after `</footer>`. A persist pass moves stray nodes
+that already landed after a footer back into that page's `.doc-body`.
+
+## Fill the open template
+
+When the user asks for a memo or report on an untitled seed:
+
+1. `rename_document` from the brief.
+2. Adapt every seed slot. Do not append a new article after the seed.
+   - Cover H1, kicker or subtitle, intro paragraphs
+   - Official heading styles
+   - Tables: replace headers and rows with topic data (no
+     "Assumption / Replace with…")
+   - Quotes, lists, discussion blocks
+   - Colour swatches stay only as brand specimens. For a memo, replace
+     the palette (`replace_class` on `palette`) with a real table or
+     delete it
+3. Writes go into `.doc-body` via `apply_document_commands` /
+   `replace_text` / `replace_class` / heading plus paragraph. Never
+   concatenate HTML after `</footer>`.
+4. If `leftover_placeholders` is not empty, replace those slots. Do
+   not stop while instructional seed copy remains.
+
+Fill the open template. Do not leave seed placeholder copy. Do not
+append after the footer.
 
 ## Rename vs heading
 

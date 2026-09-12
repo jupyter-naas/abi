@@ -1269,6 +1269,8 @@ async def test_build_abi_injection_preamble_includes_open_document() -> None:
     assert "Do not ask which document" in preamble
     assert "Plan, then write" in preamble
     assert "apply_document_commands" in preamble
+    assert "Fill the open template" in preamble
+    assert "Do not append after the footer" in preamble
     assert "list_document_sections" not in preamble
     assert "write_document_sections" not in preamble
     assert "web_search" in preamble

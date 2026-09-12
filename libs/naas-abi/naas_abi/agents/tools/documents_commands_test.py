@@ -6,6 +6,9 @@ from naas_abi.agents.tools.documents_commands import (
     insert_page_break,
     insert_paragraph,
     last_rename_document_title,
+    leftover_placeholders,
+    normalize_document_flow,
+    replace_class,
     update_document_title,
 )
 
@@ -121,6 +124,83 @@ def test_update_title_command_is_heading_only_html() -> None:
     assert result["ok"] is True
     assert "<h1>Cover only</h1>" in result["html"]
     assert last_rename_document_title([{"type": "update_title", "title": "Cover only"}]) == ""
+
+
+_SEEDED_PAGE = """<!doctype html><html><head><title>Document title</title></head><body>
+<main class="document">
+<section class="page tables" data-layout="tables">
+  <div class="doc-body">
+    <h1>Document title</h1>
+    <h2>Findings</h2>
+    <h3>Shaded</h3>
+    <table class="fm-shaded">
+      <tr><td>Assumption</td><td>Replace with the working premise.</td></tr>
+    </table>
+  </div>
+  <footer class="doc-footer">
+    <span class="doc-footer-title">Document title, industry or service line</span>
+  </footer>
+</section>
+</main></body></html>"""
+
+
+def test_insert_after_last_heading_stays_inside_doc_body() -> None:
+    html = insert_heading(_SEEDED_PAGE, title="Synthese", level=1, after_heading=-1)
+    body_close = html.lower().rfind("</div>")
+    footer = html.lower().index("<footer")
+    synthese = html.index("Synthese")
+    assert synthese < body_close < footer
+    assert html.lower().index("</footer>") < html.lower().index("</section>")
+    assert "Synthese" in html[html.index("doc-body") : footer]
+
+
+def test_normalize_moves_prose_from_after_footer_into_doc_body() -> None:
+    broken = _SEEDED_PAGE.replace(
+        "</footer>\n</section>",
+        "</footer>\n<h1>Synthese de la semaine</h1>\n<p>Board note.</p>\n</section>",
+    )
+    assert broken.lower().index("</footer>") < broken.index("Synthese de la semaine")
+    fixed = normalize_document_flow(broken)
+    footer = fixed.lower().index("<footer")
+    assert fixed.index("Synthese de la semaine") < footer
+    assert "Synthese de la semaine" not in fixed[fixed.lower().index("</footer") :]
+
+
+def test_apply_commands_does_not_append_after_footer() -> None:
+    result = apply_document_commands(
+        _SEEDED_PAGE,
+        [
+            {"type": "rename_document", "title": "Board memo"},
+            {"type": "insert_heading", "after_heading": -1, "title": "Synthese", "level": 2},
+            {"type": "insert_paragraph", "after_heading": -1, "text": "Three signals."},
+        ],
+    )
+    assert result["ok"] is True
+    html = result["html"]
+    assert "<h1>Board memo</h1>" in html or ">Board memo</h1>" in html
+    assert "Board memo" in html
+    footer = html.lower().index("<footer")
+    assert html.index("Synthese") < footer
+    assert html.index("Three signals.") < footer
+    assert "Board memo" in html[html.index("doc-footer-title") :]
+
+
+def test_replace_class_removes_palette() -> None:
+    html = (
+        '<div class="doc-body"><div class="palette" aria-label="palette">'
+        "<div class=\"swatch\">#464B4B</div></div><p>Keep</p></div>"
+    )
+    updated = replace_class(html, "palette", "")
+    assert isinstance(updated, str)
+    assert "palette" not in updated
+    assert "Keep" in updated
+
+
+def test_leftover_placeholders_lists_seed_copy() -> None:
+    found = leftover_placeholders(_SEEDED_PAGE)
+    assert "Replace with the working premise" in found
+    assert "Document title, industry or service line" in found
+    assert "Shaded" in found
 
 
 def test_last_rename_document_title_reads_the_batch() -> None:

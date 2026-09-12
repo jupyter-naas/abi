@@ -12,6 +12,7 @@ export type DocumentCommand = {
     | 'insert_text'
     | 'delete_range'
     | 'replace_text'
+    | 'replace_class'
     | 'update_paragraph_style'
     | 'update_title'
     | 'rename_document';
@@ -23,6 +24,8 @@ export type DocumentCommand = {
   style?: string;
   find?: string;
   replace?: string;
+  class_name?: string;
+  html?: string;
 };
 
 export const PAGE_BREAK_HTML = '<div class="page-break" data-nexus-page-break></div>';
@@ -59,7 +62,9 @@ const H2_RE = /<h2\b[^>]*>([\s\S]*?)<\/h2>/i;
 const HEADING_RE = /<h([1-3])\b[^>]*>([\s\S]*?)<\/h\1>/gi;
 const HEADING_TAG_RE = /<h([1-3])\b[^>]*>[\s\S]*?<\/h\1>/gi;
 const BLOCK_BOUNDARY_RE =
-  /<h[1-3]\b|<(?:div\b[^>]*(?:data-nexus-page-break|class=["'][^"']*\bpage-break))|<\/section>|<\/main>/i;
+  /<h[1-3]\b|<(?:div\b[^>]*(?:data-nexus-page-break|class=["'][^"']*\bpage-break))|<footer\b|<\/section>|<\/main>/i;
+const DOC_BODY_OPEN_RE =
+  /<div\b[^>]*\bclass\s*=\s*["'][^"']*\bdoc-body\b[^"']*["'][^>]*>/gi;
 const DIVIDER_TITLE_RE =
   /<div\b[^>]*class=["'][^"']*\bdivider-title\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/i;
 const TAG_RE = /<[^>]+>/g;
@@ -143,7 +148,71 @@ export function parseDocumentsOutline(html: string): SectionOutlineItem[] {
   return parseDocumentsSectionOutline(html);
 }
 
+function matchingCloseDiv(html: string, innerStart: number): number | null {
+  let depth = 1;
+  let pos = innerStart;
+  const openRe = /<div\b/gi;
+  const closeRe = /<\/div>/gi;
+  while (pos < html.length) {
+    openRe.lastIndex = pos;
+    closeRe.lastIndex = pos;
+    const opened = openRe.exec(html);
+    const closed = closeRe.exec(html);
+    if (!closed) return null;
+    if (opened && opened.index < closed.index) {
+      depth += 1;
+      pos = opened.index + opened[0].length;
+      continue;
+    }
+    depth -= 1;
+    if (depth === 0) return closed.index;
+    pos = closed.index + closed[0].length;
+  }
+  return null;
+}
+
+function docBodyRanges(html: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  DOC_BODY_OPEN_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = DOC_BODY_OPEN_RE.exec(html))) {
+    const close = matchingCloseDiv(html, match.index + match[0].length);
+    if (close != null) ranges.push([match.index + match[0].length, close]);
+  }
+  return ranges;
+}
+
+function clampInsertIntoDocBody(html: string, at: number): number {
+  const bodies = docBodyRanges(html);
+  if (bodies.length) {
+    for (const [start, close] of bodies) {
+      if (start <= at && at <= close) return at;
+    }
+    let chosen = bodies[0];
+    for (const [start, close] of bodies) {
+      if (start <= at) chosen = [start, close];
+    }
+    return chosen[1];
+  }
+  const footerAt = html.slice(0, at).toLowerCase().lastIndexOf('<footer');
+  if (footerAt >= 0) return footerAt;
+  return at;
+}
+
+function insertAt(html: string, at: number, markup: string): string {
+  const injected = markup.endsWith('\n') ? markup : `${markup}\n`;
+  return `${html.slice(0, at)}\n${injected}${html.slice(at)}`;
+}
+
 function insertBeforeDocumentClose(html: string, markup: string): string {
+  const bodies = docBodyRanges(html);
+  if (bodies.length) {
+    return insertAt(html, bodies[bodies.length - 1][1], markup);
+  }
+  const footer = html.toLowerCase().lastIndexOf('<footer');
+  if (footer >= 0) {
+    return insertAt(html, footer, markup);
+  }
   const close = html.toLowerCase().lastIndexOf('</section>');
   if (close >= 0) {
     return `${html.slice(0, close)}${markup}\n${html.slice(close)}`;
@@ -172,9 +241,11 @@ export function insertMarkupAfterHeadingBlock(
   const start = ends[idx];
   const rest = html.slice(start);
   const boundary = BLOCK_BOUNDARY_RE.exec(rest);
-  const at = start + (boundary ? boundary.index : rest.length);
-  const injected = markup.endsWith('\n') ? markup : `${markup}\n`;
-  return `${html.slice(0, at)}\n${injected}${html.slice(at)}`;
+  const at = clampInsertIntoDocBody(
+    html,
+    start + (boundary ? boundary.index : rest.length),
+  );
+  return insertAt(html, at, markup);
 }
 
 export function insertPageBreakHtml(html: string, afterHeadingIndex: number): string {

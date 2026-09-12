@@ -47,6 +47,10 @@ def test_sections_agent_prompt_names_the_document_after_its_topic() -> None:
     assert "call rename_document first" in lowered
     assert "update_title" in prompt
     assert "change the heading" in lowered
+    assert "Fill the open template" in prompt
+    assert "Do not leave seed placeholder copy" in prompt
+    assert "Do not append after the footer" in prompt
+    assert "leftover_placeholders" in prompt
 
 
 def test_sections_agent_default_model_is_the_policy_fallback() -> None:

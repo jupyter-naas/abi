@@ -1959,16 +1959,19 @@ async def put_document(
             email=author_email,
             username=username,
         )
+        from naas_abi.agents.tools.documents_commands import normalize_document_flow
+
+        html = normalize_document_flow(body.html)
         sidecar_ok = _write_document_via_sidecar(
             sidecar_base,
             sidecar_secret,
             document_path=paths["document_path"],
-            html=body.html,
+            html=html,
         )
         commit = sc.upsert_file(
             repo_id=repo_id,
             path=paths["document_path"],
-            content=body.html,
+            content=html,
             message=_conventional_message(body.message),
             branch=paths["branch"],
             author_name=author_name,
@@ -2000,7 +2003,7 @@ async def put_document(
         return DocumentResponse(
             slug=slug,
             path=paths["document_path"],
-            html=body.html,
+            html=html,
             commit_sha=commit.sha or None,
             source="sidecar" if sidecar_ok else "forgejo",
         )
@@ -2048,6 +2051,9 @@ def _save_live_document_html(
     sidecar_base: str | None,
     sidecar_secret: str | None,
 ) -> tuple[str | None, str]:
+    from naas_abi.agents.tools.documents_commands import normalize_document_flow
+
+    html = normalize_document_flow(html)
     sc.ensure_user(
         external_id=current_user.id,
         email=author_email,
@@ -3068,6 +3074,8 @@ class DocumentCommandItem(BaseModel):
     style: str = Field(default="", max_length=32)
     find: str = Field(default="", max_length=8_000)
     replace: str = Field(default="", max_length=8_000)
+    class_name: str = Field(default="", max_length=64)
+    html: str = Field(default="", max_length=20_000)
 
 
 class DocumentCommandsRequest(BaseModel):

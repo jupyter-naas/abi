@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   clampSectionIndex,
+  insertHeadingHtml,
   insertPageBreakHtml,
   parseDocumentsHeadingOutline,
   parseDocumentsOutline,
@@ -30,6 +31,17 @@ describe('parseDocumentsOutline', () => {
     ]);
     expect(parseDocumentsSectionOutline(SAMPLE)).toHaveLength(3);
     expect(parseDocumentsHeadingOutline(SAMPLE)).toHaveLength(2);
+  });
+
+  it('inserts a heading inside doc-body, not after the footer', () => {
+    const seeded = `<main class="document"><section class="page">
+<div class="doc-body"><h2>Findings</h2><h3>Shaded</h3></div>
+<footer class="doc-footer"><span class="doc-footer-title">Document title, industry or service line</span></footer>
+</section></main>`;
+    const next = insertHeadingHtml(seeded, 1, 'Synthese');
+    const footerAt = next.toLowerCase().indexOf('<footer');
+    expect(next.indexOf('Synthese')).toBeGreaterThan(-1);
+    expect(next.indexOf('Synthese')).toBeLessThan(footerAt);
   });
 
   it('inserts a page-break after a heading block', () => {

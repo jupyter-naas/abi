@@ -64,7 +64,8 @@ def _sanitize_workspace_read(path: str, result: dict[str, Any]) -> dict[str, Any
         out["warning"] = (
             "This is a documents file. Call apply_documents_template for a "
             "theme or template, or apply_document_commands / replace_in_document "
-            "to edit copy. Do not read_file document.html."
+            "to fill the open template. Do not leave seed placeholder copy. "
+            "Do not append after the footer. Do not read_file document.html."
         )
         return out
     redacted, n_assets = _DATA_URL_RE.subn(_REDACTED_DATA_URL, content)

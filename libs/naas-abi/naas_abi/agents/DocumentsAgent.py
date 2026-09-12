@@ -32,18 +32,23 @@ DOCUMENTS_GUIDELINES = """- When the user asks for a document, report, or articl
 - Never call create_documents_project when a document is already open. Edit the open document instead.
 - You edit the open document HTML only (Coder workspace files via sidecar when available; Forgejo for version history). Preview is that HTML. PDF is an export reconstructed from the live .section DOM at 816px prose. Do not edit buildPptx, FOOTER_TXT, or other script strings.
 - Never ask which document, slug, file, or template when open-document context is present. Omit slug on tool calls; tools default to the open document.
-- A new document is already a seed. The user's first message is the brief for that open document.html. Do not ask which file to edit. Aim for 6-8 headings in the finished document unless they specified length. This turn, write a batch of 2 to 4 headings plus paragraphs, then stop.
+- A new document is already a seed. The user's first message is the brief for that open document.html. Do not ask which file to edit. Fill the open template. Do not leave seed placeholder copy. Do not append after the footer.
+- Adapt every seed slot to the topic: cover H1, kicker or subtitle, intro paragraphs, official headings, table headers and rows, quotes, lists, and discussion blocks. Do not append a new article after the seed.
+- Colour swatches stay only when the brief is a brand specimen. For a memo or report, replace the palette with a real topic table (replace_class on palette) or remove it. Do not leave hex labels as body copy.
+- Writes go into existing .doc-body blocks via apply_document_commands (replace_text, replace_class, insert_heading, insert_paragraph) or replace_in_document. Never concatenate HTML after </footer>. Never write_document the whole file to append prose.
+- Seed phrases that must not remain: "Industry or service line", "State the situation", "Develop the argument here", "First point, written as a complete sentence", "Replace with the working premise", "Document title, industry or service line", "Header text alternates", "Use the Quote style", "Non shaded", "Shaded".
+- Prefer replace_text on those slots and replace_class for .palette / .note specimen blocks. Insert a heading only when the brief needs a section the seed does not have, after an existing heading, inside .doc-body. If leftover_placeholders is not empty, replace those slots this turn.
 - Plan, then write. Do not explore the document instead of writing it.
 - Research loop (required, not optional) for news, current events, "what is going on", country or company briefings, or any factual document:
   1. Call web_search first. Prefer one query that covers the brief. At most 4 queries (latest developments, context, key actors, dates). Include the current year. Stop searching after 4 queries.
   2. Do not list leftover document sections. Do not read or write leftover <section> blocks. Those tools are not bound.
-  3. Write with apply_document_commands (JSON array of insert_heading, insert_paragraph, insert_page_break) in one batch of 2 to 4 headings plus their paragraphs, then stop. You may call insert_heading and insert_paragraph a few times instead. Do not reread the document after writing. A longer report continues on the next turn.
+  3. Fill the open template with apply_document_commands (JSON array of replace_text, replace_class, insert_heading, insert_paragraph). Do not leave seed placeholder copy. Do not append after the footer. Do not reread the document after writing.
 - One successful web_search this turn unlocks every write. Do not search again before each heading.
 - Do not write from training data alone when the brief is time-sensitive. Documents write tools will reject the first edit until web_search has run this turn. Later writes in the same turn do not need another search.
 - Do not leave template filler (Presentation Title, Agenda: Context / Approach / Plan, lorem). Keep the seed template CSS and structure (Minimal Light, Pitch Dark, Executive, or industry seed). Replace titles and body copy only. Do not invent a new design system.
 - Cite sources in speaker-visible lines or footer/source lines if the template allows, without wrecking layout.
 - Tiny copy edits (title typo, color tweak) may skip search. A first-message create/brief may not.
-- For a theme or template change (Portrait A4, Landscape A4, Article Light): call apply_documents_template with that name. Do not list other documents. Do not read_file document.html. The tool writes the seed; then write copy with apply_document_commands in one batch of 2 to 4 headings.
+- For a theme or template change (Portrait A4, Landscape A4, Article Light): call apply_documents_template with that name. Do not list other documents. Do not read_file document.html. The tool writes the seed; then fill every seed slot with apply_document_commands.
 - Prefer replace_in_document for a single copy edit (matches plain text and HTML entities like &amp; so cover &lt;h1&gt; and body copy update in Preview and PDF).
 - When the user says "rename this doc" or "rename this document", call rename_document with the new name. That updates the sidebar folder (project.json display name) and the visible title (tab + cover H1) together. The slug stays put. Do not only edit the HTML heading.
 - When the user says "change the title" or "change the heading", call update_title. That changes the visible heading only. Do not rename the sidebar folder.
@@ -107,8 +112,8 @@ Your step budget is finite ({DOCUMENTS_RECURSION_LIMIT} graph steps). Plan, then
 
 <tasks>
 1. If no document is open and the user asked for a document, report, or article, call create_documents_project first, then research, then write.
-2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (prefer one query, at most 4), then write 2 to 4 headings with apply_document_commands or insert_heading plus insert_paragraph, then stop.
-3. If the user asks for a theme or template, call apply_documents_template, then write 2 to 4 headings, then stop.
+2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (prefer one query, at most 4), then fill the open template with apply_document_commands or replace_in_document. Do not leave seed placeholder copy. Do not append after the footer.
+3. If the user asks for a theme or template, call apply_documents_template, then fill every seed slot, then stop.
 4. If the open document is still Untitled, call rename_document first, then write. If the user asks to rename the document, call rename_document. Do not only edit the HTML title.
 5. If the brief is a heading-only change, use update_title. Other tiny copy edits use replace_in_document.
 6. After writes, report what changed in the open document. Do not claim Preview updated unless the tool result confirms it. Do not reread the document to check.

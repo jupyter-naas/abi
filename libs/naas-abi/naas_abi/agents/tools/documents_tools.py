@@ -622,6 +622,9 @@ def _persist_document(
     section") still buckets into the right semver bump instead of always
     falling back to the non-bumping "chore" type.
     """
+    from naas_abi.agents.tools.documents_commands import normalize_document_flow
+
+    html = normalize_document_flow(html)
     sources: list[str] = []
     sidecar_result: dict[str, Any] | None = None
     if _sidecar_available():
@@ -1421,6 +1424,9 @@ def _run_section_mutation(
             result["section_index"] = mutated["section_index"]
             result["section_count"] = mutated["section_count"]
             result["ids"] = mutated["ids"]
+            leftovers = mutated.get("leftover_placeholders")
+            if leftovers is not None:
+                result["leftover_placeholders"] = leftovers
         result.pop("html", None)
         result.update(_open_document_note(resolved))
         return result
@@ -1793,9 +1799,10 @@ def _view_for_llm(html: str) -> dict[str, Any]:
         "note": (
             "Outline only. HTML is omitted on purpose: a 25-section industry "
             "document is ~160k characters and blows the next model call. "
-            "Write with apply_document_commands (2 to 4 headings plus "
-            "paragraphs), then stop. Do not edit buildPptx. Preview is HTML; "
-            "PDF is derived at export."
+            "Fill the open template with apply_document_commands "
+            "(replace_text, replace_class, insert_heading, insert_paragraph). "
+            "Do not leave seed placeholder copy. Do not append after the footer. "
+            "Do not edit buildPptx. Preview is HTML; PDF is derived at export."
         ),
     }
 
@@ -1863,7 +1870,9 @@ def documents_tools() -> list[BaseTool]:
                 "commit_sha": commit.sha,
                 "note": (
                     f"Created '{clean_title}'. This is now the open document. "
-                    "Research the topic with web_search, then write the documents."
+                    "Research the topic with web_search, then fill the open "
+                    "template. Do not leave seed placeholder copy. "
+                    "Do not append after the footer."
                 ),
             }
         except Exception as exc:  # noqa: BLE001
@@ -2385,16 +2394,18 @@ def documents_tools() -> list[BaseTool]:
     ) -> dict[str, Any]:
         """Apply an ordered list of document commands (JSON array).
 
-        Prefer this for a write-report turn. Put 2 to 4 insert_heading and
-        insert_paragraph items in one call, then stop. Do not reread the
-        document. A longer report continues on the next turn.
+        Fill the open template. Prefer replace_text on seed slots and
+        replace_class for specimen blocks (palette). Insert a heading only
+        when the brief needs a section the seed does not have. Writes land
+        inside .doc-body. Do not append after the footer. If
+        leftover_placeholders is not empty, replace those slots this turn.
 
         Each item needs type. Supported: insert_text, insert_paragraph,
         insert_heading, insert_page_break, delete_range, replace_text,
-        update_paragraph_style, update_title, rename_document. Positions use
-        after_heading or heading_index. rename_document also updates the
-        sidebar display name. Returns {ok, heading_index, heading_count}.
-        Never HTML.
+        replace_class, update_paragraph_style, update_title, rename_document.
+        Positions use after_heading or heading_index. rename_document also
+        updates the sidebar display name. Returns
+        {ok, heading_index, heading_count, leftover_placeholders}. Never HTML.
 
         For news or factual briefs: call web_search once this turn first.
         """
@@ -2437,10 +2448,10 @@ def documents_tools() -> list[BaseTool]:
         slug: str = "",
         message: str = "feat(document): insert heading via Abi",
     ) -> dict[str, Any]:
-        """Insert a heading (level 1-3) after after_heading. Pandoc Header analog.
+        """Insert a heading (level 1-3) after after_heading, inside .doc-body.
 
-        Prefer apply_document_commands for a batch of 2 to 4 headings. A few
-        insert_heading calls are fine. Then stop. Do not reread.
+        Prefer replace_text on seed headings. Insert only when the brief needs
+        a section the seed does not have. Do not append after the footer.
         """
         return _run_document_commands(
             [
@@ -2462,9 +2473,9 @@ def documents_tools() -> list[BaseTool]:
         slug: str = "",
         message: str = "feat(document): insert paragraph via Abi",
     ) -> dict[str, Any]:
-        """Insert a paragraph after after_heading. Pandoc Para / ODF addParagraph.
+        """Insert a paragraph after after_heading, inside .doc-body.
 
-        Batch with apply_document_commands when writing a report. Then stop.
+        Prefer replace_text on seed copy. Do not append after the footer.
         """
         return _run_document_commands(
             [{"type": "insert_paragraph", "text": text, "after_heading": after_heading}],
@@ -2635,8 +2646,9 @@ def documents_tools() -> list[BaseTool]:
 
         Use this when the user asks for a theme or template. Do not list other
         documents and do not read_file their HTML. Replaces document.html with
-        the seed. Then write the brief with apply_document_commands in one batch
-        of 2 to 4 headings. Theme changes skip the research gate.
+        the seed. Then fill every seed slot with apply_document_commands.
+        Do not leave placeholder copy. Do not append after the footer.
+        Theme changes skip the research gate.
         """
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
@@ -2674,8 +2686,8 @@ def documents_tools() -> list[BaseTool]:
                 "wiped": True,
                 "note": (
                     f"Applied {resolved}. document.html is the seed. "
-                    "Write the brief with apply_document_commands "
-                    "(2 to 4 headings plus paragraphs), then stop."
+                    "Fill the open template. Do not leave seed placeholder "
+                    "copy. Do not append after the footer."
                 ),
             }
         except Exception as exc:  # noqa: BLE001
