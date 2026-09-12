@@ -94,6 +94,12 @@ SEED_PLACEHOLDER_PHRASES = (
     "Keep paragraphs short",
     "This heading uses the official",
     "Body copy stays Outer Space",
+    "the page before the body",
+    "Secondary colours are for charts",
+    "14pt True Blue",
+    "must stand apart from the body",
+    "Hyperlinks in copy look like",
+    "Replace the labels",
 )
 
 KNOWN_COMMANDS = frozenset(
@@ -236,7 +242,8 @@ def leftover_write_note(html: str) -> dict[str, Any]:
         note["warning"] = (
             "INCOMPLETE: seed placeholder copy remains: "
             + ", ".join(leftovers)
-            + ". Replace those slots with replace_text or replace_class now. Do not stop."
+            + ". Call apply_document_commands once with replace_text or "
+            "replace_class for every remaining slot. Do not reread. Do not stop."
         )
     return note
 

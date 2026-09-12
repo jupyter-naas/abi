@@ -52,7 +52,7 @@ def test_sections_agent_prompt_names_the_document_after_its_topic() -> None:
     assert "Do not append after the footer" in prompt
     assert "leftover_placeholders" in prompt
     assert "stop only if leftover_placeholders is empty" in prompt.lower()
-    assert "one apply_document_commands batch" in prompt
+    assert "apply_document_commands exactly once" in prompt
     assert "entire seed" in prompt.lower()
 
 
@@ -69,7 +69,8 @@ def test_sections_agent_owns_the_write_and_research_tools() -> None:
     assert "apply_documents_template" in names
     assert "insert_heading" in names
     assert "insert_paragraph" in names
-    assert "replace_in_document" in names
+    assert "replace_in_document" not in names
+    assert "apply_document_commands" in names
     assert "rename_document" in names
     assert "update_title" in names
     assert "web_search" in names

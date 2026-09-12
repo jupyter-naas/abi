@@ -33,7 +33,9 @@ from naas_abi.agents.documents import (
     note_documents_list,
     note_documents_section_read,
     reject_documents_section_read,
+    reject_read_document,
     reject_repeat_list_document_sections,
+    reject_replace_in_document_on_fill,
     reject_unresearched_documents_write,
     resolve_document_title,
 )
@@ -1481,6 +1483,7 @@ LEFTOVER_SECTION_TOOL_NAMES = frozenset(
         "reorder_sections",
     }
 )
+FILL_TURN_HIDDEN_TOOL_NAMES = frozenset({"replace_in_document"})
 COMMAND_TOOL_NAMES = frozenset(
     {
         "apply_document_commands",
@@ -2203,6 +2206,9 @@ def documents_tools() -> list[BaseTool]:
         For news, current events, or factual briefs: call web_search once this
         turn first. Later writes in the same turn do not need another search.
         """
+        fill_blocked = reject_replace_in_document_on_fill()
+        if fill_blocked:
+            return fill_blocked
         blocked = reject_unresearched_documents_write()
         if blocked:
             return blocked
@@ -2303,6 +2309,9 @@ def documents_tools() -> list[BaseTool]:
         then stop. Set include_assets=true only if you must see scripts or
         embedded images (that path can exceed the model context window).
         """
+        blocked = reject_read_document()
+        if blocked:
+            return blocked
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
         resolved = _resolve_slug(slug)
@@ -2313,6 +2322,7 @@ def documents_tools() -> list[BaseTool]:
             if isinstance(html, dict):
                 return html
             if include_assets:
+                note_documents_list()
                 return {
                     **_open_document_note(resolved),
                     "slug": resolved,
@@ -2326,6 +2336,7 @@ def documents_tools() -> list[BaseTool]:
                     ),
                 }
             view = _view_for_llm(html)
+            note_documents_list()
             return {
                 **_open_document_note(resolved),
                 "slug": resolved,
@@ -2794,5 +2805,6 @@ def documents_agent_tools() -> list[BaseTool]:
     tools = documents_tools()
     names = {tool.name for tool in tools}
     if "apply_document_commands" in names:
-        return [tool for tool in tools if tool.name not in LEFTOVER_SECTION_TOOL_NAMES]
+        hidden = LEFTOVER_SECTION_TOOL_NAMES | FILL_TURN_HIDDEN_TOOL_NAMES
+        return [tool for tool in tools if tool.name not in hidden]
     return tools

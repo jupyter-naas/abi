@@ -386,8 +386,8 @@ def _render_documents_context_block(
         "one apply_document_commands batch (replace_text, replace_class, "
         "insert_heading, insert_paragraph). Replace each entire seed slot. "
         "Do not prefix or append leftover instructional tails. "
-        "Do not spend the step budget on dozens of replace_in_document calls. "
-        "Writes go into .doc-body.\n"
+        "Do not call read_document after writing. "
+        "replace_in_document is not bound. Writes go into .doc-body.\n"
         "4. After that write, stop only if leftover_placeholders is empty. "
         "If it is not empty, replace those slots this turn. Do not reread.\n"
         + _untitled_documents_rename_hint(title, slug)

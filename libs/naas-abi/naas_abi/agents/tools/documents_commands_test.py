@@ -217,6 +217,20 @@ def test_leftover_placeholders_flags_concatenated_seed_tails() -> None:
     assert "Keep paragraphs short" in found
     assert "This heading uses the official" in found
     assert "Body copy stays Outer Space" in found
+    leftover_tails = leftover_placeholders(
+        "<p>Topic. the page before the body.</p>"
+        "<p>Secondary colours are for charts and data.</p>"
+        "<p>14pt True Blue.</p>"
+        "<p>must stand apart from the body.</p>"
+        "<p>Hyperlinks in copy look like x</p>"
+        "<p>Replace the labels.</p>"
+    )
+    assert "the page before the body" in leftover_tails
+    assert "Secondary colours are for charts" in leftover_tails
+    assert "14pt True Blue" in leftover_tails
+    assert "must stand apart from the body" in leftover_tails
+    assert "Hyperlinks in copy look like" in leftover_tails
+    assert "Replace the labels" in leftover_tails
 
 
 def test_leftover_write_note_marks_incomplete() -> None:

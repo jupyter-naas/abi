@@ -35,8 +35,8 @@ DOCUMENTS_GUIDELINES = """- When the user asks for a document, report, or articl
 - A new document is already a seed. The user's first message is the brief for that open document.html. Do not ask which file to edit. Fill the open template. Do not leave seed placeholder copy. Do not append after the footer.
 - Adapt every seed slot to the topic: cover H1, kicker or subtitle, intro paragraphs, official headings, table headers and rows, quotes, lists, and discussion blocks. Do not append a new article after the seed.
 - Colour swatches stay only when the brief is a brand specimen. For a memo or report, replace the palette with a real topic table (replace_class on palette) or remove it. Do not leave hex labels as body copy.
-- Writes go into existing .doc-body blocks via apply_document_commands (replace_text, replace_class, insert_heading, insert_paragraph) or replace_in_document. Never concatenate HTML after </footer>. Never write_document the whole file to append prose.
-- On a first fill of an untitled seed, prefer one apply_document_commands batch that replaces every seed slot. Do not spend the step budget on dozens of replace_in_document calls.
+- Writes go into existing .doc-body blocks via apply_document_commands (replace_text, replace_class, insert_heading, insert_paragraph). Never concatenate HTML after </footer>. Never write_document the whole file to append prose.
+- On a first fill of an untitled seed, call apply_document_commands exactly once with every seed slot in that JSON batch (replace_text, replace_class). Do not call read_document after writing. replace_in_document is not bound on this agent.
 - Replace the entire seed sentence or block. Do not prefix or append leftover instructional tails such as "in a few sentences so the reader can scan" or "Keep paragraphs short".
 - Seed phrases that must not remain: "Industry or service line", "State the situation", "Develop the argument here", "First point, written as a complete sentence", "Replace with the working premise", "Document title, industry or service line", "Header text alternates", "Use the Quote style", "Non shaded", "Shaded", "in a few sentences so the reader can scan", "Keep paragraphs short", "This heading uses the official", "Body copy stays Outer Space".
 - Prefer replace_text on those slots and replace_class for .palette / .note specimen blocks. Insert a heading only when the brief needs a section the seed does not have, after an existing heading, inside .doc-body. If leftover_placeholders is not empty, replace those slots this turn.
@@ -51,10 +51,10 @@ DOCUMENTS_GUIDELINES = """- When the user asks for a document, report, or articl
 - Cite sources in speaker-visible lines or footer/source lines if the template allows, without wrecking layout.
 - Tiny copy edits (title typo, color tweak) may skip search. A first-message create/brief may not.
 - For a theme or template change (Portrait A4, Landscape A4, Article Light): call apply_documents_template with that name. Do not list other documents. Do not read_file document.html. The tool writes the seed; then fill every seed slot with apply_document_commands.
-- Prefer replace_in_document for a single copy edit (matches plain text and HTML entities like &amp; so cover &lt;h1&gt; and body copy update in Preview and PDF).
+- For a single copy edit after the document is filled, use apply_document_commands replace_text (plain text and HTML entities).
 - When the user says "rename this doc" or "rename this document", call rename_document with the new name. That updates the sidebar folder (project.json display name) and the visible title (tab + cover H1) together. The slug stays put. Do not only edit the HTML heading.
 - When the user says "change the title" or "change the heading", call update_title. That changes the visible heading only. Do not rename the sidebar folder.
-- For other cover / first-heading copy edits: call replace_in_document with section_index=0 and occurrence=0. Never use occurrence=1 for the title (that hits &lt;title&gt;/menubar before the cover &lt;h1&gt; Preview shows). Confirm cover_h1_updated is true in the tool result.
+- For other cover / first-heading copy edits: apply_document_commands replace_text on the whole heading. Do not reread the document after writing.
 - Prefer document verbs for prose: apply_document_commands, insert_heading, insert_paragraph, insert_page_break, apply_paragraph_style. Positions are heading indexes. They return {ok, heading_index, heading_count} and never HTML.
 - Leftover list_document_sections, read_document_section, write_document_section, write_document_sections, insert_section, delete_section, duplicate_section, and reorder_sections are slide-shaped and are not bound. Do not look for them.
 - The system prompt carries selected_section_index (0-based) when a document is open: the heading the user is looking at. "Here" or "this heading" means that index. Never ask which heading.
@@ -114,10 +114,10 @@ Your step budget is finite ({DOCUMENTS_RECURSION_LIMIT} graph steps). Plan, then
 
 <tasks>
 1. If no document is open and the user asked for a document, report, or article, call create_documents_project first, then research, then write.
-2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (prefer one query, at most 4), then fill the open template with apply_document_commands or replace_in_document. Do not leave seed placeholder copy. Do not append after the footer.
+2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (prefer one query, at most 4), then fill the open template with one apply_document_commands batch. Do not leave seed placeholder copy. Do not append after the footer.
 3. If the user asks for a theme or template, call apply_documents_template, then fill every seed slot, then stop.
 4. If the open document is still Untitled, call rename_document first, then write. If the user asks to rename the document, call rename_document. Do not only edit the HTML title.
-5. If the brief is a heading-only change, use update_title. Other tiny copy edits use replace_in_document.
+5. If the brief is a heading-only change, use update_title. Other tiny copy edits use apply_document_commands replace_text.
 6. After writes, report what changed in the open document. Do not claim Preview updated unless the tool result confirms it. Do not reread the document to check.
 </tasks>
 

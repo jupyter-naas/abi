@@ -30,6 +30,7 @@ from naas_abi_core.services.agent.context import (
     documents_research_queries,
     documents_research_required,
     documents_section_read_indexes,
+    documents_turn_active,
     documents_writes_completed,
 )
 
@@ -99,6 +100,21 @@ _SECTION_REREAD_MESSAGE = (
 _SECTION_READ_AFTER_WRITE_MESSAGE = (
     "You already wrote this section this turn. Do not re-read it. "
     "Report what changed, or write a different section."
+)
+_READ_DOCUMENT_AFTER_WRITE_MESSAGE = (
+    "Do not reread after writing. If leftover_placeholders is not empty, "
+    "call apply_document_commands once with replace_text and replace_class. "
+    "Do not call read_document."
+)
+_READ_DOCUMENT_ONCE_MESSAGE = (
+    "read_document already ran this turn. Use that outline. "
+    "Fill the open template with one apply_document_commands batch. "
+    "Do not reread."
+)
+_REPLACE_ON_FILL_MESSAGE = (
+    "replace_in_document is not available on a Documents fill turn. "
+    "Call apply_document_commands once with replace_text and replace_class "
+    "for every leftover seed slot. Do not reread."
 )
 
 
@@ -330,6 +346,22 @@ def reject_repeat_list_document_sections() -> dict[str, Any] | None:
     """Refuse a second list_document_sections on this turn."""
     if documents_list_calls.get() >= 1:
         return {"error": _LIST_ONCE_MESSAGE}
+    return None
+
+
+def reject_read_document() -> dict[str, Any] | None:
+    """Refuse a full-document reread after the first outline or any write."""
+    if documents_writes_completed.get():
+        return {"error": _READ_DOCUMENT_AFTER_WRITE_MESSAGE}
+    if documents_list_calls.get() >= 1:
+        return {"error": _READ_DOCUMENT_ONCE_MESSAGE}
+    return None
+
+
+def reject_replace_in_document_on_fill() -> dict[str, Any] | None:
+    """Force apply_document_commands on a research/fill Documents turn."""
+    if documents_turn_active() and documents_research_required.get():
+        return {"error": _REPLACE_ON_FILL_MESSAGE}
     return None
 
 

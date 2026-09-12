@@ -24,7 +24,9 @@ from naas_abi.agents.documents.policy import (
     note_documents_section_read,
     note_documents_web_search,
     reject_documents_section_read,
+    reject_read_document,
     reject_repeat_list_document_sections,
+    reject_replace_in_document_on_fill,
     reject_unresearched_documents_write,
     resolve_documents_llm_model,
     validate_configured_documents_model,
@@ -787,6 +789,59 @@ def test_validate_configured_documents_model_accepts_a_registered_id() -> None:
     would make every possible typo resolve and the check would assert nothing.
     """
     validate_configured_documents_model(_registry_with_sections_model(), "claude-sonnet-5")
+
+
+def test_read_document_is_once_per_turn_and_refuses_after_write() -> None:
+    tokens = (
+        documents_list_calls.set(0),
+        documents_writes_completed.set([]),
+    )
+    try:
+        assert reject_read_document() is None
+        note_documents_list()
+        blocked = reject_read_document()
+        assert blocked is not None
+        assert "already ran this turn" in blocked["error"]
+    finally:
+        documents_list_calls.reset(tokens[0])
+        documents_writes_completed.reset(tokens[1])
+
+    tokens = (
+        documents_list_calls.set(0),
+        documents_writes_completed.set([]),
+    )
+    try:
+        note_documents_write("document commands")
+        blocked = reject_read_document()
+        assert blocked is not None
+        assert "Do not reread after writing" in blocked["error"]
+    finally:
+        documents_list_calls.reset(tokens[0])
+        documents_writes_completed.reset(tokens[1])
+
+
+def test_replace_in_document_is_refused_on_a_fill_turn() -> None:
+    tokens = (
+        documents_active_slug.set("untitled-fill"),
+        documents_research_required.set(True),
+    )
+    try:
+        blocked = reject_replace_in_document_on_fill()
+        assert blocked is not None
+        assert "apply_document_commands once" in blocked["error"]
+    finally:
+        documents_active_slug.reset(tokens[0])
+        documents_research_required.reset(tokens[1])
+
+    tokens = (
+        documents_active_slug.set("untitled-fill"),
+        documents_research_required.set(False),
+    )
+    try:
+        assert reject_replace_in_document_on_fill() is None
+    finally:
+        documents_active_slug.reset(tokens[0])
+        documents_research_required.reset(tokens[1])
 
 
 def test_list_document_sections_is_once_per_turn() -> None:
