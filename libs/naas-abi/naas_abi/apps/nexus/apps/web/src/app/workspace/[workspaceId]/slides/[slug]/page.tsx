@@ -353,6 +353,7 @@ export default function SlidesEditorPage() {
         }
       } catch (e) {
         if (gen !== loadGenRef.current) return;
+        clearOfficeCreate();
         const message = (e as Error).message;
         // Deck load Forgejo races are not a Coder outage; keep banners separate.
         setError(

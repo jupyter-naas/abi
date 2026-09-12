@@ -355,6 +355,7 @@ export default function SectionsEditorPage() {
         }
       } catch (e) {
         if (gen !== loadGenRef.current) return;
+        clearOfficeCreate();
         const message = (e as Error).message;
         // Document load Forgejo races are not a Coder outage; keep banners separate.
         setError(
