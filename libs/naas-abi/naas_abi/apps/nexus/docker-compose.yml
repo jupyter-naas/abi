@@ -33,7 +33,7 @@ services:
 
   # MinIO for S3-compatible file storage
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     container_name: nexus-minio
     environment:
       MINIO_ROOT_USER: minioadmin

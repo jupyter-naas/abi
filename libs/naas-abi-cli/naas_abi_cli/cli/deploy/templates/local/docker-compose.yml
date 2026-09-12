@@ -405,7 +405,7 @@ services:
   # MinIO - S3-compatible Object Storage for Dagster Compute Logs
   # -----------------------------------------------------------------------------
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     pull_policy: always
     restart: unless-stopped
     command: server /data --console-address :9001
@@ -427,7 +427,7 @@ services:
 
   # mc container to initialize the bucket on startup
   minio-init:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
     pull_policy: always
     depends_on:
       minio:
