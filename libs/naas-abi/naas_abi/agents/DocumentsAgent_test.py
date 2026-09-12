@@ -22,6 +22,7 @@ def test_sections_agent_prompt_requires_research_then_write() -> None:
     assert "Research loop" in prompt
     assert "Plan, then write" in prompt
     assert "apply_document_commands" in prompt
+    assert "fill_document_slots" in prompt
     assert "apply_documents_template" in prompt
     assert "Do not reread" in prompt
     assert "start writing immediately" not in prompt
@@ -51,10 +52,9 @@ def test_sections_agent_prompt_names_the_document_after_its_topic() -> None:
     assert "Do not leave seed placeholder copy" in prompt
     assert "Do not append after the footer" in prompt
     assert "leftover_placeholders" in prompt
-    assert "after the one apply_document_commands batch, stop" in prompt.lower()
-    assert "apply_document_commands exactly once" in prompt
-    assert "entire seed" in prompt.lower()
-    assert "leftover_slots is the required batch" in prompt
+    assert "fill_document_slots exactly once" in prompt
+    assert "do not write the memo only in chat" in prompt.lower()
+    assert "missing_slots" in prompt
 
 
 def test_sections_agent_default_model_is_the_policy_fallback() -> None:
@@ -67,6 +67,7 @@ def test_sections_agent_owns_the_write_and_research_tools() -> None:
     assert "create_documents_project" in names
     assert "write_document" in names
     assert "apply_document_commands" in names
+    assert "fill_document_slots" in names
     assert "apply_documents_template" in names
     assert "insert_heading" in names
     assert "insert_paragraph" in names

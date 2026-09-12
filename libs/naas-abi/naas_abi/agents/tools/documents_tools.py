@@ -35,7 +35,9 @@ from naas_abi.agents.documents import (
     reject_documents_section_read,
     reject_read_document,
     reject_repeat_list_document_sections,
+    note_documents_slot_fill,
     reject_repeat_apply_document_commands,
+    reject_repeat_fill_document_slots,
     reject_replace_in_document_on_fill,
     reject_unresearched_documents_write,
     resolve_document_title,
@@ -1446,6 +1448,10 @@ def _run_section_mutation(
                 result["incomplete"] = True
             if mutated.get("warning"):
                 result["warning"] = mutated["warning"]
+            if mutated.get("missing_slots") is not None:
+                result["missing_slots"] = mutated.get("missing_slots")
+            if mutated.get("filled") is not None:
+                result["filled"] = mutated.get("filled")
         result.pop("html", None)
         result.update(_open_document_note(resolved))
         return result
@@ -1488,6 +1494,7 @@ FILL_TURN_HIDDEN_TOOL_NAMES = frozenset({"replace_in_document"})
 COMMAND_TOOL_NAMES = frozenset(
     {
         "apply_document_commands",
+        "fill_document_slots",
         "insert_heading",
         "insert_paragraph",
         "insert_page_break",
@@ -1828,10 +1835,10 @@ def _view_for_llm(html: str) -> dict[str, Any]:
         "note": (
             "Outline only. HTML is omitted on purpose: a 25-section industry "
             "document is ~160k characters and blows the next model call. "
-            "Fill the open template with one apply_document_commands. "
-            "leftover_slots is the required batch: copy every find and "
-            "class_name. Each replace must be a full topic sentence. "
-            "leftover_slots is empty only when those slots have real prose. "
+            "Fill the open template with one fill_document_slots call. "
+            "Send title, subtitle, intro, note, quote, sections, "
+            "tables_heading, tables_intro, and tables. "
+            "Each value must be a non-empty topic sentence. "
             "Do not write the memo only in chat. "
             "Do not leave seed placeholder copy. Do not append after the footer. "
             "Do not edit buildPptx. Preview is HTML; PDF is derived at export."
@@ -1869,8 +1876,8 @@ def documents_tools() -> list[BaseTool]:
                 **_open_document_note(open_slug),
                 "note": (
                     "A document is already open. Do not create another. "
-                    "Fill the open template with one apply_document_commands batch. "
-                    "Replace each entire seed slot. Do not append leftover instructional tails."
+                    "Fill the open template with one fill_document_slots call. "
+                    "Send complete slot values. Do not write the memo only in chat."
                 ),
             }
         # The document name shows up in the sidebar tree, the chat card, and the
@@ -2450,16 +2457,9 @@ def documents_tools() -> list[BaseTool]:
     ) -> dict[str, Any]:
         """Apply an ordered list of document commands (JSON array).
 
-        Fill the open template in this one batch. leftover_slots is the
-        required batch: every find and class_name, each with a non-empty
-        topic-sentence replace. leftover_slots is empty only when those
-        slots have real prose. Do not write the memo only in chat.
-        A leftover phrase replaces that whole seed block. replace_class
-        on palette, fm-table, fm-shaded, intro, subtitle, note. Insert a
-        heading only when the brief needs a section the seed does not have.
-        Writes land inside .doc-body. Do not append after the footer.
-        If leftover_placeholders is not empty after this call, stop.
-        Do not apply again this turn.
+        Prefer fill_document_slots for a first memo or report fill.
+        This batch is for a later copy edit. Writes land inside .doc-body.
+        Do not append after the footer. Do not apply again this turn.
 
         Each item needs type. Supported: insert_text, insert_paragraph,
         insert_heading, insert_page_break, delete_range, replace_text,
@@ -2481,6 +2481,53 @@ def documents_tools() -> list[BaseTool]:
             return {"error": "requests_json must be a JSON array"}
         result = _run_document_commands(
             payload, slug, message or "feat(document): apply commands via Abi"
+        )
+        if "error" not in result:
+            result["heading_index"] = result.get("section_index")
+            result["heading_count"] = result.get("section_count")
+        return result
+
+    @tool
+    def fill_document_slots(
+        slots_json: str,
+        slug: str = "",
+        message: str = "feat(document): fill slots via Abi",
+    ) -> dict[str, Any]:
+        """Fill the open template from structured slots in one call.
+
+        Call this once after web_search with a complete JSON object:
+        title, subtitle, intro, note, quote, sections (array of
+        {heading, body, bullets?}), tables_heading, tables_intro,
+        tables (array of {heading, headers, rows}).
+        Every value must be a non-empty topic sentence, not seed copy.
+        Python maps the slots onto the open HTML. Do not find seed strings.
+        Do not write the memo only in chat. Palette is removed for a memo.
+        If missing_slots is not empty, call once more with only those keys.
+        Writes stay in .doc-body. Footer is untouched.
+        """
+        repeat = reject_repeat_fill_document_slots()
+        if repeat:
+            return repeat
+        blocked = reject_unresearched_documents_write()
+        if blocked:
+            return blocked
+        try:
+            payload = json.loads(slots_json or "{}")
+        except json.JSONDecodeError as exc:
+            return {"error": f"slots_json is not valid JSON: {exc}"}
+        if not isinstance(payload, dict):
+            return {"error": "slots_json must be a JSON object"}
+        from naas_abi.agents.tools.documents_slots import (
+            fill_document_slots as fill_slots,
+        )
+
+        write_label = note_documents_slot_fill()
+        result = _run_section_mutation(
+            slug,
+            lambda html: fill_slots(html, payload),
+            message or "feat(document): fill slots via Abi",
+            write_label,
+            default_type="feat",
         )
         if "error" not in result:
             result["heading_index"] = result.get("section_index")
@@ -2710,7 +2757,7 @@ def documents_tools() -> list[BaseTool]:
 
         Use this when the user asks for a theme or template. Do not list other
         documents and do not read_file their HTML. Replaces document.html with
-        the seed. Then fill every seed slot with apply_document_commands.
+        the seed. Then fill every seed slot with fill_document_slots.
         Do not leave placeholder copy. Do not append after the footer.
         Theme changes skip the research gate.
         """
@@ -2800,6 +2847,7 @@ def documents_tools() -> list[BaseTool]:
         read_document,
         write_document,
         apply_document_commands,
+        fill_document_slots,
         apply_documents_template,
         rename_document,
         update_title,

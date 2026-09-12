@@ -829,7 +829,7 @@ def test_replace_in_document_is_refused_on_a_fill_turn() -> None:
     try:
         blocked = reject_replace_in_document_on_fill()
         assert blocked is not None
-        assert "apply_document_commands once" in blocked["error"]
+        assert "fill_document_slots" in blocked["error"]
     finally:
         documents_active_slug.reset(tokens[0])
         documents_research_required.reset(tokens[1])
@@ -869,6 +869,33 @@ def test_apply_document_commands_is_once_on_a_fill_turn() -> None:
     )
     try:
         assert reject_repeat_apply_document_commands() is None
+    finally:
+        documents_active_slug.reset(tokens[0])
+        documents_research_required.reset(tokens[1])
+        documents_writes_completed.reset(tokens[2])
+
+
+def test_fill_document_slots_allows_one_follow_up() -> None:
+    from naas_abi.agents.documents.policy import (
+        note_documents_slot_fill,
+        reject_repeat_fill_document_slots,
+    )
+
+    tokens = (
+        documents_active_slug.set("untitled-fill"),
+        documents_research_required.set(True),
+        documents_writes_completed.set([]),
+    )
+    try:
+        assert reject_repeat_fill_document_slots() is None
+        first = note_documents_slot_fill()
+        note_documents_write(first)
+        assert reject_repeat_fill_document_slots() is None
+        second = note_documents_slot_fill()
+        note_documents_write(second)
+        blocked = reject_repeat_fill_document_slots()
+        assert blocked is not None
+        assert "already completed" in blocked["error"]
     finally:
         documents_active_slug.reset(tokens[0])
         documents_research_required.reset(tokens[1])

@@ -79,19 +79,18 @@ MAX_DOCUMENTS_SEARCHES = 4
 MAX_DOCUMENTS_SECTION_READS = 3
 _SEARCH_BUDGET_MESSAGE = (
     "Search budget reached (4 queries). Do not call web_search or web_fetch "
-    "again. Fill the open template with apply_document_commands. "
+    "again. Fill the open template with fill_document_slots. "
     "Do not leave seed placeholder copy. Do not append after the footer."
 )
 _LIST_ONCE_MESSAGE = (
     "list_document_sections already ran this turn. Use that outline. "
-    "Do not list again. Fill the open template with apply_document_commands. "
+    "Do not list again. Fill the open template with fill_document_slots. "
     "Do not append after the footer."
 )
 _SECTION_READ_BUDGET_MESSAGE = (
     f"read_document_section budget reached ({MAX_DOCUMENTS_SECTION_READS} sections "
     "this turn). Do not read leftover sections. Write with "
-    "apply_document_commands, then stop, or replace_in_document "
-    "for one copy edit."
+    "fill_document_slots, then stop."
 )
 _SECTION_REREAD_MESSAGE = (
     "You already read this section this turn. Do not re-read it. "
@@ -103,23 +102,28 @@ _SECTION_READ_AFTER_WRITE_MESSAGE = (
 )
 _READ_DOCUMENT_AFTER_WRITE_MESSAGE = (
     "Do not reread after writing. If leftover_placeholders is not empty, "
-    "call apply_document_commands once with replace_text and replace_class. "
+    "call fill_document_slots once more with only the missing slots. "
     "Do not call read_document."
 )
 _READ_DOCUMENT_ONCE_MESSAGE = (
     "read_document already ran this turn. Use that outline. "
-    "Fill the open template with one apply_document_commands batch. "
+    "Fill the open template with one fill_document_slots call. "
     "Do not reread."
 )
 _REPLACE_ON_FILL_MESSAGE = (
     "replace_in_document is not available on a Documents fill turn. "
-    "Call apply_document_commands once with replace_text and replace_class "
-    "for every leftover seed slot. Do not reread."
+    "Call fill_document_slots once with complete topic slots. Do not reread."
 )
 _REPEAT_APPLY_MESSAGE = (
     "apply_document_commands already ran this turn. Stop. "
     "Do not call it again. Do not reread. Report leftover_placeholders."
 )
+_REPEAT_FILL_MESSAGE = (
+    "fill_document_slots already completed this turn. Stop. "
+    "Do not write the memo only in chat. Do not reread."
+)
+_FILL_WRITE_LABEL = "document slots"
+_FILL_FOLLOWUP_LABEL = "document slots follow-up"
 
 
 def configured_documents_model() -> str:
@@ -377,6 +381,25 @@ def reject_repeat_apply_document_commands() -> dict[str, Any] | None:
     if "document commands" in written:
         return {"error": _REPEAT_APPLY_MESSAGE}
     return None
+
+
+def reject_repeat_fill_document_slots() -> dict[str, Any] | None:
+    """One complete fill, plus one follow-up for missing slots only."""
+    if not (documents_turn_active() and documents_research_required.get()):
+        return None
+    written = documents_writes_completed.get() or []
+    fills = [item for item in written if item in {_FILL_WRITE_LABEL, _FILL_FOLLOWUP_LABEL}]
+    if len(fills) >= 2:
+        return {"error": _REPEAT_FILL_MESSAGE}
+    return None
+
+
+def note_documents_slot_fill() -> str:
+    """Record a fill persist. Second call this turn is the missing-slot follow-up."""
+    written = documents_writes_completed.get() or []
+    if _FILL_WRITE_LABEL in written:
+        return _FILL_FOLLOWUP_LABEL
+    return _FILL_WRITE_LABEL
 
 
 def note_documents_list() -> None:

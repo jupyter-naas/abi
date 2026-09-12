@@ -149,6 +149,7 @@ KNOWN_COMMANDS = frozenset(
         "update_paragraph_style",
         "update_title",
         "rename_document",
+        "fill_slots",
     }
 )
 
@@ -388,14 +389,12 @@ def leftover_write_note(html: str) -> dict[str, Any]:
         note["warning"] = (
             "INCOMPLETE: seed placeholder copy remains: "
             + ", ".join(leftovers)
-            + ". leftover_slots is the required batch (exact find snippets "
-            "and class_name values). leftover_slots is empty only when those "
-            "slots have real topic prose. One apply_document_commands: "
-            "replace_text on each find with a full topic sentence; "
-            "replace_class on palette, fm-table, fm-shaded, intro, subtitle, "
-            "note. Empty replace is skipped. Do not write the memo only in "
-            "chat. This fill turn allows one apply. Stop. Do not apply "
-            "again. Do not reread."
+            + ". Call fill_document_slots with title, subtitle, intro, note, "
+            "quote, sections, tables_heading, tables_intro, and tables. "
+            "Each value must be a non-empty topic sentence. leftover_slots "
+            "is empty only when those slots have real topic prose. "
+            "Do not write the memo only in chat. "
+            "One follow-up fill is allowed for missing slots only."
         )
     return note
 
@@ -729,6 +728,16 @@ def apply_document_commands(
                 next_html, str(raw.get("title") or raw.get("text") or "")
             )
             heading_index = 0
+        elif typ == "fill_slots":
+            from naas_abi.agents.tools.documents_slots import fill_document_slots
+
+            filled = fill_document_slots(next_html, raw)
+            if filled.get("error"):
+                return filled
+            next_html = str(filled.get("html") or next_html)
+            applied.append(typ)
+            heading_index = 0
+            continue
         else:
             return {"error": f"Unhandled command {typ!r}"}
 

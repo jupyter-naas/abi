@@ -242,7 +242,7 @@ def test_leftover_write_note_marks_incomplete() -> None:
     assert note["leftover_placeholders"]
     assert note["leftover_slots"]
     assert "INCOMPLETE" in note["warning"]
-    assert "required batch" in note["warning"]
+    assert "fill_document_slots" in note["warning"]
     assert all(
         slot.get("replace_required") == "non-empty topic sentence"
         for slot in note["leftover_slots"]

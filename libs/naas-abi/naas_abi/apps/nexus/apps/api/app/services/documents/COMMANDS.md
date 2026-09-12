@@ -54,6 +54,7 @@ The first error aborts the batch (same idea as Docs `batchUpdate`).
 | `update_paragraph_style` | Retag a heading (`heading1`/`heading2`/`heading3`/`paragraph`) | Docs `updateParagraphStyle` |
 | `update_title` | Change the tab `<title>` and cover H1 only | heading-only retitle |
 | `rename_document` | Sidebar display name plus tab `<title>`, cover H1, and footer titles | "rename this document" |
+| `fill_slots` | Map structured topic copy onto seed slots | first memo or report fill |
 
 Positioning is a heading index (`after_heading` / `heading_index`), not a
 UTF-16 offset. That matches ODF "insert relative to a paragraph" more
@@ -77,15 +78,15 @@ When the user asks for a memo or report on an untitled seed:
    - Colour swatches stay only as brand specimens. For a memo, replace
      the palette (`replace_class` on `palette`) with a real table or
      delete it
-3. Writes go into `.doc-body` via one `apply_document_commands` batch.
-   `leftover_slots` is the find/class_name list. `replace_text` find may
-   be a leftover phrase; it replaces that whole seed block.
-   `replace_class` on `palette`, `fm-table`, `fm-shaded` replaces those
-   whole elements. A `replace_text` miss is skipped so the rest of the
-   batch still applies. Never concatenate HTML after `</footer>`.
-4. A research fill turn allows one `apply_document_commands`. After that
-   persist, stop. `leftover_placeholders` lists what a later turn must
-   replace.
+3. Writes go into `.doc-body` via one `fill_document_slots` call.
+   The payload is structured topic copy (title, subtitle, intro, note,
+   quote, sections, tables). Python maps those slots onto the open
+   HTML. Empty values are rejected. Unknown keys are ignored. The
+   colour palette is removed for a memo. Never concatenate HTML after
+   `</footer>`.
+4. A research fill turn allows one `fill_document_slots`, plus one
+   follow-up for `missing_slots` only. `leftover_placeholders` must be
+   empty after a complete fill.
 
 Fill the open template. Do not leave seed placeholder copy. Do not
 append after the footer.
