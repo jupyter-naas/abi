@@ -349,9 +349,11 @@ export default function SectionsEditorPage() {
         setRefreshing(false);
         clearOfficeCreate();
         if (ensureRuntime) {
-          const runtime = await ensureDocumentsRuntime(workspaceId, slug, quiet ? 2 : 6);
-          if (gen !== loadGenRef.current) return;
-          applyRuntime(runtime);
+          // Sidecar can take >15s. Overlay and editor wait only on HTML.
+          void ensureDocumentsRuntime(workspaceId, slug, quiet ? 2 : 6).then((runtime) => {
+            if (gen !== loadGenRef.current) return;
+            applyRuntime(runtime);
+          });
         }
       } catch (e) {
         if (gen !== loadGenRef.current) return;

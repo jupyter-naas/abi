@@ -1558,15 +1558,8 @@ async def create_project(
         # Only the namespaced branch reserves this slug for this workspace.
         # Legacy documents/<slug> is ownership-gated separately and must not block
         # other tenants from creating documents/<workspace_id>/<slug>.
+        # Do not list_repos: default_branch is main, else any existing ref.
         default = "main"
-        try:
-            repos = sc.list_repos()
-            for repo in repos:
-                if f"{repo.owner}/{repo.name}" == repo_id and repo.default_branch:
-                    default = repo.default_branch
-                    break
-        except SourceControlError:
-            pass
         if default not in existing and existing:
             default = next(iter(existing))
         adopted_branch = branch in existing

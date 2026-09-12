@@ -39,7 +39,7 @@ describe('beginOfficeCreate', () => {
 });
 
 describe('pushOfficeCreate', () => {
-  it('writes the creating flag before router.push', () => {
+  it('writes the creating flag and returns before any navigation', () => {
     const order: string[] = [];
     const hrefs: string[] = [];
     const unsub = useOfficeCreateStore.subscribe((state) => {
@@ -52,6 +52,10 @@ describe('pushOfficeCreate', () => {
             order.push('push');
             hrefs.push(href);
           },
+          replace: (href) => {
+            order.push('replace');
+            hrefs.push(href);
+          },
         },
         'document',
         'ws-1',
@@ -59,21 +63,36 @@ describe('pushOfficeCreate', () => {
       ),
     ).toBe(true);
     unsub();
-    expect(order).toEqual(['flag', 'push']);
-    expect(hrefs).toEqual(['/workspace/ws-1/documents/new?template=abi%2Farticle-light-v1']);
+    expect(order).toEqual(['flag']);
+    expect(hrefs).toEqual([]);
+    expect(useOfficeCreateStore.getState().kind).toBe('document');
   });
 
-  it('does not push a second time while create is in flight', () => {
+  it('does not start a second create while one is in flight', () => {
     const hrefs: string[] = [];
-    const router = { push: (href: string) => hrefs.push(href) };
+    const router = {
+      push: (href: string) => hrefs.push(href),
+      replace: (href: string) => hrefs.push(href),
+    };
     expect(pushOfficeCreate(router, 'deck', 'ws-1')).toBe(true);
     expect(pushOfficeCreate(router, 'deck', 'ws-1')).toBe(false);
-    expect(hrefs).toEqual(['/workspace/ws-1/slides/new']);
+    expect(hrefs).toEqual([]);
   });
 
   it('does not begin when workspace id is missing', () => {
-    expect(pushOfficeCreate({ push: () => undefined }, 'document', '')).toBe(false);
+    expect(
+      pushOfficeCreate({ push: () => undefined, replace: () => undefined }, 'document', ''),
+    ).toBe(false);
     expect(useOfficeCreateStore.getState().kind).toBeNull();
+  });
+
+  it('POSTs from the click, not from the /new route', () => {
+    const src = source('./office-create-state.ts');
+    expect(src).toContain("import('@/lib/create-documents-project')");
+    expect(src).toContain("import('@/lib/create-slides-project')");
+    expect(src).toContain('startNewDocument');
+    expect(src).toContain('startNewPresentation');
+    expect(src).not.toMatch(/router\.push\(officeCreateHref/);
   });
 });
 
@@ -103,8 +122,12 @@ describe('office create overlay hold', () => {
     expect(overlay).toContain('isOfficeCreateNewPath(pathname)');
     const docPage = source('../../app/workspace/[workspaceId]/documents/[slug]/page.tsx');
     expect(docPage).toContain('clearOfficeCreate()');
+    expect(docPage).toContain('void ensureDocumentsRuntime');
+    expect(docPage).not.toContain('await ensureDocumentsRuntime');
     const slidesPage = source('../../app/workspace/[workspaceId]/slides/[slug]/page.tsx');
     expect(slidesPage).toContain('clearOfficeCreate()');
+    expect(slidesPage).toContain('void ensureSlidesRuntime');
+    expect(slidesPage).not.toContain('await ensureSlidesRuntime');
   });
 });
 
@@ -156,9 +179,10 @@ describe('New document click paths', () => {
     expect(src).toContain('OfficeCreateOverlay');
   });
 
-  it('paints from the command palette before navigating to /new', () => {
+  it('paints from the command palette and POSTs without waiting for /new', () => {
     const src = source('../shell/quick-open.tsx');
-    expect(src).toContain('beginOfficeCreate(createKind)');
+    expect(src).toContain('pushOfficeCreate(router, createKind, currentWorkspaceId)');
     expect(src).toContain('officeCreateKindFromHref(action.href)');
+    expect(src).not.toContain('beginOfficeCreate(createKind)');
   });
 });

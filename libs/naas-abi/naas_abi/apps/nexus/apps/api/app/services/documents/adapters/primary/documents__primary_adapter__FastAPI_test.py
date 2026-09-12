@@ -448,6 +448,28 @@ def test_list_and_create_projects_seed_in_memory_repo(monkeypatch) -> None:
     assert namespaced.json()["template_id"] == "abi/article-light-v1"
 
 
+def test_create_project_skips_list_repos(monkeypatch) -> None:
+    """Create must not pay a list_repos RTT. Default branch is main or listed."""
+    sc = SourceControlService(InMemoryAdapter())
+
+    def _boom() -> list:
+        raise AssertionError("create must not call list_repos")
+
+    sc.list_repos = _boom  # type: ignore[method-assign]
+    client = _sections_client(monkeypatch, sc)
+    created = client.post(
+        "/documents/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Untitled document",
+            "slug": "no-list-repos",
+            "template_id": "article-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["slug"] == "no-list-repos"
+
+
 def test_create_project_returns_before_runtime_ensure(monkeypatch) -> None:
     """Create is done when branch + document.html exist. Coder waits in back."""
     sc = SourceControlService(InMemoryAdapter())

@@ -14,18 +14,13 @@ import {
 
 function useOfficeCreatePrefetch() {
   const router = useRouter();
-  const pathname = usePathname();
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
 
   useEffect(() => {
     if (!workspaceId) return;
-    if (pathname?.includes('/documents')) {
-      prefetchOfficeCreate(router, 'document', workspaceId);
-    }
-    if (pathname?.includes('/slides')) {
-      prefetchOfficeCreate(router, 'deck', workspaceId);
-    }
-  }, [pathname, router, workspaceId]);
+    prefetchOfficeCreate(router, 'document', workspaceId);
+    prefetchOfficeCreate(router, 'deck', workspaceId);
+  }, [router, workspaceId]);
 }
 
 function useOfficeCreateRouteSync(pathname: string | null) {

@@ -21,7 +21,7 @@ import {
 } from '@/lib/quick-open';
 import { useAppsStore } from '@/stores/apps';
 import { useFilesStore } from '@/stores/files';
-import { beginOfficeCreate, officeCreateKindFromHref } from '@/components/office/office-create-state';
+import { officeCreateKindFromHref, pushOfficeCreate } from '@/components/office/office-create-state';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 
 export function QuickOpen() {
@@ -273,7 +273,8 @@ export function QuickOpen() {
       if (action.panel === null) setActivePanelSection(null);
       else if (action.panel) setActivePanelSection(action.panel as SidebarSection);
       const createKind = officeCreateKindFromHref(action.href);
-      if (createKind && !beginOfficeCreate(createKind)) {
+      if (createKind) {
+        pushOfficeCreate(router, createKind, currentWorkspaceId);
         close();
         return;
       }

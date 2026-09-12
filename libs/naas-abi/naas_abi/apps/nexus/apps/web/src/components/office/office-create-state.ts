@@ -28,7 +28,7 @@ function writeBegin(kind: OfficeCreateKind): boolean {
   return true;
 }
 
-/** First paint of File → New: set the flag in this click, before router.push. */
+/** First paint of File → New: set the flag in this click, before create runs. */
 export function beginOfficeCreate(kind: OfficeCreateKind): boolean {
   if (useOfficeCreateStore.getState().kind) return false;
   if (typeof document !== 'undefined') {
@@ -41,15 +41,53 @@ export function beginOfficeCreate(kind: OfficeCreateKind): boolean {
   return writeBegin(kind);
 }
 
+function navigateOfficeCreate(
+  router: { replace: (href: string) => void; push: (href: string) => void },
+  href: string,
+): void {
+  setOfficeCreatePhase('opening');
+  if (typeof router.replace === 'function') {
+    router.replace(href);
+    return;
+  }
+  router.push(href);
+}
+
+/** File → New: paint overlay and POST now. Do not wait for /new to compile. */
 export function pushOfficeCreate(
-  router: { push: (href: string) => void },
+  router: { replace: (href: string) => void; push: (href: string) => void },
   kind: OfficeCreateKind,
   workspaceId: string,
   templateId?: string,
 ): boolean {
   if (!workspaceId) return false;
   if (!beginOfficeCreate(kind)) return false;
-  router.push(officeCreateHref(kind, workspaceId, templateId));
+  void (async () => {
+    try {
+      if (kind === 'document') {
+        const { startNewDocument } = await import('@/lib/create-documents-project');
+        await startNewDocument(
+          workspaceId,
+          (href) => navigateOfficeCreate(router, href),
+          templateId,
+        );
+        return;
+      }
+      const { startNewPresentation } = await import('@/lib/create-slides-project');
+      const openDeck = (href: string) => navigateOfficeCreate(router, href);
+      if (templateId) {
+        await startNewPresentation(workspaceId, openDeck, templateId);
+      } else {
+        await startNewPresentation(workspaceId, openDeck);
+      }
+    } catch (error) {
+      const fallback =
+        kind === 'document'
+          ? 'Could not create the document.'
+          : 'Could not create the deck.';
+      failOfficeCreate((error as Error).message || fallback);
+    }
+  })();
   return true;
 }
 
@@ -60,6 +98,9 @@ export function prefetchOfficeCreate(
 ): void {
   if (!workspaceId) return;
   router.prefetch(officeCreateHref(kind, workspaceId));
+  // Warm the editor route so File → New does not compile [slug] after POST.
+  const section = kind === 'document' ? 'documents' : 'slides';
+  router.prefetch(`/workspace/${workspaceId}/${section}/untitled-prefetch`);
 }
 
 export function setOfficeCreatePhase(phase: OfficeCreatePhase): void {
