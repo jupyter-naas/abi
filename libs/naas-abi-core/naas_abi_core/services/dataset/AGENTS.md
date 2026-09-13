@@ -119,10 +119,17 @@ trade-off. One caveat: because the connection is kept open for the process's
 lifetime, it does not re-run `_configure_object_store`'s `CREATE OR REPLACE
 SECRET`, so a deployment that rotates S3/MinIO credentials at runtime needs
 the process restarted (or the adapter recreated) to pick up new ones — a
-fresh-per-call connection previously did this implicitly. A pinned
-`query(snapshot_id=...)` (time travel) still gets its own fresh,
-snapshot-specific connection, since `SNAPSHOT_VERSION` is fixed at ATTACH
-time and can't be shared with the latest-snapshot read connection.
+fresh-per-call connection previously did this implicitly. Pinned
+`query(snapshot_id=...)` calls reuse up to four snapshot-specific connections,
+with a 60-second lifetime checked on cache access. `SNAPSHOT_VERSION` is fixed
+at ATTACH time, so these remain separate from the latest-snapshot connection.
+Every query still validates snapshot existence through the DuckLake metadata
+`ducklake_snapshot` primary key rather than listing the entire snapshot history,
+and uses an independent cursor.
+Eviction drops cache ownership without closing active readers' connections.
+Flush clears the snapshot cache; a failed pinned query retires its connection
+without replaying SQL. These are bounded process-local connection defaults,
+not a result cache or a change to snapshot retention.
 
 Ambiguous object-store transport failures are not replayed automatically: a timeout
 may arrive after metadata committed, and replaying an append could duplicate rows.

@@ -264,6 +264,67 @@ class TestDatasetSecondaryAdapterDuckLake(DatasetSecondaryAdapterContract):
         assert result.rows == []
         assert len(connect_calls) == 1
 
+    def test_pinned_reads_reuse_connection_and_keep_snapshots_isolated(
+        self, adapter, monkeypatch
+    ):
+        adapter.create(
+            DatasetSpec(name="events", columns=(ColumnSpec(name="id", type="integer"),))
+        )
+        first = adapter.write("events", [{"id": 1}]).snapshot_id
+        second = adapter.write("events", [{"id": 2}]).snapshot_id
+        connect = adapter._connect
+        snapshots = []
+
+        def counted(**kwargs):
+            snapshots.append(kwargs.get("snapshot_id"))
+            return connect(**kwargs)
+
+        adapter.list()
+        monkeypatch.setattr(adapter, "_connect", counted)
+
+        def read(snapshot):
+            return adapter.query(
+                "SELECT id FROM events ORDER BY id", snapshot_id=snapshot
+            ).rows
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            results = list(executor.map(read, [first, second] * 8))
+        assert results == [[{"id": 1}], [{"id": 1}, {"id": 2}]] * 8
+        assert sorted(snapshots) == sorted([first, second])
+        with pytest.raises(Exception):
+            adapter.query("SELECT * FROM absent", snapshot_id=first)
+        assert read(first) == [{"id": 1}]
+
+    def test_snapshot_connection_cache_is_bounded(self, adapter):
+        adapter.create(
+            DatasetSpec(name="events", columns=(ColumnSpec(name="id", type="integer"),))
+        )
+        versions = [adapter.write("events", [{"id": n}]).snapshot_id for n in range(6)]
+        for version in versions:
+            adapter.query("SELECT count(*) FROM events", snapshot_id=version)
+        assert len(adapter._snapshot_connections) <= 4
+        assert adapter.query("SELECT id FROM events", snapshot_id=versions[0]).rows == [
+            {"id": 0}
+        ]
+
+    def test_retiring_snapshot_cache_does_not_interrupt_active_cursor(self, adapter):
+        adapter.create(
+            DatasetSpec(name="events", columns=(ColumnSpec(name="id", type="integer"),))
+        )
+        snapshot = adapter.write("events", [{"id": 1}]).snapshot_id
+        cursor = adapter._get_snapshot_connection(snapshot).cursor()
+        try:
+            adapter.flush("events")
+            assert not adapter._snapshot_connections
+            assert cursor.execute(
+                "SELECT id FROM abi_datasets.default.events"
+            ).fetchall() == [(1,)]
+        finally:
+            cursor.close()
+        assert adapter.query("SELECT id FROM events", snapshot_id=snapshot).rows == [
+            {"id": 1}
+        ]
+
     def test_connect_owns_ducklake_catalog_migrations(self, adapter, monkeypatch):
         import duckdb
 
