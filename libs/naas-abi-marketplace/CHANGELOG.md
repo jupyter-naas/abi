@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.46.0 (2026-09-13)
+
+### Features
+
+- **x_proxy**: Enhance warm_usernames to accept explicit posts and add test
+  ([`e3fef22`](https://github.com/jupyter-naas/abi/commit/e3fef226f1d818922e6663af3a735d3fde63c449))
+
+
 ## v3.45.3 (2026-09-12)
 
 ### Bug Fixes
