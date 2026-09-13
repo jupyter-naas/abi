@@ -3644,6 +3644,15 @@ function formatToolCallLabel(prefix: string, name: string): string {
   return `${prefix}: ${name}`;
 }
 
+function stripToolCallMarkup(content: string): string {
+  if (!content) return content;
+  return content
+    .replace(/\[tool_call:[^\]]*\][\s\S]*?\[\/tool_call\]/gi, '')
+    .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function ToolCallsDropdown({
   toolCalls,
   isProcessing,
@@ -3963,14 +3972,19 @@ const MessageBubble = React.memo(function MessageBubble({
   // Unwrap JSON-wrapped content if the provider returned {"content": "..."}
   const displayContent = (() => {
     const raw = message.content;
-    if (typeof raw !== 'string' || !raw.trim().startsWith('{')) return raw;
-    try {
-      const obj = JSON.parse(raw);
-      if (obj && typeof obj === 'object' && typeof obj.content === 'string') return obj.content;
-    } catch {
-      // ignore
+    if (typeof raw !== 'string') return raw;
+    let text = raw;
+    if (raw.trim().startsWith('{')) {
+      try {
+        const obj = JSON.parse(raw);
+        if (obj && typeof obj === 'object' && typeof obj.content === 'string') {
+          text = obj.content;
+        }
+      } catch {
+        // ignore
+      }
     }
-    return raw;
+    return stripToolCallMarkup(text);
   })();
 
   // Parse thinking content from <think>...</think> tags
