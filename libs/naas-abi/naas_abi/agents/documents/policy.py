@@ -32,6 +32,7 @@ from naas_abi_core.services.agent.context import (
     documents_section_read_indexes,
     documents_turn_active,
     documents_writes_completed,
+    note_documents_write,
 )
 
 # Last resort for callers that reach these helpers with no ABIModule
@@ -114,10 +115,19 @@ _REPLACE_ON_FILL_MESSAGE = (
     "replace_in_document is not available on a Documents fill turn. "
     "Call fill_document_slots once with complete topic slots. Do not reread."
 )
+_APPLY_ON_FILL_MESSAGE = (
+    "apply_document_commands is not available on a Documents fill turn. "
+    "Call fill_document_slots once with complete topic slots. "
+    "If missing_slots is not empty, call once more with only those keys. "
+    "Do not apply. Do not reread."
+)
 _REPEAT_APPLY_MESSAGE = (
     "apply_document_commands already ran this turn. Stop. "
-    "Do not call it again. Do not reread. Report leftover_placeholders."
+    "Do not call it again. Do not reread. "
+    "If leftover_placeholders is not empty, call fill_document_slots "
+    "once more with leftover_slots keys only."
 )
+_APPLY_ATTEMPT_LABEL = "apply_document_commands"
 _REPEAT_FILL_MESSAGE = (
     "fill_document_slots already completed this turn. Stop. "
     "Do not write the memo only in chat. Do not reread."
@@ -367,20 +377,32 @@ def reject_read_document() -> dict[str, Any] | None:
 
 
 def reject_replace_in_document_on_fill() -> dict[str, Any] | None:
-    """Force apply_document_commands on a research/fill Documents turn."""
+    """Force fill_document_slots on a research/fill Documents turn."""
     if documents_turn_active() and documents_research_required.get():
         return {"error": _REPLACE_ON_FILL_MESSAGE}
     return None
 
 
+def reject_apply_document_commands_on_fill() -> dict[str, Any] | None:
+    """apply_document_commands is not the fill path."""
+    if documents_turn_active() and documents_research_required.get():
+        return {"error": _APPLY_ON_FILL_MESSAGE}
+    return None
+
+
 def reject_repeat_apply_document_commands() -> dict[str, Any] | None:
-    """One apply_document_commands persist per research/fill Documents turn."""
-    if not (documents_turn_active() and documents_research_required.get()):
+    """One apply_document_commands call per Documents turn, including copy-edits."""
+    if not documents_turn_active():
         return None
     written = documents_writes_completed.get() or []
-    if "document commands" in written:
+    if _APPLY_ATTEMPT_LABEL in written:
         return {"error": _REPEAT_APPLY_MESSAGE}
     return None
+
+
+def note_documents_apply_attempt() -> None:
+    """Count an apply_document_commands call even when the batch fails."""
+    note_documents_write(_APPLY_ATTEMPT_LABEL)
 
 
 def reject_repeat_fill_document_slots() -> dict[str, Any] | None:

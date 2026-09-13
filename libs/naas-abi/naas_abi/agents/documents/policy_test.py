@@ -25,6 +25,7 @@ from naas_abi.agents.documents.policy import (
     note_documents_web_search,
     reject_documents_section_read,
     reject_read_document,
+    reject_apply_document_commands_on_fill,
     reject_repeat_apply_document_commands,
     reject_repeat_list_document_sections,
     reject_replace_in_document_on_fill,
@@ -845,15 +846,40 @@ def test_replace_in_document_is_refused_on_a_fill_turn() -> None:
         documents_research_required.reset(tokens[1])
 
 
-def test_apply_document_commands_is_once_on_a_fill_turn() -> None:
+def test_apply_document_commands_is_refused_on_a_fill_turn() -> None:
     tokens = (
         documents_active_slug.set("untitled-fill"),
         documents_research_required.set(True),
+    )
+    try:
+        blocked = reject_apply_document_commands_on_fill()
+        assert blocked is not None
+        assert "fill_document_slots" in blocked["error"]
+        assert "apply_document_commands is not available" in blocked["error"]
+    finally:
+        documents_active_slug.reset(tokens[0])
+        documents_research_required.reset(tokens[1])
+
+    tokens = (
+        documents_active_slug.set("untitled-fill"),
+        documents_research_required.set(False),
+    )
+    try:
+        assert reject_apply_document_commands_on_fill() is None
+    finally:
+        documents_active_slug.reset(tokens[0])
+        documents_research_required.reset(tokens[1])
+
+
+def test_apply_document_commands_is_once_on_any_documents_turn() -> None:
+    tokens = (
+        documents_active_slug.set("untitled-fill"),
+        documents_research_required.set(False),
         documents_writes_completed.set([]),
     )
     try:
         assert reject_repeat_apply_document_commands() is None
-        note_documents_write("document commands")
+        note_documents_write("apply_document_commands")
         blocked = reject_repeat_apply_document_commands()
         assert blocked is not None
         assert "already ran this turn" in blocked["error"]
@@ -864,11 +890,12 @@ def test_apply_document_commands_is_once_on_a_fill_turn() -> None:
 
     tokens = (
         documents_active_slug.set("untitled-fill"),
-        documents_research_required.set(False),
-        documents_writes_completed.set(["document commands"]),
+        documents_research_required.set(True),
+        documents_writes_completed.set(["apply_document_commands"]),
     )
     try:
-        assert reject_repeat_apply_document_commands() is None
+        blocked = reject_repeat_apply_document_commands()
+        assert blocked is not None
     finally:
         documents_active_slug.reset(tokens[0])
         documents_research_required.reset(tokens[1])

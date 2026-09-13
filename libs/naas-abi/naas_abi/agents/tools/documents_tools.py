@@ -35,7 +35,9 @@ from naas_abi.agents.documents import (
     reject_documents_section_read,
     reject_read_document,
     reject_repeat_list_document_sections,
+    note_documents_apply_attempt,
     note_documents_slot_fill,
+    reject_apply_document_commands_on_fill,
     reject_repeat_apply_document_commands,
     reject_repeat_fill_document_slots,
     reject_replace_in_document_on_fill,
@@ -53,6 +55,7 @@ from naas_abi_core.services.agent.context import (
     documents_active_slug,
     documents_active_title,
     documents_brief,
+    documents_research_required,
     note_documents_write,
 )
 from naas_abi_core.services.agent.tools.workspace_tools import _call as _sidecar_call
@@ -1444,6 +1447,8 @@ def _run_section_mutation(
             result["ids"] = mutated.get("ids") or []
             leftovers = mutated.get("leftover_placeholders")
             result["leftover_placeholders"] = leftovers or []
+            if mutated.get("leftover_slots") is not None:
+                result["leftover_slots"] = mutated.get("leftover_slots")
             if mutated.get("incomplete"):
                 result["incomplete"] = True
             if mutated.get("warning"):
@@ -1835,13 +1840,23 @@ def _view_for_llm(html: str) -> dict[str, Any]:
         "note": (
             "Outline only. HTML is omitted on purpose: a 25-section industry "
             "document is ~160k characters and blows the next model call. "
-            "Fill the open template with one fill_document_slots call. "
-            "Send title, subtitle, intro, note, quote, sections, "
-            "tables_heading, tables_intro, and tables. "
-            "Each value must be a non-empty topic sentence. "
-            "Do not write the memo only in chat. "
-            "Do not leave seed placeholder copy. Do not append after the footer. "
-            "Do not edit buildPptx. Preview is HTML; PDF is derived at export."
+            + (
+                "Fill the open template with one fill_document_slots call. "
+                "Send leftover_slots keys, or title, subtitle, intro, note, "
+                "quote, sections, tables_heading, tables_intro, and tables. "
+                "Each value must be a non-empty topic sentence. "
+                "Do not call apply_document_commands. "
+                "Do not write the memo only in chat. "
+                "Do not leave seed placeholder copy. Do not append after the footer. "
+                if leftovers or slots
+                else (
+                    "Document slots are already filled. "
+                    "For a heading change, call update_title once. "
+                    "For a later copy edit, one apply_document_commands then stop. "
+                    "Do not call apply_document_commands again. "
+                )
+            )
+            + "Do not edit buildPptx. Preview is HTML; PDF is derived at export."
         ),
     }
 
@@ -2325,8 +2340,9 @@ def documents_tools() -> list[BaseTool]:
         """Read a compact outline of the HTML document (titles, counts, no HTML).
 
         Omit slug when a document is open. Default omits the file body: a 25-section
-        industry document is ~160k characters. Prefer apply_document_commands,
-        then stop. Set include_assets=true only if you must see scripts or
+        industry document is ~160k characters. Prefer fill_document_slots
+        for a first fill, update_title for a heading change. Set
+        include_assets=true only if you must see scripts or
         embedded images (that path can exceed the model context window).
         """
         blocked = reject_read_document()
@@ -2423,7 +2439,13 @@ def documents_tools() -> list[BaseTool]:
         except Exception as exc:  # noqa: BLE001
             return _tool_error(exc)
 
-    def _run_document_commands(requests: list[dict[str, Any]], slug: str, message: str) -> dict[str, Any]:
+    def _run_document_commands(
+        requests: list[dict[str, Any]],
+        slug: str,
+        message: str,
+        *,
+        write_label: str = "document commands",
+    ) -> dict[str, Any]:
         blocked = reject_unresearched_documents_write()
         if blocked:
             return blocked
@@ -2438,7 +2460,7 @@ def documents_tools() -> list[BaseTool]:
             slug,
             lambda html: apply_commands(html, requests),
             message,
-            "document commands",
+            write_label,
             default_type="feat",
         )
         if "error" not in result:
@@ -2458,8 +2480,10 @@ def documents_tools() -> list[BaseTool]:
         """Apply an ordered list of document commands (JSON array).
 
         Prefer fill_document_slots for a first memo or report fill.
-        This batch is for a later copy edit. Writes land inside .doc-body.
-        Do not append after the footer. Do not apply again this turn.
+        This batch is for a later copy edit only. Not bound as a fill
+        path: a research fill turn refuses this tool. Writes land
+        inside .doc-body. Do not append after the footer. One call
+        this turn, then stop.
 
         Each item needs type. Supported: insert_text, insert_paragraph,
         insert_heading, insert_page_break, delete_range, replace_text,
@@ -2470,9 +2494,16 @@ def documents_tools() -> list[BaseTool]:
 
         For news or factual briefs: call web_search once this turn first.
         """
+        blocked = reject_apply_document_commands_on_fill()
+        if blocked:
+            return blocked
         repeat = reject_repeat_apply_document_commands()
         if repeat:
             return repeat
+        research = reject_unresearched_documents_write()
+        if research:
+            return research
+        note_documents_apply_attempt()
         try:
             payload = json.loads(requests_json or "[]")
         except json.JSONDecodeError as exc:
@@ -2480,7 +2511,10 @@ def documents_tools() -> list[BaseTool]:
         if not isinstance(payload, list):
             return {"error": "requests_json must be a JSON array"}
         result = _run_document_commands(
-            payload, slug, message or "feat(document): apply commands via Abi"
+            payload,
+            slug,
+            message or "feat(document): apply commands via Abi",
+            write_label="",
         )
         if "error" not in result:
             result["heading_index"] = result.get("section_index")
@@ -2873,6 +2907,8 @@ def documents_agent_tools() -> list[BaseTool]:
     tools = documents_tools()
     names = {tool.name for tool in tools}
     if "apply_document_commands" in names:
-        hidden = LEFTOVER_SECTION_TOOL_NAMES | FILL_TURN_HIDDEN_TOOL_NAMES
+        hidden = set(LEFTOVER_SECTION_TOOL_NAMES) | set(FILL_TURN_HIDDEN_TOOL_NAMES)
+        if documents_research_required.get():
+            hidden.add("apply_document_commands")
         return [tool for tool in tools if tool.name not in hidden]
     return tools

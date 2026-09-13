@@ -85,8 +85,10 @@ When the user asks for a memo or report on an untitled seed:
    colour palette is removed for a memo. Never concatenate HTML after
    `</footer>`.
 4. A research fill turn allows one `fill_document_slots`, plus one
-   follow-up for `missing_slots` only. `leftover_placeholders` must be
-   empty after a complete fill.
+   follow-up for `missing_slots` / `leftover_slots` keys only.
+   `leftover_slots` lists fill keys, not `apply_document_commands`
+   recipes. `leftover_placeholders` must be empty after a complete
+   fill. `apply_document_commands` is not the fill path.
 
 Fill the open template. Do not leave seed placeholder copy. Do not
 append after the footer.

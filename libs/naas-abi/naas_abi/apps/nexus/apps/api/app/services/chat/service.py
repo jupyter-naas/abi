@@ -382,6 +382,7 @@ def _render_documents_context_block(
         "2. Do not list leftover sections. Do not read or write leftover <section> blocks.\n"
         "3. Fill the open template with one fill_document_slots call "
         "(title, subtitle, intro, note, quote, sections, tables). "
+        "Do not call apply_document_commands on a fill turn. "
         "Do not leave seed placeholder copy. Do not append after the footer. "
         "Do not write the memo only in chat. "
         "Do not call read_document after writing. "

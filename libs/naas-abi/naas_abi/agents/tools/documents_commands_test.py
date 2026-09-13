@@ -1,4 +1,5 @@
 from naas_abi.agents.tools.documents_commands import (
+    FILL_SLOT_KEYS,
     PAGE_BREAK_HTML,
     apply_document_commands,
     heading_outline,
@@ -243,10 +244,10 @@ def test_leftover_write_note_marks_incomplete() -> None:
     assert note["leftover_slots"]
     assert "INCOMPLETE" in note["warning"]
     assert "fill_document_slots" in note["warning"]
-    assert all(
-        slot.get("replace_required") == "non-empty topic sentence"
-        for slot in note["leftover_slots"]
-    )
+    assert "apply_document_commands" in note["warning"]
+    assert all(isinstance(slot, str) for slot in note["leftover_slots"])
+    assert set(note["leftover_slots"]) <= set(FILL_SLOT_KEYS)
+    assert "tables" in note["leftover_slots"] or "tables_heading" in note["leftover_slots"]
     clean = leftover_write_note("<h1>Board memo</h1>")
     assert clean["leftover_placeholders"] == []
     assert clean["leftover_slots"] == []
@@ -270,9 +271,8 @@ def test_leftover_placeholders_flags_seed_table_headers() -> None:
     assert "Item" in found
     assert "Heading 1 style" in found
     assert "Outer Space. Use it when" in found
-    classes = {slot["class_name"] for slot in leftover_slots(html) if "class_name" in slot}
-    assert "fm-table" in classes
-    assert "fm-shaded" in classes
+    assert "tables" in leftover_slots(html)
+    assert not any(isinstance(slot, dict) for slot in leftover_slots(html))
 
 
 def test_replace_text_leftover_phrase_replaces_the_whole_block() -> None:
@@ -328,8 +328,7 @@ def test_leftover_placeholders_ignores_css_and_svg_hex() -> None:
     found = leftover_placeholders(html)
     assert "swatch hex" not in found
     assert "colour palette" not in found
-    finds = [slot.get("find") for slot in leftover_slots(html)]
-    assert "swatch hex" not in finds
+    assert leftover_slots(html) == []
 
 
 def test_leftover_placeholders_flags_empty_seed_blocks() -> None:
@@ -344,10 +343,10 @@ def test_leftover_placeholders_flags_empty_seed_blocks() -> None:
     assert "empty subtitle" in found
     assert "empty heading" in found
     assert "missing tables" in found
-    classes = {slot["class_name"] for slot in leftover_slots(html) if "class_name" in slot}
-    assert "intro" in classes
-    assert "fm-table" in classes
-    assert "fm-shaded" in classes
+    keys = leftover_slots(html)
+    assert "intro" in keys
+    assert "subtitle" in keys
+    assert "tables" in keys
 
 
 def test_apply_skips_empty_replace_and_keeps_seed_copy() -> None:
@@ -364,3 +363,15 @@ def test_apply_skips_empty_replace_and_keeps_seed_copy() -> None:
     assert "non-empty topic copy" in result["skipped"][0]
     assert "Replace with the working premise" in result["html"]
     assert "Board memo" in result["html"]
+
+
+def test_apply_failure_does_not_ask_for_another_apply() -> None:
+    result = apply_document_commands(
+        "<h1>Board memo</h1>",
+        [{"type": "replace_text", "find": "<h2>Missing</h2>", "replace": "Nope"}],
+    )
+    assert result.get("error")
+    assert "fill_document_slots" in result["error"]
+    assert "find and class_name" not in result["error"]
+    assert "Do not apply again" in result["error"]
+    assert all(isinstance(slot, str) for slot in result.get("leftover_slots", []))

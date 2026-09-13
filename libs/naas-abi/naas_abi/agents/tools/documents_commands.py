@@ -128,10 +128,6 @@ _SEED_TH_RE = re.compile(
     r"<th\b[^>]*>\s*(Topic|Owner|Status|Item|Note)\s*</th>",
     re.IGNORECASE,
 )
-_SEED_TABLE_CLASS_RE = (
-    ("fm-table", re.compile(r"<th\b[^>]*>\s*Topic\s*</th>", re.I)),
-    ("fm-shaded", re.compile(r"<th\b[^>]*>\s*Item\s*</th>", re.I)),
-)
 _BLOCK_RE = re.compile(
     r"<(p|li|h[1-4]|td|th|blockquote|span)\b[^>]*>.*?</\1>",
     re.IGNORECASE | re.DOTALL,
@@ -292,88 +288,83 @@ def leftover_placeholders(html: str) -> list[str]:
     return found
 
 
-def leftover_slots(html: str) -> list[dict[str, str]]:
-    """Find snippets and class names for one apply_document_commands fill."""
-    slots: list[dict[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-    prose = _prose_html(html)
-    for phrase in leftover_placeholders(html):
-        if phrase in _LABEL_ONLY_LEFTOVERS or phrase.startswith("empty "):
-            continue
-        if phrase == "missing tables":
-            continue
-        if phrase not in prose:
-            continue
-        key = ("find", phrase)
-        if key in seen:
-            continue
-        seen.add(key)
-        slots.append(
-            {
-                "type": "replace_text",
-                "find": phrase,
-                "replace_required": "non-empty topic sentence",
-            }
+FILL_SLOT_KEYS = (
+    "title",
+    "subtitle",
+    "intro",
+    "note",
+    "quote",
+    "sections",
+    "tables_heading",
+    "tables_intro",
+    "tables",
+)
+
+
+def _fill_keys_for_leftover(phrase: str) -> tuple[str, ...]:
+    """Map a leftover label onto fill_document_slots keys. Never apply recipes."""
+    text = (phrase or "").strip().lower()
+    if phrase in _LABEL_ONLY_LEFTOVERS or text == "missing tables":
+        return ("tables",)
+    if text.startswith("empty "):
+        name = text[6:]
+        if name in {"intro", "subtitle", "note"}:
+            return (name,)
+        return ("title", "sections")
+    if "quote" in text or "must stand apart" in text:
+        return ("quote",)
+    if any(
+        token in text
+        for token in (
+            "intro",
+            "state the situation",
+            "scan the page",
+            "the page before the body",
         )
-    if _PALETTE_CLASS_RE.search(prose):
-        key = ("class", "palette")
-        if key not in seen:
-            seen.add(key)
-            slots.append(
-                {
-                    "type": "replace_class",
-                    "class_name": "palette",
-                    "replace_required": "non-empty topic sentence",
-                }
-            )
-    for class_name, marker in _SEED_TABLE_CLASS_RE:
-        if marker.search(prose):
-            key = ("class", class_name)
-            if key not in seen:
-                seen.add(key)
-                slots.append(
-                    {
-                        "type": "replace_class",
-                        "class_name": class_name,
-                        "replace_required": "non-empty topic sentence",
-                    }
-                )
-    for class_name, marker in _EMPTY_CLASS_RES:
-        if marker.search(prose):
-            key = ("class", class_name)
-            if key not in seen:
-                seen.add(key)
-                slots.append(
-                    {
-                        "type": "replace_class",
-                        "class_name": class_name,
-                        "replace_required": "non-empty topic sentence",
-                    }
-                )
-    if re.search(r'data-layout=["\']tables["\']', prose, re.I) and not re.search(
-        r"<table\b", prose, re.I
     ):
-        for class_name in ("fm-table", "fm-shaded"):
-            key = ("class", class_name)
-            if key not in seen:
-                seen.add(key)
-                slots.append(
-                    {
-                        "type": "replace_class",
-                        "class_name": class_name,
-                        "replace_required": "non-empty topic sentence",
-                    }
-                )
-    leftovers = leftover_placeholders(html)
-    if leftovers and not slots:
-        slots.append(
-            {
-                "type": "replace_text",
-                "find": leftovers[0],
-                "replace_required": "non-empty topic sentence",
-            }
+        return ("intro",)
+    if any(token in text for token in ("subtitle", "kicker", "industry or service")):
+        return ("subtitle",)
+    if any(
+        token in text
+        for token in (
+            "header text alternates",
+            "body copy stays",
+            "secondary colours",
+            "14pt true blue",
         )
-    return slots
+    ):
+        return ("note",)
+    if "document title" in text:
+        return ("title",)
+    if text in {"topic", "owner", "status", "item", "note"} or any(
+        token in text
+        for token in (
+            "findings",
+            "shaded",
+            "assumption",
+            "working premise",
+            "replace the labels",
+            "table",
+            "confidential figures",
+            "two official table",
+        )
+    ):
+        return ("tables_heading", "tables_intro", "tables")
+    return ("sections",)
+
+
+def leftover_slots(html: str) -> list[str]:
+    """Fill keys still open. Not apply_document_commands recipes."""
+    keys: list[str] = []
+    seen: set[str] = set()
+    for phrase in leftover_placeholders(html):
+        for key in _fill_keys_for_leftover(phrase):
+            if key not in FILL_SLOT_KEYS or key in seen:
+                continue
+            seen.add(key)
+            keys.append(key)
+    return keys
 
 
 def leftover_write_note(html: str) -> dict[str, Any]:
@@ -389,12 +380,11 @@ def leftover_write_note(html: str) -> dict[str, Any]:
         note["warning"] = (
             "INCOMPLETE: seed placeholder copy remains: "
             + ", ".join(leftovers)
-            + ". Call fill_document_slots with title, subtitle, intro, note, "
-            "quote, sections, tables_heading, tables_intro, and tables. "
-            "Each value must be a non-empty topic sentence. leftover_slots "
-            "is empty only when those slots have real topic prose. "
-            "Do not write the memo only in chat. "
-            "One follow-up fill is allowed for missing slots only."
+            + ". Call fill_document_slots once more with leftover_slots keys "
+            "only. Each value must be a non-empty topic sentence. "
+            "leftover_slots is empty only when those slots have real topic "
+            "prose. Do not write the memo only in chat. "
+            "Do not call apply_document_commands."
         )
     return note
 
@@ -755,8 +745,10 @@ def apply_document_commands(
     if not applied:
         return {
             "error": (
-                "No commands applied. leftover_slots lists find and "
-                "class_name values for one apply_document_commands."
+                "No commands applied. apply_document_commands is not the "
+                "fill path. If leftover_placeholders is not empty, call "
+                "fill_document_slots once more with leftover_slots keys. "
+                "For a heading change, call update_title. Do not apply again."
             ),
             "skipped": skipped,
             **leftover_write_note(html),

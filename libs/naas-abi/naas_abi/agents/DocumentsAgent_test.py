@@ -53,6 +53,7 @@ def test_sections_agent_prompt_names_the_document_after_its_topic() -> None:
     assert "Do not append after the footer" in prompt
     assert "leftover_placeholders" in prompt
     assert "fill_document_slots exactly once" in prompt
+    assert "do not call apply_document_commands" in prompt.lower()
     assert "do not write the memo only in chat" in prompt.lower()
     assert "missing_slots" in prompt
 

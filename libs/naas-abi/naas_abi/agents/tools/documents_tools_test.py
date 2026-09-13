@@ -47,6 +47,7 @@ from naas_abi_core.services.agent.context import (
     documents_brief,
     documents_research_queries,
     documents_research_required,
+    documents_writes_completed,
 )
 from naas_abi_core.services.source_control.adapters.secondary.InMemoryAdapter import (
     InMemoryAdapter,
@@ -361,6 +362,7 @@ def _sections_context(*, workspace: str = "ws-test", slug: str = "untitled-local
         agent_user_id.set("user-1"),
         documents_research_required.set(False),
         documents_research_queries.set(None),
+        documents_writes_completed.set([]),
     ]
     return tokens
 
@@ -371,6 +373,8 @@ def _reset_tokens(tokens) -> None:
     agent_user_id.reset(tokens[2])
     documents_research_required.reset(tokens[3])
     documents_research_queries.reset(tokens[4])
+    if len(tokens) > 5:
+        documents_writes_completed.reset(tokens[5])
 
 
 def test_friendly_sc_error_never_returns_raw_repo_id():
@@ -1117,6 +1121,17 @@ def test_documents_agent_tools_hide_leftover_section_crud_when_commands_exist():
     assert "list_document_sections" not in bound
     assert "replace_in_document" not in bound
     assert "write_document" not in bound
+    assert "apply_document_commands" in bound
+
+
+def test_documents_agent_tools_hide_apply_on_a_fill_turn():
+    token = documents_research_required.set(True)
+    try:
+        bound = {t.name for t in documents_agent_tools()}
+        assert "apply_document_commands" not in bound
+        assert "fill_document_slots" in bound
+    finally:
+        documents_research_required.reset(token)
 
 
 def test_apply_document_commands_persists_without_returning_html(monkeypatch):
@@ -1157,8 +1172,52 @@ def test_apply_document_commands_persists_without_returning_html(monkeypatch):
         )
         assert "Scope" in (document.text or "")
         assert "Audit AI covers fieldwork planning." in (document.text or "")
+        second = apply.invoke(
+            {
+                "requests_json": json.dumps(
+                    [
+                        {
+                            "type": "insert_heading",
+                            "title": "Again",
+                            "level": 2,
+                            "after_heading": -1,
+                        }
+                    ]
+                )
+            }
+        )
+        assert "already ran this turn" in second["error"]
     finally:
         _reset_tokens(tokens)
+
+
+def test_apply_document_commands_is_noop_on_a_fill_turn(monkeypatch):
+    _seed_in_memory_document(_bind_in_memory_git(monkeypatch), _SAMPLE)
+    tokens = _sections_context()
+    tokens.append(documents_research_required.set(True))
+    try:
+        apply = next(
+            t for t in documents_tools() if t.name == "apply_document_commands"
+        )
+        blocked = apply.invoke(
+            {
+                "requests_json": json.dumps(
+                    [
+                        {
+                            "type": "insert_heading",
+                            "title": "Scope",
+                            "level": 2,
+                            "after_heading": -1,
+                        }
+                    ]
+                )
+            }
+        )
+        assert "fill_document_slots" in blocked["error"]
+        assert "not available" in blocked["error"]
+    finally:
+        documents_research_required.reset(tokens[-1])
+        _reset_tokens(tokens[:-1])
 
 
 def test_insert_heading_respects_research_gate(monkeypatch):

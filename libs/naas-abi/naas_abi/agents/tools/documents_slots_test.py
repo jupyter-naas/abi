@@ -100,6 +100,7 @@ def test_fill_document_slots_clears_seed_copy() -> None:
     assert result["ok"] is True
     html = result["html"]
     assert leftover_placeholders(html) == []
+    assert result["leftover_slots"] == []
     assert result["missing_slots"] == []
     assert result["incomplete"] is False
     assert "section_index" in result

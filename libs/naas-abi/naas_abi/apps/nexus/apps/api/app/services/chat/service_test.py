@@ -1269,6 +1269,7 @@ async def test_build_abi_injection_preamble_includes_open_document() -> None:
     assert "Do not ask which document" in preamble
     assert "Plan, then write" in preamble
     assert "fill_document_slots" in preamble
+    assert "Do not call apply_document_commands on a fill turn" in preamble
     assert "Fill the open template" in preamble
     assert "Do not append after the footer" in preamble
     assert "leftover_placeholders" in preamble
@@ -1298,6 +1299,8 @@ def test_render_documents_context_block_asks_to_rename_when_untitled() -> None:
         "ws-1",
     )
     assert "rename_document first" in block
+    assert "fill_document_slots" in block
+    assert "Do not call apply_document_commands on a fill turn" in block
 
 
 def test_render_documents_context_block_skips_rename_hint_when_named() -> None:
