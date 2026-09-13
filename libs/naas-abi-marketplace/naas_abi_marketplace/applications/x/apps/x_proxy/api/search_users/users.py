@@ -94,6 +94,10 @@ INDEX_COLUMNS = [
 #    so every shard must rebuild once.
 DATASET_FORMAT = 3
 
+# Balance peak Python-object memory against repeated Polars scans of the
+# resident full-history frame.
+CACHE_SHARD_BATCH_SIZE = 16
+
 # Bios are rendered as the one-line snippet under a search result, and X caps
 # them at 160 characters anyway; the cap is what bounds this column's share of
 # a ~60k-row index.
@@ -325,6 +329,10 @@ def publish(
         f"{len(descriptions)} with a bio"
         f"{'' if index_written else ' (index unchanged, not re-uploaded)'}"
     )
+    # The compact index and its encoded bytes can both be multi-megabyte. They
+    # are no longer needed while post shards are built, which is the memory
+    # intensive phase.
+    del index_body, descriptions, display_names
 
     if not authors:
         empty = {
@@ -361,13 +369,13 @@ def publish(
     # The expensive pair - one full-graph post dump each on the SPARQL path - now
     # sees only the authors sitting in a stale shard.
     stale_usernames = [a["username"] for shard in stale for a in by_shard[shard]]
+    posts_by_user: dict[str, list[dict[str, Any]]] | None
     if cache is not None:
-        # The projection is already resident, so the shard filter buys nothing on
-        # the accounts side; posts are still narrowed to the stale authors.
+        # Keep the compact account lookup resident, but materialize post dicts
+        # one shard at a time below. Converting every historical post to Python
+        # objects at once was the dominant X app build memory spike.
         accounts = cache.accounts_by_username() if stale_usernames else {}
-        posts_by_user = (
-            cache.posts_by_username(stale_usernames) if stale_usernames else {}
-        )
+        posts_by_user = None
     else:
         accounts = (
             ctx.accounts_for_usernames(stale_usernames) if stale_usernames else {}
@@ -387,51 +395,72 @@ def publish(
     direct_users = 0
     stale_set = set(stale)
     for shard in sorted(by_shard):
-        if shard not in stale_set:
-            # Untouched: carry the previous entry forward, file and all.
-            entry = dict(previous.get(shard) or {})
-            entry["fingerprint"] = fingerprints[shard]
-            manifest[shard] = entry
-            total_posts += int(entry.get("posts") or 0)
-            unchanged += 1
+        if shard in stale_set:
             continue
+        # Untouched: carry the previous entry forward, file and all.
+        entry = dict(previous.get(shard) or {})
+        entry["fingerprint"] = fingerprints[shard]
+        manifest[shard] = entry
+        total_posts += int(entry.get("posts") or 0)
+        unchanged += 1
 
-        shard_authors = {
-            author["username"]: {
-                "profile": _profile(author, accounts.get(author["username"], {})),
-                "posts": posts_by_user.get(author["username"], []),
-            }
-            for author in by_shard[shard]
-        }
-        for username, bundle in shard_authors.items():
-            if direct_users >= max(0, direct_user_limit):
-                break
-            if any(is_recent_post(post) for post in bundle["posts"]):
-                result = publish_user(ctx.object_storage, username, bundle)
-                if not result.get("skipped"):
-                    direct_users += 1
-        # Serialized once: the same bytes decide whether to write and are what
-        # gets written.
-        payload = encode_compact(
-            {"format": DATASET_FORMAT, "shard": shard, "authors": shard_authors}
+    stale_order = sorted(stale)
+    batch_size = (
+        CACHE_SHARD_BATCH_SIZE if cache is not None else max(1, len(stale_order))
+    )
+    batch_posts: dict[str, list[dict[str, Any]]]
+    for offset in range(0, len(stale_order), batch_size):
+        batch_shards = stale_order[offset : offset + batch_size]
+        batch_usernames = [
+            author["username"] for shard in batch_shards for author in by_shard[shard]
+        ]
+        batch_posts = (
+            cache.posts_by_username(batch_usernames)
+            if cache is not None
+            else posts_by_user or {}
         )
-        digest = content_digest(payload)
-        shard_posts = sum(len(a["posts"]) for a in shard_authors.values())
-        total_posts += shard_posts
-        manifest[shard] = {
-            "hash": digest,
-            "fingerprint": fingerprints[shard],
-            "authors": len(shard_authors),
-            "posts": shard_posts,
-            "bytes": len(payload),
-        }
-        # A rebuilt shard can still be byte-identical (e.g. a fingerprint that
-        # moved on a field the payload does not carry) - don't re-upload it.
-        if (previous.get(shard) or {}).get("hash") == digest:
-            unchanged += 1
-            continue
-        ctx.save_bytes("search_users/posts", f"{shard}.json", payload)
-        written += 1
+        for shard in batch_shards:
+            shard_authors: dict[str, dict[str, Any]] = {
+                author["username"]: {
+                    "profile": _profile(author, accounts.get(author["username"], {})),
+                    "posts": batch_posts.get(author["username"], []),
+                }
+                for author in by_shard[shard]
+            }
+            for username, bundle in shard_authors.items():
+                if direct_users >= max(0, direct_user_limit):
+                    break
+                if any(is_recent_post(post) for post in bundle["posts"]):
+                    result = publish_user(ctx.object_storage, username, bundle)
+                    if not result.get("skipped"):
+                        direct_users += 1
+            # Serialized once: the same bytes decide whether to write and are
+            # what gets written.
+            payload = encode_compact(
+                {"format": DATASET_FORMAT, "shard": shard, "authors": shard_authors}
+            )
+            digest = content_digest(payload)
+            shard_post_count = sum(
+                len(author["posts"]) for author in shard_authors.values()
+            )
+            total_posts += shard_post_count
+            manifest[shard] = {
+                "hash": digest,
+                "fingerprint": fingerprints[shard],
+                "authors": len(shard_authors),
+                "posts": shard_post_count,
+                "bytes": len(payload),
+            }
+            # A rebuilt shard can still be byte-identical (e.g. a fingerprint
+            # moved on a field the payload does not carry) - don't re-upload it.
+            if (previous.get(shard) or {}).get("hash") == digest:
+                unchanged += 1
+            else:
+                ctx.save_bytes("search_users/posts", f"{shard}.json", payload)
+                written += 1
+            del shard_authors, payload
+        # Bound expanded Python post dictionaries to a small shard batch.
+        del batch_posts
 
     manifest_doc = {
         "updated_at": ctx.built_at.isoformat(),
@@ -445,7 +474,7 @@ def publish(
         "source_state": source_state,
         "index_hash": index_hash,
         "index_columns": INDEX_COLUMNS,
-        "shards": manifest,
+        "shards": {shard: manifest[shard] for shard in sorted(manifest)},
     }
     ctx.save_json_compact("search_users", "shards.json", manifest_doc)
 

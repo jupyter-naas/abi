@@ -124,9 +124,16 @@ def publish_app(
         cache=cache,
     )
 
-    globals_doc = publish_globals(ctx)
     count_doc = publish_count_page(ctx)
     search_doc = publish_search_page(ctx)
+    if cache is not None:
+        released = cache.release_window_cache()
+        if released:
+            logger.info(
+                f"X app publish: released {released} window cache(s) "
+                "before full-history pages"
+            )
+    globals_doc = publish_globals(ctx)
     tweets_doc = publish_tweets_page(ctx)
     users_doc = publish_users_page(
         ctx, full=full_users, direct_user_limit=direct_user_limit

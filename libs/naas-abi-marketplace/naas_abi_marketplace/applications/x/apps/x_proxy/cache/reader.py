@@ -194,6 +194,19 @@ class CacheReader:
         self._posts[cache_key] = df
         return df
 
+    def release_window_cache(self) -> int:
+        """Release month-window frames before loading the full-history view.
+
+        Page snapshots reuse several overlapping windows, so retaining those
+        frames while the Users dataset loads all history multiplies peak memory.
+        Keep an already-loaded full-history frame, but discard every windowed
+        view once the window-based pages have finished.
+        """
+        window_keys = [key for key in self._posts if key is not None]
+        for key in window_keys:
+            del self._posts[key]
+        return len(window_keys)
+
     def _all_matched_ids(self):
         """Ids that matched in *any* month - one narrow column over history."""
         import polars as pl

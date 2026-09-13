@@ -165,6 +165,50 @@ def test_first_publish_builds_every_shard():
     assert all(e.get("fingerprint") for e in _manifest(storage)["shards"].values())
 
 
+def test_cache_materializes_posts_in_bounded_shard_batches(monkeypatch):
+    class _RecordingCache:
+        def __init__(self) -> None:
+            self.post_queries: list[list[str]] = []
+
+        def projection_state(self) -> dict:
+            return {}
+
+        def author_index(self) -> list[dict]:
+            return [_A, _B]
+
+        def descriptions(self) -> dict[str, str]:
+            return {}
+
+        def display_names(self) -> dict[str, str]:
+            return {}
+
+        def accounts_by_username(self) -> dict[str, dict]:
+            return {}
+
+        def posts_by_username(self, usernames: list[str]) -> dict[str, list[dict]]:
+            self.post_queries.append(list(usernames))
+            return {
+                username: [
+                    {
+                        "created_at": "2026-07-07T12:00:00+00:00",
+                        "text": f"post by {username}",
+                    }
+                ]
+                for username in usernames
+            }
+
+    assert user_shard("alice") != user_shard("bob")
+    storage = _FakeObjectStorage()
+    cache = _RecordingCache()
+    ctx = _RecordingContext(storage, [])
+    ctx.cache = cache
+    monkeypatch.setattr(users, "CACHE_SHARD_BATCH_SIZE", 1)
+
+    users.publish(ctx)
+
+    assert sorted(cache.post_queries) == [["alice"], ["bob"]]
+
+
 def test_warm_usernames_publishes_only_explicit_report_posts(monkeypatch):
     storage = _FakeObjectStorage()
     shard = user_shard("alice")
