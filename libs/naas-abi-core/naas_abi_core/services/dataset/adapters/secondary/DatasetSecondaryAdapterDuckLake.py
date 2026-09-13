@@ -632,7 +632,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         def read(con: Any) -> bool:
             return (
                 con.execute(
-                    f"SELECT 1 FROM {self._ident(f'__ducklake_metadata_{CATALOG_ALIAS}')}.ducklake_snapshot "
+                    'SELECT 1 FROM "__ducklake_metadata_abi_datasets".ducklake_snapshot '
                     "WHERE snapshot_id = ?",
                     [snapshot_id],
                 ).fetchone()
