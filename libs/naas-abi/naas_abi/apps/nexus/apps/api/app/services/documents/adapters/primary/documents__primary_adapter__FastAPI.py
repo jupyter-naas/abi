@@ -66,7 +66,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
 from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -3065,6 +3065,10 @@ class HeadingOutlineItem(BaseModel):
 
 
 class DocumentCommandItem(BaseModel):
+    """One verb. Extra keys pass through to the shared mutators (slot, fill)."""
+
+    model_config = ConfigDict(extra="allow")
+
     type: str = Field(..., min_length=1, max_length=64)
     after_heading: int = -1
     heading_index: int | None = None
@@ -3202,21 +3206,24 @@ async def _run_section_html_mutation(
         if mutated.get("error"):
             raise _mutation_http_error(mutated)
         new_html = str(mutated["html"])
-        commit_sha, source = _save_live_document_html(
-            sc,
-            repo_id=repo_id,
-            paths=paths,
-            html=new_html,
-            message=message,
-            workspace_id=workspace_id,
-            slug=slug,
-            current_user=current_user,
-            username=username,
-            author_name=author_name,
-            author_email=author_email,
-            sidecar_base=sidecar_base,
-            sidecar_secret=sidecar_secret,
-        )
+        if new_html == html:
+            commit_sha, source = None, "unchanged"
+        else:
+            commit_sha, source = _save_live_document_html(
+                sc,
+                repo_id=repo_id,
+                paths=paths,
+                html=new_html,
+                message=message,
+                workspace_id=workspace_id,
+                slug=slug,
+                current_user=current_user,
+                username=username,
+                author_name=author_name,
+                author_email=author_email,
+                sidecar_base=sidecar_base,
+                sidecar_secret=sidecar_secret,
+            )
         sections = [
             SectionOutlineItem(
                 index=int(item["index"]),

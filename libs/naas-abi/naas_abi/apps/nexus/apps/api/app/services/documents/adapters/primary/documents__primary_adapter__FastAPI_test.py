@@ -1237,6 +1237,65 @@ def test_document_commands_insert_page_break_and_heading(monkeypatch) -> None:
     assert any(row.get("title") == "Annex" for row in body["outline"])
 
 
+def test_document_commands_pass_slot_and_fill_keys(monkeypatch) -> None:
+    """HTTP extras reach the same mutators as CLI and the agent."""
+    sc = SourceControlService(InMemoryAdapter())
+    client = _sections_client(monkeypatch, sc)
+    created = client.post(
+        "/documents/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Untitled document",
+            "slug": "slot-document",
+            "template_id": "article-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    filled = client.post(
+        "/documents/projects/slot-document/commands",
+        json={
+            "workspace_id": "ws-test",
+            "requests": [
+                {
+                    "type": "fill_slots",
+                    "title": "CAC EDF win plan",
+                    "subtitle": "Audit, board France",
+                    "intro": "EDF opened the CAC window this week.",
+                    "note": "Keep the decision box this time.",
+                    "quote": "One owner, one line.",
+                    "sections": [
+                        {"heading": "What changed", "body": "Public signals arrived together."},
+                        {"heading": "What we do", "body": "Name an owner."},
+                        {"heading": "Point", "body": "Keep silence external."},
+                    ],
+                    "tables_heading": "Ask",
+                    "tables_intro": "Three rows only.",
+                    "tables": [
+                        {"heading": "Ask table", "headers": ["Item"], "rows": [["Owner"]]}
+                    ],
+                }
+            ],
+        },
+    )
+    assert filled.status_code == 200, filled.text
+    html = filled.json().get("html") or ""
+    assert "CAC EDF win plan" in html
+    assert "Keep silence external." in html
+
+    missed = client.post(
+        "/documents/projects/slot-document/commands",
+        json={
+            "workspace_id": "ws-test",
+            "requests": [
+                {"type": "update_paragraph_style", "slot": "intro", "style": "normal"}
+            ],
+        },
+    )
+    assert missed.status_code == 422, missed.text
+    assert "No slot 'intro'" in missed.text
+
+
 def test_document_commands_rename_updates_project_title(monkeypatch) -> None:
     sc = SourceControlService(InMemoryAdapter())
     client = _sections_client(monkeypatch, sc)
