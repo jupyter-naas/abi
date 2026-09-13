@@ -30,16 +30,16 @@ from naas_abi.agents.documents import (
     auto_document_title,
     derive_document_title,
     is_placeholder_document_title,
+    note_documents_apply_attempt,
     note_documents_list,
     note_documents_section_read,
-    reject_documents_section_read,
-    reject_read_document,
-    reject_repeat_list_document_sections,
-    note_documents_apply_attempt,
     note_documents_slot_fill,
     reject_apply_document_commands_on_fill,
+    reject_documents_section_read,
+    reject_read_document,
     reject_repeat_apply_document_commands,
     reject_repeat_fill_document_slots,
+    reject_repeat_list_document_sections,
     reject_replace_in_document_on_fill,
     reject_unresearched_documents_write,
     resolve_document_title,
@@ -2446,9 +2446,16 @@ def documents_tools() -> list[BaseTool]:
         *,
         write_label: str = "document commands",
     ) -> dict[str, Any]:
+        hidden = reject_apply_document_commands_on_fill()
+        if hidden:
+            return hidden
         blocked = reject_unresearched_documents_write()
         if blocked:
             return blocked
+        repeat = reject_repeat_apply_document_commands()
+        if repeat:
+            return repeat
+        note_documents_apply_attempt()
         from naas_abi.agents.tools.documents_commands import (
             apply_document_commands as apply_commands,
         )
@@ -2494,16 +2501,6 @@ def documents_tools() -> list[BaseTool]:
 
         For news or factual briefs: call web_search once this turn first.
         """
-        blocked = reject_apply_document_commands_on_fill()
-        if blocked:
-            return blocked
-        repeat = reject_repeat_apply_document_commands()
-        if repeat:
-            return repeat
-        research = reject_unresearched_documents_write()
-        if research:
-            return research
-        note_documents_apply_attempt()
         try:
             payload = json.loads(requests_json or "[]")
         except json.JSONDecodeError as exc:
@@ -2556,11 +2553,12 @@ def documents_tools() -> list[BaseTool]:
         )
 
         write_label = note_documents_slot_fill()
+        note_documents_write(write_label)
         result = _run_section_mutation(
             slug,
             lambda html: fill_slots(html, payload),
             message or "feat(document): fill slots via Abi",
-            write_label,
+            "",
             default_type="feat",
         )
         if "error" not in result:
@@ -2917,6 +2915,14 @@ def documents_agent_tools() -> list[BaseTool]:
     if "apply_document_commands" in names:
         hidden = set(LEFTOVER_SECTION_TOOL_NAMES) | set(FILL_TURN_HIDDEN_TOOL_NAMES)
         if documents_research_required.get():
-            hidden.add("apply_document_commands")
+            hidden.update(
+                {
+                    "apply_document_commands",
+                    "insert_heading",
+                    "insert_paragraph",
+                    "insert_page_break",
+                    "apply_paragraph_style",
+                }
+            )
         return [tool for tool in tools if tool.name not in hidden]
     return tools

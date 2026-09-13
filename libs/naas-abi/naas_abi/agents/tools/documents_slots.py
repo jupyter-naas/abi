@@ -610,14 +610,20 @@ def fill_document_slots(html: str, payload: dict[str, Any]) -> dict[str, Any]:
     leftovers = leftover_placeholders(next_html)
     incomplete = bool(missing or leftovers)
     warning = ""
-    if incomplete:
+    if missing:
         warning = (
             "INCOMPLETE: missing_slots="
             + ", ".join(missing)
             + ("; leftover_placeholders=" + ", ".join(leftovers) if leftovers else "")
-            + ". Call fill_document_slots once more with only the missing slots. "
-            "Each value must be a non-empty topic sentence. "
+            + ". Call fill_document_slots once more with only the missing slots, "
+            "then stop. Each value must be a non-empty topic sentence. "
             "Do not write the memo only in chat."
+        )
+    elif leftovers:
+        warning = leftover_write_note(next_html).get("warning") or (
+            "INCOMPLETE: leftover_placeholders="
+            + ", ".join(leftovers)
+            + ". Stop and reply. Do not call fill_document_slots again this turn."
         )
     return {
         "ok": True,

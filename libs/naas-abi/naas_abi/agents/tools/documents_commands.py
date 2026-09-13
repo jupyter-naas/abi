@@ -443,16 +443,45 @@ def leftover_write_note(html: str) -> dict[str, Any]:
     }
     if leftovers:
         note["incomplete"] = True
-        note["warning"] = (
-            "INCOMPLETE: seed placeholder copy remains: "
-            + ", ".join(leftovers)
-            + ". Call fill_document_slots once more with leftover_slots keys "
-            "only. Each value must be a non-empty topic sentence. "
-            "leftover_slots is empty only when those slots have real topic "
-            "prose. Do not write the memo only in chat. "
+        note["warning"] = leftover_followup_warning(leftovers, slots)
+    return note
+
+
+def leftover_followup_warning(leftovers: list[str], slots: list[str]) -> str:
+    """Invite at most one leftover fill. Never say keep going after a no-op."""
+    from naas_abi.agents.documents.policy import documents_fill_count
+
+    phrases = ", ".join(leftovers)
+    keys = ", ".join(slots) if slots else "(none)"
+    prefix = (
+        "INCOMPLETE: seed placeholder copy remains: "
+        + phrases
+        + ". leftover_slots keys: "
+        + keys
+        + ". "
+    )
+    if documents_fill_count() >= 2:
+        return (
+            prefix
+            + "Stop and reply. Do not call fill_document_slots again this turn. "
+            "leftover_slots wait for a later turn. "
             "Do not call apply_document_commands."
         )
-    return note
+    if documents_fill_count() >= 1:
+        return (
+            prefix
+            + "Call fill_document_slots once more with leftover_slots keys "
+            "only, then stop. Each value must be a non-empty topic sentence. "
+            "Do not write the memo only in chat. "
+            "Do not call apply_document_commands."
+        )
+    return (
+        prefix
+        + "Call fill_document_slots once with leftover_slots keys, then stop. "
+        "Each value must be a non-empty topic sentence. "
+        "Do not write the memo only in chat. "
+        "Do not call apply_document_commands."
+    )
 
 
 def _relocate_stray_in_section(section: str) -> str:
@@ -1126,15 +1155,25 @@ def apply_document_commands(
         applied.append(typ)
 
     if not applied:
+        leftover = leftover_write_note(html)
+        if leftover.get("leftover_slots"):
+            extra = leftover.get("warning") or (
+                "leftover_slots remain. Call fill_document_slots once "
+                "with those keys, then stop."
+            )
+        else:
+            extra = (
+                "Stop and reply. Do not apply again. leftover_slots is empty, "
+                "so do not call fill_document_slots."
+            )
         return {
             "error": (
                 "No commands applied. apply_document_commands is not the "
-                "fill path. If leftover_placeholders is not empty, call "
-                "fill_document_slots once more with leftover_slots keys. "
-                "For a heading change, call update_title. Do not apply again."
+                "fill path. "
+                + extra
             ),
             "skipped": skipped,
-            **leftover_write_note(html),
+            **leftover,
         }
 
     next_html = normalize_document_flow(next_html)

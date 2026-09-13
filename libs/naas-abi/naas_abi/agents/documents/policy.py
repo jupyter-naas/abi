@@ -102,9 +102,9 @@ _SECTION_READ_AFTER_WRITE_MESSAGE = (
     "Report what changed, or write a different section."
 )
 _READ_DOCUMENT_AFTER_WRITE_MESSAGE = (
-    "Do not reread after writing. If leftover_placeholders is not empty, "
-    "call fill_document_slots once more with only the missing slots. "
-    "Do not call read_document."
+    "Do not reread after writing. Stop and reply. "
+    "Do not call read_document, insert_heading, insert_paragraph, "
+    "or apply_document_commands again this turn."
 )
 _READ_DOCUMENT_ONCE_MESSAGE = (
     "read_document already ran this turn. Use that outline. "
@@ -122,10 +122,9 @@ _APPLY_ON_FILL_MESSAGE = (
     "Do not apply. Do not reread."
 )
 _REPEAT_APPLY_MESSAGE = (
-    "apply_document_commands already ran this turn. Stop. "
-    "Do not call it again. Do not reread. "
-    "If leftover_placeholders is not empty, call fill_document_slots "
-    "once more with leftover_slots keys only."
+    "A document apply or insert already ran this turn. Stop and reply. "
+    "Do not call apply_document_commands, insert_heading, insert_paragraph, "
+    "insert_page_break, or read_document again."
 )
 _APPLY_ATTEMPT_LABEL = "apply_document_commands"
 _REPEAT_FILL_MESSAGE = (
@@ -390,12 +389,23 @@ def reject_apply_document_commands_on_fill() -> dict[str, Any] | None:
     return None
 
 
-def reject_repeat_apply_document_commands() -> dict[str, Any] | None:
-    """One apply_document_commands call per Documents turn, including copy-edits."""
-    if not documents_turn_active():
-        return None
+def documents_apply_ran() -> bool:
+    """True after apply_document_commands or an insert_* that shares that lock."""
     written = documents_writes_completed.get() or []
-    if _APPLY_ATTEMPT_LABEL in written:
+    return _APPLY_ATTEMPT_LABEL in written
+
+
+def documents_fill_count() -> int:
+    """How many fill_document_slots persists this turn (including follow-up)."""
+    written = documents_writes_completed.get() or []
+    return sum(
+        1 for item in written if item in {_FILL_WRITE_LABEL, _FILL_FOLLOWUP_LABEL}
+    )
+
+
+def reject_repeat_apply_document_commands() -> dict[str, Any] | None:
+    """One apply or insert_* call per turn, including Bob invoking Documents tools."""
+    if documents_apply_ran():
         return {"error": _REPEAT_APPLY_MESSAGE}
     return None
 
@@ -406,12 +416,13 @@ def note_documents_apply_attempt() -> None:
 
 
 def reject_repeat_fill_document_slots() -> dict[str, Any] | None:
-    """One complete fill, plus one follow-up for missing slots only."""
-    if not (documents_turn_active() and documents_research_required.get()):
-        return None
-    written = documents_writes_completed.get() or []
-    fills = [item for item in written if item in {_FILL_WRITE_LABEL, _FILL_FOLLOWUP_LABEL}]
-    if len(fills) >= 2:
+    """One complete fill, plus one follow-up for missing slots only.
+
+    Applies whenever the tool is invoked, including Bob and copy-edit turns.
+    The research flag must not disable this lock: leftover INCOMPLETE used
+    to keep asking for another fill after research_required was already off.
+    """
+    if documents_fill_count() >= 2:
         return {"error": _REPEAT_FILL_MESSAGE}
     return None
 

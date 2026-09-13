@@ -260,6 +260,7 @@ def test_leftover_write_note_marks_incomplete() -> None:
     assert "INCOMPLETE" in note["warning"]
     assert "fill_document_slots" in note["warning"]
     assert "apply_document_commands" in note["warning"]
+    assert "once more" not in note["warning"]
     assert all(isinstance(slot, str) for slot in note["leftover_slots"])
     assert set(note["leftover_slots"]) <= set(FILL_SLOT_KEYS)
     assert "tables" in note["leftover_slots"] or "tables_heading" in note["leftover_slots"]
@@ -268,6 +269,25 @@ def test_leftover_write_note_marks_incomplete() -> None:
     assert clean["leftover_slots"] == []
     if note["leftover_placeholders"]:
         assert note["leftover_slots"]
+
+
+def test_leftover_write_note_after_two_fills_says_stop() -> None:
+    from naas_abi.agents.documents.policy import note_documents_slot_fill
+    from naas_abi_core.services.agent.context import (
+        documents_writes_completed,
+        note_documents_write,
+    )
+
+    token = documents_writes_completed.set([])
+    try:
+        note_documents_write(note_documents_slot_fill())
+        note_documents_write(note_documents_slot_fill())
+        note = leftover_write_note(_SEEDED_PAGE)
+        assert "INCOMPLETE" in note["warning"]
+        assert "Stop and reply" in note["warning"]
+        assert "once more" not in note["warning"]
+    finally:
+        documents_writes_completed.reset(token)
 
 
 def test_leftover_placeholders_flags_seed_table_headers() -> None:
@@ -386,7 +406,8 @@ def test_apply_failure_does_not_ask_for_another_apply() -> None:
         [{"type": "replace_text", "find": "<h2>Missing</h2>", "replace": "Nope"}],
     )
     assert result.get("error")
-    assert "fill_document_slots" in result["error"]
     assert "find and class_name" not in result["error"]
     assert "Do not apply again" in result["error"]
+    assert "once more" not in result["error"]
+    assert "do not call fill_document_slots" in result["error"]
     assert all(isinstance(slot, str) for slot in result.get("leftover_slots", []))

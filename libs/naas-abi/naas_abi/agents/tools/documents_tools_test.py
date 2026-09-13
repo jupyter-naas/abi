@@ -1129,6 +1129,8 @@ def test_documents_agent_tools_hide_apply_on_a_fill_turn():
     try:
         bound = {t.name for t in documents_agent_tools()}
         assert "apply_document_commands" not in bound
+        assert "insert_heading" not in bound
+        assert "insert_paragraph" not in bound
         assert "fill_document_slots" in bound
     finally:
         documents_research_required.reset(token)
@@ -1191,6 +1193,24 @@ def test_apply_document_commands_persists_without_returning_html(monkeypatch):
         _reset_tokens(tokens)
 
 
+def test_insert_heading_then_insert_paragraph_is_once_per_turn(monkeypatch):
+    _seed_in_memory_document(_bind_in_memory_git(monkeypatch), _SAMPLE)
+    tokens = _sections_context()
+    try:
+        insert = next(t for t in documents_tools() if t.name == "insert_heading")
+        paragraph = next(t for t in documents_tools() if t.name == "insert_paragraph")
+        first = insert.invoke({"title": "Sources", "level": 2, "after_heading": 0})
+        assert "error" not in first, first
+        blocked = paragraph.invoke(
+            {"text": "OCDE PISA 2025 Volume I", "after_heading": 0}
+        )
+        assert blocked is not None
+        assert "already ran this turn" in blocked["error"]
+        assert "once more" not in blocked["error"]
+    finally:
+        _reset_tokens(tokens)
+
+
 def test_apply_document_commands_is_noop_on_a_fill_turn(monkeypatch):
     _seed_in_memory_document(_bind_in_memory_git(monkeypatch), _SAMPLE)
     tokens = _sections_context()
@@ -1220,7 +1240,7 @@ def test_apply_document_commands_is_noop_on_a_fill_turn(monkeypatch):
         _reset_tokens(tokens[:-1])
 
 
-def test_insert_heading_respects_research_gate(monkeypatch):
+def test_insert_heading_is_refused_on_a_fill_turn(monkeypatch):
     _seed_in_memory_document(_bind_in_memory_git(monkeypatch), _SAMPLE)
     tokens = _sections_context()
     tokens.append(documents_research_required.set(True))
@@ -1229,7 +1249,8 @@ def test_insert_heading_respects_research_gate(monkeypatch):
         insert = next(t for t in documents_tools() if t.name == "insert_heading")
         blocked = insert.invoke({"title": "Findings"})
         assert blocked is not None
-        assert "web_search" in blocked["error"]
+        assert "fill_document_slots" in blocked["error"]
+        assert "not available" in blocked["error"]
     finally:
         documents_research_required.reset(tokens[-2])
         documents_research_queries.reset(tokens[-1])

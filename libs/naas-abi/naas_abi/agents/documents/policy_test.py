@@ -23,9 +23,9 @@ from naas_abi.agents.documents.policy import (
     note_documents_list,
     note_documents_section_read,
     note_documents_web_search,
+    reject_apply_document_commands_on_fill,
     reject_documents_section_read,
     reject_read_document,
-    reject_apply_document_commands_on_fill,
     reject_repeat_apply_document_commands,
     reject_repeat_list_document_sections,
     reject_replace_in_document_on_fill,
@@ -817,6 +817,8 @@ def test_read_document_is_once_per_turn_and_refuses_after_write() -> None:
         blocked = reject_read_document()
         assert blocked is not None
         assert "Do not reread after writing" in blocked["error"]
+        assert "once more" not in blocked["error"]
+        assert "Stop and reply" in blocked["error"]
     finally:
         documents_list_calls.reset(tokens[0])
         documents_writes_completed.reset(tokens[1])
@@ -927,6 +929,40 @@ def test_fill_document_slots_allows_one_follow_up() -> None:
         documents_active_slug.reset(tokens[0])
         documents_research_required.reset(tokens[1])
         documents_writes_completed.reset(tokens[2])
+
+
+def test_fill_document_slots_is_once_on_a_copy_edit_turn() -> None:
+    from naas_abi.agents.documents.policy import (
+        note_documents_slot_fill,
+        reject_repeat_fill_document_slots,
+    )
+
+    tokens = (
+        documents_active_slug.set("untitled-edit"),
+        documents_research_required.set(False),
+        documents_writes_completed.set([]),
+    )
+    try:
+        note_documents_write(note_documents_slot_fill())
+        note_documents_write(note_documents_slot_fill())
+        blocked = reject_repeat_fill_document_slots()
+        assert blocked is not None
+        assert "already completed" in blocked["error"]
+    finally:
+        documents_active_slug.reset(tokens[0])
+        documents_research_required.reset(tokens[1])
+        documents_writes_completed.reset(tokens[2])
+
+
+def test_apply_lock_binds_when_bob_invokes_documents_tools() -> None:
+    tokens = (documents_writes_completed.set(["apply_document_commands"]),)
+    try:
+        blocked = reject_repeat_apply_document_commands()
+        assert blocked is not None
+        assert "already ran this turn" in blocked["error"]
+        assert "once more" not in blocked["error"]
+    finally:
+        documents_writes_completed.reset(tokens[0])
 
 
 def test_list_document_sections_is_once_per_turn() -> None:
