@@ -980,26 +980,26 @@ _KNOWN_LAYOUTS = frozenset({"cover", "section-divider", "content", "page-break"}
 _LAYOUT_SKELETONS = {
     "cover": (
         '<section class="page cover" data-layout="cover">'
-        '<h1 class="fm-title">{title}</h1>'
+        '<h1 class="fmz-title">{title}</h1>'
         '<p class="deck">A one-line summary the reader can scan before the body.</p>'
         "</section>"
     ),
     "section-divider": (
         '<section class="page" data-layout="section-divider">'
-        '<h2 class="fm-heading-1">{title}</h2>'
+        '<h2 class="fmz-heading-1">{title}</h2>'
         "</section>"
     ),
     "content": (
         '<section class="page" data-layout="content">'
-        '<h2 class="fm-heading-1">{title}</h2>'
-        '<p class="fm-normal"></p>'
+        '<h2 class="fmz-heading-1">{title}</h2>'
+        '<p class="fmz-normal"></p>'
         "</section>"
     ),
     "page-break": (
         '<section class="page" data-layout="page-break">'
         '<div class="page-break" data-nexus-page-break></div>'
-        '<h2 class="fm-heading-1">{title}</h2>'
-        '<p class="fm-normal"></p>'
+        '<h2 class="fmz-heading-1">{title}</h2>'
+        '<p class="fmz-normal"></p>'
         "</section>"
     ),
 }

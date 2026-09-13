@@ -152,34 +152,40 @@ KNOWN_COMMANDS = frozenset(
 # Picker names (Normal text, Title, Subtitle, Heading 1/2/3). Title is the
 # cover H1. Heading 1 is the official Word section style (h2), not the title.
 PARAGRAPH_STYLE_SPECS: dict[str, tuple[str, str]] = {
-    "normal": ("p", "fm-normal"),
-    "normal text": ("p", "fm-normal"),
-    "paragraph": ("p", "fm-normal"),
-    "fm-normal": ("p", "fm-normal"),
-    "p": ("p", "fm-normal"),
-    "title": ("h1", "fm-title"),
-    "fm-title": ("h1", "fm-title"),
-    "h1": ("h1", "fm-title"),
-    "subtitle": ("p", "fm-subtitle"),
-    "fm-subtitle": ("p", "fm-subtitle"),
-    "heading1": ("h2", "fm-heading-1"),
-    "heading 1": ("h2", "fm-heading-1"),
-    "fm-heading-1": ("h2", "fm-heading-1"),
-    "h2": ("h2", "fm-heading-1"),
-    "heading2": ("h3", "fm-heading-2"),
-    "heading 2": ("h3", "fm-heading-2"),
-    "fm-heading-2": ("h3", "fm-heading-2"),
-    "h3": ("h3", "fm-heading-2"),
-    "heading3": ("h4", "fm-heading-3"),
-    "heading 3": ("h4", "fm-heading-3"),
-    "fm-heading-3": ("h4", "fm-heading-3"),
-    "h4": ("h4", "fm-heading-3"),
+    "normal": ("p", "fmz-normal"),
+    "normal text": ("p", "fmz-normal"),
+    "paragraph": ("p", "fmz-normal"),
+    "fmz-normal": ("p", "fmz-normal"),
+    "fm-normal": ("p", "fmz-normal"),
+    "p": ("p", "fmz-normal"),
+    "title": ("h1", "fmz-title"),
+    "fmz-title": ("h1", "fmz-title"),
+    "fm-title": ("h1", "fmz-title"),
+    "h1": ("h1", "fmz-title"),
+    "subtitle": ("p", "fmz-subtitle"),
+    "fmz-subtitle": ("p", "fmz-subtitle"),
+    "fm-subtitle": ("p", "fmz-subtitle"),
+    "heading1": ("h2", "fmz-heading-1"),
+    "heading 1": ("h2", "fmz-heading-1"),
+    "fmz-heading-1": ("h2", "fmz-heading-1"),
+    "fm-heading-1": ("h2", "fmz-heading-1"),
+    "h2": ("h2", "fmz-heading-1"),
+    "heading2": ("h3", "fmz-heading-2"),
+    "heading 2": ("h3", "fmz-heading-2"),
+    "fmz-heading-2": ("h3", "fmz-heading-2"),
+    "fm-heading-2": ("h3", "fmz-heading-2"),
+    "h3": ("h3", "fmz-heading-2"),
+    "heading3": ("h4", "fmz-heading-3"),
+    "heading 3": ("h4", "fmz-heading-3"),
+    "fmz-heading-3": ("h4", "fmz-heading-3"),
+    "fm-heading-3": ("h4", "fmz-heading-3"),
+    "h4": ("h4", "fmz-heading-3"),
 }
 _INSERT_HEADING_STYLES = {
-    1: ("h1", "fm-title"),
-    2: ("h2", "fm-heading-1"),
-    3: ("h3", "fm-heading-2"),
-    4: ("h4", "fm-heading-3"),
+    1: ("h1", "fmz-title"),
+    2: ("h2", "fmz-heading-1"),
+    3: ("h3", "fmz-heading-2"),
+    4: ("h4", "fmz-heading-3"),
 }
 _PICKER_STYLE_NAMES = "normal, title, subtitle, heading1, heading2, or heading3"
 
@@ -516,13 +522,13 @@ def insert_heading(html: str, title: str = "Heading", level: int = 2, after_head
         html,
         after_heading,
         f'<{tag} class="{cls}">{_escape(title or "Heading")}</{tag}>\n'
-        f'<p class="fm-normal"></p>',
+        f'<p class="fmz-normal"></p>',
     )
 
 
 def insert_paragraph(html: str, text: str = "", after_heading: int = -1) -> str:
     return insert_after_heading_block(
-        html, after_heading, f'<p class="fm-normal">{_escape(text)}</p>'
+        html, after_heading, f'<p class="fmz-normal">{_escape(text)}</p>'
     )
 
 
@@ -666,8 +672,8 @@ def _data_attrs(open_tag: str) -> str:
 
 
 def _style_class_attr(class_name: str) -> str:
-    if class_name == "fm-subtitle":
-        return "fm-subtitle subtitle"
+    if class_name == "fmz-subtitle":
+        return "fmz-subtitle subtitle"
     return class_name
 
 

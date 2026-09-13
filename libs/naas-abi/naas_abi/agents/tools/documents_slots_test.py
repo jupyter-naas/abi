@@ -36,12 +36,12 @@ _SEED = """<!doctype html><html><head><title>Document title</title></head><body>
     <h2 data-slot="tables-heading">Findings</h2>
     <p data-slot="tables-intro">Two official table styles. Replace the labels. Do not put confidential figures in a seed.</p>
     <h3 data-slot="table-0-heading">Non shaded</h3>
-    <table class="fm-table" data-slot="table-0">
+    <table class="fmz-table" data-slot="table-0">
       <thead><tr><th>Topic</th><th>Owner</th><th>Status</th></tr></thead>
       <tbody><tr><td>Scope</td><td>Lead</td><td>Open</td></tr></tbody>
     </table>
     <h3 data-slot="table-1-heading">Shaded</h3>
-    <table class="fm-shaded" data-slot="table-1">
+    <table class="fmz-shaded" data-slot="table-1">
       <thead><tr><th>Item</th><th>Note</th></tr></thead>
       <tbody><tr><td>Assumption</td><td>Replace with the working premise.</td></tr></tbody>
     </table>
@@ -148,10 +148,10 @@ def test_fill_title_writes_cover_h1_not_situation_heading() -> None:
 <main class="document">
 <section class="page cover" data-layout="cover">
   <div class="doc-body">
-    <h1 class="fm-title" data-slot="title">Old title</h1>
-    <p class="fm-subtitle subtitle" data-slot="subtitle">Old subtitle</p>
-    <h2 class="fm-heading-1" data-slot="situation-heading">Situation</h2>
-    <p class="fm-normal" data-slot="situation">Old situation.</p>
+    <h1 class="fmz-title" data-slot="title">Old title</h1>
+    <p class="fmz-subtitle subtitle" data-slot="subtitle">Old subtitle</p>
+    <h2 class="fmz-heading-1" data-slot="situation-heading">Situation</h2>
+    <p class="fmz-normal" data-slot="situation">Old situation.</p>
   </div>
 </section>
 <section class="page content" data-layout="content">
@@ -170,12 +170,12 @@ def test_fill_title_writes_cover_h1_not_situation_heading() -> None:
     <h2 data-slot="tables-heading">Findings</h2>
     <p data-slot="tables-intro">Two official table styles. Replace the labels. Do not put confidential figures in a seed.</p>
     <h3 data-slot="table-0-heading">Non shaded</h3>
-    <table class="fm-table" data-slot="table-0">
+    <table class="fmz-table" data-slot="table-0">
       <thead><tr><th>Topic</th><th>Owner</th><th>Status</th></tr></thead>
       <tbody><tr><td>Scope</td><td>Lead</td><td>Open</td></tr></tbody>
     </table>
     <h3 data-slot="table-1-heading">Shaded</h3>
-    <table class="fm-shaded" data-slot="table-1">
+    <table class="fmz-shaded" data-slot="table-1">
       <thead><tr><th>Item</th><th>Note</th></tr></thead>
       <tbody><tr><td>Assumption</td><td>Replace with the working premise.</td></tr></tbody>
     </table>
@@ -198,7 +198,7 @@ def test_fill_title_promotes_h2_title_slot_to_h1() -> None:
         "</section>"
     )
     promoted = ensure_title_slot_is_h1(raw)
-    assert '<h1 class="fm-title" data-slot="title">Document title</h1>' in promoted
+    assert '<h1 class="fmz-title" data-slot="title">Document title</h1>' in promoted
     assert 'data-slot="title"' in promoted
     assert "<h2" not in promoted
 

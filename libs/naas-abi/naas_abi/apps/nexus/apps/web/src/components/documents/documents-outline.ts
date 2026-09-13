@@ -287,7 +287,7 @@ export function insertHeadingHtml(
   return insertMarkupAfterHeadingBlock(
     html,
     afterHeadingIndex,
-    `<h2 class="fm-heading-1">${safe}</h2>\n<p class="fm-normal"></p>`,
+    `<h2 class="fmz-heading-1">${safe}</h2>\n<p class="fmz-normal"></p>`,
   );
 }
 

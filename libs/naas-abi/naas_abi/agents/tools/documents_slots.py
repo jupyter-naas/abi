@@ -29,7 +29,7 @@ _TITLE_SLOT_OPEN_RE = re.compile(
     re.IGNORECASE,
 )
 _CLASS_OPEN_RE = re.compile(
-    r"<(?P<tag>[a-z][a-z0-9]*)\b[^>]*\bclass\s*=\s*[\"'][^\"']*\b(?P<cls>subtitle|intro|note|palette|fm-table|fm-shaded)\b[^\"']*[\"'][^>]*>",
+    r"<(?P<tag>[a-z][a-z0-9]*)\b[^>]*\bclass\s*=\s*[\"'][^\"']*\b(?P<cls>subtitle|intro|note|palette|fmz-table|fmz-shaded|fm-table|fm-shaded)\b[^\"']*[\"'][^>]*>",
     re.IGNORECASE,
 )
 _LAYOUT_OPEN_RE = re.compile(
@@ -115,7 +115,7 @@ def ensure_title_slot_is_h1(html: str) -> str:
         match.group("attrs") or "",
         flags=re.IGNORECASE,
     )
-    new_open = f'<h1 class="fm-title"{attrs}>'
+    new_open = f'<h1 class="fmz-title"{attrs}>'
     return f"{html[: match.start()]}{new_open}{inner}</h1>{html[end:]}"
 
 

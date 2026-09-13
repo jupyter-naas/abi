@@ -855,7 +855,7 @@ export function prepareSectionsPreviewHtml(html: string): string {
     min-height: 0 !important;
     background: transparent !important;
     box-shadow: none !important;
-    counter-reset: fm-page;
+    counter-reset: fmz-page;
   }
   .document[data-nexus-paginated="1"] > .page,
   .document[data-nexus-paginated="1"] > .section {
@@ -895,7 +895,7 @@ export function prepareSectionsPreviewHtml(html: string): string {
     box-shadow: 0 1px 3px rgba(26, 26, 26, 0.10), 0 12px 32px rgba(26, 26, 26, 0.12) !important;
     overflow: hidden !important;
     flex-shrink: 0 !important;
-    counter-increment: fm-page;
+    counter-increment: fmz-page;
   }
   .letter-page > .doc-header {
     position: static !important;

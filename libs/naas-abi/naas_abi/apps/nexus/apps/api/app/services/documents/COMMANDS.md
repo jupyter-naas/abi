@@ -46,7 +46,7 @@ The first error aborts the batch (same idea as Docs `batchUpdate`).
 |---|---|---|
 | `insert_text` | Insert text as a paragraph after a heading | Docs `insertText`; ODF `addParagraph` / `insert` |
 | `insert_paragraph` | Insert a `<p>` after a heading | Pandoc `Para`; ODF paragraph |
-| `insert_heading` | Insert Title (`h1.fm-title`) or Heading 1/2/3 (`h2`/`h3`/`h4`) | Pandoc `Header`; Docs `updateParagraphStyle` |
+| `insert_heading` | Insert Title (`h1.fmz-title`) or Heading 1/2/3 (`h2`/`h3`/`h4`) | Pandoc `Header`; Docs `updateParagraphStyle` |
 | `insert_page_break` | Insert a hard page break (same section) | Docs `insertPageBreak`; ODF `fo:break-before=page`; Word `w:br w:type="page"`; Pandoc pagebreak |
 | `delete_range` | Delete a heading block (that heading through the next) | Docs `deleteContentRange` |
 | `replace_text` | Replace a substring | Docs `replaceAllText` |
@@ -66,12 +66,12 @@ a paragraph style.
 
 | Picker | Style token | Markup |
 |---|---|---|
-| Title | `title` | `h1.fm-title` (cover `data-slot="title"`) |
-| Subtitle | `subtitle` | `p.fm-subtitle.subtitle` |
-| Heading 1 | `heading1` | `h2.fm-heading-1` |
-| Heading 2 | `heading2` | `h3.fm-heading-2` |
-| Heading 3 | `heading3` | `h4.fm-heading-3` |
-| Normal text | `normal` | `p.fm-normal` |
+| Title | `title` | `h1.fmz-title` (cover `data-slot="title"`) |
+| Subtitle | `subtitle` | `p.fmz-subtitle.subtitle` |
+| Heading 1 | `heading1` | `h2.fmz-heading-1` |
+| Heading 2 | `heading2` | `h3.fmz-heading-2` |
+| Heading 3 | `heading3` | `h4.fmz-heading-3` |
+| Normal text | `normal` | `p.fmz-normal` |
 
 `heading1` is not the document title. `fill_slots` `title` writes the
 cover H1, never a section heading such as `situation-heading`.
