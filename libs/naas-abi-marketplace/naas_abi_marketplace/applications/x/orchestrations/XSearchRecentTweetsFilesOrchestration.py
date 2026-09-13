@@ -43,7 +43,10 @@ Launchpad example (for an entry named ``reprocess_envelopes``)::
 
 import posixpath
 import re
+import signal
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import TypeVar
 
 import dagster as dg
 from naas_abi_core import logger
@@ -64,6 +67,43 @@ _ENVELOPE_EXTENSIONS = (".json", ".ndjson", ".json.gz", ".ndjson.gz")
 # ``2026-07-23T15:46:04.705264+00:00_<slug>.json`` or underscored older form
 # ``2026-06-29T17_58_45.974146+00_00_<slug>.json``.
 _ENVELOPE_TS_RE = re.compile(r"^(?P<ts>\d{4}-\d{2}-\d{2}T[\d_:.+-]+?)_")
+_REPROCESS_MAX_RUNTIME_SECONDS = 5 * 60
+T = TypeVar("T")
+
+
+class OrchestrationTimeoutError(TimeoutError):
+    """Raised when file reprocessing exceeds its wall-clock time limit."""
+
+
+def _with_signal_timeout(
+    *,
+    timeout_seconds: float,
+    run_id: str,
+    fn: Callable[[], T],
+) -> T:
+    """Run ``fn`` under a SIGALRM wall-clock timeout (Linux/Unix only)."""
+    if timeout_seconds <= 0:
+        raise OrchestrationTimeoutError(
+            f"X file reprocessing exceeded {timeout_seconds}s (run_id={run_id})."
+        )
+    if not hasattr(signal, "SIGALRM"):
+        return fn()
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+
+    def _handler(_signum, _frame) -> None:  # pragma: no cover - raised by signal
+        raise OrchestrationTimeoutError(
+            f"X file reprocessing exceeded {timeout_seconds}s (run_id={run_id})."
+        )
+
+    signal.signal(signal.SIGALRM, _handler)
+    signal.setitimer(signal.ITIMER_REAL, timeout_seconds)
+    try:
+        return fn()
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+
 
 _FILES_CONFIG_SCHEMA = {
     "prefix": dg.Field(
@@ -330,6 +370,8 @@ def _reprocess_files(
                 file_path, persist=persist, graph_name=graph_name
             )
             processed += 1
+        except OrchestrationTimeoutError:
+            raise
         except Exception as exc:  # noqa: BLE001
             # Don't let one bad envelope abort the whole reprocess run.
             failed += 1
@@ -409,7 +451,11 @@ def _build_reprocess_files_definitions(
 
     @dg.op(name=op_name, config_schema=_FILES_CONFIG_SCHEMA)
     def reprocess_files_op(context) -> dict:
-        return _reprocess_files(config, context.op_config or {})
+        return _with_signal_timeout(
+            timeout_seconds=_REPROCESS_MAX_RUNTIME_SECONDS,
+            run_id=str(getattr(context, "run_id", "unknown-run")),
+            fn=lambda: _reprocess_files(config, context.op_config or {}),
+        )
 
     @dg.job(name=job_name, executor_def=dg.in_process_executor)
     def reprocess_files_job():

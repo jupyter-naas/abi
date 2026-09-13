@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import time
 from unittest.mock import MagicMock, patch
 
 import dagster as dg
+import pytest
 from naas_abi_marketplace.applications.x import XSearchRecentTweetsFilesConfiguration
 from naas_abi_marketplace.applications.x.orchestrations.XSearchRecentTweetsFilesOrchestration import (
+    OrchestrationTimeoutError,
     XSearchRecentTweetsFilesOrchestration,
     _build_reprocess_files_definitions,
+    _with_signal_timeout,
 )
 
 
@@ -21,10 +25,12 @@ def test_cron_schedule_defaults_running_when_enabled_false():
         _files_config(cron="0,15,30,45 * * * *", enabled=False)
     )
 
-    assert job.name == "x_search_recent_tweets_files_reprocess_envelopes"
+    assert job.name == "x_reprocess_recent_tweets_files_reprocess_envelopes"
     assert sensor is None
     assert schedule is not None
-    assert schedule.name == "x_search_recent_tweets_files_schedule_reprocess_envelopes"
+    assert (
+        schedule.name == "x_reprocess_recent_tweets_files_schedule_reprocess_envelopes"
+    )
     assert schedule.default_status == dg.DefaultScheduleStatus.RUNNING
 
 
@@ -33,10 +39,10 @@ def test_interval_sensor_defaults_running_when_enabled_false():
         _files_config(interval_seconds=3600, enabled=False)
     )
 
-    assert job.name == "x_search_recent_tweets_files_reprocess_envelopes"
+    assert job.name == "x_reprocess_recent_tweets_files_reprocess_envelopes"
     assert schedule is None
     assert sensor is not None
-    assert sensor.name == "x_search_recent_tweets_files_sensor_reprocess_envelopes"
+    assert sensor.name == "x_reprocess_recent_tweets_files_sensor_reprocess_envelopes"
     assert sensor.default_status == dg.DefaultSensorStatus.RUNNING
 
 
@@ -58,12 +64,14 @@ def test_definitions_expose_running_triggers_for_configured_entries():
 
     assert (
         schedule_by_name[
-            "x_search_recent_tweets_files_schedule_reprocess_envelopes"
+            "x_reprocess_recent_tweets_files_schedule_reprocess_envelopes"
         ].default_status
         == dg.DefaultScheduleStatus.RUNNING
     )
     assert (
-        sensor_by_name["x_search_recent_tweets_files_sensor_hourly_sweep"].default_status
+        sensor_by_name[
+            "x_reprocess_recent_tweets_files_sensor_hourly_sweep"
+        ].default_status
         == dg.DefaultSensorStatus.RUNNING
     )
 
@@ -81,3 +89,12 @@ def test_definitions_skip_duplicate_files_names():
         orch = XSearchRecentTweetsFilesOrchestration.New()
 
     assert len(list(orch.definitions.schedules or [])) == 1
+
+
+def test_signal_timeout_interrupts_overlong_reprocessing():
+    with pytest.raises(OrchestrationTimeoutError, match="exceeded 0.05s"):
+        _with_signal_timeout(
+            timeout_seconds=0.05,
+            run_id="test-run",
+            fn=lambda: time.sleep(0.2),
+        )
