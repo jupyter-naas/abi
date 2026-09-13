@@ -975,7 +975,7 @@ export function ChatInterface({
   const sheetsTitle = useSheetsStore((s) => s.selectedTitle);
   const sheetsMode = useSheetsStore((s) => s.editorMode);
   const sheetsSelectedIndex = useSheetsStore((s) => s.selectedIndex);
-  const sheetsTabCount = useSheetsStore((s) => s.slideCount);
+  const sheetsTabCount = useSheetsStore((s) => s.tabCount);
   const sheetsChatContext = useMemo(() => {
     const onSheets =
       typeof pathname === 'string' && pathname.includes('/sheets') && Boolean(sheetsSlug);

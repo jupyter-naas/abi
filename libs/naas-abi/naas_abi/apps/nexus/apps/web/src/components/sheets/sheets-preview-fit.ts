@@ -1,9 +1,4 @@
-import {
-  SHEETS_PPTX_FROM_DOM_SCRIPT,
-  SHEETS_PPTX_FROM_DOM_SCRIPT_ID,
-} from './sheets-pptx-from-dom';
-
-/** Canonical slide stage used by Nexus workbook seeds. */
+/** Workbook preview stage (legacy 16:9 layout for multi-tab scroll). */
 export const SHEETS_STAGE_WIDTH = 1280;
 export const SHEETS_STAGE_HEIGHT = 720;
 
@@ -14,7 +9,7 @@ export const SHEETS_INDUSTRY_STAGE_SCALE =
   SHEETS_STAGE_WIDTH / SHEETS_INDUSTRY_STAGE_WIDTH;
 
 /**
- * 16:9 page used by File → Print / Save as PDF.
+ * 16:9 print page size for workbook HTML (@media print in preview CSS).
  *
  * Width and height are already landscape. Do not add the `landscape` keyword:
  * Chrome treats `size: W H landscape` as a swap (7.5in x 13.333in) or drops
@@ -51,26 +46,15 @@ export type SheetsPreviewToParentMessage =
     }
   | {
       source: typeof SHEETS_PREVIEW_MESSAGE_SOURCE;
-      type: 'export-pptx-result' | 'export-pdf-result';
-      ok: boolean;
-      error?: string;
-    }
-  | {
-      source: typeof SHEETS_PREVIEW_MESSAGE_SOURCE;
       type: 'edit-commit';
       edits: SheetsTextEdit[];
     };
 
-export type SheetsPreviewFromParentMessage =
-  | {
-      source: typeof SHEETS_PREVIEW_MESSAGE_SOURCE;
-      type: 'export-pptx' | 'export-pdf';
-    }
-  | {
-      source: typeof SHEETS_PREVIEW_MESSAGE_SOURCE;
-      type: 'set-manual-edit';
-      enabled: boolean;
-    };
+export type SheetsPreviewFromParentMessage = {
+  source: typeof SHEETS_PREVIEW_MESSAGE_SOURCE;
+  type: 'set-manual-edit';
+  enabled: boolean;
+};
 
 /** Path is ``{slideIndex}:{tag}:{nth}`` among non-nested editable tags in that slide. */
 export type SheetsTextEdit = { path: string; html: string };
@@ -300,71 +284,7 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SHEETS_PREVIEW_BRIDGE_SCRIPT_ID}">
     if (!data || data.source !== SOURCE) return;
     if (data.type === 'set-manual-edit') {
       setManualEdit(!!data.enabled);
-      return;
     }
-    if (data.type === 'export-pdf') {
-      try {
-        if (typeof window.print !== 'function') {
-          throw new Error('window.print missing');
-        }
-        // Ack before print() so the parent can clear its waiter. print() is
-        // modal and blocks this frame; posting in the same turn can stall
-        // delivery until the dialog closes, which falsely times out.
-        parent.postMessage(
-          { source: SOURCE, type: 'export-pdf-result', ok: true },
-          '*'
-        );
-        setTimeout(function () {
-          try {
-            resetWorkbookForPrint();
-            window.print();
-          } catch (e) {}
-        }, 0);
-      } catch (err) {
-        parent.postMessage(
-          {
-            source: SOURCE,
-            type: 'export-pdf-result',
-            ok: false,
-            error: (err && err.message) || String(err),
-          },
-          '*'
-        );
-      }
-      return;
-    }
-    if (data.type !== 'export-pptx') return;
-    var build = window.buildPptx;
-    if (typeof build !== 'function') {
-      parent.postMessage(
-        {
-          source: SOURCE,
-          type: 'export-pptx-result',
-          ok: false,
-          error: 'buildPptx missing',
-        },
-        '*'
-      );
-      return;
-    }
-    Promise.resolve(build())
-      .then(function () {
-        parent.postMessage(
-          { source: SOURCE, type: 'export-pptx-result', ok: true },
-          '*'
-        );
-      })
-      .catch(function (err) {
-        parent.postMessage(
-          {
-            source: SOURCE,
-            type: 'export-pptx-result',
-            ok: false,
-            error: (err && err.message) || String(err),
-          },
-          '*'
-        );
-      });
   });
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', onReady);
@@ -550,16 +470,6 @@ ${SHEETS_PREVIEW_PRINT_CSS}
     }
   }
 
-  // Override window.buildPptx so File → Export reads the live .slide DOM,
-  // even when the seeded workbook still has a hardcoded 4-slide exporter.
-  if (!next.includes(`id="${SHEETS_PPTX_FROM_DOM_SCRIPT_ID}"`)) {
-    if (next.includes('</body>')) {
-      next = next.replace('</body>', `${SHEETS_PPTX_FROM_DOM_SCRIPT}</body>`);
-    } else {
-      next = `${next}${SHEETS_PPTX_FROM_DOM_SCRIPT}`;
-    }
-  }
-
   if (!next.includes(`id="${SHEETS_PREVIEW_BRIDGE_SCRIPT_ID}"`)) {
     if (next.includes('</body>')) {
       next = next.replace('</body>', `${PREVIEW_BRIDGE_SCRIPT}</body>`);
@@ -655,9 +565,9 @@ export function coverHeroCss(html: string): string {
 export const SHEETS_COVER_FIT_STYLE_ID = 'nexus-sheets-cover-fit';
 
 /**
- * One-slide srcDoc for an index card or filmstrip thumb: head styles plus
- * one `.slide`, locked to the 1280x720 stage. No print/PPTX bridge.
- * `index` defaults to the cover (first slide).
+ * One-tab srcDoc for an index card or tab-strip thumb: head styles plus
+ * one workbook section, locked to the 1280x720 stage.
+ * `index` defaults to the first tab.
  */
 export function prepareSheetsCoverHtml(html: string, index = 0): string | null {
   const slide = extractSlideHtmlAt(html, index);

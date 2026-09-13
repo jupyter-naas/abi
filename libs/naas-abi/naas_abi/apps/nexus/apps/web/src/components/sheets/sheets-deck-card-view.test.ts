@@ -10,7 +10,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { SheetsWorkbookCardView } from './sheets-workbook-card-view';
+import { SheetsWorkbookCardView } from './sheets-deck-card-view';
 
 vi.mock('next/link', () => ({
   default: ({ children, ...props }: Record<string, unknown> & { children?: unknown }) =>
@@ -43,5 +43,9 @@ describe('SheetsWorkbookCardView', () => {
 
   it('shows the workbook title', () => {
     expect(markup()).toContain('Matériaux de construction');
+  });
+
+  it('mentions XLSX export in the subtitle', () => {
+    expect(markup()).toContain('export XLSX');
   });
 });

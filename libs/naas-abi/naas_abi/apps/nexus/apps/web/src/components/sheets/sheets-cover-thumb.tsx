@@ -193,8 +193,8 @@ export function SheetsCoverThumb({
   );
 }
 
-/** In-memory 16:9 thumb for one slide. Loads srcDoc when the card is on screen. */
-export function SheetsSlideThumb({
+/** In-memory 16:9 thumb for one sheet tab. Loads srcDoc when the tab is on screen. */
+export function SheetsTabThumb({
   html,
   index,
   title,
@@ -259,7 +259,7 @@ export function SheetsSlideThumb({
     <div
       ref={hostRef}
       className="pointer-events-none relative h-full w-full overflow-hidden bg-muted/20"
-      data-testid="sheets-slide-thumb"
+      data-testid="sheets-tab-thumb"
     >
       {srcDoc ? (
         <iframe
@@ -278,3 +278,6 @@ export function SheetsSlideThumb({
     </div>
   );
 }
+
+/** @deprecated Use SheetsTabThumb */
+export const SheetsSlideThumb = SheetsTabThumb;

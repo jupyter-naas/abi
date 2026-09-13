@@ -17,7 +17,6 @@ import {
   sanitizeSheetsEditHtml,
   SHEETS_COVER_FIT_STYLE_ID,
   SHEETS_INDUSTRY_STAGE_SCALE,
-  SHEETS_PDF_EXPORT_ACK_MS,
   SHEETS_PREVIEW_BRIDGE_SCRIPT_ID,
   SHEETS_PREVIEW_FIT_STYLE_ID,
   SHEETS_PREVIEW_MESSAGE_SOURCE,
@@ -27,7 +26,6 @@ import {
   SHEETS_STAGE_HEIGHT,
   SHEETS_STAGE_WIDTH,
 } from './sheets-preview-fit';
-import { SHEETS_PPTX_FROM_DOM_SCRIPT_ID } from './sheets-pptx-from-dom';
 
 describe('computeSheetsPreviewScale', () => {
   it('contains a 16:9 stage in a wide pane (letterbox top/bottom)', () => {
@@ -60,8 +58,8 @@ describe('prepareSheetsPreviewHtml', () => {
     const once = prepareSheetsPreviewHtml(src);
     expect(once).toContain(`id="${SHEETS_PREVIEW_FIT_STYLE_ID}"`);
     expect(once).toContain(`id="${SHEETS_PREVIEW_BRIDGE_SCRIPT_ID}"`);
-    expect(once).toContain(`id="${SHEETS_PPTX_FROM_DOM_SCRIPT_ID}"`);
-    expect(once).toContain('window.buildPptx = buildPptx');
+    expect(once).not.toContain('window.buildPptx');
+    expect(once).not.toContain('export-pptx');
     expect(once).toContain(SHEETS_PREVIEW_MESSAGE_SOURCE);
     expect(once).toContain(`${SHEETS_STAGE_WIDTH}px`);
     const fitStart = once.indexOf(`id="${SHEETS_PREVIEW_FIT_STYLE_ID}"`);
@@ -77,8 +75,7 @@ describe('prepareSheetsPreviewHtml', () => {
     expect(once).toContain('edit-commit');
     expect(once).toContain('contenteditable');
     expect(once).toContain('workbook-menubar');
-    expect(once).toContain('export-pdf');
-    expect(once).toContain('window.print');
+    expect(once).not.toContain('export-pdf');
     expect(once).toContain('@media print');
     expect(once).toContain(`size: ${SHEETS_PRINT_PAGE_WIDTH_IN} ${SHEETS_PRINT_PAGE_HEIGHT_IN}; margin: 0;`);
     expect(once).not.toMatch(/@page \{[^}]*landscape/);
@@ -90,16 +87,7 @@ describe('prepareSheetsPreviewHtml', () => {
     expect(once).toContain('page-break-after: always');
     expect(once).toContain('page-break-before: always');
     expect(once).toContain('contain: strict');
-    expect(once).toContain('beforeprint');
-    const ackAt = once.indexOf("type: 'export-pdf-result', ok: true");
-    const printAt = once.lastIndexOf('window.print()');
-    const timeoutAt = once.indexOf('setTimeout(function ()', ackAt);
-    expect(ackAt).toBeGreaterThan(-1);
-    expect(printAt).toBeGreaterThan(ackAt);
-    expect(timeoutAt).toBeGreaterThan(ackAt);
-    expect(timeoutAt).toBeLessThan(printAt);
     expect(SHEETS_PREVIEW_PRINT_CSS).toContain('@media print');
-    expect(SHEETS_PDF_EXPORT_ACK_MS).toBeGreaterThan(0);
     const twice = prepareSheetsPreviewHtml(once);
     expect(twice).toBe(once);
   });
@@ -123,18 +111,6 @@ describe('prepareSheetsPreviewHtml', () => {
     const onReadyAt = out.indexOf('function onReady()');
     const waitForImagesCallAt = out.indexOf('waitForImages().then');
     expect(waitForImagesCallAt).toBeGreaterThan(onReadyAt);
-  });
-
-  it('overrides a hardcoded seed buildPptx with the DOM walker', () => {
-    const src =
-      '<!doctype html><html><head></head><body><main class="workbook"></main>' +
-      '<script>async function buildPptx(){ /* [["1","Context"],["2","Approach"]] */ }</script>' +
-      '</body></html>';
-    const out = prepareSheetsPreviewHtml(src);
-    const walkerAt = out.lastIndexOf('window.buildPptx = buildPptx');
-    const seedAt = out.indexOf('[["1","Context"],["2","Approach"]]');
-    expect(walkerAt).toBeGreaterThan(seedAt);
-    expect(out).toContain(SHEETS_PPTX_FROM_DOM_SCRIPT_ID);
   });
 
   it('prefixes when head is missing', () => {

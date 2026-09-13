@@ -9,7 +9,7 @@ import {
 } from './sheets-menu-bar';
 
 describe('buildSheetsEditMenu', () => {
-  it('keeps Undo/Redo disabled and groups Duplicate / Delete Slide', () => {
+  it('keeps Undo/Redo disabled and groups Duplicate / Delete sheet tab', () => {
     const items = buildSheetsEditMenu({
       canDuplicate: true,
       canDelete: true,
@@ -28,8 +28,8 @@ describe('buildSheetsEditMenu', () => {
     ]);
     expect(items[0].disabled).toBe(true);
     expect(items[1].disabled).toBe(true);
-    expect(items[3].label).toBe('Duplicate Slide');
-    expect(items[4].label).toBe('Delete Slide');
+    expect(items[3].label).toBe('Duplicate sheet tab');
+    expect(items[4].label).toBe('Delete sheet tab');
     expect(items[4].shortcut).toBe('Del');
     expect(items[6].label).toBe('Manual edit');
     expect(items[6].checked).toBe(false);
@@ -68,7 +68,7 @@ describe('buildSheetsEditMenu', () => {
     expect(onManualEditChange).toHaveBeenCalledWith(true);
   });
 
-  it('disables Delete Slide on the last slide', () => {
+  it('disables Delete sheet tab when only one tab remains', () => {
     const items = buildSheetsEditMenu({
       canDuplicate: true,
       canDelete: false,
@@ -81,19 +81,18 @@ describe('buildSheetsEditMenu', () => {
 });
 
 describe('buildSheetsInsertMenu', () => {
-  it('offers New Slide layouts then Duplicate Slide', () => {
+  it('offers New sheet tab then Duplicate sheet tab', () => {
     const onInsert = vi.fn();
     const items = buildSheetsInsertMenu({
       canInsert: true,
       canDuplicate: true,
-      onInsert,
+      onInsertTab: onInsert,
       onDuplicate: vi.fn(),
     });
-    expect(items[0].label).toBe('New Slide');
-    expect(items[0].items?.map((item) => item.label)).toEqual(['Content', 'Cover', 'Section']);
-    expect(items[1].label).toBe('Duplicate Slide');
-    items[0].items?.[1].onSelect?.();
-    expect(onInsert).toHaveBeenCalledWith('cover');
+    expect(items[0].label).toBe('New sheet tab');
+    expect(items[1].label).toBe('Duplicate sheet tab');
+    items[0].onSelect?.();
+    expect(onInsert).toHaveBeenCalled();
   });
 });
 
@@ -117,9 +116,10 @@ describe('SheetsMenuBar', () => {
       createElement(SheetsMenuBar, {
         onNewWorkbook: () => {},
         onCommit: () => {},
-        onInsertSlide: () => {},
-        onDuplicateSlide: () => {},
-        onDeleteSlide: () => {},
+        onInsertTab: () => {},
+        onDuplicateTab: () => {},
+        onDeleteTab: () => {},
+        onExportXlsx: () => {},
         mode: 'preview',
         onModeChange: () => {},
         onRefresh: () => {},
