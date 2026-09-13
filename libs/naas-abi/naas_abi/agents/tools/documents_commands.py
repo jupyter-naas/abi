@@ -149,18 +149,39 @@ KNOWN_COMMANDS = frozenset(
     }
 )
 
-_STYLE_TO_TAG = {
-    "heading1": "h1",
-    "h1": "h1",
-    "title": "h1",
-    "heading2": "h2",
-    "h2": "h2",
-    "heading3": "h3",
-    "h3": "h3",
-    "paragraph": "p",
-    "normal": "p",
-    "p": "p",
+# Picker names (Normal text, Title, Subtitle, Heading 1/2/3). Title is the
+# cover H1. Heading 1 is the official Word section style (h2), not the title.
+PARAGRAPH_STYLE_SPECS: dict[str, tuple[str, str]] = {
+    "normal": ("p", "fm-normal"),
+    "normal text": ("p", "fm-normal"),
+    "paragraph": ("p", "fm-normal"),
+    "fm-normal": ("p", "fm-normal"),
+    "p": ("p", "fm-normal"),
+    "title": ("h1", "fm-title"),
+    "fm-title": ("h1", "fm-title"),
+    "h1": ("h1", "fm-title"),
+    "subtitle": ("p", "fm-subtitle"),
+    "fm-subtitle": ("p", "fm-subtitle"),
+    "heading1": ("h2", "fm-heading-1"),
+    "heading 1": ("h2", "fm-heading-1"),
+    "fm-heading-1": ("h2", "fm-heading-1"),
+    "h2": ("h2", "fm-heading-1"),
+    "heading2": ("h3", "fm-heading-2"),
+    "heading 2": ("h3", "fm-heading-2"),
+    "fm-heading-2": ("h3", "fm-heading-2"),
+    "h3": ("h3", "fm-heading-2"),
+    "heading3": ("h4", "fm-heading-3"),
+    "heading 3": ("h4", "fm-heading-3"),
+    "fm-heading-3": ("h4", "fm-heading-3"),
+    "h4": ("h4", "fm-heading-3"),
 }
+_INSERT_HEADING_STYLES = {
+    1: ("h1", "fm-title"),
+    2: ("h2", "fm-heading-1"),
+    3: ("h3", "fm-heading-2"),
+    4: ("h4", "fm-heading-3"),
+}
+_PICKER_STYLE_NAMES = "normal, title, subtitle, heading1, heading2, or heading3"
 
 
 def _strip_tags(raw: str) -> str:
@@ -490,16 +511,19 @@ def insert_page_break(html: str, after_heading: int = -1) -> str:
 
 
 def insert_heading(html: str, title: str = "Heading", level: int = 2, after_heading: int = -1) -> str:
-    tag = min(3, max(1, int(level or 2)))
+    tag, cls = _INSERT_HEADING_STYLES[min(4, max(1, int(level or 2)))]
     return insert_after_heading_block(
         html,
         after_heading,
-        f"<h{tag}>{_escape(title or 'Heading')}</h{tag}>\n<p></p>",
+        f'<{tag} class="{cls}">{_escape(title or "Heading")}</{tag}>\n'
+        f'<p class="fm-normal"></p>',
     )
 
 
 def insert_paragraph(html: str, text: str = "", after_heading: int = -1) -> str:
-    return insert_after_heading_block(html, after_heading, f"<p>{_escape(text)}</p>")
+    return insert_after_heading_block(
+        html, after_heading, f'<p class="fm-normal">{_escape(text)}</p>'
+    )
 
 
 def insert_text(html: str, text: str, after_heading: int = -1) -> str:
@@ -577,9 +601,16 @@ def replace_text(html: str, find: str, replace: str) -> str | dict[str, str]:
     return {"error": f"Text not found: {find!r}"}
 
 
-def update_document_title(html: str, title: str) -> str | dict[str, str]:
-    """Set the tab ``<title>`` and the first cover ``<h1>`` to the same name.
+_TITLE_SLOT_H1_RE = re.compile(
+    r"(<h1\b[^>]*\bdata-slot\s*=\s*[\"']title[\"'][^>]*>).*?(</h1>)",
+    re.IGNORECASE | re.DOTALL,
+)
 
+
+def update_document_title(html: str, title: str) -> str | dict[str, str]:
+    """Set the tab ``<title>`` and the cover Title H1 to the same name.
+
+    Prefers ``data-slot="title"``. Falls back to the first ``<h1>``.
     ``update_title`` and ``rename_document`` share this HTML step. The project
     display name (sidebar folder) is applied by the wrapper, not here.
     """
@@ -592,10 +623,14 @@ def update_document_title(html: str, title: str) -> str | dict[str, str]:
     if _TITLE_TAG_RE.search(next_html):
         next_html = _TITLE_TAG_RE.sub(f"<title>{safe}</title>", next_html, count=1)
         changed = True
-    h1_open = _H1_OPEN_RE.search(next_html)
-    if h1_open:
-        next_html = _H1_FULL_RE.sub(f"{h1_open.group(0)}{safe}</h1>", next_html, count=1)
+    if _TITLE_SLOT_H1_RE.search(next_html):
+        next_html = _TITLE_SLOT_H1_RE.sub(rf"\g<1>{safe}\g<2>", next_html, count=1)
         changed = True
+    else:
+        h1_open = _H1_OPEN_RE.search(next_html)
+        if h1_open:
+            next_html = _H1_FULL_RE.sub(f"{h1_open.group(0)}{safe}</h1>", next_html, count=1)
+            changed = True
     if _FOOTER_TITLE_RE.search(next_html):
         next_html = _FOOTER_TITLE_RE.sub(rf"\g<1>{safe}\g<3>", next_html)
         changed = True
@@ -618,16 +653,35 @@ def last_rename_document_title(requests: list[dict[str, Any]]) -> str:
     return title
 
 
+def _data_attrs(open_tag: str) -> str:
+    attrs = [
+        f"{match.group(1)}={match.group(2)}"
+        for match in re.finditer(
+            r'\s(data-[a-z0-9:-]+)\s*=\s*("[^"]*"|\'[^\']*\')',
+            open_tag,
+            re.IGNORECASE,
+        )
+    ]
+    return (" " + " ".join(attrs)) if attrs else ""
+
+
+def _style_class_attr(class_name: str) -> str:
+    if class_name == "fm-subtitle":
+        return "fm-subtitle subtitle"
+    return class_name
+
+
 def update_paragraph_style(
     html: str, heading_index: int, style: str
 ) -> str | dict[str, str]:
-    tag = _STYLE_TO_TAG.get((style or "").strip().lower())
-    if not tag:
+    spec = PARAGRAPH_STYLE_SPECS.get((style or "").strip().lower())
+    if not spec:
         return {
             "error": (
-                f"Unknown style {style!r}. Use heading1, heading2, heading3, or paragraph."
+                f"Unknown style {style!r}. Use {_PICKER_STYLE_NAMES}."
             )
         }
+    tag, class_name = spec
     matches = list(_HEADING_RE.finditer(html or ""))
     if not matches:
         return {"error": "No headings to style."}
@@ -635,7 +689,12 @@ def update_paragraph_style(
         return {"error": f"heading_index out of range (0..{len(matches) - 1})"}
     match = matches[heading_index]
     inner = match.group(2)
-    replacement = f"<{tag}>{inner}</{tag}>"
+    open_end = match.group(0).find(">")
+    open_tag = match.group(0)[: open_end + 1] if open_end >= 0 else ""
+    replacement = (
+        f'<{tag} class="{_style_class_attr(class_name)}"'
+        f"{_data_attrs(open_tag)}>{inner}</{tag}>"
+    )
     return html[: match.start()] + replacement + html[match.end() :]
 
 

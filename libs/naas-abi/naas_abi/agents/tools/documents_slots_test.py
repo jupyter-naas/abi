@@ -1,5 +1,8 @@
 from naas_abi.agents.tools.documents_commands import leftover_placeholders
-from naas_abi.agents.tools.documents_slots import fill_document_slots
+from naas_abi.agents.tools.documents_slots import (
+    ensure_title_slot_is_h1,
+    fill_document_slots,
+)
 
 _SEED = """<!doctype html><html><head><title>Document title</title></head><body>
 <main class="document">
@@ -138,6 +141,66 @@ def test_fill_document_slots_ignores_unknown_keys() -> None:
     result = fill_document_slots(_SEED, {**_COMPLETE, "soundtrack": "nope"})
     assert result["ok"] is True
     assert leftover_placeholders(result["html"]) == []
+
+
+def test_fill_title_writes_cover_h1_not_situation_heading() -> None:
+    html = """<!doctype html><html><head><title>Old</title></head><body>
+<main class="document">
+<section class="page cover" data-layout="cover">
+  <div class="doc-body">
+    <h1 class="fm-title" data-slot="title">Old title</h1>
+    <p class="fm-subtitle subtitle" data-slot="subtitle">Old subtitle</p>
+    <h2 class="fm-heading-1" data-slot="situation-heading">Situation</h2>
+    <p class="fm-normal" data-slot="situation">Old situation.</p>
+  </div>
+</section>
+<section class="page content" data-layout="content">
+  <div class="doc-body">
+    <h2 data-slot="section-0">Discussion</h2>
+    <p data-slot="section-0-body">Develop the argument here. Keep paragraphs short. This heading uses the official Heading 1 style.</p>
+    <h3 data-slot="section-1">Supporting detail</h3>
+    <p data-slot="section-1-body">Heading 2 stays Outer Space. Use it when the section is still the same topic.</p>
+    <blockquote data-slot="quote">Use the Quote style for a short extract that must stand apart from the body.</blockquote>
+    <h4 data-slot="section-2">A narrower point</h4>
+    <p data-slot="section-2-body">Heading 3 uses the mid blue. Hyperlinks in copy look like x.</p>
+  </div>
+</section>
+<section class="page tables" data-layout="tables">
+  <div class="doc-body">
+    <h2 data-slot="tables-heading">Findings</h2>
+    <p data-slot="tables-intro">Two official table styles. Replace the labels. Do not put confidential figures in a seed.</p>
+    <h3 data-slot="table-0-heading">Non shaded</h3>
+    <table class="fm-table" data-slot="table-0">
+      <thead><tr><th>Topic</th><th>Owner</th><th>Status</th></tr></thead>
+      <tbody><tr><td>Scope</td><td>Lead</td><td>Open</td></tr></tbody>
+    </table>
+    <h3 data-slot="table-1-heading">Shaded</h3>
+    <table class="fm-shaded" data-slot="table-1">
+      <thead><tr><th>Item</th><th>Note</th></tr></thead>
+      <tbody><tr><td>Assumption</td><td>Replace with the working premise.</td></tr></tbody>
+    </table>
+  </div>
+</section>
+</main></body></html>"""
+    result = fill_document_slots(html, {**_COMPLETE, "title": "Ce que c'est Palantir"})
+    assert result["ok"] is True
+    filled = result["html"]
+    assert 'data-slot="title">Ce que c\'est Palantir</h1>' in filled
+    assert 'data-slot="situation-heading">Situation</h2>' in filled
+    assert "Old title" not in filled
+
+
+def test_fill_title_promotes_h2_title_slot_to_h1() -> None:
+    raw = (
+        '<section class="page cover" data-layout="cover">'
+        '<h2 data-slot="title">Document title</h2>'
+        '<p class="subtitle" data-slot="subtitle">Industry or service line</p>'
+        "</section>"
+    )
+    promoted = ensure_title_slot_is_h1(raw)
+    assert '<h1 class="fm-title" data-slot="title">Document title</h1>' in promoted
+    assert 'data-slot="title"' in promoted
+    assert "<h2" not in promoted
 
 
 def test_fill_document_slots_works_without_data_slot() -> None:

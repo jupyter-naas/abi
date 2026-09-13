@@ -14,6 +14,7 @@ from naas_abi.agents.tools.documents_commands import (
     replace_class,
     replace_text,
     update_document_title,
+    update_paragraph_style,
 )
 
 _SAMPLE = """<!doctype html><html><body>
@@ -51,9 +52,9 @@ def test_insert_page_break_after_introduction() -> None:
 
 def test_insert_heading_and_paragraph() -> None:
     html = insert_heading(_SAMPLE, title="Findings", level=2, after_heading=1)
-    assert "<h2>Findings</h2>" in html
+    assert '<h2 class="fm-heading-1">Findings</h2>' in html
     html = insert_paragraph(html, "A new sentence.", after_heading=2)
-    assert "<p>A new sentence.</p>" in html
+    assert '<p class="fm-normal">A new sentence.</p>' in html
 
 
 def test_batch_commands_page_break_then_heading() -> None:
@@ -82,7 +83,21 @@ def test_replace_text_and_style() -> None:
     )
     assert result["ok"] is True
     assert "Board update" in result["html"]
-    assert "<h3>Introduction</h3>" in result["html"]
+    assert '<h4 class="fm-heading-3">Introduction</h4>' in result["html"]
+
+
+def test_update_paragraph_style_heading1_is_not_title() -> None:
+    html = (
+        '<h1 class="fm-title" data-slot="title">Cover</h1>'
+        '<h2 class="fm-heading-1" data-slot="situation-heading">Situation</h2>'
+    )
+    titled = update_paragraph_style(html, 1, "title")
+    assert isinstance(titled, str)
+    assert 'data-slot="situation-heading"' in titled
+    assert titled.count("<h1") == 2
+    heading1 = update_paragraph_style(html, 1, "heading1")
+    assert isinstance(heading1, str)
+    assert '<h2 class="fm-heading-1" data-slot="situation-heading">Situation</h2>' in heading1
 
 
 def test_delete_range_refuses_last_heading() -> None:

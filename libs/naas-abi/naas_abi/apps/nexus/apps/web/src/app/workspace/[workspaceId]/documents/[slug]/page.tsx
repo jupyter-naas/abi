@@ -27,10 +27,12 @@ import {
   deleteSection,
   duplicateSection,
   applyDocumentCommands,
+  paragraphStyleFromHeadingTag,
   parseDocumentsHeadingOutline,
   parseDocumentsOutline,
   parseDocumentsSectionOutline,
   reorderSections,
+  type DocumentParagraphStyleId,
   type DocumentsInsertKind,
   type SectionMutationResult,
 } from '@/components/documents/documents-outline';
@@ -708,6 +710,20 @@ export default function SectionsEditorPage() {
 
   const sectionActionsDisabled = mutating || loading || !html;
 
+  const applyParagraphStyle = (style: DocumentParagraphStyleId) => {
+    void applyMutation(
+      () =>
+        applyDocumentCommands(workspaceId, slug, [
+          {
+            type: 'update_paragraph_style',
+            heading_index: currentIndex,
+            style,
+          },
+        ]),
+      'Applied paragraph style',
+    );
+  };
+
   const insertBlock = (kind: DocumentsInsertKind) => {
     const after = sections.length ? currentIndex : -1;
     const request =
@@ -782,6 +798,9 @@ export default function SectionsEditorPage() {
       manualEditDisabled={sectionActionsDisabled}
       onRefresh={() => void refresh()}
       refreshDisabled={loading || refreshing}
+      paragraphStyle={paragraphStyleFromHeadingTag(sections[currentIndex]?.tag)}
+      onParagraphStyleChange={applyParagraphStyle}
+      paragraphStyleDisabled={sectionActionsDisabled || !sections.length}
       trailing={
         status || dirty || saving || savingToDrive || refreshing ? (
           <div className="ml-2 flex items-center gap-2 border-l border-border pl-2">

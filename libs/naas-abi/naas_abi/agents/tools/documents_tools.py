@@ -980,26 +980,26 @@ _KNOWN_LAYOUTS = frozenset({"cover", "section-divider", "content", "page-break"}
 _LAYOUT_SKELETONS = {
     "cover": (
         '<section class="page cover" data-layout="cover">'
-        "<h1>{title}</h1>"
+        '<h1 class="fm-title">{title}</h1>'
         '<p class="deck">A one-line summary the reader can scan before the body.</p>'
         "</section>"
     ),
     "section-divider": (
         '<section class="page" data-layout="section-divider">'
-        "<h2>{title}</h2>"
+        '<h2 class="fm-heading-1">{title}</h2>'
         "</section>"
     ),
     "content": (
         '<section class="page" data-layout="content">'
-        "<h2>{title}</h2>"
-        "<p></p>"
+        '<h2 class="fm-heading-1">{title}</h2>'
+        '<p class="fm-normal"></p>'
         "</section>"
     ),
     "page-break": (
         '<section class="page" data-layout="page-break">'
         '<div class="page-break" data-nexus-page-break></div>'
-        "<h2>{title}</h2>"
-        "<p></p>"
+        '<h2 class="fm-heading-1">{title}</h2>'
+        '<p class="fm-normal"></p>'
         "</section>"
     ),
 }
@@ -2676,9 +2676,10 @@ def documents_tools() -> list[BaseTool]:
         slug: str = "",
         message: str = "style(document): apply paragraph style via Abi",
     ) -> dict[str, Any]:
-        """Retag a heading: heading1, heading2, heading3, or paragraph.
+        """Apply a picker style: normal, title, subtitle, heading1, heading2, heading3.
 
-        Google Docs updateParagraphStyle analog.
+        Title is the cover H1. Heading 1 is the official section style (h2),
+        not the document title. Google Docs updateParagraphStyle analog.
         """
         return _run_document_commands(
             [

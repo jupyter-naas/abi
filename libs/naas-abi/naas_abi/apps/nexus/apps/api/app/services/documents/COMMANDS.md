@@ -46,12 +46,12 @@ The first error aborts the batch (same idea as Docs `batchUpdate`).
 |---|---|---|
 | `insert_text` | Insert text as a paragraph after a heading | Docs `insertText`; ODF `addParagraph` / `insert` |
 | `insert_paragraph` | Insert a `<p>` after a heading | Pandoc `Para`; ODF paragraph |
-| `insert_heading` | Insert `h1`/`h2`/`h3` after a heading | Pandoc `Header`; Docs `updateParagraphStyle` HEADING_* |
+| `insert_heading` | Insert Title (`h1.fm-title`) or Heading 1/2/3 (`h2`/`h3`/`h4`) | Pandoc `Header`; Docs `updateParagraphStyle` |
 | `insert_page_break` | Insert a hard page break (same section) | Docs `insertPageBreak`; ODF `fo:break-before=page`; Word `w:br w:type="page"`; Pandoc pagebreak |
 | `delete_range` | Delete a heading block (that heading through the next) | Docs `deleteContentRange` |
 | `replace_text` | Replace a substring | Docs `replaceAllText` |
 | `replace_class` | Replace or delete the first element with that class | fill a seed slot (palette, note) |
-| `update_paragraph_style` | Retag a heading (`heading1`/`heading2`/`heading3`/`paragraph`) | Docs `updateParagraphStyle` |
+| `update_paragraph_style` | Apply picker style: `normal`, `title`, `subtitle`, `heading1`, `heading2`, `heading3` | Docs `updateParagraphStyle` |
 | `update_title` | Change the tab `<title>` and cover H1 only | heading-only retitle |
 | `rename_document` | Sidebar display name plus tab `<title>`, cover H1, and footer titles | "rename this document" |
 | `fill_slots` | Map structured topic copy onto seed slots | first memo or report fill |
@@ -59,6 +59,22 @@ The first error aborts the batch (same idea as Docs `batchUpdate`).
 Positioning is a heading index (`after_heading` / `heading_index`), not a
 UTF-16 offset. That matches ODF "insert relative to a paragraph" more
 than Docs character indexes.
+
+The style picker (Normal text, Title, Subtitle, Heading 1, Heading 2,
+Heading 3) maps onto official Word classes. Options is editor chrome, not
+a paragraph style.
+
+| Picker | Style token | Markup |
+|---|---|---|
+| Title | `title` | `h1.fm-title` (cover `data-slot="title"`) |
+| Subtitle | `subtitle` | `p.fm-subtitle.subtitle` |
+| Heading 1 | `heading1` | `h2.fm-heading-1` |
+| Heading 2 | `heading2` | `h3.fm-heading-2` |
+| Heading 3 | `heading3` | `h4.fm-heading-3` |
+| Normal text | `normal` | `p.fm-normal` |
+
+`heading1` is not the document title. `fill_slots` `title` writes the
+cover H1, never a section heading such as `situation-heading`.
 
 Inserts land inside the `.doc-body` that owns the heading. They never
 concatenate markup after `</footer>`. A persist pass moves stray nodes

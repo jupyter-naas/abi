@@ -142,6 +142,8 @@ describe('DocumentsMenuBar', () => {
     expect(html).not.toContain('New Presentation');
     expect(html).toContain('data-testid="sections-menu-edit"');
     expect(html).toContain('data-testid="sections-menu-insert"');
+    expect(html).toContain('data-testid="documents-style-picker"');
+    expect(html).not.toContain('Options');
     expect(html).not.toContain('data-testid="sections-manual-edit-toggle"');
   });
 
@@ -155,6 +157,7 @@ describe('DocumentsMenuBar', () => {
     expect(html).toContain('data-testid="sections-menu-edit"');
     expect(html).toContain('data-testid="sections-menu-insert"');
     expect(html).toContain('data-testid="sections-menu-view"');
+    expect(html).toContain('data-testid="documents-style-picker"');
   });
 
   it('marks File New as locked while a document is being created', () => {

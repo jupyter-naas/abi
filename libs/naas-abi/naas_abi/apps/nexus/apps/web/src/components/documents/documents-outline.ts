@@ -4,6 +4,27 @@ import { documentsApiErrorMessage } from '@/lib/create-documents-project';
 export type SectionLayout = 'cover' | 'section-divider' | 'content' | 'page-break';
 export type DocumentsInsertKind = 'page-break' | 'heading' | 'paragraph';
 
+export const DOCUMENT_PARAGRAPH_STYLES = [
+  { id: 'normal', label: 'Normal text' },
+  { id: 'title', label: 'Title' },
+  { id: 'subtitle', label: 'Subtitle' },
+  { id: 'heading1', label: 'Heading 1' },
+  { id: 'heading2', label: 'Heading 2' },
+  { id: 'heading3', label: 'Heading 3' },
+] as const;
+
+export type DocumentParagraphStyleId = (typeof DOCUMENT_PARAGRAPH_STYLES)[number]['id'];
+
+export function paragraphStyleFromHeadingTag(
+  tag?: string | null,
+): DocumentParagraphStyleId {
+  if (tag === 'h1') return 'title';
+  if (tag === 'h2') return 'heading1';
+  if (tag === 'h3') return 'heading2';
+  if (tag === 'h4') return 'heading3';
+  return 'normal';
+}
+
 export type DocumentCommand = {
   type:
     | 'insert_page_break'
@@ -35,6 +56,7 @@ export type SectionOutlineItem = {
   id: string | null;
   title: string;
   layout: SectionLayout;
+  tag?: string;
 };
 
 export type SectionMutationResult = {
@@ -114,6 +136,7 @@ export function parseDocumentsHeadingOutline(html: string): SectionOutlineItem[]
       id: null,
       title: title || `Heading ${items.length + 1}`,
       layout: items.length === 0 ? 'cover' : 'content',
+      tag: `h${match[1]}`,
     });
   }
   return items;
@@ -261,7 +284,11 @@ export function insertHeadingHtml(
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
-  return insertMarkupAfterHeadingBlock(html, afterHeadingIndex, `<h2>${safe}</h2>\n<p></p>`);
+  return insertMarkupAfterHeadingBlock(
+    html,
+    afterHeadingIndex,
+    `<h2 class="fm-heading-1">${safe}</h2>\n<p class="fm-normal"></p>`,
+  );
 }
 
 export function clampSectionIndex(index: number, count: number): number {

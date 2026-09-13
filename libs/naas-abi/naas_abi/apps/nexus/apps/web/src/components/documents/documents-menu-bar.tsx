@@ -3,11 +3,15 @@
 import React, { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { type DocumentsInsertKind } from './documents-outline';
+import {
+  DOCUMENT_PARAGRAPH_STYLES,
+  type DocumentParagraphStyleId,
+  type DocumentsInsertKind,
+} from './documents-outline';
 
 export type DocumentsEditorMode = 'preview' | 'code';
 
-type MenuKey = 'file' | 'edit' | 'view' | 'insert' | null;
+type MenuKey = 'file' | 'edit' | 'view' | 'insert' | 'format' | null;
 
 export type SectionsMenuEntry = {
   id: string;
@@ -196,6 +200,77 @@ function MenuRow({ item, onClose }: { item: SectionsMenuEntry; onClose: () => vo
   );
 }
 
+function ParagraphStylePicker({
+  style,
+  disabled,
+  open,
+  onOpenChange,
+  onSelect,
+}: {
+  style: DocumentParagraphStyleId;
+  disabled: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (style: DocumentParagraphStyleId) => void;
+}) {
+  const current =
+    DOCUMENT_PARAGRAPH_STYLES.find((item) => item.id === style)?.label || 'Normal text';
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Paragraph style"
+        disabled={disabled}
+        data-testid="documents-style-picker"
+        onClick={() => {
+          if (!disabled) onOpenChange(!open);
+        }}
+        className={cn(
+          'inline-flex min-w-[7.5rem] items-center justify-between gap-1 rounded px-2 py-1 text-xs font-medium transition-colors',
+          disabled
+            ? 'cursor-not-allowed text-muted-foreground/50'
+            : open
+              ? 'bg-muted text-foreground'
+              : 'text-foreground/90 hover:bg-muted hover:text-foreground',
+        )}
+      >
+        <span className="truncate">{current}</span>
+        <ChevronDown size={12} className="opacity-60" />
+      </button>
+      {open && !disabled ? (
+        <div
+          role="listbox"
+          aria-label="Paragraph style"
+          data-testid="documents-style-picker-dropdown"
+          className="absolute left-0 top-full z-[300] mt-1 min-w-[12.5rem] rounded-md border border-border bg-card py-1 shadow-lg"
+        >
+          {DOCUMENT_PARAGRAPH_STYLES.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="option"
+              aria-selected={item.id === style}
+              data-testid={`documents-style-${item.id}`}
+              onClick={() => {
+                onSelect(item.id);
+                onOpenChange(false);
+              }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted"
+            >
+              <span className="w-3.5 shrink-0">
+                {item.id === style ? <Check size={12} className="text-workspace-accent" /> : null}
+              </span>
+              <span className="flex-1">{item.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function MenuDropdown({
   label,
   menuKey,
@@ -288,6 +363,10 @@ export interface DocumentsMenuBarProps {
   refreshDisabled?: boolean;
   /** Optional trailing controls (save status). */
   trailing?: ReactNode;
+  /** Style picker: Normal text, Title, Subtitle, Heading 1/2/3. No Options item. */
+  paragraphStyle?: DocumentParagraphStyleId;
+  onParagraphStyleChange?: (style: DocumentParagraphStyleId) => void;
+  paragraphStyleDisabled?: boolean;
 }
 
 /**
@@ -295,7 +374,8 @@ export interface DocumentsMenuBarProps {
  * render. On pages with no open document yet (index/new) the Edit/View/Insert
  * items are just disabled rather than the menus disappearing, so the bar
  * looks the same on every Documents page.
- * Format / Arrange / Tools stay out of this pass.
+ * Format / Arrange / Tools stay out of this pass. The style picker is the
+ * paragraph-style dropdown (not an Options menu).
  */
 export function DocumentsMenuBar({
   onNewPresentation,
@@ -323,6 +403,9 @@ export function DocumentsMenuBar({
   onRefresh,
   refreshDisabled,
   trailing,
+  paragraphStyle = 'normal',
+  onParagraphStyleChange,
+  paragraphStyleDisabled,
 }: DocumentsMenuBarProps) {
   const [openMenu, setOpenMenu] = useState<MenuKey>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -481,6 +564,13 @@ export function DocumentsMenuBar({
         open={openMenu === 'insert'}
         onOpenChange={(open) => setOpenMenu(open ? 'insert' : null)}
         items={insertItems}
+      />
+      <ParagraphStylePicker
+        style={paragraphStyle}
+        disabled={paragraphStyleDisabled || !onParagraphStyleChange}
+        open={openMenu === 'format'}
+        onOpenChange={(open) => setOpenMenu(open ? 'format' : null)}
+        onSelect={(next) => onParagraphStyleChange?.(next)}
       />
       {trailing}
     </div>

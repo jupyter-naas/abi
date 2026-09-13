@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   clampSectionIndex,
+  DOCUMENT_PARAGRAPH_STYLES,
   insertHeadingHtml,
   insertPageBreakHtml,
+  paragraphStyleFromHeadingTag,
   parseDocumentsHeadingOutline,
   parseDocumentsOutline,
   parseDocumentsSectionOutline,
@@ -31,6 +33,7 @@ describe('parseDocumentsOutline', () => {
     ]);
     expect(parseDocumentsSectionOutline(SAMPLE)).toHaveLength(3);
     expect(parseDocumentsHeadingOutline(SAMPLE)).toHaveLength(2);
+    expect(parseDocumentsHeadingOutline(SAMPLE)[0].tag).toBe('h1');
   });
 
   it('inserts a heading inside doc-body, not after the footer', () => {
@@ -68,6 +71,23 @@ describe('sectionLayoutFromAttrs', () => {
   it('prefers data-layout, then seed classes', () => {
     expect(sectionLayoutFromAttrs('class="section cover"')).toBe('cover');
     expect(sectionLayoutFromAttrs('data-layout="blank" class="section"')).toBe('content');
+  });
+});
+
+describe('paragraph styles', () => {
+  it('lists the picker names and maps heading tags', () => {
+    expect(DOCUMENT_PARAGRAPH_STYLES.map((item) => item.label)).toEqual([
+      'Normal text',
+      'Title',
+      'Subtitle',
+      'Heading 1',
+      'Heading 2',
+      'Heading 3',
+    ]);
+    expect(paragraphStyleFromHeadingTag('h1')).toBe('title');
+    expect(paragraphStyleFromHeadingTag('h2')).toBe('heading1');
+    expect(paragraphStyleFromHeadingTag('h3')).toBe('heading2');
+    expect(paragraphStyleFromHeadingTag('h4')).toBe('heading3');
   });
 });
 

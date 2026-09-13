@@ -24,6 +24,10 @@ _SLOT_OPEN_RE = re.compile(
     r"<(?P<tag>[a-z][a-z0-9]*)\b[^>]*\bdata-slot\s*=\s*[\"'](?P<slot>[^\"']+)[\"'][^>]*>",
     re.IGNORECASE,
 )
+_TITLE_SLOT_OPEN_RE = re.compile(
+    r"<(?P<tag>[a-z][a-z0-9]*)\b(?P<attrs>[^>]*\bdata-slot\s*=\s*[\"']title[\"'][^>]*)>",
+    re.IGNORECASE,
+)
 _CLASS_OPEN_RE = re.compile(
     r"<(?P<tag>[a-z][a-z0-9]*)\b[^>]*\bclass\s*=\s*[\"'][^\"']*\b(?P<cls>subtitle|intro|note|palette|fm-table|fm-shaded)\b[^\"']*[\"'][^>]*>",
     re.IGNORECASE,
@@ -91,6 +95,28 @@ def _set_inner(html: str, open_match: re.Match[str], text: str) -> str | None:
     if close is None:
         return None
     return f"{html[:open_match.end()]}{_escape(text)}{html[close:]}"
+
+
+def ensure_title_slot_is_h1(html: str) -> str:
+    """Cover Title is an H1. Promote ``data-slot="title"`` if it landed on H2+."""
+    match = _TITLE_SLOT_OPEN_RE.search(html or "")
+    if not match:
+        return html
+    tag = match.group("tag")
+    close = _matching_close(html, tag, match.end())
+    if close is None:
+        return html
+    close_m = re.match(rf"</{re.escape(tag)}\s*>", html[close:], re.IGNORECASE)
+    end = close + (close_m.end() if close_m else 0)
+    inner = html[match.end() : close]
+    attrs = re.sub(
+        r"\sclass\s*=\s*[\"'][^\"']*[\"']",
+        "",
+        match.group("attrs") or "",
+        flags=re.IGNORECASE,
+    )
+    new_open = f'<h1 class="fm-title"{attrs}>'
+    return f"{html[: match.start()]}{new_open}{inner}</h1>{html[end:]}"
 
 
 def _set_slot(html: str, slot: str, text: str) -> str | None:
@@ -174,6 +200,10 @@ def _fill_cover(html: str, payload: dict[str, Any]) -> tuple[str, list[str], lis
     if isinstance(title, dict):
         return html, filled, missing, title
     if title:
+        html = ensure_title_slot_is_h1(html)
+        slotted = _set_slot(html, "title", title)
+        if slotted is not None:
+            html = slotted
         updated = update_document_title(html, title)
         if isinstance(updated, str):
             html = updated
