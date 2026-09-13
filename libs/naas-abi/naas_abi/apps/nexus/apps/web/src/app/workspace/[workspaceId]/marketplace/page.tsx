@@ -347,12 +347,14 @@ interface StaticArtifact {
   type: ArtifactType;
   status: 'available' | 'coming-soon';
   url?: string;
+  /** In-workspace route suffix, e.g. `/sheets` (Closes #1254 marketplace tile). */
+  nexusHref?: string;
 }
 
 const STATIC_ARTIFACTS: StaticArtifact[] = [
   { id: 'docs', name: 'Docs', description: 'Rich text editor for documentation, notes, and runbooks with agent assistance.', icon: <FileText size={22} />, type: 'applications', status: 'coming-soon' },
   { id: 'slides', name: 'Slides', description: 'Build and narrate presentations driven by your knowledge graph.', icon: <Presentation size={22} />, type: 'applications', status: 'coming-soon' },
-  { id: 'sheets', name: 'Sheets', description: 'Intelligent spreadsheets with formula support and live data connectors.', icon: <Table2 size={22} />, type: 'applications', status: 'coming-soon' },
+  { id: 'sheets', name: 'Sheets', description: 'HTML workbooks in git with one-click XLSX export and Slides-parity versioning.', icon: <Table2 size={22} />, type: 'applications', status: 'available', nexusHref: '/sheets' },
   { id: 'board', name: 'Board', description: 'Kanban boards and whiteboards to manage tasks and visual workflows.', icon: <Trello size={22} />, type: 'applications', status: 'coming-soon' },
   { id: 'calendar', name: 'Calendar', description: 'Schedule and timeline management synced with your agents.', icon: <Calendar size={22} />, type: 'applications', status: 'coming-soon' },
   { id: 'ontologies-community', name: 'Community Ontologies', description: 'Browse and install shared ontology modules contributed by the ABI community.', icon: <Network size={22} />, type: 'ontologies', status: 'coming-soon' },
@@ -462,7 +464,13 @@ function ModuleCard({ mod, onClick, cfg }: { mod: ModuleInfo; onClick: () => voi
 // Static artifact card
 // ---------------------------------------------------------------------------
 
-function StaticCard({ artifact }: { artifact: StaticArtifact }) {
+function StaticCard({
+  artifact,
+  workspaceId,
+}: {
+  artifact: StaticArtifact;
+  workspaceId: string | null;
+}) {
   const pricing = getStaticPricing(artifact.status);
 
   const inner = (
@@ -490,6 +498,13 @@ function StaticCard({ artifact }: { artifact: StaticArtifact }) {
     </div>
   );
 
+  if (artifact.status === 'available' && artifact.nexusHref && workspaceId) {
+    return (
+      <a href={`/workspace/${workspaceId}${artifact.nexusHref}`} className="h-full block">
+        {inner}
+      </a>
+    );
+  }
   if (artifact.status === 'available' && artifact.url) {
     return <a href={artifact.url} target="_blank" rel="noreferrer noopener" className="h-full block">{inner}</a>;
   }
@@ -879,7 +894,7 @@ export default function MarketplacePage() {
                             app={{ name: artifact.name, url: artifact.url ?? '#', description: artifact.description }}
                           />
                         ) : (
-                          <StaticCard key={artifact.id} artifact={artifact} />
+                          <StaticCard key={artifact.id} artifact={artifact} workspaceId={currentWorkspaceId} />
                         ),
                       )}
                     </div>

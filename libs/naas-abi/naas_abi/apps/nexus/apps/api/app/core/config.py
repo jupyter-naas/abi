@@ -12,6 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Namespace under which ABI serves the seed decks it ships. Reserved: a
 # configured source claiming it would shadow rows the picker depends on.
 ABI_SLIDES_TEMPLATE_NAMESPACE = "abi"
+ABI_SHEETS_TEMPLATE_NAMESPACE = "abi"
 
 # Known-insecure secret keys that must be rejected
 _INSECURE_SECRETS = frozenset(
@@ -97,6 +98,25 @@ class SlidesTemplateSourceConfig(BaseModel):
         if value == ABI_SLIDES_TEMPLATE_NAMESPACE:
             raise ValueError(
                 f"'{ABI_SLIDES_TEMPLATE_NAMESPACE}' is reserved for the seeds "
+                "ABI ships. Pick another namespace for this source."
+            )
+        return value
+
+
+class SheetsTemplateSourceConfig(BaseModel):
+    """One directory of Nexus Sheets seed workbooks, contributed by config."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    namespace: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=32)
+    path: str = Field(min_length=1)
+
+    @field_validator("namespace")
+    @classmethod
+    def _namespace_is_not_reserved(cls, value: str) -> str:
+        if value == ABI_SHEETS_TEMPLATE_NAMESPACE:
+            raise ValueError(
+                f"'{ABI_SHEETS_TEMPLATE_NAMESPACE}' is reserved for the seeds "
                 "ABI ships. Pick another namespace for this source."
             )
         return value
@@ -395,6 +415,9 @@ class Settings(BaseSettings):
     # Extra Slides seed trees for the template picker. Additive: ABI's own
     # seeds are always served, so this list holds only what a deploy adds.
     slides_template_sources: list[SlidesTemplateSourceConfig] = Field(
+        default_factory=list
+    )
+    sheets_template_sources: list[SheetsTemplateSourceConfig] = Field(
         default_factory=list
     )
 

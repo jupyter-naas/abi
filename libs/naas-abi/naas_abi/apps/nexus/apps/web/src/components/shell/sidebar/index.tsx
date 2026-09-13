@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Folder, Database, Code, Presentation, LayoutGrid, Store, Settings, Activity, Home, Blocks,
+  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Folder, Database, Code, Presentation, Table2, LayoutGrid, Store, Settings, Activity, Home, Blocks,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -36,7 +36,7 @@ type SectionDef = {
   label: string;
   description: string;
   href: string;
-  feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'settings.workspace';
+  feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'sheets' | 'settings.workspace';
   extraHref?: string;
 };
 
@@ -51,6 +51,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'graph',       icon: <Waypoints size={18} />,     label: 'Knowledge Graph', description: 'Browse the knowledge graph',        href: '/graph', feature: 'graph' },
   { id: 'datasets',    icon: <Database size={18} />,      label: 'Datasets',    description: 'Manage structured datasets',            href: '/datasets',    feature: 'datasets' },
   { id: 'slides',      icon: <Presentation size={18} />,  label: 'Slides',      description: 'Create and edit presentation decks',    href: '/slides',      feature: 'slides' },
+  { id: 'sheets',      icon: <Table2 size={18} />,        label: 'Sheets',      description: 'Spreadsheets with HTML source and XLSX export', href: '/sheets', feature: 'sheets' },
   { id: 'code',        icon: <Code size={18} />,          label: 'Code',        description: 'Code editor and repositories',          href: '/code',        feature: 'code' },
   { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', description: 'Discover and install new apps',          href: '/marketplace', feature: 'marketplace' },
 ];
@@ -122,6 +123,7 @@ export function Sidebar() {
   const canGraph = useFeature('graph');
   const canCode = useFeature('code');
   const canSlides = useFeature('slides');
+  const canSheets = useFeature('sheets');
   const canSettingsWorkspace = useFeature('settings.workspace');
   const isSuperadmin = useAuthStore((s) => !!s.user?.is_superadmin);
 
@@ -191,6 +193,7 @@ export function Sidebar() {
     if (feature === 'graph') return !!canGraph;
     if (feature === 'code') return !!canCode;
     if (feature === 'slides') return !!canSlides;
+    if (feature === 'sheets') return !!canSheets;
     if (feature === 'settings.workspace') return !!canSettingsWorkspace;
     return true;
   };
@@ -212,7 +215,7 @@ export function Sidebar() {
       .filter((s) => isFeatureEnabled(s.feature))
       .sort((a, b) => (index.get(a.id) ?? 999) - (index.get(b.id) ?? 999));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sidebarNavOrder, canMaps, canChat, canFiles, canDatasets, canApps, canMarketplace, canSearch, canOntology, canGraph, canCode, canSlides]);
+  }, [sidebarNavOrder, canMaps, canChat, canFiles, canDatasets, canApps, canMarketplace, canSearch, canOntology, canGraph, canCode, canSlides, canSheets]);
 
   const getDefaultPath = (sectionId: SidebarSection): string => {
     switch (sectionId) {

@@ -38,3 +38,10 @@ export function pickSlidesOfficeAgent<T extends SlidesOfficeAgent>(
   const slides = agents.find((agent) => agent.enabled && isNexusSlidesAgent(agent));
   return slides ?? pickWorkspaceDefaultAgent(agents);
 }
+
+/** Phase-1 Sheets reuses the Slides office agent until SheetsAgent lands (#1254). */
+export function pickSheetsOfficeAgent<T extends SlidesOfficeAgent>(
+  agents: T[],
+): T | undefined {
+  return pickSlidesOfficeAgent(agents);
+}
