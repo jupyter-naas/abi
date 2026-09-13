@@ -120,6 +120,52 @@ slides_section_read_indexes: ContextVar[list[int] | None] = ContextVar(
 # A 32-slide per-section rewrite can still need a second turn.
 SLIDES_RECURSION_LIMIT = 160
 
+# Open Sheets workbook in the Nexus UI (pane).
+sheets_active_slug: ContextVar[str | None] = ContextVar(
+    "sheets_active_slug", default=None
+)
+sheets_active_title: ContextVar[str | None] = ContextVar(
+    "sheets_active_title", default=None
+)
+sheets_active_mode: ContextVar[str | None] = ContextVar(
+    "sheets_active_mode", default=None
+)
+sheets_research_required: ContextVar[bool] = ContextVar(
+    "sheets_research_required", default=False
+)
+sheets_research_queries: ContextVar[list[str] | None] = ContextVar(
+    "sheets_research_queries", default=None
+)
+sheets_brief: ContextVar[str | None] = ContextVar("sheets_brief", default=None)
+sheets_creation_intent: ContextVar[bool] = ContextVar(
+    "sheets_creation_intent", default=False
+)
+sheets_writes_completed: ContextVar[list[str] | None] = ContextVar(
+    "sheets_writes_completed", default=None
+)
+sheets_list_calls: ContextVar[int] = ContextVar("sheets_list_calls", default=0)
+sheets_section_read_indexes: ContextVar[list[int] | None] = ContextVar(
+    "sheets_section_read_indexes", default=None
+)
+SHEETS_RECURSION_LIMIT = 120
+
+
+def sheets_turn_active() -> bool:
+    if (sheets_active_slug.get() or "").strip():
+        return True
+    return bool(sheets_creation_intent.get())
+
+
+def note_sheets_write(label: str) -> None:
+    text = (label or "").strip()
+    if not text:
+        return
+    bucket = sheets_writes_completed.get()
+    if bucket is None:
+        sheets_writes_completed.set([text])
+        return
+    bucket.append(text)
+
 
 def slides_turn_active() -> bool:
     """True when this turn edits an open deck or creates a new one."""

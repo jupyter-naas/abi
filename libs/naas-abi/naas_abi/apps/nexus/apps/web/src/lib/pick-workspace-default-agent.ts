@@ -39,9 +39,15 @@ export function pickSlidesOfficeAgent<T extends SlidesOfficeAgent>(
   return slides ?? pickWorkspaceDefaultAgent(agents);
 }
 
-/** Phase-1 Sheets reuses the Slides office agent until SheetsAgent lands (#1254). */
+function isNexusSheetsAgent(agent: SlidesOfficeAgent): boolean {
+  if (agent.name === 'Sheets') return true;
+  const className = agent.class_name ?? '';
+  return className.endsWith('/SheetsAgent') && className.includes('naas_abi');
+}
+
 export function pickSheetsOfficeAgent<T extends SlidesOfficeAgent>(
   agents: T[],
 ): T | undefined {
-  return pickSlidesOfficeAgent(agents);
+  const sheets = agents.find((agent) => agent.enabled && isNexusSheetsAgent(agent));
+  return sheets ?? pickWorkspaceDefaultAgent(agents);
 }

@@ -199,6 +199,7 @@ async def stream_chat_response(
         from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
             pick_workspace_chat_agent_id,
             pick_workspace_slides_agent_id,
+            pick_workspace_sheets_agent_id,
         )
 
         async with AsyncSessionLocal() as db:
@@ -210,14 +211,19 @@ async def stream_chat_response(
         resolved_agent = pick_workspace_chat_agent_id(
             workspace_agents, request.agent
         )
+        from naas_abi.agents.sheets.policy import open_sheets_slug
         from naas_abi.agents.slides.policy import open_slides_slug
 
         slides_agent = None
-        if open_slides_slug(
-            request.context if isinstance(request.context, dict) else None
-        ):
+        ctx = request.context if isinstance(request.context, dict) else None
+        if open_slides_slug(ctx):
             slides_agent = pick_workspace_slides_agent_id(workspace_agents)
-        if slides_agent:
+        sheets_agent = None
+        if open_sheets_slug(ctx) and not open_slides_slug(ctx):
+            sheets_agent = pick_workspace_sheets_agent_id(workspace_agents)
+        if sheets_agent:
+            resolved_agent = sheets_agent
+        elif slides_agent:
             resolved_agent = slides_agent
         if resolved_agent and resolved_agent != request.agent:
             logger.info(
@@ -290,6 +296,9 @@ async def stream_chat_response(
                     slides_active_mode,
                     slides_active_slug,
                     slides_active_title,
+                    sheets_active_mode,
+                    sheets_active_slug,
+                    sheets_active_title,
                 )
                 agent_user_id.set(str(current_user.id))
                 if current_user.name:
@@ -316,9 +325,20 @@ async def stream_chat_response(
                         if mode:
                             slides_active_mode.set(mode)
 
-                # Arm the research gate for both surfaces. With no deck open
-                # this also flags a deck requested from the main chat, so the
-                # agent gets a slides-sized step budget.
+                sheets_ctx = client_ctx.get("sheets") if isinstance(client_ctx, dict) else None
+                open_sheet_slug = ""
+                if isinstance(sheets_ctx, dict):
+                    open_sheet_slug = str(sheets_ctx.get("slug") or "").strip()
+                    if open_sheet_slug:
+                        sheets_active_slug.set(open_sheet_slug)
+                        stitle = str(sheets_ctx.get("title") or "").strip()
+                        smode = str(sheets_ctx.get("mode") or "").strip()
+                        if stitle:
+                            sheets_active_title.set(stitle)
+                        if smode:
+                            sheets_active_mode.set(smode)
+
+                from naas_abi.agents.sheets import bind_sheets_research_policy
                 from naas_abi.agents.slides import bind_slides_research_policy
 
                 has_prior_assistant = any(
@@ -330,26 +350,41 @@ async def stream_chat_response(
                     has_prior_assistant,
                     client_ctx,
                 )
+                bind_sheets_research_policy(
+                    request.message,
+                    has_prior_assistant,
+                    client_ctx,
+                )
 
-                if open_slug and request.workspace_id:
+                sidecar_slug = open_sheet_slug or open_slug
+                if sidecar_slug and request.workspace_id:
                     try:
-                        from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__primary_adapter__FastAPI import (
-                            lookup_slides_sidecar,
-                        )
+                        if open_sheet_slug:
+                            from naas_abi.apps.nexus.apps.api.app.services.sheets.adapters.primary.sheets__primary_adapter__FastAPI import (
+                                lookup_slides_sidecar as lookup_sheets_sidecar,
+                            )
 
-                        ws_base, ws_secret = await lookup_slides_sidecar(
+                            lookup_fn = lookup_sheets_sidecar
+                        else:
+                            from naas_abi.apps.nexus.apps.api.app.services.slides.adapters.primary.slides__primary_adapter__FastAPI import (
+                                lookup_slides_sidecar,
+                            )
+
+                            lookup_fn = lookup_slides_sidecar
+
+                        ws_base, ws_secret = await lookup_fn(
                             db,
                             workspace_id=str(request.workspace_id),
                             user_id=str(current_user.id),
-                            slug=open_slug,
+                            slug=sidecar_slug,
                         )
                         if ws_base and ws_secret:
                             coder_workspace_base.set(ws_base)
                             coder_workspace_secret.set(ws_secret)
                     except Exception:
                         logger.warning(
-                            "Failed to bind slides sidecar for %s",
-                            open_slug,
+                            "Failed to bind office sidecar for %s",
+                            sidecar_slug,
                             exc_info=True,
                         )
 

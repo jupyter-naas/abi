@@ -236,6 +236,20 @@ def pick_workspace_slides_agent_id(agents: list[AgentRecord]) -> str | None:
     return None
 
 
+def _is_nexus_sheets_agent(agent: AgentRecord) -> bool:
+    if agent.name == "Sheets":
+        return True
+    class_name = agent.class_name or ""
+    return class_name.endswith("/SheetsAgent") and "naas_abi" in class_name
+
+
+def pick_workspace_sheets_agent_id(agents: list[AgentRecord]) -> str | None:
+    for agent in agents:
+        if agent.enabled and _is_nexus_sheets_agent(agent):
+            return agent.id
+    return None
+
+
 def _workspace_agent_roster(
     seeded_class_names: set[str] | None,
     default_class_name: str | None,

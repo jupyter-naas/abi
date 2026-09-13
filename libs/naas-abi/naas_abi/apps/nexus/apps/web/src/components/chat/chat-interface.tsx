@@ -14,6 +14,7 @@ import { nextChatUrl } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import {
+  pickSheetsOfficeAgent,
   pickSlidesOfficeAgent,
   pickWorkspaceDefaultAgent,
 } from '@/lib/pick-workspace-default-agent';
@@ -21,6 +22,11 @@ import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
 import { dispatchSlidesDeckUpdated, isSlidesWriteTool, useSlidesStore } from '@/stores/slides';
+import {
+  dispatchSheetsWorkbookUpdated,
+  isSheetsWriteTool,
+  useSheetsStore,
+} from '@/stores/sheets';
 import {
   slidesDeckCardFromToolCalls,
   slidesDeckTitleFromToolOutput,
@@ -48,6 +54,7 @@ import {
   resolveContextWindow,
 } from '@/lib/chat-context-usage';
 import { slidesOpenDeckBranch, slidesOpenDeckPath } from '@/lib/slides-pane-conversation';
+import { sheetsOpenWorkbookBranch, sheetsOpenWorkbookPath } from '@/lib/sheets-pane-conversation';
 import { ContextUsageMeter } from './context-usage-meter';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import { getLogoUrl } from '@/lib/logo-url';
@@ -964,6 +971,37 @@ export function ChatInterface({
     slidesSlideCount,
   ]);
 
+  const sheetsSlug = useSheetsStore((s) => s.selectedSlug);
+  const sheetsTitle = useSheetsStore((s) => s.selectedTitle);
+  const sheetsMode = useSheetsStore((s) => s.editorMode);
+  const sheetsSelectedIndex = useSheetsStore((s) => s.selectedIndex);
+  const sheetsTabCount = useSheetsStore((s) => s.slideCount);
+  const sheetsChatContext = useMemo(() => {
+    const onSheets =
+      typeof pathname === 'string' && pathname.includes('/sheets') && Boolean(sheetsSlug);
+    if (!onSheets || !sheetsSlug) return null;
+    return {
+      sheets: {
+        slug: sheetsSlug,
+        title: sheetsTitle || sheetsSlug,
+        mode: sheetsMode,
+        workspace_id: currentWorkspaceId || undefined,
+        branch: sheetsOpenWorkbookBranch(currentWorkspaceId || '', sheetsSlug),
+        path: sheetsOpenWorkbookPath(currentWorkspaceId || '', sheetsSlug),
+        selected_index: sheetsTabCount > 0 ? sheetsSelectedIndex : undefined,
+        sheet_count: sheetsTabCount > 0 ? sheetsTabCount : undefined,
+      },
+    };
+  }, [
+    pathname,
+    sheetsSlug,
+    sheetsTitle,
+    sheetsMode,
+    currentWorkspaceId,
+    sheetsSelectedIndex,
+    sheetsTabCount,
+  ]);
+
   const codeActiveBranch = useCodeStore((s) => s.activeBranch);
   const codeSelectedRepo = useCodeStore((s) => s.selectedRepoId);
   const codingChatContext = useMemo(() => {
@@ -984,10 +1022,11 @@ export function ChatInterface({
   const chatRequestContext = useMemo(() => {
     const merged = {
       ...(slidesChatContext ?? {}),
+      ...(sheetsChatContext ?? {}),
       ...(codingChatContext ?? {}),
     };
     return Object.keys(merged).length > 0 ? merged : null;
-  }, [slidesChatContext, codingChatContext]);
+  }, [slidesChatContext, sheetsChatContext, codingChatContext]);
 
   useEffect(() => {
     if (!mounted || isPane) return;
@@ -1872,15 +1911,26 @@ export function ChatInterface({
     // workspace default so the stream has a real agent id.
     if (!effectiveAgent) {
       const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
-      const resolved = slidesChatContext
-        ? (pickSlidesOfficeAgent(agents) ?? pickWorkspaceDefaultAgent(agents))
-        : pickWorkspaceDefaultAgent(agents);
+      const resolved = sheetsChatContext
+        ? (pickSheetsOfficeAgent(agents) ?? pickWorkspaceDefaultAgent(agents))
+        : slidesChatContext
+          ? (pickSlidesOfficeAgent(agents) ?? pickWorkspaceDefaultAgent(agents))
+          : pickWorkspaceDefaultAgent(agents);
       if (resolved) {
         effectiveAgent = resolved.id;
         if (isPane) {
           useWorkspaceStore.getState().setPaneAgent(resolved.id);
         } else {
           useWorkspaceStore.getState().setSelectedAgent(resolved.id);
+        }
+      }
+    } else if (sheetsChatContext) {
+      const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const sheets = pickSheetsOfficeAgent(agents);
+      if (sheets) {
+        effectiveAgent = sheets.id;
+        if (isPane && useWorkspaceStore.getState().paneAgent !== sheets.id) {
+          useWorkspaceStore.getState().setPaneAgent(sheets.id);
         }
       }
     } else if (slidesChatContext) {
@@ -2168,6 +2218,9 @@ export function ChatInterface({
           if (isSlidesWriteTool(rawTool)) {
             useSlidesStore.getState().setAgentWriting(true);
           }
+          if (isSheetsWriteTool(rawTool)) {
+            useSheetsStore.getState().setAgentWriting(true);
+          }
         };
 
         const handleToolResponseEvent = (output: string) => {
@@ -2209,6 +2262,24 @@ export function ChatInterface({
               const deckTitle = slidesDeckTitleFromToolOutput(output);
               if (deckTitle) useSlidesStore.getState().setSelectedTitle(deckTitle);
               dispatchSlidesDeckUpdated({ slug, source: target.rawName || target.toolName });
+            }
+          }
+          if (isSheetsWriteTool(raw)) {
+            let slug: string | undefined;
+            let writeFailed = false;
+            try {
+              const parsed = JSON.parse(output) as { slug?: string; error?: unknown; title?: string };
+              if (typeof parsed?.slug === 'string') slug = parsed.slug;
+              if (typeof parsed?.title === 'string' && parsed.title.trim()) {
+                useSheetsStore.getState().setSelectedTitle(parsed.title.trim());
+              }
+              if (parsed && parsed.error) writeFailed = true;
+            } catch {
+              /* tool output may be plain text */
+            }
+            useSheetsStore.getState().setAgentWriting(false);
+            if (!writeFailed) {
+              dispatchSheetsWorkbookUpdated({ slug, source: target.rawName || target.toolName });
             }
           }
           if (

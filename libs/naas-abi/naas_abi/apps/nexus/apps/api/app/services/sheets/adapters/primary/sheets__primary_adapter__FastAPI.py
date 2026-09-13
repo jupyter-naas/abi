@@ -1798,6 +1798,7 @@ async def export_workbook_xlsx(
     current_user: User = Depends(get_current_user_required),
 ) -> Response:
     """Download the live workbook as XLSX (JSON block or ``sheet-grid`` table)."""
+    from naas_abi.apps.nexus.sheets.formulas import evaluate_workbook_formulas
     from naas_abi.apps.nexus.sheets.html_io import grid_from_table_html, parse_workbook_html
     from naas_abi.apps.nexus.sheets.xlsx_export import workbook_to_xlsx_bytes
 
@@ -1824,6 +1825,7 @@ async def export_workbook_xlsx(
                 raise ValueError(
                     "Workbook HTML has no nexus sheet JSON or sheet-grid table"
                 )
+        workbook = evaluate_workbook_formulas(workbook)
         return workbook_to_xlsx_bytes(workbook)
 
     try:
