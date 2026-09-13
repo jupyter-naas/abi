@@ -104,3 +104,10 @@ export function officeSurfaceFromPath(pathname: string | null | undefined): {
     onDocuments: feature === 'documents',
   };
 }
+
+/** Phase-1 Sheets reuses the Slides office agent until SheetsAgent lands (#1254). */
+export function pickSheetsOfficeAgent<T extends SlidesOfficeAgent>(
+  agents: T[],
+): T | undefined {
+  return pickSlidesOfficeAgent(agents);
+}

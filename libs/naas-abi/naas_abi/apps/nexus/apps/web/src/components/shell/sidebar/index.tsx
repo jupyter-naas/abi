@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Files, Database, Code, Presentation, FileText, LayoutGrid, Store, Settings, Activity, Home, Blocks, MoreHorizontal,
+  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Files, Database, Code, Presentation, FileText, Table2, LayoutGrid, Store, Settings, Activity, Home, Blocks, MoreHorizontal,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -39,7 +39,7 @@ type SectionDef = {
   label: string;
   description: string;
   href: string;
-  feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'documents' | 'settings.workspace';
+  feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'documents' | 'sheets' | 'settings.workspace';
   extraHref?: string;
 };
 
@@ -55,6 +55,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'datasets',    icon: <Database size={18} />,      label: 'Datasets',    description: 'Manage structured datasets',            href: '/datasets',    feature: 'datasets' },
   { id: 'slides',      icon: <Presentation size={18} />,  label: 'Slides',      description: 'Create and edit presentation decks',    href: '/slides',      feature: 'slides' },
   { id: 'documents',   icon: <FileText size={18} />,      label: 'Documents',   description: 'Create and edit rich documents',        href: '/documents',   feature: 'documents' },
+  { id: 'sheets',      icon: <Table2 size={18} />,        label: 'Sheets',      description: 'Spreadsheets with HTML source and XLSX export', href: '/sheets', feature: 'sheets' },
   { id: 'code',        icon: <Code size={18} />,          label: 'Code',        description: 'Code editor and repositories',          href: '/code',        feature: 'code' },
   { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', description: 'Discover and install new apps',          href: '/marketplace', feature: 'marketplace' },
 ];
@@ -132,6 +133,7 @@ export function Sidebar() {
   const canCode = useFeature('code');
   const canSlides = useFeature('slides');
   const canDocuments = useFeature('documents');
+  const canSheets = useFeature('sheets');
   const canSettingsWorkspace = useFeature('settings.workspace');
   const isSuperadmin = useAuthStore((s) => !!s.user?.is_superadmin);
 
@@ -202,6 +204,7 @@ export function Sidebar() {
     if (feature === 'code') return !!canCode;
     if (feature === 'slides') return !!canSlides;
     if (feature === 'documents') return !!canDocuments;
+    if (feature === 'sheets') return !!canSheets;
     if (feature === 'settings.workspace') return !!canSettingsWorkspace;
     return true;
   };
@@ -223,7 +226,7 @@ export function Sidebar() {
       .filter((s) => isFeatureEnabled(s.feature))
       .sort((a, b) => (index.get(a.id) ?? 999) - (index.get(b.id) ?? 999));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sidebarNavOrder, canMaps, canChat, canFiles, canDatasets, canApps, canMarketplace, canSearch, canOntology, canGraph, canCode, canSlides, canDocuments]);
+  }, [sidebarNavOrder, canMaps, canChat, canFiles, canDatasets, canApps, canMarketplace, canSearch, canOntology, canGraph, canCode, canSlides, canDocuments, canSheets]);
 
   const dockLayout = layoutDockNav(
     navMeasure?.available ?? Number.POSITIVE_INFINITY,

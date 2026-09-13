@@ -47,6 +47,7 @@ from naas_abi.apps.nexus.apps.api.app.services.platform.handlers import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.providers.handlers import router as providers_router
 from naas_abi.apps.nexus.apps.api.app.services.skills.handlers import router as skills_router
+from naas_abi.apps.nexus.apps.api.app.services.sheets.handlers import router as sheets_router
 from naas_abi.apps.nexus.apps.api.app.services.slides.handlers import router as slides_router
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.handlers import (
     router as workspaces_router,
@@ -67,6 +68,7 @@ api_router.include_router(
 )
 api_router.include_router(slides_router, prefix="/slides", tags=["slides"])
 api_router.include_router(documents_router, prefix="/documents", tags=["documents"])
+api_router.include_router(sheets_router, prefix="/sheets", tags=["sheets"])
 api_router.include_router(openai_gateway_router, prefix="/v1", tags=["openai"])
 api_router.include_router(code_review_router, prefix="/code-review", tags=["code-review"])
 api_router.include_router(platform_router, prefix="/platform", tags=["platform"])
