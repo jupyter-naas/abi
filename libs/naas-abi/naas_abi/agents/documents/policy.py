@@ -118,19 +118,17 @@ _REPLACE_ON_FILL_MESSAGE = (
 _APPLY_ON_FILL_MESSAGE = (
     "apply_document_commands is not available on a Documents fill turn. "
     "Call fill_document_slots once with complete topic slots. "
-    "If missing_slots is not empty, call once more with only those keys. "
-    "Do not apply. Do not reread."
+    "Then stop and reply. Do not apply. Do not reread."
 )
-_REPEAT_APPLY_MESSAGE = (
-    "A document apply or insert already ran this turn. Stop and reply. "
-    "Do not call apply_document_commands, insert_heading, insert_paragraph, "
-    "insert_page_break, or read_document again."
+_REPEAT_WRITE_MESSAGE = (
+    "A document write already ran this turn. Stop and reply. "
+    "Do not call fill_document_slots, apply_document_commands, insert_heading, "
+    "insert_paragraph, insert_page_break, or read_document again."
 )
+_REPEAT_APPLY_MESSAGE = _REPEAT_WRITE_MESSAGE
 _APPLY_ATTEMPT_LABEL = "apply_document_commands"
-_REPEAT_FILL_MESSAGE = (
-    "fill_document_slots already completed this turn. Stop. "
-    "Do not write the memo only in chat. Do not reread."
-)
+_REPEAT_FILL_MESSAGE = _REPEAT_WRITE_MESSAGE
+_NON_FAMILY_WRITE_LABELS = frozenset({"rename document", "document title"})
 _FILL_WRITE_LABEL = "document slots"
 _FILL_FOLLOWUP_LABEL = "document slots follow-up"
 
@@ -328,7 +326,10 @@ def bind_documents_research_policy(
     """Set request-scoped research gates. Returns whether search is required."""
     # Documents tools name a new (or still untitled) document after this brief.
     documents_brief.set((message or "").strip())
-    slug = open_documents_slug(client_context) or (documents_active_slug.get() or "").strip()
+    slug = (
+        open_documents_slug(client_context)
+        or (documents_active_slug.get() or "").strip()
+    )
     if not slug:
         # Main chat: no document open yet. A document request still has to research
         # before writing, and the agent needs a sections-sized step budget.
@@ -395,19 +396,39 @@ def documents_apply_ran() -> bool:
     return _APPLY_ATTEMPT_LABEL in written
 
 
+def _is_write_family_label(label: str) -> bool:
+    text = (label or "").strip()
+    if not text:
+        return False
+    return not (
+        text in _NON_FAMILY_WRITE_LABELS or text.startswith("template ")
+    )
+
+
+def documents_write_family_ran() -> bool:
+    """True after one fill or apply/insert/reflow/style/delete this turn."""
+    written = documents_writes_completed.get() or []
+    return any(_is_write_family_label(item) for item in written)
+
+
 def documents_fill_count() -> int:
-    """How many fill_document_slots persists this turn (including follow-up)."""
+    """How many fill_document_slots persists this turn."""
     written = documents_writes_completed.get() or []
     return sum(
         1 for item in written if item in {_FILL_WRITE_LABEL, _FILL_FOLLOWUP_LABEL}
     )
 
 
+def reject_repeat_document_write() -> dict[str, Any] | None:
+    """One write family call per turn, on the tools Bob and Documents share."""
+    if documents_write_family_ran():
+        return {"error": _REPEAT_WRITE_MESSAGE}
+    return None
+
+
 def reject_repeat_apply_document_commands() -> dict[str, Any] | None:
     """One apply or insert_* call per turn, including Bob invoking Documents tools."""
-    if documents_apply_ran():
-        return {"error": _REPEAT_APPLY_MESSAGE}
-    return None
+    return reject_repeat_document_write()
 
 
 def note_documents_apply_attempt() -> None:
@@ -416,15 +437,11 @@ def note_documents_apply_attempt() -> None:
 
 
 def reject_repeat_fill_document_slots() -> dict[str, Any] | None:
-    """One complete fill, plus one follow-up for missing slots only.
+    """One fill this turn. leftover empty must not invite another call.
 
     Applies whenever the tool is invoked, including Bob and copy-edit turns.
-    The research flag must not disable this lock: leftover INCOMPLETE used
-    to keep asking for another fill after research_required was already off.
     """
-    if documents_fill_count() >= 2:
-        return {"error": _REPEAT_FILL_MESSAGE}
-    return None
+    return reject_repeat_document_write()
 
 
 def note_documents_slot_fill() -> str:
@@ -510,7 +527,10 @@ def attach_documents_research_note(tool: Any) -> Any:
         return tool
 
     def wrapped(*args: Any, **kwargs: Any) -> Any:
-        if documents_research_required.get() and documents_search_budget_remaining() <= 0:
+        if (
+            documents_research_required.get()
+            and documents_search_budget_remaining() <= 0
+        ):
             return _SEARCH_BUDGET_MESSAGE
         query = kwargs.get("query")
         if query is None and args:
@@ -674,7 +694,9 @@ def bind_documents_reasoning(
     if not force and not (documents_active_slug.get() or "").strip():
         return chat_model
     hay = (model_id or "").lower()
-    if not any(token in hay for token in ("gpt-5", "o3", "o4", "sonnet", "opus", "gemini")):
+    if not any(
+        token in hay for token in ("gpt-5", "o3", "o4", "sonnet", "opus", "gemini")
+    ):
         return chat_model
     lc = getattr(chat_model, "model", chat_model)
     if not hasattr(lc, "reasoning_effort"):

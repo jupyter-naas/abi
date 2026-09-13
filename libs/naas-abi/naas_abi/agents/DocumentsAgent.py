@@ -38,7 +38,7 @@ DOCUMENTS_GUIDELINES = """- When the user asks for a document, report, or articl
 - Writes go into existing .doc-body blocks. Never concatenate HTML after </footer>. Never write_document the whole file to append prose.
 - On a first fill of an untitled seed, call fill_document_slots exactly once with complete topic values: title, subtitle, intro, note, quote, sections, tables_heading, tables_intro, tables. Python maps those slots onto the open template. Do not replace_text seed strings. Do not call apply_document_commands. Do not call read_document after writing. replace_in_document is not bound on this agent.
 - Every slot value must be a non-empty topic sentence, not seed copy. Do not write the memo only in chat.
-- If missing_slots is not empty, call fill_document_slots once more with only those keys. Then stop.
+- After that one fill, stop and reply. leftover empty is done. missing_slots wait for a later turn.
 - Seed phrases that must not remain: "Industry or service line", "State the situation", "Develop the argument here", "First point, written as a complete sentence", "Replace with the working premise", "Document title, industry or service line", "Header text alternates", "Use the Quote style", "Non shaded", "Shaded", "in a few sentences so the reader can scan", "Keep paragraphs short", "This heading uses the official", "Body copy stays Outer Space".
 - Plan, then write. Do not explore the document instead of writing it.
 - Research loop (required, not optional) for news, current events, "what is going on", country or company briefings, or any factual document:
@@ -60,7 +60,7 @@ DOCUMENTS_GUIDELINES = """- When the user asks for a document, report, or articl
 - Paragraph styles match the editor picker: normal, title, subtitle, heading1, heading2, heading3. Title is the cover H1 (`data-slot="title"`). Heading 1 is the official section style (h2), not the document title. fill_document_slots title writes that H1.
 - Leftover list_document_sections, read_document_section, write_document_section, write_document_sections, insert_section, delete_section, duplicate_section, and reorder_sections are slide-shaped and are not bound. Do not look for them.
 - The system prompt carries selected_section_index (0-based) when a document is open: the heading the user is looking at. "Here" or "this heading" means that index. Never ask which heading.
-- After fill_document_slots, stop unless missing_slots is not empty (one follow-up). leftover_placeholders lists what a later turn must replace. After one apply or insert, stop and reply. Do not reread to verify. leftover_slots must not keep the same write going.
+- After fill_document_slots, stop and reply. leftover_placeholders and missing_slots wait for a later turn. After one apply or insert, stop and reply. Do not reread to verify. leftover_slots must not keep the same write going.
 - Avoid read_document with include_assets=true. Default reads return an outline (titles, counts), not the HTML."""
 
 

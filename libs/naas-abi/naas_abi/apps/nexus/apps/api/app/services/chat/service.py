@@ -298,9 +298,7 @@ def _render_slides_context_block(
         "FOOTER_TXT. For a small copy edit after research (or a title-only tweak), "
         "call replace_in_slides_deck with section_index=0 and "
         "occurrence=0 (matches &amp; on cover h1; do not use occurrence=1 "
-        "for the title).\n"
-        + "\n".join(lines)
-        + "\n"
+        "for the title).\n" + "\n".join(lines) + "\n"
     )
 
 
@@ -387,8 +385,9 @@ def _render_documents_context_block(
         "Do not write the memo only in chat. "
         "Do not call read_document after writing. "
         "replace_in_document is not bound. Writes go into .doc-body.\n"
-        "4. After that one write, stop unless missing_slots is not empty "
-        "(one follow-up for those keys only). Do not reread.\n"
+        "4. After that one write, stop and reply. leftover empty is done. "
+        "leftover_placeholders wait for a later turn. "
+        "Do not call fill_document_slots again. Do not reread.\n"
         + _untitled_documents_rename_hint(title, slug)
         + "\n".join(lines)
         + "\n"
@@ -419,9 +418,7 @@ def _render_coding_context_block(client_context: dict | None) -> str:
         "ready. Do not ask which repository or branch. Prefer read_coding_file, "
         "write_coding_file, list_coding_dir, and run_in_coding_sandbox for direct "
         "edits. For larger multi-file refactors, use run_coding_harness_task to "
-        "delegate to the managed OpenCode harness in the same checkout.\n"
-        + "\n".join(lines)
-        + "\n"
+        "delegate to the managed OpenCode harness in the same checkout.\n" + "\n".join(lines) + "\n"
     )
 
 
@@ -466,9 +463,7 @@ def render_user_context_block(
     ]
     technical_lines = [f"- {label}: {value}" for label, value in technical_fields if value]
     technical_block = (
-        ("\n\nTechnical context:\n" + "\n".join(technical_lines))
-        if technical_lines
-        else ""
+        ("\n\nTechnical context:\n" + "\n".join(technical_lines)) if technical_lines else ""
     )
     return (
         "\n\nYou are speaking with the following user. Use this profile to "
@@ -520,7 +515,9 @@ class ChatService:
             system_prompt += _MULTI_AGENT_NOTICE
             return system_prompt
 
-        addendum = await self.build_user_context_addendum(prior_messages, user_id, workspace_id, conversation_id)
+        addendum = await self.build_user_context_addendum(
+            prior_messages, user_id, workspace_id, conversation_id
+        )
         return system_prompt + addendum
 
     async def build_abi_injection_preamble(

@@ -11,7 +11,14 @@ from naas_abi.agents.tools.web_tools import (
     _http_only_opener,
     make_web_fetch_tool,
     make_web_search_tool,
+    reset_web_tool_turn,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_web_tool_turn() -> None:
+    reset_web_tool_turn()
+
 
 _PYPROJECT = Path(__file__).parents[3] / "pyproject.toml"
 
@@ -32,7 +39,11 @@ def test_web_search_tool_name_and_numbered_results() -> None:
     assert tool.name == "web_search"
     fake = [
         {"title": "Trump wins", "href": "https://bbc.com/1", "body": "Donald Trump..."},
-        {"title": "White House", "href": "https://whitehouse.gov", "body": "President..."},
+        {
+            "title": "White House",
+            "href": "https://whitehouse.gov",
+            "body": "President...",
+        },
     ]
     with patch("naas_abi.agents.tools.web_tools._ddgs_search", return_value=fake):
         result = tool.invoke({"query": "president usa 2026"})
@@ -57,7 +68,9 @@ def _mock_opener(response: MagicMock) -> MagicMock:
     return opener
 
 
-def _html_response(body: bytes, content_type: str = "text/html; charset=utf-8") -> MagicMock:
+def _html_response(
+    body: bytes, content_type: str = "text/html; charset=utf-8"
+) -> MagicMock:
     resp = MagicMock()
     resp.read.return_value = body
     resp.headers.get.return_value = content_type
@@ -294,6 +307,7 @@ def test_web_search_truncates_snippets_and_tolerates_other_key_names() -> None:
     with patch("naas_abi.agents.tools.web_tools._ddgs_search", return_value=long_body):
         assert "X" * 251 not in tool.invoke({"query": "q"})
 
+    reset_web_tool_turn()
     short_keys = [{"t": "Title", "u": "https://x.com", "d": "Desc"}]
     with patch("naas_abi.agents.tools.web_tools._ddgs_search", return_value=short_keys):
         assert "Title" in tool.invoke({"query": "q"})
@@ -311,6 +325,61 @@ def test_web_fetch_marks_truncated_pages() -> None:
 
     assert "truncated" in result
     assert len(result) <= 200
+
+
+def test_web_fetch_rejects_the_same_url_twice() -> None:
+    tool = make_web_fetch_tool()
+    resp = _html_response(b"<p>ok</p>")
+    with patch(
+        "naas_abi.agents.tools.web_tools._http_only_opener",
+        return_value=_mock_opener(resp),
+    ):
+        assert "ok" in tool.invoke(
+            {"url": "https://www.forvismazars.com/il/en/offices"}
+        )
+        blocked = tool.invoke({"url": "https://www.forvismazars.com/il/en/offices"})
+    assert "already ran" in blocked
+    assert "Stop and reply" in blocked
+
+
+def test_web_fetch_rejects_truncated_oss_url_then_repeat() -> None:
+    tool = make_web_fetch_tool()
+    url = (
+        "https://routify-file-proxy-sg.oss-ap-southeast-1.aliyuncs.com/x"
+        "?OSSAccessKeyId=LTAI5t…QVZr"
+    )
+    opener = MagicMock()
+    with patch(
+        "naas_abi.agents.tools.web_tools._http_only_opener",
+        return_value=opener,
+    ):
+        first = tool.invoke({"url": url})
+        second = tool.invoke({"url": url})
+    assert "truncated" in first.lower() or "ellipsis" in first.lower()
+    assert "already ran" in second
+    opener.open.assert_not_called()
+
+
+def test_web_search_drops_truncated_result_urls() -> None:
+    tool = make_web_search_tool()
+    fake = [
+        {
+            "title": "Good",
+            "href": "https://www.forvismazars.com/il/en/offices",
+            "body": "ok",
+        },
+        {
+            "title": "Bad",
+            "href": "https://routify.example/x?id=LTAI5t…QVZr",
+            "body": "junk",
+        },
+    ]
+    with patch("naas_abi.agents.tools.web_tools._ddgs_search", return_value=fake):
+        result = tool.invoke({"query": "Forvis Mazars Israel 2026"})
+    assert "forvismazars.com" in result
+    assert "routify" not in result
+    again = tool.invoke({"query": "Forvis Mazars Israel 2026"})
+    assert "already ran" in again
 
 
 def test_web_fetch_reports_transport_failures_as_text() -> None:

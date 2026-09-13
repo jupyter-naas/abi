@@ -62,7 +62,12 @@ def test_batch_commands_page_break_then_heading() -> None:
         _SAMPLE,
         [
             {"type": "insert_page_break", "after_heading": 1},
-            {"type": "insert_heading", "after_heading": 1, "title": "Annex", "level": 2},
+            {
+                "type": "insert_heading",
+                "after_heading": 1,
+                "title": "Annex",
+                "level": 2,
+            },
         ],
     )
     assert result["ok"] is True
@@ -77,7 +82,11 @@ def test_replace_text_and_style() -> None:
     result = apply_document_commands(
         _SAMPLE,
         [
-            {"type": "replace_text", "find": "Document Title", "replace": "Board update"},
+            {
+                "type": "replace_text",
+                "find": "Document Title",
+                "replace": "Board update",
+            },
             {"type": "update_paragraph_style", "heading_index": 1, "style": "heading3"},
         ],
     )
@@ -97,12 +106,17 @@ def test_update_paragraph_style_heading1_is_not_title() -> None:
     assert titled.count("<h1") == 2
     heading1 = update_paragraph_style(html, 1, "heading1")
     assert isinstance(heading1, str)
-    assert '<h2 class="fmz-heading-1" data-slot="situation-heading">Situation</h2>' in heading1
+    assert (
+        '<h2 class="fmz-heading-1" data-slot="situation-heading">Situation</h2>'
+        in heading1
+    )
 
 
 def test_delete_range_refuses_last_heading() -> None:
     one = "<main class='document'><section class='page'><h1>Only</h1><p>x</p></section></main>"
-    result = apply_document_commands(one, [{"type": "delete_range", "heading_index": 0}])
+    result = apply_document_commands(
+        one, [{"type": "delete_range", "heading_index": 0}]
+    )
     assert "error" in result
 
 
@@ -117,7 +131,11 @@ def test_empty_requests_rejected() -> None:
 
 
 def test_update_document_title_sets_tab_and_cover() -> None:
-    html = "<html><head><title>Document Title</title></head><body>" + _SAMPLE + "</body></html>"
+    html = (
+        "<html><head><title>Document Title</title></head><body>"
+        + _SAMPLE
+        + "</body></html>"
+    )
     updated = update_document_title(html, "Forvis Mazars Story")
     assert isinstance(updated, str)
     assert "<title>Forvis Mazars Story</title>" in updated
@@ -142,7 +160,10 @@ def test_update_title_command_is_heading_only_html() -> None:
     )
     assert result["ok"] is True
     assert "<h1>Cover only</h1>" in result["html"]
-    assert last_rename_document_title([{"type": "update_title", "title": "Cover only"}]) == ""
+    assert (
+        last_rename_document_title([{"type": "update_title", "title": "Cover only"}])
+        == ""
+    )
 
 
 _SEEDED_PAGE = """<!doctype html><html><head><title>Document title</title></head><body>
@@ -190,7 +211,12 @@ def test_apply_commands_does_not_append_after_footer() -> None:
         _SEEDED_PAGE,
         [
             {"type": "rename_document", "title": "Board memo"},
-            {"type": "insert_heading", "after_heading": -1, "title": "Synthese", "level": 2},
+            {
+                "type": "insert_heading",
+                "after_heading": -1,
+                "title": "Synthese",
+                "level": 2,
+            },
             {"type": "insert_paragraph", "after_heading": -1, "text": "Three signals."},
         ],
     )
@@ -207,7 +233,7 @@ def test_apply_commands_does_not_append_after_footer() -> None:
 def test_replace_class_removes_palette() -> None:
     html = (
         '<div class="doc-body"><div class="palette" aria-label="palette">'
-        "<div class=\"swatch\">#464B4B</div></div><p>Keep</p></div>"
+        '<div class="swatch">#464B4B</div></div><p>Keep</p></div>'
     )
     updated = replace_class(html, "palette", "")
     assert isinstance(updated, str)
@@ -263,7 +289,9 @@ def test_leftover_write_note_marks_incomplete() -> None:
     assert "once more" not in note["warning"]
     assert all(isinstance(slot, str) for slot in note["leftover_slots"])
     assert set(note["leftover_slots"]) <= set(FILL_SLOT_KEYS)
-    assert "tables" in note["leftover_slots"] or "tables_heading" in note["leftover_slots"]
+    assert (
+        "tables" in note["leftover_slots"] or "tables_heading" in note["leftover_slots"]
+    )
     clean = leftover_write_note("<h1>Board memo</h1>")
     assert clean["leftover_placeholders"] == []
     assert clean["leftover_slots"] == []
@@ -271,7 +299,7 @@ def test_leftover_write_note_marks_incomplete() -> None:
         assert note["leftover_slots"]
 
 
-def test_leftover_write_note_after_two_fills_says_stop() -> None:
+def test_leftover_write_note_after_one_fill_says_stop() -> None:
     from naas_abi.agents.documents.policy import note_documents_slot_fill
     from naas_abi_core.services.agent.context import (
         documents_writes_completed,
@@ -281,11 +309,14 @@ def test_leftover_write_note_after_two_fills_says_stop() -> None:
     token = documents_writes_completed.set([])
     try:
         note_documents_write(note_documents_slot_fill())
-        note_documents_write(note_documents_slot_fill())
         note = leftover_write_note(_SEEDED_PAGE)
         assert "INCOMPLETE" in note["warning"]
         assert "Stop and reply" in note["warning"]
         assert "once more" not in note["warning"]
+        clean = leftover_write_note("<h1>Board memo</h1>")
+        assert clean["leftover_placeholders"] == []
+        assert "once more" not in (clean.get("warning") or "")
+        assert "Stop and reply" in (clean.get("warning") or "")
     finally:
         documents_writes_completed.reset(token)
 
@@ -315,7 +346,11 @@ def test_replace_text_leftover_phrase_replaces_the_whole_block() -> None:
         '<p class="intro">Introduction. State the situation in a few sentences '
         "so the reader can scan the page before the body.</p>"
     )
-    updated = replace_text(html, "State the situation in a few sentences so the reader can scan.", "ASIC opened five inquiries.")
+    updated = replace_text(
+        html,
+        "State the situation in a few sentences so the reader can scan.",
+        "ASIC opened five inquiries.",
+    )
     assert isinstance(updated, str)
     assert "State the situation" not in updated
     assert "the page before the body" not in updated
@@ -327,7 +362,11 @@ def test_apply_skips_a_missing_find_and_keeps_the_batch() -> None:
         _SEEDED_PAGE,
         [
             {"type": "replace_text", "find": "Kicker or subtitle", "replace": "Audit"},
-            {"type": "replace_text", "find": "Replace with the working premise", "replace": "PE is buying the mid-tier."},
+            {
+                "type": "replace_text",
+                "find": "Replace with the working premise",
+                "replace": "PE is buying the mid-tier.",
+            },
             {"type": "rename_document", "title": "Board memo"},
         ],
     )
@@ -388,7 +427,11 @@ def test_apply_skips_empty_replace_and_keeps_seed_copy() -> None:
     result = apply_document_commands(
         _SEEDED_PAGE,
         [
-            {"type": "replace_text", "find": "Replace with the working premise", "replace": ""},
+            {
+                "type": "replace_text",
+                "find": "Replace with the working premise",
+                "replace": "",
+            },
             {"type": "rename_document", "title": "Board memo"},
         ],
     )

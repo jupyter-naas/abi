@@ -444,6 +444,14 @@ def leftover_write_note(html: str) -> dict[str, Any]:
     if leftovers:
         note["incomplete"] = True
         note["warning"] = leftover_followup_warning(leftovers, slots)
+        return note
+    from naas_abi.agents.documents.policy import documents_fill_count
+
+    if documents_fill_count() >= 1:
+        note["warning"] = (
+            "Slots are filled. Stop and reply. "
+            "Do not call fill_document_slots again this turn."
+        )
     return note
 
 
@@ -460,19 +468,11 @@ def leftover_followup_warning(leftovers: list[str], slots: list[str]) -> str:
         + keys
         + ". "
     )
-    if documents_fill_count() >= 2:
+    if documents_fill_count() >= 1:
         return (
             prefix
             + "Stop and reply. Do not call fill_document_slots again this turn. "
             "leftover_slots wait for a later turn. "
-            "Do not call apply_document_commands."
-        )
-    if documents_fill_count() >= 1:
-        return (
-            prefix
-            + "Call fill_document_slots once more with leftover_slots keys "
-            "only, then stop. Each value must be a non-empty topic sentence. "
-            "Do not write the memo only in chat. "
             "Do not call apply_document_commands."
         )
     return (

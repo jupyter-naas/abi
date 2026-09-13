@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from naas_abi.agents.tools.documents_tools import (
     _DATA_URL_RE,
@@ -38,6 +39,11 @@ from naas_abi.agents.tools.documents_tools import (
     documents_tools,
     maybe_auto_title_open_document,
     resolve_documents_template_id,
+)
+from naas_abi.agents.tools.web_tools import (
+    make_web_fetch_tool,
+    make_web_search_tool,
+    reset_web_tool_turn,
 )
 from naas_abi_core.services.agent.context import (
     agent_user_id,
@@ -243,7 +249,10 @@ def test_section_scoped_replace_updates_cover_h1_not_document_title():
     assert found >= 3
     assert replaced == 1
     # Document-order first hit is <title>, not the visible cover H1.
-    assert "<title>Presentation Title &amp; Overview COCO | Document</title>" in updated_doc
+    assert (
+        "<title>Presentation Title &amp; Overview COCO | Document</title>"
+        in updated_doc
+    )
     assert _cover_h1_text(updated_doc) == "Presentation Title & Overview"
 
     scoped = _apply_replacements_in_section(
@@ -381,12 +390,16 @@ def test_friendly_sc_error_never_returns_raw_repo_id():
     assert _friendly_sc_error(RepoNotFoundError("abi/monorepo")) == _WIPED_DECK_ERROR
     assert (
         _friendly_sc_error(
-            RepoNotFoundError("abi/monorepo:documents/ws-test/untitled-local/document.html")
+            RepoNotFoundError(
+                "abi/monorepo:documents/ws-test/untitled-local/document.html"
+            )
         )
         == _WIPED_DECK_ERROR
     )
     assert (
-        _friendly_sc_error(RepoNotFoundError("abi/monorepo@documents/ws-test/untitled-local"))
+        _friendly_sc_error(
+            RepoNotFoundError("abi/monorepo@documents/ws-test/untitled-local")
+        )
         == _WIPED_DECK_ERROR
     )
     assert _friendly_sc_error(RepoNotFoundError("abi/monorepo")) != "abi/monorepo"
@@ -483,10 +496,11 @@ def test_replace_write_path_matches_ui_create(monkeypatch):
     )
     tokens = _sections_context()
     try:
-        assert _document_path("untitled-local") == "documents/ws-test/untitled-local/document.html"
-        replace = next(
-            t for t in documents_tools() if t.name == "replace_in_document"
+        assert (
+            _document_path("untitled-local")
+            == "documents/ws-test/untitled-local/document.html"
         )
+        replace = next(t for t in documents_tools() if t.name == "replace_in_document")
         result = replace.invoke(
             {
                 "old": "Presentation Title",
@@ -587,7 +601,9 @@ def test_create_documents_project_from_main_chat_without_an_open_document(monkey
     sc = _bind_in_memory_git(monkeypatch)
     tokens = _main_chat_context()
     try:
-        create = next(t for t in documents_tools() if t.name == "create_documents_project")
+        create = next(
+            t for t in documents_tools() if t.name == "create_documents_project"
+        )
         result = create.invoke({"title": "Latest News About AI"})
         assert "error" not in result, result
         slug = result["slug"]
@@ -613,7 +629,9 @@ def test_create_documents_project_from_main_chat_without_an_open_document(monkey
         # same turn resolves to it without being passed a slug. Asserted
         # through the tool boundary because LangChain runs each tool in an
         # isolated context, where a ContextVar set by create is not visible.
-        sections = next(t for t in documents_tools() if t.name == "list_document_sections")
+        sections = next(
+            t for t in documents_tools() if t.name == "list_document_sections"
+        )
         listed = sections.invoke({})
         assert "error" not in listed, listed
         assert listed["slug"] == slug
@@ -625,7 +643,9 @@ def test_create_documents_project_keeps_the_open_document(monkeypatch):
     sc = _bind_in_memory_git(monkeypatch)
     tokens = _sections_context(slug="untitled-loop3")
     try:
-        create = next(t for t in documents_tools() if t.name == "create_documents_project")
+        create = next(
+            t for t in documents_tools() if t.name == "create_documents_project"
+        )
         result = create.invoke({"title": "Should not create"})
         assert result.get("created") is False
         assert result["slug"] == "untitled-loop3"
@@ -639,7 +659,9 @@ def test_create_documents_project_avoids_colliding_with_an_existing_slug(monkeyp
     sc = _bind_in_memory_git(monkeypatch)
     tokens = _main_chat_context()
     try:
-        create = next(t for t in documents_tools() if t.name == "create_documents_project")
+        create = next(
+            t for t in documents_tools() if t.name == "create_documents_project"
+        )
         first = create.invoke({"title": "AI News"})
         second = create.invoke({"title": "AI News"})
         assert first["slug"] != second["slug"]
@@ -660,7 +682,9 @@ def test_create_documents_project_names_the_document_after_a_french_brief(monkey
     tokens = _main_chat_context()
     brief = documents_brief.set(_FRENCH_BRIEF)
     try:
-        create = next(t for t in documents_tools() if t.name == "create_documents_project")
+        create = next(
+            t for t in documents_tools() if t.name == "create_documents_project"
+        )
         result = create.invoke({"title": _FRENCH_BRIEF})
         assert "error" not in result, result
         assert result["title"] == "Matériaux de construction"
@@ -693,7 +717,9 @@ def test_create_documents_project_falls_back_to_the_turn_brief(monkeypatch):
     tokens = _main_chat_context()
     brief = documents_brief.set("Make a document about the latest news in AI")
     try:
-        create = next(t for t in documents_tools() if t.name == "create_documents_project")
+        create = next(
+            t for t in documents_tools() if t.name == "create_documents_project"
+        )
         result = create.invoke({"title": "Untitled document"})
         assert "error" not in result, result
         assert result["title"] == "Latest news in AI"
@@ -838,7 +864,10 @@ def test_auto_title_keeps_a_custom_document_name(monkeypatch):
     _seed_untitled_document(sc, title="Already named")
     tokens = _sections_context()
     try:
-        assert maybe_auto_title_open_document("Write an executive memo on two firms") is None
+        assert (
+            maybe_auto_title_open_document("Write an executive memo on two firms")
+            is None
+        )
         assert _stored_title(sc) == "Already named"
     finally:
         _reset_tokens(tokens)
@@ -885,7 +914,9 @@ def test_apply_commands_rename_document_updates_project(monkeypatch):
     _seed_untitled_document(sc)
     tokens = _sections_context()
     try:
-        apply = next(t for t in documents_tools() if t.name == "apply_document_commands")
+        apply = next(
+            t for t in documents_tools() if t.name == "apply_document_commands"
+        )
         result = apply.invoke(
             {
                 "requests_json": json.dumps(
@@ -905,7 +936,9 @@ def test_create_documents_project_rejects_an_empty_title(monkeypatch):
     _bind_in_memory_git(monkeypatch)
     tokens = _main_chat_context()
     try:
-        create = next(t for t in documents_tools() if t.name == "create_documents_project")
+        create = next(
+            t for t in documents_tools() if t.name == "create_documents_project"
+        )
         assert "error" in create.invoke({"title": "   "})
     finally:
         _reset_tokens(tokens)
@@ -950,7 +983,9 @@ def test_write_document_sections_persists_once(monkeypatch):
     sc = _seed_in_memory_document(_bind_in_memory_git(monkeypatch), _SAMPLE)
     tokens = _sections_context()
     try:
-        write = next(t for t in documents_tools() if t.name == "write_document_sections")
+        write = next(
+            t for t in documents_tools() if t.name == "write_document_sections"
+        )
         result = write.invoke(
             {
                 "sections": json.dumps(
@@ -993,7 +1028,9 @@ def test_join_sections_round_trips_split():
 
 
 def test_insert_section_appends_and_clones_content_layout():
-    result = _insert_section_html(_SAMPLE, after_index=-1, layout="content", title="Risks")
+    result = _insert_section_html(
+        _SAMPLE, after_index=-1, layout="content", title="Risks"
+    )
     assert result["ok"] is True
     assert result["section_count"] == 3
     assert result["section_index"] == 2
@@ -1007,7 +1044,9 @@ def test_insert_section_appends_and_clones_content_layout():
 
 
 def test_insert_section_after_current_uses_catalog_when_layout_missing():
-    result = _insert_section_html(_SAMPLE, after_index=0, layout="section-divider", title="Part two")
+    result = _insert_section_html(
+        _SAMPLE, after_index=0, layout="section-divider", title="Part two"
+    )
     assert result["ok"] is True
     assert result["section_index"] == 1
     assert result["section_count"] == 3
@@ -1022,9 +1061,11 @@ def test_insert_section_rejects_unknown_layout():
 
 
 def test_insert_section_page_break_layout_uses_catalog_marker():
-    result = _insert_section_html(_SAMPLE, after_index=-1, layout="page-break", title="After")
+    result = _insert_section_html(
+        _SAMPLE, after_index=-1, layout="page-break", title="After"
+    )
     assert result["ok"] is True
-    assert 'data-nexus-page-break' in result["html"]
+    assert "data-nexus-page-break" in result["html"]
     assert "After" in result["html"]
 
 
@@ -1081,18 +1122,24 @@ def test_structure_tools_persist_without_returning_html(monkeypatch):
         assert inserted["section_index"] == 1
         assert "html" not in inserted
         assert "<section" not in json.dumps(inserted)
+        documents_writes_completed.set([])
         duplicated = tools["duplicate_section"].invoke({"index": 0})
         assert duplicated["ok"] is True
         assert duplicated["section_count"] == 4
         assert "html" not in duplicated
+        documents_writes_completed.set([])
         reordered = tools["reorder_sections"].invoke({"from_index": 0, "to_index": 1})
         assert reordered["ok"] is True
         assert "html" not in reordered
+        documents_writes_completed.set([])
         deleted = tools["delete_section"].invoke({"index": 3})
         assert deleted["ok"] is True
         assert deleted["section_count"] == 3
+        documents_writes_completed.set([])
         assert tools["delete_section"].invoke({"index": 0})["section_count"] == 2
+        documents_writes_completed.set([])
         assert tools["delete_section"].invoke({"index": 0})["section_count"] == 1
+        documents_writes_completed.set([])
         last = tools["delete_section"].invoke({"index": 0})
         assert last["error"] == "Cannot delete the last section."
         document = sc.get_file(
@@ -1193,6 +1240,91 @@ def test_apply_document_commands_persists_without_returning_html(monkeypatch):
         _reset_tokens(tokens)
 
 
+# conv-uc4e9gn3zn: create → search → fetch offices → same truncated OSS URL 75x.
+_CONV_UC4E9GN3ZN_OSS = (
+    "https://routify-file-proxy-sg.oss-ap-southeast-1.aliyuncs.com/"
+    "proxy_temp_file/production/2026-09-13/"
+    "trace_210181ff17892380600308330e0c06/"
+    "requestId_21220212212222222222222222222222/"
+    "22222222222222222222222222222222"
+    "?Expires=1815386061&OSSAccessKeyId=LTAI5t…QVZr&Signature=%2Fq%2…A%3D"
+)
+
+
+def test_conv_uc4e9gn3zn_rejects_second_fetch_insert_and_read(monkeypatch):
+    """Replay that turn: after the document exists, the second fetch/insert/read dies."""
+    reset_web_tool_turn()
+    _seed_in_memory_document(
+        _bind_in_memory_git(monkeypatch),
+        _SAMPLE,
+        slug="forvis-mazars-presence-in-israel",
+    )
+    tokens = _sections_context(slug="forvis-mazars-presence-in-israel")
+    try:
+        search = make_web_search_tool()
+        fetch = make_web_fetch_tool()
+        fake = [
+            {
+                "title": "Our offices - Forvis Mazars - Israel",
+                "href": "https://www.forvismazars.com/il/en/offices",
+                "body": "Mazars specialise in audit, tax and advisory.",
+            },
+            {
+                "title": "junk proxy",
+                "href": _CONV_UC4E9GN3ZN_OSS,
+                "body": "truncated",
+            },
+        ]
+        with patch("naas_abi.agents.tools.web_tools._ddgs_search", return_value=fake):
+            found = search.invoke(
+                {"query": "Forvis Mazars Israel office Tel Aviv services 2026"}
+            )
+        assert "forvismazars.com/il/en/offices" in found
+        assert "routify-file-proxy" not in found
+
+        resp = MagicMock()
+        resp.read.return_value = b"<p>Our offices - Forvis Mazars - Israel</p>"
+        resp.headers.get.return_value = "text/html; charset=utf-8"
+        resp.__enter__.return_value = resp
+        resp.__exit__.return_value = False
+        opener = MagicMock()
+        opener.open.return_value = resp
+        with patch(
+            "naas_abi.agents.tools.web_tools._http_only_opener",
+            return_value=opener,
+        ):
+            first = fetch.invoke({"url": "https://www.forvismazars.com/il/en/offices"})
+        assert "Israel" in first
+
+        junk = fetch.invoke({"url": _CONV_UC4E9GN3ZN_OSS})
+        assert "truncated" in junk.lower() or "ellipsis" in junk.lower()
+        assert "Stop" in junk
+        opener.open.assert_called_once()
+
+        again = fetch.invoke({"url": _CONV_UC4E9GN3ZN_OSS})
+        assert "already ran" in again
+        assert "Stop and reply" in again
+        assert opener.open.call_count == 1
+
+        insert = next(t for t in documents_tools() if t.name == "insert_heading")
+        read = next(t for t in documents_tools() if t.name == "read_document")
+        first_insert = insert.invoke(
+            {"title": "Sources", "level": 2, "after_heading": 0}
+        )
+        assert "error" not in first_insert, first_insert
+        second_insert = insert.invoke(
+            {"title": "Again", "level": 2, "after_heading": 0}
+        )
+        assert "already ran this turn" in second_insert["error"]
+        assert "once more" not in second_insert["error"]
+        blocked_read = read.invoke({})
+        assert "Do not reread after writing" in blocked_read["error"]
+        assert "once more" not in blocked_read["error"]
+    finally:
+        reset_web_tool_turn()
+        _reset_tokens(tokens)
+
+
 def test_insert_heading_then_insert_paragraph_is_once_per_turn(monkeypatch):
     _seed_in_memory_document(_bind_in_memory_git(monkeypatch), _SAMPLE)
     tokens = _sections_context()
@@ -1266,8 +1398,7 @@ _CATALOG = [
 
 def test_resolve_documents_template_id_prefers_named_portrait():
     assert (
-        resolve_documents_template_id("Portrait A4", _CATALOG)
-        == "firm/portrait-a4-v1"
+        resolve_documents_template_id("Portrait A4", _CATALOG) == "firm/portrait-a4-v1"
     )
     assert (
         resolve_documents_template_id("portrait a4 theme", _CATALOG)

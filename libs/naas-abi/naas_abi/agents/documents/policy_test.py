@@ -102,7 +102,9 @@ def test_configured_documents_model_falls_back_to_the_general_agent_model() -> N
         assert configured_documents_model() == "claude-sonnet-5"
 
 
-def test_configured_documents_model_prefers_the_sections_model_when_it_is_named() -> None:
+def test_configured_documents_model_prefers_the_sections_model_when_it_is_named() -> (
+    None
+):
     """The fallback must not outrank an explicit setting."""
     with _configured(
         sections_model="anthropic/claude-sonnet-5",
@@ -145,14 +147,21 @@ def test_resolve_documents_llm_model_always_returns_the_configured_model() -> No
     added it. A strong-looking selection is checked here alongside the weak
     ones so the rule is one rule, not a lookup.
     """
-    assert resolve_documents_llm_model("gpt-4.1-mini", sections_default="gpt-5") == "gpt-5"
     assert (
-        resolve_documents_llm_model("google/gemma-4-26b-a4b-it:free", sections_default="gpt-5")
+        resolve_documents_llm_model("gpt-4.1-mini", sections_default="gpt-5") == "gpt-5"
+    )
+    assert (
+        resolve_documents_llm_model(
+            "google/gemma-4-26b-a4b-it:free", sections_default="gpt-5"
+        )
         == "gpt-5"
     )
     assert resolve_documents_llm_model("gpt-5.2", sections_default="gpt-5") == "gpt-5"
     assert resolve_documents_llm_model(None, sections_default="gpt-5") == "gpt-5"
-    assert resolve_documents_llm_model(None, sections_default=None) == DEFAULT_DOCUMENTS_MODEL
+    assert (
+        resolve_documents_llm_model(None, sections_default=None)
+        == DEFAULT_DOCUMENTS_MODEL
+    )
 
 
 def test_resolve_documents_llm_model_warns_when_it_overrides_the_selection(
@@ -205,7 +214,8 @@ def test_apply_documents_model_override_when_document_open() -> None:
     """
     assert apply_documents_model_override("gpt-4.1-mini", None, None) == "gpt-4.1-mini"
     assert (
-        apply_documents_model_override("gpt-4.1-mini", {"documents": {}}, None) == "gpt-4.1-mini"
+        apply_documents_model_override("gpt-4.1-mini", {"documents": {}}, None)
+        == "gpt-4.1-mini"
     )
     assert (
         apply_documents_model_override(
@@ -286,7 +296,8 @@ def _unimportable(*prefixes: str) -> Iterator[None]:
 
     def blocked(fullname: str) -> bool:
         return any(
-            fullname == prefix or fullname.startswith(f"{prefix}.") for prefix in prefixes
+            fullname == prefix or fullname.startswith(f"{prefix}.")
+            for prefix in prefixes
         )
 
     class _Blocker:
@@ -394,7 +405,9 @@ def test_search_budget_stops_after_four_queries() -> None:
 def test_documents_creation_requested_detects_a_document_brief_in_main_chat() -> None:
     from naas_abi.agents.documents.policy import documents_creation_requested
 
-    assert documents_creation_requested("create a document about the latest news about AI")
+    assert documents_creation_requested(
+        "create a document about the latest news about AI"
+    )
     assert documents_creation_requested("Make me a document on Q3 revenue")
     assert documents_creation_requested("build a report on the Iran situation")
     assert documents_creation_requested("write me a competitive report")
@@ -429,7 +442,10 @@ def test_research_policy_records_the_brief_for_naming() -> None:
             False,
             None,
         )
-        assert documents_brief.get() == "fais des sections sur les matériaux de construction"
+        assert (
+            documents_brief.get()
+            == "fais des sections sur les matériaux de construction"
+        )
     finally:
         documents_brief.reset(token)
 
@@ -610,7 +626,9 @@ def test_bind_documents_reasoning_leaves_a_declared_registration_alone() -> None
     have every sections turn fail outright, and the cause would read as a
     provider problem rather than as this function's contribution.
     """
-    registry = _registry_with_sections_model(extra_body={"reasoning": {"effort": "high"}})
+    registry = _registry_with_sections_model(
+        extra_body={"reasoning": {"effort": "high"}}
+    )
     shared = registry.get_chat_model("claude-sonnet-5", provider="openrouter")
 
     token = documents_active_slug.set("iran-now")
@@ -641,7 +659,9 @@ def test_bind_documents_reasoning_says_so_when_it_supplies_the_effort(
 
     token = documents_active_slug.set("iran-now")
     try:
-        with caplog.at_level(logging.WARNING, logger="naas_abi.agents.documents.policy"):
+        with caplog.at_level(
+            logging.WARNING, logger="naas_abi.agents.documents.policy"
+        ):
             bound = bind_documents_reasoning(shared, "anthropic/claude-sonnet-5")
     finally:
         documents_active_slug.reset(token)
@@ -659,7 +679,9 @@ def test_bind_documents_reasoning_force_applies_without_an_open_document() -> No
 
     token = documents_active_slug.set("")
     try:
-        bound = bind_documents_reasoning(shared, "anthropic/claude-sonnet-5", force=True)
+        bound = bind_documents_reasoning(
+            shared, "anthropic/claude-sonnet-5", force=True
+        )
     finally:
         documents_active_slug.reset(token)
 
@@ -790,7 +812,9 @@ def test_validate_configured_documents_model_accepts_a_registered_id() -> None:
     and a factory will build any id it is handed, so pinning a provider here
     would make every possible typo resolve and the check would assert nothing.
     """
-    validate_configured_documents_model(_registry_with_sections_model(), "claude-sonnet-5")
+    validate_configured_documents_model(
+        _registry_with_sections_model(), "claude-sonnet-5"
+    )
 
 
 def test_read_document_is_once_per_turn_and_refuses_after_write() -> None:
@@ -904,7 +928,7 @@ def test_apply_document_commands_is_once_on_any_documents_turn() -> None:
         documents_writes_completed.reset(tokens[2])
 
 
-def test_fill_document_slots_allows_one_follow_up() -> None:
+def test_fill_document_slots_is_once_then_stop() -> None:
     from naas_abi.agents.documents.policy import (
         note_documents_slot_fill,
         reject_repeat_fill_document_slots,
@@ -917,14 +941,12 @@ def test_fill_document_slots_allows_one_follow_up() -> None:
     )
     try:
         assert reject_repeat_fill_document_slots() is None
-        first = note_documents_slot_fill()
-        note_documents_write(first)
-        assert reject_repeat_fill_document_slots() is None
-        second = note_documents_slot_fill()
-        note_documents_write(second)
+        note_documents_write(note_documents_slot_fill())
         blocked = reject_repeat_fill_document_slots()
         assert blocked is not None
-        assert "already completed" in blocked["error"]
+        assert "already ran this turn" in blocked["error"]
+        assert "once more" not in blocked["error"]
+        assert "Stop and reply" in blocked["error"]
     finally:
         documents_active_slug.reset(tokens[0])
         documents_research_required.reset(tokens[1])
@@ -944,14 +966,30 @@ def test_fill_document_slots_is_once_on_a_copy_edit_turn() -> None:
     )
     try:
         note_documents_write(note_documents_slot_fill())
-        note_documents_write(note_documents_slot_fill())
         blocked = reject_repeat_fill_document_slots()
         assert blocked is not None
-        assert "already completed" in blocked["error"]
+        assert "already ran this turn" in blocked["error"]
     finally:
         documents_active_slug.reset(tokens[0])
         documents_research_required.reset(tokens[1])
         documents_writes_completed.reset(tokens[2])
+
+
+def test_fill_then_apply_is_one_write_family() -> None:
+    from naas_abi.agents.documents.policy import (
+        note_documents_slot_fill,
+        reject_repeat_apply_document_commands,
+        reject_repeat_fill_document_slots,
+    )
+
+    tokens = (documents_writes_completed.set([]),)
+    try:
+        note_documents_write(note_documents_slot_fill())
+        assert reject_repeat_apply_document_commands() is not None
+        assert reject_repeat_fill_document_slots() is not None
+        assert "once more" not in reject_repeat_apply_document_commands()["error"]
+    finally:
+        documents_writes_completed.reset(tokens[0])
 
 
 def test_apply_lock_binds_when_bob_invokes_documents_tools() -> None:

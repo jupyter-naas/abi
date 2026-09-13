@@ -38,6 +38,7 @@ from naas_abi.agents.documents import (
     reject_documents_section_read,
     reject_read_document,
     reject_repeat_apply_document_commands,
+    reject_repeat_document_write,
     reject_repeat_fill_document_slots,
     reject_repeat_list_document_sections,
     reject_replace_in_document_on_fill,
@@ -297,7 +298,9 @@ def _ensure_sections_write_paths(slug: str) -> dict[str, str]:
         return {"error": _friendly_sc_error(exc)}
     branch = paths["branch"]
     if branch not in names:
-        default = "main" if "main" in names else (next(iter(names)) if names else "main")
+        default = (
+            "main" if "main" in names else (next(iter(names)) if names else "main")
+        )
         if default not in names:
             return {"error": _WIPED_DECK_ERROR}
         try:
@@ -642,6 +645,7 @@ def _persist_document(
             return payload
         payload.update(leftover_write_note(html))
         return payload
+
     sources: list[str] = []
     sidecar_result: dict[str, Any] | None = None
     if _sidecar_available():
@@ -652,7 +656,9 @@ def _persist_document(
             # Keep going: Forgejo write still updates version storage.
             sources.append("sidecar-failed")
     try:
-        forgejo = _commit_document_forgejo(slug, html, message, default_type=default_type)
+        forgejo = _commit_document_forgejo(
+            slug, html, message, default_type=default_type
+        )
         if forgejo.get("error"):
             if sidecar_result and sidecar_result.get("ok"):
                 return _with_leftovers(
@@ -1085,16 +1091,22 @@ def _parse_section_writes(raw: Any) -> list[dict[str, Any]] | dict[str, str]:
         except json.JSONDecodeError as exc:
             return {"error": f"sections is not valid JSON: {exc}"}
     if not isinstance(payload, list) or not payload:
-        return {"error": "sections must be a non-empty JSON array of {index or section_id, html}"}
+        return {
+            "error": "sections must be a non-empty JSON array of {index or section_id, html}"
+        }
     parsed: list[dict[str, Any]] = []
     for i, item in enumerate(payload):
         if not isinstance(item, dict):
-            return {"error": f"sections[{i}] must be an object with html and index or section_id"}
+            return {
+                "error": f"sections[{i}] must be an object with html and index or section_id"
+            }
         html = item.get("html")
         if not isinstance(html, str) or not html.strip():
             return {"error": f"sections[{i}].html must be a non-empty string"}
         if "<section" not in html.lower():
-            return {"error": f"sections[{i}].html must include a <section>...</section> block"}
+            return {
+                "error": f"sections[{i}].html must include a <section>...</section> block"
+            }
         index = item.get("index")
         section_id = item.get("section_id") or item.get("id")
         if index is None and not section_id:
@@ -1319,9 +1331,7 @@ def _delete_section_html(html: str, index: int) -> dict[str, Any]:
     if len(sections) <= 1:
         return {"error": "Cannot delete the last section."}
     if index < 0 or index >= len(sections):
-        return {
-            "error": f"index out of range (0..{len(sections) - 1}; got {index})"
-        }
+        return {"error": f"index out of range (0..{len(sections) - 1}; got {index})"}
     del sections[index]
     new_html = _join_sections(prefix, sections, suffix)
     lost = _guard_main(html, new_html)
@@ -1335,9 +1345,7 @@ def _duplicate_section_html(html: str, index: int) -> dict[str, Any]:
     if not sections:
         return {"error": "Document has no sections to duplicate."}
     if index < 0 or index >= len(sections):
-        return {
-            "error": f"index out of range (0..{len(sections) - 1}; got {index})"
-        }
+        return {"error": f"index out of range (0..{len(sections) - 1}; got {index})"}
     layout = _section_layout(sections[index])
     clone = _clone_section(
         sections[index],
@@ -1401,8 +1409,7 @@ def _reorder_sections_html(
     if from_index < 0 or from_index >= n or to_index < 0 or to_index >= n:
         return {
             "error": (
-                f"indexes out of range (0..{n - 1}; "
-                f"from={from_index}, to={to_index})"
+                f"indexes out of range (0..{n - 1}; from={from_index}, to={to_index})"
             )
         }
     if from_index != to_index:
@@ -1422,8 +1429,13 @@ def _run_section_mutation(
     write_label: str,
     *,
     default_type: str = "chore",
+    already_guarded: bool = False,
 ) -> dict[str, Any]:
     """Load, mutate, persist. Strip HTML so the model never sees the document body."""
+    if not already_guarded:
+        repeat = reject_repeat_document_write()
+        if repeat:
+            return repeat
     if not agent_user_id.get():
         return {"error": "No authenticated user on this agent session."}
     resolved = _resolve_slug(slug)
@@ -1534,7 +1546,9 @@ def resolve_documents_template_id(
             "error": "template_id is required. Pass a catalog name or id.",
             "templates": choices,
         }
-    stripped = re.sub(r"\b(theme|template|style|styles)\b", "", raw, flags=re.IGNORECASE)
+    stripped = re.sub(
+        r"\b(theme|template|style|styles)\b", "", raw, flags=re.IGNORECASE
+    )
     needle = _template_key(stripped)
     if not needle:
         return {"error": "template_id is required.", "templates": choices}
@@ -1544,7 +1558,11 @@ def resolve_documents_template_id(
 
     for row in choices:
         tid = row["id"]
-        if raw == tid or needle == _template_key(tid) or needle == _template_key(stem(tid)):
+        if (
+            raw == tid
+            or needle == _template_key(tid)
+            or needle == _template_key(stem(tid))
+        ):
             return tid
     for row in choices:
         if needle == _template_key(row["name"]):
@@ -1915,7 +1933,9 @@ def documents_tools() -> list[BaseTool]:
 
             seed = _load_seed_document_html()
             if not seed:
-                return {"error": "Documents template is missing; cannot seed a document."}
+                return {
+                    "error": "Documents template is missing; cannot seed a document."
+                }
             commit = sc.upsert_file(
                 repo_id=repo_id,
                 path=paths["document_path"],
@@ -1970,7 +1990,10 @@ def documents_tools() -> list[BaseTool]:
                 slug = ""
                 if ns_prefix and name.startswith(ns_prefix):
                     slug = name[len(ns_prefix) :]
-                elif name.startswith(_BRANCH_PREFIX) and "/" not in name[len(_BRANCH_PREFIX) :]:
+                elif (
+                    name.startswith(_BRANCH_PREFIX)
+                    and "/" not in name[len(_BRANCH_PREFIX) :]
+                ):
                     slug = name[len(_BRANCH_PREFIX) :]
                 else:
                     continue
@@ -1991,11 +2014,7 @@ def documents_tools() -> list[BaseTool]:
                     owner = str(data.get("workspace_id") or "").strip()
                     if ws and owner and owner != ws:
                         continue
-                    if (
-                        ws
-                        and "/" not in name[len(_BRANCH_PREFIX) :]
-                        and not owner
-                    ):
+                    if ws and "/" not in name[len(_BRANCH_PREFIX) :] and not owner:
                         # Unscoped legacy: hide until claimed via Documents UI.
                         continue
                 except (SourceControlError, json.JSONDecodeError):
@@ -2400,6 +2419,9 @@ def documents_tools() -> list[BaseTool]:
         blocked = reject_unresearched_documents_write()
         if blocked:
             return blocked
+        repeat = reject_repeat_document_write()
+        if repeat:
+            return repeat
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
         resolved = _resolve_slug(slug)
@@ -2423,9 +2445,7 @@ def documents_tools() -> list[BaseTool]:
                     original = loaded
             except Exception:  # noqa: BLE001
                 original = ""
-            content = (
-                _restore_redacted_data_urls(html, original) if original else html
-            )
+            content = _restore_redacted_data_urls(html, original) if original else html
             result = _persist_document(
                 resolved,
                 content,
@@ -2469,6 +2489,7 @@ def documents_tools() -> list[BaseTool]:
             message,
             write_label,
             default_type="feat",
+            already_guarded=True,
         )
         if "error" not in result:
             result["heading_index"] = result.get("section_index")
@@ -2533,7 +2554,7 @@ def documents_tools() -> list[BaseTool]:
         Every value must be a non-empty topic sentence, not seed copy.
         Python maps the slots onto the open HTML. Do not find seed strings.
         Do not write the memo only in chat. Palette is removed for a memo.
-        If missing_slots is not empty, call once more with only those keys.
+        After that one write, stop and reply. leftover empty is done.
         Writes stay in .doc-body. Footer is untouched.
         """
         repeat = reject_repeat_fill_document_slots()
@@ -2560,6 +2581,7 @@ def documents_tools() -> list[BaseTool]:
             message or "feat(document): fill slots via Abi",
             "",
             default_type="feat",
+            already_guarded=True,
         )
         if "error" not in result:
             result["heading_index"] = result.get("section_index")
@@ -2621,7 +2643,13 @@ def documents_tools() -> list[BaseTool]:
         Prefer replace_text on seed copy. Do not append after the footer.
         """
         return _run_document_commands(
-            [{"type": "insert_paragraph", "text": text, "after_heading": after_heading}],
+            [
+                {
+                    "type": "insert_paragraph",
+                    "text": text,
+                    "after_heading": after_heading,
+                }
+            ],
             slug,
             message or "feat(document): insert paragraph via Abi",
         )
@@ -2792,7 +2820,9 @@ def documents_tools() -> list[BaseTool]:
         )
 
     @tool
-    def apply_documents_template(template_id: str = "", slug: str = "") -> dict[str, Any]:
+    def apply_documents_template(
+        template_id: str = "", slug: str = ""
+    ) -> dict[str, Any]:
         """Apply a catalog seed (Portrait A4, Landscape A4, ...) to the open document.
 
         Use this when the user asks for a theme or template. Do not list other
