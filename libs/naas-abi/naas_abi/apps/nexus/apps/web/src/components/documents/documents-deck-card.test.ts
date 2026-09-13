@@ -101,6 +101,42 @@ describe('sectionsDocumentCardFromToolCalls', () => {
     expect(card?.title).toBe('Latest News About AI');
   });
 
+  it('derives a document card from fill_document_slots, including persisted labels', () => {
+    const filled = JSON.stringify({
+      ok: true,
+      slug: 'strategie-ia-de-forvis-mazars',
+      title: 'Stratégie IA de Forvis Mazars',
+      path: 'documents/ws-1/strategie-ia-de-forvis-mazars/document.html',
+    });
+    expect(
+      sectionsDocumentCardFromToolCalls([
+        toolCall({ rawName: 'fill_document_slots', output: filled }),
+      ]),
+    ).toEqual({
+      slug: 'strategie-ia-de-forvis-mazars',
+      title: 'Stratégie IA de Forvis Mazars',
+      workspaceId: '',
+    });
+    expect(
+      sectionsDocumentCardFromToolCalls([
+        toolCall({
+          toolName: 'Fill Document Slots',
+          rawName: 'Fill Document Slots',
+          output: filled,
+        }),
+      ])?.slug,
+    ).toBe('strategie-ia-de-forvis-mazars');
+    expect(
+      sectionsDocumentCardFromToolCalls([
+        toolCall({
+          toolName: 'Create Documents Project',
+          rawName: 'Create Documents Project',
+          output: CREATED_OUTPUT,
+        }),
+      ])?.slug,
+    ).toBe('latest-news-about-ai');
+  });
+
   it('uses the most recent document when chat creates more than one', () => {
     const second = toolCall({
       id: 'tc-2',

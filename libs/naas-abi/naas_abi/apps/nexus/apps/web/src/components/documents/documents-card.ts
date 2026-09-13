@@ -17,11 +17,18 @@ export type DocumentsCard = {
 
 const CREATE_TOOL = 'create_documents_project';
 
+function normalizeToolName(rawName: string | null | undefined): string {
+  // Live stream keeps snake_case; persisted steps store the human label
+  // ("Fill Document Slots"). Collapse both so the chat card still matches.
+  return (rawName || '').toLowerCase().replace(/[\s-]+/g, '_');
+}
+
 function isDocumentsWriteTool(rawName: string | null | undefined): boolean {
-  const raw = (rawName || '').toLowerCase();
+  const raw = normalizeToolName(rawName);
   return (
     raw.includes(CREATE_TOOL) ||
     raw.includes('write_document') ||
+    raw.includes('fill_document_slots') ||
     raw.includes('replace_in_document') ||
     raw.includes('rename_document') ||
     raw.includes('update_title')

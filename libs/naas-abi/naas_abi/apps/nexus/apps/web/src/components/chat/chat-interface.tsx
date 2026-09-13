@@ -25,7 +25,11 @@ import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
 import { dispatchDocumentUpdated, isDocumentsWriteTool, useDocumentsStore } from '@/stores/documents';
 import { dispatchSlidesDeckUpdated, isSlidesWriteTool, useSlidesStore } from '@/stores/slides';
-import { sectionsDocumentTitleFromToolOutput } from '@/components/documents/documents-card';
+import {
+  sectionsDocumentCardFromToolCalls,
+  sectionsDocumentTitleFromToolOutput,
+} from '@/components/documents/documents-card';
+import { DocumentsCardView } from '@/components/documents/documents-deck-card-view';
 import {
   slidesDeckCardFromToolCalls,
   slidesDeckTitleFromToolOutput,
@@ -3917,10 +3921,14 @@ const MessageBubble = React.memo(function MessageBubble({
   const [copiedCodeKey, setCopiedCodeKey] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
-  // Deck Abi built during this turn, shown as a card that opens it in Slides.
+  // Artifact Abi built during this turn, shown as a card that opens it.
   const messageWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const slidesDeckCard = useMemo(
     () => (isUser ? null : slidesDeckCardFromToolCalls(message.toolCalls)),
+    [isUser, message.toolCalls],
+  );
+  const documentsCard = useMemo(
+    () => (isUser ? null : sectionsDocumentCardFromToolCalls(message.toolCalls)),
     [isUser, message.toolCalls],
   );
   // true = iframe-embeddable → open in preview panel
@@ -4505,10 +4513,16 @@ const MessageBubble = React.memo(function MessageBubble({
           })()}
         </div>
 
-        {/* Deck built this turn: opens it in the Slides surface */}
+        {/* Artifact built this turn: opens it on the Slides or Documents surface */}
         {slidesDeckCard && (
           <SlidesDeckCardView
             card={slidesDeckCard}
+            currentWorkspaceId={messageWorkspaceId ?? ''}
+          />
+        )}
+        {documentsCard && (
+          <DocumentsCardView
+            card={documentsCard}
             currentWorkspaceId={messageWorkspaceId ?? ''}
           />
         )}

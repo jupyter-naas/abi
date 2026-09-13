@@ -175,6 +175,7 @@ export function isDocumentsWriteTool(rawName: string | null | undefined): boolea
     raw.includes('insert_paragraph') ||
     raw.includes('apply_paragraph_style') ||
     raw.includes('create_documents_project') ||
+    raw.includes('fill_document_slots') ||
     raw.includes('rename_document') ||
     raw.includes('update_title')
   );
