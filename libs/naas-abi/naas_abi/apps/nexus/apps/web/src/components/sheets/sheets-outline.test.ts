@@ -1,37 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import {
-  clampSlideIndex,
-  parseSheetsOutline,
-  slideLayoutFromAttrs,
-} from './sheets-outline';
+import { clampSlideIndex, parseSheetsOutline, slideLayoutFromAttrs } from './sheets-outline';
 
-const SAMPLE = `<!DOCTYPE html><html><body>
-<main class="workbook">
-<section id="slide-cover" class="slide cover">
-  <h1>Workbook Title &amp; Overview</h1>
-</section>
-<section class="slide section-divider">
-  <div class="divider-title">Context</div>
-</section>
-<section id="slide-agenda" class="slide" data-layout="content">
-  <h1>Agenda</h1>
-</section>
-</main></body></html>`;
+const SAMPLE = `<!doctype html><html><head>
+<script type="application/vnd.nexus.sheet+json">
+{"title":"Budget","sheets":[{"name":"Revenue","rows":[]},{"name":"Costs","rows":[]}]}
+</script></head><body></body></html>`;
 
 describe('parseSheetsOutline', () => {
-  it('lists sections with id, title, and layout', () => {
-    const sheets = parseSheetsOutline(SAMPLE);
-    expect(sheets).toHaveLength(3);
-    expect(sheets[0]).toEqual({
+  it('lists workbook tabs from the JSON block', () => {
+    const tabs = parseSheetsOutline(SAMPLE);
+    expect(tabs).toHaveLength(2);
+    expect(tabs[0]).toEqual({
       index: 0,
-      id: 'slide-cover',
-      title: 'Workbook Title & Overview',
-      layout: 'cover',
+      id: null,
+      title: 'Revenue',
+      layout: 'content',
     });
-    expect(sheets[1].title).toBe('Context');
-    expect(sheets[1].layout).toBe('section-divider');
-    expect(sheets[2].id).toBe('slide-agenda');
-    expect(sheets[2].layout).toBe('content');
+    expect(tabs[1].title).toBe('Costs');
   });
 
   it('returns an empty list for empty html', () => {
@@ -40,9 +25,8 @@ describe('parseSheetsOutline', () => {
 });
 
 describe('slideLayoutFromAttrs', () => {
-  it('prefers data-layout, then seed classes', () => {
-    expect(slideLayoutFromAttrs('class="slide cover"')).toBe('cover');
-    expect(slideLayoutFromAttrs('data-layout="blank" class="slide"')).toBe('content');
+  it('always returns content for sheet tabs', () => {
+    expect(slideLayoutFromAttrs('class="slide cover"')).toBe('content');
   });
 });
 

@@ -162,12 +162,7 @@ export const useSheetsStore = create<SheetsState>()(
 export function isSheetsWriteTool(rawName: string | null | undefined): boolean {
   const raw = (rawName || '').toLowerCase();
   return (
-    raw.includes('write_sheets') ||
-    raw.includes('replace_in_sheets') ||
-    raw.includes('insert_slide') ||
-    raw.includes('delete_slide') ||
-    raw.includes('duplicate_slide') ||
-    raw.includes('reorder_sheets') ||
+    raw.includes('write_sheets_workbook') ||
     raw.includes('create_sheets_project') ||
     raw.includes('evaluate_sheets_formulas') ||
     raw.includes('import_dataset_to_sheet')

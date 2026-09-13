@@ -7,7 +7,7 @@ from typing import Any
 
 from langchain_core.tools import BaseTool, tool
 from naas_abi.agents.sheets import resolve_workbook_title
-from naas_abi.agents.tools import sheets_tools_legacy as leg
+from naas_abi.agents.tools import sheets_workbook_storage as store
 from naas_abi.apps.nexus.sheets.formulas import evaluate_workbook_formulas
 from naas_abi.apps.nexus.sheets.html_io import parse_workbook_html, serialize_workbook_html
 from naas_abi.apps.nexus.sheets.model import SheetTab, SheetWorkbook
@@ -21,7 +21,7 @@ from naas_abi_core.services.agent.context import (
 
 
 def _load_model(slug: str) -> tuple[SheetWorkbook, str, str] | dict[str, Any]:
-    html, source = leg._load_workbook_text(slug)
+    html, source = store.load_workbook_text(slug)
     if isinstance(html, dict):
         return html
     try:
@@ -32,7 +32,7 @@ def _load_model(slug: str) -> tuple[SheetWorkbook, str, str] | dict[str, Any]:
 
 def _persist_model(slug: str, workbook: SheetWorkbook, html_template: str, message: str) -> dict[str, Any]:
     new_html = serialize_workbook_html(workbook, template_html=html_template)
-    return leg._persist_workbook(slug, new_html, message, default_type="feat")
+    return store.persist_workbook(slug, new_html, message, default_type="feat")
 
 
 def sheets_tools() -> list[BaseTool]:
@@ -42,31 +42,31 @@ def sheets_tools() -> list[BaseTool]:
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
         clean_title = resolve_workbook_title(title, sheets_brief.get() or "")
-        base = leg._slugify_title(clean_title)
+        base = store.slugify_title(clean_title)
         if not base:
             return {"error": "title must contain letters or digits"}
         try:
-            sc = leg._get_source_control()
-            repo_id = leg._ensure_coding_repo()
+            sc = store.get_source_control()
+            repo_id = store.ensure_coding_repo()
             taken = {b.name for b in sc.list_branches(repo_id=repo_id)}
-            slug = leg._unique_slug(base, taken)
+            slug = store.unique_slug(base, taken)
             sheets_active_title.set(clean_title)
-            paths = leg._ensure_sheets_write_paths(slug)
+            paths = store.ensure_sheets_write_paths(slug)
             if paths.get("error"):
                 return {"error": paths["error"]}
-            seed = leg._load_seed_workbook_html()
+            seed = store.load_seed_workbook_html()
             if not seed:
                 return {"error": "Sheets template is missing; cannot seed a workbook."}
             commit = sc.upsert_file(
                 repo_id=repo_id,
                 path=paths["workbook_path"],
-                content=leg._seed_deck_with_title(seed, clean_title),
+                content=store.seed_workbook_with_title(seed, clean_title),
                 message=f"feat(sheets): create {slug}",
                 branch=paths["branch"],
-                **leg._agent_author(),
+                **store.agent_author(),
             )
             sheets_active_slug.set(slug)
-            leg._remember_active_slug(slug)
+            store.remember_active_slug(slug)
             return {
                 "ok": True,
                 "slug": slug,
@@ -76,14 +76,14 @@ def sheets_tools() -> list[BaseTool]:
                 "commit_sha": commit.sha,
             }
         except Exception as exc:  # noqa: BLE001
-            return leg._tool_error(exc)
+            return store.tool_error(exc)
 
     @tool
     def read_sheets_workbook(slug: str = "") -> dict[str, Any]:
         """Read the JSON sheet model (tabs, rows). Omit slug when a workbook is open."""
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
-        resolved = leg._resolve_slug(slug)
+        resolved = store.resolve_slug(slug)
         if isinstance(resolved, dict):
             return resolved
         loaded = _load_model(resolved)
@@ -106,7 +106,7 @@ def sheets_tools() -> list[BaseTool]:
         """Replace the workbook JSON model. ``workbook_json`` is a SheetWorkbook object."""
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
-        resolved = leg._resolve_slug(slug)
+        resolved = store.resolve_slug(slug)
         if isinstance(resolved, dict):
             return resolved
         try:
@@ -114,7 +114,7 @@ def sheets_tools() -> list[BaseTool]:
             workbook = SheetWorkbook.model_validate(data)
         except (json.JSONDecodeError, ValueError) as exc:
             return {"error": f"invalid workbook_json: {exc}"}
-        html, _src = leg._load_workbook_text(resolved)
+        html, _src = store.load_workbook_text(resolved)
         if isinstance(html, dict):
             return html
         result = _persist_model(resolved, workbook, html, message)
@@ -128,7 +128,7 @@ def sheets_tools() -> list[BaseTool]:
         """Evaluate ``=`` formulas in the open workbook and persist computed values."""
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
-        resolved = leg._resolve_slug(slug)
+        resolved = store.resolve_slug(slug)
         if isinstance(resolved, dict):
             return resolved
         loaded = _load_model(resolved)
@@ -158,7 +158,7 @@ def sheets_tools() -> list[BaseTool]:
         """Live connector: pull rows from a Nexus dataset into the open workbook."""
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
-        resolved = leg._resolve_slug(slug)
+        resolved = store.resolve_slug(slug)
         if isinstance(resolved, dict):
             return resolved
         try:

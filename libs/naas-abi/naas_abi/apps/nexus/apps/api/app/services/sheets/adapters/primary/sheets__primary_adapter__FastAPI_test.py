@@ -77,26 +77,15 @@ def test_slugify_and_paths() -> None:
     assert legacy["branch"] == "sheets/demo"
 
 
-def test_parse_slide_outline_reads_eyebrow_and_h1() -> None:
-    html = """
-    <main class="deck">
-      <section id="slide-cover" class="slide cover">
-        <div class="eyebrow">Confidential</div>
-        <h1>Presentation Title</h1>
-      </section>
-      <section class="slide section-divider">
-        <div class="divider-eyebrow">Section 01</div>
-        <div class="divider-title">Context</div>
-      </section>
-    </main>
-    """
+def test_parse_slide_outline_reads_workbook_tabs() -> None:
+    html = """<!doctype html><head>
+<script type="application/vnd.nexus.sheet+json">
+{"title":"T","sheets":[{"name":"Revenue","rows":[]},{"name":"Costs","rows":[]}]}
+</script></head><body></body></html>"""
     slides = _parse_slide_outline(html)
     assert len(slides) == 2
-    assert slides[0]["id"] == "slide-cover"
-    assert slides[0]["eyebrow"] == "Confidential"
-    assert slides[0]["title"] == "Presentation Title"
-    assert slides[1]["eyebrow"] == "Section 01"
-    assert slides[1]["title"] == "Context"
+    assert slides[0]["title"] == "Revenue"
+    assert slides[1]["title"] == "Costs"
     assets = _parse_template_assets(
         'const IMG = {\n  hero: "data:image/svg+xml,x",\n  logo: "data:image/svg+xml,y",\n};'
     )
@@ -983,7 +972,7 @@ def test_slide_mutations_insert_delete_duplicate_reorder(monkeypatch) -> None:
     assert listed.status_code == 200, listed.text
     start = listed.json()
     assert start["ok"] is True
-    assert start["section_count"] >= 2
+    assert start["section_count"] >= 1
     n = start["section_count"]
 
     inserted = client.post(
@@ -1062,7 +1051,7 @@ def test_delete_last_slide_is_refused(monkeypatch) -> None:
         json={"workspace_id": "ws-test", "index": 0},
     )
     assert last.status_code == 409
-    assert "last slide" in last.json()["detail"].lower()
+    assert "last sheet" in last.json()["detail"].lower()
 
 
 def test_history_uses_conventional_commits_and_diff_resolves_head(monkeypatch) -> None:

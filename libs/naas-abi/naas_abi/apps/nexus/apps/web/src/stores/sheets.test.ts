@@ -37,14 +37,7 @@ describe('sheets sidebar filmstrip', () => {
 
 describe('isSheetsWriteTool', () => {
   it('recognizes every workbook-mutating tool in sheets_tools.py', () => {
-    expect(isSheetsWriteTool('write_sheets_section')).toBe(true);
-    expect(isSheetsWriteTool('write_sheets_sections')).toBe(true);
     expect(isSheetsWriteTool('write_sheets_workbook')).toBe(true);
-    expect(isSheetsWriteTool('replace_in_sheets_workbook')).toBe(true);
-    expect(isSheetsWriteTool('insert_slide')).toBe(true);
-    expect(isSheetsWriteTool('delete_slide')).toBe(true);
-    expect(isSheetsWriteTool('duplicate_slide')).toBe(true);
-    expect(isSheetsWriteTool('reorder_sheets')).toBe(true);
     expect(isSheetsWriteTool('create_sheets_project')).toBe(true);
     expect(isSheetsWriteTool('evaluate_sheets_formulas')).toBe(true);
     expect(isSheetsWriteTool('import_dataset_to_sheet')).toBe(true);
