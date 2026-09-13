@@ -8,13 +8,13 @@ const src = readFileSync(
   'utf8',
 );
 
-describe('SheetsFilmstrip', () => {
-  it('is a vertical thumb strip without command chrome', () => {
-    expect(src).toContain('data-testid="sheets-filmstrip"');
-    expect(src).toContain('data-orientation="vertical"');
+describe('SheetsTabStrip', () => {
+  it('is a vertical tab strip without command chrome', () => {
+    expect(src).toContain('data-testid="sheets-tab-strip"');
+    expect(src).toContain('aria-label="Sheet tabs"');
     expect(src).toContain('flex-col');
     expect(src).toContain('overflow-y-auto');
-    expect(src).toContain('aspect-video');
+    expect(src).toContain('SheetsTabThumb');
     expect(src).toContain('onReorder');
     expect(src).not.toContain('onInsert');
     expect(src).not.toContain('onDelete');

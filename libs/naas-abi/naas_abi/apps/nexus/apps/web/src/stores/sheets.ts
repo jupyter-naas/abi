@@ -47,8 +47,8 @@ interface SheetsState {
   selectedTitle: string | null;
   sidebarView: SheetsSidebarView;
   selectedIndex: number;
-  /** Number of sheets in the open workbook (0 when none is open). Sent to Abi with selectedIndex. */
-  slideCount: number;
+  /** Number of sheet tabs in the open workbook (0 when none is open). Sent to Abi with selectedIndex. */
+  tabCount: number;
   filmstrip: SheetsFilmstripWorkbook | null;
   reorderOpenWorkbook: ((fromIndex: number, toIndex: number) => void) | null;
   editorMode: SheetsEditorMode;
@@ -71,7 +71,7 @@ interface SheetsState {
   setSelectedTitle: (title: string | null) => void;
   setSidebarView: (view: SheetsSidebarView) => void;
   setSelectedIndex: (index: number) => void;
-  setSlideCount: (count: number) => void;
+  setTabCount: (count: number) => void;
   setFilmstrip: (filmstrip: SheetsFilmstripWorkbook | null) => void;
   setReorderOpenWorkbook: (fn: ((fromIndex: number, toIndex: number) => void) | null) => void;
   setEditorMode: (mode: SheetsEditorMode) => void;
@@ -95,7 +95,7 @@ export const useSheetsStore = create<SheetsState>()(
       selectedTitle: null,
       sidebarView: 'sheets',
       selectedIndex: 0,
-      slideCount: 0,
+      tabCount: 0,
       filmstrip: null,
       reorderOpenWorkbook: null,
       editorMode: 'preview',
@@ -113,7 +113,7 @@ export const useSheetsStore = create<SheetsState>()(
       setSelectedTitle: (title) => set({ selectedTitle: title }),
       setSidebarView: (view) => set({ sidebarView: view }),
       setSelectedIndex: (index) => set({ selectedIndex: index }),
-      setSlideCount: (count) => set({ slideCount: count }),
+      setTabCount: (count) => set({ tabCount: count }),
       setFilmstrip: (filmstrip) => set({ filmstrip }),
       setReorderOpenWorkbook: (fn) => set({ reorderOpenWorkbook: fn }),
       setEditorMode: (mode) => set({ editorMode: mode }),

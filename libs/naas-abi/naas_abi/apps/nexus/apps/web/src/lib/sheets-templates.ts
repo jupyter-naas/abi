@@ -160,15 +160,18 @@ export function sheetsTemplateMenuRows(
   return rows;
 }
 
-/** Sidebar line: eyebrow plus section title from the seed outline. */
-export function templateSlideLabel(slide: Pick<SheetsTemplateSlide, 'eyebrow' | 'title'>): string {
-  const eyebrow = (slide.eyebrow || '').trim();
-  const title = (slide.title || '').trim();
+/** Sidebar line: eyebrow plus tab title from the seed outline. */
+export function templateTabLabel(tab: Pick<SheetsTemplateSlide, 'eyebrow' | 'title'>): string {
+  const eyebrow = (tab.eyebrow || '').trim();
+  const title = (tab.title || '').trim();
   if (eyebrow && title && eyebrow.toLowerCase() !== title.toLowerCase()) {
     return `${eyebrow}: ${title}`;
   }
-  return title || eyebrow || 'Untitled slide';
+  return title || eyebrow || 'Untitled sheet tab';
 }
+
+/** @deprecated Use templateTabLabel */
+export const templateSlideLabel = templateTabLabel;
 
 export function templateAssetLabel(asset: Pick<SheetsTemplateAsset, 'name' | 'kind'>): string {
   const name = (asset.name || '').trim() || 'asset';

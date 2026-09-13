@@ -1,28 +1,21 @@
 import { authFetch } from '@/stores/auth';
 import { sheetsApiErrorMessage } from '@/lib/create-sheets-project';
 
-/** One workbook tab (filmstrip item). Layout is kept for menu parity with Slides UI. */
-export type SlideLayout = 'cover' | 'section-divider' | 'content';
-
-export type SlideOutlineItem = {
+/** One sheet tab in the workbook (sidebar tab strip). */
+export type SheetTabItem = {
   index: number;
   id: string | null;
   title: string;
-  layout: SlideLayout;
 };
 
-export type SlideMutationResult = {
+export type TabMutationResult = {
   ok: boolean;
   section_index: number;
   section_count: number;
   ids?: Array<string | null>;
   html?: string;
-  sheets?: SlideOutlineItem[];
+  sheets?: SheetTabItem[];
 };
-
-export const SLIDE_LAYOUTS: { id: SlideLayout; label: string }[] = [
-  { id: 'content', label: 'Sheet tab' },
-];
 
 const JSON_TYPE = 'application/vnd.nexus.sheet+json';
 
@@ -55,34 +48,40 @@ function parseWorkbookModel(html: string): { sheets: Array<{ name: string }> } |
   }
 }
 
-export function parseSheetsOutline(html: string): SlideOutlineItem[] {
+/** Tab list from the live workbook HTML (JSON block). */
+export function parseWorkbookTabs(html: string): SheetTabItem[] {
   const model = parseWorkbookModel(html);
   if (!model) return [];
   return model.sheets.map((tab, index) => ({
     index,
     id: null,
     title: tab.name,
-    layout: 'content',
   }));
 }
 
-export function slideLayoutFromAttrs(_attrs: string): SlideLayout {
-  return 'content';
+/** @deprecated Use parseWorkbookTabs */
+export const parseSheetsOutline = parseWorkbookTabs;
+
+export function countWorkbookTabs(html: string): number {
+  return parseWorkbookTabs(html).length;
 }
 
-export function clampSlideIndex(index: number, count: number): number {
+export function clampTabIndex(index: number, count: number): number {
   if (count <= 0) return 0;
   if (index < 0) return 0;
   if (index >= count) return count - 1;
   return index;
 }
 
+/** @deprecated Use clampTabIndex */
+export const clampSlideIndex = clampTabIndex;
+
 async function postTabMutation(
   workspaceId: string,
   slug: string,
   action: 'insert' | 'delete' | 'duplicate' | 'reorder',
   body: Record<string, unknown>,
-): Promise<SlideMutationResult> {
+): Promise<TabMutationResult> {
   const res = await authFetch(
     `/api/sheets/projects/${encodeURIComponent(slug)}/sheets/${action}`,
     {
@@ -91,7 +90,7 @@ async function postTabMutation(
       body: JSON.stringify({ workspace_id: workspaceId, ...body }),
     },
   );
-  const payload = (await res.json().catch(() => ({}))) as SlideMutationResult & {
+  const payload = (await res.json().catch(() => ({}))) as TabMutationResult & {
     detail?: unknown;
   };
   if (!res.ok) {
@@ -102,44 +101,76 @@ async function postTabMutation(
   return payload;
 }
 
-export function insertSlide(
+function mapMutationTabs(result: TabMutationResult): TabMutationResult {
+  if (!result.sheets?.length) return result;
+  return {
+    ...result,
+    sheets: result.sheets.map((row, index) => ({
+      index: typeof row.index === 'number' ? row.index : index,
+      id: row.id ?? null,
+      title: row.title || `Sheet ${index + 1}`,
+    })),
+  };
+}
+
+export function insertWorkbookTab(
   workspaceId: string,
   slug: string,
   afterIndex: number,
-  layout: SlideLayout,
   title = '',
-): Promise<SlideMutationResult> {
+): Promise<TabMutationResult> {
   return postTabMutation(workspaceId, slug, 'insert', {
     after_index: afterIndex,
-    layout,
+    layout: 'content',
     title: title || 'Sheet',
-  });
+  }).then(mapMutationTabs);
 }
 
-export function deleteSlide(
+export function deleteWorkbookTab(
   workspaceId: string,
   slug: string,
   index: number,
-): Promise<SlideMutationResult> {
-  return postTabMutation(workspaceId, slug, 'delete', { index });
+): Promise<TabMutationResult> {
+  return postTabMutation(workspaceId, slug, 'delete', { index }).then(mapMutationTabs);
 }
 
-export function duplicateSlide(
+export function duplicateWorkbookTab(
   workspaceId: string,
   slug: string,
   index: number,
-): Promise<SlideMutationResult> {
-  return postTabMutation(workspaceId, slug, 'duplicate', { index });
+): Promise<TabMutationResult> {
+  return postTabMutation(workspaceId, slug, 'duplicate', { index }).then(mapMutationTabs);
 }
 
-export function reorderSheets(
+export function reorderWorkbookTabs(
   workspaceId: string,
   slug: string,
   fromIndex: number,
   toIndex: number,
-): Promise<SlideMutationResult> {
+): Promise<TabMutationResult> {
   return postTabMutation(workspaceId, slug, 'reorder', {
     from_index: fromIndex,
     to_index: toIndex,
-  });
+  }).then(mapMutationTabs);
 }
+
+/** @deprecated Use insertWorkbookTab */
+export function insertSlide(
+  workspaceId: string,
+  slug: string,
+  afterIndex: number,
+  _layout: unknown,
+  title = '',
+): Promise<TabMutationResult> {
+  return insertWorkbookTab(workspaceId, slug, afterIndex, title);
+}
+
+/** @deprecated */
+export const deleteSlide = deleteWorkbookTab;
+/** @deprecated */
+export const duplicateSlide = duplicateWorkbookTab;
+/** @deprecated */
+export const reorderSheets = reorderWorkbookTabs;
+
+export type SlideOutlineItem = SheetTabItem;
+export type SlideMutationResult = TabMutationResult;

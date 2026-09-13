@@ -3,7 +3,7 @@ import {
   sheetsWorkbookCardFromToolCalls,
   sheetsWorkbookHref,
   sheetsWorkbookTitleFromToolOutput,
-} from './sheets-workbook-card';
+} from './sheets-deck-card';
 import type { ToolCall } from '@/stores/workspace';
 
 function toolCall(partial: Partial<ToolCall>): ToolCall {

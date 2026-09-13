@@ -8,7 +8,7 @@ import { SheetsProjectOverflowMenu } from './sheets-project-menu';
 import {
   sheetsHomeTemplateCards,
   templatePreviewColors,
-  templateSlideLabel,
+  templateTabLabel,
   type SheetsSeedTemplate,
 } from '@/lib/sheets-templates';
 import type { SheetsProject } from '@/stores/sheets';
@@ -132,7 +132,7 @@ export function SheetsTemplateStrip({
         {cards.map((card) => {
           const seed = templates.find((row) => row.id === card.id);
           const first = seed?.sheets?.[0];
-          const coverTitle = first ? templateSlideLabel(first) : card.label;
+          const coverTitle = first ? templateTabLabel(first) : card.label;
           const preview = templatePreviewColors(card.id, templates);
           return (
             <button

@@ -10,10 +10,7 @@ import {
   SheetsMenuBar,
   type SheetsEditorMode,
 } from '@/components/sheets/sheets-menu-bar';
-import {
-  SheetsPreviewFrame,
-  type SheetsPreviewFrameHandle,
-} from '@/components/sheets/sheets-preview-frame';
+import { SheetsPreviewFrame } from '@/components/sheets/sheets-preview-frame';
 import { downloadSheetsHtml, resolveSheetsPreviewAssets } from '@/components/sheets/sheets-assets';
 import {
   applySheetsTextEdits,
@@ -23,15 +20,15 @@ import {
   type SheetsTextEdit,
 } from '@/components/sheets/sheets-preview-fit';
 import {
-  clampSlideIndex,
-  deleteSlide,
-  duplicateSlide,
-  insertSlide,
-  parseSheetsOutline,
-  reorderSheets,
-  type SlideLayout,
-  type SlideMutationResult,
+  clampTabIndex,
+  deleteWorkbookTab,
+  duplicateWorkbookTab,
+  insertWorkbookTab,
+  parseWorkbookTabs,
+  reorderWorkbookTabs,
+  type TabMutationResult,
 } from '@/components/sheets/sheets-outline';
+import { downloadSheetsWorkbookXlsx } from '@/lib/export-sheets-workbook-xlsx';
 import { SheetsStatusBar } from '@/components/sheets/sheets-status-bar';
 import {
   openSheetsAgentPane,
@@ -178,7 +175,7 @@ export default function SheetsEditorPage() {
   const setSelectedTitle = useSheetsStore((s) => s.setSelectedTitle);
   const selectedIndex = useSheetsStore((s) => s.selectedIndex);
   const setSelectedIndex = useSheetsStore((s) => s.setSelectedIndex);
-  const setSlideCount = useSheetsStore((s) => s.setSlideCount);
+  const setTabCount = useSheetsStore((s) => s.setTabCount);
   const setFilmstrip = useSheetsStore((s) => s.setFilmstrip);
   const setReorderOpenWorkbook = useSheetsStore((s) => s.setReorderOpenWorkbook);
   const setEditorMode = useSheetsStore((s) => s.setEditorMode);
@@ -205,7 +202,6 @@ export default function SheetsEditorPage() {
   const [manualEdit, setManualEdit] = useState(false);
   const [holdPreview, setHoldPreview] = useState(false);
   const [mutating, setMutating] = useState(false);
-  const previewRef = useRef<SheetsPreviewFrameHandle>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [previewHtml, setPreviewHtml] = useState('');
   const dirtyRef = useRef(false);
@@ -313,9 +309,9 @@ export default function SheetsEditorPage() {
         setHtml(workbook.html);
         setPreviewHtml(workbook.html);
         setSelectedIndex(
-          clampSlideIndex(
+          clampTabIndex(
             useSheetsStore.getState().selectedIndex,
-            parseSheetsOutline(workbook.html).length,
+            parseWorkbookTabs(workbook.html).length,
           ),
         );
         setDirty(false);
@@ -486,9 +482,9 @@ export default function SheetsEditorPage() {
     refreshRef.current = refresh;
   }, [refresh]);
 
-  const deleteSelectedSlideRef = useRef<() => void>(() => {});
+  const deleteSelectedTabRef = useRef<() => void>(() => {});
 
-  // ⌘/Ctrl+S Save, ⌘/Ctrl+R Refresh (intercept browser reload). Delete slide when not typing.
+  // ⌘/Ctrl+S Save, ⌘/Ctrl+R Refresh (intercept browser reload). Delete tab when not typing.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const mod = event.metaKey || event.ctrlKey;
@@ -499,7 +495,7 @@ export default function SheetsEditorPage() {
           !isSheetsTypingTarget(event.target)
         ) {
           event.preventDefault();
-          deleteSelectedSlideRef.current();
+          deleteSelectedTabRef.current();
         }
         return;
       }
@@ -520,59 +516,34 @@ export default function SheetsEditorPage() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, []);
 
-  const exportPptx = async () => {
-    // Preview iframe stays mounted (hidden in Code mode) so export stays available.
-    // Export goes through postMessage; sandbox omits allow-same-origin.
-    if (!previewRef.current) {
-      setError('Preview is not ready for PPTX export.');
-      return;
-    }
+  const exportXlsx = async () => {
+    if (!workspaceId || !slug) return;
     setExporting(true);
     setError(null);
     setStatus(null);
     try {
-      await previewRef.current.exportPptx();
-      setStatus(
-        'PPTX started from live HTML (closest fit; fonts and wrap will differ from preview)',
-      );
+      await downloadSheetsWorkbookXlsx(workspaceId, slug, `${slug}.xlsx`);
+      setStatus('Downloaded Excel workbook (formulas evaluated)');
     } catch (e) {
-      setError(`PPTX export failed: ${(e as Error).message}`);
+      setError(`XLSX export failed: ${(e as Error).message}`);
     } finally {
       setExporting(false);
     }
   };
 
-  const exportPdf = async () => {
-    if (!previewRef.current) {
-      setError('Preview is not ready for PDF export.');
-      return;
-    }
-    setExporting(true);
-    setError(null);
-    setStatus(null);
-    try {
-      await previewRef.current.exportPdf();
-    } catch (e) {
-      setError(`PDF export failed: ${(e as Error).message}`);
-    } finally {
-      setExporting(false);
-    }
-  };
+  const tabs = useMemo(() => parseWorkbookTabs(html), [html]);
+  const currentIndex = clampTabIndex(selectedIndex, tabs.length);
 
-  const sheets = useMemo(() => parseSheetsOutline(html), [html]);
-  const currentIndex = clampSlideIndex(selectedIndex, sheets.length);
-
-  // Publish the slide count so the chat pane can tell Abi "slide N of M".
   useEffect(() => {
-    setSlideCount(sheets.length);
-  }, [sheets.length, setSlideCount]);
+    setTabCount(tabs.length);
+  }, [tabs.length, setTabCount]);
 
   const applyMutation = useCallback(
-    async (run: () => Promise<SlideMutationResult>, label: string) => {
+    async (run: () => Promise<TabMutationResult>, label: string) => {
       if (!workspaceId || !slug) return;
       if (dirtyRef.current) {
         const ok = window.confirm(
-          'Unsaved code edits will be replaced by this slide change. Continue?',
+          'Unsaved code edits will be replaced by this sheet tab change. Continue?',
         );
         if (!ok) return;
       }
@@ -615,8 +586,8 @@ export default function SheetsEditorPage() {
     setReorderOpenWorkbook((fromIndex, toIndex) => {
       if (fromIndex === toIndex) return;
       void applyMutation(
-        () => reorderSheets(workspaceId, slug, fromIndex, toIndex),
-        'Moved slide',
+        () => reorderWorkbookTabs(workspaceId, slug, fromIndex, toIndex),
+        'Moved sheet tab',
       );
     });
   }, [workspaceId, slug, applyMutation, setReorderOpenWorkbook]);
@@ -625,9 +596,9 @@ export default function SheetsEditorPage() {
     return () => {
       setFilmstrip(null);
       setReorderOpenWorkbook(null);
-      setSlideCount(0);
+      setTabCount(0);
     };
-  }, [setFilmstrip, setReorderOpenWorkbook, setSlideCount]);
+  }, [setFilmstrip, setReorderOpenWorkbook, setTabCount]);
 
   const exportHtml = async () => {
     const live = previewHtml || html;
@@ -685,32 +656,32 @@ export default function SheetsEditorPage() {
     [scheduleManualSave],
   );
 
-  const slideActionsDisabled = mutating || loading || !html;
+  const tabActionsDisabled = mutating || loading || !html;
 
-  const insertSelectedSlide = (layout: SlideLayout) => {
-    const after = sheets.length ? currentIndex : -1;
+  const insertSelectedTab = () => {
+    const after = tabs.length ? currentIndex : -1;
     void applyMutation(
-      () => insertSlide(workspaceId, slug, after, layout),
-      'Inserted slide',
+      () => insertWorkbookTab(workspaceId, slug, after),
+      'Inserted sheet tab',
     );
   };
 
-  const duplicateSelectedSlide = () => {
+  const duplicateSelectedTab = () => {
     void applyMutation(
-      () => duplicateSlide(workspaceId, slug, currentIndex),
-      'Duplicated slide',
+      () => duplicateWorkbookTab(workspaceId, slug, currentIndex),
+      'Duplicated sheet tab',
     );
   };
 
-  const deleteSelectedSlide = () => {
-    if (sheets.length <= 1) return;
-    if (!window.confirm('Delete the selected slide?')) return;
+  const deleteSelectedTab = () => {
+    if (tabs.length <= 1) return;
+    if (!window.confirm('Delete the selected sheet tab?')) return;
     void applyMutation(
-      () => deleteSlide(workspaceId, slug, currentIndex),
-      'Deleted slide',
+      () => deleteWorkbookTab(workspaceId, slug, currentIndex),
+      'Deleted sheet tab',
     );
   };
-  deleteSelectedSlideRef.current = deleteSelectedSlide;
+  deleteSelectedTabRef.current = deleteSelectedTab;
 
   const menuBar = (
     <SheetsMenuBar
@@ -724,16 +695,15 @@ export default function SheetsEditorPage() {
       commitDisabled={saving || !dirty || loading}
       onSaveToMyDrive={() => void saveToMyDrive()}
       saveToMyDriveDisabled={savingToDrive || loading || !html}
-      onExportPdf={() => void exportPdf()}
-      onExportPptx={() => void exportPptx()}
+      onExportXlsx={() => void exportXlsx()}
       onExportHtml={() => void exportHtml()}
       exportDisabled={exporting || loading}
-      onInsertSlide={insertSelectedSlide}
-      insertSlideDisabled={slideActionsDisabled}
-      onDuplicateSlide={duplicateSelectedSlide}
-      duplicateSlideDisabled={slideActionsDisabled || !sheets.length}
-      onDeleteSlide={deleteSelectedSlide}
-      deleteSlideDisabled={slideActionsDisabled || sheets.length <= 1}
+      onInsertTab={insertSelectedTab}
+      insertTabDisabled={tabActionsDisabled}
+      onDuplicateTab={duplicateSelectedTab}
+      duplicateTabDisabled={tabActionsDisabled || !tabs.length}
+      onDeleteTab={deleteSelectedTab}
+      deleteTabDisabled={tabActionsDisabled || tabs.length <= 1}
       mode={mode}
       onModeChange={(next) => {
         setMode(next);
@@ -741,7 +711,7 @@ export default function SheetsEditorPage() {
       }}
       manualEdit={manualEdit}
       onManualEditChange={setManualEdit}
-      manualEditDisabled={slideActionsDisabled}
+      manualEditDisabled={tabActionsDisabled}
       onRefresh={() => void refresh()}
       refreshDisabled={loading || refreshing}
       trailing={
@@ -783,7 +753,7 @@ export default function SheetsEditorPage() {
     <div className="flex h-full flex-col">
       <Header
         title={title}
-        subtitle={`HTML source · PPTX is a 1280x720 reconstruction (closest fit)`}
+        subtitle={`JSON grid in workbook.html · Export to Excel for sharing`}
         nav={menuBar}
       />
 
@@ -824,7 +794,7 @@ export default function SheetsEditorPage() {
 
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="relative min-h-0 flex-1">
-        {/* Keep iframe mounted so PPTX export and live preview stay warm. */}
+        {/* Keep iframe mounted so preview stays warm when switching Code ↔ Preview. */}
         <div
           className={cn(
             'absolute inset-0',
@@ -833,7 +803,6 @@ export default function SheetsEditorPage() {
           aria-hidden={mode !== 'preview'}
         >
           <SheetsPreviewFrame
-            ref={previewRef}
             html={previewHtml}
             workspaceId={workspaceId}
             slug={slug}

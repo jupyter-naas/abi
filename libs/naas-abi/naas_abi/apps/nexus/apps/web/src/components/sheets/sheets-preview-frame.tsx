@@ -1,10 +1,8 @@
 'use client';
 
 import {
-  forwardRef,
   useCallback,
   useEffect,
-  useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
@@ -19,7 +17,6 @@ import {
   prepareSheetsPreviewHtml,
   sheetsPreviewIndexFromScroll,
   sheetsPreviewScrollTop,
-  SHEETS_PDF_EXPORT_ACK_MS,
   SHEETS_PREVIEW_IMAGES_READY_TIMEOUT_MS,
   SHEETS_PREVIEW_MESSAGE_SOURCE,
   SHEETS_STAGE_HEIGHT,
@@ -27,11 +24,6 @@ import {
   type SheetsPreviewFromParentMessage,
   type SheetsTextEdit,
 } from './sheets-preview-fit';
-
-export interface SheetsPreviewFrameHandle {
-  exportPptx: () => Promise<void>;
-  exportPdf: () => Promise<void>;
-}
 
 export interface SheetsPreviewFrameProps {
   html: string;
@@ -46,45 +38,33 @@ export interface SheetsPreviewFrameProps {
 }
 
 /**
- * Present-style preview: fixed 1280x720 stage scaled with object-fit:contain
- * into the available center pane (letterbox OK). The full workbook scrolls at
- * that scale (PowerPoint Normal view). Filmstrip click jumps scroll; host
- * scroll updates the selected index.
+ * Workbook preview: fixed 1280x720 tabs stacked vertically, contain-scaled in the
+ * center pane. Tab strip selection jumps scroll; scrolling updates the active tab.
  *
- * Sandbox omits allow-same-origin. Height, PPTX, PDF, and Manual edit use
- * the postMessage bridge. allow-modals is required so File, Print / Save as
- * PDF can open the browser print dialog. Viewport-fit is stripped in
- * prepareSheetsPreviewHtml so the parent contain-scale is the only scale.
+ * Sandbox omits allow-same-origin. Metrics and Manual edit use the postMessage
+ * bridge. Viewport-fit is stripped in prepareSheetsPreviewHtml so the parent
+ * contain-scale is the only scale.
  *
  * Relative ``assets/`` paths 404 inside srcDoc. The parent fetches the sheets
  * asset route with Bearer auth and inlines data-URLs before setting srcDoc.
- *
- * The iframe stays transparent (and a spinner shows) until the in-frame
- * bridge reports every ``<img>`` has loaded/errored, or the ready timeout.
  */
-export const SheetsPreviewFrame = forwardRef<
-  SheetsPreviewFrameHandle,
-  SheetsPreviewFrameProps
->(function SheetsPreviewFrame(
-  {
-    html,
-    workspaceId = '',
-    slug = '',
-    className,
-    title = 'Sheets preview',
-    selectedIndex = 0,
-    onSelectedIndexChange,
-    manualEdit = false,
-    onManualEditCommit,
-  },
-  ref,
-) {
+export function SheetsPreviewFrame({
+  html,
+  workspaceId = '',
+  slug = '',
+  className,
+  title = 'Sheets preview',
+  selectedIndex = 0,
+  onSelectedIndexChange,
+  manualEdit = false,
+  onManualEditCommit,
+}: SheetsPreviewFrameProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const manualEditRef = useRef(manualEdit);
   const onManualEditCommitRef = useRef(onManualEditCommit);
   const acceptEditsUntilRef = useRef(0);
-  const slideCountRef = useRef(1);
+  const tabCountRef = useRef(1);
   const [scale, setScale] = useState(1);
   const [docHeight, setDocHeight] = useState(SHEETS_STAGE_HEIGHT);
   const [hostHeight, setHostHeight] = useState(0);
@@ -101,12 +81,12 @@ export const SheetsPreviewFrame = forwardRef<
     let cancelled = false;
     setImagesReady(false);
     const count = Math.max(1, countSlideSections(html));
-    slideCountRef.current = count;
+    tabCountRef.current = count;
     setDocHeight(stageHeightForCount(count));
     void resolveSheetsPreviewAssets(html, workspaceId, slug).then((resolved) => {
       if (cancelled) return;
       const nextCount = Math.max(1, countSlideSections(resolved));
-      slideCountRef.current = nextCount;
+      tabCountRef.current = nextCount;
       setDocHeight(stageHeightForCount(nextCount));
       setPreviewHtml(prepareSheetsPreviewHtml(resolved));
     });
@@ -123,14 +103,6 @@ export const SheetsPreviewFrame = forwardRef<
     );
     return () => window.clearTimeout(timer);
   }, [previewHtml, imagesReady]);
-
-  const exportWaiters = useRef<
-    Array<{
-      resolve: () => void;
-      reject: (error: Error) => void;
-      timer: number;
-    }>
-  >([]);
 
   const measureHost = useCallback(() => {
     const host = hostRef.current;
@@ -175,7 +147,7 @@ export const SheetsPreviewFrame = forwardRef<
       ) {
         if (typeof event.data.height === 'number' && event.data.height > 0) {
           setDocHeight(
-            Math.max(event.data.height, stageHeightForCount(slideCountRef.current)),
+            Math.max(event.data.height, stageHeightForCount(tabCountRef.current)),
           );
         }
         if (event.data.type === 'images-ready') setImagesReady(true);
@@ -187,24 +159,6 @@ export const SheetsPreviewFrame = forwardRef<
       if (event.data.type === 'edit-commit') {
         if (!manualEditRef.current && Date.now() > acceptEditsUntilRef.current) return;
         onManualEditCommitRef.current?.(event.data.edits);
-        return;
-      }
-      if (
-        event.data.type === 'export-pptx-result' ||
-        event.data.type === 'export-pdf-result'
-      ) {
-        const waiters = exportWaiters.current.splice(0);
-        waiters.forEach((w) => window.clearTimeout(w.timer));
-        if (event.data.ok) {
-          waiters.forEach((w) => w.resolve());
-        } else {
-          const fallback =
-            event.data.type === 'export-pdf-result'
-              ? 'PDF export failed'
-              : 'PPTX export failed';
-          const err = new Error(event.data.error || fallback);
-          waiters.forEach((w) => w.reject(err));
-        }
       }
     };
     window.addEventListener('message', onMessage);
@@ -231,63 +185,6 @@ export const SheetsPreviewFrame = forwardRef<
     }, 250);
     return () => window.clearTimeout(timer);
   }, [selectedIndex, scale, previewHtml]);
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      exportPptx: () =>
-        new Promise<void>((resolve, reject) => {
-          const win = iframeRef.current?.contentWindow;
-          if (!win) {
-            reject(new Error('Preview is not ready for PPTX export.'));
-            return;
-          }
-          const waiter = {
-            resolve,
-            reject,
-            timer: window.setTimeout(() => {
-              const idx = exportWaiters.current.indexOf(waiter);
-              if (idx >= 0) {
-                exportWaiters.current.splice(idx, 1);
-                reject(new Error('PPTX export timed out'));
-              }
-            }, 15000),
-          };
-          exportWaiters.current.push(waiter);
-          const msg: SheetsPreviewFromParentMessage = {
-            source: SHEETS_PREVIEW_MESSAGE_SOURCE,
-            type: 'export-pptx',
-          };
-          win.postMessage(msg, '*');
-        }),
-      exportPdf: () =>
-        new Promise<void>((resolve, reject) => {
-          const win = iframeRef.current?.contentWindow;
-          if (!win) {
-            reject(new Error('Preview is not ready for PDF export.'));
-            return;
-          }
-          const waiter = {
-            resolve,
-            reject,
-            timer: window.setTimeout(() => {
-              const idx = exportWaiters.current.indexOf(waiter);
-              if (idx >= 0) {
-                exportWaiters.current.splice(idx, 1);
-                reject(new Error('PDF export timed out'));
-              }
-            }, SHEETS_PDF_EXPORT_ACK_MS),
-          };
-          exportWaiters.current.push(waiter);
-          const msg: SheetsPreviewFromParentMessage = {
-            source: SHEETS_PREVIEW_MESSAGE_SOURCE,
-            type: 'export-pdf',
-          };
-          win.postMessage(msg, '*');
-        }),
-    }),
-    [],
-  );
 
   const scaledW = SHEETS_STAGE_WIDTH * scale;
   const scaledH = docHeight * scale;
@@ -318,7 +215,7 @@ export const SheetsPreviewFrame = forwardRef<
           <iframe
             ref={iframeRef}
             title={title}
-            sandbox="allow-scripts allow-downloads allow-modals"
+            sandbox="allow-scripts allow-downloads"
             srcDoc={previewHtml}
             className={cn(
               'block border-0 transition-opacity duration-150',
@@ -344,4 +241,4 @@ export const SheetsPreviewFrame = forwardRef<
       </div>
     </div>
   );
-});
+}

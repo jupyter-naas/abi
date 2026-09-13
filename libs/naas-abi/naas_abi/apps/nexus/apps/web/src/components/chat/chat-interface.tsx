@@ -881,7 +881,7 @@ export function ChatInterface({
   const sheetsTitle = useSheetsStore((s) => s.selectedTitle);
   const sheetsMode = useSheetsStore((s) => s.editorMode);
   const sheetsSelectedIndex = useSheetsStore((s) => s.selectedIndex);
-  const sheetsTabCount = useSheetsStore((s) => s.slideCount);
+  const sheetsTabCount = useSheetsStore((s) => s.tabCount);
   const sheetsChatContext = useMemo(() => {
     const onSheets = officeSurfaceFromPath(pathname).onSheets && Boolean(sheetsSlug);
     if (!onSheets || !sheetsSlug) return null;

@@ -3,7 +3,6 @@
 import React, { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { SLIDE_LAYOUTS, type SlideLayout } from './sheets-outline';
 
 export type SheetsEditorMode = 'preview' | 'code';
 
@@ -58,13 +57,13 @@ export function buildSheetsEditMenu(opts: {
     { id: 'sep-history', separator: true },
     {
       id: 'duplicate',
-      label: 'Duplicate Slide',
+      label: 'Duplicate sheet tab',
       disabled: !opts.canDuplicate,
       onSelect: opts.onDuplicate,
     },
     {
       id: 'delete',
-      label: 'Delete Slide',
+      label: 'Delete sheet tab',
       shortcut: 'Del',
       disabled: !opts.canDelete,
       onSelect: opts.onDelete,
@@ -83,24 +82,19 @@ export function buildSheetsEditMenu(opts: {
 export function buildSheetsInsertMenu(opts: {
   canInsert: boolean;
   canDuplicate: boolean;
-  onInsert: (layout: SlideLayout) => void;
+  onInsertTab: () => void;
   onDuplicate: () => void;
 }): SheetsMenuEntry[] {
   return [
     {
-      id: 'new-slide',
-      label: 'New Slide',
+      id: 'new-tab',
+      label: 'New sheet tab',
       disabled: !opts.canInsert,
-      items: SLIDE_LAYOUTS.map((layout) => ({
-        id: `layout-${layout.id}`,
-        label: layout.label,
-        disabled: !opts.canInsert,
-        onSelect: () => opts.onInsert(layout.id),
-      })),
+      onSelect: opts.onInsertTab,
     },
     {
       id: 'duplicate',
-      label: 'Duplicate Slide',
+      label: 'Duplicate sheet tab',
       disabled: !opts.canDuplicate,
       onSelect: opts.onDuplicate,
     },
@@ -250,20 +244,18 @@ export interface SheetsMenuBarProps {
   /** File → Save to My Drive (MinIO copy). Omit when not on an open workbook. */
   onSaveToMyDrive?: () => void;
   saveToMyDriveDisabled?: boolean;
-  /** File → Export to PDF. Omit when not on an open workbook. */
-  onExportPdf?: () => void;
-  /** File → Export to PPTX. Omit when not on an open workbook. */
-  onExportPptx?: () => void;
+  /** File → Export to XLSX (server-side, formulas evaluated). */
+  onExportXlsx?: () => void;
   /** File → Export HTML. Omit when not on an open workbook. */
   onExportHtml?: () => void;
   exportDisabled?: boolean;
-  /** Edit / Insert slide actions. Omit on index/new pages. */
-  onInsertSlide?: (layout: SlideLayout) => void;
-  insertSlideDisabled?: boolean;
-  onDuplicateSlide?: () => void;
-  duplicateSlideDisabled?: boolean;
-  onDeleteSlide?: () => void;
-  deleteSlideDisabled?: boolean;
+  /** Edit / Insert tab actions. Omit on index/new pages. */
+  onInsertTab?: () => void;
+  insertTabDisabled?: boolean;
+  onDuplicateTab?: () => void;
+  duplicateTabDisabled?: boolean;
+  onDeleteTab?: () => void;
+  deleteTabDisabled?: boolean;
   /** View → Preview / Code / Refresh. Omit on index/new pages. */
   mode?: SheetsEditorMode;
   onModeChange?: (mode: SheetsEditorMode) => void;
@@ -279,11 +271,10 @@ export interface SheetsMenuBarProps {
 }
 
 /**
- * Lean PowerPoint-style menu bar: File, Edit, View, Insert. All four always
+ * Spreadsheet-style menu bar: File, Edit, View, Insert. All four always
  * render. On pages with no open workbook yet (index/new) the Edit/View/Insert
  * items are just disabled rather than the menus disappearing, so the bar
  * looks the same on every Sheets page.
- * Format / Arrange / Tools stay out of this pass.
  */
 export function SheetsMenuBar({
   onNewWorkbook,
@@ -291,16 +282,15 @@ export function SheetsMenuBar({
   commitDisabled,
   onSaveToMyDrive,
   saveToMyDriveDisabled,
-  onExportPdf,
-  onExportPptx,
+  onExportXlsx,
   onExportHtml,
   exportDisabled,
-  onInsertSlide,
-  insertSlideDisabled,
-  onDuplicateSlide,
-  duplicateSlideDisabled,
-  onDeleteSlide,
-  deleteSlideDisabled,
+  onInsertTab,
+  insertTabDisabled,
+  onDuplicateTab,
+  duplicateTabDisabled,
+  onDeleteTab,
+  deleteTabDisabled,
   mode,
   onModeChange,
   manualEdit = false,
@@ -350,20 +340,12 @@ export function SheetsMenuBar({
     });
   }
   const exportItems: SheetsMenuEntry[] = [];
-  if (onExportPdf) {
+  if (onExportXlsx) {
     exportItems.push({
-      id: 'export-pdf',
-      label: 'Print / Save as PDF',
+      id: 'export-xlsx',
+      label: 'Export to Excel (XLSX)',
       disabled: exportDisabled,
-      onSelect: onExportPdf,
-    });
-  }
-  if (onExportPptx) {
-    exportItems.push({
-      id: 'export-pptx',
-      label: 'Export to PPTX',
-      disabled: exportDisabled,
-      onSelect: onExportPptx,
+      onSelect: onExportXlsx,
     });
   }
   if (onExportHtml) {
@@ -387,21 +369,21 @@ export function SheetsMenuBar({
   // vanishing, so the bar looks identical everywhere in Sheets.
   const canToggleManualEdit = Boolean(onManualEditChange) && mode !== 'code';
   const editItems = buildSheetsEditMenu({
-    canDuplicate: Boolean(onDuplicateSlide) && !duplicateSlideDisabled,
-    canDelete: Boolean(onDeleteSlide) && !deleteSlideDisabled,
+    canDuplicate: Boolean(onDuplicateTab) && !duplicateTabDisabled,
+    canDelete: Boolean(onDeleteTab) && !deleteTabDisabled,
     mod,
-    onDuplicate: () => onDuplicateSlide?.(),
-    onDelete: () => onDeleteSlide?.(),
+    onDuplicate: () => onDuplicateTab?.(),
+    onDelete: () => onDeleteTab?.(),
     manualEdit,
     canManualEdit: canToggleManualEdit && !manualEditDisabled,
     onManualEditChange,
   });
 
   const insertItems = buildSheetsInsertMenu({
-    canInsert: Boolean(onInsertSlide) && !insertSlideDisabled,
-    canDuplicate: Boolean(onDuplicateSlide) && !duplicateSlideDisabled,
-    onInsert: (layout) => onInsertSlide?.(layout),
-    onDuplicate: () => onDuplicateSlide?.(),
+    canInsert: Boolean(onInsertTab) && !insertTabDisabled,
+    canDuplicate: Boolean(onDuplicateTab) && !duplicateTabDisabled,
+    onInsertTab: () => onInsertTab?.(),
+    onDuplicate: () => onDuplicateTab?.(),
   });
 
   const canChangeMode = Boolean(mode && onModeChange);
