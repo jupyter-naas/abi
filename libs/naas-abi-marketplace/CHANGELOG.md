@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.48.0 (2026-09-13)
+
+### Features
+
+- **x/orchestrations**: Add signal-based timeout for file reprocessing
+  ([`1c9a25e`](https://github.com/jupyter-naas/abi/commit/1c9a25e3bb9e3205abf1dff1d4bae0f273eceff7))
+
+
 ## v3.47.0 (2026-09-13)
 
 ### Features
