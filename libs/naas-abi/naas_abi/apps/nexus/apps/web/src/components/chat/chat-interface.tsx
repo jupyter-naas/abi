@@ -17,6 +17,7 @@ import {
   officeSurfaceFromPath,
   pickDocumentsOfficeAgent,
   pickPaneOfficeAgent,
+  pickSheetsOfficeAgent,
   pickSlidesOfficeAgent,
   pickWorkspaceDefaultAgent,
 } from '@/lib/pick-workspace-default-agent';
@@ -38,6 +39,11 @@ import {
   sectionsDocumentTitleFromToolOutput,
 } from '@/components/documents/documents-card';
 import { DocumentsCardView } from '@/components/documents/documents-deck-card-view';
+import {
+  dispatchSheetsWorkbookUpdated,
+  isSheetsWriteTool,
+  useSheetsStore,
+} from '@/stores/sheets';
 import {
   slidesDeckCardFromToolCalls,
   slidesDeckTitleFromToolOutput,
@@ -71,6 +77,7 @@ import { firstUserPrompt } from '@/lib/office-auto-title';
 import { openDocumentBranch, openDocumentPath } from '@/lib/documents-pane-conversation';
 import { autoTitleOpenDeckIfNeeded } from '@/lib/slides-project-actions';
 import { slidesOpenDeckBranch, slidesOpenDeckPath } from '@/lib/slides-pane-conversation';
+import { sheetsOpenWorkbookBranch, sheetsOpenWorkbookPath } from '@/lib/sheets-pane-conversation';
 import { ContextUsageMeter } from './context-usage-meter';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import { getLogoUrl } from '@/lib/logo-url';
@@ -870,6 +877,36 @@ export function ChatInterface({
     documentsSectionCount,
   ]);
 
+  const sheetsSlug = useSheetsStore((s) => s.selectedSlug);
+  const sheetsTitle = useSheetsStore((s) => s.selectedTitle);
+  const sheetsMode = useSheetsStore((s) => s.editorMode);
+  const sheetsSelectedIndex = useSheetsStore((s) => s.selectedIndex);
+  const sheetsTabCount = useSheetsStore((s) => s.slideCount);
+  const sheetsChatContext = useMemo(() => {
+    const onSheets = officeSurfaceFromPath(pathname).onSheets && Boolean(sheetsSlug);
+    if (!onSheets || !sheetsSlug) return null;
+    return {
+      sheets: {
+        slug: sheetsSlug,
+        title: sheetsTitle || sheetsSlug,
+        mode: sheetsMode,
+        workspace_id: currentWorkspaceId || undefined,
+        branch: sheetsOpenWorkbookBranch(currentWorkspaceId || '', sheetsSlug),
+        path: sheetsOpenWorkbookPath(currentWorkspaceId || '', sheetsSlug),
+        selected_index: sheetsTabCount > 0 ? sheetsSelectedIndex : undefined,
+        sheet_count: sheetsTabCount > 0 ? sheetsTabCount : undefined,
+      },
+    };
+  }, [
+    pathname,
+    sheetsSlug,
+    sheetsTitle,
+    sheetsMode,
+    currentWorkspaceId,
+    sheetsSelectedIndex,
+    sheetsTabCount,
+  ]);
+
   const codeActiveBranch = useCodeStore((s) => s.activeBranch);
   const codeSelectedRepo = useCodeStore((s) => s.selectedRepoId);
   const codingChatContext = useMemo(() => {
@@ -899,16 +936,17 @@ export function ChatInterface({
     const merged = {
       ...(slidesChatContext ?? {}),
       ...(documentsChatContext ?? {}),
+      ...(sheetsChatContext ?? {}),
       ...(codingChatContext ?? {}),
       ...(featurePaneContext ?? {}),
     };
     return Object.keys(merged).length > 0 ? merged : null;
-  }, [slidesChatContext, documentsChatContext, codingChatContext, featurePaneContext]);
+  }, [slidesChatContext, documentsChatContext, sheetsChatContext, codingChatContext, featurePaneContext]);
 
   useEffect(() => {
     if (!isPane) return;
     const surface = officeSurfaceFromPath(pathname);
-    if (!surface.onDocuments && !surface.onSlides) return;
+    if (!surface.onDocuments && !surface.onSlides && !surface.onSheets) return;
     const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
     const picked = pickPaneOfficeAgent(agents, surface);
     if (picked && useWorkspaceStore.getState().paneAgent !== picked.id) {
@@ -1803,7 +1841,7 @@ export function ChatInterface({
     if (!effectiveAgent) {
       const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
       const resolved =
-        officeSurface.onSlides || officeSurface.onDocuments
+        officeSurface.onSlides || officeSurface.onDocuments || officeSurface.onSheets
           ? (pickPaneOfficeAgent(agents, officeSurface) ?? pickWorkspaceDefaultAgent(agents))
           : isPane
             ? pickPaneAgentForSurface(
@@ -1818,6 +1856,15 @@ export function ChatInterface({
           useWorkspaceStore.getState().setPaneAgent(resolved.id);
         } else {
           useWorkspaceStore.getState().setSelectedAgent(resolved.id);
+        }
+      }
+    } else if (officeSurface.onSheets) {
+      const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const sheets = pickSheetsOfficeAgent(agents);
+      if (sheets) {
+        effectiveAgent = sheets.id;
+        if (isPane && useWorkspaceStore.getState().paneAgent !== sheets.id) {
+          useWorkspaceStore.getState().setPaneAgent(sheets.id);
         }
       }
     } else if (officeSurface.onSlides) {
@@ -2139,6 +2186,9 @@ export function ChatInterface({
           if (isDocumentsWriteTool(rawTool)) {
             useDocumentsStore.getState().setAgentWriting(true);
           }
+          if (isSheetsWriteTool(rawTool)) {
+            useSheetsStore.getState().setAgentWriting(true);
+          }
           noteAppProjectToolStart(rawTool);
         };
 
@@ -2220,6 +2270,24 @@ export function ChatInterface({
                 source: target.rawName || target.toolName,
                 title: documentTitle || undefined,
               });
+            }
+          }
+          if (isSheetsWriteTool(raw)) {
+            let slug: string | undefined;
+            let writeFailed = false;
+            try {
+              const parsed = JSON.parse(output) as { slug?: string; error?: unknown; title?: string };
+              if (typeof parsed?.slug === 'string') slug = parsed.slug;
+              if (typeof parsed?.title === 'string' && parsed.title.trim()) {
+                useSheetsStore.getState().setSelectedTitle(parsed.title.trim());
+              }
+              if (parsed && parsed.error) writeFailed = true;
+            } catch {
+              /* tool output may be plain text */
+            }
+            useSheetsStore.getState().setAgentWriting(false);
+            if (!writeFailed) {
+              dispatchSheetsWorkbookUpdated({ slug, source: target.rawName || target.toolName });
             }
           }
           if (

@@ -79,13 +79,28 @@ export function pickDocumentsOfficeAgent<T extends DocumentsOfficeAgent>(
   return documents ?? pickWorkspaceDefaultAgent(agents);
 }
 
-/** Right-pane office bind: Slides on a deck, Documents on a file, else default. */
+function isNexusSheetsAgent(agent: OfficeAgent): boolean {
+  if (agent.name === 'Sheets') return true;
+  const className = agent.class_name ?? '';
+  return className.endsWith('/SheetsAgent') && className.includes('naas_abi');
+}
+
+/** Nexus Sheets when the workspace listed it, else the workspace default. */
+export function pickSheetsOfficeAgent<T extends OfficeAgent>(
+  agents: T[],
+): T | undefined {
+  const sheets = agents.find((agent) => agent.enabled && isNexusSheetsAgent(agent));
+  return sheets ?? pickWorkspaceDefaultAgent(agents);
+}
+
+/** Right-pane office bind: Sheets/Documents/Slides on that surface, else default. */
 export function pickPaneOfficeAgent<
   T extends OfficeAgent & DocumentsOfficeAgent,
 >(
   agents: T[],
-  surface: { onSlides?: boolean; onDocuments?: boolean },
+  surface: { onSlides?: boolean; onDocuments?: boolean; onSheets?: boolean },
 ): T | undefined {
+  if (surface.onSheets) return pickSheetsOfficeAgent(agents);
   if (surface.onDocuments) return pickDocumentsOfficeAgent(agents);
   if (surface.onSlides) return pickSlidesOfficeAgent(agents);
   return pickWorkspaceDefaultAgent(agents);
@@ -95,6 +110,7 @@ export function pickPaneOfficeAgent<
 export function officeSurfaceFromPath(pathname: string | null | undefined): {
   onSlides: boolean;
   onDocuments: boolean;
+  onSheets: boolean;
 } {
   const parts = (pathname || '').split(/[?#]/)[0].split('/').filter(Boolean);
   const workspaceIndex = parts.indexOf('workspace');
@@ -102,12 +118,6 @@ export function officeSurfaceFromPath(pathname: string | null | undefined): {
   return {
     onSlides: feature === 'slides',
     onDocuments: feature === 'documents',
+    onSheets: feature === 'sheets',
   };
-}
-
-/** Phase-1 Sheets reuses the Slides office agent until SheetsAgent lands (#1254). */
-export function pickSheetsOfficeAgent<T extends SlidesOfficeAgent>(
-  agents: T[],
-): T | undefined {
-  return pickSlidesOfficeAgent(agents);
 }

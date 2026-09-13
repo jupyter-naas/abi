@@ -690,6 +690,7 @@ class ABIModule(BaseModule):
         # slides follow ``abi_agent_model``, which the engine already resolves.
         abi_slides_agent_model: str = ""
         abi_documents_agent_model: str = ""
+        abi_sheets_agent_model: str = ""
 
         # Canonical model id used by OntologyEngineerAgent. Same registry
         # semantics as ``abi_agent_model``.
@@ -730,6 +731,12 @@ class ABIModule(BaseModule):
             validate_configured_documents_model(
                 self._engine.services.model_registry,
                 self.configuration.abi_documents_agent_model,
+            )
+            from naas_abi.agents.sheets import validate_configured_sheets_model
+
+            validate_configured_sheets_model(
+                self._engine.services.model_registry,
+                self.configuration.abi_sheets_agent_model,
             )
 
         super().on_initialized()

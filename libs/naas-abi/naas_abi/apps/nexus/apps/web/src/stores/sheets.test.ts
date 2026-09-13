@@ -46,6 +46,8 @@ describe('isSheetsWriteTool', () => {
     expect(isSheetsWriteTool('duplicate_slide')).toBe(true);
     expect(isSheetsWriteTool('reorder_sheets')).toBe(true);
     expect(isSheetsWriteTool('create_sheets_project')).toBe(true);
+    expect(isSheetsWriteTool('evaluate_sheets_formulas')).toBe(true);
+    expect(isSheetsWriteTool('import_dataset_to_sheet')).toBe(true);
   });
 
   it('ignores read-only and unrelated tools', () => {

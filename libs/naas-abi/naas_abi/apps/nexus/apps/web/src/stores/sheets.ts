@@ -168,7 +168,9 @@ export function isSheetsWriteTool(rawName: string | null | undefined): boolean {
     raw.includes('delete_slide') ||
     raw.includes('duplicate_slide') ||
     raw.includes('reorder_sheets') ||
-    raw.includes('create_sheets_project')
+    raw.includes('create_sheets_project') ||
+    raw.includes('evaluate_sheets_formulas') ||
+    raw.includes('import_dataset_to_sheet')
   );
 }
 
