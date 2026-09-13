@@ -196,3 +196,17 @@ def resolve_deck_title(title: str, brief: str = "") -> str:
         if not _looks_like_a_request(candidate):
             return _tidy_topic(candidate) or candidate
     return derive_deck_title(brief)
+
+
+def auto_deck_title(brief: str) -> str:
+    """Title for an untitled deck after the first prompt.
+
+    Prefer the topic extracted from a slides request. If the brief is not
+    shaped that way, use the same first-line clip Chat uses.
+    """
+    from naas_abi.agents.conversation_title import conversation_title_from_prompt
+
+    derived = derive_deck_title(brief)
+    if derived:
+        return derived
+    return conversation_title_from_prompt(brief)

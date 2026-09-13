@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from naas_abi.agents.slides.title import (
+    auto_deck_title,
     derive_deck_title,
     is_placeholder_deck_title,
     resolve_deck_title,
@@ -99,3 +100,9 @@ def test_resolve_falls_back_to_the_turn_brief():
 def test_resolve_returns_empty_when_there_is_nothing_to_go_on():
     assert resolve_deck_title("   ", brief="  ") == ""
     assert resolve_deck_title("Untitled presentation", brief="hello") == ""
+
+
+def test_auto_title_falls_back_to_the_chat_clip():
+    brief = "What is going on in France right now?"
+    assert derive_deck_title(brief) == ""
+    assert auto_deck_title(brief) == brief

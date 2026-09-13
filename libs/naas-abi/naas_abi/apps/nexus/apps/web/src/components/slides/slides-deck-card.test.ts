@@ -70,6 +70,23 @@ describe('slidesDeckCardFromToolCalls', () => {
     );
   });
 
+  it('picks up a rename_deck title for the chat card', () => {
+    const renamed = toolCall({
+      rawName: 'rename_deck',
+      output: JSON.stringify({
+        ok: true,
+        slug: 'untitled-local',
+        title: 'Forvis Mazars Story',
+        workspace_id: 'ws-1',
+      }),
+    });
+    expect(slidesDeckCardFromToolCalls([renamed])).toEqual({
+      slug: 'untitled-local',
+      title: 'Forvis Mazars Story',
+      workspaceId: 'ws-1',
+    });
+  });
+
   it('prefers the created deck over a later write on the same deck', () => {
     const write = toolCall({
       id: 'tc-2',

@@ -9,6 +9,7 @@ import { useFilesStore } from '@/stores/files';
 import { usePlatformStatusStore } from '@/stores/platform-status';
 import { useSlidesStore } from '@/stores/slides';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { officeSurfaceFromPath } from '@/lib/pick-workspace-default-agent';
 import { cn } from '@/lib/utils';
 import { FOOTER_HEIGHT } from '@/lib/shell-columns';
 
@@ -117,7 +118,7 @@ export function PlatformStatusFooter() {
   const deckSource = useSlidesStore((s) => s.deckSource);
   const requestDeckRefresh = useSlidesStore((s) => s.requestDeckRefresh);
 
-  const isSlides = pathname.includes('/slides');
+  const isSlides = officeSurfaceFromPath(pathname).onSlides;
   const isCode = pathname.includes('/code') || pathname.includes('/ide');
   const pathRepo = parseCodeRepoFromPath(pathname);
 

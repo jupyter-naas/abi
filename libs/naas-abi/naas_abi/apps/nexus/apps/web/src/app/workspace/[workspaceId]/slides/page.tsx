@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Header } from '@/components/shell/header';
@@ -8,14 +8,19 @@ import { SlidesIndexGallery, SlidesTemplateStrip } from '@/components/slides/sli
 import { invalidateSlidesCover } from '@/components/slides/slides-cover-thumb';
 import { SlidesMenuBar } from '@/components/slides/slides-menu-bar';
 import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
+import { OfficeCreateLoader } from '@/components/office/office-create-loader';
+import { pushOfficeCreate, useOfficeCreateStore } from '@/components/office/office-create-state';
 import {
   openSlidesAgentPane,
   slidesApiErrorMessage,
-  startNewPresentation,
 } from '@/lib/create-slides-project';
+import { useOfficeListRecovery, withOfficeListRetry } from '@/lib/office-list-retry';
+import { pickPaneOfficeAgent } from '@/lib/pick-workspace-default-agent';
 import { partitionSlidesProjects, patchSlidesProject } from '@/lib/slides-project-actions';
 import type { SlidesSeedTemplate } from '@/lib/slides-templates';
+import { useAgentsStore } from '@/stores/agents';
 import { authFetch } from '@/stores/auth';
+import { useWorkspaceStore } from '@/stores/workspace';
 import {
   SLIDES_DECK_UPDATED_EVENT,
   useSlidesStore,
@@ -31,60 +36,60 @@ export default function SlidesIndexPage() {
   const [projects, setProjects] = useState<SlidesProject[]>([]);
   const [templates, setTemplates] = useState<SlidesSeedTemplate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
+  const creating = useOfficeCreateStore((s) => s.kind === 'deck');
   const [error, setError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const setSelectedSlug = useSlidesStore((s) => s.setSelectedSlug);
   const setSelectedTitle = useSlidesStore((s) => s.setSelectedTitle);
   const { active, archived } = partitionSlidesProjects(projects);
   const visibleProjects = showArchived ? archived : active;
+  const loadGen = useRef(0);
 
   const onCreateFromTemplate = useCallback(
-    async (templateId?: string) => {
-      if (!workspaceId || creating) return;
-      setCreating(true);
-      setError(null);
-      try {
-        await startNewPresentation(workspaceId, (href) => router.push(href), templateId);
-      } catch (e) {
-        setError(slidesApiErrorMessage((e as Error).message, 'Could not create the deck.'));
-        setCreating(false);
-      }
+    (templateId?: string) => {
+      pushOfficeCreate(router, 'deck', workspaceId, templateId);
     },
-    [workspaceId, creating, router],
+    [workspaceId, router],
   );
 
   const load = useCallback(
     async (opts?: { quiet?: boolean }) => {
       if (!workspaceId) return;
+      const gen = ++loadGen.current;
       const quiet = Boolean(opts?.quiet);
       if (!quiet) {
         setLoading(true);
         setError(null);
       }
       try {
-        const [projRes, tmplRes] = await Promise.all([
-          authFetch(`/api/slides/projects?workspace_id=${encodeURIComponent(workspaceId)}`),
-          authFetch(`/api/slides/templates?workspace_id=${encodeURIComponent(workspaceId)}`),
-        ]);
-        if (!projRes.ok) {
-          const body = (await projRes.json().catch(() => ({}))) as { detail?: unknown };
-          throw new Error(slidesApiErrorMessage(body.detail, `Failed (${projRes.status})`));
-        }
-        setProjects((await projRes.json()) as SlidesProject[]);
-        if (tmplRes.ok) {
-          const body = (await tmplRes.json()) as SlidesSeedTemplate[];
-          setTemplates(
-            body.map((row) => ({
-              ...row,
-              slides: row.slides ?? [],
-              assets: row.assets ?? [],
-            })),
-          );
-        }
+        await withOfficeListRetry(async () => {
+          const [projRes, tmplRes] = await Promise.all([
+            authFetch(`/api/slides/projects?workspace_id=${encodeURIComponent(workspaceId)}`),
+            authFetch(`/api/slides/templates?workspace_id=${encodeURIComponent(workspaceId)}`),
+          ]);
+          if (gen !== loadGen.current) return;
+          if (!projRes.ok) {
+            const body = (await projRes.json().catch(() => ({}))) as { detail?: unknown };
+            throw new Error(slidesApiErrorMessage(body.detail, `Failed (${projRes.status})`));
+          }
+          setProjects((await projRes.json()) as SlidesProject[]);
+          setError(null);
+          if (tmplRes.ok) {
+            const body = (await tmplRes.json()) as SlidesSeedTemplate[];
+            setTemplates(
+              body.map((row) => ({
+                ...row,
+                slides: row.slides ?? [],
+                assets: row.assets ?? [],
+              })),
+            );
+          }
+        });
       } catch (e) {
+        if (gen !== loadGen.current) return;
         if (!quiet) setError((e as Error).message);
       } finally {
+        if (gen !== loadGen.current) return;
         if (!quiet) setLoading(false);
       }
     },
@@ -92,8 +97,22 @@ export default function SlidesIndexPage() {
   );
 
   useEffect(() => {
+    setProjects([]);
     void load();
   }, [load]);
+
+  useOfficeListRecovery(load, error);
+
+  // Rebind Slides on the index even when the chat pane is closed. The pane
+  // ChatInterface is unmounted then, so a leftover Documents bind would
+  // otherwise persist until a deck is opened.
+  useEffect(() => {
+    const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+    const slides = pickPaneOfficeAgent(agents, { onSlides: true });
+    if (slides && useWorkspaceStore.getState().paneAgent !== slides.id) {
+      useWorkspaceStore.getState().setPaneAgent(slides.id);
+    }
+  }, [workspaceId]);
 
   useEffect(() => {
     if (archived.length === 0 && showArchived) setShowArchived(false);
@@ -146,7 +165,12 @@ export default function SlidesIndexPage() {
     <div className="flex h-full flex-col">
       <Header
         title="Slides"
-        nav={<SlidesMenuBar onNewPresentation={() => void onCreateFromTemplate()} />}
+        nav={
+          <SlidesMenuBar
+            onNewPresentation={() => onCreateFromTemplate()}
+            newDisabled={creating}
+          />
+        }
       />
 
       {error && (
@@ -155,7 +179,10 @@ export default function SlidesIndexPage() {
         </div>
       )}
 
-      <div className="flex-1 overflow-auto">
+      {creating ? (
+        <OfficeCreateLoader kind="deck" phase="creating" />
+      ) : (
+        <div className="flex-1 overflow-auto">
         {loading ? (
           <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
             <Loader2 size={16} className="mr-2 animate-spin" />
@@ -215,7 +242,8 @@ export default function SlidesIndexPage() {
             </div>
           </>
         )}
-      </div>
+        </div>
+      )}
       <SlidesStatusBar />
     </div>
   );

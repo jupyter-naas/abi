@@ -45,6 +45,42 @@ OPENAI_COMPATIBLE = [
 SUPPORTED_STREAMING = ["ollama", "cloudflare", "abi", *OPENAI_COMPATIBLE]
 
 
+def _first_prompt_for_office_title(request: ChatRequest) -> str:
+    from naas_abi.agents.conversation_title import first_user_prompt
+
+    return first_user_prompt(request.message, request.messages)
+
+
+def _apply_office_auto_title(request: ChatRequest) -> None:
+    """Name a still-untitled document or deck from the first prompt, like Chat."""
+    brief = _first_prompt_for_office_title(request)
+    if not brief or brief.startswith("/"):
+        return
+    client_ctx = request.context if isinstance(request.context, dict) else {}
+    documents_ctx = client_ctx.get("documents") if isinstance(client_ctx, dict) else None
+    slides_ctx = client_ctx.get("slides") if isinstance(client_ctx, dict) else None
+    if isinstance(documents_ctx, dict):
+        slug = str(documents_ctx.get("slug") or "").strip()
+        if slug:
+            from naas_abi.agents.tools.documents_tools import maybe_auto_title_open_document
+            from naas_abi_core.services.agent.context import documents_active_title
+
+            new_title = maybe_auto_title_open_document(brief, slug)
+            if new_title:
+                documents_ctx["title"] = new_title
+                documents_active_title.set(new_title)
+    if isinstance(slides_ctx, dict):
+        slug = str(slides_ctx.get("slug") or "").strip()
+        if slug:
+            from naas_abi.agents.tools.slides_tools import maybe_auto_title_open_deck
+            from naas_abi_core.services.agent.context import slides_active_title
+
+            new_title = maybe_auto_title_open_deck(brief, slug)
+            if new_title:
+                slides_ctx["title"] = new_title
+                slides_active_title.set(new_title)
+
+
 def _format_tool_name(raw: str) -> str:
     words = raw.replace("_", " ").split()
     return " ".join(w[0].upper() + w[1:] for w in words if w)
@@ -198,6 +234,7 @@ async def stream_chat_response(
     if request.workspace_id:
         from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
             pick_workspace_chat_agent_id,
+            pick_workspace_documents_agent_id,
             pick_workspace_slides_agent_id,
         )
 
@@ -210,6 +247,7 @@ async def stream_chat_response(
         resolved_agent = pick_workspace_chat_agent_id(
             workspace_agents, request.agent
         )
+        from naas_abi.agents.documents.policy import open_documents_slug
         from naas_abi.agents.slides.policy import open_slides_slug
 
         slides_agent = None
@@ -217,8 +255,15 @@ async def stream_chat_response(
             request.context if isinstance(request.context, dict) else None
         ):
             slides_agent = pick_workspace_slides_agent_id(workspace_agents)
+        documents_agent = None
+        if open_documents_slug(
+            request.context if isinstance(request.context, dict) else None
+        ):
+            documents_agent = pick_workspace_documents_agent_id(workspace_agents)
         if slides_agent:
             resolved_agent = slides_agent
+        elif documents_agent:
+            resolved_agent = documents_agent
         if resolved_agent and resolved_agent != request.agent:
             logger.info(
                 "Rewriting chat agent %s -> %s for workspace %s",
@@ -287,23 +332,30 @@ async def stream_chat_response(
                     agent_workspace_id,
                     coder_workspace_base,
                     coder_workspace_secret,
+                    documents_active_mode,
+                    documents_active_slug,
+                    documents_active_title,
                     slides_active_mode,
                     slides_active_slug,
                     slides_active_title,
                 )
                 agent_user_id.set(str(current_user.id))
-                if current_user.name:
-                    agent_user_name.set(current_user.name)
-                if current_user.email:
-                    agent_user_email.set(str(current_user.email))
+                name = getattr(current_user, "name", None)
+                email = getattr(current_user, "email", None)
+                if name:
+                    agent_user_name.set(name)
+                if email:
+                    agent_user_email.set(str(email))
                 agent_chat_id.set(str(conversation_id))
                 if request.workspace_id is not None:
                     agent_workspace_id.set(str(request.workspace_id))
 
-                # Bind open Slides deck + its Coder sidecar so SlidesAgent tools
-                # act on workspace files (Continue-parity) without asking which deck.
+                # Bind open Slides deck or Documents file + Coder sidecar.
                 client_ctx = request.context if isinstance(request.context, dict) else {}
                 slides_ctx = client_ctx.get("slides") if isinstance(client_ctx, dict) else None
+                documents_ctx = (
+                    client_ctx.get("documents") if isinstance(client_ctx, dict) else None
+                )
                 open_slug = ""
                 if isinstance(slides_ctx, dict):
                     open_slug = str(slides_ctx.get("slug") or "").strip()
@@ -315,10 +367,19 @@ async def stream_chat_response(
                             slides_active_title.set(title)
                         if mode:
                             slides_active_mode.set(mode)
+                open_document_slug = ""
+                if isinstance(documents_ctx, dict):
+                    open_document_slug = str(documents_ctx.get("slug") or "").strip()
+                    if open_document_slug:
+                        documents_active_slug.set(open_document_slug)
+                        title = str(documents_ctx.get("title") or "").strip()
+                        mode = str(documents_ctx.get("mode") or "").strip()
+                        if title:
+                            documents_active_title.set(title)
+                        if mode:
+                            documents_active_mode.set(mode)
 
-                # Arm the research gate for both surfaces. With no deck open
-                # this also flags a deck requested from the main chat, so the
-                # agent gets a slides-sized step budget.
+                from naas_abi.agents.documents import bind_documents_research_policy
                 from naas_abi.agents.slides import bind_slides_research_policy
 
                 has_prior_assistant = any(
@@ -326,6 +387,11 @@ async def stream_chat_response(
                     for m in (request.messages or [])
                 )
                 bind_slides_research_policy(
+                    request.message,
+                    has_prior_assistant,
+                    client_ctx,
+                )
+                bind_documents_research_policy(
                     request.message,
                     has_prior_assistant,
                     client_ctx,
@@ -352,6 +418,34 @@ async def stream_chat_response(
                             open_slug,
                             exc_info=True,
                         )
+                elif open_document_slug and request.workspace_id:
+                    try:
+                        from naas_abi.apps.nexus.apps.api.app.services.documents.adapters.primary.documents__primary_adapter__FastAPI import (
+                            lookup_documents_sidecar,
+                        )
+
+                        ws_base, ws_secret = await lookup_documents_sidecar(
+                            db,
+                            workspace_id=str(request.workspace_id),
+                            user_id=str(current_user.id),
+                            slug=open_document_slug,
+                        )
+                        if ws_base and ws_secret:
+                            coder_workspace_base.set(ws_base)
+                            coder_workspace_secret.set(ws_secret)
+                    except Exception:
+                        logger.warning(
+                            "Failed to bind documents sidecar for %s",
+                            open_document_slug,
+                            exc_info=True,
+                        )
+
+                try:
+                    from starlette.concurrency import run_in_threadpool
+
+                    await run_in_threadpool(_apply_office_auto_title, request)
+                except Exception:
+                    logger.warning("Failed to auto-title office project", exc_info=True)
 
                 coding_ctx = (
                     client_ctx.get("coding") if isinstance(client_ctx, dict) else None
@@ -450,9 +544,27 @@ async def stream_chat_response(
     #             )
     #             break
 
+    from naas_abi.agents.documents import apply_documents_model_override
+    from naas_abi.agents.documents.policy import open_documents_slug
     from naas_abi.agents.slides import apply_slides_model_override
+    from naas_abi.agents.slides.policy import open_slides_slug
 
     incoming_llm = getattr(provider, "llm_model", None) or request.llm_model
+    # Slides first when a deck is open or the brief is a deck request, so
+    # Documents does not steal an existing slides turn. Documents claims an
+    # open file, or a main-chat report/document brief slides did not take.
+    if open_documents_slug(client_ctx) and not open_slides_slug(client_ctx):
+        routed_llm = apply_documents_model_override(
+            incoming_llm, client_ctx, request.message
+        )
+    else:
+        routed_llm = apply_slides_model_override(
+            incoming_llm, client_ctx, request.message
+        )
+        if routed_llm == incoming_llm:
+            routed_llm = apply_documents_model_override(
+                incoming_llm, client_ctx, request.message
+            )
     provider_config = ProviderConfig(
         id=provider.id,
         name=provider.name,
@@ -462,9 +574,9 @@ async def stream_chat_response(
         api_key=provider.api_key,
         account_id=provider.account_id,
         model=provider.model,
-        # Pass the brief: with no deck open it is the only signal that this
-        # turn is a deck request, and that turn writes the whole deck.
-        llm_model=apply_slides_model_override(incoming_llm, client_ctx, request.message),
+        # Pass the brief: with no file open it is the only signal that this
+        # turn writes a whole deck or document.
+        llm_model=routed_llm,
     )
 
     assistant_msg_id = ""

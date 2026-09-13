@@ -2,6 +2,7 @@ from __future__ import annotations
 
 # Standard library imports for type hints
 import atexit
+import concurrent.futures
 import json
 import os
 import re
@@ -57,11 +58,14 @@ from langgraph.graph.message import MessagesState
 from langgraph.types import Command
 from naas_abi_core.engine.context import get_default_event_service
 from naas_abi_core.services.agent.context import (
+    DOCUMENTS_RECURSION_LIMIT,
     SLIDES_RECURSION_LIMIT,
     agent_chat_id,
     agent_user_id,
     agent_workspace_id,
     coder_workspace_base,
+    documents_step_limit_message,
+    documents_turn_active,
     slides_step_limit_message,
     slides_turn_active,
 )
@@ -130,6 +134,8 @@ def _friendly_model_invoke_error(exc: BaseException) -> str:
     if "recursion limit" in lowered:
         if slides_turn_active():
             return slides_step_limit_message()
+        if documents_turn_active():
+            return documents_step_limit_message()
         return (
             "The agent hit its step limit before finishing. "
             "Try a smaller request, or continue from what already landed."
@@ -154,10 +160,29 @@ def _friendly_model_invoke_error(exc: BaseException) -> str:
                 "Use list_slides_sections and write_slides_sections; "
                 "do not read_file the whole deck.html."
             )
+        if documents_turn_active():
+            return (
+                "This document is too large to load in one read. "
+                "Use list_document_sections and write_document_sections; "
+                "do not read_file the whole document.html."
+            )
         return (
             "This request exceeded the model's context window. "
             "Do not load whole files with embedded images, then try again."
         )
+    if "timed out" in lowered or "timeouterror" in lowered.replace(" ", ""):
+        if documents_turn_active():
+            return (
+                "The model timed out on this step. Use apply_documents_template "
+                "for a theme or template, or apply_document_commands to fill "
+                "the open template. Do not read_file document.html."
+            )
+        if slides_turn_active():
+            return (
+                "The model timed out on this step. Write a few slides, then stop. "
+                "Do not read_file the whole deck.html."
+            )
+        return "The model timed out. Try a smaller request."
     if (
         "error code:" in lowered
         or "provider returned error" in lowered
@@ -165,6 +190,40 @@ def _friendly_model_invoke_error(exc: BaseException) -> str:
     ):
         return "The model provider failed. Pick another model and try again."
     return text or "The model provider failed. Pick another model and try again."
+
+
+# Documents/Slides ChatOpenAI registrations often use timeout=120 and
+# max_retries=3. Those retries stack to ~8 minutes on one hung generation.
+_OFFICE_MODEL_INVOKE_TIMEOUT_S = 90.0
+
+
+def _office_chat_model_bind_kwargs() -> dict[str, float]:
+    """HTTP timeout only. Completions.create rejects max_retries."""
+    return {"timeout": _OFFICE_MODEL_INVOKE_TIMEOUT_S}
+
+
+def _invoke_office_chat_model(chat_model: Any, messages: list[Any]) -> BaseMessage:
+    """One attempt, 90s cap. Do not let provider retries sit until the gateway dies."""
+    bound = chat_model
+    bind = getattr(chat_model, "bind", None)
+    if callable(bind):
+        try:
+            bound = bind(**_office_chat_model_bind_kwargs())
+        except Exception:  # noqa: BLE001
+            bound = chat_model
+    ctx = copy_context()
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        future = pool.submit(ctx.run, bound.invoke, messages)
+        try:
+            return future.result(timeout=_OFFICE_MODEL_INVOKE_TIMEOUT_S)
+        except concurrent.futures.TimeoutError as exc:
+            future.cancel()
+            raise TimeoutError(
+                f"Request timed out after {_OFFICE_MODEL_INVOKE_TIMEOUT_S:.0f}s"
+            ) from exc
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 # View-only shrink of prior ToolMessages before invoke. Not Claude Code /compact
@@ -1612,7 +1671,10 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             else self._chat_model_without_workspace_tools
         )
         try:
-            response: BaseMessage = chat_model.invoke(messages)
+            if documents_turn_active() or slides_turn_active():
+                response = _invoke_office_chat_model(chat_model, messages)
+            else:
+                response = chat_model.invoke(messages)
         except Exception as e:  # noqa: BLE001
             logger.error(f"Model invocation failed for agent '{self._name}': {e}")
             return Command(
@@ -2238,12 +2300,14 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         stream_config: RunnableConfig = {
             "configurable": {"thread_id": self._state.thread_id}
         }
-        # Default LangGraph limit is 25. A slides turn (search, then one
-        # batched deck write) needs more. 160 is the slides-specific budget
-        # (see SLIDES_RECURSION_LIMIT). This also covers a deck requested from
-        # the main chat, where no deck is open yet at the start of the turn.
+        # Default LangGraph limit is 25. A slides or documents turn (search,
+        # then one batched write) needs more. 160 is the office-agent budget.
+        # This also covers a deck or document requested from the main chat,
+        # where no file is open yet at the start of the turn.
         if slides_turn_active():
             stream_config["recursion_limit"] = SLIDES_RECURSION_LIMIT
+        elif documents_turn_active():
+            stream_config["recursion_limit"] = DOCUMENTS_RECURSION_LIMIT
         for chunk in self.graph.stream(
             {"messages": [human_message]},
             config=stream_config,

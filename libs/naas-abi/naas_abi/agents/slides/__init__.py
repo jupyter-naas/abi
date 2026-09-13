@@ -25,6 +25,7 @@ from naas_abi.agents.slides.policy import (
     validate_configured_slides_model,
 )
 from naas_abi.agents.slides.title import (
+    auto_deck_title,
     derive_deck_title,
     is_placeholder_deck_title,
     resolve_deck_title,
@@ -36,6 +37,7 @@ __all__ = [
     "MAX_SLIDES_SECTION_READS",
     "apply_slides_model_override",
     "attach_slides_research_note",
+    "auto_deck_title",
     "bind_slides_reasoning",
     "bind_slides_research_policy",
     "configured_slides_model",

@@ -11,6 +11,7 @@ Coder.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import html as html_lib
 import json
@@ -28,7 +29,7 @@ from urllib.parse import quote
 from urllib.request import Request as UrlRequest
 from urllib.request import urlopen
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
@@ -40,7 +41,7 @@ from naas_abi.apps.nexus.apps.api.app.core.config import (
     ABI_SLIDES_TEMPLATE_NAMESPACE,
     settings,
 )
-from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, get_db
 from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import create_access_token
 from naas_abi_core.services.coding_environment.adapters.secondary.CoderAdapter import (
@@ -105,6 +106,18 @@ _SLIDES_TEMPLATE_NAMES = ("abi-slides", "abi-code-server", "local-directory")
 # wait; a single probe races "running" phase and falsely marks degraded.
 _SIDECAR_WAIT_ATTEMPTS = 2
 _SIDECAR_WAIT_INTERVAL_S = 0.5
+# One provision at a time per deck: create starts this in the
+# background, and the editor POSTs /runtime as soon as HTML is up.
+_runtime_ensure_locks: dict[tuple[str, str], asyncio.Lock] = {}
+
+
+def _runtime_ensure_lock(workspace_id: str, slug: str) -> asyncio.Lock:
+    key = (workspace_id, slug)
+    lock = _runtime_ensure_locks.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _runtime_ensure_locks[key] = lock
+    return lock
 
 
 def _get_source_control(request: Request) -> SourceControlService:
@@ -1424,8 +1437,8 @@ async def list_projects(
 async def create_project(
     body: ProjectCreateRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
 ) -> ProjectResponse:
     await require_workspace_access(current_user.id, body.workspace_id)
     slug = body.slug or _slugify(body.title)
@@ -1459,15 +1472,8 @@ async def create_project(
         # Only the namespaced branch reserves this slug for this workspace.
         # Legacy slides/<slug> is ownership-gated separately and must not block
         # other tenants from creating slides/<workspace_id>/<slug>.
+        # Do not list_repos: default_branch is main, else any existing ref.
         default = "main"
-        try:
-            repos = sc.list_repos()
-            for repo in repos:
-                if f"{repo.owner}/{repo.name}" == repo_id and repo.default_branch:
-                    default = repo.default_branch
-                    break
-        except SourceControlError:
-            pass
         if default not in existing and existing:
             default = next(iter(existing))
         adopted_branch = branch in existing
@@ -1529,27 +1535,27 @@ async def create_project(
         )
 
     try:
+        seed_started = time.perf_counter()
         project = await run_in_threadpool(_create)
+        logger.info(
+            "slides create seed %.3fs slug=%s",
+            time.perf_counter() - seed_started,
+            slug,
+        )
     except BranchNameConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SourceControlError as exc:
         raise _source_control_http_error(exc) from exc
 
-    try:
-        runtime = await _ensure_runtime_impl(
-            request=request,
-            workspace_id=body.workspace_id,
-            slug=slug,
-            current_user=current_user,
-            db=db,
-        )
-        if not runtime.ensured:
-            logger.warning(
-                "slides runtime not ensured for %s: %s", slug, runtime.detail
-            )
-    except Exception:
-        logger.exception("slides runtime ensure failed for %s", slug)
-
+    # HTML is already on the branch. Do not hold the create response for
+    # Coder: the editor reads Forgejo immediately; sidecar warms behind it.
+    _schedule_created_runtime(
+        background_tasks,
+        request=request,
+        workspace_id=body.workspace_id,
+        slug=slug,
+        current_user=current_user,
+    )
     return project
 
 
@@ -2673,6 +2679,77 @@ async def _ensure_runtime_impl(
     )
 
 
+async def _ensure_runtime_serialized(
+    *,
+    request: Request,
+    workspace_id: str,
+    slug: str,
+    current_user: User,
+    db: AsyncSession | None,
+) -> RuntimeResponse:
+    async with _runtime_ensure_lock(workspace_id, slug):
+        return await _ensure_runtime_impl(
+            request=request,
+            workspace_id=workspace_id,
+            slug=slug,
+            current_user=current_user,
+            db=db,
+        )
+
+
+async def _ensure_created_runtime(
+    request: Request,
+    workspace_id: str,
+    slug: str,
+    current_user: User,
+) -> None:
+    """Warm the Coder sidecar after create. Must not delay the create response."""
+    started = time.perf_counter()
+    try:
+        async with AsyncSessionLocal() as db:
+            runtime = await _ensure_runtime_serialized(
+                request=request,
+                workspace_id=workspace_id,
+                slug=slug,
+                current_user=current_user,
+                db=db,
+            )
+            elapsed = time.perf_counter() - started
+            if not runtime.ensured:
+                logger.warning(
+                    "slides runtime not ensured for %s after %.3fs: %s",
+                    slug,
+                    elapsed,
+                    runtime.detail,
+                )
+            else:
+                logger.info(
+                    "slides runtime ready in %.3fs slug=%s sidecar_ready=%s",
+                    elapsed,
+                    slug,
+                    runtime.sidecar_ready,
+                )
+    except Exception:
+        logger.exception("slides runtime ensure failed for %s", slug)
+
+
+def _schedule_created_runtime(
+    background_tasks: BackgroundTasks,
+    *,
+    request: Request,
+    workspace_id: str,
+    slug: str,
+    current_user: User,
+) -> None:
+    background_tasks.add_task(
+        _ensure_created_runtime,
+        request,
+        workspace_id,
+        slug,
+        current_user,
+    )
+
+
 @router.post("/projects/{slug}/runtime", response_model=RuntimeResponse)
 async def ensure_runtime(
     slug: str,
@@ -2684,7 +2761,7 @@ async def ensure_runtime(
     await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
-    return await _ensure_runtime_impl(
+    return await _ensure_runtime_serialized(
         request=request,
         workspace_id=workspace_id,
         slug=slug,
@@ -2837,6 +2914,32 @@ class SlideMutationResponse(BaseModel):
     html: str | None = None
     commit_sha: str | None = None
     source: str | None = None
+
+
+class SlideCommandItem(BaseModel):
+    type: str = Field(..., min_length=1, max_length=64)
+    title: str = Field(default="", max_length=500)
+    text: str = Field(default="", max_length=500)
+
+
+class SlideCommandsRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1, max_length=100)
+    requests: list[SlideCommandItem] = Field(..., min_length=1)
+
+
+class SlideCommandsResponse(BaseModel):
+    ok: bool = True
+    slug: str
+    applied: list[str] = Field(default_factory=list)
+    section_index: int = 0
+    section_count: int = 0
+    slides: list[SlideOutlineItem] = Field(default_factory=list)
+    html: str | None = None
+    commit_sha: str | None = None
+    source: str | None = None
+    title: str | None = None
+    project_renamed: bool = False
+    slug_changed: bool = False
 
 
 class SlidesListResponse(BaseModel):
@@ -3142,4 +3245,128 @@ async def reorder_slides(
             order=body.order,
         ),
         message=f"style(slides): reorder slides in {slug}",
+    )
+
+
+def _write_project_display_title(
+    sc: SourceControlService,
+    *,
+    repo_id: str,
+    paths: dict[str, str],
+    slug: str,
+    workspace_id: str,
+    title: str,
+    current_user: User,
+    username: str,
+    author_name: str,
+    author_email: str,
+) -> dict:
+    """Set project.json title. Slug and git folder stay put."""
+    meta = _load_project_meta(
+        sc, repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
+    )
+    if meta is None:
+        raise RepoNotFoundError(f"slides project {slug}")
+    from datetime import UTC, datetime
+
+    meta["title"] = title.strip()
+    meta["workspace_id"] = workspace_id
+    meta["slug"] = meta.get("slug") or slug
+    meta["updated_at"] = datetime.now(UTC).isoformat()
+    sc.ensure_user(
+        external_id=current_user.id,
+        email=author_email,
+        username=username,
+    )
+    sc.upsert_file(
+        repo_id=repo_id,
+        path=paths["project_path"],
+        content=json.dumps(meta, indent=2, ensure_ascii=False) + "\n",
+        message=f"chore(slides): rename project {slug}",
+        branch=paths["branch"],
+        author_name=author_name,
+        author_email=author_email,
+    )
+    return meta
+
+
+@router.post("/projects/{slug}/commands", response_model=SlideCommandsResponse)
+async def apply_slide_commands_route(
+    slug: str,
+    body: SlideCommandsRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> SlideCommandsResponse:
+    """Batch of named slide verbs. See COMMANDS.md. This pass: rename and title."""
+    from naas_abi.agents.tools.slides_commands import apply_slide_commands
+
+    await require_workspace_access(current_user.id, body.workspace_id)
+    if not _SLUG_RE.match(slug):
+        raise HTTPException(status_code=422, detail="Invalid slug")
+
+    payloads = [item.model_dump() for item in body.requests]
+
+    def _mutate(html: str) -> dict:
+        return apply_slide_commands(html, payloads)
+
+    mutated = await _run_slide_html_mutation(
+        slug=slug,
+        workspace_id=body.workspace_id,
+        request=request,
+        current_user=current_user,
+        db=db,
+        mutate=_mutate,
+        message=f"feat(slides): apply commands in {slug}",
+    )
+    from naas_abi.agents.tools.slides_commands import last_rename_deck_title
+
+    rename_title = last_rename_deck_title(payloads)
+    project_renamed = False
+    if rename_title:
+        sc, repo_id = _slides_sc(request)
+        username = _forge_username(current_user.name or "", str(current_user.email))
+        author_name = current_user.name or username
+        author_email = str(current_user.email)
+
+        def _rename() -> None:
+            paths = _resolve_project_paths(
+                sc, repo_id=repo_id, workspace_id=body.workspace_id, slug=slug
+            )
+            if paths is None:
+                raise RepoNotFoundError(f"slides project {slug}")
+            _write_project_display_title(
+                sc,
+                repo_id=repo_id,
+                paths=paths,
+                slug=slug,
+                workspace_id=body.workspace_id,
+                title=rename_title,
+                current_user=current_user,
+                username=username,
+                author_name=author_name,
+                author_email=author_email,
+            )
+
+        try:
+            await run_in_threadpool(_rename)
+            project_renamed = True
+        except RepoNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except SourceControlError as exc:
+            raise _source_control_http_error(exc) from exc
+
+    return SlideCommandsResponse(
+        ok=True,
+        slug=slug,
+        applied=[item.type for item in body.requests],
+        section_index=mutated.section_index,
+        section_count=mutated.section_count,
+        slides=mutated.slides,
+        html=mutated.html,
+        commit_sha=mutated.commit_sha,
+        source=mutated.source,
+        title=rename_title or None,
+        project_renamed=project_renamed,
+        slug_changed=False,
     )

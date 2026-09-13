@@ -46,6 +46,8 @@ describe('isSlidesWriteTool', () => {
     expect(isSlidesWriteTool('duplicate_slide')).toBe(true);
     expect(isSlidesWriteTool('reorder_slides')).toBe(true);
     expect(isSlidesWriteTool('create_slides_project')).toBe(true);
+    expect(isSlidesWriteTool('rename_deck')).toBe(true);
+    expect(isSlidesWriteTool('update_title')).toBe(true);
   });
 
   it('ignores read-only and unrelated tools', () => {

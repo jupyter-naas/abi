@@ -3,11 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { ChevronRight, FolderTree, LayoutGrid, Presentation } from 'lucide-react';
+import { pushOfficeCreate, useOfficeCreateStore } from '@/components/office/office-create-state';
 import {
   DEFAULT_SLIDES_TEMPLATE_ID,
   openSlidesAgentPane,
-  slidesApiErrorMessage,
-  startNewPresentation,
 } from '@/lib/create-slides-project';
 import { partitionSlidesProjects, patchSlidesProject } from '@/lib/slides-project-actions';
 import '@/app/workspace/[workspaceId]/chat/components/chat-components.css';
@@ -15,6 +14,7 @@ import {
   slidesTemplateMenuRows,
   type SlidesSeedTemplate,
 } from '@/lib/slides-templates';
+import { withOfficeListRetry } from '@/lib/office-list-retry';
 import { authFetch } from '@/stores/auth';
 import {
   SLIDES_DECK_UPDATED_EVENT,
@@ -61,7 +61,7 @@ export function SlidesSection({
   const [rootExpanded, setRootExpanded] = useState(true);
   const [expandedDecks, setExpandedDecks] = useState<string[]>([]);
   const [expandedDirs, setExpandedDirs] = useState<string[]>([]);
-  const [creating, setCreating] = useState(false);
+  const creating = useOfficeCreateStore((s) => s.kind === 'deck');
   const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -82,30 +82,45 @@ export function SlidesSection({
   const fetchProjects = useCallback(async () => {
     if (!workspaceId) return;
     try {
-      const res = await authFetch(
-        `/api/slides/projects?workspace_id=${encodeURIComponent(workspaceId)}`,
-      );
-      if (res.ok) setProjects((await res.json()) as SlidesProject[]);
+      await withOfficeListRetry(async () => {
+        const res = await authFetch(
+          `/api/slides/projects?workspace_id=${encodeURIComponent(workspaceId)}`,
+        );
+        if (!res.ok) {
+          if (res.status >= 500 || res.status === 429) {
+            throw new Error(`Failed (${res.status})`);
+          }
+          return;
+        }
+        setProjects((await res.json()) as SlidesProject[]);
+      });
     } catch {
-      // ignore
+      // Recovery retries on focus / online / next navigation.
     }
   }, [workspaceId]);
 
   const fetchTemplates = useCallback(async () => {
     if (!workspaceId) return;
     try {
-      const res = await authFetch(
-        `/api/slides/templates?workspace_id=${encodeURIComponent(workspaceId)}`,
-      );
-      if (!res.ok) return;
-      const body = (await res.json()) as SlidesSeedTemplate[];
-      setTemplates(
-        body.map((row) => ({
-          ...row,
-          slides: row.slides ?? [],
-          assets: row.assets ?? [],
-        })),
-      );
+      await withOfficeListRetry(async () => {
+        const res = await authFetch(
+          `/api/slides/templates?workspace_id=${encodeURIComponent(workspaceId)}`,
+        );
+        if (!res.ok) {
+          if (res.status >= 500 || res.status === 429) {
+            throw new Error(`Failed (${res.status})`);
+          }
+          return;
+        }
+        const body = (await res.json()) as SlidesSeedTemplate[];
+        setTemplates(
+          body.map((row) => ({
+            ...row,
+            slides: row.slides ?? [],
+            assets: row.assets ?? [],
+          })),
+        );
+      });
     } catch {
       // ignore
     }
@@ -131,23 +146,44 @@ export function SlidesSection({
   );
 
   useEffect(() => {
+    setProjects([]);
     void fetchProjects();
     void fetchTemplates();
   }, [fetchProjects, fetchTemplates, pathname]);
+
+  useEffect(() => {
+    const refresh = () => {
+      void fetchProjects();
+      void fetchTemplates();
+    };
+    window.addEventListener('focus', refresh);
+    window.addEventListener('online', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('online', refresh);
+    };
+  }, [fetchProjects, fetchTemplates]);
 
   // Abi names a still-untitled deck on its first write, so the tree label has
   // to come back from the server instead of waiting for the next navigation.
   // The same write can add a file, so the open deck's tree is refetched too.
   useEffect(() => {
     const onUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ slug?: string; title?: string }>).detail;
+      const slug = detail?.slug || openSlug || '';
+      const title = (detail?.title || '').trim();
+      if (title && slug) {
+        setProjects((current) =>
+          current.map((row) => (row.slug === slug ? { ...row, title } : row)),
+        );
+        if (selectedSlug === slug || openSlug === slug) setSelectedTitle(title);
+      }
       void fetchProjects();
-      const slug =
-        (event as CustomEvent<{ slug?: string }>).detail?.slug || openSlug || '';
       if (slug) void fetchTree(slug);
     };
     window.addEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
     return () => window.removeEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
-  }, [fetchProjects, fetchTree, openSlug]);
+  }, [fetchProjects, fetchTree, openSlug, selectedSlug, setSelectedTitle]);
 
   useEffect(() => {
     if (routeSlug) setSelectedSlug(routeSlug);
@@ -226,23 +262,10 @@ export function SlidesSection({
 
   const createDeck = useCallback(
     (templateId: string) => {
-      if (!workspaceId || creating) return;
-      setCreating(true);
       setActionError(null);
-      void startNewPresentation(workspaceId, (href) => router.push(href), templateId)
-        .then(() => {
-          void fetchProjects();
-        })
-        .catch((e) => {
-          setActionError(
-            slidesApiErrorMessage((e as Error).message, 'Could not create the deck.'),
-          );
-        })
-        .finally(() => {
-          setCreating(false);
-        });
+      pushOfficeCreate(router, 'deck', workspaceId, templateId);
     },
-    [workspaceId, creating, router, fetchProjects],
+    [workspaceId, router],
   );
 
   const templateOptions: SidebarNewItemMenuOption[] = slidesTemplateMenuRows(templates).map(

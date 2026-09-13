@@ -383,6 +383,67 @@ def test_list_and_create_projects_seed_in_memory_repo(monkeypatch) -> None:
     assert namespaced.json()["template_id"] == "abi/executive-v1"
 
 
+def test_create_project_skips_list_repos(monkeypatch) -> None:
+    """Create must not pay a list_repos RTT. Default branch is main or listed."""
+    sc = SourceControlService(InMemoryAdapter())
+
+    def _boom() -> list:
+        raise AssertionError("create must not call list_repos")
+
+    sc.list_repos = _boom  # type: ignore[method-assign]
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Untitled presentation",
+            "slug": "no-list-repos",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["slug"] == "no-list-repos"
+
+
+def test_create_project_returns_before_runtime_ensure(monkeypatch) -> None:
+    """Create is done when branch + deck.html exist. Coder waits in back."""
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    scheduled: dict[str, str] = {}
+
+    def _schedule(background_tasks, **kwargs):
+        del background_tasks
+        scheduled["slug"] = str(kwargs["slug"])
+        scheduled["workspace_id"] = str(kwargs["workspace_id"])
+
+    async def _boom(**kwargs):
+        del kwargs
+        raise AssertionError("create must not await runtime ensure")
+
+    monkeypatch.setattr(slides_api, "_schedule_created_runtime", _schedule)
+    monkeypatch.setattr(slides_api, "_ensure_runtime_impl", _boom)
+    monkeypatch.setattr(slides_api, "_ensure_runtime_serialized", _boom)
+
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Untitled presentation",
+            "slug": "fast-create",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["slug"] == "fast-create"
+    assert scheduled == {"slug": "fast-create", "workspace_id": "ws-test"}
+    deck = client.get(
+        "/slides/projects/fast-create/deck",
+        params={"workspace_id": "ws-test"},
+    )
+    assert deck.status_code == 200, deck.text
+    assert deck.json()["html"]
+
+
 def test_patch_project_renames_and_archives_without_changing_slug(monkeypatch) -> None:
     sc = SourceControlService(InMemoryAdapter())
     client = _slides_client(monkeypatch, sc)
@@ -443,6 +504,72 @@ def test_patch_project_renames_and_archives_without_changing_slug(monkeypatch) -
         json={"workspace_id": "ws-test", "title": "Nope"},
     )
     assert missing.status_code == 404
+
+
+def test_slide_commands_rename_updates_project_title(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Untitled presentation",
+            "slug": "untitled-rename",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    applied = client.post(
+        "/slides/projects/untitled-rename/commands",
+        json={
+            "workspace_id": "ws-test",
+            "requests": [{"type": "rename_deck", "title": "Forvis Mazars Story"}],
+        },
+    )
+    assert applied.status_code == 200, applied.text
+    body = applied.json()
+    assert body["ok"] is True
+    assert body["title"] == "Forvis Mazars Story"
+    assert body["project_renamed"] is True
+    assert body["slug_changed"] is False
+    assert "<h1>Forvis Mazars Story</h1>" in (body.get("html") or "")
+
+    listed = client.get("/slides/projects", params={"workspace_id": "ws-test"})
+    assert listed.status_code == 200, listed.text
+    row = next(p for p in listed.json() if p["slug"] == "untitled-rename")
+    assert row["title"] == "Forvis Mazars Story"
+    assert row["slug"] == "untitled-rename"
+
+
+def test_slide_commands_update_title_leaves_project_name(monkeypatch) -> None:
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    created = client.post(
+        "/slides/projects",
+        json={
+            "workspace_id": "ws-test",
+            "title": "Untitled presentation",
+            "slug": "untitled-heading",
+            "template_id": "minimal-light-v1",
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    applied = client.post(
+        "/slides/projects/untitled-heading/commands",
+        json={
+            "workspace_id": "ws-test",
+            "requests": [{"type": "update_title", "title": "Cover only"}],
+        },
+    )
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["project_renamed"] is False
+    assert "<h1>Cover only</h1>" in (applied.json().get("html") or "")
+
+    listed = client.get("/slides/projects", params={"workspace_id": "ws-test"})
+    row = next(p for p in listed.json() if p["slug"] == "untitled-heading")
+    assert row["title"] == "Untitled presentation"
 
 
 def test_friendly_git_detail_hides_pushrejected_dump() -> None:

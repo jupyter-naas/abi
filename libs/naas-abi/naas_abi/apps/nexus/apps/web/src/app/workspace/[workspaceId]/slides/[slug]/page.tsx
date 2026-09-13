@@ -36,8 +36,13 @@ import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
 import {
   openSlidesAgentPane,
   slidesApiErrorMessage,
-  startNewPresentation,
 } from '@/lib/create-slides-project';
+import { OfficeCreateLoader } from '@/components/office/office-create-loader';
+import {
+  clearOfficeCreate,
+  pushOfficeCreate,
+  useOfficeCreateStore,
+} from '@/components/office/office-create-state';
 import { copyDeckToMyDrive } from '@/lib/slides-my-drive';
 import { authFetch } from '@/stores/auth';
 import {
@@ -205,6 +210,7 @@ export default function SlidesEditorPage() {
   const [manualEdit, setManualEdit] = useState(false);
   const [holdPreview, setHoldPreview] = useState(false);
   const [mutating, setMutating] = useState(false);
+  const creating = useOfficeCreateStore((s) => s.kind === 'deck');
   const previewRef = useRef<SlidesPreviewFrameHandle>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [previewHtml, setPreviewHtml] = useState('');
@@ -339,13 +345,17 @@ export default function SlidesEditorPage() {
         }
         setLoading(false);
         setRefreshing(false);
+        clearOfficeCreate();
         if (ensureRuntime) {
-          const runtime = await ensureSlidesRuntime(workspaceId, slug, quiet ? 2 : 6);
-          if (gen !== loadGenRef.current) return;
-          applyRuntime(runtime);
+          // Sidecar can take >15s. Overlay and editor wait only on HTML.
+          void ensureSlidesRuntime(workspaceId, slug, quiet ? 2 : 6).then((runtime) => {
+            if (gen !== loadGenRef.current) return;
+            applyRuntime(runtime);
+          });
         }
       } catch (e) {
         if (gen !== loadGenRef.current) return;
+        clearOfficeCreate();
         const message = (e as Error).message;
         // Deck load Forgejo races are not a Coder outage; keep banners separate.
         setError(
@@ -715,11 +725,9 @@ export default function SlidesEditorPage() {
   const menuBar = (
     <SlidesMenuBar
       onNewPresentation={() => {
-        if (!workspaceId) return;
-        void startNewPresentation(workspaceId, (href) => router.push(href)).catch((e) => {
-          setError(slidesApiErrorMessage((e as Error).message, 'Could not create the deck.'));
-        });
+        pushOfficeCreate(router, 'deck', workspaceId);
       }}
+      newDisabled={creating}
       onCommit={() => void save()}
       commitDisabled={saving || !dirty || loading}
       onSaveToMyDrive={() => void saveToMyDrive()}
@@ -762,6 +770,16 @@ export default function SlidesEditorPage() {
     />
   );
 
+  if (creating) {
+    return (
+      <div className="flex h-full flex-col">
+        <Header title="New Presentation" nav={menuBar} />
+        <OfficeCreateLoader kind="deck" phase="creating" />
+        <SlidesStatusBar />
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex h-full flex-col">
@@ -770,10 +788,7 @@ export default function SlidesEditorPage() {
           subtitle={slug ? `slides/${slug}/deck.html` : undefined}
           nav={menuBar}
         />
-        <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
-          <Loader2 size={16} className="animate-spin" />
-          Loading deck…
-        </div>
+        <OfficeCreateLoader kind="deck" phase="opening" />
         <SlidesStatusBar />
       </div>
     );

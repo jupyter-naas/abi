@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="nexus-documents-template" content="article-light-v1" />
+<title>Document Title</title>
+<style>
+  :root {
+    --desk: #e8e6e1;
+    --panel: #ffffff;
+    --ink: #1a1a1a;
+    --muted: #444444;
+    --line: #d8d5ce;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--desk);
+    color: var(--ink);
+    font-family: "Georgia", "Times New Roman", Times, serif;
+  }
+  .document {
+    width: 816px;
+    max-width: 100%;
+    min-height: 1056px;
+    margin: 0 auto;
+    padding: 72px 80px 96px;
+    background: var(--panel);
+    box-shadow: 0 1px 3px rgba(26, 26, 26, 0.08);
+  }
+  .page {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    min-height: 0;
+  }
+  .page-break {
+    break-before: page;
+    page-break-before: always;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  h1 {
+    margin: 0 0 10px;
+    font-size: 32px;
+    line-height: 1.25;
+    font-weight: 650;
+  }
+  h2 {
+    margin: 0 0 10px;
+    font-size: 20px;
+    line-height: 1.3;
+    font-weight: 650;
+  }
+  .deck {
+    margin: 0 0 28px;
+    font-size: 18px;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+  p {
+    margin: 0 0 14px;
+    font-size: 16px;
+    line-height: 1.65;
+    color: var(--ink);
+  }
+  ul {
+    margin: 0 0 14px;
+    padding-left: 22px;
+  }
+  li {
+    margin: 6px 0;
+    font-size: 16px;
+    line-height: 1.55;
+  }
+  @media print {
+    @page { size: letter; margin: 1in; }
+    html, body { background: #fff; }
+    .document {
+      width: auto;
+      max-width: none;
+      min-height: 0;
+      margin: 0;
+      padding: 0;
+      box-shadow: none;
+    }
+    .page-break {
+      break-before: page;
+      page-break-before: always;
+    }
+  }
+</style>
+</head>
+<body>
+<main class="document">
+  <section class="page cover" data-layout="cover">
+    <h1>Document Title</h1>
+    <p class="deck">A one-line summary the reader can scan before the body.</p>
+    <h2>Introduction</h2>
+    <p>State the situation in a few sentences. Write for someone who will read this on a page, not a board: complete thoughts, then the next heading.</p>
+  </section>
+  <section class="page content" data-layout="content">
+    <div class="page-break" data-nexus-page-break></div>
+    <h2>Discussion</h2>
+    <p>Develop the argument or findings here. Keep paragraphs short. Use a list only when the items are parallel.</p>
+    <ul>
+      <li>First point, written as a sentence.</li>
+      <li>Second point, written as a sentence.</li>
+      <li>Third point, written as a sentence.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

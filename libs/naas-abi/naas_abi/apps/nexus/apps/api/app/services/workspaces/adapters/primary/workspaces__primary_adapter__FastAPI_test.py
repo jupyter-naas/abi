@@ -46,6 +46,7 @@ def test_to_schema_includes_role_and_feature_flags_for_member() -> None:
             "settings": False,
             "code": False,
             "slides": True,
+            "documents": True,
         }
     finally:
         settings.feature_flags = previous_config

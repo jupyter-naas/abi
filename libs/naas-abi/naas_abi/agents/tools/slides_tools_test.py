@@ -32,6 +32,7 @@ from naas_abi.agents.tools.slides_tools import (
     _section_meta,
     _split_sections,
     _view_for_llm,
+    maybe_auto_title_open_deck,
     slides_tools,
 )
 from naas_abi_core.services.agent.context import (
@@ -687,6 +688,77 @@ def _stored_title(sc) -> str:
         ref="slides/ws-test/untitled-local",
     )
     return json.loads(meta.text or "{}").get("title", "")
+
+
+def _stored_html(sc) -> str:
+    file = sc.get_file(
+        repo_id="abi/monorepo",
+        path="slides/ws-test/untitled-local/deck.html",
+        ref="slides/ws-test/untitled-local",
+    )
+    return file.text or ""
+
+
+def test_auto_title_names_an_untitled_deck_from_the_first_prompt(monkeypatch):
+    sc = _bind_in_memory_git(monkeypatch)
+    _seed_untitled_deck(sc)
+    tokens = _slides_context()
+    title = slides_active_title.set("Untitled presentation")
+    try:
+        named = maybe_auto_title_open_deck("Make a deck about the latest news in AI")
+        assert named == "Latest news in AI"
+        assert _stored_title(sc) == "Latest news in AI"
+        assert "<h1>Latest news in AI</h1>" in _stored_html(sc)
+    finally:
+        slides_active_title.reset(title)
+        _reset_tokens(tokens)
+
+
+def test_auto_title_keeps_a_custom_deck_name(monkeypatch):
+    sc = _bind_in_memory_git(monkeypatch)
+    _seed_untitled_deck(sc, title="Already named")
+    tokens = _slides_context()
+    try:
+        assert maybe_auto_title_open_deck("Make a deck about the latest news in AI") is None
+        assert _stored_title(sc) == "Already named"
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_rename_deck_updates_sidebar_name_and_cover(monkeypatch):
+    """Rename this deck updates project.json and the visible heading."""
+    sc = _bind_in_memory_git(monkeypatch)
+    _seed_untitled_deck(sc)
+    tokens = _slides_context()
+    try:
+        rename = next(t for t in slides_tools() if t.name == "rename_deck")
+        result = rename.invoke({"title": "Forvis Mazars Story"})
+        assert "error" not in result, result
+        assert result["title"] == "Forvis Mazars Story"
+        assert result["project_renamed"] is True
+        assert result["slug_changed"] is False
+        assert result["slug"] == "untitled-local"
+        assert _stored_title(sc) == "Forvis Mazars Story"
+        html = _stored_html(sc)
+        assert "<h1>Forvis Mazars Story</h1>" in html
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_update_title_leaves_the_sidebar_folder(monkeypatch):
+    """Change the heading updates HTML only."""
+    sc = _bind_in_memory_git(monkeypatch)
+    _seed_untitled_deck(sc)
+    tokens = _slides_context()
+    try:
+        update = next(t for t in slides_tools() if t.name == "update_title")
+        result = update.invoke({"title": "Cover only"})
+        assert "error" not in result, result
+        assert result["project_renamed"] is False
+        assert _stored_title(sc) == "Untitled presentation"
+        assert "<h1>Cover only</h1>" in _stored_html(sc)
+    finally:
+        _reset_tokens(tokens)
 
 
 def test_write_names_a_still_untitled_deck_after_the_brief(monkeypatch):

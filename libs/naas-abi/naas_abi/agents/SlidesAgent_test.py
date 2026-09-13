@@ -41,6 +41,11 @@ def test_slides_agent_prompt_names_the_deck_after_its_topic() -> None:
     assert "same language as the brief" in lowered
     assert "untitled" in lowered
     assert "cover" in lowered
+    assert "rename_deck" in prompt
+    assert "rename this presentation" in lowered
+    assert "call rename_deck first" in lowered
+    assert "update_title" in prompt
+    assert "change the heading" in lowered
 
 
 def test_slides_agent_default_model_is_the_policy_fallback() -> None:
@@ -55,6 +60,8 @@ def test_slides_agent_owns_the_write_and_research_tools() -> None:
     assert "write_slides_section" in names
     assert "write_slides_sections" in names
     assert "replace_in_slides_deck" in names
+    assert "rename_deck" in names
+    assert "update_title" in names
     assert "web_search" in names
     assert "web_fetch" in names
     source = inspect.getsource(SlidesAgent.get_tools)

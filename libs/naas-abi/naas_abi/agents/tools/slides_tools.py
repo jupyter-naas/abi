@@ -27,6 +27,7 @@ from typing import Any
 
 from langchain_core.tools import BaseTool, tool
 from naas_abi.agents.slides import (
+    auto_deck_title,
     derive_deck_title,
     is_placeholder_deck_title,
     note_slides_list,
@@ -272,6 +273,188 @@ def _ensure_project_json(
     # Later tools in this turn (and the open_deck note) report the new name.
     slides_active_title.set(title)
     return title
+
+
+def _write_project_title(slug: str, title: str) -> str | dict[str, Any]:
+    """Force-update project.json display name. Slug and git folder stay put.
+
+    The sidebar tree reads this title, not the slug. ``Untitled presentation``
+    is a display name. A user rename must overwrite it even when the brief
+    looks like an edit instruction.
+    """
+    clean = (title or "").strip()
+    if not clean:
+        return {"error": "title is required"}
+    if is_placeholder_deck_title(clean):
+        return {"error": "title must be a real name, not Untitled presentation"}
+    paths = _resolve_paths(slug)
+    if paths.get("error"):
+        return {"error": paths["error"]}
+    sc = _get_source_control()
+    repo_id = _repo_id()
+    meta: dict[str, Any] = {}
+    try:
+        existing = sc.get_file(
+            repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
+        )
+        if existing.text:
+            meta = json.loads(existing.text)
+    except (SourceControlError, json.JSONDecodeError, TypeError):
+        meta = {}
+    if not isinstance(meta, dict):
+        meta = {}
+    from datetime import UTC, datetime
+
+    ws = _workspace_id()
+    meta = {
+        **meta,
+        "slug": meta.get("slug") or slug,
+        "workspace_id": str(meta.get("workspace_id") or ws or ""),
+        "title": clean,
+        "updated_at": datetime.now(UTC).isoformat(),
+    }
+    try:
+        sc.upsert_file(
+            repo_id=repo_id,
+            path=paths["project_path"],
+            content=json.dumps(meta, indent=2, ensure_ascii=False) + "\n",
+            message=f"chore(slides): rename project {slug}",
+            branch=paths["branch"],
+            **_agent_author(),
+        )
+    except SourceControlError as exc:
+        return {"error": _friendly_sc_error(exc)}
+    slides_active_title.set(clean)
+    return clean
+
+
+def _stored_display_title(slug: str) -> str:
+    """project.json title for the open deck, or empty."""
+    paths = _resolve_paths(slug)
+    if paths.get("error"):
+        return ""
+    try:
+        existing = _get_source_control().get_file(
+            repo_id=_repo_id(), path=paths["project_path"], ref=paths["branch"]
+        )
+        if not existing.text:
+            return ""
+        meta = json.loads(existing.text)
+    except (SourceControlError, json.JSONDecodeError, TypeError):
+        return ""
+    if not isinstance(meta, dict):
+        return ""
+    return str(meta.get("title") or "").strip()
+
+
+def maybe_auto_title_open_deck(brief: str, slug: str = "") -> str | None:
+    """Name a still-untitled open deck from the first prompt, like Chat.
+
+    Persists through rename_deck so the sidebar display name and cover H1
+    move together. A title the user already chose is never overwritten.
+    """
+    text = (brief or "").strip()
+    if not text or text.startswith("/"):
+        return None
+    resolved = _resolve_slug(slug)
+    if isinstance(resolved, dict):
+        return None
+    current = (
+        _stored_display_title(resolved) or (slides_active_title.get() or "").strip()
+    )
+    if current and not is_placeholder_deck_title(current):
+        return None
+    title = auto_deck_title(text)
+    if not title or is_placeholder_deck_title(title):
+        return None
+    result = _rename_or_update_deck(
+        title,
+        resolved,
+        rename_project=True,
+        message="feat(slides): auto-title from first prompt",
+    )
+    if result.get("error"):
+        return None
+    return str(result.get("title") or title)
+
+
+def _apply_rename_project(result: dict[str, Any], title: str) -> dict[str, Any]:
+    """Write the sidebar display name after a successful HTML rename."""
+    slug = str(result.get("slug") or "").strip()
+    if not slug or not title:
+        return result
+    written = _write_project_title(slug, title)
+    if isinstance(written, dict):
+        result["project_rename_error"] = written.get("error")
+        result["project_renamed"] = False
+        return result
+    result["title"] = written
+    result["project_renamed"] = True
+    result["slug_changed"] = False
+    return result
+
+
+def _rename_or_update_deck(
+    title: str,
+    slug: str,
+    *,
+    rename_project: bool,
+    message: str,
+) -> dict[str, Any]:
+    """Shared path for rename_deck (project + HTML) and update_title (HTML)."""
+    from naas_abi.agents.tools.slides_commands import update_deck_title
+
+    if not agent_user_id.get():
+        return {"error": "No authenticated user on this agent session."}
+    resolved = _resolve_slug(slug)
+    if isinstance(resolved, dict):
+        return resolved
+    clean = (title or "").strip()
+    if not clean:
+        return {"error": "title is required"}
+    if rename_project and is_placeholder_deck_title(clean):
+        return {"error": "title must be a real name, not Untitled presentation"}
+    try:
+        html, source = _load_deck_text(resolved)
+        if isinstance(html, dict):
+            return html
+        cover_before = _cover_h1_text(html)
+        updated = update_deck_title(html, clean)
+        if isinstance(updated, dict):
+            return updated
+        result: dict[str, Any]
+        if updated != html:
+            result = _persist_deck(resolved, updated, message, default_type="feat")
+            if "error" in result:
+                return result
+        else:
+            result = {
+                "ok": True,
+                "slug": resolved,
+                "source": source,
+                "title": clean,
+            }
+        cover_after = _cover_h1_text(updated)
+        result["ok"] = True
+        result["slug"] = resolved
+        result["cover_h1_before"] = cover_before
+        result["cover_h1_after"] = cover_after
+        result["cover_h1_updated"] = bool(
+            cover_before is not None
+            and cover_after is not None
+            and cover_before != cover_after
+        )
+        result["slug_changed"] = False
+        if rename_project:
+            result = _apply_rename_project(result, clean)
+        else:
+            result["title"] = clean
+            result["project_renamed"] = False
+        note_slides_write("rename deck" if rename_project else "deck title")
+        result.update(_open_deck_note(resolved))
+        return result
+    except Exception as exc:  # noqa: BLE001
+        return _tool_error(exc)
 
 
 def _ensure_slides_write_paths(slug: str) -> dict[str, str]:
@@ -2091,6 +2274,47 @@ def slides_tools() -> list[BaseTool]:
         )
 
     @tool
+    def rename_deck(
+        title: str,
+        slug: str = "",
+        message: str = "feat(slides): rename deck via Abi",
+    ) -> dict[str, Any]:
+        """Rename the open deck: sidebar folder and visible title together.
+
+        Use this when the user says "rename this deck" or "rename this
+        presentation". Updates project.json display name and the HTML tab
+        plus cover H1 to the same name. The slug and git folder stay put.
+
+        For a heading-only change ("change the title", "change the heading"),
+        use update_title instead.
+        """
+        return _rename_or_update_deck(
+            title,
+            slug,
+            rename_project=True,
+            message=message or "feat(slides): rename deck via Abi",
+        )
+
+    @tool
+    def update_title(
+        title: str,
+        slug: str = "",
+        message: str = "feat(slides): update title via Abi",
+    ) -> dict[str, Any]:
+        """Change the visible deck title (tab + cover H1) only.
+
+        Use this when the user says "change the title" or "change the heading".
+        Does not rename the sidebar folder. Use rename_deck when they say
+        "rename this deck" or "rename this presentation".
+        """
+        return _rename_or_update_deck(
+            title,
+            slug,
+            rename_project=False,
+            message=message or "feat(slides): update title via Abi",
+        )
+
+    @tool
     def slides_history(slug: str = "", limit: int = 10) -> dict[str, Any]:
         """List recent commits on a Slides project branch (Forgejo version history)."""
         if not agent_user_id.get():
@@ -2136,5 +2360,7 @@ def slides_tools() -> list[BaseTool]:
         delete_slide,
         duplicate_slide,
         reorder_slides,
+        rename_deck,
+        update_title,
         slides_history,
     ]

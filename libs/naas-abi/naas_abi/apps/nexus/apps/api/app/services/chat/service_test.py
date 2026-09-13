@@ -22,6 +22,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.service import (
     REGENERATION_DIRECTIVE,
     ChatService,
     ResolvedProvider,
+    _render_documents_context_block,
     _render_slides_context_block,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.port import (
@@ -1243,6 +1244,85 @@ def test_render_slides_context_block_omits_selection_when_absent() -> None:
     assert "- selected_slide_index:" not in block
     assert "- slide_count:" not in block
     assert "- slug: q3-br" in block
+
+
+@pytest.mark.asyncio
+async def test_build_abi_injection_preamble_includes_open_document() -> None:
+    service = ChatService(adapter=SimpleNamespace())
+    preamble = await service.build_abi_injection_preamble(
+        prior_messages=[SimpleNamespace(role="assistant", content="Hello")],
+        user_id="user-1",
+        workspace_id="ws-1",
+        client_context={
+            "documents": {
+                "slug": "q3-br",
+                "title": "Q3 BR",
+                "path": "documents/q3-br/document.html",
+                "branch": "documents/q3-br",
+                "mode": "preview",
+            }
+        },
+    )
+    assert preamble is not None
+    assert "Open Documents file" in preamble
+    assert "q3-br" in preamble
+    assert "Do not ask which document" in preamble
+    assert "Plan, then write" in preamble
+    assert "fill_document_slots" in preamble
+    assert "Fill the open template" in preamble
+    assert "Do not append after the footer" in preamble
+    assert "leftover_placeholders" in preamble
+    assert "list_document_sections" not in preamble
+    assert "write_document_sections" not in preamble
+    assert "web_search" in preamble
+    assert "today:" in preamble
+
+
+@pytest.mark.asyncio
+async def test_build_abi_injection_preamble_namespaces_document_when_path_omitted() -> None:
+    service = ChatService(adapter=SimpleNamespace())
+    preamble = await service.build_abi_injection_preamble(
+        prior_messages=[SimpleNamespace(role="assistant", content="Hello")],
+        user_id="user-1",
+        workspace_id="ws-894202a3986f",
+        client_context={"documents": {"slug": "untitled-mtsg9zse"}},
+    )
+    assert preamble is not None
+    assert "documents/ws-894202a3986f/untitled-mtsg9zse/document.html" in preamble
+    assert "documents/untitled-mtsg9zse/document.html" not in preamble
+
+
+def test_render_documents_context_block_asks_to_rename_when_untitled() -> None:
+    block = _render_documents_context_block(
+        {"documents": {"slug": "untitled-abc", "title": "Untitled document"}},
+        "ws-1",
+    )
+    assert "rename_document first" in block
+
+
+def test_render_documents_context_block_skips_rename_hint_when_named() -> None:
+    block = _render_documents_context_block(
+        {"documents": {"slug": "untitled-abc", "title": "Already named"}},
+        "ws-1",
+    )
+    assert "rename_document first" not in block
+
+
+def test_render_slides_context_block_asks_to_rename_when_untitled() -> None:
+    block = _render_slides_context_block(
+        {"slides": {"slug": "untitled-abc", "title": "Untitled presentation"}},
+        "ws-1",
+    )
+    assert "rename_deck first" in block
+
+
+def test_render_documents_context_block_carries_selected_section() -> None:
+    block = _render_documents_context_block(
+        {"documents": {"slug": "q3-br", "selected_index": 4, "section_count": 12}},
+        "ws-1",
+    )
+    assert "- section_count: 12" in block
+    assert "- selected_section_index: 4 (section 5 of 12 in the editor)" in block
 
 
 @pytest.mark.asyncio

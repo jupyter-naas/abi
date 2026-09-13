@@ -5,10 +5,17 @@ import { DEFAULT_NAV_ORDER, mergeNavOrder } from '@/lib/sidebar-nav';
 import { clampDockWidth, clampFeatureColumnWidth, DOCK_WIDTH_DEFAULT } from '@/lib/shell-columns';
 import { pushRecentWorkspaceId } from '@/lib/workspace-picker';
 import {
+  dropDocumentsPaneConversationKeys,
+  documentsPaneConversationKey,
+} from '@/lib/documents-pane-conversation';
+import {
   dropSlidesPaneConversationKeys,
   slidesPaneConversationKey,
 } from '@/lib/slides-pane-conversation';
+import { conversationTitleFromPrompt } from '@/lib/office-auto-title';
 import { useAuthStore } from './auth';
+import { useDocumentsStore } from './documents';
+import { useSlidesStore } from './slides';
 import { getApiUrl } from '@/lib/config';
 
 // Throttled localStorage wrapper: prevents browser freeze during streaming.
@@ -115,6 +122,7 @@ export interface Conversation {
   isDraft?: boolean;
   /** Slides deck this pane thread is bound to. Client-only; API has no field. */
   slidesSlug?: string;
+  documentsSlug?: string;
 }
 
 export interface Project {
@@ -198,7 +206,7 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'home' | 'workspaces' | 'maps' | 'chat' | 'search' | 'files' | 'datasets' | 'code' | 'slides' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings' | 'events' | 'infrastructure';
+export type SidebarSection = 'home' | 'workspaces' | 'maps' | 'chat' | 'search' | 'files' | 'datasets' | 'code' | 'slides' | 'documents' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings' | 'events' | 'infrastructure';
 
 const RETIRED_PANEL_SECTIONS = new Set<string>(['lab']);
 
@@ -305,6 +313,12 @@ interface WorkspaceState {
     slug: string,
     conversationId: string,
   ) => void;
+  documentsPaneConversationByKey: Record<string, string>;
+  rememberDocumentsPaneConversation: (
+    workspaceId: string,
+    slug: string,
+    conversationId: string,
+  ) => void;
   /** Open conversation tabs in the right chat pane (Cursor-style). */
   paneOpenTabIds: string[];
   /** Open (or focus) a conversation as a pane tab. */
@@ -313,7 +327,7 @@ interface WorkspaceState {
   closePaneTab: (id: string) => void;
   createConversation: (
     projectId?: string,
-    options?: { surface?: 'main' | 'pane'; slidesSlug?: string },
+    options?: { surface?: 'main' | 'pane'; slidesSlug?: string; documentsSlug?: string },
   ) => string;
   setActiveConversation: (id: string | null) => void;
   /** Record the latest agent used in a conversation (mirrors the backend,
@@ -631,6 +645,23 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       ),
     }));
   },
+  documentsPaneConversationByKey: {},
+  rememberDocumentsPaneConversation: (workspaceId, slug, conversationId) => {
+    const ws = workspaceId.trim();
+    const doc = slug.trim();
+    const id = conversationId.trim();
+    if (!ws || !doc || !id) return;
+    const key = documentsPaneConversationKey(ws, doc);
+    set((state) => ({
+      documentsPaneConversationByKey: {
+        ...state.documentsPaneConversationByKey,
+        [key]: id,
+      },
+      conversations: state.conversations.map((conv) =>
+        conv.id === id && conv.documentsSlug !== doc ? { ...conv, documentsSlug: doc } : conv,
+      ),
+    }));
+  },
   setPaneConversationId: (id) =>
     set((state) => {
       const conv = id ? state.conversations.find((c) => c.id === id) : null;
@@ -673,7 +704,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       };
     }),
 
-  createConversation: (projectId?: string, options?: { surface?: 'main' | 'pane'; slidesSlug?: string }) => {
+  createConversation: (projectId?: string, options?: { surface?: 'main' | 'pane'; slidesSlug?: string; documentsSlug?: string }) => {
     const id = generateConversationId();
     const workspaceId = get().currentWorkspaceId;
     const surface = options?.surface ?? 'main';
@@ -683,6 +714,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     }
     const agent = surface === 'pane' ? get().paneAgent : get().selectedAgent;
     const slidesSlug = options?.slidesSlug?.trim() || undefined;
+    const documentsSlug = options?.documentsSlug?.trim() || undefined;
     const newConversation: Conversation = {
       id,
       workspaceId,
@@ -695,10 +727,15 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       projectId,
       isDraft: true,
       slidesSlug,
+      documentsSlug,
     };
     const slidesKey =
       slidesSlug && surface === 'pane'
         ? slidesPaneConversationKey(workspaceId, slidesSlug)
+        : null;
+    const documentsKey =
+      documentsSlug && surface === 'pane'
+        ? documentsPaneConversationKey(workspaceId, documentsSlug)
         : null;
     set((state) => ({
       conversations: [newConversation, ...state.conversations],
@@ -715,6 +752,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             slidesPaneConversationByKey: {
               ...state.slidesPaneConversationByKey,
               [slidesKey]: id,
+            },
+          }
+        : {}),
+      ...(documentsKey
+        ? {
+            documentsPaneConversationByKey: {
+              ...state.documentsPaneConversationByKey,
+              [documentsKey]: id,
             },
           }
         : {}),
@@ -764,7 +809,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               updatedAt: new Date(),
               title:
                 conv.messages.length === 0 && message.role === 'user'
-                  ? message.content.slice(0, 50) + (message.content.length > 50 ? '...' : '')
+                  ? conversationTitleFromPrompt(message.content)
                   : conv.title,
               isDraft: false,
             }
@@ -969,6 +1014,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           state.slidesPaneConversationByKey,
           id,
         ),
+        documentsPaneConversationByKey: dropDocumentsPaneConversationKeys(
+          state.documentsPaneConversationByKey,
+          id,
+        ),
       };
     });
     
@@ -998,6 +1047,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   },
 
   setCurrentWorkspace: (id) => {
+    const previousId = get().currentWorkspaceId;
     set((state) => ({
       currentWorkspaceId: id,
       recentWorkspaceIds: pushRecentWorkspaceId(
@@ -1013,6 +1063,25 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         ? { paneConversationId: null, paneOpenTabIds: [] as string[] }
         : {}),
     }));
+    if (previousId !== id) {
+      // Selected slugs are not workspace-keyed. A leftover deck/doc from the
+      // previous workspace made the sidebar treat a missing row as open and
+      // let preferred-agent logic pin the wrong office face.
+      useSlidesStore.setState({
+        selectedSlug: null,
+        selectedTitle: null,
+        filmstrip: null,
+        selectedIndex: 0,
+        slideCount: 0,
+      });
+      useDocumentsStore.setState({
+        selectedSlug: null,
+        selectedTitle: null,
+        outline: null,
+        selectedIndex: 0,
+        sectionCount: 0,
+      });
+    }
   },
 
   syncWorkspaceConversations: async (workspaceId) => {
@@ -1757,6 +1826,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         paneConversationId: state.paneConversationId,
         paneOpenTabIds: state.paneOpenTabIds,
         slidesPaneConversationByKey: state.slidesPaneConversationByKey,
+        documentsPaneConversationByKey: state.documentsPaneConversationByKey,
         activePanelSection: state.activePanelSection,
         dockWidth: state.dockWidth,
         sectionPanelWidth: state.sectionPanelWidth,
@@ -1809,6 +1879,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             state.slidesPaneConversationByKey &&
             typeof state.slidesPaneConversationByKey === 'object'
               ? state.slidesPaneConversationByKey
+              : {};
+          state.documentsPaneConversationByKey =
+            state.documentsPaneConversationByKey &&
+            typeof state.documentsPaneConversationByKey === 'object'
+              ? state.documentsPaneConversationByKey
               : {};
           // Use setTimeout to ensure we're outside the hydration cycle
           setTimeout(() => {

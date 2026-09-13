@@ -25,6 +25,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { PresenceIndicator } from '@/components/presence-indicator';
 import { getWorkspacePath } from './sidebar/utils';
 import { pathNeedsAgentCatalog } from '@/lib/feature-access';
+import { OfficeCreateOverlay } from '@/components/office/office-create-overlay';
 
 const AIPane = dynamic(() => import('./ai-pane').then((m) => m.AIPane), { ssr: false });
 const ChatSection = dynamic(
@@ -351,7 +352,10 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
                 <ChatInterface initialConversationId={mobileThreadConversationId} />
               </div>
             ) : (
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
+              <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+                {children}
+                <OfficeCreateOverlay />
+              </div>
             )}
             <PlatformStatusFooter />
           </div>
@@ -396,7 +400,10 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
               beside a per-page-scoped header. */}
           <main className="flex flex-1 flex-col overflow-hidden">
             {currentWorkspaceId && <PresenceIndicator workspaceId={currentWorkspaceId} />}
-            <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+            <div className="relative min-h-0 flex-1 overflow-hidden">
+              {children}
+              <OfficeCreateOverlay />
+            </div>
           </main>
 
           {contextPanelOpen && <AIPane />}
