@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.47.0 (2026-09-13)
+
+### Features
+
+- **x_proxy**: Enhance publish and search_users with cache release and memory optimization
+  ([`95262f4`](https://github.com/jupyter-naas/abi/commit/95262f4c3c73b667e03f791bf722630ff80d4610))
+
+
 ## v3.46.0 (2026-09-13)
 
 ### Features
