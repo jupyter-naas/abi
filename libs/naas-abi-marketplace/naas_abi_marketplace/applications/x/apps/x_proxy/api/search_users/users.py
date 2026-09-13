@@ -462,12 +462,19 @@ def publish(
     return summary
 
 
-def warm_usernames(ctx: SnapshotContext, usernames: Iterable[str]) -> dict[str, Any]:
+def warm_usernames(
+    ctx: SnapshotContext,
+    usernames: Iterable[str],
+    *,
+    posts_by_user: dict[str, list[dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
     """Refresh ``search_users/posts/<shard>.json`` for report-linked authors.
 
     Merges into any existing shard payload so unrelated authors in the same
-    shard are preserved. Best-effort: when no dataset has been published yet,
-    returns ``skipped`` without raising.
+    shard are preserved. When ``posts_by_user`` is supplied, publishes only
+    those explicitly linked posts and does not scan all historical posts for
+    the authors. Best-effort: when no dataset has been published yet, returns
+    ``skipped`` without raising.
     """
     wanted = sorted(
         {str(raw).strip().lstrip("@") for raw in usernames if str(raw or "").strip()}
@@ -484,31 +491,42 @@ def warm_usernames(ctx: SnapshotContext, usernames: Iterable[str]) -> dict[str, 
         return {"warmed_usernames": 0, "shards_touched": 0, "skipped": True}
 
     cache = getattr(ctx, "cache", None)
-    if cache is not None:
+    if posts_by_user is not None:
+        author_index = {}
+        accounts = ctx.accounts_for_usernames(wanted)
+        selected_posts = {
+            username: list(posts_by_user.get(username, [])) for username in wanted
+        }
+    elif cache is not None:
         author_index = {a["username"]: a for a in cache.author_index()}
         accounts = cache.accounts_by_username()
-        posts_by_user = cache.posts_by_username(wanted)
+        selected_posts = cache.posts_by_username(wanted)
     else:
         author_index = {}
         accounts = ctx.accounts_for_usernames(wanted)
-        posts_by_user = ctx.posts_for_usernames(wanted)
+        selected_posts = ctx.posts_for_usernames(wanted)
 
     by_shard: dict[str, dict[str, Any]] = {}
     for username in wanted:
         shard = user_shard(username)
         author = author_index.get(username) or {
             "username": username,
-            "posts": len(posts_by_user.get(username, [])),
+            "posts": len(selected_posts.get(username, [])),
         }
         by_shard.setdefault(shard, {})[username] = {
             "profile": _profile(author, accounts.get(username, {})),
-            "posts": posts_by_user.get(username, []),
+            "posts": selected_posts.get(username, []),
         }
 
     touched = 0
     for shard, authors in by_shard.items():
         for username, bundle in authors.items():
-            publish_user(ctx.object_storage, username, bundle, force_posts=True)
+            publish_user(
+                ctx.object_storage,
+                username,
+                bundle,
+                force_posts=True,
+            )
         existing = ctx.read_json("search_users/posts", f"{shard}.json") or {}
         merged_authors = dict(existing.get("authors") or {})
         merged_authors.update(authors)

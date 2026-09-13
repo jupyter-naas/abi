@@ -165,6 +165,48 @@ def test_first_publish_builds_every_shard():
     assert all(e.get("fingerprint") for e in _manifest(storage)["shards"].values())
 
 
+def test_warm_usernames_publishes_only_explicit_report_posts(monkeypatch):
+    storage = _FakeObjectStorage()
+    shard = user_shard("alice")
+    storage.put_object(
+        "x/apps/x_proxy/search_users",
+        "shards.json",
+        json.dumps({"shards": {shard: {}}}).encode(),
+    )
+    ctx = _RecordingContext(storage, [_A])
+    published: list[tuple[str, list[str], bool]] = []
+
+    def _record_publish_user(
+        _storage, username: str, bundle: dict, *, force_posts: bool = False
+    ) -> dict:
+        published.append(
+            (
+                username,
+                [str(post.get("tweet_id")) for post in bundle["posts"]],
+                force_posts,
+            )
+        )
+        return {}
+
+    monkeypatch.setattr(users, "publish_user", _record_publish_user)
+    summary = users.warm_usernames(
+        ctx,
+        ["alice"],
+        posts_by_user={
+            "alice": [
+                {
+                    "tweet_id": "2098019155375198538",
+                    "text": "Linked from report email",
+                }
+            ]
+        },
+    )
+
+    assert ctx.posts_queried == []
+    assert published == [("alice", ["2098019155375198538"], True)]
+    assert summary == {"warmed_usernames": 1, "shards_touched": 1}
+
+
 def test_republish_with_no_change_queries_nothing_and_writes_nothing():
     """The whole point: an unchanged shard costs no SPARQL and no upload."""
     storage = _FakeObjectStorage()
