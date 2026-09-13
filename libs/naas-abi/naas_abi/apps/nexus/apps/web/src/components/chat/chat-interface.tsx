@@ -2957,7 +2957,7 @@ export function ChatInterface({
                 message={message}
                 currentSelectedAgent={selectedAgent}
                 showConnecting={showConnecting}
-                showStop={Boolean(streamingMessageId)}
+                showStop={streamingMessageId === message.id}
                 onStop={stableStopStream}
                 onPreviewUrl={setPreviewUrl}
                 requestSentAt={requestSentAt}
@@ -3741,11 +3741,15 @@ function ToolCallsDropdown({
           )}
           <ChevronDown size={11} className={cn('shrink-0 transition-transform', isOpen && 'rotate-180')} />
         </button>
-        {isProcessing && showStop && (
+        {showStop && (
           <button
             type="button"
-            className="shrink-0 rounded px-1.5 py-0.5 text-xs hover:bg-muted hover:text-foreground"
-            onClick={() => onStop()}
+            className="relative z-20 shrink-0 rounded px-1.5 py-0.5 text-xs pointer-events-auto hover:bg-muted hover:text-foreground"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onStop();
+            }}
             title="Stop generation"
           >
             Stop
