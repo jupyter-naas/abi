@@ -1,6 +1,7 @@
 import { authFetch } from '@/stores/auth';
 import { sheetsApiErrorMessage } from '@/lib/create-sheets-project';
 
+/** One workbook tab (filmstrip item). Layout is kept for menu parity with Slides UI. */
 export type SlideLayout = 'cover' | 'section-divider' | 'content';
 
 export type SlideOutlineItem = {
@@ -20,65 +21,53 @@ export type SlideMutationResult = {
 };
 
 export const SLIDE_LAYOUTS: { id: SlideLayout; label: string }[] = [
-  { id: 'content', label: 'Content' },
-  { id: 'cover', label: 'Cover' },
-  { id: 'section-divider', label: 'Section' },
+  { id: 'content', label: 'Sheet tab' },
 ];
 
-const SECTION_RE = /<section\b([^>]*)>([\s\S]*?)<\/section>/gi;
-const ID_RE = /\bid\s*=\s*["']([^"']+)["']/i;
-const CLASS_RE = /\bclass\s*=\s*["']([^"']+)["']/i;
-const LAYOUT_RE = /\bdata-layout\s*=\s*["']([^"']+)["']/i;
-const H1_RE = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i;
-const DIVIDER_TITLE_RE =
-  /<div\b[^>]*class=["'][^"']*\bdivider-title\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/i;
-const TAG_RE = /<[^>]+>/g;
+const JSON_TYPE = 'application/vnd.nexus.sheet+json';
 
-function stripTags(raw: string): string {
-  return raw.replace(TAG_RE, '').replace(/\s+/g, ' ').trim();
+function extractWorkbookJsonScript(html: string): string | null {
+  const marker = `type="${JSON_TYPE}"`;
+  const alt = `type='${JSON_TYPE}'`;
+  const start = html.includes(marker)
+    ? html.indexOf(marker) + marker.length
+    : html.includes(alt)
+      ? html.indexOf(alt) + alt.length
+      : -1;
+  if (start < 0) return null;
+  const openEnd = html.indexOf('>', start);
+  if (openEnd < 0) return null;
+  const close = html.indexOf('</script>', openEnd);
+  if (close < 0) return null;
+  return html.slice(openEnd + 1, close).trim();
 }
 
-function decodeEntities(raw: string): string {
-  return raw
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-}
-
-export function slideLayoutFromAttrs(attrs: string): SlideLayout {
-  const layout = LAYOUT_RE.exec(attrs || '')?.[1]?.trim().toLowerCase();
-  if (layout === 'cover' || layout === 'section-divider' || layout === 'content') {
-    return layout;
+function parseWorkbookModel(html: string): { sheets: Array<{ name: string }> } | null {
+  if (!html) return null;
+  const jsonText = extractWorkbookJsonScript(html);
+  if (!jsonText) return null;
+  try {
+    const data = JSON.parse(jsonText) as { sheets?: Array<{ name?: string }> };
+    if (!Array.isArray(data.sheets)) return null;
+    return { sheets: data.sheets.map((s) => ({ name: String(s.name || 'Sheet') })) };
+  } catch {
+    return null;
   }
-  if (layout === 'blank') return 'content';
-  if (layout === 'divider' || layout === 'section') return 'section-divider';
-  const classes = (CLASS_RE.exec(attrs || '')?.[1] || '').toLowerCase().split(/\s+/);
-  if (classes.includes('cover')) return 'cover';
-  if (classes.includes('section-divider')) return 'section-divider';
-  return 'content';
 }
 
 export function parseSheetsOutline(html: string): SlideOutlineItem[] {
-  if (!html) return [];
-  SECTION_RE.lastIndex = 0;
-  const sheets: SlideOutlineItem[] = [];
-  let match: RegExpExecArray | null;
-  while ((match = SECTION_RE.exec(html))) {
-    const attrs = match[1] || '';
-    const body = match[2] || '';
-    const h1 = H1_RE.exec(body)?.[1];
-    const divider = DIVIDER_TITLE_RE.exec(body)?.[1];
-    const title = decodeEntities(stripTags(h1 || divider || ''));
-    sheets.push({
-      index: sheets.length,
-      id: ID_RE.exec(attrs)?.[1] || null,
-      title,
-      layout: slideLayoutFromAttrs(attrs),
-    });
-  }
-  return sheets;
+  const model = parseWorkbookModel(html);
+  if (!model) return [];
+  return model.sheets.map((tab, index) => ({
+    index,
+    id: null,
+    title: tab.name,
+    layout: 'content',
+  }));
+}
+
+export function slideLayoutFromAttrs(_attrs: string): SlideLayout {
+  return 'content';
 }
 
 export function clampSlideIndex(index: number, count: number): number {
@@ -88,7 +77,7 @@ export function clampSlideIndex(index: number, count: number): number {
   return index;
 }
 
-async function postSlideMutation(
+async function postTabMutation(
   workspaceId: string,
   slug: string,
   action: 'insert' | 'delete' | 'duplicate' | 'reorder',
@@ -106,7 +95,9 @@ async function postSlideMutation(
     detail?: unknown;
   };
   if (!res.ok) {
-    throw new Error(sheetsApiErrorMessage(payload.detail, `Slide ${action} failed (${res.status})`));
+    throw new Error(
+      sheetsApiErrorMessage(payload.detail, `Sheet tab ${action} failed (${res.status})`),
+    );
   }
   return payload;
 }
@@ -118,10 +109,10 @@ export function insertSlide(
   layout: SlideLayout,
   title = '',
 ): Promise<SlideMutationResult> {
-  return postSlideMutation(workspaceId, slug, 'insert', {
+  return postTabMutation(workspaceId, slug, 'insert', {
     after_index: afterIndex,
     layout,
-    title,
+    title: title || 'Sheet',
   });
 }
 
@@ -130,7 +121,7 @@ export function deleteSlide(
   slug: string,
   index: number,
 ): Promise<SlideMutationResult> {
-  return postSlideMutation(workspaceId, slug, 'delete', { index });
+  return postTabMutation(workspaceId, slug, 'delete', { index });
 }
 
 export function duplicateSlide(
@@ -138,7 +129,7 @@ export function duplicateSlide(
   slug: string,
   index: number,
 ): Promise<SlideMutationResult> {
-  return postSlideMutation(workspaceId, slug, 'duplicate', { index });
+  return postTabMutation(workspaceId, slug, 'duplicate', { index });
 }
 
 export function reorderSheets(
@@ -147,7 +138,7 @@ export function reorderSheets(
   fromIndex: number,
   toIndex: number,
 ): Promise<SlideMutationResult> {
-  return postSlideMutation(workspaceId, slug, 'reorder', {
+  return postTabMutation(workspaceId, slug, 'reorder', {
     from_index: fromIndex,
     to_index: toIndex,
   });

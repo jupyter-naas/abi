@@ -559,7 +559,27 @@ def _strip_html_text(raw: str) -> str:
 
 
 def _parse_slide_outline(html: str) -> list[dict]:
-    """h1 / eyebrow (or divider title) per ``<section class="slide">``."""
+    """Workbook tab outline from the ``application/vnd.nexus.sheet+json`` block."""
+    from naas_abi.apps.nexus.sheets.tab_mutations import list_workbook_tabs
+
+    try:
+        items = list_workbook_tabs(html or "")
+    except ValueError:
+        return []
+    return [
+        {
+            "index": int(item["index"]),
+            "id": item.get("id"),
+            "eyebrow": str(item.get("eyebrow") or ""),
+            "title": str(item.get("title") or ""),
+            "layout": str(item.get("layout") or "content"),
+        }
+        for item in items
+    ]
+
+
+def _parse_slide_outline_legacy_sections(html: str) -> list[dict]:
+    """Legacy slide HTML outline (unused for Sheets seeds; kept for reference tests)."""
     slides: list[dict] = []
     index = 0
     for match in _SECTION_SLIDE_RE.finditer(html or ""):
@@ -2273,14 +2293,14 @@ def _adapter_runtime_binding(
     return str(base), str(secret)
 
 
-async def lookup_slides_sidecar(
+async def lookup_sheets_sidecar(
     db: AsyncSession,
     *,
     workspace_id: str,
     user_id: str,
     slug: str,
 ) -> tuple[str | None, str | None]:
-    """Return (sidecar_base, sidecar_secret) for an open Slides deck, if bound."""
+    """Return (sidecar_base, sidecar_secret) for an open Sheets workbook, if bound."""
     if db is None or not workspace_id or not user_id or not slug or not _SLUG_RE.match(slug):
         return None, None
     labels = _runtime_labels(workspace_id, slug)
@@ -2932,19 +2952,14 @@ async def list_seed_templates(
 
 
 def _mutation_outline(html: str) -> tuple[list[SlideOutlineItem], list[str | None]]:
-    from naas_abi.agents.tools.slides_tools import (
-        _slide_outline_items,
-        _split_sections,
-    )
-
-    _prefix, sections, _suffix = _split_sections(html)
-    items = _slide_outline_items(sections)
+    items = _parse_slide_outline(html)
     slides = [
         SlideOutlineItem(
             index=int(item["index"]),
             id=item.get("id"),
             title=str(item.get("title") or ""),
-            layout=str(item.get("layout") or ""),
+            layout=str(item.get("layout") or "content"),
+            eyebrow=str(item.get("eyebrow") or ""),
         )
         for item in items
     ]
@@ -2952,12 +2967,12 @@ def _mutation_outline(html: str) -> tuple[list[SlideOutlineItem], list[str | Non
 
 
 def _mutation_http_error(result: dict) -> HTTPException:
-    detail = str(result.get("error") or "Slide mutation failed")
-    status = 409 if "last slide" in detail.lower() else 422
+    detail = str(result.get("error") or "Workbook tab mutation failed")
+    status = 409 if "last sheet" in detail.lower() else 422
     return HTTPException(status_code=status, detail=detail)
 
 
-async def _run_slide_html_mutation(
+async def _run_workbook_tab_mutation(
     *,
     slug: str,
     workspace_id: str,
@@ -2973,7 +2988,7 @@ async def _run_slide_html_mutation(
     username = _forge_username(current_user.name or "", str(current_user.email))
     author_name = current_user.name or username
     author_email = str(current_user.email)
-    sidecar_base, sidecar_secret = await lookup_slides_sidecar(
+    sidecar_base, sidecar_secret = await lookup_sheets_sidecar(
         db,
         workspace_id=workspace_id,
         user_id=current_user.id,
@@ -3017,7 +3032,8 @@ async def _run_slide_html_mutation(
                 index=int(item["index"]),
                 id=item.get("id"),
                 title=str(item.get("title") or ""),
-                layout=str(item.get("layout") or ""),
+                layout=str(item.get("layout") or "content"),
+                eyebrow=str(item.get("eyebrow") or ""),
             )
             for item in mutated.get("slides") or []
         ]
@@ -3046,14 +3062,14 @@ async def _run_slide_html_mutation(
 
 
 @router.get("/projects/{slug}/slides", response_model=SlidesListResponse)
-async def list_slides(
+async def list_workbook_tabs(
     slug: str,
     workspace_id: str,
     request: Request,
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> SlidesListResponse:
-    """Outline of ``<section>`` slides. No HTML body."""
+    """Outline of workbook tabs (JSON model). No HTML body."""
     await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
@@ -3097,108 +3113,109 @@ async def list_slides(
         raise _source_control_http_error(exc) from exc
 
 
-@router.post("/projects/{slug}/slides/insert", response_model=SlideMutationResponse)
-async def insert_slide(
+@router.post("/projects/{slug}/sheets/insert", response_model=SlideMutationResponse)
+async def insert_workbook_tab(
     slug: str,
     body: SlideInsertRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> SlideMutationResponse:
-    """Insert a slide after ``after_index`` (-1 appends). Same mutation as the agent tool."""
-    from naas_abi.agents.tools.slides_tools import _insert_slide_html
+    """Insert a sheet tab after ``after_index`` (-1 appends)."""
+    from naas_abi.apps.nexus.sheets.tab_mutations import insert_workbook_tab
 
     await require_workspace_access(current_user.id, body.workspace_id)
-    return await _run_slide_html_mutation(
+    return await _run_workbook_tab_mutation(
         slug=slug,
         workspace_id=body.workspace_id,
         request=request,
         current_user=current_user,
         db=db,
-        mutate=lambda html: _insert_slide_html(
+        mutate=lambda html: insert_workbook_tab(
             html,
             after_index=body.after_index,
             layout=body.layout,
             title=body.title,
         ),
-        message=f"feat(sheets): insert slide in {slug}",
+        message=f"feat(sheets): insert tab in {slug}",
     )
 
 
-@router.post("/projects/{slug}/slides/delete", response_model=SlideMutationResponse)
-async def delete_slide(
+@router.post("/projects/{slug}/sheets/delete", response_model=SlideMutationResponse)
+async def delete_workbook_tab(
     slug: str,
     body: SlideIndexRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> SlideMutationResponse:
-    """Delete the slide at index. Refuses the last slide."""
-    from naas_abi.agents.tools.slides_tools import _delete_slide_html
+    """Delete the tab at index. Refuses the last tab."""
+    from naas_abi.apps.nexus.sheets.tab_mutations import delete_workbook_tab
 
     await require_workspace_access(current_user.id, body.workspace_id)
-    return await _run_slide_html_mutation(
+    return await _run_workbook_tab_mutation(
         slug=slug,
         workspace_id=body.workspace_id,
         request=request,
         current_user=current_user,
         db=db,
-        mutate=lambda html: _delete_slide_html(html, body.index),
-        message=f"refactor(sheets): delete slide in {slug}",
+        mutate=lambda html: delete_workbook_tab(html, body.index),
+        message=f"refactor(sheets): delete tab in {slug}",
     )
 
 
-@router.post("/projects/{slug}/slides/duplicate", response_model=SlideMutationResponse)
-async def duplicate_slide(
+@router.post("/projects/{slug}/sheets/duplicate", response_model=SlideMutationResponse)
+async def duplicate_workbook_tab(
     slug: str,
     body: SlideIndexRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> SlideMutationResponse:
-    """Duplicate the slide at index and insert the copy after it."""
-    from naas_abi.agents.tools.slides_tools import _duplicate_slide_html
+    """Duplicate the tab at index and insert the copy after it."""
+    from naas_abi.apps.nexus.sheets.tab_mutations import duplicate_workbook_tab
 
     await require_workspace_access(current_user.id, body.workspace_id)
-    return await _run_slide_html_mutation(
+    return await _run_workbook_tab_mutation(
         slug=slug,
         workspace_id=body.workspace_id,
         request=request,
         current_user=current_user,
         db=db,
-        mutate=lambda html: _duplicate_slide_html(html, body.index),
-        message=f"feat(sheets): duplicate slide in {slug}",
+        mutate=lambda html: duplicate_workbook_tab(html, body.index),
+        message=f"feat(sheets): duplicate tab in {slug}",
     )
 
 
-@router.post("/projects/{slug}/slides/reorder", response_model=SlideMutationResponse)
-async def reorder_slides(
+@router.post("/projects/{slug}/sheets/reorder", response_model=SlideMutationResponse)
+async def reorder_workbook_tabs_route(
     slug: str,
     body: SlideReorderRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> SlideMutationResponse:
-    """Move one slide (from_index/to_index) or apply a full ``order`` permutation."""
-    from naas_abi.agents.tools.slides_tools import _reorder_slides_html
+    """Move one tab (from_index/to_index) or apply a full ``order`` permutation."""
+    from naas_abi.apps.nexus.sheets.tab_mutations import reorder_workbook_tabs
 
     await require_workspace_access(current_user.id, body.workspace_id)
-    return await _run_slide_html_mutation(
+    return await _run_workbook_tab_mutation(
         slug=slug,
         workspace_id=body.workspace_id,
         request=request,
         current_user=current_user,
         db=db,
-        mutate=lambda html: _reorder_slides_html(
+        mutate=lambda html: reorder_workbook_tabs(
             html,
             from_index=body.from_index,
             to_index=body.to_index,
             order=body.order,
         ),
-        message=f"style(sheets): reorder slides in {slug}",
+        message=f"style(sheets): reorder tabs in {slug}",
     )
 
 
-# Tests and legacy call sites still use the Slides-era names.
+# Tests and chat streaming may still import the Slides-era alias names.
+lookup_slides_sidecar = lookup_sheets_sidecar
 _read_deck_via_sidecar = _read_workbook_via_sidecar
 _write_deck_via_sidecar = _write_workbook_via_sidecar
