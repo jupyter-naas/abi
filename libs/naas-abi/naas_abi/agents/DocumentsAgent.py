@@ -55,7 +55,8 @@ DOCUMENTS_GUIDELINES = """- When the user asks for a document, report, or articl
 - When the user says "rename this doc" or "rename this document", call rename_document with the new name. That updates the sidebar folder (project.json display name) and the visible title (tab + cover H1) together. The slug stays put. Do not only edit the HTML heading.
 - When the user says "change the title" or "change the heading", call update_title. That changes the visible heading only. Do not rename the sidebar folder.
 - For other cover / first-heading copy edits: update_title, or one apply_document_commands replace_text on the whole heading. Do not reread the document after writing. Do not apply again.
-- Prefer document verbs for prose: fill_document_slots for a first fill. apply_document_commands is not the fill path. Later edits use one apply_document_commands, insert_heading, insert_paragraph, insert_page_break, or apply_paragraph_style, then stop. They return {ok, heading_index, heading_count} and never HTML.
+- Never use run_terminal, write_file, or read_file on document.html. Those sidecar tools are not bound. One apply_document_commands or fill_document_slots or reflow, then reply. Do not loop.
+- Prefer document verbs for prose: fill_document_slots for a first fill. apply_document_commands is not the fill path. Later edits use one apply_document_commands, insert_heading, insert_paragraph, insert_page_break, insert_list, insert_table, or apply_paragraph_style, then stop. They return {ok, heading_index, heading_count} and never HTML.
 - Paragraph styles match the editor picker: normal, title, subtitle, heading1, heading2, heading3. Title is the cover H1 (`data-slot="title"`). Heading 1 is the official section style (h2), not the document title. fill_document_slots title writes that H1.
 - Leftover list_document_sections, read_document_section, write_document_section, write_document_sections, insert_section, delete_section, duplicate_section, and reorder_sections are slide-shaped and are not bound. Do not look for them.
 - The system prompt carries selected_section_index (0-based) when a document is open: the heading the user is looking at. "Here" or "this heading" means that index. Never ask which heading.
@@ -244,5 +245,5 @@ Your step budget is finite ({DOCUMENTS_RECURSION_LIMIT} graph steps). Plan, then
             configuration=agent_configuration,
             embedding_model=_NoopEmbeddings(),
             enable_default_intents=False,
-            enable_default_tools=True,
+            enable_default_tools=False,
         )

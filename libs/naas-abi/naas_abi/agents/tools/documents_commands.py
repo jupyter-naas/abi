@@ -41,9 +41,23 @@ _PALETTE_CLASS_RE = re.compile(
     re.IGNORECASE,
 )
 _SEED_HEADING_RE = re.compile(
-    r"<h2\b[^>]*>\s*(Discussion|Findings)\s*</h2>",
+    r"<h2\b[^>]*>\s*(Discussion|Findings|Ce qui a changé)\s*</h2>",
     re.IGNORECASE,
 )
+_SLOT_OPEN_RE = re.compile(
+    r"<([a-z][a-z0-9]*)\b[^>]*\bdata-slot\s*=\s*[\"']([^\"']+)[\"'][^>]*>",
+    re.IGNORECASE,
+)
+_PAGE_SECTION_OPEN_RE = re.compile(
+    r"<section\b[^>]*\bclass\s*=\s*[\"'][^\"']*\bpage\b[^\"']*[\"'][^>]*>",
+    re.IGNORECASE,
+)
+_PAGE_BREAK_RE = re.compile(
+    r"\s*(?:<div\b[^>]*(?:data-nexus-page-break|class=[\"'][^\"']*\bpage-break)[^>]*>\s*</div>|"
+    r"<div\b[^>]*(?:data-nexus-page-break|class=[\"'][^\"']*\bpage-break)[^>]*/>)\s*",
+    re.IGNORECASE,
+)
+_DELETABLE_CLASSES = frozenset({"palette", "decision"})
 _SWATCH_HEX_RE = re.compile(
     r"#(?:464B4B|0072CE|171C8F|4AA7B7|27B093|5D93CD|B1B3B3|F4F4F4)",
     re.IGNORECASE,
@@ -123,6 +137,13 @@ SEED_PLACEHOLDER_PHRASES = (
     "Replace the labels",
     "Heading 1 style",
     "Outer Space. Use it when",
+    "Cette note demande une décision",
+    "Décision demandée",
+    "Les missions reçoivent déjà",
+    "Approuver un cadre de réponse unique",
+    "Valider le cadre de réponse du cabinet",
+    "Les signaux sont publics et simultanés",
+    "Quatre expositions, dans cet ordre",
 )
 _SEED_TH_RE = re.compile(
     r"<th\b[^>]*>\s*(Topic|Owner|Status|Item|Note)\s*</th>",
@@ -139,13 +160,17 @@ KNOWN_COMMANDS = frozenset(
         "insert_paragraph",
         "insert_heading",
         "insert_page_break",
+        "insert_list",
+        "insert_table",
         "delete_range",
+        "delete_block",
         "replace_text",
         "replace_class",
         "update_paragraph_style",
         "update_title",
         "rename_document",
         "fill_slots",
+        "reflow",
     }
 )
 
@@ -320,6 +345,7 @@ FILL_SLOT_KEYS = (
     "subtitle",
     "intro",
     "note",
+    "situation",
     "quote",
     "sections",
     "tables_heading",
@@ -343,10 +369,20 @@ def _fill_keys_for_leftover(phrase: str) -> tuple[str, ...]:
     if any(
         token in text
         for token in (
+            "situation",
+            "missions reçoivent",
+            "missions recoivent",
+        )
+    ):
+        return ("situation",)
+    if any(
+        token in text
+        for token in (
             "intro",
             "state the situation",
             "scan the page",
             "the page before the body",
+            "cette note demande",
         )
     ):
         return ("intro",)
@@ -359,10 +395,13 @@ def _fill_keys_for_leftover(phrase: str) -> tuple[str, ...]:
             "body copy stays",
             "secondary colours",
             "14pt true blue",
+            "décision demandée",
+            "decision demandee",
+            "approuver un cadre",
         )
     ):
         return ("note",)
-    if "document title" in text:
+    if "document title" in text or "valider le cadre de réponse" in text:
         return ("title",)
     if text in {"topic", "owner", "status", "item", "note"} or any(
         token in text
@@ -440,22 +479,165 @@ def _relocate_stray_in_section(section: str) -> str:
 
 
 def normalize_document_flow(html: str) -> str:
-    """Move prose that landed after a footer back into that page's ``.doc-body``."""
-    if not html or "</footer>" not in html.lower():
+    """Move stray footer prose, then remonter le texte on empty letter pages."""
+    if html and "</footer>" in html.lower():
+
+        def _replace(match: re.Match[str]) -> str:
+            return _relocate_stray_in_section(match.group(0))
+
+        html = _SECTION_RE.sub(_replace, html)
+    return reflow_document(html)
+
+
+def _span_from_open(html: str, match: re.Match[str]) -> tuple[int, int] | None:
+    tag = match.group(1)
+    start = match.start()
+    if tag.lower() in _VOID_TAGS or match.group(0).rstrip().endswith("/>"):
+        return start, match.end()
+    close = _matching_close_tag(html, tag, match.end())
+    if close is None:
+        return None
+    end_match = re.match(rf"</{re.escape(tag)}\s*>", html[close:], re.IGNORECASE)
+    end = close + (end_match.end() if end_match else 0)
+    return start, end
+
+
+def _slot_span(html: str, slot: str) -> tuple[int, int] | None:
+    for match in _SLOT_OPEN_RE.finditer(html or ""):
+        if match.group(2) == slot:
+            return _span_from_open(html, match)
+    return None
+
+
+def _class_span(html: str, class_name: str) -> tuple[int, int] | None:
+    token = (class_name or "").strip().lstrip(".")
+    if not token:
+        return None
+    open_re = re.compile(
+        rf"<([a-z][a-z0-9]*)\b[^>]*\bclass\s*=\s*[\"'][^\"']*\b{re.escape(token)}\b[^\"']*[\"'][^>]*>",
+        re.IGNORECASE,
+    )
+    match = open_re.search(html or "")
+    if not match:
+        return None
+    return _span_from_open(html, match)
+
+
+def _page_outer_ranges(html: str) -> list[tuple[int, int]]:
+    ranges: list[tuple[int, int]] = []
+    for match in _PAGE_SECTION_OPEN_RE.finditer(html or ""):
+        close = _matching_close_tag(html, "section", match.end())
+        if close is None:
+            continue
+        end_match = re.match(r"</section\s*>", html[close:], re.IGNORECASE)
+        end = close + (end_match.end() if end_match else 0)
+        ranges.append((match.start(), end))
+    return ranges
+
+
+def _first_body_inner(page: str) -> str:
+    bodies = _doc_body_ranges(page)
+    if not bodies:
+        return ""
+    start, close = bodies[0]
+    return page[start:close]
+
+
+def _replace_first_body_inner(page: str, inner: str) -> str:
+    bodies = _doc_body_ranges(page)
+    if not bodies:
+        return page
+    start, close = bodies[0]
+    return page[:start] + inner + page[close:]
+
+
+def _page_body_has_prose(page: str) -> bool:
+    inner = _first_body_inner(page)
+    if inner:
+        return bool(_strip_tags(inner))
+    stripped = re.sub(
+        r"<footer\b[^>]*>.*?</footer>",
+        "",
+        page or "",
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return bool(_strip_tags(stripped))
+
+
+def _has_cover_chrome(page: str) -> bool:
+    if re.search(r"\bclass\s*=\s*[\"'][^\"']*\bdecision\b", page or "", re.IGNORECASE):
+        return True
+    return bool(
+        re.search(
+            r"data-slot\s*=\s*[\"']situation(?:-heading)?[\"']",
+            page or "",
+            re.IGNORECASE,
+        )
+    )
+
+
+def _strip_page_breaks(fragment: str) -> str:
+    return _PAGE_BREAK_RE.sub("\n", fragment or "")
+
+
+def _trim_adjacent_page_breaks(prefix: str, suffix: str) -> tuple[str, str]:
+    prefix = re.sub(
+        r"(?:\s*<div\b[^>]*(?:data-nexus-page-break|class=[\"'][^\"']*\bpage-break)[^>]*>\s*</div>)+$",
+        "\n",
+        prefix or "",
+        flags=re.IGNORECASE,
+    )
+    suffix = re.sub(
+        r"^(?:\s*<div\b[^>]*(?:data-nexus-page-break|class=[\"'][^\"']*\bpage-break)[^>]*>\s*</div>)+",
+        "\n",
+        suffix or "",
+        flags=re.IGNORECASE,
+    )
+    return prefix, suffix
+
+
+def _drop_empty_pages(html: str) -> str:
+    changed = True
+    while changed:
+        changed = False
+        for start, end in _page_outer_ranges(html):
+            if _page_body_has_prose(html[start:end]):
+                continue
+            prefix, suffix = _trim_adjacent_page_breaks(html[:start], html[end:])
+            html = prefix + suffix
+            changed = True
+            break
+    return html
+
+
+def reflow_document(html: str) -> str:
+    """Drop empty letter pages and remonter le texte after cover chrome delete."""
+    if not html:
         return html
-
-    def _replace(match: re.Match[str]) -> str:
-        return _relocate_stray_in_section(match.group(0))
-
-    return _SECTION_RE.sub(_replace, html)
+    html = _drop_empty_pages(html)
+    pages = _page_outer_ranges(html)
+    first = html[pages[0][0] : pages[0][1]] if len(pages) >= 2 else ""
+    if (
+        len(pages) >= 2
+        and _first_body_inner(first)
+        and not _has_cover_chrome(first)
+    ):
+        second = html[pages[1][0] : pages[1][1]]
+        pulled = _first_body_inner(second)
+        if pulled.strip():
+            merged = _first_body_inner(first) + pulled
+            first = _replace_first_body_inner(first, merged)
+            html = html[: pages[0][0]] + first + html[pages[1][1] :]
+            html = _drop_empty_pages(html)
+    return html
 
 
 def replace_class(html: str, class_name: str, replacement: str) -> str | dict[str, str]:
-    """Replace the first element with ``class_name``. Empty replacement deletes palette only."""
+    """Replace the first element with ``class_name``. Empty deletes palette or decision."""
     token = (class_name or "").strip().lstrip(".")
     if not token or not re.fullmatch(r"[A-Za-z][\w-]{0,62}", token):
         return {"error": "class_name is required"}
-    if not (replacement or "").strip() and token != "palette":
+    if not (replacement or "").strip() and token not in _DELETABLE_CLASSES:
         return {"error": _EMPTY_REPLACE_ERROR}
     safe = re.escape(token)
     open_re = re.compile(
@@ -535,6 +717,70 @@ def insert_paragraph(html: str, text: str = "", after_heading: int = -1) -> str:
 def insert_text(html: str, text: str, after_heading: int = -1) -> str:
     """Google Docs insertText analog: text becomes a paragraph in the HTML store."""
     return insert_paragraph(html, text, after_heading)
+
+
+def insert_list(
+    html: str,
+    items: list[Any] | None = None,
+    after_heading: int = -1,
+    ordered: bool = False,
+) -> str:
+    tag = "ol" if ordered else "ul"
+    inner = "".join(
+        f"<li>{_escape(str(item))}</li>"
+        for item in (items or [])
+        if str(item or "").strip()
+    )
+    return insert_after_heading_block(html, after_heading, f"<{tag}>{inner}</{tag}>")
+
+
+def insert_table(
+    html: str,
+    headers: list[Any] | None = None,
+    rows: list[Any] | None = None,
+    after_heading: int = -1,
+    variant: str = "fmz-table",
+) -> str:
+    cls = variant if variant in {"fmz-table", "fmz-shaded"} else "fmz-table"
+    ths = "".join(f"<th>{_escape(str(header))}</th>" for header in (headers or []))
+    body: list[str] = []
+    for row in rows or []:
+        cells = row if isinstance(row, list) else [row]
+        body.append(
+            "<tr>" + "".join(f"<td>{_escape(str(cell))}</td>" for cell in cells) + "</tr>"
+        )
+    markup = (
+        f'<table class="{cls}"><thead><tr>{ths}</tr></thead>'
+        f"<tbody>{''.join(body)}</tbody></table>"
+    )
+    return insert_after_heading_block(html, after_heading, markup)
+
+
+def delete_block(
+    html: str, class_name: str = "", slot: str = ""
+) -> str | dict[str, str]:
+    """Delete a block by class or data-slot. Situation removes the heading too."""
+    slot = (slot or "").strip()
+    class_name = (class_name or "").strip().lstrip(".")
+    if slot:
+        names = ["situation-heading", "situation"] if slot == "situation" else [slot]
+        if slot == "decision":
+            return replace_class(html, "decision", "")
+        next_html = html
+        found = False
+        for name in names:
+            span = _slot_span(next_html, name)
+            if span is None:
+                continue
+            start, end = span
+            next_html = next_html[:start] + next_html[end:]
+            found = True
+        if not found:
+            return {"error": f"No slot {slot!r}"}
+        return next_html
+    if class_name:
+        return replace_class(html, class_name, "")
+    return {"error": "class_name or slot is required"}
 
 
 def delete_heading_range(html: str, heading_index: int) -> str | dict[str, str]:
@@ -678,7 +924,12 @@ def _style_class_attr(class_name: str) -> str:
 
 
 def update_paragraph_style(
-    html: str, heading_index: int, style: str
+    html: str,
+    heading_index: int | None = None,
+    style: str = "",
+    *,
+    slot: str | None = None,
+    class_name: str | None = None,
 ) -> str | dict[str, str]:
     spec = PARAGRAPH_STYLE_SPECS.get((style or "").strip().lower())
     if not spec:
@@ -687,18 +938,44 @@ def update_paragraph_style(
                 f"Unknown style {style!r}. Use {_PICKER_STYLE_NAMES}."
             )
         }
-    tag, class_name = spec
+    tag, class_name_out = spec
+    span: tuple[int, int] | None = None
+    open_tag = ""
+    inner = ""
+    slot = (slot or "").strip() or None
+    class_name = (class_name or "").strip().lstrip(".") or None
+    if slot:
+        span = _slot_span(html, slot)
+        if span is None:
+            return {"error": f"No slot {slot!r}"}
+    elif class_name:
+        span = _class_span(html, class_name)
+        if span is None:
+            return {"error": f"No element with class {class_name!r}"}
+    if span is not None:
+        start, end = span
+        gt = html.find(">", start)
+        open_tag = html[start : gt + 1] if gt >= 0 else ""
+        close = _matching_close_tag(html, open_tag[1:].split(None, 1)[0].rstrip(">"), gt + 1) if gt >= 0 else None
+        if close is None:
+            return {"error": "Unclosed element to style"}
+        inner = html[gt + 1 : close]
+        replacement = (
+            f'<{tag} class="{_style_class_attr(class_name_out)}"'
+            f"{_data_attrs(open_tag)}>{inner}</{tag}>"
+        )
+        return html[:start] + replacement + html[end:]
     matches = list(_HEADING_RE.finditer(html or ""))
     if not matches:
         return {"error": "No headings to style."}
-    if heading_index < 0 or heading_index >= len(matches):
-        return {"error": f"heading_index out of range (0..{len(matches) - 1})"}
+    if heading_index is None or heading_index < 0 or heading_index >= len(matches):
+        return {"error": f"heading_index out of range (0..{max(0, len(matches) - 1)})"}
     match = matches[heading_index]
     inner = match.group(2)
     open_end = match.group(0).find(">")
     open_tag = match.group(0)[: open_end + 1] if open_end >= 0 else ""
     replacement = (
-        f'<{tag} class="{_style_class_attr(class_name)}"'
+        f'<{tag} class="{_style_class_attr(class_name_out)}"'
         f"{_data_attrs(open_tag)}>{inner}</{tag}>"
     )
     return html[: match.start()] + replacement + html[match.end() :]
@@ -729,9 +1006,11 @@ def apply_document_commands(
             after = int(after)
         except (TypeError, ValueError):
             return {"error": f"requests[{i}].after_heading must be an integer"}
-        target = raw.get("heading_index", max(after, 0))
+        raw_index = raw.get("heading_index", max(after, 0))
+        if raw_index is None:
+            raw_index = max(after, 0)
         try:
-            target = int(target)
+            target = int(raw_index)
         except (TypeError, ValueError):
             return {"error": f"requests[{i}].heading_index must be an integer"}
 
@@ -757,10 +1036,40 @@ def apply_document_commands(
         elif typ == "insert_page_break":
             result = insert_page_break(next_html, after)
             heading_index = max(after, 0)
+        elif typ == "insert_list":
+            items = raw.get("items")
+            if items is None and raw.get("text"):
+                items = [raw.get("text")]
+            if not isinstance(items, list):
+                return {"error": f"requests[{i}].items must be an array"}
+            result = insert_list(
+                next_html, items, after, ordered=bool(raw.get("ordered"))
+            )
+            heading_index = max(after, 0)
+        elif typ == "insert_table":
+            headers = raw.get("headers") or []
+            rows = raw.get("rows") or []
+            if not isinstance(headers, list) or not isinstance(rows, list):
+                return {"error": f"requests[{i}].headers and rows must be arrays"}
+            result = insert_table(
+                next_html,
+                headers,
+                rows,
+                after,
+                variant=str(raw.get("variant") or "fmz-table"),
+            )
+            heading_index = max(after, 0)
         elif typ == "delete_range":
             result = delete_heading_range(next_html, target)
             if isinstance(result, str):
                 heading_index = max(0, target - 1)
+        elif typ == "delete_block":
+            result = delete_block(
+                next_html,
+                class_name=str(raw.get("class_name") or ""),
+                slot=str(raw.get("slot") or ""),
+            )
+            heading_index = target
         elif typ == "replace_text":
             result = replace_text(
                 next_html, str(raw.get("find") or ""), str(raw.get("replace") or "")
@@ -774,10 +1083,19 @@ def apply_document_commands(
             )
             heading_index = target
         elif typ == "update_paragraph_style":
+            slot = str(raw.get("slot") or "").strip() or None
+            class_name = str(raw.get("class_name") or "").strip() or None
             result = update_paragraph_style(
-                next_html, target, str(raw.get("style") or "")
+                next_html,
+                None if (slot or class_name) else target,
+                str(raw.get("style") or ""),
+                slot=slot,
+                class_name=class_name,
             )
             heading_index = target
+        elif typ == "reflow":
+            result = reflow_document(next_html)
+            heading_index = 0
         elif typ in {"update_title", "rename_document"}:
             result = update_document_title(
                 next_html, str(raw.get("title") or raw.get("text") or "")

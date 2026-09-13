@@ -9,33 +9,30 @@ Pandoc AST. It is not an ODF writer and not a Google Docs clone.
 
 ## Architecture
 
-HTTP is the public contract. Named verbs (`rename_document`,
-`insert_heading`, `apply_template`, …) are the product surface. The
-agent calls those same names. A future `abi documents <verb>` would
-wrap the same HTTP routes. That is API first, with CLI-shaped verbs
-on top. It is not a CLI that owns the logic.
+Python mutators own the logic. HTTP, the agent, and `abi documents`
+call the same functions. Do not prompt-engineer around a missing verb.
 
 `POST /api/documents/projects/{slug}/commands` applies an ordered
-list of verbs (Google Docs `batchUpdate` style). That is not a shell
-CLI. There is no `abi documents rename` today. The `abi` Click CLI
-is workspace, user, stack, and dev. Do not invent a Documents Click
-group until a wrapper is a product need, and do not put business
-logic in the agent.
+list of verbs (Google Docs `batchUpdate` style). `abi documents apply`
+sends the same list to `apply_document_commands`. Named CLI verbs
+(`style`, `insert-heading`, `fill`, `reflow`, …) call the same
+functions as the matching HTTP command.
 
 What actually runs:
 
-1. Verb functions live in `documents_commands.py` (HTML).
-   `rename_document` also writes `project.json` `title`.
+1. Verb functions live in `documents_commands.py` and
+   `documents_slots.py` (HTML). `rename_document` also writes
+   `project.json` `title` on the HTTP/agent path.
 2. FastAPI `POST /commands` calls those verbs and writes the
    git-backed store (sidecar plus Forgejo).
-3. Agent tools use the same names and the same Python mutators. They
-   talk to sidecar and git directly. They are not HTTP clients of
-   the API.
-4. The web UI calls the HTTP API (PATCH for a sidebar-typed rename,
+3. Agent tools use the same names and the same Python mutators.
+4. `abi documents <verb>` calls those mutators on a local
+   `--html` file. Sidebar `project.json` rename stays on HTTP/agent.
+5. The web UI calls the HTTP API (PATCH for a sidebar-typed rename,
    `POST /commands` for outline edits).
 
 Target: one named command per user-facing function, callable from
-HTTP and from the agent. A later CLI is a thin wrapper of the API.
+HTTP, CLI, and the agent.
 
 ## Supported commands
 
@@ -48,10 +45,14 @@ The first error aborts the batch (same idea as Docs `batchUpdate`).
 | `insert_paragraph` | Insert a `<p>` after a heading | Pandoc `Para`; ODF paragraph |
 | `insert_heading` | Insert Title (`h1.fmz-title`) or Heading 1/2/3 (`h2`/`h3`/`h4`) | Pandoc `Header`; Docs `updateParagraphStyle` |
 | `insert_page_break` | Insert a hard page break (same section) | Docs `insertPageBreak`; ODF `fo:break-before=page`; Word `w:br w:type="page"`; Pandoc pagebreak |
+| `insert_list` | Insert a `ul`/`ol` after a heading | Pandoc `BulletList` / `OrderedList` |
+| `insert_table` | Insert an official `fmz-table` or `fmz-shaded` | Pandoc `Table`; ODF table |
 | `delete_range` | Delete a heading block (that heading through the next) | Docs `deleteContentRange` |
+| `delete_block` | Delete a block by class or `data-slot` (decision, situation) | cover chrome delete |
 | `replace_text` | Replace a substring | Docs `replaceAllText` |
-| `replace_class` | Replace or delete the first element with that class | fill a seed slot (palette, note) |
-| `update_paragraph_style` | Apply picker style: `normal`, `title`, `subtitle`, `heading1`, `heading2`, `heading3` | Docs `updateParagraphStyle` |
+| `replace_class` | Replace or delete the first element with that class | empty deletes `palette` or `decision` |
+| `update_paragraph_style` | Apply picker style on any block (`slot` / `class_name` / heading index) | Docs `updateParagraphStyle` |
+| `reflow` | Remonter le texte: drop empty letter pages, pull the next body up | after cover chrome delete |
 | `update_title` | Change the tab `<title>` and cover H1 only | heading-only retitle |
 | `rename_document` | Sidebar display name plus tab `<title>`, cover H1, and footer titles | "rename this document" |
 | `fill_slots` | Map structured topic copy onto seed slots | first memo or report fill |
@@ -162,8 +163,8 @@ and margins. Neither is "new slide".
 
 - Full ODF / OOXML writer or reader
 - Docs UTF-16 indexes, suggestions, comments, tabs, named ranges
-- Headers, footers, footnotes, tables, images, bullets as first-class
-  commands (Pandoc and Docs have them; add later if a product need appears)
+- Headers, footers, footnotes, images as first-class commands
+- Google Docs comments, suggestions, track changes, mail merge
 - Changing Slides
 
 ## Citations

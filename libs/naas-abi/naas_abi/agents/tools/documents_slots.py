@@ -11,6 +11,7 @@ import re
 from typing import Any
 
 from naas_abi.agents.tools.documents_commands import (
+    delete_block,
     heading_outline,
     leftover_placeholders,
     leftover_slots,
@@ -33,7 +34,7 @@ _CLASS_OPEN_RE = re.compile(
     re.IGNORECASE,
 )
 _LAYOUT_OPEN_RE = re.compile(
-    r"<section\b[^>]*\bdata-layout\s*=\s*[\"'](?P<layout>[^\"']+)[\"'][^>]*>",
+    r"<(?P<tag>section|div)\b[^>]*\bdata-layout\s*=\s*[\"'](?P<layout>[^\"']+)[\"'][^>]*>",
     re.IGNORECASE,
 )
 _HEADING_OPEN_RE = re.compile(r"<h([1-4])\b[^>]*>", re.IGNORECASE)
@@ -47,7 +48,6 @@ REQUIRED_KEYS = (
     "title",
     "subtitle",
     "intro",
-    "note",
     "quote",
     "sections",
     "tables_heading",
@@ -137,9 +137,29 @@ def _layout_range(html: str, layout: str) -> tuple[int, int] | None:
     for match in _LAYOUT_OPEN_RE.finditer(html):
         if match.group("layout").lower() != layout.lower():
             continue
-        close = _matching_close(html, "section", match.end())
+        tag = match.group("tag")
+        close = _matching_close(html, tag, match.end())
         if close is not None:
             return match.end(), close
+    return None
+
+
+def _is_impl_heading(open_tag: str) -> bool:
+    return bool(re.search(r"data-slot\s*=\s*[\"']impl-", open_tag or "", re.IGNORECASE))
+
+
+def _nth_section_heading_in_range(
+    html: str, start: int, end: int, index: int
+) -> re.Match[str] | None:
+    found = 0
+    for match in _HEADING_OPEN_RE.finditer(html):
+        if match.start() < start or match.start() >= end:
+            continue
+        if _is_impl_heading(match.group(0)):
+            continue
+        if found == index:
+            return match
+        found += 1
     return None
 
 
@@ -213,7 +233,7 @@ def _fill_cover(html: str, payload: dict[str, Any]) -> tuple[str, list[str], lis
     else:
         missing.append("title")
 
-    for key in ("subtitle", "intro", "note"):
+    for key in ("subtitle", "intro"):
         value = _require_text(payload[key] if key in payload else None, key)
         if isinstance(value, dict):
             return html, filled, missing, value
@@ -226,6 +246,57 @@ def _fill_cover(html: str, payload: dict[str, Any]) -> tuple[str, list[str], lis
             continue
         html = updated
         filled.append(key)
+
+    if "situation" in payload:
+        situation = _require_text(payload.get("situation"), "situation")
+        if isinstance(situation, dict):
+            return html, filled, missing, situation
+        if situation:
+            updated = _set_slot(html, "situation", situation)
+            if updated is None:
+                missing.append("situation")
+            else:
+                html = updated
+                filled.append("situation")
+            heading = _require_text(
+                payload["situation-heading"] if "situation-heading" in payload else None,
+                "situation-heading",
+            )
+            if isinstance(heading, dict):
+                return html, filled, missing, heading
+            if heading:
+                headed = _set_slot(html, "situation-heading", heading)
+                if headed is not None:
+                    html = headed
+                    filled.append("situation-heading")
+        else:
+            deleted = delete_block(html, slot="situation")
+            if isinstance(deleted, str):
+                html = deleted
+                filled.append("situation")
+
+    if "note" in payload:
+        note = _require_text(payload.get("note"), "note")
+        if isinstance(note, dict):
+            return html, filled, missing, note
+        if note:
+            updated = _set_slot(html, "note", note) or _set_class_inner(html, "note", note)
+            if updated is None:
+                missing.append("note")
+            else:
+                html = updated
+                filled.append("note")
+        else:
+            deleted = replace_class(html, "decision", "")
+            if isinstance(deleted, str):
+                html = deleted
+                filled.append("note")
+    else:
+        deleted = replace_class(html, "decision", "")
+        if isinstance(deleted, str):
+            html = deleted
+        elif _set_slot(html, "note", "x") is not None or _set_class_inner(html, "note", "x") is not None:
+            missing.append("note")
     return html, filled, missing, None
 
 
@@ -289,18 +360,36 @@ def _fill_sections(
         if heading:
             updated = _set_slot(html, slot_h, heading)
             if updated is None:
-                open_m = _nth_open_in_range(html, _HEADING_OPEN_RE, start, end, i)
+                open_m = _nth_section_heading_in_range(html, start, end, i)
                 if open_m:
                     updated = _replace_open_inner(
                         html, open_m, f"h{open_m.group(1)}", _escape(heading)
                     )
             if updated is None:
-                missing.append(f"sections[{i}].heading")
-            else:
-                html = updated
+                extra = f'<h2 class="fmz-heading-1">{_escape(heading)}</h2>\n'
+                appended_body = False
+                appended_bullets = False
+                if body:
+                    extra += f'<p class="fmz-normal">{_escape(body)}</p>\n'
+                    appended_body = True
+                if bullets:
+                    extra += f"<ul>{_list_items_html(bullets)}</ul>\n"
+                    appended_bullets = True
+                html = f"{html[:end]}{extra}{html[end:]}"
                 filled.append(f"sections[{i}].heading")
+                if appended_body:
+                    filled.append(f"sections[{i}].body")
+                else:
+                    missing.append(f"sections[{i}].body")
+                if appended_bullets:
+                    filled.append(f"sections[{i}].bullets")
                 span = _layout_range(html, "content") or span
                 start, end = span
+                continue
+            html = updated
+            filled.append(f"sections[{i}].heading")
+            span = _layout_range(html, "content") or span
+            start, end = span
         else:
             missing.append(f"sections[{i}].heading")
         if body:

@@ -2671,24 +2671,31 @@ def documents_tools() -> list[BaseTool]:
 
     @tool
     def apply_paragraph_style(
-        heading_index: int,
-        style: str,
+        heading_index: int = 0,
+        style: str = "",
+        slot: str = "",
+        class_name: str = "",
         slug: str = "",
         message: str = "style(document): apply paragraph style via Abi",
     ) -> dict[str, Any]:
         """Apply a picker style: normal, title, subtitle, heading1, heading2, heading3.
 
         Title is the cover H1. Heading 1 is the official section style (h2),
-        not the document title. Google Docs updateParagraphStyle analog.
+        not the document title. Target any block with slot or class_name,
+        not heading_index only. Google Docs updateParagraphStyle analog.
         """
+        request: dict[str, Any] = {
+            "type": "update_paragraph_style",
+            "style": style,
+        }
+        if slot:
+            request["slot"] = slot
+        elif class_name:
+            request["class_name"] = class_name
+        else:
+            request["heading_index"] = heading_index
         return _run_document_commands(
-            [
-                {
-                    "type": "update_paragraph_style",
-                    "heading_index": heading_index,
-                    "style": style,
-                }
-            ],
+            [request],
             slug,
             message or "style(document): apply paragraph style via Abi",
         )
