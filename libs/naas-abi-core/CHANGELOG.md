@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.36.1 (2026-09-14)
+
+### Bug Fixes
+
+- **core**: Preserve IntentAgent subclass on duplicate
+  ([`f701a27`](https://github.com/jupyter-naas/abi/commit/f701a27820f2b22985e386cfa2edb224018a73c8))
+
+
 ## v2.36.0 (2026-09-14)
 
 ### Features
