@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v2.68.0 (2026-09-14)
+
+### Bug Fixes
+
+- **nexus**: Add title to slides deck updated event detail
+  ([`47249c9`](https://github.com/jupyter-naas/abi/commit/47249c999b6c570fd2078222c01987355d3e729d))
+
+- **nexus**: Export slides auto-title helper for chat
+  ([`b447ab9`](https://github.com/jupyter-naas/abi/commit/b447ab97780d95f77a02d1dc56456ea67ea8d2db))
+
+### Chores
+
+- Drop documents CLI and template ADR from integration
+  ([`21e04ad`](https://github.com/jupyter-naas/abi/commit/21e04ad2b4abc6fe2d6fdb8d7d1508b015b9035b))
+
+### Features
+
+- **nexus**: Add Documents office product
+  ([`f917aa5`](https://github.com/jupyter-naas/abi/commit/f917aa5d475724075c94f87ddf99b90e92a93f4d))
+
+
 ## v2.67.0 (2026-09-11)
 
 ### Bug Fixes
