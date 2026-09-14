@@ -3616,6 +3616,7 @@ dependencies = [
     { name = "naas-abi-marketplace" },
     { name = "ollama" },
     { name = "openai" },
+    { name = "openpyxl" },
     { name = "psycopg2-binary" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -3653,6 +3654,7 @@ requires-dist = [
     { name = "naas-abi-marketplace", editable = "libs/naas-abi-marketplace" },
     { name = "ollama", specifier = ">=0.1.0" },
     { name = "openai", specifier = ">=1.10.0" },
+    { name = "openpyxl", specifier = ">=3.1.5,<4" },
     { name = "psycopg2-binary", specifier = ">=2.9.9" },
     { name = "pydantic", specifier = ">=2.5.0" },
     { name = "pydantic-settings", specifier = ">=2.1.0" },
@@ -6216,8 +6218,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "jeepney", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "cryptography" },
+    { name = "jeepney" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [

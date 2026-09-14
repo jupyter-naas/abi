@@ -38,3 +38,16 @@ export function pickSlidesOfficeAgent<T extends SlidesOfficeAgent>(
   const slides = agents.find((agent) => agent.enabled && isNexusSlidesAgent(agent));
   return slides ?? pickWorkspaceDefaultAgent(agents);
 }
+
+function isNexusSheetsAgent(agent: SlidesOfficeAgent): boolean {
+  if (agent.name === 'Sheets') return true;
+  const className = agent.class_name ?? '';
+  return className.endsWith('/SheetsAgent') && className.includes('naas_abi');
+}
+
+export function pickSheetsOfficeAgent<T extends SlidesOfficeAgent>(
+  agents: T[],
+): T | undefined {
+  const sheets = agents.find((agent) => agent.enabled && isNexusSheetsAgent(agent));
+  return sheets ?? pickWorkspaceDefaultAgent(agents);
+}

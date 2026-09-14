@@ -1,0 +1,216 @@
+from langchain_core.embeddings import Embeddings
+from naas_abi.agents.sheets import (
+    bind_sheets_reasoning,
+    configured_sheets_model,
+    load_sheets_chat_model,
+    resolve_sheets_llm_model,
+    sheets_research_tools,
+)
+from naas_abi_core.services.agent.context import SHEETS_RECURSION_LIMIT
+from naas_abi_core.services.agent.IntentAgent import (
+    AgentConfiguration,
+    AgentSharedState,
+    Intent,
+    IntentAgent,
+    IntentScope,
+    IntentType,
+)
+
+
+class _NoopEmbeddings(Embeddings):
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [[0.0] for _ in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        del text
+        return [0.0]
+
+
+SHEETS_GUIDELINES = """- When the user asks for a spreadsheet or workbook and none is open, call create_sheets_project first with a short title from their brief, then write rows via write_sheets_workbook.
+- Never call create_sheets_project when a workbook is already open; edit it instead.
+- The source of truth is the JSON block inside workbook.html (application/vnd.nexus.sheet+json). Use read_sheets_workbook before large edits and write_sheets_workbook to persist tabs/rows.
+- Use evaluate_sheets_formulas after adding ``=`` formulas (e.g. ``=B2+C2`` or ``=SUM(A1:A10)`` with simple arithmetic).
+- Use import_dataset_to_sheet to pull live rows from a Nexus dataset (namespace/name) into a tab.
+- For time-sensitive numeric briefs, call web_search first (2–4 queries), then write the grid from sources.
+- Omit slug on tool calls when open-workbook context is present.
+- Do not dump full workbook HTML in chat; report slug, tab names, and row counts."""
+
+
+_HANDOFF_PHRASES = (
+    "create a spreadsheet",
+    "create a workbook",
+    "make sheets",
+    "build sheets",
+    "write a workbook",
+    "fais des sheets",
+    "crée une présentation",
+    "crée une spreadsheet",
+    "prépare un tableur",
+    "prepare un tableur",
+    "monte un tableur",
+    "rédige une présentation",
+)
+
+
+class SheetsAgent(IntentAgent):
+    """Office agent for Nexus Sheets.
+
+    Research 2 to 4 web_search queries, then write the open workbook.html.
+    The JSON grid block in workbook.html is the live source; XLSX is export-only.
+
+    Run: LOG_LEVEL=DEBUG uv run abi chat naas_abi SheetsAgent
+    """
+
+    name: str = "Sheets"
+    description: str = (
+        "Office agent for Nexus Sheets. Creates and edits HTML workbooks with a "
+        "JSON grid model, evaluates formulas, and imports dataset rows."
+    )
+    logo_url: str = (
+        "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
+    )
+    recursion_limit: int = SHEETS_RECURSION_LIMIT
+    system_prompt: str = f"""<role>
+You are Sheets, the office agent for Nexus Sheets. You research, then write the HTML workbook. You are not Abi with a sheets hat.
+</role>
+
+<objective>
+Turn the user's brief into a researched spreadsheet in workbook.html. The JSON grid model is the live source of truth. XLSX export is derived from that model.
+</objective>
+
+<context>
+You will receive an open-workbook block (slug, path, branch, today) when the user is in Sheets. Edit that file. Do not invent a second workbook. Do not dump or rewrite the full file for a small text change. From the main chat, with no workbook open, create the workbook first, then write it.
+Your step budget is finite ({SHEETS_RECURSION_LIMIT} graph steps). Plan, then write. Do not spend the budget listing and reading the whole workbook.
+</context>
+
+<tasks>
+1. If no workbook is open and the user asked for a workbook, spreadsheet, or sheets, call create_sheets_project first, then research, then write.
+2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (2 to 4 queries), then read_sheets_workbook once, then write the whole workbook in one write_sheets_workbook.
+3. After adding ``=`` formulas, call evaluate_sheets_formulas. For live data, use import_dataset_to_sheet.
+4. After writes, report what changed in the open workbook. Do not claim Preview updated unless the tool result confirms it. Do not re-read the workbook to check.
+</tasks>
+
+<sheets_guidelines>
+{SHEETS_GUIDELINES}
+</sheets_guidelines>
+
+<tools>
+[TOOLS]
+</tools>
+
+<operating_guidelines>
+- Keep a clear, concise, professional tone.
+- Format replies as clean Markdown.
+- Include relevant tool output when it matters (cover_h1_updated, write errors, search budget).
+</operating_guidelines>
+
+<constraints>
+- Preserve the language of the user's message.
+- Never invent sources, dates, or that you edited a file without a tool result.
+- Never use em dashes or en dashes in cell copy. Use commas, colons, or hyphens.
+- Do not keep searching instead of writing.
+</constraints>
+"""
+    suggestions: list[dict] = [
+        {
+            "label": "Situation brief",
+            "value": (
+                "Create a briefing on what's going on now. "
+                "Research first, then write the open workbook."
+            ),
+            "description": "2 to 4 web searches, then fill tabs with sourced rows",
+        },
+        {
+            "label": "Company brief",
+            "value": "Build a company briefing workbook from current sources.",
+            "description": "Research the company, then write tabs and formulas",
+        },
+        {
+            "label": "What can you do?",
+            "value": "What can you do with this open workbook?",
+            "description": "Tools and the research-then-write loop",
+        },
+    ]
+
+    @staticmethod
+    def handoff_intents() -> list[Intent]:
+        """Phrases Abi copies so a workbook brief transfers here instead of writing itself."""
+        return [
+            Intent(
+                intent_value=phrase,
+                intent_type=IntentType.RAW,
+                intent_target="Sheets",
+                intent_scope=IntentScope.ALL,
+            )
+            for phrase in _HANDOFF_PHRASES
+        ]
+
+    @staticmethod
+    def get_tools() -> list:
+        """Workbook writes plus the search stack the research gate depends on."""
+        tools: list = []
+        try:
+            from naas_abi.agents.tools.sheets_tools import sheets_tools
+
+            tools += sheets_tools()
+        except Exception as exc:  # noqa: BLE001
+            logger = __import__("logging").getLogger(__name__)
+            logger.debug("sheets tools unavailable: %s", exc)
+
+        try:
+            tools += sheets_research_tools()
+        except Exception as exc:  # noqa: BLE001
+            logger = __import__("logging").getLogger(__name__)
+            logger.debug("sheets research tools unavailable: %s", exc)
+
+        return tools
+
+    @classmethod
+    def get_chat_model_id(cls) -> str:
+        return configured_sheets_model()
+
+    @classmethod
+    def get_chat_model_ids(cls) -> list[str]:
+        return [configured_sheets_model()]
+
+    @classmethod
+    def New(
+        cls,
+        agent_shared_state: AgentSharedState | None = None,
+        agent_configuration: AgentConfiguration | None = None,
+        model_id: str | None = None,
+    ) -> "SheetsAgent":
+        resolved = resolve_sheets_llm_model(model_id)
+        chat_model = bind_sheets_reasoning(
+            load_sheets_chat_model(resolved),
+            resolved,
+            force=True,
+        )
+        tools = cls.get_tools()
+
+        if agent_shared_state is None:
+            agent_shared_state = AgentSharedState()
+
+        if agent_configuration is None:
+            tools_section = (
+                "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
+                or ""
+            )
+            agent_configuration = AgentConfiguration(
+                system_prompt=cls.system_prompt.replace("[TOOLS]", tools_section)
+            )
+
+        return cls(
+            name=cls.name,
+            description=cls.description,
+            chat_model=chat_model,
+            tools=tools,
+            agents=[],
+            intents=cls.handoff_intents(),
+            memory=None,
+            state=agent_shared_state,
+            configuration=agent_configuration,
+            embedding_model=_NoopEmbeddings(),
+            enable_default_intents=False,
+            enable_default_tools=True,
+        )

@@ -1,0 +1,15 @@
+{
+  "templates": [
+    {
+      "id": "grid-light-v1",
+      "name": "Grid Light",
+      "description": "Excel-like grid with JSON source of truth and XLSX export.",
+      "preview": {
+        "bg": "#f3f3f3",
+        "panel": "#ffffff",
+        "accent": "#1a73e8",
+        "ink": "#202124"
+      }
+    }
+  ]
+}

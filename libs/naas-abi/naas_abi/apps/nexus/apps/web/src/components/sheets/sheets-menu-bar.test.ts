@@ -1,0 +1,148 @@
+import { describe, expect, it, vi } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import {
+  buildSheetsEditMenu,
+  buildSheetsInsertMenu,
+  isSheetsTypingTarget,
+  SheetsMenuBar,
+} from './sheets-menu-bar';
+
+describe('buildSheetsEditMenu', () => {
+  it('keeps Undo/Redo disabled and groups Duplicate / Delete sheet tab', () => {
+    const items = buildSheetsEditMenu({
+      canDuplicate: true,
+      canDelete: true,
+      mod: '⌘',
+      onDuplicate: vi.fn(),
+      onDelete: vi.fn(),
+    });
+    expect(items.map((item) => item.id)).toEqual([
+      'undo',
+      'redo',
+      'sep-history',
+      'duplicate',
+      'delete',
+      'sep-manual-edit',
+      'manual-edit',
+    ]);
+    expect(items[0].disabled).toBe(true);
+    expect(items[1].disabled).toBe(true);
+    expect(items[3].label).toBe('Duplicate sheet tab');
+    expect(items[4].label).toBe('Delete sheet tab');
+    expect(items[4].shortcut).toBe('Del');
+    expect(items[6].label).toBe('Manual edit');
+    expect(items[6].checked).toBe(false);
+    expect(items[6].disabled).toBe(true);
+  });
+
+  it('checks Manual edit when on and toggles on click', () => {
+    const onManualEditChange = vi.fn();
+    const on = buildSheetsEditMenu({
+      canDuplicate: true,
+      canDelete: true,
+      mod: '⌘',
+      onDuplicate: vi.fn(),
+      onDelete: vi.fn(),
+      manualEdit: true,
+      canManualEdit: true,
+      onManualEditChange,
+    });
+    const item = on.find((entry) => entry.id === 'manual-edit');
+    expect(item?.checked).toBe(true);
+    expect(item?.disabled).toBe(false);
+    item?.onSelect?.();
+    expect(onManualEditChange).toHaveBeenCalledWith(false);
+
+    const off = buildSheetsEditMenu({
+      canDuplicate: true,
+      canDelete: true,
+      mod: '⌘',
+      onDuplicate: vi.fn(),
+      onDelete: vi.fn(),
+      manualEdit: false,
+      canManualEdit: true,
+      onManualEditChange,
+    });
+    off.find((entry) => entry.id === 'manual-edit')?.onSelect?.();
+    expect(onManualEditChange).toHaveBeenCalledWith(true);
+  });
+
+  it('disables Delete sheet tab when only one tab remains', () => {
+    const items = buildSheetsEditMenu({
+      canDuplicate: true,
+      canDelete: false,
+      mod: 'Ctrl+',
+      onDuplicate: vi.fn(),
+      onDelete: vi.fn(),
+    });
+    expect(items.find((item) => item.id === 'delete')?.disabled).toBe(true);
+  });
+});
+
+describe('buildSheetsInsertMenu', () => {
+  it('offers New sheet tab then Duplicate sheet tab', () => {
+    const onInsert = vi.fn();
+    const items = buildSheetsInsertMenu({
+      canInsert: true,
+      canDuplicate: true,
+      onInsertTab: onInsert,
+      onDuplicate: vi.fn(),
+    });
+    expect(items[0].label).toBe('New sheet tab');
+    expect(items[1].label).toBe('Duplicate sheet tab');
+    items[0].onSelect?.();
+    expect(onInsert).toHaveBeenCalled();
+  });
+});
+
+describe('isSheetsTypingTarget', () => {
+  it('treats inputs and Monaco as typing', () => {
+    expect(isSheetsTypingTarget({ tagName: 'INPUT' })).toBe(true);
+    expect(isSheetsTypingTarget({ tagName: 'TEXTAREA' })).toBe(true);
+    expect(
+      isSheetsTypingTarget({
+        tagName: 'DIV',
+        closest: (selector: string) => selector.includes('.monaco-editor'),
+      }),
+    ).toBe(true);
+    expect(isSheetsTypingTarget({ tagName: 'BUTTON' })).toBe(false);
+  });
+});
+
+describe('SheetsMenuBar', () => {
+  it('shows File Edit View Insert on a workbook', () => {
+    const html = renderToStaticMarkup(
+      createElement(SheetsMenuBar, {
+        onNewWorkbook: () => {},
+        onCommit: () => {},
+        onInsertTab: () => {},
+        onDuplicateTab: () => {},
+        onDeleteTab: () => {},
+        onExportXlsx: () => {},
+        mode: 'preview',
+        onModeChange: () => {},
+        onRefresh: () => {},
+      }),
+    );
+    expect(html).toContain('File');
+    expect(html).toContain('Edit');
+    expect(html).toContain('View');
+    expect(html).toContain('Insert');
+    expect(html).toContain('data-testid="sheets-menu-edit"');
+    expect(html).toContain('data-testid="sheets-menu-insert"');
+    expect(html).not.toContain('data-testid="sheets-manual-edit-toggle"');
+  });
+
+  it('still shows Edit, View and Insert (disabled) on index-style pages', () => {
+    const html = renderToStaticMarkup(
+      createElement(SheetsMenuBar, {
+        onNewWorkbook: () => {},
+      }),
+    );
+    expect(html).toContain('File');
+    expect(html).toContain('data-testid="sheets-menu-edit"');
+    expect(html).toContain('data-testid="sheets-menu-insert"');
+    expect(html).toContain('data-testid="sheets-menu-view"');
+  });
+});

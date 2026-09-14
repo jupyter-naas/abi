@@ -275,6 +275,45 @@ def _render_slides_context_block(
     )
 
 
+def _render_sheets_context_block(
+    client_context: dict | None,
+    workspace_id: str | None = None,
+) -> str:
+    if not isinstance(client_context, dict):
+        return ""
+    sheets = client_context.get("sheets")
+    if not isinstance(sheets, dict):
+        return ""
+    slug = str(sheets.get("slug") or "").strip()
+    if not slug:
+        return ""
+    ws = str(sheets.get("workspace_id") or workspace_id or "").strip()
+    default_path = (
+        f"sheets/{ws}/{slug}/workbook.html" if ws else f"sheets/{slug}/workbook.html"
+    )
+    default_branch = f"sheets/{ws}/{slug}" if ws else f"sheets/{slug}"
+    path = str(sheets.get("path") or default_path).strip()
+    branch = str(sheets.get("branch") or default_branch).strip()
+    title = str(sheets.get("title") or "").strip()
+    lines = [
+        f"- slug: {slug}",
+        f"- path: {path}",
+        f"- branch: {branch}",
+    ]
+    if ws:
+        lines.append(f"- workspace_id: {ws}")
+    if title:
+        lines.append(f"- title: {title}")
+    return (
+        "\n\n## Open Sheets workbook\n"
+        "The user is editing this spreadsheet in Nexus Sheets. "
+        "If you lack write_sheets_workbook, call transfer_to_Sheets and stop.\n"
+        "Edit the JSON model via Sheets tools; omit slug (defaults to this workbook).\n"
+        + "\n".join(lines)
+        + "\n"
+    )
+
+
 def _render_coding_context_block(client_context: dict | None) -> str:
     """Inject open Code repo/branch so Abi edits the sandbox checkout."""
     if not isinstance(client_context, dict):
@@ -388,6 +427,9 @@ class ChatService:
         slides_block = _render_slides_context_block(client_context, workspace_id)
         if slides_block:
             system_prompt += slides_block
+        sheets_block = _render_sheets_context_block(client_context, workspace_id)
+        if sheets_block:
+            system_prompt += sheets_block
         coding_block = _render_coding_context_block(client_context)
         if coding_block:
             system_prompt += coding_block
@@ -423,6 +465,10 @@ class ChatService:
         slides_block = _render_slides_context_block(client_context, workspace_id)
         if slides_block.strip():
             parts.append(slides_block.strip())
+
+        sheets_block = _render_sheets_context_block(client_context, workspace_id)
+        if sheets_block.strip():
+            parts.append(sheets_block.strip())
 
         coding_block = _render_coding_context_block(client_context)
         if coding_block.strip():
