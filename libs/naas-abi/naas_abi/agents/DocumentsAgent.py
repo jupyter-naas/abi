@@ -227,9 +227,7 @@ Your step budget is finite ({DOCUMENTS_RECURSION_LIMIT} graph steps). Plan, then
             return True
         words = lowered.split()
         # Short follow-ups like "plus formel" stay with Documents.
-        if len(words) <= 6 and "?" not in raw:
-            return True
-        return False
+        return bool(len(words) <= 6 and "?" not in raw)
 
     @staticmethod
     def handoff_intents() -> list[Intent]:
