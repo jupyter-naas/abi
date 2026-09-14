@@ -716,6 +716,26 @@ class Agent(Expose):
         return str(content)
 
     @staticmethod
+    def _ai_content_effectively_empty(content: Any) -> bool:
+        """True when an assistant reply has no user-visible text."""
+        if not content:
+            return True
+        if isinstance(content, str):
+            return not content.strip()
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict):
+                    btype = block.get("type")
+                    if btype == "text" and (block.get("text") or "").strip():
+                        return False
+                    if btype == "tool_use":
+                        return False
+                elif isinstance(block, str) and block.strip():
+                    return False
+            return True
+        return False
+
+    @staticmethod
     def _has_tool_calls(message: AnyMessage) -> bool:
         tool_calls = getattr(message, "tool_calls", None)
         if tool_calls:
@@ -1145,11 +1165,41 @@ class Agent(Expose):
             self._state.current_active_agent is not None
             and self._state.current_active_agent != self._name
         ):
-            logger.debug(
-                f"⏩ Continuing conversation with: '{self._state.current_active_agent}'"
+            active_name = self._state.current_active_agent
+            human_text = (
+                last_human_message.content
+                if last_human_message is not None
+                and isinstance(last_human_message.content, str)
+                else ""
             )
-            # self._notify_agent_routing(self._state.current_active_agent)
-            return Command(goto=self._state.current_active_agent)
+            active_agent = pd.find(
+                self._agents,
+                lambda a: Agent.validate_name(a.name) == active_name,
+            )
+            retain = True
+            retain_fn = (
+                getattr(type(active_agent), "retains_active_turn", None)
+                if active_agent is not None
+                else None
+            )
+            if callable(retain_fn):
+                try:
+                    retain = bool(retain_fn(human_text))
+                except Exception:  # noqa: BLE001
+                    logger.debug(
+                        "retains_active_turn failed for '%s'; keeping sticky handoff",
+                        active_name,
+                        exc_info=True,
+                    )
+                    retain = True
+            if retain:
+                logger.debug(f"⏩ Continuing conversation with: '{active_name}'")
+                # self._notify_agent_routing(active_name)
+                return Command(goto=active_name)
+            logger.debug(
+                f"↩️  Releasing sticky agent '{active_name}' back to '{self._name}'"
+            )
+            self._state.set_current_active_agent(self._name)
 
         # self._state.set_current_active_agent(self.name)
         logger.debug(f"💬 Starting chatting with: '{self._name}'")
@@ -1945,6 +1995,37 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         if self._markdown_pretty_display:
             logger.debug("Applying Markdown pretty display to response")
             response = self._pretty_display_markdown(response)
+
+        # Empty final replies under a supervisor become blank chat bubbles. Hand
+        # control back so the supervisor can answer the same user turn instead
+        # of persisting an empty AIMessage.
+        has_supervisor = (
+            self._state.supervisor_agent is not None
+            and self._state.supervisor_agent.strip() != ""
+            and self._state.supervisor_agent != self._name
+        )
+        if (
+            isinstance(response, AIMessage)
+            and not self._has_tool_calls(response)
+            and self._ai_content_effectively_empty(response.content)
+            and has_supervisor
+        ):
+            supervisor = self._state.supervisor_agent
+            assert supervisor is not None
+            logger.info(
+                "Empty reply from '%s'; returning control to supervisor '%s'",
+                self._name,
+                supervisor,
+            )
+            self._state.set_current_active_agent(supervisor)
+            return Command(
+                goto="current_active_agent",
+                graph=Command.PARENT,
+                update={
+                    **routing_update,
+                    "current_active_agent": supervisor,
+                },
+            )
 
         # Sequential supervisor mode (opt-in): if a sequential_supervisor parent
         # tagged this sub-agent instance, hand control back to that supervisor when

@@ -862,3 +862,13 @@ def test_one_routing_write_per_step_keeps_first_handoff():
     assert routing == [first]
     assert any((cmd.update or {}).get("messages") == ["h2"] for cmd in out)
     assert any((cmd.update or {}).get("messages") == ["deck"] for cmd in out)
+
+
+def test_ai_content_effectively_empty():
+    from naas_abi_core.services.agent.Agent import Agent
+
+    assert Agent._ai_content_effectively_empty("") is True
+    assert Agent._ai_content_effectively_empty("   ") is True
+    assert Agent._ai_content_effectively_empty("hello") is False
+    assert Agent._ai_content_effectively_empty([{"type": "text", "text": ""}]) is True
+    assert Agent._ai_content_effectively_empty([{"type": "text", "text": "hi"}]) is False
