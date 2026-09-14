@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v2.68.1 (2026-09-14)
+
+### Bug Fixes
+
+- **core,nexus**: Release sticky office turns that would leave empty bubbles
+  ([`333e5d8`](https://github.com/jupyter-naas/abi/commit/333e5d8de15984905c21ad244462acc4485dfad7))
+
+- **documents**: Satisfy ruff SIM103 in retains_active_turn
+  ([`ba96f93`](https://github.com/jupyter-naas/abi/commit/ba96f930e5544d144d341a1f6c489ef19030eeae))
+
+
 ## v2.68.0 (2026-09-14)
 
 ### Bug Fixes
