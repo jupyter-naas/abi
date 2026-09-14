@@ -2,19 +2,6 @@
 
 <!-- version list -->
 
-## v2.35.2 (2026-09-14)
-
-### Bug Fixes
-
-- **core**: Use static SQL for snapshot existence lookup
-  ([`41bd54d`](https://github.com/jupyter-naas/abi/commit/41bd54dd4cdf556e390f859694dcc3e5c5bd871c))
-
-### Performance Improvements
-
-- **core**: Reuse DuckLake snapshot read connections
-  ([`c3471c9`](https://github.com/jupyter-naas/abi/commit/c3471c9b3321a51e21e18ac77d38f4d75a954e7d))
-
-
 ## v2.35.1 (2026-09-11)
 
 ### Bug Fixes

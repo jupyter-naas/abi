@@ -9,6 +9,7 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__p
     _class_declared_model_ids,
     _workspace_agent_roster,
     pick_workspace_chat_agent_id,
+    pick_workspace_documents_agent_id,
     pick_workspace_slides_agent_id,
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents.port import AgentRecord
@@ -119,3 +120,29 @@ def test_pick_workspace_slides_agent_prefers_enabled_office_slides() -> None:
     assert pick_workspace_slides_agent_id([default, other, slides]) == "slides"
     assert pick_workspace_slides_agent_id([default, other, disabled]) is None
     assert pick_workspace_slides_agent_id([default, other]) is None
+
+
+def test_pick_workspace_documents_agent_prefers_enabled_office_documents() -> None:
+    default = _agent(agent_id="default", is_default=True, enabled=True, name="Orchestrator")
+    documents = _agent(
+        agent_id="documents",
+        enabled=True,
+        name="Documents",
+        class_name="naas_abi.agents.DocumentsAgent/DocumentsAgent",
+    )
+    other = _agent(
+        agent_id="sheet",
+        enabled=True,
+        name="Office Documents",
+        class_name="acme.office.agents.SheetDocumentsAgent/SheetDocumentsAgent",
+    )
+    disabled = _agent(
+        agent_id="off",
+        enabled=False,
+        name="Documents",
+        class_name="naas_abi.agents.DocumentsAgent/DocumentsAgent",
+    )
+
+    assert pick_workspace_documents_agent_id([default, other, documents]) == "documents"
+    assert pick_workspace_documents_agent_id([default, other, disabled]) is None
+    assert pick_workspace_documents_agent_id([default, other]) is None

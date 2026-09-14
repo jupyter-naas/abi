@@ -1,0 +1,1 @@
+"""Documents asset namespace."""
