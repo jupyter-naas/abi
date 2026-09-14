@@ -29,7 +29,6 @@ from naas_abi.agents.tools.slides_tools import (
     _image_query_for_slide,
     _insert_slide_html,
     _join_sections,
-    _load_portrait_catalog,
     _parse_section_writes,
     _persist_deck,
     _redact_data_urls,
@@ -109,7 +108,7 @@ def test_download_remote_image_rejects_html_returned_with_http_200(monkeypatch):
         headers = Headers()
 
         def geturl(self):
-            return "https://valeo.com/photo"
+            return "https://images.example/photo"
 
         def read(self, _limit):
             return b"<html>blocked</html>"
@@ -124,7 +123,7 @@ def test_download_remote_image_rejects_html_returned_with_http_200(monkeypatch):
         "naas_abi.agents.tools.slides_tools.urlopen",
         lambda *_args, **_kwargs: Response(),
     )
-    result = _download_remote_image("https://valeo.com/photo")
+    result = _download_remote_image("https://images.example/photo")
     assert "error" in result
     assert "supported" in result["error"]
 
@@ -140,7 +139,7 @@ def test_download_remote_image_returns_stable_local_asset_name(monkeypatch):
         headers = Headers()
 
         def geturl(self):
-            return "https://valeo.com/photo.png"
+            return "https://images.example/photo.png"
 
         def read(self, _limit):
             return payload
@@ -155,7 +154,7 @@ def test_download_remote_image_returns_stable_local_asset_name(monkeypatch):
         "naas_abi.agents.tools.slides_tools.urlopen",
         lambda *_args, **_kwargs: Response(),
     )
-    result = _download_remote_image("https://valeo.com/photo.png")
+    result = _download_remote_image("https://images.example/photo.png")
     assert result["bytes"] == payload
     assert result["media_type"] == "image/png"
     assert result["filename"].startswith("ai-")
@@ -184,7 +183,7 @@ def test_search_remote_images_ignores_thumbnail_only_results(monkeypatch):
             ]
 
     monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=FakeDDGS))
-    result = _search_remote_images("Valeo electric mobility")
+    result = _search_remote_images("electric mobility")
     assert result == [
         {
             "image_url": "https://images.example/original.jpg",
@@ -199,86 +198,36 @@ def test_search_remote_images_ignores_thumbnail_only_results(monkeypatch):
 def test_extract_profile_portrait_candidates_prefers_og_image():
     html = """
     <html><head>
-      <meta property="og:image" content="/media/christian-back.jpg">
+      <meta property="og:image" content="/media/alex-morgan.jpg">
       <meta name="twitter:image" content="/media/social-card.jpg">
     </head><body>
-      <img alt="Christian Back portrait" src="/media/portrait-thumb.jpg">
+      <img alt="Alex Morgan portrait" src="/media/portrait-thumb.jpg">
     </body></html>
     """
     candidates = _extract_profile_portrait_candidates(
         html,
-        "https://www.forvismazars.com/de/en/users/christian-back",
-        "Christian Back",
+        "https://profiles.example/people/alex-morgan",
+        "Alex Morgan",
     )
     assert candidates
     assert (
-        candidates[0]["image_url"]
-        == "https://www.forvismazars.com/media/christian-back.jpg"
+        candidates[0]["image_url"] == "https://profiles.example/media/alex-morgan.jpg"
     )
     assert candidates[0]["source"] == "og:image"
 
 
-def test_resolve_person_portrait_uses_bob_catalog(monkeypatch):
-    monkeypatch.setattr(
-        "naas_abi.agents.tools.slides_tools._load_portrait_catalog",
-        lambda: [
-            {
-                "name": "Christian Back",
-                "photo": "https://cdn.example.test/christian-back.webp",
-                "profile_url": "https://www.forvismazars.com/christian-back",
-            }
-        ],
-    )
-    result = _resolve_person_portrait("christian back")
-    assert result["image_url"] == "https://cdn.example.test/christian-back.webp"
-    assert result["source"] == "bob_person_photo_catalog"
-
-
-def test_load_portrait_catalog_reads_bob_partners_wrapper(tmp_path, monkeypatch):
-    catalog = tmp_path / "partner-photos.json"
-    catalog.write_text(
-        json.dumps(
-            {
-                "source": "public directory",
-                "partners": [
-                    {
-                        "name": "Jörg Maas",
-                        "photo": "https://cdn.example.test/jorg-maas.webp",
-                        "profileUrl": "https://example.test/jorg-maas",
-                    }
-                ],
-            }
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(
-        "naas_abi.agents.tools.slides_tools._portrait_catalog_paths", lambda: [catalog]
-    )
-    entries = _load_portrait_catalog()
-    assert entries == [
-        {
-            "name": "Jörg Maas",
-            "photo": "https://cdn.example.test/jorg-maas.webp",
-            "profile_url": "https://example.test/jorg-maas",
-        }
-    ]
-
-
 def test_resolve_person_portrait_extracts_public_profile_image(monkeypatch):
-    monkeypatch.setattr(
-        "naas_abi.agents.tools.slides_tools._load_portrait_catalog", list
-    )
     monkeypatch.setattr(
         "naas_abi.agents.tools.slides_tools._fetch_public_profile_page",
         lambda url: {
             "final_url": url,
-            "html": '<meta property="og:image" content="/people/bryan-wright.jpg">',
+            "html": '<meta property="og:image" content="/people/alex-morgan.jpg">',
         },
     )
     result = _resolve_person_portrait(
-        "Bryan Wright", "https://forvismazars.us/people/bryan-wright"
+        "Alex Morgan", "https://profiles.example/people/alex-morgan"
     )
-    assert result["image_url"] == "https://forvismazars.us/people/bryan-wright.jpg"
+    assert result["image_url"] == "https://profiles.example/people/alex-morgan.jpg"
     assert result["source"] == "og:image"
 
 
@@ -363,8 +312,6 @@ def test_real_template_sections_round_trip_and_compact_view():
     assert prefix + "".join(sections) + suffix == html
     assert "Presentation Title" in sections[0]
     low = html.lower()
-    assert "forvis" not in low
-    assert "mazars" not in low
     assert "iso 27001" not in low
     view = _view_for_llm(html)
     # Editable surface must stay far below the ~256k-token failure mode.
@@ -517,8 +464,8 @@ def test_replaceable_image_matches_excludes_logos_icons_and_decorative_images():
 def test_image_query_for_slide_combines_theme_title_and_image_metadata():
     section = '<section><h1>Electric mobility</h1><img alt="battery plant" src="old.jpg"></section>'
     tag = _replaceable_image_matches(section)[0][1]
-    query = _image_query_for_slide("Valeo automotive", 2, section, tag)
-    assert query == "Valeo automotive Electric mobility battery plant"
+    query = _image_query_for_slide("automotive mobility", 2, section, tag)
+    assert query == "automotive mobility Electric mobility battery plant"
 
 
 def test_adapt_deck_images_replaces_editorial_images_and_preserves_logo(monkeypatch):
@@ -576,11 +523,11 @@ def test_adapt_deck_images_replaces_editorial_images_and_preserves_logo(monkeypa
         adapt = next(
             tool for tool in slides_tools() if tool.name == "adapt_deck_images"
         )
-        result = adapt.invoke({"theme": "Valeo automotive mobility"})
+        result = adapt.invoke({"theme": "automotive mobility"})
         assert result["images_found"] == 2
         assert result["images_replaced"] == 2
         assert len(result["queries"]) == 2
-        assert all("Valeo automotive mobility" in query for query in search_calls)
+        assert all("automotive mobility" in query for query in search_calls)
         deck = sc.get_file(
             repo_id="abi/monorepo",
             path="slides/ws-test/untitled-local/deck.html",

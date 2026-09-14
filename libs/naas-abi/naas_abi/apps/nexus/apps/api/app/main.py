@@ -491,18 +491,6 @@ def create_app(app: FastAPI | None = None):
         if attach_startup_handlers:
             _register_startup_handlers(app)
         register_service_exception_handlers(app)
-
-        from fastapi.exceptions import RequestValidationError
-        from fastapi.responses import JSONResponse
-
-        @app.exception_handler(RequestValidationError)
-        async def _debug_log_validation_error(request: Request, exc: RequestValidationError):
-            print(
-                f"DEBUG 422 on {request.url.path}: body={exc.body!r} errors={exc.errors()!r}",
-                flush=True,
-            )
-            return JSONResponse(status_code=422, content={"detail": exc.errors()})
-
         _configure_middleware(app)
         _register_routes(app)
         _mount_static_assets(app)

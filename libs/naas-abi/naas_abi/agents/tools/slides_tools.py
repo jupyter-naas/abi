@@ -28,7 +28,6 @@ import re
 import struct
 import unicodedata
 from collections import OrderedDict
-from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
@@ -123,9 +122,6 @@ _IMAGE_EXTENSIONS = {
 }
 _PROFILE_FETCH_MAX_BYTES = 200_000
 _PROFILE_FETCH_TIMEOUT_SECONDS = 15
-_PORTRAIT_CATALOG_RELATIVE = Path(
-    "src/personnel/carl_partners/apps/map/assets/partner-photos.json"
-)
 _HTML_ATTR_RE = re.compile(
     r"""([:\w-]+)\s*=\s*([\"'])(.*?)\2""", re.IGNORECASE | re.DOTALL
 )
@@ -153,72 +149,6 @@ def _normalise_person_name(value: str) -> str:
     decomposed = unicodedata.normalize("NFKD", value or "")
     ascii_name = decomposed.encode("ascii", "ignore").decode("ascii")
     return re.sub(r"[^a-z0-9]+", " ", ascii_name.casefold()).strip()
-
-
-def _portrait_catalog_paths() -> list[Path]:
-    """Find the public BOB personnel catalogue from a local checkout."""
-    paths: list[Path] = []
-    for root in (Path.cwd(), *Path.cwd().parents):
-        candidate = root / _PORTRAIT_CATALOG_RELATIVE
-        if candidate.is_file() and candidate not in paths:
-            paths.append(candidate)
-    return paths
-
-
-def _load_portrait_catalog() -> list[dict[str, str]]:
-    """Load public portrait metadata without requiring BOB at import time."""
-    for path in _portrait_catalog_paths():
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError):
-            continue
-        if isinstance(payload, dict):
-            payload = (
-                payload.get("partners") or payload.get("people") or payload.get("items")
-            )
-        if not isinstance(payload, list):
-            continue
-        entries: list[dict[str, str]] = []
-        for item in payload:
-            if not isinstance(item, dict):
-                continue
-            name = item.get("name")
-            photo = item.get("photo")
-            profile_url = item.get("profileUrl")
-            if isinstance(name, str) and isinstance(photo, str) and photo.strip():
-                entries.append(
-                    {
-                        "name": name.strip(),
-                        "photo": photo.strip(),
-                        "profile_url": profile_url.strip()
-                        if isinstance(profile_url, str)
-                        else "",
-                    }
-                )
-        if entries:
-            return entries
-    return []
-
-
-def _catalog_portrait(person_name: str) -> dict[str, str] | None:
-    wanted = _normalise_person_name(person_name)
-    if not wanted:
-        return None
-    entries = _load_portrait_catalog()
-    exact = [
-        entry for entry in entries if _normalise_person_name(entry["name"]) == wanted
-    ]
-    if len(exact) == 1:
-        return exact[0]
-    wanted_tokens = set(wanted.split())
-    if len(wanted_tokens) < 2:
-        return None
-    partial = [
-        entry
-        for entry in entries
-        if wanted_tokens.issubset(set(_normalise_person_name(entry["name"]).split()))
-    ]
-    return partial[0] if len(partial) == 1 else None
 
 
 def _html_attrs(tag: str) -> dict[str, str]:
@@ -403,20 +333,11 @@ def _resolve_person_portrait(person_name: str, profile_url: str = "") -> dict[st
     name = (person_name or "").strip()
     if not name:
         return {"error": "person_name must be a non-empty full name."}
-    catalog_entry = _catalog_portrait(name)
-    if catalog_entry:
-        return {
-            "person_name": name,
-            "image_url": catalog_entry["photo"],
-            "profile_url": catalog_entry.get("profile_url", ""),
-            "source": "bob_person_photo_catalog",
-            "verified_by": "replace_slide_image_binary_validation",
-        }
     source_url = (profile_url or "").strip()
     if not source_url:
         return {
             "error": (
-                f"No portrait catalogue entry found for {name}. Provide the public profile URL "
+                f"No profile URL was provided for {name}. Provide the public profile URL "
                 "returned by web_search, not a direct image URL."
             )
         }
@@ -859,20 +780,6 @@ def _image_box_aspect_ratio(tag: str) -> float | None:
     except ValueError:
         return None
     return width / height if width > 0 and height > 0 else None
-
-
-def _catalog_portrait_for_tag(tag: str) -> dict[str, str] | None:
-    """Find an official portrait when the image metadata contains a catalog name."""
-    searchable = _normalise_person_name(" ".join(_html_attrs(tag).values()))
-    if not searchable:
-        return None
-    searchable_tokens = set(searchable.split())
-    matches = []
-    for entry in _load_portrait_catalog():
-        name_tokens = set(_normalise_person_name(entry.get("name", "")).split())
-        if len(name_tokens) >= 2 and name_tokens.issubset(searchable_tokens):
-            matches.append(entry)
-    return matches[0] if len(matches) == 1 else None
 
 
 def _replace_image_tags_in_section(
@@ -2765,29 +2672,17 @@ def slides_tools() -> list[BaseTool]:
                     processed += 1
                     query = _image_query_for_slide(theme, section_index, section, tag)
                     queries.append(query)
-                    official_portrait = _catalog_portrait_for_tag(tag)
                     search_result = _search_remote_images(query, candidate_limit)
                     if isinstance(search_result, dict):
-                        if not official_portrait:
-                            failures.append(
-                                {
-                                    "section_index": section_index,
-                                    "query": query,
-                                    **search_result,
-                                }
-                            )
-                            continue
-                        search_result = []
-                    candidates: list[dict[str, str]] = []
-                    if official_portrait:
-                        candidates.append(
+                        failures.append(
                             {
-                                "image_url": official_portrait["photo"],
-                                "title": official_portrait["name"],
-                                "source_url": official_portrait.get("profile_url", ""),
-                                "source": "official_bob_person_photo_catalog",
+                                "section_index": section_index,
+                                "query": query,
+                                **search_result,
                             }
                         )
+                        continue
+                    candidates: list[dict[str, str]] = []
                     candidates.extend(search_result)
                     expected_aspect_ratio = _image_box_aspect_ratio(tag)
                     valid_candidates: list[
@@ -2809,11 +2704,6 @@ def slides_tools() -> list[BaseTool]:
                         if score < 0:
                             last_error = "Image dimensions could not be verified."
                             continue
-                        if (
-                            candidate.get("source")
-                            == "official_bob_person_photo_catalog"
-                        ):
-                            score += 100
                         valid_candidates.append((score, downloaded, candidate))
                     if not valid_candidates:
                         failures.append(
@@ -2930,8 +2820,7 @@ def slides_tools() -> list[BaseTool]:
         """Resolve a named person's direct public portrait image URL.
 
         Use this after ``web_search`` when a user asks for a named person's
-        photo. The resolver first checks BOB's public Forvis Mazars personnel
-        catalogue, then can inspect a public profile page's ``og:image``,
+        photo. The resolver inspects a public profile page's ``og:image``,
         JSON-LD, or image attributes. It never treats a profile page URL as an
         image URL and does not guess CDN paths. Pass the returned ``image_url``
         to ``replace_slide_image``; that tool performs the final binary image
