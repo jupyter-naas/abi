@@ -54,3 +54,32 @@ def test_cli_apply_uses_shared_mutator(tmp_path) -> None:
     )
     assert result.exit_code == 0, result.output
     assert "Added" in path.read_text(encoding="utf-8")
+
+
+def test_cli_apply_mark_and_link_use_shared_mutator(tmp_path) -> None:
+    path = tmp_path / "document.html"
+    path.write_text(
+        '<div class="doc-body"><h2>Head</h2><p>See the public website.</p></div>',
+        encoding="utf-8",
+    )
+    bold = CliRunner().invoke(
+        documents,
+        ["apply-mark", "--html", str(path), "--find", "public", "--mark", "strong"],
+    )
+    assert bold.exit_code == 0, bold.output
+    linked = CliRunner().invoke(
+        documents,
+        [
+            "insert-link",
+            "--html",
+            str(path),
+            "--find",
+            "website",
+            "--href",
+            "https://www.forvismazars.com",
+        ],
+    )
+    assert linked.exit_code == 0, linked.output
+    text = path.read_text(encoding="utf-8")
+    assert "<strong>public</strong>" in text
+    assert 'href="https://www.forvismazars.com"' in text

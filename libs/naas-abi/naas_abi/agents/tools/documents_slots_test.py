@@ -137,10 +137,9 @@ def test_fill_document_slots_lists_omitted_slots() -> None:
     assert "Use the Quote style" in result["html"]
 
 
-def test_fill_document_slots_ignores_unknown_keys() -> None:
+def test_fill_document_slots_rejects_unknown_keys() -> None:
     result = fill_document_slots(_SEED, {**_COMPLETE, "soundtrack": "nope"})
-    assert result["ok"] is True
-    assert leftover_placeholders(result["html"]) == []
+    assert "Unknown template field: soundtrack" in result["error"]
 
 
 def test_fill_title_writes_cover_h1_not_situation_heading() -> None:
@@ -204,11 +203,38 @@ def test_fill_title_promotes_h2_title_slot_to_h1() -> None:
 
 
 def test_fill_document_slots_works_without_data_slot() -> None:
-    bare = _SEED.replace(" data-slot=\"title\"", "")
-    bare = bare.replace(" data-slot=\"subtitle\"", "")
-    bare = bare.replace(" data-slot=\"intro\"", "")
-    bare = bare.replace(" data-slot=\"note\"", "")
+    bare = _SEED.replace(' data-slot="title"', "")
+    bare = bare.replace(' data-slot="subtitle"', "")
+    bare = bare.replace(' data-slot="intro"', "")
+    bare = bare.replace(' data-slot="note"', "")
     result = fill_document_slots(bare, _COMPLETE)
     assert result["ok"] is True
     assert "Synthese board" in result["html"]
     assert leftover_placeholders(result["html"]) == []
+
+
+def test_fill_blank_creates_content_and_table_regions():
+    seed = '<main class="document"><section class="page"><div class="doc-body"><h1 data-slot="title">Title</h1><p data-slot="subtitle"></p><p data-slot="intro"></p></div><footer>Keep footer</footer></section></main>'
+    result = fill_document_slots(seed, _COMPLETE)
+    assert result["ok"], result
+    assert _COMPLETE["sections"][0]["body"] in result["html"]
+    assert "<table" in result["html"]
+    assert result["html"].index(_COMPLETE["sections"][0]["body"]) < result[
+        "html"
+    ].index("</div><footer>")
+
+
+def test_template_fields_are_filled_and_unknown_fields_rejected():
+    seed = _SEED.replace("</main>", '<p data-slot="client">[Client]</p></main>')
+    result = fill_document_slots(seed, {**_COMPLETE, "fields": {"client": "Acme & Co"}})
+    assert "Acme &amp; Co" in result.get("html", ""), result
+    assert "[Client]" not in result["html"]
+    bad = fill_document_slots(seed, {**_COMPLETE, "fields": {"clinet": "Acme"}})
+    assert "error" in bad
+
+
+def test_unfilled_business_fields_prevent_complete_result():
+    seed = _SEED.replace("</main>", '<p data-slot="client">[Client]</p></main>')
+    result = fill_document_slots(seed, _COMPLETE)
+    assert result["incomplete"]
+    assert "client" in result["missing_slots"]

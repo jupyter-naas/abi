@@ -3,18 +3,31 @@ import {
   SLIDES_PDF_FROM_DOM_SCRIPT_ID,
 } from './documents-pptx-from-dom';
 
-/** Letter content width (8.5in at 96dpi). Reading column, not a 16:9 stage. */
-export const DOCUMENTS_PAGE_WIDTH = 816;
-/** Letter page height at 96dpi. Soft pagination fills this sheet. */
-export const DOCUMENTS_PAGE_MIN_HEIGHT = 1056;
+/** One paper contract for preview and print: ISO A4, at CSS 96dpi. */
+export const DOCUMENTS_PAPER_WIDTH_MM = 210;
+export const DOCUMENTS_PAPER_HEIGHT_MM = 297;
+export const DOCUMENTS_PAGE_WIDTH = DOCUMENTS_PAPER_WIDTH_MM * 96 / 25.4;
+export const DOCUMENTS_PAGE_MIN_HEIGHT = DOCUMENTS_PAPER_HEIGHT_MM * 96 / 25.4;
 export const DOCUMENTS_PAGE_PADDING_TOP = 72;
 export const DOCUMENTS_PAGE_PADDING_X = 80;
 export const DOCUMENTS_PAGE_PADDING_BOTTOM = 96;
-/** Gap between stacked letter sheets in the preview (Word / Docs print layout). */
+/** Gap between stacked A4 sheets in the preview (Word / Docs print layout). */
 export const DOCUMENTS_PAGE_GAP_PX = 32;
 export const DOCUMENTS_PAGE_CONTENT_HEIGHT =
   DOCUMENTS_PAGE_MIN_HEIGHT - DOCUMENTS_PAGE_PADDING_TOP - DOCUMENTS_PAGE_PADDING_BOTTOM;
 export const DOCUMENTS_PREVIEW_GUTTER_PX = 48;
+
+/** Existing templates only select orientation; all Documents pages use A4. */
+export function documentsPageSize(html: string): { width: number; height: number } {
+  const styles = Array.from(html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi))
+    .map((match) => match[1]).join('\n');
+  const width = Number(styles.match(/--page-w\s*:\s*([\d.]+)px/i)?.[1]);
+  const height = Number(styles.match(/--page-h\s*:\s*([\d.]+)px/i)?.[1]);
+  const landscape = width >= 320 && width <= 2400 && height >= 320 && height <= 2400 && width > height;
+  return landscape
+    ? { width: DOCUMENTS_PAGE_MIN_HEIGHT, height: DOCUMENTS_PAGE_WIDTH }
+    : { width: DOCUMENTS_PAGE_WIDTH, height: DOCUMENTS_PAGE_MIN_HEIGHT };
+}
 
 /** Hard page break in source HTML. Print and the paginator honor this, not a section. */
 export const PAGE_BREAK_HTML = '<div class="page-break" data-nexus-page-break></div>';
@@ -25,7 +38,7 @@ export type DocumentsFlowBlock = {
 };
 
 /**
- * Group flow blocks into letter pages. A hard break is ODF fo:break-before=page
+ * Group flow blocks into paper pages. A hard break is ODF fo:break-before=page
  * / Google Docs PageBreak / Word w:br w:type="page": start a new sheet, same section.
  */
 export function planLetterPages(
@@ -82,9 +95,9 @@ export const SLIDES_INDUSTRY_STAGE_HEIGHT = 1080;
 export const SLIDES_INDUSTRY_STAGE_SCALE =
   DOCUMENTS_PAGE_WIDTH / SLIDES_INDUSTRY_STAGE_WIDTH;
 
-/** Letter sheet used by File → Print / Save as PDF. */
-export const SLIDES_PRINT_PAGE_WIDTH_IN = '8.5in';
-export const SLIDES_PRINT_PAGE_HEIGHT_IN = '11in';
+/** A4 sheet used by File → Print / Save as PDF. */
+export const SLIDES_PRINT_PAGE_WIDTH_IN = `${DOCUMENTS_PAPER_WIDTH_MM / 25.4}in`;
+export const SLIDES_PRINT_PAGE_HEIGHT_IN = `${DOCUMENTS_PAPER_HEIGHT_MM / 25.4}in`;
 
 /** Parent waits this long for an iframe ack that print() was invoked. */
 export const SLIDES_PDF_EXPORT_ACK_MS = 8000;
@@ -180,7 +193,7 @@ const SLIDES_EDIT_HTML_ALLOWED = new Set([
 ]);
 
 /**
- * Width-only scale: fit the letter column into the pane. Height follows the
+ * Width-only scale: fit the A4 column into the pane, capped at 100%. Height follows the
  * prose, so the host scrolls like a Word page, not a 16:9 contain-fit.
  */
 export function computeSectionsPreviewScale(
@@ -192,7 +205,7 @@ export function computeSectionsPreviewScale(
   if (availWidth <= 0 || pageWidth <= 0) {
     return 1;
   }
-  return Math.max(0.05, (availWidth - gutter) / pageWidth);
+  return Math.min(1, Math.max(0.05, (availWidth - gutter) / pageWidth));
 }
 
 /** Host scrollTop that brings a heading block into view at the current scale. */
@@ -219,7 +232,7 @@ export function sectionsPreviewIndexFromScroll(
   return best;
 }
 
-/** CSS injected into preview srcDoc so fixed 816px prose sections fill the stage cleanly. */
+/** CSS injected into preview srcDoc so fixed A4 prose sections fill the stage cleanly. */
 export const SLIDES_PREVIEW_FIT_STYLE_ID = 'nexus-documents-preview-fit';
 export const SLIDES_PREVIEW_BRIDGE_SCRIPT_ID = 'nexus-documents-preview-bridge';
 
@@ -236,7 +249,7 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
   }
   function headingNodes() {
     return Array.prototype.slice.call(
-      document.querySelectorAll('.letter-page h1, .letter-page h2, .letter-page h3, main.document > section h1, main.document > section h2, main.document > section h3')
+      document.querySelectorAll('.letter-page h1, .letter-page h2, .letter-page h3, .letter-page h4, main.document > section h1, main.document > section h2, main.document > section h3, main.document > section h4')
     );
   }
   function isPageBreak(el) {
@@ -366,7 +379,7 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
         current.footer = n;
         return;
       }
-      if (n.nodeType === 1 && n.classList && n.classList.contains('doc-body')) {
+      if (n.nodeType === 1 && n.classList && (n.classList.contains('doc-body') || n.classList.contains('doc-region'))) {
         takeKids(n);
         return;
       }
@@ -392,6 +405,8 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
       var filled = false;
       run.nodes.forEach(function (node) {
         if (isHardBreak(node)) {
+          // Keep the marker so a later pagination pass preserves the explicit break.
+          bodyEl.appendChild(node);
           if (filled) {
             page = makeLetterPage();
             root.appendChild(page);
@@ -404,6 +419,12 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
         filled = true;
         if (bodyEl.childNodes.length > 1 && bodyOverflows(bodyEl)) {
           bodyEl.removeChild(node);
+          var precedingHeadings = [];
+          while (bodyEl.lastElementChild && /^H[1-4]$/.test(bodyEl.lastElementChild.tagName)) {
+            var heading = bodyEl.lastElementChild;
+            bodyEl.removeChild(heading);
+            precedingHeadings.unshift(heading);
+          }
           if (discardEmptyPage(page, bodyEl)) {
             page = null;
             bodyEl = null;
@@ -411,6 +432,7 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
           page = makeLetterPage();
           root.appendChild(page);
           bodyEl = decorateLetterPage(page, run.header, run.footer, true);
+          precedingHeadings.forEach(function (heading) { bodyEl.appendChild(heading); });
           bodyEl.appendChild(node);
         }
       });
@@ -446,9 +468,9 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
   function outlineTops() {
     var heads = headingNodes();
     if (heads.length) {
-      return heads.map(function (node) { return node.offsetTop || 0; });
+      return heads.map(function (node) { return node.getBoundingClientRect().top + window.scrollY; });
     }
-    return sectionNodes().map(function (node) { return node.offsetTop || 0; });
+    return sectionNodes().map(function (node) { return node.getBoundingClientRect().top + window.scrollY; });
   }
   function reportMetrics() {
     try {
@@ -490,7 +512,7 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
     reportMetrics();
     setTimeout(reportMetrics, 50);
     setTimeout(reportMetrics, 250);
-    waitForImages().then(function () {
+    Promise.all([waitForImages(), document.fonts ? document.fonts.ready : Promise.resolve()]).then(function () {
       paginateDocument();
       parent.postMessage(
         { source: SOURCE, type: 'images-ready', height: measureHeight() },
@@ -578,6 +600,12 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
     scheduleEditCommit();
   });
   document.addEventListener('keydown', function (event) {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'p') {
+      event.preventDefault();
+      resetDocumentForPrint();
+      window.print();
+      return;
+    }
     if (!editEnabled || event.key !== 'Escape') return;
     var active = document.activeElement;
     if (active && active.blur) active.blur();
@@ -689,33 +717,19 @@ const PREVIEW_BRIDGE_SCRIPT = `<script id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}">
 })();
 </script>`;
 
-/** Print: each letter sheet is one page. Hard .page-break markers still force a page. */
+/** Printing changes only the surrounding canvas, never the paper geometry. */
 export const SLIDES_PREVIEW_PRINT_CSS = `
   @media print {
-    @page { size: letter; margin: 0; }
-    * {
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-    }
-    html, body {
-      margin: 0 !important;
-      padding: 0 !important;
-      width: auto !important;
-      height: auto !important;
-      background: #fff !important;
-      overflow: visible !important;
-    }
-    .document-menubar,
-    .section-index,
-    .document-export-menu { display: none !important; }
+    @page { size: A4 portrait; margin: 0; }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    html, body { margin: 0 !important; padding: 0 !important; height: auto !important; min-height: 0 !important; background: #fff !important; overflow: visible !important; }
+    .document-menubar, .section-index, .document-export-menu { display: none !important; }
     body.document-has-menubar .document,
-    .document {
+    .document, .document[data-nexus-paginated="1"] {
       display: block !important;
       padding: 0 !important;
-      gap: 0 !important;
       margin: 0 !important;
-      width: auto !important;
-      max-width: none !important;
+      gap: 0 !important;
       min-height: 0 !important;
       box-shadow: none !important;
       background: transparent !important;
@@ -724,92 +738,18 @@ export const SLIDES_PREVIEW_PRINT_CSS = `
       overflow: visible !important;
     }
     .letter-page {
-      position: relative !important;
-      display: flex !important;
-      flex-direction: column !important;
-      width: 8.5in !important;
-      height: 11in !important;
-      min-height: 11in !important;
-      max-height: 11in !important;
       margin: 0 !important;
-      padding: 0.3in 0.5in !important;
-      overflow: hidden !important;
       box-shadow: none !important;
-      border: none !important;
-      background: #fff !important;
-      page-break-after: always !important;
       break-after: page !important;
-      page-break-inside: avoid !important;
+      page-break-after: always !important;
       break-inside: avoid !important;
+      page-break-inside: avoid !important;
     }
-    .letter-page:last-of-type {
-      page-break-after: auto !important;
-      break-after: auto !important;
-    }
-    .letter-page > .doc-header {
-      position: static !important;
-      top: auto !important;
-      right: auto !important;
-      left: auto !important;
-      flex: 0 0 auto !important;
-      align-self: flex-end !important;
-      margin: 0 0 12pt !important;
-    }
-    .letter-page > .doc-body {
-      flex: 1 1 auto !important;
-      min-height: 0 !important;
-      overflow: hidden !important;
-    }
-    .letter-page > .doc-footer {
-      position: static !important;
-      left: auto !important;
-      right: auto !important;
-      bottom: auto !important;
-      flex: 0 0 auto !important;
-      margin: 12pt 0 0 !important;
-    }
-    .letter-page > .doc-footer ~ .doc-header,
-    .letter-page > .doc-footer .brand-logo,
-    .letter-page > .doc-footer .wordmark {
+    .letter-page:last-of-type { break-after: auto !important; page-break-after: auto !important; }
+    .letter-page .page-break, .letter-page [data-nexus-page-break] {
       display: none !important;
-    }
-    .page-break, [data-nexus-page-break] {
-      display: block !important;
-      height: 0 !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      border: none !important;
-      page-break-before: always !important;
-      break-before: page !important;
-    }
-    .letter-page .page-break,
-    .letter-page [data-nexus-page-break] {
-      page-break-before: auto !important;
       break-before: auto !important;
-    }
-    .page[data-nexus-empty-section],
-    .section[data-nexus-empty-section] {
-      display: none !important;
-    }
-    .page, .section {
-      display: block !important;
-      position: relative !important;
-      width: auto !important;
-      height: auto !important;
-      min-height: 0 !important;
-      max-width: none !important;
-      max-height: none !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      overflow: visible !important;
-      contain: none !important;
-      border: none !important;
-      box-shadow: none !important;
-      background: transparent !important;
-    }
-    h1, h2, h3 {
-      page-break-after: avoid !important;
-      break-after: avoid !important;
+      page-break-before: auto !important;
     }
   }
 `;
@@ -819,6 +759,14 @@ const VIEWPORT_FIT_SCRIPT_RE =
 
 export function prepareSectionsPreviewHtml(html: string): string {
   if (!html) return html;
+  const pageSize = documentsPageSize(html);
+  const printCss = SLIDES_PREVIEW_PRINT_CSS.replace(
+    'A4 portrait', pageSize.width > pageSize.height ? 'A4 landscape' : 'A4 portrait',
+  );
+  const bridge = PREVIEW_BRIDGE_SCRIPT.replace(
+    `var PAGE_MIN_HEIGHT = ${DOCUMENTS_PAGE_MIN_HEIGHT};`,
+    `var PAGE_MIN_HEIGHT = ${pageSize.height};`,
+  );
   let next = html.replace(VIEWPORT_FIT_SCRIPT_RE, '');
 
   if (!next.includes(`id="${SLIDES_PREVIEW_FIT_STYLE_ID}"`)) {
@@ -838,9 +786,9 @@ export function prepareSectionsPreviewHtml(html: string): string {
     padding: ${DOCUMENTS_PAGE_PADDING_TOP}px ${DOCUMENTS_PAGE_PADDING_X}px ${DOCUMENTS_PAGE_PADDING_BOTTOM}px !important;
     gap: 0 !important;
     align-items: stretch !important;
-    width: ${DOCUMENTS_PAGE_WIDTH}px !important;
-    max-width: ${DOCUMENTS_PAGE_WIDTH}px !important;
-    min-height: ${DOCUMENTS_PAGE_MIN_HEIGHT}px !important;
+    width: ${pageSize.width}px !important;
+    max-width: ${pageSize.width}px !important;
+    min-height: ${pageSize.height}px !important;
     background: #fff !important;
     box-shadow: 0 1px 3px rgba(26, 26, 26, 0.08) !important;
     transform: none !important;
@@ -884,10 +832,10 @@ export function prepareSectionsPreviewHtml(html: string): string {
     display: flex !important;
     flex-direction: column !important;
     box-sizing: border-box !important;
-    width: ${DOCUMENTS_PAGE_WIDTH}px !important;
-    height: ${DOCUMENTS_PAGE_MIN_HEIGHT}px !important;
-    min-height: ${DOCUMENTS_PAGE_MIN_HEIGHT}px !important;
-    max-height: ${DOCUMENTS_PAGE_MIN_HEIGHT}px !important;
+    width: ${pageSize.width}px !important;
+    height: ${pageSize.height}px !important;
+    min-height: ${pageSize.height}px !important;
+    max-height: ${pageSize.height}px !important;
     padding: 28px ${DOCUMENTS_PAGE_PADDING_X}px !important;
     margin: 0 !important;
     border: none !important;
@@ -971,7 +919,7 @@ export function prepareSectionsPreviewHtml(html: string): string {
     outline: 2px solid rgba(37, 99, 235, 0.75);
     outline-offset: 2px;
   }
-${SLIDES_PREVIEW_PRINT_CSS}
+${printCss}
 </style>`;
     if (next.includes('</head>')) {
       next = next.replace('</head>', `${inject}</head>`);
@@ -992,9 +940,9 @@ ${SLIDES_PREVIEW_PRINT_CSS}
 
   if (!next.includes(`id="${SLIDES_PREVIEW_BRIDGE_SCRIPT_ID}"`)) {
     if (next.includes('</body>')) {
-      next = next.replace('</body>', `${PREVIEW_BRIDGE_SCRIPT}</body>`);
+      next = next.replace('</body>', `${bridge}</body>`);
     } else {
-      next = `${next}${PREVIEW_BRIDGE_SCRIPT}`;
+      next = `${next}${bridge}`;
     }
   }
 
@@ -1085,7 +1033,7 @@ export function coverHeroCss(html: string): string {
 export const SLIDES_COVER_FIT_STYLE_ID = 'nexus-documents-cover-fit';
 
 /**
- * Top-of-page srcDoc for an index card: letter column, no 16:9 lock, no print bridge.
+ * Top-of-page srcDoc for an index card: A4 column, no 16:9 lock, no print bridge.
  * `index` defaults to the first heading block.
  */
 export function prepareSectionsCoverHtml(html: string, index = 0): string | null {

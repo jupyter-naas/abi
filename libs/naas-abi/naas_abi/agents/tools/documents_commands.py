@@ -12,6 +12,9 @@ from __future__ import annotations
 import html as html_lib
 import re
 from typing import Any
+from urllib.parse import urlsplit
+
+from naas_abi.agents.tools.documents_html import replace_visible, template_fields
 
 PAGE_BREAK_HTML = '<div class="page-break" data-nexus-page-break></div>'
 
@@ -68,18 +71,27 @@ _STYLE_OR_SVG_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _EMPTY_CLASS_RES = (
-    ("intro", re.compile(
-        r"<p\b[^>]*\bclass\s*=\s*[\"'][^\"']*\bintro\b[^\"']*[\"'][^>]*>\s*</p>",
-        re.IGNORECASE,
-    )),
-    ("subtitle", re.compile(
-        r"<p\b[^>]*\bclass\s*=\s*[\"'][^\"']*\bsubtitle\b[^\"']*[\"'][^>]*>\s*</p>",
-        re.IGNORECASE,
-    )),
-    ("note", re.compile(
-        r"<p\b[^>]*\bclass\s*=\s*[\"'][^\"']*\bnote\b[^\"']*[\"'][^>]*>\s*</p>",
-        re.IGNORECASE,
-    )),
+    (
+        "intro",
+        re.compile(
+            r"<p\b[^>]*\bclass\s*=\s*[\"'][^\"']*\bintro\b[^\"']*[\"'][^>]*>\s*</p>",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "subtitle",
+        re.compile(
+            r"<p\b[^>]*\bclass\s*=\s*[\"'][^\"']*\bsubtitle\b[^\"']*[\"'][^>]*>\s*</p>",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "note",
+        re.compile(
+            r"<p\b[^>]*\bclass\s*=\s*[\"'][^\"']*\bnote\b[^\"']*[\"'][^>]*>\s*</p>",
+            re.IGNORECASE,
+        ),
+    ),
 )
 _EMPTY_HEADING_RE = re.compile(r"<h[2-4]\b[^>]*>\s*</h[2-4]>", re.IGNORECASE)
 _LABEL_ONLY_LEFTOVERS = frozenset({"colour palette", "swatch hex"})
@@ -162,6 +174,11 @@ KNOWN_COMMANDS = frozenset(
         "insert_page_break",
         "insert_list",
         "insert_table",
+        "insert_image",
+        "apply_mark",
+        "insert_link",
+        "insert_comment",
+        "insert_suggestion",
         "delete_range",
         "delete_block",
         "replace_text",
@@ -221,6 +238,10 @@ def _strip_tags(raw: str) -> str:
 
 def _escape(text: str) -> str:
     return html_lib.escape(text or "", quote=False)
+
+
+def _attr(value: str) -> str:
+    return html_lib.escape(value or "", quote=True)
 
 
 def heading_outline(html: str) -> list[dict[str, Any]]:
@@ -332,8 +353,8 @@ def leftover_placeholders(html: str) -> list[str]:
     if _EMPTY_HEADING_RE.search(prose):
         if "empty heading" not in found:
             found.append("empty heading")
-    if re.search(r'data-layout=["\']tables["\']', prose, re.I) and not re.search(
-        r"<table\b", prose, re.I
+    if re.search(r'data-layout=["\']tables["\']', prose, re.IGNORECASE) and not re.search(
+        r"<table\b", prose, re.IGNORECASE
     ):
         if "missing tables" not in found:
             found.append("missing tables")
@@ -462,7 +483,7 @@ def leftover_followup_warning(leftovers: list[str], slots: list[str]) -> str:
     phrases = ", ".join(leftovers)
     keys = ", ".join(slots) if slots else "(none)"
     prefix = (
-        "INCOMPLETE: seed placeholder copy remains: "
+        "Seed placeholder copy remains: "
         + phrases
         + ". leftover_slots keys: "
         + keys
@@ -470,14 +491,12 @@ def leftover_followup_warning(leftovers: list[str], slots: list[str]) -> str:
     )
     if documents_fill_count() >= 1:
         return (
-            prefix
-            + "Stop and reply. Do not call fill_document_slots again this turn. "
+            prefix + "Stop and reply. Do not call fill_document_slots again this turn. "
             "leftover_slots wait for a later turn. "
             "Do not call apply_document_commands."
         )
     return (
-        prefix
-        + "Call fill_document_slots once with leftover_slots keys, then stop. "
+        prefix + "Call fill_document_slots once with leftover_slots keys, then stop. "
         "Each value must be a non-empty topic sentence. "
         "Do not write the memo only in chat. "
         "Do not call apply_document_commands."
@@ -646,11 +665,7 @@ def reflow_document(html: str) -> str:
     html = _drop_empty_pages(html)
     pages = _page_outer_ranges(html)
     first = html[pages[0][0] : pages[0][1]] if len(pages) >= 2 else ""
-    if (
-        len(pages) >= 2
-        and _first_body_inner(first)
-        and not _has_cover_chrome(first)
-    ):
+    if len(pages) >= 2 and _first_body_inner(first) and not _has_cover_chrome(first):
         second = html[pages[1][0] : pages[1][1]]
         pulled = _first_body_inner(second)
         if pulled.strip():
@@ -727,7 +742,9 @@ def insert_page_break(html: str, after_heading: int = -1) -> str:
     return insert_after_heading_block(html, after_heading, PAGE_BREAK_HTML)
 
 
-def insert_heading(html: str, title: str = "Heading", level: int = 2, after_heading: int = -1) -> str:
+def insert_heading(
+    html: str, title: str = "Heading", level: int = 2, after_heading: int = -1
+) -> str:
     tag, cls = _INSERT_HEADING_STYLES[min(4, max(1, int(level or 2)))]
     return insert_after_heading_block(
         html,
@@ -776,13 +793,95 @@ def insert_table(
     for row in rows or []:
         cells = row if isinstance(row, list) else [row]
         body.append(
-            "<tr>" + "".join(f"<td>{_escape(str(cell))}</td>" for cell in cells) + "</tr>"
+            "<tr>"
+            + "".join(f"<td>{_escape(str(cell))}</td>" for cell in cells)
+            + "</tr>"
         )
     markup = (
         f'<table class="{cls}"><thead><tr>{ths}</tr></thead>'
         f"<tbody>{''.join(body)}</tbody></table>"
     )
     return insert_after_heading_block(html, after_heading, markup)
+
+
+_ALLOWED_MARKS = frozenset({"strong", "em", "mark", "a"})
+
+
+def apply_mark(
+    html: str,
+    find: str,
+    mark: str = "strong",
+    href: str = "",
+    title: str = "",
+) -> str | dict[str, str]:
+    """Wrap the first find in strong, em, mark, or a link."""
+    if not find:
+        return {"error": "find is required"}
+    needle = _escape(html_lib.unescape(find))
+    kind = (mark or "strong").strip().lower()
+    if kind not in _ALLOWED_MARKS:
+        return {"error": f"Unknown mark {mark!r}. Use strong, em, mark, or a."}
+    if kind == "a":
+        target = (href or "").strip()
+        if not target or urlsplit(target).scheme.lower() not in {
+            "http",
+            "https",
+            "mailto",
+        }:
+            return {"error": "href must be an http, https, or mailto URL"}
+        wrapped = f'<a href="{_attr(target)}">{needle}</a>'
+    elif kind == "mark":
+        comment = (title or "").strip()
+        if comment:
+            wrapped = (
+                f'<mark class="fmz-comment" data-comment="{_attr(comment)}">'
+                f"{needle}</mark>"
+            )
+        else:
+            wrapped = f"<mark>{needle}</mark>"
+    else:
+        wrapped = f"<{kind}>{needle}</{kind}>"
+    return replace_visible(html, find, wrapped, unique=True)
+
+
+def insert_link(html: str, find: str, href: str) -> str | dict[str, str]:
+    return apply_mark(html, find, mark="a", href=href)
+
+
+def insert_image(
+    html: str,
+    src: str = "",
+    alt: str = "",
+    after_heading: int = -1,
+) -> str | dict[str, str]:
+    target = (src or "").strip()
+    if not target or urlsplit(target).scheme.lower() not in {"http", "https"}:
+        return {"error": "src must be an http or https URL"}
+    markup = (
+        f'<figure class="fmz-image"><img src="{_attr(target)}" '
+        f'alt="{_attr(alt)}" /></figure>'
+    )
+    return insert_after_heading_block(html, after_heading, markup)
+
+
+def insert_comment(html: str, find: str, text: str) -> str | dict[str, str]:
+    note = (text or "").strip()
+    if not note:
+        return {"error": "text is required"}
+    return apply_mark(html, find, mark="mark", title=note)
+
+
+def insert_suggestion(html: str, find: str, replace: str) -> str | dict[str, str]:
+    if not find:
+        return {"error": "find is required"}
+    if not (replace or "").strip():
+        return {"error": "replace is required"}
+    needle = _escape(html_lib.unescape(find))
+    markup = (
+        f'<del class="fmz-suggest-del">{needle}</del>'
+        f'<ins class="fmz-suggest-ins">{_escape(replace)}</ins>'
+    )
+    return replace_visible(html, find, markup, unique=True)
 
 
 def delete_block(
@@ -829,57 +928,12 @@ def delete_heading_range(html: str, heading_index: int) -> str | dict[str, str]:
     return html[:start] + html[end:]
 
 
-def _resolve_find_needle(html: str, find: str) -> str | None:
-    """Exact find, else a leftover phrase that is in both the find and the HTML."""
-    if not html or not find:
-        return None
-    if find in html:
-        return find
-    contained = [p for p in SEED_PLACEHOLDER_PHRASES if p in find and p in html]
-    if contained:
-        return max(contained, key=len)
-    containers = [p for p in SEED_PLACEHOLDER_PHRASES if find in p and p in html]
-    if containers:
-        return max(containers, key=len)
-    return None
-
-
-def _replace_blocks_containing(html: str, needle: str, replacement: str) -> tuple[str, int]:
-    """Replace each p/li/heading/td/th/quote/span that still holds needle."""
-    count = 0
-
-    def _repl(match: re.Match[str]) -> str:
-        nonlocal count
-        block = match.group(0)
-        if needle not in block:
-            return block
-        count += 1
-        tag = match.group(1)
-        if (replacement or "").lstrip().startswith("<"):
-            return replacement
-        open_tag = re.match(r"<[^>]+>", block)
-        if not open_tag:
-            return replacement
-        return f"{open_tag.group(0)}{html_lib.escape(replacement)}</{tag}>"
-
-    return _BLOCK_RE.sub(_repl, html), count
-
-
 def replace_text(html: str, find: str, replace: str) -> str | dict[str, str]:
     if not find:
         return {"error": "find is required"}
     if not (replace or "").strip():
         return {"error": _EMPTY_REPLACE_ERROR}
-    needle = _resolve_find_needle(html or "", find)
-    if needle is None:
-        return {"error": f"Text not found: {find!r}"}
-    if needle in SEED_PLACEHOLDER_PHRASES:
-        updated, n = _replace_blocks_containing(html, needle, replace)
-        if n:
-            return updated
-    if needle in html:
-        return html.replace(needle, replace)
-    return {"error": f"Text not found: {find!r}"}
+    return replace_visible(html, find, _escape(replace), acknowledge=True)
 
 
 _TITLE_SLOT_H1_RE = re.compile(
@@ -910,7 +964,9 @@ def update_document_title(html: str, title: str) -> str | dict[str, str]:
     else:
         h1_open = _H1_OPEN_RE.search(next_html)
         if h1_open:
-            next_html = _H1_FULL_RE.sub(f"{h1_open.group(0)}{safe}</h1>", next_html, count=1)
+            next_html = _H1_FULL_RE.sub(
+                f"{h1_open.group(0)}{safe}</h1>", next_html, count=1
+            )
             changed = True
     if _FOOTER_TITLE_RE.search(next_html):
         next_html = _FOOTER_TITLE_RE.sub(rf"\g<1>{safe}\g<3>", next_html)
@@ -962,11 +1018,7 @@ def update_paragraph_style(
 ) -> str | dict[str, str]:
     spec = PARAGRAPH_STYLE_SPECS.get((style or "").strip().lower())
     if not spec:
-        return {
-            "error": (
-                f"Unknown style {style!r}. Use {_PICKER_STYLE_NAMES}."
-            )
-        }
+        return {"error": (f"Unknown style {style!r}. Use {_PICKER_STYLE_NAMES}.")}
     tag, class_name_out = spec
     span: tuple[int, int] | None = None
     open_tag = ""
@@ -985,7 +1037,13 @@ def update_paragraph_style(
         start, end = span
         gt = html.find(">", start)
         open_tag = html[start : gt + 1] if gt >= 0 else ""
-        close = _matching_close_tag(html, open_tag[1:].split(None, 1)[0].rstrip(">"), gt + 1) if gt >= 0 else None
+        close = (
+            _matching_close_tag(
+                html, open_tag[1:].split(None, 1)[0].rstrip(">"), gt + 1
+            )
+            if gt >= 0
+            else None
+        )
         if close is None:
             return {"error": "Unclosed element to style"}
         inner = html[gt + 1 : close]
@@ -1017,6 +1075,7 @@ def apply_document_commands(
     if not isinstance(requests, list) or not requests:
         return {"error": "requests must be a non-empty list of command objects"}
     next_html = html
+    fill_missing: list[str] = []
     applied: list[str] = []
     skipped: list[str] = []
     heading_index = 0
@@ -1061,7 +1120,9 @@ def apply_document_commands(
                 after_heading=after,
             )
             outline = heading_outline(result)
-            heading_index = min(after + 1 if after >= 0 else len(outline) - 1, len(outline) - 1)
+            heading_index = min(
+                after + 1 if after >= 0 else len(outline) - 1, len(outline) - 1
+            )
         elif typ == "insert_page_break":
             result = insert_page_break(next_html, after)
             heading_index = max(after, 0)
@@ -1088,6 +1149,46 @@ def apply_document_commands(
                 variant=str(raw.get("variant") or "fmz-table"),
             )
             heading_index = max(after, 0)
+        elif typ == "insert_image":
+            result = insert_image(
+                next_html,
+                src=str(raw.get("src") or raw.get("href") or ""),
+                alt=str(raw.get("alt") or ""),
+                after_heading=after,
+            )
+            heading_index = max(after, 0)
+        elif typ == "apply_mark":
+            result = apply_mark(
+                next_html,
+                find=str(raw.get("find") or raw.get("text") or ""),
+                mark=str(raw.get("mark") or "strong"),
+                href=str(raw.get("href") or ""),
+                title=str(raw.get("title") or raw.get("comment") or ""),
+            )
+            heading_index = target
+        elif typ == "insert_link":
+            result = insert_link(
+                next_html,
+                find=str(raw.get("find") or raw.get("text") or ""),
+                href=str(raw.get("href") or ""),
+            )
+            heading_index = target
+        elif typ == "insert_comment":
+            result = insert_comment(
+                next_html,
+                find=str(raw.get("find") or raw.get("text") or ""),
+                text=str(
+                    raw.get("comment") or raw.get("title") or raw.get("replace") or ""
+                ),
+            )
+            heading_index = target
+        elif typ == "insert_suggestion":
+            result = insert_suggestion(
+                next_html,
+                find=str(raw.get("find") or ""),
+                replace=str(raw.get("replace") or raw.get("text") or ""),
+            )
+            heading_index = target
         elif typ == "delete_range":
             result = delete_heading_range(next_html, target)
             if isinstance(result, str):
@@ -1133,9 +1234,12 @@ def apply_document_commands(
         elif typ == "fill_slots":
             from naas_abi.agents.tools.documents_slots import fill_document_slots
 
-            filled = fill_document_slots(next_html, raw)
+            filled = fill_document_slots(
+                next_html, {k: v for k, v in raw.items() if k != "type"}
+            )
             if filled.get("error"):
                 return filled
+            fill_missing.extend(filled.get("missing_slots", []))
             next_html = str(filled.get("html") or next_html)
             applied.append(typ)
             heading_index = 0
@@ -1145,8 +1249,8 @@ def apply_document_commands(
 
         if isinstance(result, dict):
             err = str(result.get("error") or "")
-            if typ in {"replace_text", "replace_class"} and (
-                err.startswith("Text not found") or err.startswith(_EMPTY_REPLACE_ERROR)
+            if typ in {"replace_text", "replace_class"} and err.startswith(
+                ("Text not found", _EMPTY_REPLACE_ERROR)
             ):
                 skipped.append(err)
                 continue
@@ -1169,8 +1273,7 @@ def apply_document_commands(
         return {
             "error": (
                 "No commands applied. apply_document_commands is not the "
-                "fill path. "
-                + extra
+                "fill path. " + extra
             ),
             "skipped": skipped,
             **leftover,
@@ -1180,6 +1283,17 @@ def apply_document_commands(
     outline = heading_outline(next_html)
     if heading_index >= len(outline):
         heading_index = max(0, len(outline) - 1)
+    unfilled = [
+        field["name"] for field in template_fields(next_html) if field["unfilled"]
+    ]
+    completeness = {
+        "missing_slots": list(dict.fromkeys([*fill_missing, *unfilled])),
+        "content_complete": not fill_missing
+        and not unfilled
+        and not leftover_placeholders(next_html),
+    }
+    if unfilled:
+        completeness["incomplete"] = True
     return {
         "ok": True,
         "html": next_html,
@@ -1193,4 +1307,5 @@ def apply_document_commands(
         "ids": [None] * len(outline),
         "sections": outline,
         **leftover_write_note(next_html),
+        **completeness,
     }

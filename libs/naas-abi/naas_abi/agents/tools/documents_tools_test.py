@@ -548,7 +548,7 @@ def test_replace_in_document_reports_leftover_seed_copy(monkeypatch):
         assert "error" not in result, result
         assert result.get("incomplete") is True
         assert "Industry or service line" in result.get("leftover_placeholders", [])
-        assert "INCOMPLETE" in (result.get("warning") or "")
+        assert "placeholder" in (result.get("warning") or "").lower()
     finally:
         _reset_tokens(tokens)
 
@@ -1462,5 +1462,57 @@ def test_list_documents_projects_when_open_hides_other_docs(monkeypatch):
         slugs = {row["slug"] for row in result["projects"]}
         assert slugs == {"untitled-local"}
         assert "apply_documents_template" in result["note"]
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_failed_command_can_be_corrected_in_same_turn(monkeypatch):
+    _seed_in_memory_document(_bind_in_memory_git(monkeypatch), _SAMPLE)
+    tokens = _sections_context()
+    try:
+        apply = next(
+            t for t in documents_tools() if t.name == "apply_document_commands"
+        )
+        failed = apply.invoke({"requests_json": '[{"type":"not_a_command"}]'})
+        assert "error" in failed
+        fixed = apply.invoke(
+            {
+                "requests_json": '[{"type":"insert_paragraph","text":"Recovered edit","after_heading":0}]'
+            }
+        )
+        assert fixed.get("ok"), fixed
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_main_chat_creation_uses_configured_template_and_metadata(monkeypatch):
+    from naas_abi.apps.nexus.apps.api.app.services.documents.adapters.primary import (
+        documents__primary_adapter__FastAPI as api,
+    )
+
+    monkeypatch.setattr(api, "_configured_default_template_id", lambda: "acme/base-v1")
+    monkeypatch.setattr(
+        api,
+        "_load_seed_html",
+        lambda template_id: (
+            '<main><section><div class="doc-body"><h1 data-slot="title">Acme template</h1><p data-slot="client">[Client]</p></div></section></main>'
+        ),
+    )
+    sc = _bind_in_memory_git(monkeypatch)
+    tokens = _main_chat_context()
+    try:
+        create = next(
+            t for t in documents_tools() if t.name == "create_documents_project"
+        )
+        result = create.invoke({"title": "Acme report"})
+        assert result.get("ok"), result
+        assert result["template_id"] == "acme/base-v1"
+        assert any(f["name"] == "client" for f in result["template_fields"])
+        stored = sc.get_file(
+            repo_id="abi/monorepo",
+            path="documents/ws-test/acme-report/project.json",
+            ref=result["branch"],
+        )
+        assert json.loads(stored.text)["template_id"] == "acme/base-v1"
     finally:
         _reset_tokens(tokens)

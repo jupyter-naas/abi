@@ -1,13 +1,28 @@
 import inspect
+from types import SimpleNamespace
 
 from naas_abi.agents.AbiAgent import AbiAgent
 from naas_abi.agents.DocumentsAgent import DocumentsAgent
 
 
-def test_abi_prompt_hands_document_briefs_to_sections() -> None:
+def test_abi_registers_configured_documents_agent_routing() -> None:
+    agent = SimpleNamespace(
+        name=DocumentsAgent.name,
+        description=DocumentsAgent.description,
+        intents=[],
+    )
+    intents = AbiAgent.get_intents([agent])
+    assert any(
+        intent.intent_target == DocumentsAgent.name
+        and intent.intent_value == f"Chat with {DocumentsAgent.name} Agent"
+        for intent in intents
+    )
+    assert any(
+        intent.intent_target == DocumentsAgent.name
+        and intent.intent_value == DocumentsAgent.description
+        for intent in intents
+    )
     prompt = AbiAgent.system_prompt
-    lowered = prompt.lower()
-    assert "hand off to the sections agent" in lowered
     assert "create_documents_project" not in prompt
     assert "<sections_guidelines>" not in prompt
 

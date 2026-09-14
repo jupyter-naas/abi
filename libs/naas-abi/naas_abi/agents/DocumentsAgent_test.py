@@ -52,8 +52,9 @@ def test_sections_agent_prompt_names_the_document_after_its_topic() -> None:
     assert "Do not leave seed placeholder copy" in prompt
     assert "Do not append after the footer" in prompt
     assert "leftover_placeholders" in prompt
-    assert "fill_document_slots exactly once" in prompt
-    assert "do not call apply_document_commands" in prompt.lower()
+    assert "template_fields" in prompt
+    assert "content_complete=false" in prompt
+    assert "failed edit may be corrected" in prompt.lower()
     assert "do not write the memo only in chat" in prompt.lower()
     assert "missing_slots" in prompt
 
@@ -86,7 +87,10 @@ def test_sections_agent_owns_the_write_and_research_tools() -> None:
     }
     assert leftover.isdisjoint(names)
     source = inspect.getsource(DocumentsAgent.get_tools)
-    assert "naas_abi.agents.tools.web_tools" in source or "documents_research_tools" in source
+    assert (
+        "naas_abi.agents.tools.web_tools" in source
+        or "documents_research_tools" in source
+    )
     assert "nexus_admin_tools" not in source
 
 
@@ -141,7 +145,9 @@ def test_new_loads_the_sections_model_and_keeps_write_tools(monkeypatch) -> None
             **kwargs,
         ) -> ChatResult:
             del messages, stop, run_manager, kwargs
-            return ChatResult(generations=[ChatGeneration(message=AIMessage(content="ok"))])
+            return ChatResult(
+                generations=[ChatGeneration(message=AIMessage(content="ok"))]
+            )
 
     dummy = _DummyChatModel()
     monkeypatch.setattr(
@@ -175,10 +181,14 @@ def test_abi_get_intents_include_sections_handoff() -> None:
         intents=DocumentsAgent.handoff_intents(),
     )
     intents = AbiAgent.get_intents(agents=[sections])
-    sections_intents = [intent for intent in intents if intent.intent_target == "Documents"]
+    sections_intents = [
+        intent for intent in intents if intent.intent_target == "Documents"
+    ]
     values = " ".join(intent.intent_value.lower() for intent in sections_intents)
 
     assert sections_intents
     assert "create a document" in values
     assert "fais un rapport" in values
-    assert DocumentsAgent.description in {intent.intent_value for intent in sections_intents}
+    assert DocumentsAgent.description in {
+        intent.intent_value for intent in sections_intents
+    }

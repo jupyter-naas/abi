@@ -48,7 +48,8 @@ DEFAULT_DOCUMENTS_MODEL = "anthropic/claude-sonnet-5"
 
 _COPY_EDIT_RE = re.compile(
     r"\b("
-    r"rename|retitle|fix typo|change the title|tweak|"
+    r"rename|retitle|fix typo|change the title|tweak|renomme|renommer|corrige|corriger|"
+    r"change le titre|modifie le titre|mets en gras|"
     r"make it (darker|lighter|dark|light)|"
     r"change (the )?(color|font|theme)"
     r")\b",
@@ -64,8 +65,7 @@ _RESEARCH_RE = re.compile(
 )
 _CREATE_RE = re.compile(
     r"\b("
-    r"create|make|build|write|draft|generate|"
-    r"document|report|rapport|article|brief"
+    r"create|make|build|write|draft|generate|rédige|crée|cree|fais|écris"
     r")\b",
     re.IGNORECASE,
 )
@@ -120,11 +120,7 @@ _APPLY_ON_FILL_MESSAGE = (
     "Call fill_document_slots once with complete topic slots. "
     "Then stop and reply. Do not apply. Do not reread."
 )
-_REPEAT_WRITE_MESSAGE = (
-    "A document write already ran this turn. Stop and reply. "
-    "Do not call fill_document_slots, apply_document_commands, insert_heading, "
-    "insert_paragraph, insert_page_break, or read_document again."
-)
+_REPEAT_WRITE_MESSAGE = "A document write already ran this turn. Stop and reply."
 _REPEAT_APPLY_MESSAGE = _REPEAT_WRITE_MESSAGE
 _APPLY_ATTEMPT_LABEL = "apply_document_commands"
 _REPEAT_FILL_MESSAGE = _REPEAT_WRITE_MESSAGE
@@ -400,9 +396,7 @@ def _is_write_family_label(label: str) -> bool:
     text = (label or "").strip()
     if not text:
         return False
-    return not (
-        text in _NON_FAMILY_WRITE_LABELS or text.startswith("template ")
-    )
+    return not (text in _NON_FAMILY_WRITE_LABELS or text.startswith("template "))
 
 
 def documents_write_family_ran() -> bool:

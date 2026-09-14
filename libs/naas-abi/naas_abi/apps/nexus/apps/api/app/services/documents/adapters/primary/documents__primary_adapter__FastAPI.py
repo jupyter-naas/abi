@@ -3101,6 +3101,12 @@ class DocumentCommandsResponse(BaseModel):
     project_renamed: bool = False
     slug_changed: bool = False
 
+    content_complete: bool = False
+    incomplete: bool = False
+    missing_slots: list[str] = Field(default_factory=list)
+    skipped: list[str] = Field(default_factory=list)
+    warning: str = ""
+
 
 class DocumentOutlineResponse(BaseModel):
     ok: bool = True
@@ -3486,13 +3492,17 @@ async def apply_document_commands_route(
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
 
-    payloads = [item.model_dump() for item in body.requests]
+    payloads = [item.model_dump(exclude_unset=True) for item in body.requests]
     for item in payloads:
         if item.get("heading_index") is None:
             item.pop("heading_index", None)
 
+    command_result: dict = {}
+
     def _mutate(html: str) -> dict:
-        return apply_document_commands(html, payloads)
+        result = apply_document_commands(html, payloads)
+        command_result.update(result)
+        return result
 
     mutated = await _run_section_html_mutation(
         slug=slug,
@@ -3508,7 +3518,7 @@ async def apply_document_commands_route(
         last_rename_document_title,
     )
 
-    payloads_for_title = [item.model_dump() for item in body.requests]
+    payloads_for_title = [item.model_dump(exclude_unset=True) for item in body.requests]
     rename_title = last_rename_document_title(payloads_for_title)
     project_renamed = False
     if rename_title:
@@ -3548,7 +3558,12 @@ async def apply_document_commands_route(
     return DocumentCommandsResponse(
         ok=True,
         slug=slug,
-        applied=[item.type for item in body.requests],
+        applied=command_result.get("applied", []),
+        content_complete=command_result.get("content_complete", False),
+        incomplete=not command_result.get("content_complete", False),
+        missing_slots=command_result.get("missing_slots", []),
+        skipped=command_result.get("skipped", []),
+        warning=command_result.get("warning", ""),
         heading_index=mutated.section_index,
         heading_count=len(items),
         outline=[

@@ -6,15 +6,19 @@ import json
 from pathlib import Path
 
 import click
-
 from naas_abi.agents.tools.documents_commands import (
     apply_document_commands,
+    apply_mark,
     delete_block,
     heading_outline,
+    insert_comment,
     insert_heading,
+    insert_image,
+    insert_link,
     insert_list,
     insert_page_break,
     insert_paragraph,
+    insert_suggestion,
     insert_table,
     reflow_document,
     replace_text,
@@ -34,6 +38,11 @@ DOCUMENTS_VERBS = (
     "insert-page-break",
     "insert-list",
     "insert-table",
+    "insert-image",
+    "apply-mark",
+    "insert-link",
+    "insert-comment",
+    "insert-suggestion",
     "replace-text",
     "delete",
     "fill",
@@ -193,6 +202,78 @@ def documents_insert_table(
     row_list = [part.split(",") for part in rows]
     html = insert_table(_read_html(html_path), header_list, row_list, after_heading)
     _write_html(html_path, html)
+    _emit({"ok": True})
+
+
+@documents.command("insert-image")
+@click.option("--html", "html_path", type=click.Path(exists=True), required=True)
+@click.option("--src", required=True)
+@click.option("--alt", default="")
+@click.option("--after-heading", type=int, default=-1)
+def documents_insert_image(
+    html_path: str, src: str, alt: str, after_heading: int
+) -> None:
+    result = insert_image(_read_html(html_path), src, alt, after_heading)
+    if isinstance(result, dict):
+        _emit(result)
+        return
+    _write_html(html_path, result)
+    _emit({"ok": True})
+
+
+@documents.command("apply-mark")
+@click.option("--html", "html_path", type=click.Path(exists=True), required=True)
+@click.option("--find", required=True)
+@click.option("--mark", "mark_name", default="strong")
+@click.option("--href", default="")
+@click.option("--title", default="")
+def documents_apply_mark(
+    html_path: str, find: str, mark_name: str, href: str, title: str
+) -> None:
+    result = apply_mark(_read_html(html_path), find, mark_name, href, title)
+    if isinstance(result, dict):
+        _emit(result)
+        return
+    _write_html(html_path, result)
+    _emit({"ok": True})
+
+
+@documents.command("insert-link")
+@click.option("--html", "html_path", type=click.Path(exists=True), required=True)
+@click.option("--find", required=True)
+@click.option("--href", required=True)
+def documents_insert_link(html_path: str, find: str, href: str) -> None:
+    result = insert_link(_read_html(html_path), find, href)
+    if isinstance(result, dict):
+        _emit(result)
+        return
+    _write_html(html_path, result)
+    _emit({"ok": True})
+
+
+@documents.command("insert-comment")
+@click.option("--html", "html_path", type=click.Path(exists=True), required=True)
+@click.option("--find", required=True)
+@click.option("--text", required=True)
+def documents_insert_comment(html_path: str, find: str, text: str) -> None:
+    result = insert_comment(_read_html(html_path), find, text)
+    if isinstance(result, dict):
+        _emit(result)
+        return
+    _write_html(html_path, result)
+    _emit({"ok": True})
+
+
+@documents.command("insert-suggestion")
+@click.option("--html", "html_path", type=click.Path(exists=True), required=True)
+@click.option("--find", required=True)
+@click.option("--replace", required=True)
+def documents_insert_suggestion(html_path: str, find: str, replace: str) -> None:
+    result = insert_suggestion(_read_html(html_path), find, replace)
+    if isinstance(result, dict):
+        _emit(result)
+        return
+    _write_html(html_path, result)
     _emit({"ok": True})
 
 

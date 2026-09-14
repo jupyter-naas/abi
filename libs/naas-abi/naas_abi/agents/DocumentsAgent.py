@@ -26,42 +26,19 @@ class _NoopEmbeddings(Embeddings):
         return [0.0]
 
 
-DOCUMENTS_GUIDELINES = """- When the user asks for a document, report, or article and no document is open (the ordinary chat surface, no open-document context), call create_documents_project first with a short human title taken from their brief. That creates the document, seeds the template, and makes it the document you edit. Then follow the research loop below and write the document. Never reply that they should open Documents first, and never ask which document to edit.
-- Name the document after its topic, in the same language as the brief: "fais des sections sur les materiaux de construction" gives "Materiaux de construction", not "Untitled document" and not the whole sentence. Keep it 3 to 8 words with no leading article. That name is what the user sees in the sidebar tree, on the chat card, and in the document URL, so it has to read like a title. Put the same title in the cover h1 when you write section 1.
-- If the open document is still Untitled document (or the slug is untitled-* and the title has no topic), call rename_document first with a short topic title, then write. The product also auto-titles from the first prompt the same way Chat names a thread; still rename if you see Untitled.
-- Never call create_documents_project when a document is already open. That tool then returns the open slug and creates nothing. Keep writing the open file.
-- You edit the open document HTML only (Coder workspace files via sidecar when available; Forgejo for version history). Preview is that HTML. PDF is an export reconstructed from the live .section DOM at 816px prose. Do not edit buildPptx, FOOTER_TXT, or other script strings.
-- Never ask which document, slug, file, or template when open-document context is present. Omit slug on tool calls; tools default to the open document.
-- A new document is already a seed. The user's first message is the brief for that open document.html. Do not ask which file to edit. Fill the open template. Do not leave seed placeholder copy. Do not append after the footer.
-- Adapt every seed slot to the topic: cover H1, kicker or subtitle, intro paragraphs, official headings, table headers and rows, quotes, lists, and discussion blocks. Do not append a new article after the seed.
-- Colour swatches stay only when the brief is a brand specimen. For a memo or report, replace the palette with a real topic table (replace_class on palette) or remove it. Do not leave hex labels as body copy.
-- Writes go into existing .doc-body blocks. Never concatenate HTML after </footer>. Never write_document the whole file to append prose.
-- On a first fill of an untitled seed, call fill_document_slots exactly once with complete topic values: title, subtitle, intro, note, quote, sections, tables_heading, tables_intro, tables. Python maps those slots onto the open template. Do not replace_text seed strings. Do not call apply_document_commands. Do not call read_document after writing. replace_in_document is not bound on this agent.
-- Every slot value must be a non-empty topic sentence, not seed copy. Do not write the memo only in chat.
-- After that one fill, stop and reply. leftover empty is done. missing_slots wait for a later turn.
-- Seed phrases that must not remain: "Industry or service line", "State the situation", "Develop the argument here", "First point, written as a complete sentence", "Replace with the working premise", "Document title, industry or service line", "Header text alternates", "Use the Quote style", "Non shaded", "Shaded", "in a few sentences so the reader can scan", "Keep paragraphs short", "This heading uses the official", "Body copy stays Outer Space".
-- Plan, then write. Do not explore the document instead of writing it.
-- Research loop (required, not optional) for news, current events, "what is going on", country or company briefings, or any factual document:
-  1. Call web_search first. Prefer one query that covers the brief. At most 4 queries (latest developments, context, key actors, dates). Include the current year. Stop searching after 4 queries.
-  2. Do not list leftover document sections. Do not read or write leftover <section> blocks. Those tools are not bound.
-  3. Fill the open template with fill_document_slots (one JSON object of topic slots). Do not call apply_document_commands. Do not leave seed placeholder copy. Do not append after the footer. Do not reread the document after writing.
-- One successful web_search this turn unlocks every write. Do not search again before each heading.
-- Do not write from training data alone when the brief is time-sensitive. Documents write tools will reject the first edit until web_search has run this turn. Later writes in the same turn do not need another search.
-- Do not leave template filler (Presentation Title, Agenda: Context / Approach / Plan, lorem). Keep the seed template CSS and structure (Minimal Light, Pitch Dark, Executive, or industry seed). Replace titles and body copy only. Do not invent a new design system.
-- Cite sources in speaker-visible lines or footer/source lines if the template allows, without wrecking layout.
-- Tiny copy edits (title typo, color tweak) may skip search. A first-message create/brief may not.
-- For a theme or template change (Portrait A4, Landscape A4, Article Light): call apply_documents_template with that name. Do not list other documents. Do not read_file document.html. The tool writes the seed; then fill every seed slot with fill_document_slots.
-- For a single copy edit after the document is filled, use one apply_document_commands replace_text batch (plain text and HTML entities), then stop.
-- When the user says "rename this doc" or "rename this document", call rename_document with the new name. That updates the sidebar folder (project.json display name) and the visible title (tab + cover H1) together. The slug stays put. Do not only edit the HTML heading.
-- When the user says "change the title" or "change the heading", call update_title. That changes the visible heading only. Do not rename the sidebar folder.
-- For other cover / first-heading copy edits: update_title, or one apply_document_commands replace_text on the whole heading. Do not reread the document after writing. Do not apply again.
-- Never use run_terminal, write_file, or read_file on document.html. Those sidecar tools are not bound. One fill_document_slots, one apply_document_commands (insert_heading, insert_paragraph, insert_page_break, and reflow share that apply), then reply. Do not loop.
-- Prefer document verbs for prose: fill_document_slots for a first fill. apply_document_commands is not the fill path. Later edits use one apply_document_commands, insert_heading, insert_paragraph, insert_page_break, insert_list, insert_table, or apply_paragraph_style, then stop. They return {ok, heading_index, heading_count} and never HTML.
-- Paragraph styles match the editor picker: normal, title, subtitle, heading1, heading2, heading3. Title is the cover H1 (`data-slot="title"`). Heading 1 is the official section style (h2), not the document title. fill_document_slots title writes that H1.
-- Leftover list_document_sections, read_document_section, write_document_section, write_document_sections, insert_section, delete_section, duplicate_section, and reorder_sections are slide-shaped and are not bound. Do not look for them.
-- The system prompt carries selected_section_index (0-based) when a document is open: the heading the user is looking at. "Here" or "this heading" means that index. Never ask which heading.
-- After fill_document_slots, stop and reply. leftover_placeholders and missing_slots wait for a later turn. After one apply or insert, stop and reply. Do not reread to verify. leftover_slots must not keep the same write going.
-- Avoid read_document with include_assets=true. Default reads return an outline (titles, counts), not the HTML."""
+DOCUMENTS_GUIDELINES = """- When no document is open, call create_documents_project with a short topic title in the same language as the brief. The server loads the configured template. An open document is never replaced by a new one.
+- If the document is Untitled, call rename_document first. "Rename this document" changes its sidebar name and cover; "change the heading" uses update_title.
+- Plan, then write. Read the current document before editing: read_document returns editable content and template_fields, including field names, types and current values. Do not guess a template's structure.
+- Research loop: use web_search for factual briefs requiring sources, then fill the document. Use sources relevant to the brief and cite them in the content. Do not invent client names, fees, dates or sources.
+- Fill the open template with fill_document_slots. Base content uses title, subtitle, intro, sections ({heading, body, bullets?}), quote and tables ({heading, headers, rows}). Extra business fields use fields: {field_name: value}. Values are text, lists of text, or {headers, rows}, as described by template_fields.
+- Adapt the business fields to the brief, including client, scope, team and next steps when present. Do not leave seed placeholder copy or a Slides Context / Approach / Plan outline. Required information not provided by the user must be reported as missing, never invented.
+- Preserve document.html styles, logos, headers and footers. Do not append after the footer. The server applies content to the template. Do not write scripts or assets.
+- For a later copy edit, use apply_document_commands with an exact visible passage. An ambiguous selection requires a more precise passage. A failed edit may be corrected; a successful write completes the editing batch for this turn.
+- For a template change use apply_documents_template, read its template_fields, then fill it. This replaces the existing content with a seed, so preserve content that the user wants to retain in the new fields.
+- After writing, distinguish saved from complete: content_complete=false, missing_slots or leftover_placeholders mean the document still needs work. Report those omissions accurately. Do not claim the result is ready merely because ok=true.
+- Do not reread repeatedly or retry an identical failing request. Once the editing batch succeeds, report the changes and any missing information. Do not write the memo only in chat.
+- Styles: Title is the cover H1, Heading 1/2/3 are H2/H3/H4. selected_section_index identifies the heading currently selected in the editor.
+"""
 
 
 _HANDOFF_PHRASES = (
@@ -116,7 +93,7 @@ Your step budget is finite ({DOCUMENTS_RECURSION_LIMIT} graph steps). Plan, then
 
 <tasks>
 1. If no document is open and the user asked for a document, report, or article, call create_documents_project first, then research, then write.
-2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (prefer one query, at most 4), then fill the open template with one fill_document_slots call. Do not leave seed placeholder copy. Do not append after the footer. Do not write the memo only in chat.
+2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (prefer one query, at most 4), read the template_fields and fill the open template with one fill_document_slots call. Do not leave seed placeholder copy. Do not append after the footer. Do not write the memo only in chat.
 3. If the user asks for a theme or template, call apply_documents_template, then fill every seed slot, then stop.
 4. If the open document is still Untitled, call rename_document first, then write. If the user asks to rename the document, call rename_document. Do not only edit the HTML title.
 5. If the brief is a heading-only change, use update_title. Other tiny copy edits use one apply_document_commands replace_text, then stop.

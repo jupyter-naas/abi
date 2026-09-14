@@ -283,7 +283,7 @@ def test_leftover_write_note_marks_incomplete() -> None:
     assert note["incomplete"] is True
     assert note["leftover_placeholders"]
     assert note["leftover_slots"]
-    assert "INCOMPLETE" in note["warning"]
+    assert "placeholder copy remains" in note["warning"]
     assert "fill_document_slots" in note["warning"]
     assert "apply_document_commands" in note["warning"]
     assert "once more" not in note["warning"]
@@ -310,7 +310,7 @@ def test_leftover_write_note_after_one_fill_says_stop() -> None:
     try:
         note_documents_write(note_documents_slot_fill())
         note = leftover_write_note(_SEEDED_PAGE)
-        assert "INCOMPLETE" in note["warning"]
+        assert "placeholder copy remains" in note["warning"]
         assert "Stop and reply" in note["warning"]
         assert "once more" not in note["warning"]
         clean = leftover_write_note("<h1>Board memo</h1>")
@@ -341,7 +341,7 @@ def test_leftover_placeholders_flags_seed_table_headers() -> None:
     assert not any(isinstance(slot, dict) for slot in leftover_slots(html))
 
 
-def test_replace_text_leftover_phrase_replaces_the_whole_block() -> None:
+def test_replace_text_refuses_a_guessed_passage() -> None:
     html = (
         '<p class="intro">Introduction. State the situation in a few sentences '
         "so the reader can scan the page before the body.</p>"
@@ -351,10 +351,7 @@ def test_replace_text_leftover_phrase_replaces_the_whole_block() -> None:
         "State the situation in a few sentences so the reader can scan.",
         "ASIC opened five inquiries.",
     )
-    assert isinstance(updated, str)
-    assert "State the situation" not in updated
-    assert "the page before the body" not in updated
-    assert "ASIC opened five inquiries." in updated
+    assert "error" in updated
 
 
 def test_apply_skips_a_missing_find_and_keeps_the_batch() -> None:
@@ -454,3 +451,24 @@ def test_apply_failure_does_not_ask_for_another_apply() -> None:
     assert "once more" not in result["error"]
     assert "do not call fill_document_slots" in result["error"]
     assert all(isinstance(slot, str) for slot in result.get("leftover_slots", []))
+
+
+def test_inline_mark_targets_visible_text_and_preserves_head():
+    from naas_abi.agents.tools.documents_commands import apply_mark
+
+    seed = '<html><head><title>Proposal</title><style>.Proposal{}</style></head><body><h1 title="Proposal">Proposal</h1></body></html>'
+    result = apply_mark(seed, "Proposal")
+    assert "<title>Proposal</title>" in result
+    assert '<h1 title="Proposal"><strong>Proposal</strong></h1>' in result
+
+
+def test_inline_mark_refuses_ambiguous_text_and_unsafe_link():
+    from naas_abi.agents.tools.documents_commands import apply_mark, insert_link
+
+    assert "error" in apply_mark("<p>Same</p><p>Same</p>", "Same")
+    assert "error" in insert_link("<p>Open</p>", "Open", "javascript:alert(1)")
+
+
+def test_replace_text_preserves_attributes_and_escapes_user_text():
+    result = replace_text('<p title="Old">Old</p>', "Old", "<script>bad()</script>")
+    assert result == '<p title="Old">&lt;script&gt;bad()&lt;/script&gt;</p>'

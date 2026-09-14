@@ -47,6 +47,11 @@ The first error aborts the batch (same idea as Docs `batchUpdate`).
 | `insert_page_break` | Insert a hard page break (same section) | Docs `insertPageBreak`; ODF `fo:break-before=page`; Word `w:br w:type="page"`; Pandoc pagebreak |
 | `insert_list` | Insert a `ul`/`ol` after a heading | Pandoc `BulletList` / `OrderedList` |
 | `insert_table` | Insert an official `fmz-table` or `fmz-shaded` | Pandoc `Table`; ODF table |
+| `insert_image` | Insert a figure after a heading (CSS default size) | Pandoc `Image` |
+| `apply_mark` | Wrap found text in `strong`, `em`, `mark`, or a link | Docs `updateTextStyle` |
+| `insert_link` | Hyperlink the first find | Docs `updateTextStyle` link |
+| `insert_comment` | Mark a range with `data-comment` | lean range note, not Docs comments |
+| `insert_suggestion` | `<del>` plus `<ins>` on a find | lean suggestion mark, not track changes |
 | `delete_range` | Delete a heading block (that heading through the next) | Docs `deleteContentRange` |
 | `delete_block` | Delete a block by class or `data-slot` (decision, situation) | cover chrome delete |
 | `replace_text` | Replace a substring | Docs `replaceAllText` |
@@ -137,7 +142,7 @@ Read and project verbs already exist:
 | `GET /projects/{slug}/document`, `read_document` | Read stored HTML (tools return an outline by default) | Docs `documents.get` |
 | `PUT /projects/{slug}/document`, `write_document` | Replace the whole document | full-document write |
 | `GET /projects/{slug}/outline` | Heading outline | Pandoc `Header` walk |
-| `GET /projects/{slug}/history` | Git history | versioning, not a Docs API |
+| `GET /projects/{slug}/history` | Git history | undo/redo is this version strip, not an in-memory stack |
 | File print / HTML export | Print and download | Docs export / Pandoc convert |
 
 Agent tools with the same names call the same mutators:
@@ -165,9 +170,10 @@ and margins. Neither is "new slide".
 ## Explicit non-goals
 
 - Full ODF / OOXML writer or reader
-- Docs UTF-16 indexes, suggestions, comments, tabs, named ranges
-- Headers, footers, footnotes, images as first-class commands
-- Google Docs comments, suggestions, track changes, mail merge
+- Docs UTF-16 indexes, tabs, named ranges
+- Image layout or column-resize chrome
+- Google Docs comments product, track-changes UI, mail merge, email share/ACL
+- Spellcheck
 - Changing Slides
 
 ## Citations
@@ -176,3 +182,20 @@ and margins. Neither is "new slide".
 - Google Docs requests: https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/request
 - Pandoc AST (`Para`, `Header`, `Table`, `Image`): https://hackage.haskell.org/package/pandoc-types-1.23/docs/Text-Pandoc-Definition.html
 - Word `w:p` / `w:br w:type="page"`: ECMA-376 / ISO/IEC 29500
+
+## Template contract and readiness
+
+`fill_slots` accepts the base fields and `fields: {name: value}` for named template
+fields. Text fields take strings, list fields take arrays of strings, table fields
+take `{headers, rows}`. `read_document` exposes the actual `template_fields`; unknown
+field names fail validation. Blank templates receive missing body regions inside
+`.doc-body`. Repeated sections and tables are not limited to seed examples.
+
+A successful result has `ok=true`; `content_complete` and `missing_slots` are separate
+readiness information, also preserved by the HTTP response. Seed fields marked
+`data-placeholder="true"` require explicit review/fill. Missing client information
+must not be invented. Failed mutations can be corrected in the same agent turn.
+
+`replace_text` edits visible text, escaping replacement text; it does not inject
+HTML or modify attributes, styles or scripts. Use `apply_mark` or `insert_link` for
+formatting, with a unique visible passage.

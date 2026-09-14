@@ -456,10 +456,10 @@ export function DocumentsMenuBar({
       onSelect: onExportPdf,
     });
   }
-  if (onExportPptx) {
+  if (!onExportPdf && onExportPptx) {
     exportItems.push({
       id: 'export-pdf',
-      label: 'Export to PDF',
+      label: 'Print / Save as PDF',
       disabled: exportDisabled,
       onSelect: onExportPptx,
     });

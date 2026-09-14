@@ -22,7 +22,7 @@ import {
   SLIDES_PREVIEW_IMAGES_READY_TIMEOUT_MS,
   SLIDES_PREVIEW_MESSAGE_SOURCE,
   DOCUMENTS_PAGE_MIN_HEIGHT,
-  DOCUMENTS_PAGE_WIDTH,
+  documentsPageSize,
   type SectionsPreviewFromParentMessage,
   type DocumentsTextEdit,
 } from './documents-preview-fit';
@@ -45,7 +45,7 @@ export interface DocumentsPreviewFrameProps {
 }
 
 /**
- * Word-like preview: stacked letter sheets (816 x 1056) with a desk gap.
+ * Word-like preview: stacked A4 sheets (210 x 297 mm) with a desk gap.
  * Soft pagination fills a sheet; a .page-break starts the next one.
  * Outline click jumps scroll; host scroll updates the selected heading.
  *
@@ -77,6 +77,7 @@ export const DocumentsPreviewFrame = forwardRef<
   },
   ref,
 ) {
+  const { width: pageWidth, height: pageHeight } = documentsPageSize(html);
   const hostRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const manualEditRef = useRef(manualEdit);
@@ -94,7 +95,7 @@ export const DocumentsPreviewFrame = forwardRef<
   useEffect(() => {
     let cancelled = false;
     setImagesReady(false);
-    setDocHeight(DOCUMENTS_PAGE_MIN_HEIGHT);
+    setDocHeight(pageHeight);
     void resolveDocumentsPreviewAssets(html, workspaceId, slug).then((resolved) => {
       if (cancelled) return;
       setPreviewHtml(prepareSectionsPreviewHtml(resolved));
@@ -102,7 +103,7 @@ export const DocumentsPreviewFrame = forwardRef<
     return () => {
       cancelled = true;
     };
-  }, [html, workspaceId, slug]);
+  }, [html, workspaceId, slug, pageHeight]);
 
   useEffect(() => {
     if (imagesReady) return;
@@ -125,8 +126,8 @@ export const DocumentsPreviewFrame = forwardRef<
     const host = hostRef.current;
     if (!host) return;
     const { width } = host.getBoundingClientRect();
-    setScale(computeSectionsPreviewScale(width));
-  }, []);
+    setScale(computeSectionsPreviewScale(width, undefined, pageWidth));
+  }, [pageWidth]);
 
   useLayoutEffect(() => {
     measureHost();
@@ -162,7 +163,7 @@ export const DocumentsPreviewFrame = forwardRef<
         event.data.type === 'images-ready'
       ) {
         if (typeof event.data.height === 'number' && event.data.height > 0) {
-          setDocHeight(Math.max(event.data.height, DOCUMENTS_PAGE_MIN_HEIGHT));
+          setDocHeight(Math.max(event.data.height, pageHeight));
         }
         if (Array.isArray(event.data.sectionTops)) {
           setSectionTops(
@@ -194,7 +195,7 @@ export const DocumentsPreviewFrame = forwardRef<
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [postManualEdit]);
+  }, [postManualEdit, pageHeight]);
 
   useEffect(() => {
     if (!previewHtml || !imagesReady) return;
@@ -202,10 +203,13 @@ export const DocumentsPreviewFrame = forwardRef<
   }, [manualEdit, previewHtml, imagesReady, postManualEdit]);
 
   const ignoreScrollRef = useRef(false);
+  const scrollSelectedIndexRef = useRef<number | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+    if (scrollSelectedIndexRef.current === selectedIndex) return;
+    scrollSelectedIndexRef.current = selectedIndex;
     const target = sectionsPreviewScrollTop(
       selectedIndex,
       scale,
@@ -278,7 +282,7 @@ export const DocumentsPreviewFrame = forwardRef<
     [],
   );
 
-  const scaledW = DOCUMENTS_PAGE_WIDTH * scale;
+  const scaledW = pageWidth * scale;
   const scaledH = docHeight * scale;
   const topPad = 24;
 
@@ -291,7 +295,10 @@ export const DocumentsPreviewFrame = forwardRef<
         const host = hostRef.current;
         if (!host) return;
         const next = sectionsPreviewIndexFromScroll(host.scrollTop, scale, sectionTops);
-        if (next !== selectedIndex) onSelectedIndexChange(next);
+        if (next !== selectedIndex) {
+          scrollSelectedIndexRef.current = next;
+          onSelectedIndexChange(next);
+        }
       }}
     >
       <div
@@ -313,7 +320,7 @@ export const DocumentsPreviewFrame = forwardRef<
               imagesReady ? 'opacity-100' : 'opacity-0',
             )}
             style={{
-              width: DOCUMENTS_PAGE_WIDTH,
+              width: pageWidth,
               height: docHeight,
               transform: `scale(${scale})`,
               transformOrigin: 'top left',

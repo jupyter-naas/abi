@@ -17,6 +17,7 @@ import {
 import { downloadDocumentsHtml, resolveDocumentsPreviewAssets } from '@/components/documents/documents-assets';
 import {
   applyDocumentsTextEdits,
+  prepareSectionsPreviewHtml,
   collectDocumentsTextEdits,
   sanitizeDocumentsEditHtml,
   DOCUMENTS_MANUAL_EDIT_IDLE_MS,
@@ -518,6 +519,14 @@ export default function SectionsEditorPage() {
         return;
       }
       const key = event.key.toLowerCase();
+      if (key === 'p') {
+        event.preventDefault();
+        event.stopPropagation();
+        void previewRef.current?.exportPdf().catch((error: Error) => {
+          setError(`PDF export failed: ${error.message}`);
+        });
+        return;
+      }
       if (key === 's') {
         event.preventDefault();
         event.stopPropagation();
@@ -663,7 +672,7 @@ export default function SectionsEditorPage() {
     setStatus(null);
     try {
       const inlined = await resolveDocumentsPreviewAssets(live, workspaceId, slug);
-      downloadDocumentsHtml(`${slug || 'document'}.html`, inlined);
+      downloadDocumentsHtml(`${slug || 'document'}.html`, prepareSectionsPreviewHtml(inlined));
       setStatus('Downloaded self-contained HTML');
     } catch (e) {
       setError(`HTML export failed: ${(e as Error).message}`);
@@ -847,7 +856,7 @@ export default function SectionsEditorPage() {
     <div className="flex h-full flex-col">
       <Header
         title={title}
-        subtitle={`HTML source · letter pages (8.5 x 11 in)`}
+        subtitle="A4 · 210 × 297 mm"
         nav={menuBar}
       />
 

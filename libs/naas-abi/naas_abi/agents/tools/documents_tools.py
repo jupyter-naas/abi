@@ -45,6 +45,7 @@ from naas_abi.agents.documents import (
     reject_unresearched_documents_write,
     resolve_document_title,
 )
+from naas_abi.agents.tools.documents_html import DocumentHTML, template_fields
 from naas_abi_core.services.agent.context import (
     agent_chat_id,
     agent_user_email,
@@ -1465,6 +1466,8 @@ def _run_section_mutation(
                 result["incomplete"] = True
             if mutated.get("warning"):
                 result["warning"] = mutated["warning"]
+            if "content_complete" in mutated:
+                result["content_complete"] = mutated["content_complete"]
             if mutated.get("missing_slots") is not None:
                 result["missing_slots"] = mutated.get("missing_slots")
             if mutated.get("filled") is not None:
@@ -1846,7 +1849,16 @@ def _view_for_llm(html: str) -> dict[str, Any]:
     _prefix, sections, _suffix = _split_sections(html)
     leftovers = leftover_placeholders(html)
     slots = leftover_slots(html)
+    parsed = DocumentHTML(html)
+    content = "\n".join(
+        html_lib.unescape(html[start:end]).strip()
+        for start, end in parsed.text_ranges
+        if html[start:end].strip()
+    )
     return {
+        "content_text": content[:12000],
+        "content_truncated": len(content) > 12000,
+        "template_fields": template_fields(html),
         "chars": len(html),
         "chars_redacted": len(redacted),
         "section_count": len(sections),
@@ -1856,7 +1868,9 @@ def _view_for_llm(html: str) -> dict[str, Any]:
         "leftover_placeholders": leftovers,
         "leftover_slots": slots,
         "note": (
-            "Outline only. HTML is omitted on purpose: a 25-section industry "
+            "Editable text and template_fields describe the current document. "
+            "Use fields for named business text/list/table slots. "
+            "HTML is omitted on purpose: a 25-section industry "
             "document is ~160k characters and blows the next model call. "
             + (
                 "Fill the open template with one fill_document_slots call. "
@@ -1931,7 +1945,14 @@ def documents_tools() -> list[BaseTool]:
             if paths.get("error"):
                 return {"error": paths["error"]}
 
-            seed = _load_seed_document_html()
+            from naas_abi.apps.nexus.apps.api.app.services.documents.adapters.primary.documents__primary_adapter__FastAPI import (
+                _configured_default_template_id,
+            )
+
+            template_id = _configured_default_template_id()
+            seed = _load_catalog_seed_html(template_id)
+            if isinstance(seed, dict):
+                return seed
             if not seed:
                 return {
                     "error": "Documents template is missing; cannot seed a document."
@@ -1945,6 +1966,8 @@ def documents_tools() -> list[BaseTool]:
                 **_agent_author(),
             )
 
+            _write_project_template_id(slug, template_id)
+
             # Become the active document for the rest of this conversation.
             documents_active_slug.set(slug)
             _remember_active_slug(slug)
@@ -1956,7 +1979,8 @@ def documents_tools() -> list[BaseTool]:
                 "branch": paths["branch"],
                 "path": paths["document_path"],
                 "workspace_id": _workspace_id() or "",
-                "template_id": "article-light-v1",
+                "template_id": template_id,
+                "template_fields": template_fields(seed),
                 "commit_sha": commit.sha,
                 "note": (
                     f"Created '{clean_title}'. This is now the open document. "
@@ -2475,7 +2499,6 @@ def documents_tools() -> list[BaseTool]:
         repeat = reject_repeat_apply_document_commands()
         if repeat:
             return repeat
-        note_documents_apply_attempt()
         from naas_abi.agents.tools.documents_commands import (
             apply_document_commands as apply_commands,
         )
@@ -2492,6 +2515,7 @@ def documents_tools() -> list[BaseTool]:
             already_guarded=True,
         )
         if "error" not in result:
+            note_documents_apply_attempt()
             result["heading_index"] = result.get("section_index")
             result["heading_count"] = result.get("section_count")
             rename_title = last_rename_document_title(requests)
@@ -2514,8 +2538,10 @@ def documents_tools() -> list[BaseTool]:
         this turn, then stop.
 
         Each item needs type. Supported: insert_text, insert_paragraph,
-        insert_heading, insert_page_break, delete_range, replace_text,
-        replace_class, update_paragraph_style, update_title, rename_document.
+        insert_heading, insert_page_break, insert_list, insert_table,
+        insert_image, apply_mark, insert_link, insert_comment,
+        insert_suggestion, delete_range, replace_text, replace_class,
+        update_paragraph_style, update_title, rename_document.
         Positions use after_heading or heading_index. rename_document also
         updates the sidebar display name. Returns
         {ok, heading_index, heading_count, leftover_placeholders}. Never HTML.
@@ -2551,6 +2577,9 @@ def documents_tools() -> list[BaseTool]:
         title, subtitle, intro, note, quote, sections (array of
         {heading, body, bullets?}), tables_heading, tables_intro,
         tables (array of {heading, headers, rows}).
+        Read template_fields first. Additional named template fields go in
+        fields: {name: text, list_name: [items], table_name: {headers, rows}}.
+        Unknown field names are rejected. Never invent missing client data.
         Every value must be a non-empty topic sentence, not seed copy.
         Python maps the slots onto the open HTML. Do not find seed strings.
         Do not write the memo only in chat. Palette is removed for a memo.
@@ -2574,7 +2603,6 @@ def documents_tools() -> list[BaseTool]:
         )
 
         write_label = note_documents_slot_fill()
-        note_documents_write(write_label)
         result = _run_section_mutation(
             slug,
             lambda html: fill_slots(html, payload),
@@ -2584,6 +2612,7 @@ def documents_tools() -> list[BaseTool]:
             already_guarded=True,
         )
         if "error" not in result:
+            note_documents_write(write_label)
             result["heading_index"] = result.get("section_index")
             result["heading_count"] = result.get("section_count")
         return result
@@ -2864,6 +2893,7 @@ def documents_tools() -> list[BaseTool]:
                 **result,
                 "ok": True,
                 "template_id": resolved,
+                "template_fields": template_fields(seed),
                 "wiped": True,
                 "note": (
                     f"Applied {resolved}. document.html is the seed. "

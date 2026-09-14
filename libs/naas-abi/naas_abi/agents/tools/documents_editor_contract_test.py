@@ -136,7 +136,12 @@ def test_insert_list_and_table_are_first_class_verbs() -> None:
         html,
         [
             {"type": "insert_list", "items": ["A"], "after_heading": 0},
-            {"type": "insert_table", "headers": ["H"], "rows": [["R"]], "after_heading": 0},
+            {
+                "type": "insert_table",
+                "headers": ["H"],
+                "rows": [["R"]],
+                "after_heading": 0,
+            },
         ],
     )
     assert result["ok"] is True
@@ -153,7 +158,7 @@ def test_reflow_after_cover_chrome_delete_remonte_le_texte() -> None:
     assert "Body that must remonter." in moved
     first_close = moved.lower().index("</section>")
     assert "Body that must remonter." in moved[:first_close]
-    pages = moved.lower().count('<section')
+    pages = moved.lower().count("<section")
     assert pages == 2
     assert "data-nexus-page-break" in moved
     empty_bodies = moved.count('<div class="doc-body">\n  </div>')
@@ -162,7 +167,10 @@ def test_reflow_after_cover_chrome_delete_remonte_le_texte() -> None:
 
 def test_leftover_flags_french_board_memo_seed() -> None:
     found = leftover_placeholders(_FLOWING_MEMO)
-    assert any("Cette note demande une décision" in item or "décision" in item.lower() for item in found)
+    assert any(
+        "Cette note demande une décision" in item or "décision" in item.lower()
+        for item in found
+    )
     assert any("missions reçoivent" in item for item in found)
     assert "Décision demandée" in found
     slots = leftover_slots(_FLOWING_MEMO)
@@ -246,6 +254,5 @@ def test_documents_agent_has_no_sidecar_file_tools() -> None:
     assert "read_file" not in names
     lowered = DOCUMENTS_GUIDELINES.lower()
     assert "document.html" in lowered
-    assert "run_terminal" in lowered
-    assert "write_file" in lowered
-    assert "one apply" in lowered or "then stop" in lowered or "then reply" in lowered
+    assert "server applies content" in lowered
+    assert "successful write completes" in lowered

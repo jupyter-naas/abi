@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeSectionsPreviewScale,
+  documentsPageSize,
   sectionsPreviewIndexFromScroll,
   sectionsPreviewScrollTop,
   applyDocumentsTextEdits,
@@ -26,6 +27,7 @@ import {
   SLIDES_PRINT_PAGE_HEIGHT_IN,
   SLIDES_PRINT_PAGE_WIDTH_IN,
   DOCUMENTS_PAGE_WIDTH,
+  DOCUMENTS_PAGE_MIN_HEIGHT,
   DOCUMENTS_PREVIEW_GUTTER_PX,
   SLIDES_STAGE_HEIGHT,
 } from './documents-preview-fit';
@@ -86,19 +88,43 @@ describe('planLetterPages', () => {
 });
 
 describe('computeSectionsPreviewScale', () => {
-  it('scales the letter column to pane width, ignoring height', () => {
-    const scale = computeSectionsPreviewScale(864, 400);
-    expect(scale).toBeCloseTo((864 - DOCUMENTS_PREVIEW_GUTTER_PX) / DOCUMENTS_PAGE_WIDTH, 5);
+  it('fits a landscape template to the same available pane width', () => {
+    expect(computeSectionsPreviewScale(864, undefined, 1123)).toBeCloseTo(816 / 1123);
+  });
+  it('shrinks A4 to a narrow pane without changing its layout', () => {
+    const scale = computeSectionsPreviewScale(600, 400);
+    expect(scale).toBeCloseTo((600 - DOCUMENTS_PREVIEW_GUTTER_PX) / DOCUMENTS_PAGE_WIDTH, 5);
   });
 
   it('does not use 16:9 contain-fit', () => {
     const scale = computeSectionsPreviewScale(1600, 600);
     expect(scale).not.toBeCloseTo(600 / SLIDES_STAGE_HEIGHT, 5);
-    expect(scale).toBeCloseTo((1600 - DOCUMENTS_PREVIEW_GUTTER_PX) / DOCUMENTS_PAGE_WIDTH, 5);
+    expect(scale).toBe(1);
   });
 
   it('returns 1 for non-positive width', () => {
     expect(computeSectionsPreviewScale(0, 720)).toBe(1);
+  });
+});
+
+describe('documentsPageSize', () => {
+  it('uses declared dimensions and ignores body text or invalid values', () => {
+    expect(documentsPageSize('<style>:root { --page-w: 1123px; --page-h: 794px; }</style>'))
+      .toEqual({ width: DOCUMENTS_PAGE_MIN_HEIGHT, height: DOCUMENTS_PAGE_WIDTH });
+    expect(documentsPageSize('<p>--page-w: 1123px;</p>'))
+      .toEqual({ width: DOCUMENTS_PAGE_WIDTH, height: DOCUMENTS_PAGE_MIN_HEIGHT });
+    expect(documentsPageSize('<style>:root { --page-w: 99999px; --page-h: 0px; }</style>'))
+      .toEqual({ width: DOCUMENTS_PAGE_WIDTH, height: DOCUMENTS_PAGE_MIN_HEIGHT });
+  });
+
+  it('keeps landscape dimensions consistent in screen, print and pagination', () => {
+    const out = prepareSectionsPreviewHtml('<html><head><style>:root { --page-w: 1123px; --page-h: 794px; }</style></head><body><main class="document"></main></body></html>');
+    expect(out).toContain(`width: ${DOCUMENTS_PAGE_MIN_HEIGHT}px !important`);
+    expect(out).toContain(`height: ${DOCUMENTS_PAGE_WIDTH}px !important`);
+    expect(out).toContain('@page { size: A4 landscape; margin: 0; }');
+    expect(out).toContain(`var PAGE_MIN_HEIGHT = ${DOCUMENTS_PAGE_WIDTH};`);
+    expect(out).not.toContain('size: letter;');
+    expect(prepareSectionsPreviewHtml(out)).toBe(out);
   });
 });
 
@@ -136,7 +162,7 @@ describe('prepareSectionsPreviewHtml', () => {
     expect(once).toContain('export-pdf');
     expect(once).toContain('window.print');
     expect(once).toContain('@media print');
-    expect(once).toContain('size: letter; margin: 0;');
+    expect(once).toContain('size: A4 portrait; margin: 0;');
     expect(once).not.toMatch(/@page \{[^}]*landscape/);
     expect(once).toContain('display: block !important');
     expect(once).toContain('.section-index');
@@ -161,7 +187,7 @@ describe('prepareSectionsPreviewHtml', () => {
     expect(screenCss).toMatch(/\.letter-page > \.doc-footer[\s\S]*position: static/);
     expect(once).toContain('position: relative !important');
     expect(once).toContain('page-break-after: always');
-    expect(once).toContain('break-before: page');
+    expect(once).toContain('bodyEl.appendChild(node)');
     expect(once).not.toContain('contain: strict');
     expect(once).toContain('beforeprint');
     const ackAt = once.indexOf("type: 'export-pdf-result', ok: true");
@@ -194,7 +220,7 @@ describe('prepareSectionsPreviewHtml', () => {
     expect(out).toContain('waitForImages');
     expect(out).toContain("type: 'images-ready'");
     const onReadyAt = out.indexOf('function onReady()');
-    const waitForImagesCallAt = out.indexOf('waitForImages().then');
+    const waitForImagesCallAt = out.indexOf('Promise.all([waitForImages(), document.fonts');
     expect(waitForImagesCallAt).toBeGreaterThan(onReadyAt);
   });
 
@@ -232,12 +258,13 @@ const TWO_SLIDE_DECK = `<!doctype html><html><head>
 
 describe('SLIDES_PREVIEW_PRINT_CSS', () => {
   it('prints each letter sheet and honors hard page breaks', () => {
-    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('@page { size: letter; margin: 0; }');
+    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('@page { size: A4 portrait; margin: 0; }');
     expect(SLIDES_PREVIEW_PRINT_CSS).not.toMatch(/@page \{[^}]*landscape/);
     expect(SLIDES_PREVIEW_PRINT_CSS).toContain('page-break-after: always');
-    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('break-before: page');
-    expect(SLIDES_PRINT_PAGE_WIDTH_IN).toBe('8.5in');
-    expect(SLIDES_PRINT_PAGE_HEIGHT_IN).toBe('11in');
+    expect(SLIDES_PREVIEW_PRINT_CSS).toContain('page-break-before: auto');
+    expect(SLIDES_PREVIEW_PRINT_CSS).not.toContain('padding: 0.3in');
+    expect(parseFloat(SLIDES_PRINT_PAGE_WIDTH_IN) * 25.4).toBeCloseTo(210);
+    expect(parseFloat(SLIDES_PRINT_PAGE_HEIGHT_IN) * 25.4).toBeCloseTo(297);
   });
 });
 
