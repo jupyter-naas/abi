@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.23.0 (2026-09-14)
+
+### Chores
+
+- Drop documents CLI and template ADR from integration
+  ([`21e04ad`](https://github.com/jupyter-naas/abi/commit/21e04ad2b4abc6fe2d6fdb8d7d1508b015b9035b))
+
+### Features
+
+- **nexus**: Add Documents office product
+  ([`f917aa5`](https://github.com/jupyter-naas/abi/commit/f917aa5d475724075c94f87ddf99b90e92a93f4d))
+
+
 ## v2.22.2 (2026-09-12)
 
 ### Bug Fixes
