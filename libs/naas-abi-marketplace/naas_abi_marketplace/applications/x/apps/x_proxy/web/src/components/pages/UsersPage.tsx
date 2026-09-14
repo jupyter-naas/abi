@@ -41,13 +41,9 @@ export function UsersPage({
   const [indexLoading, setIndexLoading] = useState(true);
   const [resultsPage, setResultsPage] = useState(0);
 
-  // The index is every author in the tweet graph - a few MB, fetched once when
-  // the page first opens and memoised for the rest of the session.
+  // The index is every author in the tweet graph - fetched once per session so
+  // deep-linked author pages can show ingested totals before the shard loads.
   useEffect(() => {
-    if (selected) {
-      setIndexLoading(false);
-      return;
-    }
     let live = true;
     setIndexLoading(true);
     loadUserIndex()
@@ -60,9 +56,8 @@ export function UsersPage({
     return () => {
       live = false;
     };
-  }, [selected]);
+  }, []);
 
-  // A new needle starts again at the first page of results.
   const handleNeedleChange = (value: string) => {
     onNeedleChange(value);
     setResultsPage(0);

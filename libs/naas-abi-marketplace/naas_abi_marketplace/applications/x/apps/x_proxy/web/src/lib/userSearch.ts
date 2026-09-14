@@ -22,8 +22,7 @@ const BASE = "/app-html/x/apps/x_proxy";
  * Posts the author feed shows per batch - `feed.batch` in `config.yaml`.
  *
  * The whole shard is already in memory, so a batch is a slice, not a fetch: the
- * feed opens with one and grows by one whenever the end comes into view or the
- * button is pressed.
+ * feed opens with the newest batch and grows when the reader clicks Load more.
  */
 export const USER_FEED_BATCH = FEED.batch;
 
