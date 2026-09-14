@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.36.2 (2026-09-14)
+
+### Bug Fixes
+
+- **core,nexus**: Release sticky office turns that would leave empty bubbles
+  ([`333e5d8`](https://github.com/jupyter-naas/abi/commit/333e5d8de15984905c21ad244462acc4485dfad7))
+
+
 ## v2.36.1 (2026-09-14)
 
 ### Bug Fixes
