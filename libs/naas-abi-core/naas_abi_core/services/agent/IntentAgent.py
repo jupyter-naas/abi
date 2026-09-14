@@ -861,7 +861,10 @@ If you endup with a single intent which is of type TOOL, you must call this tool
             agent.duplicate(queue, shared_state) for agent in self._original_agents
         ]
 
-        new_agent = IntentAgent(
+        # Must use self.__class__, not IntentAgent: subclasses override
+        # call_model / stream_invoke / build_graph. Hardcoding IntentAgent dropped
+        # those overrides on every Nexus per-request duplicate.
+        new_agent = self.__class__(
             name=self._name,
             description=self._description,
             chat_model=self._chat_model,

@@ -176,3 +176,49 @@ def test_map_intents_degrades_when_embedding_provider_fails():
 
     assert command.update == {"intent_mapping": {"intents": []}}, command
     assert command.goto == "call_model", command
+
+
+def test_duplicate_preserves_subclass():
+    """Per-request Nexus duplicates must keep IntentAgent subclasses.
+
+    Agent.duplicate already uses self.__class__. IntentAgent.duplicate used to
+    hardcode IntentAgent(...), so overrides on call_model / stream_invoke /
+    build_graph were dropped for every chat turn.
+    """
+    from unittest.mock import MagicMock, patch
+
+    from naas_abi_core.services.agent.Agent import AgentSharedState
+
+    class _Subclass(IntentAgent):
+        pass
+
+    agent = object.__new__(_Subclass)
+    agent._name = "Subclass"
+    agent._description = "subclass agent"
+    agent._chat_model = MagicMock()
+    agent._original_tools = []
+    agent._original_agents = []
+    agent._intents = []
+    agent._checkpointer = MagicMock()
+    agent._configuration = AgentConfiguration()
+    agent._embedding_model = None
+    agent._threshold = 0.85
+    agent._threshold_neighbor = 0.05
+    agent._direct_intent_score = 0.90
+    agent._enable_default_intents = True
+    agent._enable_default_tools = True
+    agent._markdown_pretty_display = False
+    agent._state = AgentSharedState(thread_id="1")
+
+    created: dict[str, type] = {}
+
+    def _capture_init(self, *args, **kwargs):
+        created["cls"] = type(self)
+        self._name = kwargs.get("name", "Subclass")
+        self._agents = []
+
+    with patch.object(_Subclass, "__init__", _capture_init):
+        out = IntentAgent.duplicate(agent)
+
+    assert created["cls"] is _Subclass
+    assert isinstance(out, _Subclass)
