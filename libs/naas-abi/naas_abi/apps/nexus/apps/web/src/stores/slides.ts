@@ -38,6 +38,7 @@ export const SLIDES_DECK_UPDATED_EVENT = 'slides-deck-updated';
 export type SlidesDeckUpdatedDetail = {
   slug?: string;
   source?: string;
+  title?: string;
 };
 
 export type SlidesDeckSource = 'sidecar' | 'forgejo' | null;
