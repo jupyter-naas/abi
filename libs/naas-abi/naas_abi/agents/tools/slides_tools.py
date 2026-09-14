@@ -18,20 +18,21 @@ the live ``.slide`` DOM; tools therefore:
 
 from __future__ import annotations
 
-import html as html_lib
-import json
 import base64
 import hashlib
+import html as html_lib
+import json
+import logging
 import mimetypes
 import re
 import struct
 import unicodedata
-from urllib.error import HTTPError, URLError
+from collections import OrderedDict
 from pathlib import Path
+from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
-from collections import OrderedDict
-from typing import Any
 
 from langchain_core.tools import BaseTool, tool
 from naas_abi.agents.slides import (
@@ -44,6 +45,7 @@ from naas_abi.agents.slides import (
     reject_unresearched_slides_write,
     resolve_deck_title,
 )
+from naas_abi.agents.tools.web_tools import _blocked_host_reason, _http_only_opener
 from naas_abi_core.services.agent.context import (
     agent_chat_id,
     agent_user_email,
@@ -58,11 +60,12 @@ from naas_abi_core.services.agent.context import (
     slides_brief,
 )
 from naas_abi_core.services.agent.tools.workspace_tools import _call as _sidecar_call
-from naas_abi.agents.tools.web_tools import _blocked_host_reason, _http_only_opener
 from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNameConflictError,
     SourceControlError,
 )
+
+logger = logging.getLogger(__name__)
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _BRANCH_PREFIX = "slides/"
@@ -170,7 +173,9 @@ def _load_portrait_catalog() -> list[dict[str, str]]:
         except (OSError, UnicodeError, json.JSONDecodeError):
             continue
         if isinstance(payload, dict):
-            payload = payload.get("partners") or payload.get("people") or payload.get("items")
+            payload = (
+                payload.get("partners") or payload.get("people") or payload.get("items")
+            )
         if not isinstance(payload, list):
             continue
         entries: list[dict[str, str]] = []
@@ -200,7 +205,9 @@ def _catalog_portrait(person_name: str) -> dict[str, str] | None:
     if not wanted:
         return None
     entries = _load_portrait_catalog()
-    exact = [entry for entry in entries if _normalise_person_name(entry["name"]) == wanted]
+    exact = [
+        entry for entry in entries if _normalise_person_name(entry["name"]) == wanted
+    ]
     if len(exact) == 1:
         return exact[0]
     wanted_tokens = set(wanted.split())
@@ -241,7 +248,9 @@ def _add_profile_image_candidate(
         score -= 35
     if any(term in lowered for term in _PORTRAIT_TERMS):
         score += 20
-    name_tokens = [token for token in _normalise_person_name(person_name).split() if token]
+    name_tokens = [
+        token for token in _normalise_person_name(person_name).split() if token
+    ]
     if name_tokens and sum(token in lowered for token in name_tokens) >= 2:
         score += 30
     seen.add(candidate)
@@ -259,11 +268,23 @@ def _extract_profile_portrait_candidates(
         marker = (attrs.get("property") or attrs.get("name") or "").casefold()
         if marker in {"og:image", "og:image:url"}:
             _add_profile_image_candidate(
-                candidates, seen, attrs.get("content", ""), profile_url, 100, marker, person_name
+                candidates,
+                seen,
+                attrs.get("content", ""),
+                profile_url,
+                100,
+                marker,
+                person_name,
             )
         elif marker == "twitter:image":
             _add_profile_image_candidate(
-                candidates, seen, attrs.get("content", ""), profile_url, 90, marker, person_name
+                candidates,
+                seen,
+                attrs.get("content", ""),
+                profile_url,
+                90,
+                marker,
+                person_name,
             )
 
     for tag in _PROFILE_IMAGE_RE.findall(html or ""):
@@ -320,7 +341,13 @@ def _extract_profile_portrait_candidates(
             continue
         for image_url in collect_json_images(payload):
             _add_profile_image_candidate(
-                candidates, seen, image_url, profile_url, 80, "json-ld:image", person_name
+                candidates,
+                seen,
+                image_url,
+                profile_url,
+                80,
+                "json-ld:image",
+                person_name,
             )
 
     candidates.sort(key=lambda item: item[0], reverse=True)
@@ -347,7 +374,9 @@ def _fetch_public_profile_page(url: str) -> dict[str, str]:
         },
     )
     try:
-        with _http_only_opener().open(request, timeout=_PROFILE_FETCH_TIMEOUT_SECONDS) as response:
+        with _http_only_opener().open(
+            request, timeout=_PROFILE_FETCH_TIMEOUT_SECONDS
+        ) as response:
             final_url = response.geturl()
             final_blocked = _blocked_host_reason(final_url)
             if final_blocked is not None:
@@ -448,9 +477,12 @@ def _image_dimensions(payload: bytes, media_type: str) -> tuple[int, int] | None
                 return width, height
         if media_type == "image/jpeg" and payload.startswith(b"\xff\xd8\xff"):
             offset = 2
-            sof_markers = set(range(0xC0, 0xC4)) | set(range(0xC5, 0xC8)) | set(
-                range(0xC9, 0xCC)
-            ) | set(range(0xCD, 0xD0))
+            sof_markers = (
+                set(range(0xC0, 0xC4))
+                | set(range(0xC5, 0xC8))
+                | set(range(0xC9, 0xCC))
+                | set(range(0xCD, 0xD0))
+            )
             while offset + 9 <= len(payload):
                 if payload[offset] != 0xFF:
                     offset += 1
@@ -469,7 +501,9 @@ def _image_dimensions(payload: bytes, media_type: str) -> tuple[int, int] | None
                 if segment_length < 2 or offset + segment_length > len(payload):
                     break
                 if marker in sof_markers and segment_length >= 7:
-                    height, width = struct.unpack(">HH", payload[offset + 3 : offset + 7])
+                    height, width = struct.unpack(
+                        ">HH", payload[offset + 3 : offset + 7]
+                    )
                     return width, height
                 offset += segment_length
         if media_type == "image/svg+xml":
@@ -549,7 +583,10 @@ def _download_remote_image(url: str) -> dict[str, Any]:
     dimensions = _image_dimensions(payload, media_type)
     if dimensions:
         width, height = dimensions
-        if max(width, height) < _MIN_IMAGE_LONG_SIDE or width * height < _MIN_IMAGE_AREA:
+        if (
+            max(width, height) < _MIN_IMAGE_LONG_SIDE
+            or width * height < _MIN_IMAGE_AREA
+        ):
             return {
                 "error": (
                     "Remote image is too small for a slide: "
@@ -569,7 +606,9 @@ def _download_remote_image(url: str) -> dict[str, Any]:
     }
 
 
-def _search_remote_images(query: str, max_results: int = 8) -> list[dict[str, str]] | dict[str, str]:
+def _search_remote_images(
+    query: str, max_results: int = 8
+) -> list[dict[str, str]] | dict[str, str]:
     """Search for direct image URLs using the installed DuckDuckGo backend."""
     search_query = (query or "").strip()
     if not search_query:
@@ -618,7 +657,9 @@ def _search_remote_images(query: str, max_results: int = 8) -> list[dict[str, st
     return candidates
 
 
-def _persist_image_asset(slug: str, filename: str, payload: bytes, message: str) -> dict[str, Any]:
+def _persist_image_asset(
+    slug: str, filename: str, payload: bytes, message: str
+) -> dict[str, Any]:
     """Write one binary image to the live workspace and Forgejo snapshot."""
     paths = _ensure_slides_write_paths(slug)
     if paths.get("error"):
@@ -712,17 +753,25 @@ def _replace_image_src_in_section(
                 score += 20
             if asset_role and "photo" in asset_role.group(1).casefold():
                 score += 10
-            style = re.search(r"\bstyle\s*=\s*([\"'])(.*?)\1", tag, re.IGNORECASE | re.DOTALL)
+            style = re.search(
+                r"\bstyle\s*=\s*([\"'])(.*?)\1", tag, re.IGNORECASE | re.DOTALL
+            )
             if style:
-                dimensions = re.findall(r"\b(width|height)\s*:\s*([\d.]+)px", style.group(2), re.IGNORECASE)
+                dimensions = re.findall(
+                    r"\b(width|height)\s*:\s*([\d.]+)px", style.group(2), re.IGNORECASE
+                )
                 if len(dimensions) == 2:
-                    score += int(float(dimensions[0][1]) * float(dimensions[1][1]) / 10000)
+                    score += int(
+                        float(dimensions[0][1]) * float(dimensions[1][1]) / 10000
+                    )
             scored.append((score, match, tag))
         if not scored:
             return {"error": "No replaceable photo found in the targeted slide"}
         scored.sort(key=lambda item: item[0], reverse=True)
         if len(scored) > 1 and scored[0][0] == scored[1][0]:
-            return {"error": "Main image target is ambiguous; provide a target description"}
+            return {
+                "error": "Main image target is ambiguous; provide a target description"
+            }
         matches = [(scored[0][1], scored[0][2])]
     if not matches:
         return {"error": "No matching image found in the targeted slide"}
@@ -733,11 +782,7 @@ def _replace_image_src_in_section(
     if not src_match:
         return {"error": "Target image has no src attribute"}
     escaped_src = html_lib.escape(candidate, quote=True)
-    replacement = (
-        tag[: src_match.start(2)]
-        + escaped_src
-        + tag[src_match.end(2) :]
-    )
+    replacement = tag[: src_match.start(2)] + escaped_src + tag[src_match.end(2) :]
     updated = section_html[: match.start()] + replacement + section_html[match.end() :]
     return updated, html_lib.unescape(src_match.group(2))
 
@@ -776,7 +821,9 @@ def _replaceable_image_matches(section_html: str) -> list[tuple[re.Match[str], s
     return matches
 
 
-def _image_query_for_slide(theme: str, section_index: int, section_html: str, tag: str) -> str:
+def _image_query_for_slide(
+    theme: str, section_index: int, section_html: str, tag: str
+) -> str:
     """Build a useful, bounded image query from the theme and slide metadata."""
     meta = _section_meta(section_index, section_html)
     attrs = _html_attrs(tag)
@@ -786,7 +833,11 @@ def _image_query_for_slide(theme: str, section_index: int, section_html: str, ta
         attrs.get("data-asset-role", ""),
     ]
     context = " ".join(value for value in descriptors if value).strip()
-    parts = [theme.strip(), meta.get("title", "") or f"slide {section_index + 1}", context]
+    parts = [
+        theme.strip(),
+        meta.get("title", "") or f"slide {section_index + 1}",
+        context,
+    ]
     return re.sub(r"\s+", " ", " ".join(part for part in parts if part)).strip()[:240]
 
 
@@ -1059,7 +1110,9 @@ def _ensure_slides_write_paths(slug: str) -> dict[str, str]:
         return {"error": _friendly_sc_error(exc)}
     branch = paths["branch"]
     if branch not in names:
-        default = "main" if "main" in names else (next(iter(names)) if names else "main")
+        default = (
+            "main" if "main" in names else (next(iter(names)) if names else "main")
+        )
         if default not in names:
             return {"error": _WIPED_DECK_ERROR}
         try:
@@ -1291,9 +1344,7 @@ def _write_deck_via_sidecar(slug: str, html: str) -> dict[str, Any]:
     paths = _resolve_paths(slug)
     if paths.get("error"):
         return {"error": paths["error"], "source": "sidecar"}
-    result = _sidecar_call(
-        "write_file", {"path": paths["deck_path"], "content": html}
-    )
+    result = _sidecar_call("write_file", {"path": paths["deck_path"], "content": html})
     if result.get("error") or result.get("ok") is False:
         return {
             "error": result.get("error") or "sidecar write failed",
@@ -1832,16 +1883,22 @@ def _parse_section_writes(raw: Any) -> list[dict[str, Any]] | dict[str, str]:
         except json.JSONDecodeError as exc:
             return {"error": f"sections is not valid JSON: {exc}"}
     if not isinstance(payload, list) or not payload:
-        return {"error": "sections must be a non-empty JSON array of {index or section_id, html}"}
+        return {
+            "error": "sections must be a non-empty JSON array of {index or section_id, html}"
+        }
     parsed: list[dict[str, Any]] = []
     for i, item in enumerate(payload):
         if not isinstance(item, dict):
-            return {"error": f"sections[{i}] must be an object with html and index or section_id"}
+            return {
+                "error": f"sections[{i}] must be an object with html and index or section_id"
+            }
         html = item.get("html")
         if not isinstance(html, str) or not html.strip():
             return {"error": f"sections[{i}].html must be a non-empty string"}
         if "<section" not in html.lower():
-            return {"error": f"sections[{i}].html must include a <section>...</section> block"}
+            return {
+                "error": f"sections[{i}].html must include a <section>...</section> block"
+            }
         index = item.get("index")
         section_id = item.get("section_id") or item.get("id")
         if index is None and not section_id:
@@ -2131,9 +2188,7 @@ def _delete_slide_html(html: str, index: int) -> dict[str, Any]:
     if len(sections) <= 1:
         return {"error": "Cannot delete the last slide."}
     if index < 0 or index >= len(sections):
-        return {
-            "error": f"index out of range (0..{len(sections) - 1}; got {index})"
-        }
+        return {"error": f"index out of range (0..{len(sections) - 1}; got {index})"}
     del sections[index]
     new_html = _join_sections(prefix, sections, suffix)
     lost = _guard_main(html, new_html)
@@ -2147,9 +2202,7 @@ def _duplicate_slide_html(html: str, index: int) -> dict[str, Any]:
     if not sections:
         return {"error": "Deck has no slides to duplicate."}
     if index < 0 or index >= len(sections):
-        return {
-            "error": f"index out of range (0..{len(sections) - 1}; got {index})"
-        }
+        return {"error": f"index out of range (0..{len(sections) - 1}; got {index})"}
     layout = _section_layout(sections[index])
     clone = _clone_section(
         sections[index],
@@ -2213,8 +2266,7 @@ def _reorder_slides_html(
     if from_index < 0 or from_index >= n or to_index < 0 or to_index >= n:
         return {
             "error": (
-                f"indexes out of range (0..{n - 1}; "
-                f"from={from_index}, to={to_index})"
+                f"indexes out of range (0..{n - 1}; from={from_index}, to={to_index})"
             )
         }
     if from_index != to_index:
@@ -2311,6 +2363,7 @@ def slides_tools() -> list[BaseTool]:
     """
     if not hasattr(slides_tools, "_read_section_calls"):
         slides_tools._read_section_calls = 0
+
     @tool
     def create_slides_project(title: str) -> dict[str, Any]:
         """Create a new Slides presentation and make it the deck you are editing.
@@ -2401,7 +2454,10 @@ def slides_tools() -> list[BaseTool]:
                 slug = ""
                 if ns_prefix and name.startswith(ns_prefix):
                     slug = name[len(ns_prefix) :]
-                elif name.startswith(_BRANCH_PREFIX) and "/" not in name[len(_BRANCH_PREFIX) :]:
+                elif (
+                    name.startswith(_BRANCH_PREFIX)
+                    and "/" not in name[len(_BRANCH_PREFIX) :]
+                ):
                     slug = name[len(_BRANCH_PREFIX) :]
                 else:
                     continue
@@ -2422,11 +2478,7 @@ def slides_tools() -> list[BaseTool]:
                     owner = str(data.get("workspace_id") or "").strip()
                     if ws and owner and owner != ws:
                         continue
-                    if (
-                        ws
-                        and "/" not in name[len(_BRANCH_PREFIX) :]
-                        and not owner
-                    ):
+                    if ws and "/" not in name[len(_BRANCH_PREFIX) :] and not owner:
                         # Unscoped legacy: hide until claimed via Slides UI.
                         continue
                 except (SourceControlError, json.JSONDecodeError):
@@ -2688,7 +2740,9 @@ def slides_tools() -> list[BaseTool]:
             if isinstance(original, dict):
                 return original
             prefix, sections, suffix = _split_sections(original)
-            total_targets = sum(len(_replaceable_image_matches(section)) for section in sections)
+            total_targets = sum(
+                len(_replaceable_image_matches(section)) for section in sections
+            )
             if total_targets == 0:
                 return {"error": "No replaceable editorial images found in the deck."}
 
@@ -2716,7 +2770,11 @@ def slides_tools() -> list[BaseTool]:
                     if isinstance(search_result, dict):
                         if not official_portrait:
                             failures.append(
-                                {"section_index": section_index, "query": query, **search_result}
+                                {
+                                    "section_index": section_index,
+                                    "query": query,
+                                    **search_result,
+                                }
                             )
                             continue
                         search_result = []
@@ -2732,7 +2790,9 @@ def slides_tools() -> list[BaseTool]:
                         )
                     candidates.extend(search_result)
                     expected_aspect_ratio = _image_box_aspect_ratio(tag)
-                    valid_candidates: list[tuple[float, dict[str, Any], dict[str, str]]] = []
+                    valid_candidates: list[
+                        tuple[float, dict[str, Any], dict[str, str]]
+                    ] = []
                     last_error = "No valid image candidate returned by image search."
                     for candidate in candidates:
                         image_url = candidate.get("image_url", "")
@@ -2749,12 +2809,19 @@ def slides_tools() -> list[BaseTool]:
                         if score < 0:
                             last_error = "Image dimensions could not be verified."
                             continue
-                        if candidate.get("source") == "official_bob_person_photo_catalog":
+                        if (
+                            candidate.get("source")
+                            == "official_bob_person_photo_catalog"
+                        ):
                             score += 100
                         valid_candidates.append((score, downloaded, candidate))
                     if not valid_candidates:
                         failures.append(
-                            {"section_index": section_index, "query": query, "error": last_error}
+                            {
+                                "section_index": section_index,
+                                "query": query,
+                                "error": last_error,
+                            }
                         )
                         continue
                     _score, downloaded, candidate = max(
@@ -2917,11 +2984,13 @@ def slides_tools() -> list[BaseTool]:
                 candidates = [resolved_index]
             else:
                 for idx, section in enumerate(sections):
-                    if (element_id and element_id in section) or (
-                        asset_name and asset_name in section
+                    if (
+                        (element_id and element_id in section)
+                        or (asset_name and asset_name in section)
+                        or not element_id
+                        and not asset_name
+                        and section_index is not None
                     ):
-                        candidates.append(idx)
-                    elif not element_id and not asset_name and section_index is not None:
                         candidates.append(idx)
                 if len(candidates) != 1:
                     return {
@@ -3043,7 +3112,10 @@ def slides_tools() -> list[BaseTool]:
                 # HTML of the section it targeted so it can fix old/new without
                 # a separate read_slides_section round-trip (that loop is what
                 # bloats context until the model call times out).
-                if "error" in applied and applied.get("error") == "old string not found in deck":
+                if (
+                    "error" in applied
+                    and applied.get("error") == "old string not found in deck"
+                ):
                     _prefix, _secs, _suffix = _split_sections(html)
                     try:
                         _idx = _resolve_section_index(_secs, section_index, section_id)
@@ -3052,8 +3124,10 @@ def slides_tools() -> list[BaseTool]:
                             applied["target_section_index"] = _idx
                             applied["target_section_html"] = _target_html
                             applied["target_redacted_assets"] = _n_assets
-                    except Exception:  # noqa: BLE001
-                        pass
+                    except Exception:
+                        logger.debug(
+                            "Failed to redact target section HTML", exc_info=True
+                        )
                 return applied
             updated, count, replaced, resolved_section = applied
             _prefix, original_sections, _suffix = _split_sections(html)
@@ -3132,7 +3206,9 @@ def slides_tools() -> list[BaseTool]:
             return _tool_error(exc)
 
     @tool
-    def read_slides_deck(slug: str = "", include_assets: bool = False) -> dict[str, Any]:
+    def read_slides_deck(
+        slug: str = "", include_assets: bool = False
+    ) -> dict[str, Any]:
         """Read a compact outline of the HTML deck (titles, counts, no HTML).
 
         Omit slug when a deck is open. Default omits the file body: a 25-slide
@@ -3213,9 +3289,7 @@ def slides_tools() -> list[BaseTool]:
                     original = loaded
             except Exception:  # noqa: BLE001
                 original = ""
-            content = (
-                _restore_redacted_data_urls(html, original) if original else html
-            )
+            content = _restore_redacted_data_urls(html, original) if original else html
             result = _persist_deck(
                 resolved,
                 content,
@@ -3308,9 +3382,7 @@ def slides_tools() -> list[BaseTool]:
         def _mutate(html: str) -> dict[str, Any]:
             if parsed is not None:
                 return _reorder_slides_html(html, order=parsed)
-            return _reorder_slides_html(
-                html, from_index=from_index, to_index=to_index
-            )
+            return _reorder_slides_html(html, from_index=from_index, to_index=to_index)
 
         return _run_slide_mutation(
             slug,
