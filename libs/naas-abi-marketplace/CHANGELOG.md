@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.48.1 (2026-09-14)
+
+### Bug Fixes
+
+- **x_proxy**: Update UserDetail component and config for improved feed handling
+  ([`dc29d09`](https://github.com/jupyter-naas/abi/commit/dc29d09b52dde5da7325414606242bf1bda5e477))
+
+
 ## v3.48.0 (2026-09-13)
 
 ### Features
