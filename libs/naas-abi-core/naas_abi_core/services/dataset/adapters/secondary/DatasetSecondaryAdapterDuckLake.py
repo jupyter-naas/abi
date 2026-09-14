@@ -8,6 +8,7 @@ import logging
 import random
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -125,8 +126,9 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
     cost, and a long-held ATTACH sees commits from other connections without
     re-attaching. Each call still gets its own cursor off that connection, so
     concurrent reads are independent and one call's error can't poison another's.
-    A pinned ``query(snapshot_id=...)`` (time travel) still gets a fresh,
-    snapshot-specific connection, since SNAPSHOT_VERSION is fixed at ATTACH time.
+    Pinned queries reuse a bounded cache of snapshot-specific connections,
+    since SNAPSHOT_VERSION is fixed at ATTACH time. Each query validates that
+    its snapshot still exists and uses an independent cursor.
     """
 
     def __init__(
@@ -187,6 +189,8 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         )
         self._read_connection: Any | None = None
         self._read_connection_lock = threading.Lock()
+        self._snapshot_connections: OrderedDict[int, tuple[float, Any]] = OrderedDict()
+        self._snapshot_connection_lock = threading.Lock()
         self._prepare_local_paths()
 
     def create(self, spec: DatasetSpec) -> DatasetInfo:
@@ -325,14 +329,40 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
 
         if not self._snapshot_exists(snapshot_id):
             raise DatasetSnapshotNotFoundError(snapshot_id)
+        connection = self._get_snapshot_connection(snapshot_id)
+        cursor = connection.cursor()
         try:
-            con = self._connect(snapshot_id=snapshot_id)
-        except Exception as exc:
-            raise DatasetSnapshotNotFoundError(snapshot_id) from exc
-        try:
-            return self._run_query(con, sql, namespace)
+            return self._run_query(cursor, sql, namespace)
+        except Exception:
+            # Retire on failure, including stale inline tables after an external
+            # flush. Never replay arbitrary query SQL automatically.
+            with self._snapshot_connection_lock:
+                entry = self._snapshot_connections.get(snapshot_id)
+                if entry is not None and entry[1] is connection:
+                    del self._snapshot_connections[snapshot_id]
+            raise
         finally:
-            con.close()
+            cursor.close()
+
+    def _get_snapshot_connection(self, snapshot_id: int) -> Any:
+        with self._snapshot_connection_lock:
+            now = time.monotonic()
+            for version, (created, _) in list(self._snapshot_connections.items()):
+                if now - created >= 60:
+                    del self._snapshot_connections[version]
+            entry = self._snapshot_connections.get(snapshot_id)
+            if entry is None:
+                try:
+                    connection = self._connect(snapshot_id=snapshot_id)
+                except Exception as exc:
+                    raise DatasetSnapshotNotFoundError(snapshot_id) from exc
+                entry = (time.monotonic(), connection)
+                self._snapshot_connections[snapshot_id] = entry
+            self._snapshot_connections.move_to_end(snapshot_id)
+            while len(self._snapshot_connections) > 4:
+                # Drop cache ownership, not active readers' references.
+                self._snapshot_connections.popitem(last=False)
+            return entry[1]
 
     def _run_query(self, con: Any, sql: str, namespace: str) -> QueryResult:
         con.execute(f"USE {self._qualified_schema(namespace)}")
@@ -408,6 +438,8 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         # must attach again; existing cursors retain their connection reference.
         with self._read_connection_lock:
             self._read_connection = None
+        with self._snapshot_connection_lock:
+            self._snapshot_connections.clear()
         return result
 
     def compact(self, name: str, *, namespace: str = "default") -> QueryResult:
@@ -600,7 +632,8 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         def read(con: Any) -> bool:
             return (
                 con.execute(
-                    "SELECT 1 FROM abi_datasets.snapshots() WHERE snapshot_id = ?",
+                    'SELECT 1 FROM "__ducklake_metadata_abi_datasets".ducklake_snapshot '
+                    "WHERE snapshot_id = ?",
                     [snapshot_id],
                 ).fetchone()
                 is not None
