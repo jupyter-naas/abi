@@ -224,6 +224,14 @@ services:
         secret_access_key: "{{ secret.MINIO_ROOT_PASSWORD }}"
         endpoint_url: "http://minio:9000"
 
+  # Mutable module state; collections are provisioned on every boot.
+  # Reuse the existing database, with a dedicated document-service schema.
+  document:
+    document_adapter:
+      adapter: "postgresql"
+      config:
+        dsn: "postgresql://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/{{ secret.POSTGRES_DB }}"
+
   # Q: Where are structured, versioned datasets stored?
   # A: DuckLake keeps metadata in its dedicated PostgreSQL database and table
   #    data in the shared storage path. Both must be backed up coherently.

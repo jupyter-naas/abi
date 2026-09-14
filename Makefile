@@ -123,6 +123,7 @@ help:
 	@echo "  test-api                 Run API-specific tests"
 	@echo "  test-local-embedded-core Run no-docker local embedded core e2e test"
 	@echo "  test-integration-core    Run core integration tests (testcontainers)"
+	@echo "  test-document-core       Run document tests (set DOCUMENT_TEST_POSTGRES_DSN for PostgreSQL)"
 	@echo "  test-api-init            Test API initialization with production secrets"
 	@echo "  test-api-init-container  Test API initialization in containerized environment"
 	@echo "  ftest                    Interactive test selector using fzf (fuzzy finder)"
@@ -560,6 +561,12 @@ test-local-embedded-core: deps
 test-integration-core: deps check-docker
 	@ echo "🔍 Running core integration tests (testcontainers)..."
 	@ cd libs/naas-abi-core && uv sync --all-extras && uv run pytest naas_abi_core/services/triple_store/adaptors/secondary/ApacheJenaTDB2_integration_test.py naas_abi_core/services/triple_store/adaptors/secondary/Oxigraph_integration_test.py -m integration -v
+
+# Run document unit tests and the optional PostgreSQL adapter contract
+test-document-core:
+	@ uv run --project libs/naas-abi-core --all-extras python -m pytest -c libs/naas-abi-core/pyproject.toml libs/naas-abi-core/naas_abi_core/services/document libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_DocumentService_test.py -q
+
+.PHONY: test-document-core
 
 # Test API initialization with production secrets
 test-api-init: deps
