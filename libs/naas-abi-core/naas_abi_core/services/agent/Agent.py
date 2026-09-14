@@ -1457,6 +1457,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         lower = text.lower()
         cursor = 0
         while cursor < len(text):
+            tag_name: str | None = None
             bracket = lower.find("[tool_call:", cursor)
             xml = lower.find("<tool_call>", cursor)
             if bracket == -1 and xml == -1:
@@ -1483,7 +1484,6 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
             body_start = xml + len("<tool_call>")
             payload, payload_end = cls._read_json_object_at(text, body_start)
-            tag_name = None
             if payload is None:
                 line_end = text.find("\n", body_start)
                 close_early = lower.find("</tool_call>", body_start)
