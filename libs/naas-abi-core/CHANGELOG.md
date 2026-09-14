@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.36.0 (2026-09-14)
+
+### Features
+
+- **nexus**: Add Documents office product
+  ([`f917aa5`](https://github.com/jupyter-naas/abi/commit/f917aa5d475724075c94f87ddf99b90e92a93f4d))
+
+
 ## v2.35.1 (2026-09-11)
 
 ### Bug Fixes
