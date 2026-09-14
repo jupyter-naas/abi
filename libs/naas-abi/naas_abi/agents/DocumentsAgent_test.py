@@ -35,7 +35,21 @@ def test_sections_agent_prompt_covers_creating_a_document_from_the_main_chat() -
     prompt = DocumentsAgent.system_prompt
     assert "create_documents_project" in prompt
     assert "no document is open" in prompt.lower()
+    assert "Never finish with empty content" in prompt
+    assert "request_help" in prompt
 
+
+def test_documents_retains_active_turn_for_edits_not_meta_chat() -> None:
+    assert DocumentsAgent.retains_active_turn("plus formel") is True
+    assert DocumentsAgent.retains_active_turn("change the title") is True
+    assert DocumentsAgent.retains_active_turn("crée un document pour le board") is True
+    assert DocumentsAgent.retains_active_turn("ah") is False
+    assert (
+        DocumentsAgent.retains_active_turn(
+            "c'est marrant tu as parlé de toi comme ia tu as fait un truc générique"
+        )
+        is False
+    )
 
 def test_sections_agent_prompt_names_the_document_after_its_topic() -> None:
     prompt = DocumentsAgent.system_prompt

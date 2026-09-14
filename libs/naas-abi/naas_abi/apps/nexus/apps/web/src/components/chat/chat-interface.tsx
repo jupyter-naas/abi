@@ -2647,15 +2647,21 @@ export function ChatInterface({
         // Mark any still-running tool as done
         streamToolCalls.forEach((t) => { if (t.status === 'running') t.status = 'done'; });
         const finalToolCalls = streamToolCalls.length > 0 ? [...streamToolCalls] : undefined;
-        updateLastMessage(
-          conversationId!,
-          finalContent,
-          thinkingDuration,
-          streamSources.length > 0 ? streamSources : undefined,
-          hasDetailedActivity ? streamActivityLine : null,
-          finalToolCalls,
-          executionTime,
-        );
+        // Sticky office agents sometimes end the SSE with call_model + [DONE]
+        // and no text. Drop the empty assistant row instead of leaving a blank bubble.
+        if (!finalContent && !(finalToolCalls && finalToolCalls.length > 0) && assistantMessageIdRef) {
+          useWorkspaceStore.getState().removeMessage(conversationId!, assistantMessageIdRef);
+        } else {
+          updateLastMessage(
+            conversationId!,
+            finalContent,
+            thinkingDuration,
+            streamSources.length > 0 ? streamSources : undefined,
+            hasDetailedActivity ? streamActivityLine : null,
+            finalToolCalls,
+            executionTime,
+          );
+        }
         // Persist execution metadata to backend. Keyed on ``assistantMessageIdRef``
         // for the same reason as the id swap above: the React state
         // ``streamingMessageId`` captured in this closure is stale (still null on

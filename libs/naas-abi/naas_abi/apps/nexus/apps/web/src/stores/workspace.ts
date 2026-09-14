@@ -354,6 +354,8 @@ interface WorkspaceState {
     oldMessageId: string,
     newMessageId: string,
   ) => void;
+  /** Drop a message row (e.g. empty assistant bubble after a no-content stream). */
+  removeMessage: (conversationId: string, messageId: string) => void;
   setMessageModelId: (
     conversationId: string,
     messageId: string,
@@ -876,6 +878,20 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               messages: conv.messages.map((msg) =>
                 msg.id === oldMessageId ? { ...msg, id: newMessageId } : msg,
               ),
+            }
+          : conv,
+      ),
+    }));
+  },
+
+  removeMessage: (conversationId, messageId) => {
+    if (!conversationId || !messageId) return;
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.id === conversationId
+          ? {
+              ...conv,
+              messages: conv.messages.filter((msg) => msg.id !== messageId),
             }
           : conv,
       ),
