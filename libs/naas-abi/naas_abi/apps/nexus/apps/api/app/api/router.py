@@ -31,6 +31,9 @@ from naas_abi.apps.nexus.apps.api.app.services.coding_environment.handlers impor
 from naas_abi.apps.nexus.apps.api.app.services.datasets.handlers import (
     router as datasets_router,
 )
+from naas_abi.apps.nexus.apps.api.app.services.documents.handlers import (
+    router as documents_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.files.handlers import router as files_router
 from naas_abi.apps.nexus.apps.api.app.services.modules.handlers import router as modules_router
 from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.handlers import (
@@ -60,6 +63,7 @@ api_router.include_router(
     coding_environment_router, prefix="/coding-environments", tags=["coding-environments"]
 )
 api_router.include_router(slides_router, prefix="/slides", tags=["slides"])
+api_router.include_router(documents_router, prefix="/documents", tags=["documents"])
 api_router.include_router(openai_gateway_router, prefix="/v1", tags=["openai"])
 api_router.include_router(code_review_router, prefix="/code-review", tags=["code-review"])
 api_router.include_router(platform_router, prefix="/platform", tags=["platform"])

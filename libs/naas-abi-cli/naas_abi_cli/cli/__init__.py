@@ -9,6 +9,7 @@ from .config import config
 from .deploy import deploy
 from .dev import dev
 from .docs import docs
+from .documents import documents
 from .init import init
 from .module import module
 from .new import new
@@ -30,6 +31,7 @@ def _main():
 _main.add_command(secrets)
 _main.add_command(config)
 _main.add_command(docs)
+_main.add_command(documents)
 _main.add_command(module)
 _main.add_command(agent)
 _main.add_command(chat)

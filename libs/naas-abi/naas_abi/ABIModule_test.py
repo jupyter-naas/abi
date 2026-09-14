@@ -46,6 +46,29 @@ def test_a_slides_template_source_survives_the_trip_into_nexus_settings() -> Non
     assert source.path == "src/acme/templates"
 
 
+def test_documents_picker_overrides_survive_the_trip_into_nexus_settings() -> None:
+    """Default and hidden ids in config.yaml have to reach the Documents API.
+
+    Same dump-into-Settings path as the extra sources. A field on only one
+    of the two models would boot, then silently keep ABI's own seed as the
+    New Document default.
+    """
+    from naas_abi.apps.nexus.apps.api.app.core.config import Settings
+
+    dumped = NexusConfig(
+        documents_template_sources=[{"namespace": "acme", "path": "src/acme/templates"}],
+        documents_default_template_id="acme/house-v1",
+        documents_hidden_template_ids=["abi/article-light-v1"],
+    ).model_dump(exclude_none=True)
+
+    settings = Settings(**dumped)
+
+    (source,) = settings.documents_template_sources
+    assert source.namespace == "acme"
+    assert settings.documents_default_template_id == "acme/house-v1"
+    assert settings.documents_hidden_template_ids == ["abi/article-light-v1"]
+
+
 def test_a_slides_template_source_cannot_claim_the_abi_namespace() -> None:
     """Refused on the boot, before a picker can serve the wrong deck.
 

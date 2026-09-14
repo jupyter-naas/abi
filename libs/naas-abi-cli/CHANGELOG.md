@@ -2,30 +2,6 @@
 
 <!-- version list -->
 
-## v2.22.2 (2026-09-12)
-
-### Bug Fixes
-
-- **docker-compose**: Update MinIO image source to quay.io
-  ([`2c7bcdc`](https://github.com/jupyter-naas/abi/commit/2c7bcdcef3e964165bb8cd73581c9bf8ba2c9dcd))
-
-
-## v2.22.1 (2026-09-12)
-
-### Bug Fixes
-
-- **x_proxy**: Add type checking and improve orchestration scheduling
-  ([`74067df`](https://github.com/jupyter-naas/abi/commit/74067df90cfc589fb095475ceffbc3de6dbc35a0))
-
-
-## v2.22.0 (2026-09-11)
-
-### Features
-
-- **x-proxy**: Enhance tweet search UI and update dependencies
-  ([`69e679c`](https://github.com/jupyter-naas/abi/commit/69e679c5c59c5f8e67412e94c20d8fa6d269e303))
-
-
 ## v2.21.5 (2026-09-10)
 
 ### Bug Fixes

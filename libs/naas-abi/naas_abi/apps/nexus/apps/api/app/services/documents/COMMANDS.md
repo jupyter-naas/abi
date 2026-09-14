@@ -1,0 +1,201 @@
+# Documents commands
+
+Nexus Documents stores git-backed HTML (`document.html`). The command
+surface is the contract. The file format is an implementation detail.
+
+This note is the verb set. It is inspired by Google Docs
+`documents.batchUpdate`, OASIS OpenDocument text operations, and the
+Pandoc AST. It is not an ODF writer and not a Google Docs clone.
+
+## Architecture
+
+Python mutators own the logic. HTTP, the agent, and `abi documents`
+call the same functions. Do not prompt-engineer around a missing verb.
+
+`POST /api/documents/projects/{slug}/commands` applies an ordered
+list of verbs (Google Docs `batchUpdate` style). `abi documents apply`
+sends the same list to `apply_document_commands`. Named CLI verbs
+(`style`, `insert-heading`, `fill`, `reflow`, …) call the same
+functions as the matching HTTP command.
+
+What actually runs:
+
+1. Verb functions live in `documents_commands.py` and
+   `documents_slots.py` (HTML). `rename_document` also writes
+   `project.json` `title` on the HTTP/agent path.
+2. FastAPI `POST /commands` calls those verbs and writes the
+   git-backed store (sidecar plus Forgejo).
+3. Agent tools use the same names and the same Python mutators.
+4. `abi documents <verb>` calls those mutators on a local
+   `--html` file. Sidebar `project.json` rename stays on HTTP/agent.
+5. The web UI calls the HTTP API (PATCH for a sidebar-typed rename,
+   `POST /commands` for outline edits).
+
+Target: one named command per user-facing function, callable from
+HTTP, CLI, and the agent.
+
+## Supported commands
+
+`POST /api/documents/projects/{slug}/commands` applies an ordered list.
+The first error aborts the batch (same idea as Docs `batchUpdate`).
+
+| Command | What it does | Source |
+|---|---|---|
+| `insert_text` | Insert text as a paragraph after a heading | Docs `insertText`; ODF `addParagraph` / `insert` |
+| `insert_paragraph` | Insert a `<p>` after a heading | Pandoc `Para`; ODF paragraph |
+| `insert_heading` | Insert Title (`h1.fmz-title`) or Heading 1/2/3 (`h2`/`h3`/`h4`) | Pandoc `Header`; Docs `updateParagraphStyle` |
+| `insert_page_break` | Insert a hard page break (same section) | Docs `insertPageBreak`; ODF `fo:break-before=page`; Word `w:br w:type="page"`; Pandoc pagebreak |
+| `insert_list` | Insert a `ul`/`ol` after a heading | Pandoc `BulletList` / `OrderedList` |
+| `insert_table` | Insert an official `fmz-table` or `fmz-shaded` | Pandoc `Table`; ODF table |
+| `insert_image` | Insert a figure after a heading (CSS default size) | Pandoc `Image` |
+| `apply_mark` | Wrap found text in `strong`, `em`, `mark`, or a link | Docs `updateTextStyle` |
+| `insert_link` | Hyperlink the first find | Docs `updateTextStyle` link |
+| `insert_comment` | Mark a range with `data-comment` | lean range note, not Docs comments |
+| `insert_suggestion` | `<del>` plus `<ins>` on a find | lean suggestion mark, not track changes |
+| `delete_range` | Delete a heading block (that heading through the next) | Docs `deleteContentRange` |
+| `delete_block` | Delete a block by class or `data-slot` (decision, situation) | cover chrome delete |
+| `replace_text` | Replace a substring | Docs `replaceAllText` |
+| `replace_class` | Replace or delete the first element with that class | empty deletes `palette` or `decision` |
+| `update_paragraph_style` | Apply picker style on any block (`slot` / `class_name` / heading index) | Docs `updateParagraphStyle` |
+| `reflow` | Remonter le texte: drop empty letter pages, pull the next body up | after cover chrome delete |
+| `update_title` | Change the tab `<title>` and cover H1 only | heading-only retitle |
+| `rename_document` | Sidebar display name plus tab `<title>`, cover H1, and footer titles | "rename this document" |
+| `fill_slots` | Map structured topic copy onto seed slots | first memo or report fill |
+
+Positioning is a heading index (`after_heading` / `heading_index`), not a
+UTF-16 offset. That matches ODF "insert relative to a paragraph" more
+than Docs character indexes.
+
+The style picker (Normal text, Title, Subtitle, Heading 1, Heading 2,
+Heading 3) maps onto official Word classes. Options is editor chrome, not
+a paragraph style.
+
+| Picker | Style token | Markup |
+|---|---|---|
+| Title | `title` | `h1.fmz-title` (cover `data-slot="title"`) |
+| Subtitle | `subtitle` | `p.fmz-subtitle.subtitle` |
+| Heading 1 | `heading1` | `h2.fmz-heading-1` |
+| Heading 2 | `heading2` | `h3.fmz-heading-2` |
+| Heading 3 | `heading3` | `h4.fmz-heading-3` |
+| Normal text | `normal` | `p.fmz-normal` |
+
+`heading1` is not the document title. `fill_slots` `title` writes the
+cover H1, never a section heading such as `situation-heading`.
+
+Inserts land inside the `.doc-body` that owns the heading. They never
+concatenate markup after `</footer>`. A persist pass moves stray nodes
+that already landed after a footer back into that page's `.doc-body`.
+
+## Fill the open template
+
+When the user asks for a memo or report on an untitled seed:
+
+1. `rename_document` from the brief.
+2. Adapt every seed slot. Do not append a new article after the seed.
+   - Cover H1, kicker or subtitle, intro paragraphs
+   - Official heading styles
+   - Tables: replace headers and rows with topic data (no
+     "Assumption / Replace with the working premise")
+   - Quotes, lists, discussion blocks
+   - Colour swatches stay only as brand specimens. For a memo, replace
+     the palette (`replace_class` on `palette`) with a real table or
+     delete it
+3. Writes go into `.doc-body` via one `fill_document_slots` call.
+   The payload is structured topic copy (title, subtitle, intro, note,
+   quote, sections, tables). Python maps those slots onto the open
+   HTML. Empty values are rejected. Unknown keys are ignored. The
+   colour palette is removed for a memo. Never concatenate HTML after
+   `</footer>`.
+4. One `fill_document_slots` per turn, plus one follow-up for
+   `missing_slots` / `leftover_slots` keys only. One apply family per
+   turn: `apply_document_commands`, `insert_heading`, `insert_paragraph`,
+   `insert_page_break`, or `reflow`. Then stop and reply.
+   `leftover_slots` lists fill keys, not `apply_document_commands`
+   recipes. An empty leftover list must not say keep going.
+   `leftover_placeholders` must be empty after a complete fill.
+   `apply_document_commands` is not the fill path.
+
+Fill the open template. Do not leave seed placeholder copy. Do not
+append after the footer.
+
+## Rename vs heading
+
+"Rename this document" (or "rename this doc") is one product action:
+`rename_document`. It updates the project display name the sidebar tree
+reads (`project.json` `title`) and the visible document title (tab and
+cover H1). The slug and git folder stay put. `Untitled document` is that
+display name, not only the slug.
+
+"Change the title" or "change the heading" is heading-only: `update_title`.
+It does not rename the sidebar folder.
+
+Agent tools use the same names. Internal helpers can still split
+project write vs HTML write; the command the agent and the user see
+must not.
+
+Read and project verbs already exist:
+
+| Route / tool | What it does | Source |
+|---|---|---|
+| `GET /projects`, `list_documents_projects` | List documents | Docs `documents.list` analog |
+| `POST /projects`, `create_documents_project` | Create from a seed | Docs `documents.create` |
+| `GET /projects/{slug}/document`, `read_document` | Read stored HTML (tools return an outline by default) | Docs `documents.get` |
+| `PUT /projects/{slug}/document`, `write_document` | Replace the whole document | full-document write |
+| `GET /projects/{slug}/outline` | Heading outline | Pandoc `Header` walk |
+| `GET /projects/{slug}/history` | Git history | undo/redo is this version strip, not an in-memory stack |
+| File print / HTML export | Print and download | Docs export / Pandoc convert |
+
+Agent tools with the same names call the same mutators:
+`insert_page_break`, `insert_heading`, `insert_paragraph`,
+`apply_paragraph_style`, `apply_document_commands`, `rename_document`,
+`update_title`.
+
+## Leftover section API
+
+These are slide-shaped leftovers. They still work on `<section class="page">`
+blocks. Do not use them as the model for new prose features.
+
+- `GET /projects/{slug}/sections`
+- `POST .../sections/insert` (`cover` / `section-divider` / `content`)
+- `POST .../sections/delete`
+- `POST .../sections/duplicate`
+- `POST .../sections/reorder`
+- Agent tools `insert_section`, `delete_section`, `duplicate_section`,
+  `reorder_sections`, `write_document_section(s)`
+
+An ODF `text:section` is a named region (columns, notes). It is not a
+slide and not a page. Docs `insertSectionBreak` changes headers, footers,
+and margins. Neither is "new slide".
+
+## Explicit non-goals
+
+- Full ODF / OOXML writer or reader
+- Docs UTF-16 indexes, tabs, named ranges
+- Image layout or column-resize chrome
+- Google Docs comments product, track-changes UI, mail merge, email share/ACL
+- Spellcheck
+- Changing Slides
+
+## Citations
+
+- OASIS OpenDocument TC: https://www.oasis-open.org/committees/tc_home.php?wg_abbrev=office
+- Google Docs requests: https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/request
+- Pandoc AST (`Para`, `Header`, `Table`, `Image`): https://hackage.haskell.org/package/pandoc-types-1.23/docs/Text-Pandoc-Definition.html
+- Word `w:p` / `w:br w:type="page"`: ECMA-376 / ISO/IEC 29500
+
+## Template contract and readiness
+
+`fill_slots` accepts the base fields and `fields: {name: value}` for named template
+fields. Text fields take strings, list fields take arrays of strings, table fields
+take `{headers, rows}`. `read_document` exposes the actual `template_fields`; unknown
+field names fail validation. Blank templates receive missing body regions inside
+`.doc-body`. Repeated sections and tables are not limited to seed examples.
+
+A successful result has `ok=true`; `content_complete` and `missing_slots` are separate
+readiness information, also preserved by the HTTP response. Seed fields marked
+`data-placeholder="true"` require explicit review/fill. Missing client information
+must not be invented. Failed mutations can be corrected in the same agent turn.
+
+`replace_text` edits visible text, escaping replacement text; it does not inject
+HTML or modify attributes, styles or scripts. Use `apply_mark` or `insert_link` for
+formatting, with a unique visible passage.

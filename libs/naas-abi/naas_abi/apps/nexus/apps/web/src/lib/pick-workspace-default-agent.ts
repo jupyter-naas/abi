@@ -38,3 +38,50 @@ export function pickSlidesOfficeAgent<T extends SlidesOfficeAgent>(
   const slides = agents.find((agent) => agent.enabled && isNexusSlidesAgent(agent));
   return slides ?? pickWorkspaceDefaultAgent(agents);
 }
+
+type DocumentsOfficeAgent = {
+  enabled?: boolean;
+  isDefault?: boolean;
+  name?: string;
+  class_name?: string | null;
+};
+
+export function isNexusDocumentsAgent(agent: DocumentsOfficeAgent): boolean {
+  if (agent.name === 'Documents') return true;
+  const className = agent.class_name ?? '';
+  return className.endsWith('/DocumentsAgent') && className.includes('naas_abi');
+}
+
+/** Nexus Documents when the workspace listed it, else the workspace default. */
+export function pickDocumentsOfficeAgent<T extends DocumentsOfficeAgent>(
+  agents: T[],
+): T | undefined {
+  const documents = agents.find((agent) => agent.enabled && isNexusDocumentsAgent(agent));
+  return documents ?? pickWorkspaceDefaultAgent(agents);
+}
+
+/** Right-pane office bind: Slides on a deck, Documents on a file, else default. */
+export function pickPaneOfficeAgent<
+  T extends SlidesOfficeAgent & DocumentsOfficeAgent,
+>(
+  agents: T[],
+  surface: { onSlides?: boolean; onDocuments?: boolean },
+): T | undefined {
+  if (surface.onDocuments) return pickDocumentsOfficeAgent(agents);
+  if (surface.onSlides) return pickSlidesOfficeAgent(agents);
+  return pickWorkspaceDefaultAgent(agents);
+}
+
+/** Office surface from the route segment, not leftover store slugs or slug text. */
+export function officeSurfaceFromPath(pathname: string | null | undefined): {
+  onSlides: boolean;
+  onDocuments: boolean;
+} {
+  const parts = (pathname || '').split(/[?#]/)[0].split('/').filter(Boolean);
+  const workspaceIndex = parts.indexOf('workspace');
+  const feature = workspaceIndex >= 0 ? parts[workspaceIndex + 2] : '';
+  return {
+    onSlides: feature === 'slides',
+    onDocuments: feature === 'documents',
+  };
+}

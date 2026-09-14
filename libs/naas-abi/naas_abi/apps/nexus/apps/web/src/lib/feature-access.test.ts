@@ -20,6 +20,7 @@ describe('mergeFeatureFlags', () => {
     expect(flags.files).toBe(true);
     expect(flags.datasets).toBe(true);
     expect(flags.slides).toBe(true);
+    expect(flags.documents).toBe(true);
     expect(flags.agents).toBe(false);
     expect(flags.apps).toBe(false);
     expect(flags.marketplace).toBe(false);
@@ -86,6 +87,15 @@ describe('getFeatureForWorkspacePath', () => {
     expect(mergeFeatureFlags('owner').slides).toBe(true);
     expect(
       isWorkspacePathAllowed({ pathname: '/workspace/ws1/slides', role: 'member' }),
+    ).toBe(true);
+  });
+
+  it('maps documents paths to the documents feature', () => {
+    expect(getFeatureForWorkspacePath('/workspace/ws1/documents')).toBe('documents');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/documents/new')).toBe('documents');
+    expect(mergeFeatureFlags('owner').documents).toBe(true);
+    expect(
+      isWorkspacePathAllowed({ pathname: '/workspace/ws1/documents', role: 'member' }),
     ).toBe(true);
   });
 });
@@ -214,6 +224,8 @@ describe('pathNeedsAgentCatalog', () => {
     expect(pathNeedsAgentCatalog('/workspace/ws1/chat/conv-1')).toBe(true);
     expect(pathNeedsAgentCatalog('/workspace/ws1/settings/agents')).toBe(true);
     expect(pathNeedsAgentCatalog('/workspace/ws1/lab')).toBe(false);
+    expect(pathNeedsAgentCatalog('/workspace/ws1/slides')).toBe(true);
+    expect(pathNeedsAgentCatalog('/workspace/ws1/documents/untitled-1')).toBe(true);
   });
 
   it('is false on apps and other sections', () => {

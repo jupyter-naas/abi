@@ -236,6 +236,21 @@ def pick_workspace_slides_agent_id(agents: list[AgentRecord]) -> str | None:
     return None
 
 
+def _is_nexus_documents_agent(agent: AgentRecord) -> bool:
+    if agent.name == "Documents":
+        return True
+    class_name = agent.class_name or ""
+    return class_name.endswith("/DocumentsAgent") and "naas_abi" in class_name
+
+
+def pick_workspace_documents_agent_id(agents: list[AgentRecord]) -> str | None:
+    """Enabled Nexus Documents row, or None when the workspace did not list it."""
+    for agent in agents:
+        if agent.enabled and _is_nexus_documents_agent(agent):
+            return agent.id
+    return None
+
+
 def _workspace_agent_roster(
     seeded_class_names: set[str] | None,
     default_class_name: str | None,
