@@ -9,14 +9,12 @@ Pandoc AST. It is not an ODF writer and not a Google Docs clone.
 
 ## Architecture
 
-Python mutators own the logic. HTTP, the agent, and `abi documents`
-call the same functions. Do not prompt-engineer around a missing verb.
+Python mutators own the logic. HTTP and the agent call the same
+functions. Do not prompt-engineer around a missing verb.
 
 `POST /api/documents/projects/{slug}/commands` applies an ordered
-list of verbs (Google Docs `batchUpdate` style). `abi documents apply`
-sends the same list to `apply_document_commands`. Named CLI verbs
-(`style`, `insert-heading`, `fill`, `reflow`, …) call the same
-functions as the matching HTTP command.
+list of verbs (Google Docs `batchUpdate` style) via
+`apply_document_commands`.
 
 What actually runs:
 
@@ -26,13 +24,11 @@ What actually runs:
 2. FastAPI `POST /commands` calls those verbs and writes the
    git-backed store (sidecar plus Forgejo).
 3. Agent tools use the same names and the same Python mutators.
-4. `abi documents <verb>` calls those mutators on a local
-   `--html` file. Sidebar `project.json` rename stays on HTTP/agent.
-5. The web UI calls the HTTP API (PATCH for a sidebar-typed rename,
+4. The web UI calls the HTTP API (PATCH for a sidebar-typed rename,
    `POST /commands` for outline edits).
 
 Target: one named command per user-facing function, callable from
-HTTP, CLI, and the agent.
+HTTP and the agent.
 
 ## Supported commands
 
