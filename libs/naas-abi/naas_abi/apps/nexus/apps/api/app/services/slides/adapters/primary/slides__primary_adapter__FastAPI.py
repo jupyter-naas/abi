@@ -2607,6 +2607,19 @@ async def _ensure_runtime_impl(
             coder_workspace=name,
             branch=branch,
         )
+    except Exception as exc:
+        # LocalDirectoryAdapter (and similar) can raise OSError/FileNotFoundError
+        # on concurrent checkout cleanup. Preview already uses Forgejo HTML;
+        # never 500 the optional runtime ensure.
+        logger.exception("slides runtime ensure failed for %s", slug)
+        return RuntimeResponse(
+            ensured=False,
+            detail=_friendly_coding_detail(exc),
+            template_name=template_name,
+            label=label,
+            coder_workspace=name,
+            branch=branch,
+        )
 
     has_creds = bool(ws_base and ws_secret)
     sidecar_ready = False

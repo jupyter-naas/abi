@@ -117,51 +117,55 @@ async function ensureDocumentsRuntime(
     environment_id?: string | null;
   } = {};
   for (let i = 0; i < attempts; i++) {
-    const res = await authFetch(
-      `/api/documents/projects/${encodeURIComponent(slug)}/runtime?workspace_id=${encodeURIComponent(workspaceId)}`,
-      { method: 'POST' },
-    );
-    const body = (await res.json().catch(() => ({}))) as {
-      ensured?: boolean;
-      sidecar_ready?: boolean;
-      detail?: string;
-      phase?: string;
-      coder_workspace?: string;
-      branch?: string;
-      coder_ui_url?: string;
-      environment_id?: string;
-    };
-    lastMeta = {
-      coder_workspace: body.coder_workspace ?? lastMeta.coder_workspace,
-      branch: body.branch ?? lastMeta.branch,
-      coder_ui_url: body.coder_ui_url ?? lastMeta.coder_ui_url,
-      environment_id: body.environment_id ?? lastMeta.environment_id,
-    };
-    if (res.ok && body.ensured) {
-      const result = {
-        ensured: true,
-        sidecar_ready: Boolean(body.sidecar_ready),
-        detail: friendlyRuntimeDetail(body.detail) ?? null,
-        phase: body.phase ?? null,
+    try {
+      const res = await authFetch(
+        `/api/documents/projects/${encodeURIComponent(slug)}/runtime?workspace_id=${encodeURIComponent(workspaceId)}`,
+        { method: 'POST' },
+      );
+      const body = (await res.json().catch(() => ({}))) as {
+        ensured?: boolean;
+        sidecar_ready?: boolean;
+        detail?: string;
+        phase?: string;
+        coder_workspace?: string;
+        branch?: string;
+        coder_ui_url?: string;
+        environment_id?: string;
+      };
+      lastMeta = {
         coder_workspace: body.coder_workspace ?? lastMeta.coder_workspace,
         branch: body.branch ?? lastMeta.branch,
         coder_ui_url: body.coder_ui_url ?? lastMeta.coder_ui_url,
         environment_id: body.environment_id ?? lastMeta.environment_id,
       };
-      // Settle only when sidecar is healthy. Returning on the first
-      // ensured=true stuck the degraded banner while :8378 was still starting.
-      if (result.sidecar_ready) {
+      if (res.ok && body.ensured) {
+        const result = {
+          ensured: true,
+          sidecar_ready: Boolean(body.sidecar_ready),
+          detail: friendlyRuntimeDetail(body.detail) ?? null,
+          phase: body.phase ?? null,
+          coder_workspace: body.coder_workspace ?? lastMeta.coder_workspace,
+          branch: body.branch ?? lastMeta.branch,
+          coder_ui_url: body.coder_ui_url ?? lastMeta.coder_ui_url,
+          environment_id: body.environment_id ?? lastMeta.environment_id,
+        };
+        // Settle only when sidecar is healthy. Returning on the first
+        // ensured=true stuck the degraded banner while :8378 was still starting.
+        if (result.sidecar_ready) {
+          return result;
+        }
+        lastEnsured = result;
+        if (i < attempts - 1) {
+          await new Promise((r) => setTimeout(r, 1500 * Math.min(i + 1, 4)));
+          continue;
+        }
         return result;
       }
-      lastEnsured = result;
-      if (i < attempts - 1) {
-        await new Promise((r) => setTimeout(r, 1500 * Math.min(i + 1, 4)));
-        continue;
-      }
-      return result;
+      lastDetail =
+        friendlyRuntimeDetail(body.detail) || `Runtime ensure failed (${res.status})`;
+    } catch (err) {
+      lastDetail = friendlyRuntimeDetail((err as Error)?.message) || 'Runtime ensure unavailable';
     }
-    lastDetail =
-      friendlyRuntimeDetail(body.detail) || `Runtime ensure failed (${res.status})`;
     if (i < attempts - 1) {
       await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
     }
@@ -353,10 +357,15 @@ export default function SectionsEditorPage() {
         clearOfficeCreate();
         if (ensureRuntime) {
           // Sidecar can take >15s. Overlay and editor wait only on HTML.
-          void ensureDocumentsRuntime(workspaceId, slug, quiet ? 2 : 6).then((runtime) => {
-            if (gen !== loadGenRef.current) return;
-            applyRuntime(runtime);
-          });
+          void ensureDocumentsRuntime(workspaceId, slug, quiet ? 2 : 6)
+            .then((runtime) => {
+              if (gen !== loadGenRef.current) return;
+              applyRuntime(runtime);
+            })
+            .catch(() => {
+              if (gen !== loadGenRef.current) return;
+              applyRuntime({ ensured: false, detail: null });
+            });
         }
       } catch (e) {
         if (gen !== loadGenRef.current) return;

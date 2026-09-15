@@ -2292,19 +2292,24 @@ export function ChatInterface({
 
           // After Abi writes a Slides deck, nudge the open preview to reload.
           const raw = (target.rawName || target.toolName || '').toLowerCase();
-          if (isSlidesWriteTool(raw)) {
+          if (isSlidesWriteTool(raw, output)) {
             let slug: string | undefined;
             let writeFailed = false;
             let projectRenamed = false;
+            let parsedOutput: Record<string, unknown> | null = null;
             try {
-              const parsed = JSON.parse(output) as {
+              parsedOutput = JSON.parse(output) as {
                 slug?: string;
                 error?: unknown;
                 project_renamed?: unknown;
+                created?: unknown;
+                nexus_shipped?: unknown;
+                title?: unknown;
+                workspace_id?: unknown;
               };
-              if (typeof parsed?.slug === 'string') slug = parsed.slug;
-              if (parsed && parsed.error) writeFailed = true;
-              if (parsed?.project_renamed === true) projectRenamed = true;
+              if (typeof parsedOutput?.slug === 'string') slug = parsedOutput.slug;
+              if (parsedOutput && parsedOutput.error) writeFailed = true;
+              if (parsedOutput?.project_renamed === true) projectRenamed = true;
             } catch {
               /* tool output may be plain text */
             }
@@ -2319,6 +2324,9 @@ export function ChatInterface({
                 source: target.rawName || target.toolName,
                 title: projectRenamed ? deckTitle : undefined,
               });
+              // New decks from chat (create_slides_project and other deck-shaped
+              // publishes) stay in chat: the presentation card is derived from
+              // tool output and the user opens it. Do not auto-navigate.
             }
           }
           if (isDocumentsWriteTool(raw)) {
