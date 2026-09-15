@@ -41,6 +41,7 @@ describe('isSlidesWriteTool', () => {
     expect(isSlidesWriteTool('write_slides_sections')).toBe(true);
     expect(isSlidesWriteTool('write_slides_deck')).toBe(true);
     expect(isSlidesWriteTool('replace_in_slides_deck')).toBe(true);
+    expect(isSlidesWriteTool('replace_slide_image')).toBe(true);
     expect(isSlidesWriteTool('insert_slide')).toBe(true);
     expect(isSlidesWriteTool('delete_slide')).toBe(true);
     expect(isSlidesWriteTool('duplicate_slide')).toBe(true);

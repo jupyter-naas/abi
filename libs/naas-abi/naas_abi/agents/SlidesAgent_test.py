@@ -22,6 +22,12 @@ def test_slides_agent_prompt_requires_research_then_write() -> None:
     assert "Research loop" in prompt
     assert "Plan, then write" in prompt
     assert "write_slides_sections" in prompt
+    assert "resolve_person_portrait" in prompt
+    assert "adapt_deck_images" in prompt
+    assert "all deck photos/images" in prompt
+    assert "named person's photo" in prompt
+    assert "plain visible text" in prompt
+    assert "Never escape the tags" in prompt
     assert "Do not re-read" in prompt
     assert "start writing immediately" not in prompt
     assert "Context / Approach / Plan" in prompt
@@ -54,11 +60,16 @@ def test_slides_agent_owns_the_write_and_research_tools() -> None:
     assert "write_slides_deck" in names
     assert "write_slides_section" in names
     assert "write_slides_sections" in names
+    assert "adapt_deck_images" in names
+    assert "resolve_person_portrait" in names
+    assert "replace_slide_image" in names
     assert "replace_in_slides_deck" in names
     assert "web_search" in names
     assert "web_fetch" in names
     source = inspect.getsource(SlidesAgent.get_tools)
-    assert "naas_abi.agents.tools.web_tools" in source or "slides_research_tools" in source
+    assert (
+        "naas_abi.agents.tools.web_tools" in source or "slides_research_tools" in source
+    )
     assert "nexus_admin_tools" not in source
 
 
@@ -89,7 +100,9 @@ def test_new_loads_the_slides_model_and_keeps_write_tools(monkeypatch) -> None:
             **kwargs,
         ) -> ChatResult:
             del messages, stop, run_manager, kwargs
-            return ChatResult(generations=[ChatGeneration(message=AIMessage(content="ok"))])
+            return ChatResult(
+                generations=[ChatGeneration(message=AIMessage(content="ok"))]
+            )
 
     dummy = _DummyChatModel()
     monkeypatch.setattr(
