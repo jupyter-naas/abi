@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.69.0 (2026-09-15)
+
+### Features
+
+- **nexus**: Detect slide decks by result shape
+  ([`c229191`](https://github.com/jupyter-naas/abi/commit/c22919166e91cc006b28dd7bc82e3f36063ff8d9))
+
+
 ## v2.68.1 (2026-09-14)
 
 ### Bug Fixes
