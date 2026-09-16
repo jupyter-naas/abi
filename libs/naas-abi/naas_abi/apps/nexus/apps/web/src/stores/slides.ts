@@ -172,6 +172,7 @@ export function isSlidesWriteTool(
   if (
     raw.includes('write_slides') ||
     raw.includes('replace_in_slides') ||
+    raw.includes('replace_slide_image') ||
     raw.includes('insert_slide') ||
     raw.includes('delete_slide') ||
     raw.includes('duplicate_slide') ||

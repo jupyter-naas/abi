@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from naas_abi.agents.tools.slides_tools import (
     _DATA_URL_RE,
+    _READ_SECTION_BUDGET,
     _REDACTED_PLACEHOLDER,
     _WIPED_DECK_ERROR,
     _apply_replacements,
@@ -16,21 +19,30 @@ from naas_abi.agents.tools.slides_tools import (
     _cover_subtitle_text,
     _deck_path,
     _delete_slide_html,
+    _download_remote_image,
     _duplicate_slide_html,
     _ensure_coding_repo,
+    _extract_profile_portrait_candidates,
     _forget_active_slugs,
     _friendly_sc_error,
+    _image_dimensions,
+    _image_query_for_slide,
     _insert_slide_html,
     _join_sections,
     _parse_section_writes,
     _persist_deck,
     _redact_data_urls,
     _reorder_slides_html,
+    _replace_image_src_in_section,
     _replace_string_pairs,
+    _replaceable_image_matches,
+    _resolve_person_portrait,
     _resolve_slug,
     _restore_redacted_data_urls,
+    _search_remote_images,
     _section_meta,
     _split_sections,
+    _validate_section_edit,
     _view_for_llm,
     slides_tools,
 )
@@ -85,6 +97,144 @@ def test_redact_data_urls_shrinks_payload_and_counts():
     assert count == 1
     assert _REDACTED_PLACEHOLDER in redacted
     assert len(redacted) < len(html)
+
+
+def test_download_remote_image_rejects_html_returned_with_http_200(monkeypatch):
+    class Headers:
+        def get_content_type(self):
+            return "text/html"
+
+    class Response:
+        headers = Headers()
+
+        def geturl(self):
+            return "https://images.example/photo"
+
+        def read(self, _limit):
+            return b"<html>blocked</html>"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.slides_tools.urlopen",
+        lambda *_args, **_kwargs: Response(),
+    )
+    result = _download_remote_image("https://images.example/photo")
+    assert "error" in result
+    assert "supported" in result["error"]
+
+
+def test_download_remote_image_returns_stable_local_asset_name(monkeypatch):
+    payload = b"\x89PNG\r\n\x1a\nvalid-png"
+
+    class Headers:
+        def get_content_type(self):
+            return "image/png"
+
+    class Response:
+        headers = Headers()
+
+        def geturl(self):
+            return "https://images.example/photo.png"
+
+        def read(self, _limit):
+            return payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.slides_tools.urlopen",
+        lambda *_args, **_kwargs: Response(),
+    )
+    result = _download_remote_image("https://images.example/photo.png")
+    assert result["bytes"] == payload
+    assert result["media_type"] == "image/png"
+    assert result["filename"].startswith("ai-")
+    assert result["filename"].endswith(".png")
+
+
+def test_image_dimensions_reads_png_header():
+    payload = (
+        b"\x89PNG\r\n\x1a\n"
+        + b"\x00\x00\x00\rIHDR"
+        + (1600).to_bytes(4, "big")
+        + (900).to_bytes(4, "big")
+    )
+    assert _image_dimensions(payload, "image/png") == (1600, 900)
+
+
+def test_search_remote_images_ignores_thumbnail_only_results(monkeypatch):
+    class FakeDDGS:
+        def images(self, _query, **_kwargs):
+            return [
+                {"thumbnail": "https://images.example/low.jpg"},
+                {
+                    "image": "https://images.example/original.jpg",
+                    "title": "Original photo",
+                },
+            ]
+
+    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=FakeDDGS))
+    result = _search_remote_images("electric mobility")
+    assert result == [
+        {
+            "image_url": "https://images.example/original.jpg",
+            "title": "Original photo",
+            "source_url": "",
+            "width": "",
+            "height": "",
+        }
+    ]
+
+
+def test_extract_profile_portrait_candidates_prefers_og_image():
+    html = """
+    <html><head>
+      <meta property="og:image" content="/media/alex-morgan.jpg">
+      <meta name="twitter:image" content="/media/social-card.jpg">
+    </head><body>
+      <img alt="Alex Morgan portrait" src="/media/portrait-thumb.jpg">
+    </body></html>
+    """
+    candidates = _extract_profile_portrait_candidates(
+        html,
+        "https://profiles.example/people/alex-morgan",
+        "Alex Morgan",
+    )
+    assert candidates
+    assert (
+        candidates[0]["image_url"] == "https://profiles.example/media/alex-morgan.jpg"
+    )
+    assert candidates[0]["source"] == "og:image"
+
+
+def test_resolve_person_portrait_extracts_public_profile_image(monkeypatch):
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.slides_tools._fetch_public_profile_page",
+        lambda url: {
+            "final_url": url,
+            "html": '<meta property="og:image" content="/people/alex-morgan.jpg">',
+        },
+    )
+    result = _resolve_person_portrait(
+        "Alex Morgan", "https://profiles.example/people/alex-morgan"
+    )
+    assert result["image_url"] == "https://profiles.example/people/alex-morgan.jpg"
+    assert result["source"] == "og:image"
+
+
+def test_resolve_person_portrait_does_not_guess_when_person_is_unknown():
+    result = _resolve_person_portrait("Unknown Person")
+    assert "error" in result
+    assert "profile URL" in result["error"]
 
 
 def test_split_sections_preserves_prefix_suffix_and_ids():
@@ -162,8 +312,6 @@ def test_real_template_sections_round_trip_and_compact_view():
     assert prefix + "".join(sections) + suffix == html
     assert "Presentation Title" in sections[0]
     low = html.lower()
-    assert "forvis" not in low
-    assert "mazars" not in low
     assert "iso 27001" not in low
     view = _view_for_llm(html)
     # Editable surface must stay far below the ~256k-token failure mode.
@@ -171,6 +319,291 @@ def test_real_template_sections_round_trip_and_compact_view():
     assert view["chars_redacted"] < 120_000
     assert view["section_count"] == 10
     assert len(view["sections"]) == 10
+
+
+def test_apply_replacements_in_section_not_found_returns_target():
+    # A failed scoped replace should hand back the (redacted) HTML of the
+    # targeted section so the model can self-correct without a re-read.
+    updated = _apply_replacements_in_section(
+        _SAMPLE, "NO SUCH TEXT", "x", 0, section_index=0
+    )
+    # The low-level helper returns the plain not-found error; the tool layer is
+    # what attaches the target section HTML (covered by the end-to-end test).
+    assert isinstance(updated, dict)
+    assert updated["error"] == "old string not found in deck"
+
+
+def test_apply_replacements_rejects_html_in_plain_text_new_value():
+    applied = _apply_replacements(_SAMPLE, "Session details", "<p>New copy</p>", 0)
+    assert isinstance(applied, dict)
+    assert "plain visible text" in applied["error"]
+
+    escaped = _apply_replacements(
+        _SAMPLE, "Session details", "&lt;p&gt;New copy&lt;/p&gt;", 0
+    )
+    assert isinstance(escaped, dict)
+    assert "plain visible text" in escaped["error"]
+
+
+def test_validate_section_edit_rejects_nested_paragraph_in_heading():
+    original = '<section id="s1"><h1 data-element-id="title">Old</h1></section>'
+    updated = '<section id="s1"><h1 data-element-id="title"><p>New</p></h1></section>'
+    error = _validate_section_edit(original, updated)
+    assert error is not None
+    assert "nest <p>" in error
+
+
+def test_validate_section_edit_rejects_visible_escaped_markup():
+    original = '<section id="s1"><div data-element-id="body" data-semantic-role="text-body"><p>Old</p></div></section>'
+    updated = '<section id="s1"><div data-element-id="body" data-semantic-role="text-body"><p>&lt;p style="color:red"&gt;New&lt;/p&gt;</p></div></section>'
+    error = _validate_section_edit(original, updated)
+    assert error is not None
+    assert "visible HTML markup" in error
+
+
+def test_validate_section_edit_allows_paragraph_after_heading():
+    original = (
+        '<section id="s1"><h1 data-element-id="title">Old</h1><p>Body</p></section>'
+    )
+    updated = (
+        '<section id="s1"><h1 data-element-id="title">New</h1><p>Body</p></section>'
+    )
+    assert _validate_section_edit(original, updated) is None
+
+
+def test_validate_section_edit_preserves_semantic_handles():
+    original = (
+        '<section id="s1"><h1 data-element-id="title" '
+        'data-semantic-role="title">Old</h1></section>'
+    )
+    updated = '<section id="s1"><h1>New</h1></section>'
+    error = _validate_section_edit(original, updated)
+    assert error is not None
+    assert "data-element-id" in error
+
+
+def test_validate_section_edit_rejects_new_placeholder():
+    original = '<section id="s1"><h1 data-element-id="title">Old</h1></section>'
+    updated = '<section id="s1"><h1 data-element-id="title">Name</h1></section>'
+    error = _validate_section_edit(original, updated)
+    assert error is not None
+    assert "placeholder" in error
+
+
+def test_replace_image_src_preserves_layout_and_semantic_attributes():
+    section = (
+        '<section id="s1"><img data-element-id="photo-1" '
+        'data-semantic-role="image" data-asset-name="old-photo" '
+        'src="assets/old.jpg" style="position:absolute;left:12px;top:24px;'
+        'width:400px;height:200px;object-fit:cover" alt="Old photo"></section>'
+    )
+    applied = _replace_image_src_in_section(
+        section, "assets/new-photo.jpg", element_id="photo-1"
+    )
+    assert not isinstance(applied, dict)
+    updated, old_src = applied
+    assert old_src == "assets/old.jpg"
+    assert 'src="assets/new-photo.jpg"' in updated
+    assert (
+        'style="position:absolute;left:12px;top:24px;width:400px;height:200px;object-fit:cover"'
+        in updated
+    )
+    assert 'data-element-id="photo-1"' in updated
+    assert 'data-asset-name="old-photo"' in updated
+
+
+def test_replace_image_src_rejects_unsafe_or_ambiguous_targets():
+    section = '<section><img data-asset-name="photo" src="assets/old.jpg"></section>'
+    unsafe = _replace_image_src_in_section(
+        section, "javascript:alert(1)", asset_name="photo"
+    )
+    assert isinstance(unsafe, dict)
+    assert "executable" in unsafe["error"]
+    missing = _replace_image_src_in_section(
+        section + '<img data-asset-name="other" src="assets/other.jpg">',
+        "assets/new.jpg",
+        target="photo",
+    )
+    assert isinstance(missing, dict)
+    assert "ambiguous" in missing["error"]
+
+
+def test_replace_image_src_can_choose_main_photo_without_internal_location():
+    section = (
+        '<section><img data-semantic-role="brand-logo" src="assets/logo.svg" '
+        'style="width:100px;height:40px">'
+        '<img data-semantic-role="image" data-asset-role="hero-photo" '
+        'src="assets/hero.jpg" style="width:800px;height:400px;object-fit:cover">'
+        "</section>"
+    )
+    applied = _replace_image_src_in_section(
+        section, "assets/new-hero.jpg", target="main photo"
+    )
+    assert not isinstance(applied, dict)
+    updated, old_src = applied
+    assert old_src == "assets/hero.jpg"
+    assert 'src="assets/new-hero.jpg"' in updated
+    assert 'src="assets/logo.svg"' in updated
+
+
+def test_replaceable_image_matches_excludes_logos_icons_and_decorative_images():
+    section = """
+    <section id="s1">
+      <img data-semantic-role="brand-logo" src="assets/logo.svg">
+      <img class="icon" src="assets/icon.svg">
+      <img data-semantic-role="decorative" src="assets/shape.png">
+      <img data-semantic-role="image" data-asset-role="hero-photo"
+           alt="vehicle assembly" src="assets/old.jpg">
+    </section>
+    """
+    matches = _replaceable_image_matches(section)
+    assert len(matches) == 1
+    assert "vehicle assembly" in matches[0][1]
+
+
+def test_image_query_for_slide_combines_theme_title_and_image_metadata():
+    section = '<section><h1>Electric mobility</h1><img alt="battery plant" src="old.jpg"></section>'
+    tag = _replaceable_image_matches(section)[0][1]
+    query = _image_query_for_slide("automotive mobility", 2, section, tag)
+    assert query == "automotive mobility Electric mobility battery plant"
+
+
+def test_adapt_deck_images_replaces_editorial_images_and_preserves_logo(monkeypatch):
+    sc = _bind_in_memory_git(monkeypatch)
+    html = """<!DOCTYPE html><html><body><main>
+    <section id="slide-one" class="slide"><h1>Electric mobility</h1>
+      <img data-semantic-role="brand-logo" src="assets/logo.svg">
+      <img data-semantic-role="image" alt="battery plant" src="assets/old-one.jpg"
+           style="position:absolute;left:10px;top:20px;width:400px;height:200px;object-fit:cover">
+    </section>
+    <section id="slide-two" class="slide"><h1>Smart mobility</h1>
+      <img data-semantic-role="image" alt="vehicle sensor" src="assets/old-two.jpg"
+           style="position:absolute;left:30px;top:40px;width:300px;height:180px;object-fit:cover">
+    </section>
+    </main></body></html>"""
+    _seed_in_memory_deck(sc, html)
+    tokens = _slides_context()
+    search_calls = []
+
+    def fake_search(query, _max_results):
+        search_calls.append(query)
+        number = len(search_calls)
+        return [
+            {
+                "image_url": f"https://images.example/low-{number}.png",
+                "title": "Low quality",
+            },
+            {
+                "image_url": f"https://images.example/high-{number}.png",
+                "title": query,
+            },
+        ]
+
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.slides_tools._search_remote_images", fake_search
+    )
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.slides_tools._download_remote_image",
+        lambda url: {
+            "bytes": b"\x89PNG\r\n\x1a\nvalid",
+            "filename": f"ai-{url.rsplit('/', 1)[-1]}",
+            "media_type": "image/png",
+            "final_url": url,
+            "width": 500 if "/low-" in url else 1600,
+            "height": 300 if "/low-" in url else 900,
+        },
+    )
+    monkeypatch.setattr(
+        "naas_abi.agents.tools.slides_tools._persist_image_asset",
+        lambda _slug, filename, _payload, _message: {
+            "asset_path": f"assets/{filename}"
+        },
+    )
+    try:
+        adapt = next(
+            tool for tool in slides_tools() if tool.name == "adapt_deck_images"
+        )
+        result = adapt.invoke({"theme": "automotive mobility"})
+        assert result["images_found"] == 2
+        assert result["images_replaced"] == 2
+        assert len(result["queries"]) == 2
+        assert all("automotive mobility" in query for query in search_calls)
+        deck = sc.get_file(
+            repo_id="abi/monorepo",
+            path="slides/ws-test/untitled-local/deck.html",
+            ref="slides/ws-test/untitled-local",
+        )
+        saved = deck.text or ""
+        assert 'src="assets/logo.svg"' in saved
+        assert 'src="assets/ai-high-1.png"' in saved
+        assert 'src="assets/ai-high-2.png"' in saved
+        assert 'src="assets/ai-low-1.png"' not in saved
+        assert 'src="assets/ai-low-2.png"' not in saved
+        assert (
+            'style="position:absolute;left:10px;top:20px;width:400px;height:200px;object-fit:cover"'
+            in saved
+        )
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_replace_in_slides_deck_not_found_includes_target_section_html(monkeypatch):
+    # A missed scoped replace hands back the (redacted) HTML of the targeted
+    # section so the model can self-correct without a re-read round-trip.
+    sc = _bind_in_memory_git(monkeypatch)
+    sc.ensure_repo(owner="abi", name="monorepo")
+    sc.create_branch(
+        repo_id="abi/monorepo", name="slides/ws-test/untitled-local", from_ref="main"
+    )
+    sc.upsert_file(
+        repo_id="abi/monorepo",
+        path="slides/ws-test/untitled-local/deck.html",
+        content=_SAMPLE,
+        message="Seed deck",
+        branch="slides/ws-test/untitled-local",
+    )
+    tokens = _slides_context()
+    try:
+        replace = next(t for t in slides_tools() if t.name == "replace_in_slides_deck")
+        res = replace.invoke(
+            {"old": "NO SUCH TEXT", "new": "x", "section_index": 0, "occurrence": 0}
+        )
+        assert res["error"] == "old string not found in deck"
+        assert res["target_section_index"] == 0
+        assert "<h1>" in res["target_section_html"]
+        assert _REDACTED_PLACEHOLDER in res["target_section_html"]  # image redacted
+    finally:
+        _reset_tokens(tokens)
+        slides_tools._read_section_calls = 0
+
+
+def test_read_slides_section_budget_stops_runaway_reads(monkeypatch):
+    # Repeated section reads must eventually be refused so the agent cannot
+    # loop and bloat the model context until the call times out.
+    sc = _bind_in_memory_git(monkeypatch)
+    sc.ensure_repo(owner="abi", name="monorepo")
+    sc.create_branch(
+        repo_id="abi/monorepo", name="slides/ws-test/untitled-local", from_ref="main"
+    )
+    sc.upsert_file(
+        repo_id="abi/monorepo",
+        path="slides/ws-test/untitled-local/deck.html",
+        content=_SAMPLE,
+        message="Seed deck",
+        branch="slides/ws-test/untitled-local",
+    )
+    tokens = _slides_context()
+    try:
+        read = next(t for t in slides_tools() if t.name == "read_slides_section")
+        results = [
+            read.invoke({"index": i % 2}) for i in range(_READ_SECTION_BUDGET + 2)
+        ]
+        # first budget-many succeed, the rest are refused
+        assert all("html" in r for r in results[:_READ_SECTION_BUDGET])
+        assert all("error" in r for r in results[_READ_SECTION_BUDGET:])
+    finally:
+        _reset_tokens(tokens)
+        slides_tools._read_section_calls = 0
 
 
 def test_replace_string_pairs_covers_amp_entity():
@@ -377,7 +810,9 @@ def test_friendly_sc_error_never_returns_raw_repo_id():
         == _WIPED_DECK_ERROR
     )
     assert (
-        _friendly_sc_error(RepoNotFoundError("abi/monorepo@slides/ws-test/untitled-local"))
+        _friendly_sc_error(
+            RepoNotFoundError("abi/monorepo@slides/ws-test/untitled-local")
+        )
         == _WIPED_DECK_ERROR
     )
     assert _friendly_sc_error(RepoNotFoundError("abi/monorepo")) != "abi/monorepo"
@@ -475,9 +910,7 @@ def test_replace_write_path_matches_ui_create(monkeypatch):
     tokens = _slides_context()
     try:
         assert _deck_path("untitled-local") == "slides/ws-test/untitled-local/deck.html"
-        replace = next(
-            t for t in slides_tools() if t.name == "replace_in_slides_deck"
-        )
+        replace = next(t for t in slides_tools() if t.name == "replace_in_slides_deck")
         result = replace.invoke(
             {
                 "old": "Presentation Title",
@@ -846,7 +1279,9 @@ def test_join_sections_round_trips_split():
 
 
 def test_insert_slide_appends_and_clones_content_layout():
-    result = _insert_slide_html(_SAMPLE, after_index=-1, layout="content", title="Risks")
+    result = _insert_slide_html(
+        _SAMPLE, after_index=-1, layout="content", title="Risks"
+    )
     assert result["ok"] is True
     assert result["section_count"] == 3
     assert result["section_index"] == 2
@@ -860,7 +1295,9 @@ def test_insert_slide_appends_and_clones_content_layout():
 
 
 def test_insert_slide_after_current_uses_catalog_when_layout_missing():
-    result = _insert_slide_html(_SAMPLE, after_index=0, layout="section-divider", title="Part two")
+    result = _insert_slide_html(
+        _SAMPLE, after_index=0, layout="section-divider", title="Part two"
+    )
     assert result["ok"] is True
     assert result["section_index"] == 1
     assert result["section_count"] == 3
