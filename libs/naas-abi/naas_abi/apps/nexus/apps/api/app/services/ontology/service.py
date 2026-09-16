@@ -739,7 +739,10 @@ class OntologyService:
                     continue
                 seen.add(ontology)
 
-                if "sandbox" in ontology.lower() or "modules" not in ontology.lower():
+                # Process schemas are registered alongside vocabulary modules.
+                # Folder organization must not hide their system declarations.
+                catalog_folders = {part.lower() for part in Path(ontology).parts}
+                if "sandbox" in ontology.lower() or not {"modules", "processes"}.intersection(catalog_folders):
                     continue
 
                 ontology_graph = Graph()

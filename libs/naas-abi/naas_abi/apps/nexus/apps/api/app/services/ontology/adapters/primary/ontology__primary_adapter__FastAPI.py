@@ -31,13 +31,21 @@ from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.primary.ontolog
     ReferenceProperty,
     RelationshipCreate,
 )
+from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.secondary.ontology_icons_postgres import (
+    OntologyIconsPostgres,
+)
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import (
     OntologyFileNotFoundError,
     OntologyParseError,
     OntologyPathNotFoundError,
     OntologyServiceUnavailableError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_icons import (
+    EDIT_ROLES,
+    OntologyIconsService,
+)
 from naas_abi.apps.nexus.apps.api.app.services.ontology.service import OntologyService
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -104,6 +112,10 @@ async def ontology_catalog_scope(
     if not workspace_id:
         return None
     await require_workspace_access(current_user.id, workspace_id)
+    return await _catalog_refs_for_workspace(workspace_id)
+
+
+async def _catalog_refs_for_workspace(workspace_id: str) -> list[str] | None:
     seed = workspace_seed_for_slug(await _workspace_slug(workspace_id))
     if seed is None or getattr(seed, "ontologies", None) is None:
         return None
@@ -478,3 +490,61 @@ async def export_ontology_file(
         filename=path.name,
         media_type="application/octet-stream",
     )
+
+
+# Workspace-shared UI icons. Reads and writes use the same permitted catalog as the dictionary.
+class OntologyIconUpdate(BaseModel):
+    kind: str = Field(min_length=1, max_length=24)
+    resource_id: str = Field(min_length=1, max_length=8192)
+    icon: str | None = Field(default=None, max_length=160)
+
+
+def get_ontology_icons_service() -> OntologyIconsService:
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    return OntologyIconsService(OntologyIconsPostgres(AsyncSessionLocal))
+
+
+async def ontology_icons_access(
+    workspace_id: str = Query(..., min_length=1),
+    current_user: User = Depends(get_current_user_required),
+    ontology_service: OntologyService = Depends(get_ontology_service),
+) -> tuple[str, set[tuple[str, str]]]:
+    role = await require_workspace_access(current_user.id, workspace_id)
+    refs = await _catalog_refs_for_workspace(workspace_id)
+    dictionary = await ontology_service.workspace_dictionary(catalog_refs=refs)
+    files = await ontology_service.list_ontology_files(catalog_refs=refs)
+    allowed = {(item["type"], item["id"]) for item in dictionary["items"]}
+    allowed.update(("file", item.path) for item in files)
+    return role, allowed
+
+
+@router.get("/icons")
+async def list_ontology_icons(
+    workspace_id: str = Query(..., min_length=1),
+    access: tuple[str, set[tuple[str, str]]] = Depends(ontology_icons_access),
+    icons_service: OntologyIconsService = Depends(get_ontology_icons_service),
+) -> dict:
+    role, allowed = access
+    return {"items": await icons_service.list_icons(workspace_id, allowed),
+            "can_edit": role in EDIT_ROLES}
+
+
+@router.put("/icons")
+async def save_ontology_icon(
+    updates: OntologyIconUpdate,
+    workspace_id: str = Query(..., min_length=1),
+    current_user: User = Depends(get_current_user_required),
+    access: tuple[str, set[tuple[str, str]]] = Depends(ontology_icons_access),
+    icons_service: OntologyIconsService = Depends(get_ontology_icons_service),
+) -> dict:
+    role, allowed = access
+    try:
+        await icons_service.save_icon(workspace_id, role, current_user.id, allowed,
+                                      updates.kind, updates.resource_id, updates.icon)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"kind": updates.kind, "resource_id": updates.resource_id, "icon": updates.icon}

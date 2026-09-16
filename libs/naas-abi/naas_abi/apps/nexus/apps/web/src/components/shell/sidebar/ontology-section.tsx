@@ -3,20 +3,24 @@
 import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  BrainCircuit, ChevronRight, Box, Network,
+  BrainCircuit, ChevronRight, Box, LayoutGrid,
   BookOpen, FileCode, Folder,
 } from 'lucide-react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { OntologySystemPicker } from './ontology-system-picker';
 import { OntologyDictionary } from './ontology-dictionary';
 import { cn } from '@/lib/utils';
 import { useOntologyStore } from '@/stores/ontology';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
-import { ontologyBrowser, systemRoute } from '@/lib/ontology-navigation';
+import { ontologyBrowser } from '@/lib/ontology-navigation';
+import { dashboardRoute } from '@/lib/ontology-dashboard';
+import './ontology-picker.css';
 import { ontologyApiQuery } from '@/lib/ontology-query';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
+import { useOntologyTreeKeyboard } from '@/hooks/use-ontology-tree-keyboard';
 
 type OntologyFile = {
   name: string;
@@ -43,13 +47,12 @@ type ModuleSubmoduleGroup = {
 };
 
 export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
+  const keyboard = useOntologyTreeKeyboard();
   const router = useRouter();
   const searchParams = useSearchParams();
   const routeQuery = searchParams?.toString() || '';
   const pathname = usePathname();
   const dictionaryMode = ontologyBrowser(routeQuery) === 'dictionary';
-  const isSystemHome = searchParams?.get('view') === 'system'
-    && !searchParams?.get('subsystem') && !searchParams?.get('process');
   const [ontologyFiles, setOntologyFiles] = useState<OntologyFile[]>([]);
   const [expandedOntologyModules, setExpandedOntologyModules] = useState<string[]>([]);
   const [expandedOntologySubmodules, setExpandedOntologySubmodules] = useState<string[]>([]);
@@ -200,7 +203,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
     params.set('view', 'network');
     params.set('ontology', path);
     params.delete('term'); params.delete('termType');
-    router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params}`));
+    router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params}`), { scroll: false });
   }
 
   return (
@@ -213,14 +216,11 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
       collapsed={collapsed}
       detailOnly={detailOnly}
     >
-      {dictionaryMode ? <h2 className="px-2 pb-2 pt-2">
-        <button type="button" title="Back to system overview" aria-label="System home"
-          onClick={() => router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${systemRoute(routeQuery)}`), { scroll: false })}
-          aria-current={isSystemHome ? 'page' : undefined}
-          className={cn('flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] font-medium hover:bg-workspace-accent-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-workspace-accent', isSystemHome && 'bg-workspace-accent-10 text-workspace-accent')}>
-          <Network size={14} aria-hidden="true" /><span>System</span>
-        </button>
-      </h2> : <h2 className="px-2 pb-2 pt-2 text-[13px] font-medium">Files</h2>}
+      <button type="button" className="ontology-dashboard-home" aria-current={searchParams?.get('view') === 'overview' ? 'page' : undefined}
+        onClick={() => router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${dashboardRoute(routeQuery)}`), {scroll: false})}>
+        <LayoutGrid size={14} aria-hidden="true" /><span>Dashboard</span>
+      </button>
+      {dictionaryMode ? <OntologySystemPicker /> : <h2 className="px-2 pb-2 pt-2 text-[13px] font-medium">Files</h2>}
       {ontologyTooltip && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed z-[100] whitespace-nowrap rounded-md border border-border bg-popover px-3 py-2 text-sm shadow-lg animate-in fade-in-0 zoom-in-95 duration-100"
@@ -237,13 +237,13 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
 
       {dictionaryMode ? <OntologyDictionary files={filesWorkspaceId === currentWorkspaceId ? ontologyFiles : []} filesLoading={loadingOntologyFiles || filesWorkspaceId !== currentWorkspaceId} filesError={filesWorkspaceId === currentWorkspaceId ? filesError : null} /> : <>
       {/* Ontologies by module */}
-      <div className="space-y-0.5">
+      <nav {...keyboard} aria-label="Ontology files" className="space-y-0.5">
         {groupedByModuleAndSubmodule.map((group: ModuleSubmoduleGroup) => {
           const { moduleName, filesWithoutSubmodule, submodules } = group;
           const moduleExpanded = expandedOntologyModules.includes(moduleName);
           return (
-            <div key={moduleName} className="space-y-0.5">
-              <button
+            <div key={moduleName} data-ontology-tree-row className="space-y-0.5">
+              <button data-ontology-tree-item={`module:${moduleName}`} data-ontology-tree-toggle aria-expanded={moduleExpanded}
                 onClick={() => setExpandedOntologyModules((prev: string[]) => (
                   prev.includes(moduleName)
                     ? prev.filter((value: string) => value !== moduleName)
@@ -273,9 +273,10 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                       return (
                         <button
                           key={`${moduleName}:${ontologyFile.path}`}
+                          data-ontology-tree-row data-ontology-tree-item={ontologyFile.path} data-ontology-tree-select
                           onClick={() => openFile(ontologyFile.path)}
                           className={cn(
-                            "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] leading-5 transition-colors hover:bg-workspace-accent-10",
+                            "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs leading-[18px] transition-colors hover:bg-workspace-accent-10",
                             isSelected && "bg-workspace-accent-10 text-workspace-accent"
                           )}
                           onMouseEnter={(event) => showOntologyTooltip(
@@ -287,7 +288,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                           aria-current={isSelected ? 'page' : undefined}
                         >
                           <FileCode size={12} className="flex-shrink-0 text-workspace-accent" />
-                          <span className="min-w-0 flex-1"><span className="block truncate font-mono text-[13px] leading-5">{ontologyFile.path.split(/[\\/]/).pop()}</span><span className="block truncate text-xs text-muted-foreground">{ontologyFile.name}</span></span>
+                          <span className="min-w-0 flex-1"><span className="block truncate font-mono text-xs leading-[18px]">{ontologyFile.path.split(/[\\/]/).pop()}</span><span className="block truncate text-xs text-muted-foreground">{ontologyFile.name}</span></span>
                         </button>
                       );
                     })()
@@ -297,8 +298,8 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                     const submoduleKey = `${moduleName}::${submoduleName}`;
                     const submoduleExpanded = expandedOntologySubmodules.includes(submoduleKey);
                     return (
-                      <div key={submoduleKey} className="space-y-0.5">
-                        <button
+                      <div key={submoduleKey} data-ontology-tree-row className="space-y-0.5">
+                        <button data-ontology-tree-item={`module:${submoduleKey}`} data-ontology-tree-toggle aria-expanded={submoduleExpanded}
                           onClick={() => setExpandedOntologySubmodules((prev: string[]) => (
                             prev.includes(submoduleKey)
                               ? prev.filter((value: string) => value !== submoduleKey)
@@ -323,9 +324,10 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                                 return (
                                   <button
                                     key={`${submoduleKey}:${ontologyFile.path}`}
+                                    data-ontology-tree-row data-ontology-tree-item={ontologyFile.path} data-ontology-tree-select
                                     onClick={() => openFile(ontologyFile.path)}
                                     className={cn(
-                                      "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] leading-5 transition-colors hover:bg-workspace-accent-10",
+                                      "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs leading-[18px] transition-colors hover:bg-workspace-accent-10",
                                       isSelected && "bg-workspace-accent-10 text-workspace-accent"
                                     )}
                                     onMouseEnter={(event) => showOntologyTooltip(
@@ -337,7 +339,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                                     aria-current={isSelected ? 'page' : undefined}
                                   >
                                     <FileCode size={12} className="flex-shrink-0 text-workspace-accent" />
-                                    <span className="min-w-0 flex-1"><span className="block truncate font-mono text-[13px] leading-5">{ontologyFile.path.split(/[\\/]/).pop()}</span><span className="block truncate text-xs text-muted-foreground">{ontologyFile.name}</span></span>
+                                    <span className="min-w-0 flex-1"><span className="block truncate font-mono text-xs leading-[18px]">{ontologyFile.path.split(/[\\/]/).pop()}</span><span className="block truncate text-xs text-muted-foreground">{ontologyFile.name}</span></span>
                                   </button>
                                 );
                               })()
@@ -359,7 +361,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
         {loadingOntologyFiles && (
           <p className="px-2 py-1 text-xs text-muted-foreground">Loading ontologies...</p>
         )}
-      </div>
+      </nav>
 
       {/* Reference Ontologies */}
       {referenceOntologies.length > 0 && (
@@ -373,7 +375,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
               <div key={ref.id} className="space-y-0.5">
                 <button
                   onClick={() => toggleReference(ref.id)}
-                  className="group flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-[13px] leading-5 transition-colors hover:bg-workspace-accent-10"
+                  className="group flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-xs leading-[18px] transition-colors hover:bg-workspace-accent-10"
                 >
                   <ChevronRight
                     size={10}

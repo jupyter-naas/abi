@@ -2,17 +2,20 @@
 
 import { useState } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { useOntologyStore } from '@/stores/ontology';
 import { browserRoute, viewRoute, termTabs, ontologyBrowser } from '@/lib/ontology-navigation';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { dashboardRoute } from '@/lib/ontology-dashboard';
+import { ONTOLOGY_SPACING, ontologySpacing, ontologySpacingRoute } from '@/lib/ontology-spacing';
 
 export function OntologyMenuBar() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const spacing = ontologySpacing(searchParams?.toString() || '');
   const workspaceId = useWorkspaceStore(state => state.currentWorkspaceId);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -21,7 +24,8 @@ export function OntologyMenuBar() {
   const surface = 'z-[300] min-w-[190px] rounded-md border border-border bg-card p-1 text-foreground shadow-lg';
   const trigger = 'flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-muted data-[state=open]:bg-muted';
   function navigate(view: string) {
-    router.push(`${root}?${viewRoute(searchParams?.toString() || '', view)}`);
+    const query = searchParams?.toString() || '';
+    router.push(`${root}?${view === 'overview' ? dashboardRoute(query) : viewRoute(query, view)}`, { scroll: false });
   }
   function selectBrowser(mode: string) {
     router.push(`${root}?${browserRoute(searchParams?.toString() || '', mode)}`);
@@ -55,8 +59,34 @@ export function OntologyMenuBar() {
             </DropdownMenu.RadioItem>)}
           </DropdownMenu.RadioGroup>
           <DropdownMenu.Separator className="my-1 h-px bg-border" />
-          {(ontologyBrowser(searchParams?.toString() || '') === 'dictionary' ? [['system', 'System'], ['details', 'Details'], ['network', 'Network'], ['overview', 'Metrics']] : [['network', 'Network'], ['overview', 'Metrics'], ...termTabs]).map(([view, label]) =>
+          {(ontologyBrowser(searchParams?.toString() || '') === 'dictionary' ? [['system', 'System'], ['details', 'Details'], ['network', 'Network'], ['overview', 'Dashboard']] : [['network', 'Network'], ['overview', 'Dashboard'], ...termTabs]).map(([view, label]) =>
             <DropdownMenu.Item key={view} className={row} onSelect={() => navigate(view)}>{label}</DropdownMenu.Item>)}
+          <DropdownMenu.Separator className="my-1 h-px bg-border" />
+          <DropdownMenu.Label className="px-3 py-1 text-xs text-muted-foreground">Connectors</DropdownMenu.Label>
+          <DropdownMenu.RadioGroup value={searchParams?.get('connectors') === 'curved' ? 'curved' : 'orthogonal'} onValueChange={value => {
+            const params = new URLSearchParams(searchParams?.toString() || '');
+            params.set('connectors', value);
+            router.replace(`${root}?${params}`, { scroll: false });
+          }}>
+            {([['orthogonal', 'Right angles'], ['curved', 'Curves']] as const).map(([value, label]) => <DropdownMenu.RadioItem key={value} value={value} className={row}>
+              <span className="flex w-3 items-center"><DropdownMenu.ItemIndicator><Check size={12} /></DropdownMenu.ItemIndicator></span>{label}
+            </DropdownMenu.RadioItem>)}
+          </DropdownMenu.RadioGroup>
+          <DropdownMenu.Separator className="my-1 h-px bg-border" />
+          <DropdownMenu.Sub>
+            <DropdownMenu.SubTrigger className={row}>
+              Spacing <span className="ml-auto text-muted-foreground">{spacing.label}</span><ChevronRight size={12} />
+            </DropdownMenu.SubTrigger>
+            <DropdownMenu.Portal><DropdownMenu.SubContent sideOffset={4} collisionPadding={8} className={surface}>
+              <DropdownMenu.RadioGroup value={spacing.value} onValueChange={value => {
+                router.replace(`${root}?${ontologySpacingRoute(searchParams?.toString() || '', value)}`, { scroll: false });
+              }}>
+                {ONTOLOGY_SPACING.map(option => <DropdownMenu.RadioItem key={option.value} value={option.value} className={row}>
+                  <span className="flex w-3 items-center"><DropdownMenu.ItemIndicator><Check size={12} /></DropdownMenu.ItemIndicator></span>{option.label}
+                </DropdownMenu.RadioItem>)}
+              </DropdownMenu.RadioGroup>
+            </DropdownMenu.SubContent></DropdownMenu.Portal>
+          </DropdownMenu.Sub>
           <DropdownMenu.Separator className="my-1 h-px bg-border" />
           <DropdownMenu.Item className={row} disabled={refreshing} onSelect={() => {
             setRefreshing(true); setRefreshError(null);

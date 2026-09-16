@@ -1,0 +1,31 @@
+.ontology-icon-control { display:block; width:fit-content; }
+.ontology-icon-trigger { position:relative; display:flex; align-items:center; justify-content:center; padding:4px; margin:-4px; border:1px solid transparent; border-radius:0; color:inherit; cursor:pointer; }
+.ontology-icon-trigger:hover,.ontology-icon-trigger:focus-visible { background:var(--muted-bg-hex); border-color:var(--border-hex); }
+.ontology-icon-trigger:disabled { cursor:default; }
+.ontology-icon-trigger-hint { position:absolute; left:calc(100% + 8px); top:50%; transform:translateY(-50%); white-space:nowrap; font-size:11px; color:var(--muted-foreground-hex); opacity:0; pointer-events:none; }
+.ontology-icon-trigger:hover .ontology-icon-trigger-hint,.ontology-icon-trigger:focus-visible .ontology-icon-trigger-hint { opacity:1; }
+.ontology-icon-picker-overlay { position:fixed; inset:0; z-index:500; background:transparent; }
+.ontology-icon-picker { position:fixed; z-index:501; display:flex; flex-direction:column; min-height:0; border:1px solid var(--border-hex); border-radius:0; background:var(--background-hex); color:var(--foreground-hex); box-shadow:0 8px 28px #00000024; font-size:12px; line-height:1.5; }
+.ontology-icon-picker > header { display:flex; align-items:flex-start; justify-content:space-between; padding:14px 14px 10px; gap:12px; }
+.ontology-icon-picker h2 { margin:0; font-size:14px; font-weight:600; }
+.ontology-icon-picker header p { margin:3px 0 0; font-size:11px; color:var(--muted-foreground-hex); }
+.ontology-icon-picker-close { padding:3px; cursor:pointer; }
+.ontology-icon-picker-search { display:flex; align-items:center; gap:8px; margin:0 14px; padding:8px; border:1px solid var(--border-hex); color:var(--muted-foreground-hex); }
+.ontology-icon-picker-search input { width:100%; min-width:0; padding:0; border:0; border-radius:0; outline:none; box-shadow:none; background:transparent; color:var(--foreground-hex); font-size:12px; }
+.ontology-icon-picker-results-label { display:flex; align-items:center; justify-content:space-between; padding:10px 14px 6px; color:var(--muted-foreground-hex); font-size:11px; }
+.ontology-icon-picker-body { min-height:0; overflow:auto; padding:4px 14px 14px; overscroll-behavior:contain; }
+.ontology-icon-picker-body > p { margin:4px 0 10px; color:var(--muted-foreground-hex); }
+.ontology-icon-picker-body > p button { text-decoration:underline; }
+.ontology-icon-picker-grid { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:4px; }
+.ontology-icon-picker-grid button { position:relative; display:flex; align-items:center; justify-content:center; aspect-ratio:1; min-width:0; padding:5px; border:1px solid transparent; border-radius:0; cursor:pointer; }
+.ontology-icon-picker-grid button > svg { width:26px; height:26px; }
+.ontology-icon-picker-grid button:hover { background:var(--muted-bg-hex); }
+.ontology-icon-picker-grid button[aria-pressed="true"] { color:var(--workspace-accent,var(--color-primary)); border-color:currentColor; }
+.ontology-icon-picker-grid button > .ontology-icon-picker-check { position:absolute; right:0; bottom:0; width:10px; height:10px; background:var(--background-hex); }
+.ontology-icon-picker-placeholder { width:22px; height:22px; background:var(--muted-bg-hex); }
+.ontology-icon-picker-more { display:block; width:100%; padding:9px; margin-top:10px; border:1px solid var(--border-hex); color:var(--workspace-accent,var(--color-primary)); cursor:pointer; }
+.ontology-icon-picker > footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-top:1px solid var(--border-hex); flex-shrink:0; }
+.ontology-icon-picker footer button { color:var(--workspace-accent,var(--color-primary)); cursor:pointer; }
+.ontology-icon-picker button:disabled { opacity:0.45; cursor:default; }
+.ontology-icon-picker button:focus-visible,.ontology-icon-trigger:focus-visible { outline:2px solid var(--workspace-accent,var(--color-primary)); outline-offset:2px; box-shadow:none; }
+.ontology-icon-picker-search:focus-within { border-color:var(--workspace-accent,var(--color-primary)); }

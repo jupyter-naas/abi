@@ -3,6 +3,8 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useOntologyDictionaryStore } from '@/stores/ontology-dictionary';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { OntologyIconPicker } from '@/components/ontology/ontology-icon-picker';
+import '@/components/ontology/ontology-detail.css';
 import { OntologyUsedIn } from '@/components/ontology/ontology-used-in';
 import { classProperties } from '@/lib/ontology-class-properties';
 import type { DictionaryTerm } from '@/lib/ontology-dictionary-tree';
@@ -40,6 +42,7 @@ export function OntologyDictionaryEntry() {
     ? <div className="flex flex-wrap gap-x-3 gap-y-1">{links.map(link => <span key={link.id}>{linkedTerm(link.id, link.name, kind)}</span>)}</div> : missing;
   const renderValues = (values?: string[]) => values?.length ? values.map(value => <p key={value}>{value}</p>) : missing;
   return <article className="min-w-0 flex-1 overflow-y-auto p-4 md:p-5">
+    <OntologyIconPicker subject={term} className="ontology-detail-topic-icon" />
     <h1 className="break-words text-xl font-semibold">{term.name}</h1>
     <p className="mt-1 text-xs text-muted-foreground">{dictionaryKindLabel(term.type)}</p>
     <dl className="mt-5 divide-y rounded-md border text-sm">

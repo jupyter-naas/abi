@@ -5,11 +5,11 @@ import {
   ontologyBrowser, rememberOntologyRoute, termRoute, viewRoute,
 } from './ontology-navigation';
 
-test('first visit opens the dictionary without inventing a file scope', () => {
+test('first visit opens the dashboard with the dictionary and no invented file scope', () => {
   assert.equal(ontologyBrowser(''), 'dictionary');
   const route = lastOntologyRoute('new-workspace');
   assert.equal(route.get('browser'), 'dictionary');
-  assert.equal(route.get('view'), 'classes');
+  assert.equal(route.get('view'), 'overview');
   assert.equal(route.has('ontology'), false);
 });
 

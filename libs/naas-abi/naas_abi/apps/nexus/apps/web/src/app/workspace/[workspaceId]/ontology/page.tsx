@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
+import { ontologySpacing } from '@/lib/ontology-spacing';
 import dynamic from 'next/dynamic';
 import { OntologyDictionaryEntry } from '@/components/shell/sidebar/ontology-dictionary-entry';
 import { OntologySystemView } from '@/components/ontology/ontology-system-view';
 import { OntologyTermNetwork } from '@/components/ontology/ontology-term-network';
 import { OntologyMenuBar } from '@/components/ontology/ontology-menu-bar';
+import { OntologyDashboard } from '@/components/ontology/ontology-dashboard';
 import '@/components/ontology/ontology-detail.css';
 import { Header } from '@/components/shell/header';
 import { authFetch } from '@/stores/auth';
@@ -27,6 +29,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useOntologyStore } from '@/stores/ontology';
+import { useOntologyIconsStore } from '@/stores/ontology-icons';
 import { useOntologyDictionaryStore } from '@/stores/ontology-dictionary';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { termTabs, termViews, kindForView, termRoute, viewRoute, ontologyBrowser, normalizeOntologyRoute, lastOntologyRoute, rememberOntologyRoute } from '@/lib/ontology-navigation';
@@ -68,14 +71,24 @@ export default function OntologyPage() {
   const refresh = useOntologyStore(state => state.graphRefreshTrigger);
   const dictionary = useOntologyDictionaryStore();
   const { load } = dictionary;
+  const loadIcons = useOntologyIconsStore(state => state.load);
+  useEffect(() => {
+    if (!workspaceId) return;
+    void loadIcons(workspaceId, true);
+    const sync = () => { if (document.visibilityState !== 'hidden') void loadIcons(workspaceId, true); };
+    window.addEventListener('focus', sync);
+    return () => window.removeEventListener('focus', sync);
+  }, [workspaceId, refresh, loadIcons]);
+
   const dictionaryMode = ontologyBrowser(query) === 'dictionary';
   const selectedOntologyPath = dictionaryMode ? null : searchParams?.get('ontology') || null;
-  const requestedView = searchParams?.get('view') || 'classes';
+  const requestedView = searchParams?.get('view') || (dictionaryMode ? 'overview' : 'network');
   const legacyKind = searchParams?.get('termType') as DictionaryTerm['type'];
   const view = requestedView === 'dictionary' || requestedView === 'editor'
     ? termViews[legacyKind] || 'classes' : requestedView;
   const kind = kindForView(view);
   const requestedTermId = searchParams?.get('term');
+  const showDashboard = view === 'overview' || Boolean(kind && !requestedTermId);
   const workspaceTerms = dictionary.workspaceId === workspaceId ? dictionary.terms : [];
   const focusTerm = workspaceTerms.find(term => term.id === requestedTermId && term.type === legacyKind);
   const [queryText, setQueryText] = useState('');
@@ -123,8 +136,8 @@ export default function OntologyPage() {
   }, [view, selectedOntologyPath, workspaceId, refresh, requestedTermId]);
   return <div className="flex h-full flex-col overflow-hidden">
     <Header title="Ontology" nav={<OntologyMenuBar />} />
-    {view !== 'system' && <><nav aria-label="Ontology views" className="flex min-h-10 shrink-0 flex-wrap items-center gap-1 border-b bg-muted/30 px-4 py-1">
-      {(dictionaryMode ? [['details', 'Details'], ['network', 'Network'], ['overview', 'Metrics']] : [['network', 'Network'], ['overview', 'Metrics'], ...termTabs]).map(([value, label]) =>
+    {view !== 'system' && !showDashboard && <><nav aria-label="Ontology views" className="flex min-h-10 shrink-0 flex-wrap items-center gap-1 border-b bg-muted/30 px-4 py-1">
+      {(dictionaryMode ? [['details', 'Details'], ['network', 'Network']] : [['network', 'Network'], ...termTabs]).map(([value, label]) =>
         <button key={value} type="button" aria-current={view === value || (value === 'details' && kind) ? 'page' : undefined} onClick={() => navigate(value)}
           className={cn('rounded-md px-3 py-1 text-[13px]', view === value || (value === 'details' && kind) ? 'bg-background text-foreground' : 'text-muted-foreground hover:bg-background')}>{label}</button>)}
     </nav>
@@ -134,23 +147,14 @@ export default function OntologyPage() {
     </div>
     </>}
     <div className="flex min-h-0 flex-1 overflow-hidden">
-      {view === 'system' ? <OntologySystemView terms={workspaceTerms} loading={dictionary.loading || dictionary.workspaceId !== workspaceId} error={dictionary.error} partial={dictionary.errors.length > 0} />
+      {showDashboard ? <OntologyDashboard /> : view === 'system' ? <OntologySystemView terms={workspaceTerms} loading={dictionary.loading || dictionary.workspaceId !== workspaceId} error={dictionary.error} partial={dictionary.errors.length > 0} />
         : view === 'network' && requestedTermId ? dictionary.loading || dictionary.workspaceId !== workspaceId ? <p className="p-5 text-sm text-muted-foreground" role="status">Loading term connections…</p>
         : dictionary.error ? <p className="p-5 text-sm text-destructive" role="alert">{dictionary.error}</p>
         : focusTerm ? <div className="flex min-w-0 flex-1 flex-col">{!!dictionary.errors.length && <p className="border-b px-5 py-2 text-xs text-destructive">Some workspace files could not be read. Connections may be incomplete.</p>}<OntologyTermNetwork key={`${workspaceId}:${focusTerm.type}:${focusTerm.id}`} term={focusTerm} terms={workspaceTerms} /></div>
         : <p className="p-5 text-sm text-muted-foreground">This term is not available in this workspace.</p>
         : view === 'network' ? <OntologyNetworkView key={`${workspaceId}:${selectedOntologyPath || 'all'}:${refresh}`} ontologyPath={selectedOntologyPath}
         graphNodes={graph.nodes} graphEdges={graph.edges} graphPrefixes={graph.prefixes} loadingGraph={loadingGraph} graphError={graphError} />
-        : view === 'overview' ? <section className="w-full overflow-auto p-5">
-          <h1 className="text-xl font-semibold">Metrics</h1>
-          {dictionary.loading ? <p role="status" className="mt-4 text-sm">Loading terms…</p> : dictionary.error ? <p role="alert" className="mt-4 text-sm text-destructive">{dictionary.error}</p> : <>
-            <p className="mt-2 text-sm text-muted-foreground">{terms.length} unique terms{dictionary.errors.length ? ' · Partial results' : ''}</p>
-            <div className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-5">{termTabs.map(([value, label]) => <button key={value} type="button" onClick={() => navigate(value)} className="rounded-md border p-4 text-left hover:bg-muted">
-              <span className="text-xs text-muted-foreground">{label}</span><span className="mt-2 block text-xl font-semibold">{terms.filter(term => term.type === kindForView(value)).length}</span>
-            </button>)}</div>
-            {!!dictionary.errors.length && <p role="alert" className="mt-4 text-sm text-destructive">{dictionary.errors.length} workspace files could not be read. Counts include readable files only.</p>}
-          </>}
-        </section> : kind ? <>
+        : kind ? <>
           {!dictionaryMode && <aside className="w-64 shrink-0 overflow-auto border-r p-3 lg:w-72">
             <input aria-label="Search terms and definitions" placeholder="Search terms…" value={queryText} onChange={event => setQueryText(event.target.value)} className="mb-3 w-full rounded border bg-background px-2 py-2 text-xs" />
             {matches.map(term => <button key={`${term.type}:${term.id}`} type="button" onClick={() => select(term)} title={term.id}
@@ -260,6 +264,8 @@ function OntologyNetworkView({
   loadingGraph: boolean;
   graphError: string | null;
 }) {
+  const searchParams = useSearchParams();
+  const spacing = ontologySpacing(searchParams?.toString() || '');
   const [graphSearchQuery, setGraphSearchQuery] = useState('');
   const [selectedGraphNodeId, setSelectedGraphNodeId] = useState<string | null>(null);
   const [selectedGraphEdgeId, setSelectedGraphEdgeId] = useState<string | null>(null);
@@ -890,6 +896,10 @@ function OntologyNetworkView({
             </div>
           ) : (
             <VisNetwork
+              spacingKey={spacing.value}
+              minimumAutoFitScale={1}
+              nodeSpacing={spacing.gap}
+              orthogonalEdges={searchParams?.get('connectors') !== 'curved'}
               nodes={filteredGraphNodes}
               edges={filteredGraphEdges}
               selectedNodeId={selectedGraphNodeId}

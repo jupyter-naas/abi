@@ -23,7 +23,9 @@ export const useOntologyDictionaryStore = create<DictionaryState>((set, get) => 
   fileCount: 0, loadedFileCount: 0, errors: [], revision: -1,
   load: async (workspaceId, revision = 0, force = false) => {
     const previous = get();
-    if (!force && previous.workspaceId === workspaceId && previous.revision === revision) return;
+    // A hot update can retain a dictionary loaded before ledger metadata existed.
+    const currentProjection = previous.terms.every(term => term.type !== 'entity' || 'processLedger' in term);
+    if (!force && currentProjection && previous.workspaceId === workspaceId && previous.revision === revision) return;
     const request = ++generation;
     set({ workspaceId, revision, terms: [], loading: true, error: null, errors: [], fileCount: 0, loadedFileCount: 0 });
     try {

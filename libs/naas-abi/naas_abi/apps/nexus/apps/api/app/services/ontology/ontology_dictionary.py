@@ -50,6 +50,24 @@ def build_workspace_dictionary(
                     values.add(label(value))
         return sorted(values)
 
+    def process_ledger(iri: URIRef) -> dict[str, Any] | None:
+        # Original business buckets are provenance, not additional BFO assertions.
+        namespace = "http://ontology.naas.ai/abi/"
+        buckets = {}
+        for bucket in ("WHO", "WHERE", "WHEN", "HOWITIS", "WHY", "HOWWEKNOW"):
+            predicate = URIRef(namespace + "ledger" + bucket)
+            entries = []
+            for value in literals(combined, iri, predicate):
+                provenance = [source for source, graph in sources
+                              if value in literals(graph, iri, predicate)]
+                entries.append({"value": value, "sources": provenance})
+            buckets[bucket] = entries
+        if not any(buckets.values()):
+            return None
+        return {"code": next(iter(literals(combined, iri, URIRef(namespace + "ledgerCode"))), None),
+                "buckets": buckets,
+                "status": literals(combined, iri, URIRef(namespace + "modelingStatus"))}
+
     kinds = {
         OWL.Class: "entity", RDFS.Class: "entity",
         OWL.ObjectProperty: "relationship", OWL.DatatypeProperty: "attribute",
@@ -78,6 +96,8 @@ def build_workspace_dictionary(
                         "equivalents": links(subject, OWL.equivalentClass) if kind == "entity" else [],
                         "systemViewKind": next(iter(literals(combined, subject, URIRef("http://ontology.naas.ai/abi/systemViewKind"))), None) if kind == "entity" else None,
                         "systemViewParents": links(subject, URIRef("http://ontology.naas.ai/abi/systemViewParent")) if kind == "entity" else [],
+                        "processLedger": process_ledger(subject) if kind == "entity" else None,
+                        "sourceValues": literals(combined, subject, URIRef("http://ontology.naas.ai/abi/sourceValue")),
                         "examples": literals(combined, subject, SKOS.example),
                         "aliases": literals(combined, subject, SKOS.altLabel),
                         "contributors": annotation_values(subject, DCTERMS.contributor, DC.contributor),
@@ -102,16 +122,24 @@ def build_workspace_dictionary(
                 continue
             relations = relations_by_subject.setdefault(str(subject), {})
 
-            def add_relation(prop: URIRef, target: URIRef, kind: str, constraint: str = "") -> None:
+            def add_relation(
+                prop: URIRef,
+                target: URIRef,
+                kind: str,
+                constraint: str = "",
+                *,
+                _relations: dict[tuple[str, str, str, str], dict[str, Any]] = relations,
+                _source: dict[str, str] = source,
+            ) -> None:
                 key = (str(prop), str(target), kind, constraint)
-                if key not in relations:
-                    relations[key] = {
+                if key not in _relations:
+                    _relations[key] = {
                         "property": {"id": str(prop), "name": label(prop)},
                         "target": {"id": str(target), "name": label(target)},
                         "kind": kind, "constraint": constraint, "sources": [],
                     }
-                if source not in relations[key]["sources"]:
-                    relations[key]["sources"].append(source)
+                if _source not in _relations[key]["sources"]:
+                    _relations[key]["sources"].append(_source)
 
             for prop, target in graph.predicate_objects(subject):
                 if prop in object_properties and isinstance(target, URIRef):

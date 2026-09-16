@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildOntologySystems, buildSystemGraph } from './ontology-system-graph';
+import { buildOntologySystems, buildSystemGraph, buildSystemsGraph } from './ontology-system-graph';
 import { systemRoute, termRoute, browserRoute, normalizeOntologyRoute } from './ontology-navigation';
 import { filterTermsByFiles } from './ontology-file-filter';
 import type { DictionaryTerm } from './ontology-dictionary-tree';
@@ -12,6 +12,54 @@ const group = term('group', { systemViewKind: 'subsystem', systemViewParents: [{
 const process = term('p1', { parents: [{ id: 'http://purl.obolibrary.org/obo/BFO_0000015', name: 'process' }, { id: root.id, name: root.name }, { id: group.id, name: group.name }] });
 const second = term('p2', { parents: process.parents });
 const terms = [root, group, process, second];
+
+const sampleProcesses = ['Engage process', 'Deliver process', 'Manage process', 'Develop process', 'Comply process'].map((name, index) => term('proc' + index, {
+  name, parents: [{id: root.id, name: root.name}, {id: 'http://purl.obolibrary.org/obo/BFO_0000015', name: 'process'}],
+}));
+
+test('five processes fit at readable text size instead of using a large-ledger radius', () => {
+  const [model] = buildOntologySystems([root, ...sampleProcesses]);
+  const original = structuredClone(model);
+  const graph = buildSystemGraph(model);
+  const width = Math.max(...graph.nodes.map(node => node.x!)) - Math.min(...graph.nodes.map(node => node.x!)) + 220;
+  const height = Math.max(...graph.nodes.map(node => node.y!)) - Math.min(...graph.nodes.map(node => node.y!)) + 80;
+  // vis-network fit adds 10% padding; a modest canvas should retain 1:1 text.
+  assert.ok(width * 1.1 <= 800, `Too wide for legible fit: ${width}`);
+  assert.ok(height * 1.1 <= 500, `Too tall for legible fit: ${height}`);
+  assert.equal(graph.nodes.length, 6);
+  assert.equal(graph.edges.length, 5);
+  for (const [index, a] of graph.nodes.entries()) for (const b of graph.nodes.slice(index + 1)) {
+    assert.ok(Math.abs(a.x! - b.x!) >= 210 || Math.abs(a.y! - b.y!) >= 80, 'Process labels must remain separated');
+  }
+  assert.deepEqual(model, original);
+});
+
+test('multiple small systems use their actual bounds instead of fixed 3000-unit gaps', () => {
+  const [first] = buildOntologySystems([root, ...sampleProcesses]);
+  const other = term('other', {systemViewKind: 'system'});
+  const children = sampleProcesses.map(p => ({...p, id: p.id + 'other', parents: [{id: other.id, name: other.name}, ...p.parents!.slice(1)]}));
+  const [second] = buildOntologySystems([other, ...children]);
+  const graph = buildSystemsGraph([first, second]);
+  assert.equal(graph.nodes.length, 12);
+  assert.equal(graph.edges.length, 10);
+  const firstRight = Math.max(...graph.nodes.filter(node => first.term.id === node.properties.iri || first.processes.some(p => p.id === node.properties.iri)).map(node => node.x! + 110));
+  const secondLeft = Math.min(...graph.nodes.filter(node => second.term.id === node.properties.iri || second.processes.some(p => p.id === node.properties.iri)).map(node => node.x! - 110));
+  assert.ok(secondLeft > firstRight, 'Selected systems must not overlap');
+  assert.ok(Math.max(...graph.nodes.map(node => node.x!)) - Math.min(...graph.nodes.map(node => node.x!)) < 1600);
+});
+
+test('combined overview includes every selected system, with separate layouts and no synthetic root', () => {
+  const sibling = term('sibling', { systemViewKind: 'system' });
+  const engage = term('engage', { parents: [{id: sibling.id, name: sibling.name}, {id: 'http://purl.obolibrary.org/obo/BFO_0000015', name: 'process'}] });
+  const systems = buildOntologySystems([...terms, sibling, engage]);
+  const graph = buildSystemsGraph(systems);
+  assert.equal(graph.nodes.length, 6);
+  assert.equal(graph.edges.length, 4);
+  assert.equal(graph.nodes.filter(node => node.properties.system_level === 'system').length, 2);
+  assert.notEqual(graph.nodes.find(n => n.id === 'entity:sibling')?.x, graph.nodes.find(n => n.id === 'entity:system')?.x);
+  assert.deepEqual(buildSystemsGraph([systems[0]]), buildSystemGraph(systems[0]));
+  assert.deepEqual(buildSystemsGraph([]), { nodes: [], edges: [] });
+});
 
 test('system → subsystem → processes is distinct from the ontology ancestor graph', () => {
   const [model] = buildOntologySystems(terms);

@@ -10,6 +10,13 @@ export type DictionaryTerm = {
   equivalents?: DictionaryLink[];
   systemViewKind?: string | null;
   systemViewParents?: DictionaryLink[];
+  /** Source ledger wording and business groupings, independent of formal BFO types. */
+  processLedger?: {
+    code?: string | null;
+    buckets: Record<string, Array<{ value: string; sources: NonNullable<DictionaryTerm['sources']> }>>;
+    status?: string[];
+  } | null;
+  sourceValues?: string[];
   domain?: DictionaryLink[];
   range?: DictionaryLink[];
   inverse?: DictionaryLink[];

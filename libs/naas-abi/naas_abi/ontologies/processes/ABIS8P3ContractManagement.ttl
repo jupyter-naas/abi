@@ -1,0 +1,170 @@
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:S8P3Ontology a owl:Ontology ;
+    rdfs:label "S8-P3 · Contract management"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceSHA256 "0d2c2c1e42dc3dfcfb1a8661ddba31057e88de911af1bb8f21868ba3096c0763"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    dct:title "S8-P3 · Contract management"@en ;
+    rdfs:comment "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    owl:imports abi:ABIProcessLedgerOntology .
+
+abi:S8P3Condition1 a owl:Class ;
+    rdfs:label "Contract management timing condition"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "On award; per renewal"@en ;
+    rdfs:comment "Ledger trigger/cadence/target: On award; per renewal. No occurrence or achieved timing is asserted."@en ;
+    rdfs:subClassOf abi:ExecutionCondition ;
+    skos:definition "Ledger trigger/cadence/target: On award; per renewal. No occurrence or achieved timing is asserted."@en .
+
+abi:S8P3ExecutionRole a owl:Class ;
+    rdfs:label "Contract management execution role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "A proposed role realised in Contract management and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom [ a owl:Class ;
+                    owl:unionOf ( abi:ContractManagerParticipant abi:OracleERPHost abi:VendorParticipant ) ] ],
+        abi:ExecutionRole ;
+    skos:definition "A proposed role realised in Contract management and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en .
+
+abi:S8P3Interval a owl:Class ;
+    rdfs:label "Contract management execution interval"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The temporal region occupied by an execution of Contract management; actual dates are unspecified."@en ;
+    rdfs:subClassOf abi:ExecutionInterval ;
+    skos:definition "The temporal region occupied by an execution of Contract management; actual dates are unspecified."@en .
+
+abi:S8P3Objective1 a owl:Class ;
+    rdfs:label "Contract management objective"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Enforceable, auditable commitments"@en ;
+    rdfs:comment "Intended outcome: Enforceable, auditable commitments. This is an objective specification, not a role or a guaranteed result."@en ;
+    rdfs:subClassOf abi:ObjectiveSpecification ;
+    skos:definition "Intended outcome: Enforceable, auditable commitments. This is an objective specification, not a role or a guaranteed result."@en .
+
+abi:S8P3Specification a owl:Class ;
+    rdfs:label "Contract management specification"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The simulated ledger specification for S8-P3. It describes a possible process, not an executed run."@en ;
+    rdfs:subClassOf abi:ProcessSpecification ;
+    skos:definition "The simulated ledger specification for S8-P3. It describes a possible process, not an executed run."@en .
+
+abi:S8P3Step1 a owl:Class ;
+    rdfs:label "Contract management · Draft"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 1 ;
+    rdfs:comment "Suggested step 1 of Contract management: Draft. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S8P3 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 1 of Contract management: Draft. Its ordering is a specification, not observed timing."@en .
+
+abi:S8P3Step2 a owl:Class ;
+    rdfs:label "Contract management · Sign"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 2 ;
+    rdfs:comment "Suggested step 2 of Contract management: Sign. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S8P3 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 2 of Contract management: Sign. Its ordering is a specification, not observed timing."@en .
+
+abi:S8P3Step3 a owl:Class ;
+    rdfs:label "Contract management · Manage lifecycle"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 3 ;
+    rdfs:comment "Suggested step 3 of Contract management: Manage lifecycle. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S8P3 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 3 of Contract management: Manage lifecycle. Its ordering is a specification, not observed timing."@en .
+
+abi:S8P3 a owl:Class ;
+    rdfs:label "Contract management"@en ;
+    abi:ledgerCode "S8-P3"@en ;
+    abi:ledgerHOWITIS "Contract status"@en,
+        "Right-to-audit"@en ;
+    abi:ledgerHOWWEKNOW "Audit trail"@en,
+        "Vendor contract"@en ;
+    abi:ledgerWHEN "On award; per renewal"@en ;
+    abi:ledgerWHERE "Operations centre"@en ;
+    abi:ledgerWHO "Contract manager"@en,
+        "Oracle ERP"@en,
+        "Vendor"@en ;
+    abi:ledgerWHY "Enforceable, auditable commitments"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:qualityMappingStatus "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed ABI contract management process. Suggested steps: Draft → Sign → Manage lifecycle. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en,
+        "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:AuditTrailRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000059 ;
+            owl:someValuesFrom abi:S8P3Specification ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S8P3Step2 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:usesInformation ;
+            owl:someValuesFrom abi:OracleERPSoftware ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:ContractManagerParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:RightToAuditIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S8P3Step3 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:ContractStatusIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000199 ;
+            owl:someValuesFrom abi:S8P3Interval ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:OperationsCentreSite ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000055 ;
+            owl:someValuesFrom abi:S8P3ExecutionRole ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:VendorParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:pursuesObjective ;
+            owl:someValuesFrom abi:S8P3Objective1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:VendorContractRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S8P3Step1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasExecutionCondition ;
+            owl:someValuesFrom abi:S8P3Condition1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:OracleERPHost ],
+        abi:LedgerProcess,
+        abi:S8Process,
+        bfo:BFO_0000015 ;
+    skos:altLabel "S8-P3"@en ;
+    skos:definition "A proposed ABI contract management process. Suggested steps: Draft → Sign → Manage lifecycle. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en .
+

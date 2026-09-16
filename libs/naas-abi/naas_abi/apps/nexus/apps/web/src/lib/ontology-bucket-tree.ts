@@ -6,7 +6,7 @@ export type BucketTree = { bucket: BfoBucketDef; roots: BucketTreeNode[]; count:
 const compare = (a: GraphNode, b: GraphNode) => a.label.localeCompare(b.label, undefined, { numeric: true });
 
 /** A navigation tree over the current graph, not a new set of ontology assertions. */
-export function buildBucketTree(nodes: GraphNode[], edges: GraphEdge[]): BucketTree[] {
+export function buildBucketTree(nodes: GraphNode[], edges: GraphEdge[], definitions = BFO_BUCKET_DEFS): BucketTree[] {
   const byId = new Map(nodes.map(node => [node.id, node]));
   const parents = new Map<string, Set<string>>();
   for (const edge of edges) {
@@ -42,8 +42,8 @@ export function buildBucketTree(nodes: GraphNode[], edges: GraphEdge[]): BucketT
   const entries = new Map(nodes.map(node => [node.id, { node, children: [] } as BucketTreeNode]));
   for (const [child, parent] of chosen) entries.get(parent)!.children.push(entries.get(child)!);
   for (const entry of entries.values()) entry.children.sort((a, b) => compare(a.node, b.node));
-  return BFO_BUCKET_DEFS.map(bucket => {
-    const members = nodes.filter(node => node.type === bucket.type || (bucket.type === 'Unknown' && !BFO_BUCKET_DEFS.some(def => def.type === node.type)));
+  return definitions.map(bucket => {
+    const members = nodes.filter(node => node.type === bucket.type || (bucket.type === 'Unknown' && !definitions.some(def => def.type === node.type)));
     return { bucket, count: members.length, roots: members.filter(node => !chosen.has(node.id)).sort(compare).map(node => entries.get(node.id)!) };
   }).filter(({ bucket, count }) => !['Entity', 'Unknown'].includes(bucket.type) || count > 0);
 }

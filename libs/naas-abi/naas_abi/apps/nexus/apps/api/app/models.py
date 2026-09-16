@@ -481,6 +481,18 @@ class OntologyModel(Base):
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
 
+class OntologyIconModel(Base):
+    __tablename__ = "ontology_icons"
+
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    target_key = Column(String(64), primary_key=True)
+    resource_kind = Column(String(24), nullable=False)
+    resource_id = Column(Text, nullable=False)
+    icon_name = Column(String(160), nullable=False)
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
 # ============================================
 # Graph Nodes
 # ============================================

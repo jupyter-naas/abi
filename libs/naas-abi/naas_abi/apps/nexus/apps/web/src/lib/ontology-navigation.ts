@@ -74,7 +74,7 @@ export function normalizeOntologyRoute(current: string): URLSearchParams {
   const params = new URLSearchParams(current);
   const browser = ontologyBrowser(current);
   params.set('browser', browser);
-  if (!params.get('view')) params.set('view', browser === 'files' ? 'network' : 'classes');
+  if (!params.get('view')) params.set('view', browser === 'files' ? 'network' : 'overview');
   return params;
 }
 

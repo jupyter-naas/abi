@@ -1,9 +1,12 @@
 'use client';
 
 import { create } from 'zustand';
+import type { BfoBucketDef } from '@/lib/bfo-buckets';
 import type { GraphNode, GraphEdge } from './knowledge-graph';
 
 export type SystemTreeProjection = {
+  bucketDefinitions?: BfoBucketDef[];
+  bucketHeading?: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
   selectedNodeId: string | null;

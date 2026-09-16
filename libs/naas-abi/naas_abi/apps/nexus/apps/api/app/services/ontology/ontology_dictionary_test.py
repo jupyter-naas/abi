@@ -1,7 +1,7 @@
 """Dictionary projection tests; fixture graphs represent the permitted catalog."""
 import importlib.util
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 from rdflib import Graph
 
@@ -128,6 +128,42 @@ class DictionaryTests(unittest.TestCase):
         self.assertIsNone(items['https://example.org/Annotation']['systemViewKind'])
         self.assertIsNone(items['https://example.org/P']['systemViewKind'])
         self.assertEqual(len(items), 4)
+
+    def test_process_ledger_keeps_wording_and_per_value_provenance(self):
+        items = build_workspace_dictionary([
+            source('one', '\n'.join([
+                '@prefix abi: <http://ontology.naas.ai/abi/> .',
+                'ex:P a owl:Class; abi:ledgerCode "S1-P1"; abi:ledgerWHO "HR system"; abi:ledgerWHEN "On hire" .',
+            ])),
+            source('two', '@prefix abi: <http://ontology.naas.ai/abi/> . ex:P a owl:Class; abi:ledgerWHO "HR officer", "HR system" .'),
+        ])
+        ledger = items[0]['processLedger']
+        self.assertEqual(ledger['code'], 'S1-P1')
+        self.assertEqual([x['value'] for x in ledger['buckets']['WHO']], ['HR officer', 'HR system'])
+        self.assertEqual([s['path'] for s in ledger['buckets']['WHO'][1]['sources']], ['one.ttl', 'two.ttl'])
+        self.assertEqual([s['path'] for s in ledger['buckets']['WHEN'][0]['sources']], ['one.ttl'])
+        self.assertEqual(items[0]['parents'], [])
+        self.assertEqual(items[0]['relations'], [])
+
+    def test_ledger_never_inherits_or_reads_an_imported_source(self):
+        items = build_workspace_dictionary([source('allowed', '''
+            @prefix abi: <http://ontology.naas.ai/abi/> .
+            ex:O a owl:Ontology; owl:imports <file:///private-ledger.ttl> .
+            ex:Parent a owl:Class; abi:ledgerWHO "Allowed" .
+            ex:Child a owl:Class; rdfs:subClassOf ex:Parent .
+            ex:Note a owl:AnnotationProperty; abi:ledgerWHO "Not a process" .
+        ''')])
+        by_id = {item['id']: item for item in items}
+        self.assertIsNone(by_id['https://example.org/Child']['processLedger'])
+        self.assertIsNone(by_id['https://example.org/Note']['processLedger'])
+        self.assertEqual(by_id['https://example.org/Parent']['processLedger']['buckets']['WHO'][0]['value'], 'Allowed')
+        self.assertEqual(len(items), 3)
+
+    def test_source_values_do_not_change_formal_types(self):
+        items = build_workspace_dictionary([source('allowed', '@prefix abi: <http://ontology.naas.ai/abi/> . ex:T a owl:Class; rdfs:subClassOf ex:Information; abi:sourceValue "On hire" .')])
+        self.assertEqual(items[0]['sourceValues'], ['On hire'])
+        self.assertEqual(items[0]['parents'][0]['id'], 'https://example.org/Information')
+        self.assertIsNone(items[0]['processLedger'])
 
     def test_empty_catalog_is_empty(self):
         self.assertEqual(build_workspace_dictionary([]), [])

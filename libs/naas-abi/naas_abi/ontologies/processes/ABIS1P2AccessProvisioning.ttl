@@ -1,0 +1,171 @@
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:S1P2Ontology a owl:Ontology ;
+    rdfs:label "S1-P2 · Access provisioning"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceSHA256 "0d2c2c1e42dc3dfcfb1a8661ddba31057e88de911af1bb8f21868ba3096c0763"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    dct:title "S1-P2 · Access provisioning"@en ;
+    rdfs:comment "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    owl:imports abi:ABIProcessLedgerOntology .
+
+abi:S1P2Condition1 a owl:Class ;
+    rdfs:label "Access provisioning timing condition"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "On role change"@en ;
+    rdfs:comment "Ledger trigger/cadence/target: On role change. No occurrence or achieved timing is asserted."@en ;
+    rdfs:subClassOf abi:ExecutionCondition ;
+    skos:definition "Ledger trigger/cadence/target: On role change. No occurrence or achieved timing is asserted."@en .
+
+abi:S1P2ExecutionRole a owl:Class ;
+    rdfs:label "Access provisioning execution role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "A proposed role realised in Access provisioning and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom [ a owl:Class ;
+                    owl:unionOf ( abi:HROfficerParticipant abi:ITAdminParticipant abi:IdentitySystemHost ) ] ],
+        abi:ExecutionRole ;
+    skos:definition "A proposed role realised in Access provisioning and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en .
+
+abi:S1P2Interval a owl:Class ;
+    rdfs:label "Access provisioning execution interval"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The temporal region occupied by an execution of Access provisioning; actual dates are unspecified."@en ;
+    rdfs:subClassOf abi:ExecutionInterval ;
+    skos:definition "The temporal region occupied by an execution of Access provisioning; actual dates are unspecified."@en .
+
+abi:S1P2Objective1 a owl:Class ;
+    rdfs:label "Access provisioning objective"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Controlled access to systems"@en ;
+    rdfs:comment "Intended outcome: Controlled access to systems. This is an objective specification, not a role or a guaranteed result."@en ;
+    rdfs:subClassOf abi:ObjectiveSpecification ;
+    skos:definition "Intended outcome: Controlled access to systems. This is an objective specification, not a role or a guaranteed result."@en .
+
+abi:S1P2Specification a owl:Class ;
+    rdfs:label "Access provisioning specification"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The simulated ledger specification for S1-P2. It describes a possible process, not an executed run."@en ;
+    rdfs:subClassOf abi:ProcessSpecification ;
+    skos:definition "The simulated ledger specification for S1-P2. It describes a possible process, not an executed run."@en .
+
+abi:S1P2Step1 a owl:Class ;
+    rdfs:label "Access provisioning · Request access"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 1 ;
+    rdfs:comment "Suggested step 1 of Access provisioning: Request access. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S1P2 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 1 of Access provisioning: Request access. Its ordering is a specification, not observed timing."@en .
+
+abi:S1P2Step2 a owl:Class ;
+    rdfs:label "Access provisioning · Approve"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 2 ;
+    rdfs:comment "Suggested step 2 of Access provisioning: Approve. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S1P2 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 2 of Access provisioning: Approve. Its ordering is a specification, not observed timing."@en .
+
+abi:S1P2Step3 a owl:Class ;
+    rdfs:label "Access provisioning · Provision & log"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 3 ;
+    rdfs:comment "Suggested step 3 of Access provisioning: Provision & log. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S1P2 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 3 of Access provisioning: Provision & log. Its ordering is a specification, not observed timing."@en .
+
+abi:S1P2 a owl:Class ;
+    rdfs:label "Access provisioning"@en ;
+    abi:ledgerCode "S1-P2"@en ;
+    abi:ledgerHOWITIS "Access status"@en,
+        "Least-privilege compliance"@en ;
+    abi:ledgerHOWWEKNOW "Access request record"@en,
+        "Audit trail"@en ;
+    abi:ledgerWHEN "On role change"@en ;
+    abi:ledgerWHERE "Secure network perimeter"@en ;
+    abi:ledgerWHO "HR officer"@en,
+        "IT admin"@en,
+        "Identity system"@en ;
+    abi:ledgerWHY "Controlled access to systems"@en ;
+    abi:modelingNote "WHERE 'Secure network perimeter' describes a deployment boundary, not an identified physical site. The occurrence site remains generic pending clarification."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:qualityMappingStatus "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed ABI access provisioning process. Suggested steps: Request access → Approve → Provision & log. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en,
+        "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:HROfficerParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasExecutionCondition ;
+            owl:someValuesFrom abi:S1P2Condition1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S1P2Step2 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000059 ;
+            owl:someValuesFrom abi:S1P2Specification ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:usesInformation ;
+            owl:someValuesFrom abi:IdentitySystemSoftware ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:pursuesObjective ;
+            owl:someValuesFrom abi:S1P2Objective1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S1P2Step1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:AuditTrailRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000055 ;
+            owl:someValuesFrom abi:S1P2ExecutionRole ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:ITAdminParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:AccessStatusIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S1P2Step3 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:LeastPrivilegeComplianceIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000199 ;
+            owl:someValuesFrom abi:S1P2Interval ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:IdentitySystemHost ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:AccessRequestRecordRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:ExecutionSite ],
+        abi:LedgerProcess,
+        abi:S1Process,
+        bfo:BFO_0000015 ;
+    skos:altLabel "S1-P2"@en ;
+    skos:definition "A proposed ABI access provisioning process. Suggested steps: Request access → Approve → Provision & log. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en .
+
