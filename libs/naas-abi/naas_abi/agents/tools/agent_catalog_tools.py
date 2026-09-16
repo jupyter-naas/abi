@@ -39,13 +39,25 @@ def _registry() -> Any:
 
 
 async def _workspace_agents(db: Any, user_id: str, workspace_id: str) -> Any:
+    """The roster this caller may see, filtered like ``GET /api/agents``.
+
+    Without the filter the catalog would name the office agents of sections
+    this role cannot open, which the HTTP listing hides.
+    """
+    from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
+        caller_feature_flags,
+        filter_feature_agents,
+    )
+
     role = await require_member(db, user_id, workspace_id)
     if isinstance(role, dict):
         return role
     with bound_session(db):
-        return await _registry().agents.list_workspace_agents(
+        agents = await _registry().agents.list_workspace_agents(
             request_context(user_id), workspace_id
         )
+    flags = await caller_feature_flags(db, workspace_id, role)
+    return filter_feature_agents(agents, flags)
 
 
 async def _workspace_skills(db: Any, user_id: str, workspace_id: str) -> Any:

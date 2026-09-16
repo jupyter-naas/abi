@@ -110,3 +110,16 @@ def spec_for_feature(feature_key: str) -> FeatureAgentSpec | None:
 def abi_handoff_line() -> str:
     """One line per feature agent for Abi's system prompt."""
     return "; ".join(f"{spec.name} for {spec.summary}" for spec in FEATURE_AGENTS)
+
+
+def spec_for_class_name(class_name: str | None) -> FeatureAgentSpec | None:
+    """The naas_abi feature agent a registry key (``module/Class``) names.
+
+    Only ``naas_abi``'s own classes resolve, so another module's lookalike
+    (``acme.agents.ShopAppsAgent/ShopAppsAgent``) is never treated as the
+    Apps office agent. Mirrors ``isFeatureOfficeAgent`` on the web side.
+    """
+    module, separator, agent_class = (class_name or "").strip().partition("/")
+    if not separator or not module.startswith("naas_abi."):
+        return None
+    return next((s for s in FEATURE_AGENTS if s.class_name == agent_class), None)

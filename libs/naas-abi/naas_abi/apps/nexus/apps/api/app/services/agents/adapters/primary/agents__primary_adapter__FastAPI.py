@@ -13,6 +13,10 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
     require_workspace_access,
 )
+from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
+    caller_feature_flags,
+    filter_feature_agents,
+)
 from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
     resolve_agent_ref,
     resolve_agent_refs,
@@ -158,6 +162,14 @@ async def _workspace_slug(workspace_id: str) -> str | None:
             select(WorkspaceModel.slug).where(WorkspaceModel.id == workspace_id)
         )
         return result.scalar_one_or_none()
+
+
+async def _caller_feature_flags(workspace_id: str, role: str | None) -> dict[str, bool]:
+    """``caller_feature_flags`` on a session of our own (routes hold none)."""
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as db:
+        return await caller_feature_flags(db, workspace_id, role)
 
 
 def _get_engine_default_agent_class_name() -> str | None:
@@ -748,13 +760,17 @@ async def list_agents(
 ) -> list[AgentRecord]:
     """Read-only listing of a workspace's persisted agents, enriched for display.
 
+    Scoped to the caller: the naas_abi office agents of a feature this user
+    cannot open are left out (see ``core.agent_feature_access``), so two
+    members of one workspace can get different rosters.
+
     Does not create, delete or otherwise mutate agent records; call
     ``POST /sync`` to reconcile the database with the code class registry.
     """
     if not workspace_id:
         return []
 
-    await require_workspace_access(current_user.id, workspace_id)
+    role = await require_workspace_access(current_user.id, workspace_id)
 
     # Retrieve agent records from the database (fast)
     agent_list = await agent_service.list_workspace_agents(
@@ -767,7 +783,11 @@ async def list_agents(
     # return instantly from the process-level cache.
     class_name_to_agent_class = _get_agent_class_registry()
 
-    return [_enrich_agent(agent, class_name_to_agent_class) for agent in agent_list]
+    flags = await _caller_feature_flags(workspace_id, role)
+    return [
+        _enrich_agent(agent, class_name_to_agent_class)
+        for agent in filter_feature_agents(agent_list, flags)
+    ]
 
 
 @router.post("/sync")
@@ -781,11 +801,16 @@ async def sync_agents(
     Creates records for newly discovered agent classes, deletes stale ones whose
     class no longer exists in the registry, and backfills missing metadata : then
     returns the reconciled, enriched list.
+
+    Reconciliation is workspace-wide (``enabled`` follows the ``agents:``
+    roster for everyone), but the list returned is scoped to the caller's
+    feature access, exactly like ``GET /``. A member syncing the workspace
+    therefore never narrows what an owner sees.
     """
     if not workspace_id:
         return []
 
-    await require_workspace_access(current_user.id, workspace_id)
+    role = await require_workspace_access(current_user.id, workspace_id)
 
     class_name_to_agent_class = _get_agent_class_registry()
 
@@ -803,7 +828,11 @@ async def sync_agents(
             class_name_to_agent_class=class_name_to_agent_class,
         )
 
-    return [_enrich_agent(agent, class_name_to_agent_class) for agent in agent_list]
+    flags = await _caller_feature_flags(workspace_id, role)
+    return [
+        _enrich_agent(agent, class_name_to_agent_class)
+        for agent in filter_feature_agents(agent_list, flags)
+    ]
 
 
 @router.post("/")
@@ -888,5 +917,10 @@ async def get_agent(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    await require_workspace_access(current_user.id, agent.workspace_id)
+    role = await require_workspace_access(current_user.id, agent.workspace_id)
+    # Same rule as the listing: an office agent the caller's role cannot
+    # reach is not addressable by id either, or the gate would only hide it.
+    flags = await _caller_feature_flags(agent.workspace_id, role)
+    if not filter_feature_agents([agent], flags):
+        raise HTTPException(status_code=404, detail="Agent not found")
     return agent

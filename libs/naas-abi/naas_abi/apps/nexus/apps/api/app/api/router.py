@@ -19,10 +19,10 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints import (
     websocket,
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents.handlers import router as agents_router
+from naas_abi.apps.nexus.apps.api.app.services.apps.handlers import router as apps_router
 from naas_abi.apps.nexus.apps.api.app.services.apps.projects.handlers import (
     router as app_projects_router,
 )
-from naas_abi.apps.nexus.apps.api.app.services.apps.handlers import router as apps_router
 from naas_abi.apps.nexus.apps.api.app.services.auth.handlers import router as auth_router
 from naas_abi.apps.nexus.apps.api.app.services.chat.handlers import router as chat_router
 from naas_abi.apps.nexus.apps.api.app.services.code_review.handlers import (

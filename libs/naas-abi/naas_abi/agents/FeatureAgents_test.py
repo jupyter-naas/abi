@@ -28,6 +28,7 @@ WEB_ROOT = PACKAGE_ROOT / "apps/nexus/apps/web"
 WEB_MAP = WEB_ROOT / "src/lib/feature-office-agents.ts"
 _FRENCH_RE = re.compile(r"^(Comment|Quel|Quelle|Quelles|Qu'|Pourquoi)")
 _PATH_RE = re.compile(r"(naas_abi(?:_core)?/[^\s:,()]+)")
+GOAL_SUGGESTION = "What can you do?"
 
 
 def _ids(spec: FeatureAgentSpec) -> str:
@@ -176,6 +177,27 @@ def test_abi_does_not_own_feature_tools() -> None:
     source = inspect.getsource(AbiAgent.get_tools)
     for module in ("apps_tools", "graph_tools", "files_tools", "nexus_source_tools"):
         assert module not in source
+
+
+@pytest.mark.parametrize("spec", FEATURE_AGENTS, ids=_ids)
+def test_suggestions_open_on_the_agent_goal(spec: FeatureAgentSpec) -> None:
+    """The pane's starter chips. Every agent offers its goal as one of them.
+
+    An agent whose chips are all task starters leaves a first-time user with
+    no way to ask what the section is for, and the capabilities competency
+    question then has no entry point in the UI.
+    """
+    suggestions = list(getattr(spec.load(), "suggestions", []) or [])
+    assert suggestions, f"{spec.class_name} ships no suggestions"
+    for suggestion in suggestions:
+        assert suggestion.get("label"), suggestion
+        assert suggestion.get("value"), suggestion
+    assert any(s["label"] == GOAL_SUGGESTION for s in suggestions), (
+        f"{spec.class_name} has no {GOAL_SUGGESTION!r} chip"
+    )
+    assert any(q.kind == "capabilities" for q in COMPETENCY_QUESTIONS[spec.name]), (
+        "the goal chip needs a capabilities competency question behind it"
+    )
 
 
 @pytest.mark.parametrize("spec", FEATURE_AGENTS, ids=_ids)

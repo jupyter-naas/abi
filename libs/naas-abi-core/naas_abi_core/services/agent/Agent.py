@@ -615,6 +615,11 @@ class Agent(Expose):
         _chat_model_output_version (str|None): Version identifier for model output format
     """
 
+    # Per-agent step budget, declared here so subclasses can raise it and the
+    # per-request copy in ``duplicate`` can carry it over. 0 means "leave
+    # LangGraph's default alone", which is why every read guards on ``> 0``.
+    recursion_limit: int = 0
+
     _name: str
     _description: str
 
