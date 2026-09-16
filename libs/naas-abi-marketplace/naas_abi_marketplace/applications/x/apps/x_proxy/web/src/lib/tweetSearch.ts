@@ -9,6 +9,7 @@
  * ones visible in the loaded page.
  */
 import { RESULTS } from "@/lib/appConfig";
+import { withAccessToken } from "@/lib/routes";
 import type {
   FacetEntry,
   FacetValue,
@@ -73,10 +74,11 @@ export function rowMatches(
 
 /* ---- Search Tweets: the published rows as search hits --------------------
  *
- * The Search Tweets page reads the same `tables.json` the Search page's tweet
- * table used to render, but as a list of results rather than a grid of cells:
- * one hit per post, ranked against the needle. Everything is in memory already,
- * so searching is a filter and a sort, never a fetch.
+ * The Search Tweets page is not scoped by the Scenario / Query filters: it
+ * searches every post in the tweet graph, published under `search_tweets/` by
+ * `api/search_tweets/posts.py` (see that module's docstring). Not the same
+ * dataset as the Search page's `search_recents_tweets/tables.json`, which is
+ * capped to the newest rows per configured query + time window.
  */
 
 /** Hits per page - `results.per_page`, the same as Search Users lists. */
@@ -106,15 +108,147 @@ function cell(row: Record<string, unknown>, key: string): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
 }
 
+const SEARCH_TWEETS_BASE = "/app-html/x/apps/x_proxy/search_tweets";
+
 /**
- * Every published post, newest first.
+ * One compact row of `search_tweets/posts.json` / `posts_preview.json`.
  *
- * The Search Tweets page is not scoped by the Scenario / Query filters, so it
- * reads *all* the tweet tables the publish carries. A post that answered two
- * followed queries, or that falls inside two scenario windows, is published in
- * each of those tables - so hits are keyed by tweet id, the query slugs are
- * unioned onto one hit, and the merged list is sorted by date rather than
- * trusting the per-table publish order.
+ * Must match `INDEX_COLUMNS` in `api/search_tweets/posts.py`: tweet_id,
+ * created_at, text, username, location, verified_type, referenced (0/1),
+ * media_count, queries (space-separated slugs). No `url` / media URLs - the
+ * whole-graph index keeps only what the results list renders.
+ */
+type PostIndexRow = [
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  number,
+  number,
+  string,
+];
+
+type PostIndexDoc = {
+  format?: number;
+  count?: number;
+  posts?: PostIndexRow[];
+};
+
+function hitFromIndexRow(row: PostIndexRow): TweetHit {
+  const [
+    tweetId,
+    createdAt,
+    text,
+    username,
+    location,
+    verifiedType,
+    referenced,
+    mediaCount,
+    queries,
+  ] = row;
+  return {
+    id: tweetId || null,
+    text,
+    url: tweetId && username ? `https://x.com/${username}/status/${tweetId}` : "",
+    username,
+    createdAt,
+    location,
+    verifiedType,
+    referenced: Boolean(referenced),
+    mediaCount: Number(mediaCount) || 0,
+    mediaUrl: "",
+    queries: queries ? queries.split(/\s+/).filter(Boolean) : [],
+  };
+}
+
+async function getPostIndex(path: string): Promise<TweetHit[]> {
+  const res = await fetch(withAccessToken(`${SEARCH_TWEETS_BASE}/${path}`));
+  if (!res.ok) throw new Error(`${path} HTTP ${res.status}`);
+  const doc = (await res.json()) as PostIndexDoc;
+  return (doc.posts || []).map(hitFromIndexRow);
+}
+
+let previewPromise: Promise<TweetHit[]> | null = null;
+
+/**
+ * The newest 1 000 published posts, whole graph - fast first paint for the
+ * Search Tweets page before a needle is submitted. Memoised per session.
+ */
+export function loadTweetPreview(): Promise<TweetHit[]> {
+  if (!previewPromise) {
+    previewPromise = getPostIndex("posts_preview.json").catch(() => []);
+  }
+  return previewPromise;
+}
+
+export type TweetSearchPage = {
+  count: number;
+  page: number;
+  perPage: number;
+  hits: TweetHit[];
+};
+
+/** Search one server-side projection page without downloading the full index. */
+export async function loadTweetSearchPage(
+  needle: string,
+  page: number,
+): Promise<TweetSearchPage> {
+  const params = new URLSearchParams({
+    q: needle,
+    page: String(page),
+    per_page: String(TWEET_RESULTS_PAGE_SIZE),
+  });
+  const response = await fetch(
+    withAccessToken(`${SEARCH_TWEETS_BASE}/query.json?${params}`),
+  );
+  if (!response.ok) throw new Error(`query.json HTTP ${response.status}`);
+  const doc = (await response.json()) as PostIndexDoc & {
+    page?: number;
+    per_page?: number;
+  };
+  return {
+    count: Number(doc.count) || 0,
+    page: Number(doc.page) || 0,
+    perPage: Number(doc.per_page) || TWEET_RESULTS_PAGE_SIZE,
+    hits: (doc.posts || []).map((row) =>
+      Array.isArray(row) ? hitFromIndexRow(row) : hitFromSearchPost(row),
+    ),
+  };
+}
+
+function hitFromSearchPost(post: Record<string, unknown>): TweetHit {
+  const tweetId = cell(post, "tweet_id");
+  const username = cell(post, "username");
+  const queries = post.queries;
+  return {
+    id: tweetId || null,
+    text: cell(post, "text"),
+    url: tweetId && username ? `https://x.com/${username}/status/${tweetId}` : "",
+    username,
+    createdAt: cell(post, "created_at"),
+    location: cell(post, "location"),
+    verifiedType: cell(post, "verified_type"),
+    referenced: Boolean(post.referenced),
+    mediaCount: Number(post.media_count) || 0,
+    mediaUrl: "",
+    queries: Array.isArray(queries)
+      ? queries.filter((value): value is string => typeof value === "string")
+      : [],
+  };
+}
+
+/**
+ * Every post in the Search page's scoped tables, newest first.
+ *
+ * Not what the Search Tweets page reads (see `loadTweetPreview` /
+ * `loadTweetIndex` above) - this stays for `findHit`, the Post page's
+ * fallback lookup when a tweet id is not in the direct post/user artifacts. A
+ * post that answered two followed queries, or that falls inside two scenario
+ * windows, is published in each of those tables - so hits are keyed by tweet
+ * id, the query slugs are unioned onto one hit, and the merged list is sorted
+ * by date rather than trusting the per-table publish order.
  */
 export function tweetHits(tables: TableEntry[] | undefined): TweetHit[] {
   const byId = new Map<string, TweetHit>();

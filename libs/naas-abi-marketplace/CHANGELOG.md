@@ -2,6 +2,89 @@
 
 <!-- version list -->
 
+## v3.48.1 (2026-09-14)
+
+### Bug Fixes
+
+- **x_proxy**: Update UserDetail component and config for improved feed handling
+  ([`dc29d09`](https://github.com/jupyter-naas/abi/commit/dc29d09b52dde5da7325414606242bf1bda5e477))
+
+
+## v3.48.0 (2026-09-13)
+
+### Features
+
+- **x/orchestrations**: Add signal-based timeout for file reprocessing
+  ([`1c9a25e`](https://github.com/jupyter-naas/abi/commit/1c9a25e3bb9e3205abf1dff1d4bae0f273eceff7))
+
+
+## v3.47.0 (2026-09-13)
+
+### Features
+
+- **x_proxy**: Enhance publish and search_users with cache release and memory optimization
+  ([`95262f4`](https://github.com/jupyter-naas/abi/commit/95262f4c3c73b667e03f791bf722630ff80d4610))
+
+
+## v3.46.0 (2026-09-13)
+
+### Features
+
+- **x_proxy**: Enhance warm_usernames to accept explicit posts and add test
+  ([`e3fef22`](https://github.com/jupyter-naas/abi/commit/e3fef226f1d818922e6663af3a735d3fde63c449))
+
+
+## v3.45.3 (2026-09-12)
+
+### Bug Fixes
+
+- **x_proxy**: Update search tweets publish and cache reader
+  ([`4f16a55`](https://github.com/jupyter-naas/abi/commit/4f16a551cf19da2c5a1c166f55730a3f0dff5c3e))
+
+
+## v3.45.2 (2026-09-12)
+
+### Bug Fixes
+
+- **x_proxy**: Add type checking and improve orchestration scheduling
+  ([`74067df`](https://github.com/jupyter-naas/abi/commit/74067df90cfc589fb095475ceffbc3de6dbc35a0))
+
+
+## v3.45.1 (2026-09-12)
+
+### Bug Fixes
+
+- **x_proxy**: Optimize post indexing and update schedule
+  ([`94abc97`](https://github.com/jupyter-naas/abi/commit/94abc97bd439dd99d2b4b9e942fe904a32d1b2a9))
+
+
+## v3.45.0 (2026-09-11)
+
+### Features
+
+- **x_proxy**: Add server-side tweet search with filtering and pagination
+  ([`b05c5af`](https://github.com/jupyter-naas/abi/commit/b05c5af4ef03d17052534182338f59f9a6f07ec9))
+
+
+## v3.44.0 (2026-09-11)
+
+### Features
+
+- **x-proxy**: Enhance tweet search UI and update dependencies
+  ([`69e679c`](https://github.com/jupyter-naas/abi/commit/69e679c5c59c5f8e67412e94c20d8fa6d269e303))
+
+- **x-proxy-app**: Commit staged changes for x-proxy app
+  ([`03ffe4d`](https://github.com/jupyter-naas/abi/commit/03ffe4d4c92e6812b86f39a0f01a313ce19b9c16))
+
+
+## v3.43.2 (2026-09-10)
+
+### Bug Fixes
+
+- **x-pipelines**: Improve TweetLanguage individual linking in graph builder
+  ([`1a21d63`](https://github.com/jupyter-naas/abi/commit/1a21d632005891587eb9bfb88ab6454d6ba497b3))
+
+
 ## v3.43.1 (2026-09-10)
 
 ### Bug Fixes

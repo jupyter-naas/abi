@@ -1,6 +1,7 @@
 "use client";
 
 import { fmt } from "@/lib/format";
+import { artifactUrl } from "@/lib/userSearch";
 import type { UserAccount, UserProfile } from "@/lib/types";
 
 type Props = {
@@ -56,7 +57,12 @@ export function UserProfileCard({ profile, username, timezone }: Props) {
     <div className="profile-card">
       {banner ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img className="profile-banner" src={banner} alt="" loading="lazy" />
+        <img
+          className="profile-banner"
+          src={artifactUrl(banner)}
+          alt=""
+          loading="lazy"
+        />
       ) : (
         <div className="profile-banner profile-banner-empty" />
       )}
@@ -65,7 +71,7 @@ export function UserProfileCard({ profile, username, timezone }: Props) {
           // eslint-disable-next-line @next/next/no-img-element
           <img
             className="profile-avatar"
-            src={largeAvatar(avatar)}
+            src={artifactUrl(largeAvatar(avatar))}
             alt={`@${username}`}
             loading="lazy"
           />

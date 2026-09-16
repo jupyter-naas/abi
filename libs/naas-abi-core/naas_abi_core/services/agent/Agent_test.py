@@ -710,6 +710,89 @@ def test_normalize_coerces_present_but_invalid_input_in_tooluse_block():
     assert normalized.content[0]["toolUse"]["input"] == {}
 
 
+_QWEN_TRANSFER_MARKUP = """\
+[tool_call: transfer_to_Documents]
+{
+  "name": "documents_agent",
+  "arguments": {
+    "task": "Create a professional document/report about Forvis Mazars' presence in Israel."
+  }
+}
+[/tool_call]
+"""
+
+
+def test_normalize_promotes_qwen_bracket_tool_markup():
+    """Qwen-3.8 often writes a handoff as chat text after a native default tool.
+
+    The stored Israel-document turn dumped this markup as the assistant
+    paragraph and never executed transfer_to_Documents.
+    """
+    from langchain_core.messages import AIMessage
+    from naas_abi_core.services.agent.Agent import Agent
+
+    message = AIMessage(content=_QWEN_TRANSFER_MARKUP, id="ai1")
+
+    normalized = Agent._normalize_ai_message_tool_inputs(message)
+
+    assert normalized is not message
+    assert Agent._has_tool_calls(normalized)
+    assert normalized.tool_calls[0]["name"] == "transfer_to_Documents"
+    assert normalized.tool_calls[0]["args"] == {
+        "task": (
+            "Create a professional document/report about Forvis Mazars' "
+            "presence in Israel."
+        )
+    }
+    assert "[tool_call" not in Agent._content_to_text(normalized.content)
+    assert "documents_agent" not in Agent._content_to_text(normalized.content)
+
+
+def test_normalize_promotes_hermes_xml_tool_markup():
+    from langchain_core.messages import AIMessage
+    from naas_abi_core.services.agent.Agent import Agent
+
+    message = AIMessage(
+        content=(
+            "<tool_call>\n"
+            '{"name": "documents_agent", "arguments": {"task": "Write the memo"}}\n'
+            "</tool_call>"
+        ),
+        id="ai1",
+    )
+
+    normalized = Agent._normalize_ai_message_tool_inputs(message)
+
+    assert normalized.tool_calls[0]["name"] == "transfer_to_Documents"
+    assert normalized.tool_calls[0]["args"] == {"task": "Write the memo"}
+    assert normalized.content == ""
+
+
+def test_normalize_keeps_native_tool_calls_and_strips_markup():
+    from langchain_core.messages import AIMessage
+    from naas_abi_core.services.agent.Agent import Agent
+
+    message = AIMessage(
+        content="Checking the clock.\n" + _QWEN_TRANSFER_MARKUP,
+        tool_calls=[
+            {
+                "name": "get_time_date",
+                "args": {"timezone": "Europe/Paris"},
+                "id": "call-time",
+                "type": "tool_call",
+            }
+        ],
+        id="ai1",
+    )
+
+    normalized = Agent._normalize_ai_message_tool_inputs(message)
+
+    names = [call["name"] for call in normalized.tool_calls]
+    assert names == ["get_time_date", "transfer_to_Documents"]
+    assert "Checking the clock." in Agent._content_to_text(normalized.content)
+    assert "[tool_call" not in Agent._content_to_text(normalized.content)
+
+
 def test_stream_invoke_surfaces_error_containing_braces():
     """Regression guard: an invoke failure must reach the caller as a message.
 
@@ -830,3 +913,13 @@ def test_one_routing_write_per_step_keeps_first_handoff():
     assert routing == [first]
     assert any((cmd.update or {}).get("messages") == ["h2"] for cmd in out)
     assert any((cmd.update or {}).get("messages") == ["deck"] for cmd in out)
+
+
+def test_ai_content_effectively_empty():
+    from naas_abi_core.services.agent.Agent import Agent
+
+    assert Agent._ai_content_effectively_empty("") is True
+    assert Agent._ai_content_effectively_empty("   ") is True
+    assert Agent._ai_content_effectively_empty("hello") is False
+    assert Agent._ai_content_effectively_empty([{"type": "text", "text": ""}]) is True
+    assert Agent._ai_content_effectively_empty([{"type": "text", "text": "hi"}]) is False

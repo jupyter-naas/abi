@@ -2,6 +2,7 @@ from __future__ import annotations
 
 # Standard library imports for type hints
 import atexit
+import concurrent.futures
 import json
 import os
 import re
@@ -57,11 +58,14 @@ from langgraph.graph.message import MessagesState
 from langgraph.types import Command
 from naas_abi_core.engine.context import get_default_event_service
 from naas_abi_core.services.agent.context import (
+    DOCUMENTS_RECURSION_LIMIT,
     SLIDES_RECURSION_LIMIT,
     agent_chat_id,
     agent_user_id,
     agent_workspace_id,
     coder_workspace_base,
+    documents_step_limit_message,
+    documents_turn_active,
     slides_step_limit_message,
     slides_turn_active,
 )
@@ -130,6 +134,8 @@ def _friendly_model_invoke_error(exc: BaseException) -> str:
     if "recursion limit" in lowered:
         if slides_turn_active():
             return slides_step_limit_message()
+        if documents_turn_active():
+            return documents_step_limit_message()
         return (
             "The agent hit its step limit before finishing. "
             "Try a smaller request, or continue from what already landed."
@@ -154,10 +160,29 @@ def _friendly_model_invoke_error(exc: BaseException) -> str:
                 "Use list_slides_sections and write_slides_sections; "
                 "do not read_file the whole deck.html."
             )
+        if documents_turn_active():
+            return (
+                "This document is too large to load in one read. "
+                "Use list_document_sections and write_document_sections; "
+                "do not read_file the whole document.html."
+            )
         return (
             "This request exceeded the model's context window. "
             "Do not load whole files with embedded images, then try again."
         )
+    if "timed out" in lowered or "timeouterror" in lowered.replace(" ", ""):
+        if documents_turn_active():
+            return (
+                "The model timed out on this step. Use apply_documents_template "
+                "for a theme or template, or apply_document_commands to fill "
+                "the open template. Do not read_file document.html."
+            )
+        if slides_turn_active():
+            return (
+                "The model timed out on this step. Write a few slides, then stop. "
+                "Do not read_file the whole deck.html."
+            )
+        return "The model timed out. Try a smaller request."
     if (
         "error code:" in lowered
         or "provider returned error" in lowered
@@ -165,6 +190,40 @@ def _friendly_model_invoke_error(exc: BaseException) -> str:
     ):
         return "The model provider failed. Pick another model and try again."
     return text or "The model provider failed. Pick another model and try again."
+
+
+# Documents/Slides ChatOpenAI registrations often use timeout=120 and
+# max_retries=3. Those retries stack to ~8 minutes on one hung generation.
+_OFFICE_MODEL_INVOKE_TIMEOUT_S = 90.0
+
+
+def _office_chat_model_bind_kwargs() -> dict[str, float]:
+    """HTTP timeout only. Completions.create rejects max_retries."""
+    return {"timeout": _OFFICE_MODEL_INVOKE_TIMEOUT_S}
+
+
+def _invoke_office_chat_model(chat_model: Any, messages: list[Any]) -> BaseMessage:
+    """One attempt, 90s cap. Do not let provider retries sit until the gateway dies."""
+    bound = chat_model
+    bind = getattr(chat_model, "bind", None)
+    if callable(bind):
+        try:
+            bound = bind(**_office_chat_model_bind_kwargs())
+        except Exception:  # noqa: BLE001
+            bound = chat_model
+    ctx = copy_context()
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        future = pool.submit(ctx.run, bound.invoke, messages)
+        try:
+            return future.result(timeout=_OFFICE_MODEL_INVOKE_TIMEOUT_S)
+        except concurrent.futures.TimeoutError as exc:
+            future.cancel()
+            raise TimeoutError(
+                f"Request timed out after {_OFFICE_MODEL_INVOKE_TIMEOUT_S:.0f}s"
+            ) from exc
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 # View-only shrink of prior ToolMessages before invoke. Not Claude Code /compact
@@ -657,6 +716,26 @@ class Agent(Expose):
         return str(content)
 
     @staticmethod
+    def _ai_content_effectively_empty(content: Any) -> bool:
+        """True when an assistant reply has no user-visible text."""
+        if not content:
+            return True
+        if isinstance(content, str):
+            return not content.strip()
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict):
+                    btype = block.get("type")
+                    if btype == "text" and (block.get("text") or "").strip():
+                        return False
+                    if btype == "tool_use":
+                        return False
+                elif isinstance(block, str) and block.strip():
+                    return False
+            return True
+        return False
+
+    @staticmethod
     def _has_tool_calls(message: AnyMessage) -> bool:
         tool_calls = getattr(message, "tool_calls", None)
         if tool_calls:
@@ -1086,11 +1165,41 @@ class Agent(Expose):
             self._state.current_active_agent is not None
             and self._state.current_active_agent != self._name
         ):
-            logger.debug(
-                f"⏩ Continuing conversation with: '{self._state.current_active_agent}'"
+            active_name = self._state.current_active_agent
+            human_text = (
+                last_human_message.content
+                if last_human_message is not None
+                and isinstance(last_human_message.content, str)
+                else ""
             )
-            # self._notify_agent_routing(self._state.current_active_agent)
-            return Command(goto=self._state.current_active_agent)
+            active_agent = pd.find(
+                self._agents,
+                lambda a: Agent.validate_name(a.name) == active_name,
+            )
+            retain = True
+            retain_fn = (
+                getattr(type(active_agent), "retains_active_turn", None)
+                if active_agent is not None
+                else None
+            )
+            if callable(retain_fn):
+                try:
+                    retain = bool(retain_fn(human_text))
+                except Exception:  # noqa: BLE001
+                    logger.debug(
+                        "retains_active_turn failed for '%s'; keeping sticky handoff",
+                        active_name,
+                        exc_info=True,
+                    )
+                    retain = True
+            if retain:
+                logger.debug(f"⏩ Continuing conversation with: '{active_name}'")
+                # self._notify_agent_routing(active_name)
+                return Command(goto=active_name)
+            logger.debug(
+                f"↩️  Releasing sticky agent '{active_name}' back to '{self._name}'"
+            )
+            self._state.set_current_active_agent(self._name)
 
         # self._state.set_current_active_agent(self.name)
         logger.debug(f"💬 Starting chatting with: '{self._name}'")
@@ -1314,9 +1423,237 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             return container, False
         return {**container, key: coerced}, True
 
+    _TEXT_TOOL_NAME_ALIASES = {
+        "documents_agent": "transfer_to_Documents",
+        "documentsagent": "transfer_to_Documents",
+        "documents": "transfer_to_Documents",
+        "slides_agent": "transfer_to_Slides",
+        "slidesagent": "transfer_to_Slides",
+        "slides": "transfer_to_Slides",
+    }
+
+    @staticmethod
+    def _resolve_text_tool_name(tag_name: str | None, json_name: str | None) -> str:
+        """Pick the executable tool name from Qwen/Hermes markup.
+
+        Qwen often writes ``[tool_call: transfer_to_Documents]`` and then a JSON
+        body whose ``name`` is a hallucinated id such as ``documents_agent``.
+        The tag is the one that matches a bound handoff tool.
+        """
+        raw = (tag_name or "").strip() or (json_name or "").strip()
+        if not raw:
+            return ""
+        if raw.startswith("transfer_to_"):
+            return Agent.validate_name(raw)
+        key = raw.lower().replace("-", "_").replace(" ", "_")
+        alias = Agent._TEXT_TOOL_NAME_ALIASES.get(key)
+        if alias:
+            return alias
+        return Agent.validate_name(raw)
+
+    @classmethod
+    def _payload_to_tool_call(
+        cls, tag_name: str | None, payload: dict[str, Any], call_id: str
+    ) -> ToolCall | None:
+        json_name = payload.get("name")
+        if isinstance(json_name, dict):
+            json_name = json_name.get("name")
+        if not isinstance(json_name, str):
+            json_name = None
+        name = cls._resolve_text_tool_name(tag_name, json_name)
+        if not name:
+            return None
+        if "arguments" in payload:
+            args = payload.get("arguments")
+        elif "args" in payload:
+            args = payload.get("args")
+        elif "parameters" in payload:
+            args = payload.get("parameters")
+        else:
+            args = {k: v for k, v in payload.items() if k not in {"name", "function"}}
+        return {
+            "name": name,
+            "args": cls._coerce_tool_args_to_object(args),
+            "id": call_id,
+            "type": "tool_call",
+        }
+
+    @staticmethod
+    def _read_json_object_at(
+        text: str, start: int
+    ) -> tuple[dict[str, Any] | None, int]:
+        index = start
+        length = len(text)
+        while index < length and text[index].isspace():
+            index += 1
+        if index >= length or text[index] != "{":
+            return None, start
+        try:
+            parsed, end = json.JSONDecoder().raw_decode(text, index)
+        except json.JSONDecodeError:
+            return None, start
+        if not isinstance(parsed, dict):
+            return None, start
+        return parsed, end
+
+    @classmethod
+    def _extract_text_tool_calls(cls, text: str) -> tuple[list[ToolCall], str]:
+        """Lift ``[tool_call:]`` / ``<tool_call>`` markup into LangChain tool_calls.
+
+        Qwen-3.x via an OpenAI-compatible gateway often keeps native tool
+        calling for a default tool, then writes the real handoff as chat text.
+        Without this, the markup is stored as the assistant paragraph and the
+        transfer never runs.
+        """
+        if not text or (
+            "[tool_call" not in text.lower() and "<tool_call" not in text.lower()
+        ):
+            return [], text
+
+        extracted: list[ToolCall] = []
+        spans: list[tuple[int, int]] = []
+        lower = text.lower()
+        cursor = 0
+        while cursor < len(text):
+            tag_name: str | None = None
+            bracket = lower.find("[tool_call:", cursor)
+            xml = lower.find("<tool_call>", cursor)
+            if bracket == -1 and xml == -1:
+                break
+            if xml == -1 or (bracket != -1 and bracket < xml):
+                name_start = bracket + len("[tool_call:")
+                name_end = text.find("]", name_start)
+                if name_end == -1:
+                    break
+                tag_name = text[name_start:name_end].strip()
+                payload, payload_end = cls._read_json_object_at(text, name_end + 1)
+                close = lower.find("[/tool_call]", payload_end)
+                if payload is None or close == -1:
+                    cursor = name_end + 1
+                    continue
+                call = cls._payload_to_tool_call(
+                    tag_name, payload, f"call_{uuid.uuid4().hex[:12]}"
+                )
+                if call is not None:
+                    extracted.append(call)
+                    spans.append((bracket, close + len("[/tool_call]")))
+                cursor = close + len("[/tool_call]")
+                continue
+
+            body_start = xml + len("<tool_call>")
+            payload, payload_end = cls._read_json_object_at(text, body_start)
+            if payload is None:
+                line_end = text.find("\n", body_start)
+                close_early = lower.find("</tool_call>", body_start)
+                token_end = line_end if line_end != -1 else close_early
+                if token_end != -1:
+                    maybe_name = text[body_start:token_end].strip()
+                    if maybe_name and "{" not in maybe_name:
+                        tag_name = maybe_name
+                        payload, payload_end = cls._read_json_object_at(
+                            text, token_end + 1
+                        )
+            close = lower.find("</tool_call>", payload_end)
+            if payload is None or close == -1:
+                cursor = body_start
+                continue
+            call = cls._payload_to_tool_call(
+                tag_name, payload, f"call_{uuid.uuid4().hex[:12]}"
+            )
+            if call is not None:
+                extracted.append(call)
+                spans.append((xml, close + len("</tool_call>")))
+            cursor = close + len("</tool_call>")
+
+        if not extracted:
+            return [], text
+
+        cleaned = text
+        for start, end in reversed(spans):
+            cleaned = cleaned[:start] + cleaned[end:]
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+        return extracted, cleaned
+
+    @classmethod
+    def _strip_text_tool_markup_from_content(
+        cls, content: Any, cleaned_text: str
+    ) -> Any:
+        if isinstance(content, str):
+            return cleaned_text
+        if not isinstance(content, list):
+            return content
+        new_blocks: list[Any] = []
+        for block in content:
+            if isinstance(block, str):
+                stripped = cls._extract_text_tool_calls(block)[1]
+                if stripped.strip():
+                    new_blocks.append(stripped)
+                continue
+            if isinstance(block, dict) and block.get("type") == "text":
+                raw = block.get("text")
+                if isinstance(raw, str):
+                    stripped = cls._extract_text_tool_calls(raw)[1]
+                    if stripped.strip():
+                        new_blocks.append({**block, "text": stripped})
+                    continue
+            new_blocks.append(block)
+        return new_blocks if new_blocks else ""
+
+    @classmethod
+    def _promote_text_tool_calls(cls, message: AIMessage) -> AIMessage:
+        """Turn Qwen/Hermes tool markup in content into ``tool_calls``."""
+        text = cls._content_to_text(message.content)
+        extracted, cleaned = cls._extract_text_tool_calls(text)
+        if not extracted and cleaned == text:
+            return message
+
+        existing = list(getattr(message, "tool_calls", None) or [])
+        seen: set[tuple[str, str]] = set()
+        merged: list[ToolCall] = []
+        for call in existing:
+            if not isinstance(call, dict):
+                merged.append(cast(ToolCall, call))
+                continue
+            key = (
+                str(call.get("name") or ""),
+                json.dumps(call.get("args") or {}, sort_keys=True, default=str),
+            )
+            seen.add(key)
+            merged.append(cast(ToolCall, call))
+        for call in extracted:
+            key = (
+                str(call.get("name") or ""),
+                json.dumps(call.get("args") or {}, sort_keys=True, default=str),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(call)
+
+        content_changed = cleaned != text
+        content = (
+            cls._strip_text_tool_markup_from_content(message.content, cleaned)
+            if content_changed
+            else message.content
+        )
+        if merged == existing and content is message.content:
+            return message
+        return AIMessage(
+            content=content,
+            tool_calls=merged,
+            invalid_tool_calls=list(getattr(message, "invalid_tool_calls", None) or []),
+            id=message.id,
+            additional_kwargs=dict(getattr(message, "additional_kwargs", None) or {}),
+            response_metadata=dict(getattr(message, "response_metadata", None) or {}),
+            usage_metadata=getattr(message, "usage_metadata", None),
+            name=getattr(message, "name", None),
+            example=getattr(message, "example", False),
+        )
+
     @classmethod
     def _normalize_ai_message_tool_inputs(cls, message: AIMessage) -> AIMessage:
         """Rewrite an AIMessage so every tool input is a dict object."""
+        message = cls._promote_text_tool_calls(message)
         tool_calls = list(getattr(message, "tool_calls", None) or [])
         normalized_calls: list[ToolCall] = []
         calls_changed = False
@@ -1627,7 +1964,10 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             else self._chat_model_without_workspace_tools
         )
         try:
-            response: BaseMessage = chat_model.invoke(messages)
+            if documents_turn_active() or slides_turn_active():
+                response = _invoke_office_chat_model(chat_model, messages)
+            else:
+                response = chat_model.invoke(messages)
         except Exception as e:  # noqa: BLE001
             logger.error(f"Model invocation failed for agent '{self._name}': {e}")
             return Command(
@@ -1670,6 +2010,37 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         if self._markdown_pretty_display:
             logger.debug("Applying Markdown pretty display to response")
             response = self._pretty_display_markdown(response)
+
+        # Empty final replies under a supervisor become blank chat bubbles. Hand
+        # control back so the supervisor can answer the same user turn instead
+        # of persisting an empty AIMessage.
+        has_supervisor = (
+            self._state.supervisor_agent is not None
+            and self._state.supervisor_agent.strip() != ""
+            and self._state.supervisor_agent != self._name
+        )
+        if (
+            isinstance(response, AIMessage)
+            and not self._has_tool_calls(response)
+            and self._ai_content_effectively_empty(response.content)
+            and has_supervisor
+        ):
+            supervisor = self._state.supervisor_agent
+            assert supervisor is not None
+            logger.info(
+                "Empty reply from '%s'; returning control to supervisor '%s'",
+                self._name,
+                supervisor,
+            )
+            self._state.set_current_active_agent(supervisor)
+            return Command(
+                goto="current_active_agent",
+                graph=Command.PARENT,
+                update={
+                    **routing_update,
+                    "current_active_agent": supervisor,
+                },
+            )
 
         # Sequential supervisor mode (opt-in): if a sequential_supervisor parent
         # tagged this sub-agent instance, hand control back to that supervisor when
@@ -2253,12 +2624,14 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         stream_config: RunnableConfig = {
             "configurable": {"thread_id": self._state.thread_id}
         }
-        # Default LangGraph limit is 25. A slides turn (search, then one
-        # batched deck write) needs more. 160 is the slides-specific budget
-        # (see SLIDES_RECURSION_LIMIT). This also covers a deck requested from
-        # the main chat, where no deck is open yet at the start of the turn.
+        # Default LangGraph limit is 25. A slides or documents turn (search,
+        # then one batched write) needs more. 160 is the office-agent budget.
+        # This also covers a deck or document requested from the main chat,
+        # where no file is open yet at the start of the turn.
         if slides_turn_active():
             stream_config["recursion_limit"] = SLIDES_RECURSION_LIMIT
+        elif documents_turn_active():
+            stream_config["recursion_limit"] = DOCUMENTS_RECURSION_LIMIT
         else:
             # An agent may declare its own budget (class attribute). Grounded
             # answers (read the code, then explain) and supervisor handoffs run

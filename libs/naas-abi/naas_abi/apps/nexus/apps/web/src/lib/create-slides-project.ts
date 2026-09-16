@@ -134,6 +134,39 @@ export async function createUntitledSlidesProject(
   throw new Error(lastError);
 }
 
+/** Open the Slides feature on a deck (Forgejo HTML preview).
+
+ * Used for intentional UI actions (New presentation, apply template). Chat
+ * publish results (create_slides_project and other deck-shaped tool outputs)
+ * do not call this: they render a presentation card and the user clicks to open.
+ * No-ops navigation when already on that deck route.
+ */
+export function jumpToSlidesDeck(opts: {
+  workspaceId: string;
+  slug: string;
+  title?: string | null;
+  navigate: (href: string) => void;
+  pathname?: string | null;
+}): void {
+  const workspaceId = (opts.workspaceId || '').trim();
+  const slug = (opts.slug || '').trim();
+  if (!workspaceId || !slug) return;
+
+  const title = (opts.title || '').trim() || null;
+  useSlidesStore.getState().setSelectedSlug(slug);
+  if (title) useSlidesStore.getState().setSelectedTitle(title);
+  openSlidesAgentPane({ slug, title });
+
+  const target = `/workspace/${encodeURIComponent(workspaceId)}/slides/${encodeURIComponent(slug)}`;
+  const path = opts.pathname ?? (typeof window !== 'undefined' ? window.location.pathname : '');
+  const alreadyThere =
+    typeof path === 'string' &&
+    (path === target || path.endsWith(`/slides/${slug}`) || path.includes(`/slides/${slug}/`));
+  if (!alreadyThere) {
+    opts.navigate(target);
+  }
+}
+
 /** One click: seed a template (default Minimal Light), open the deck, open the pane. */
 export async function startNewPresentation(
   workspaceId: string,
@@ -141,10 +174,12 @@ export async function startNewPresentation(
   templateId: string = DEFAULT_SLIDES_TEMPLATE_ID,
 ): Promise<CreatedSlidesProject> {
   const created = await createUntitledSlidesProject(workspaceId, templateId);
-  useSlidesStore.getState().setSelectedSlug(created.slug);
-  useSlidesStore.getState().setSelectedTitle(created.title);
-  openSlidesAgentPane({ freshChat: true });
-  navigate(`/workspace/${workspaceId}/slides/${created.slug}`);
+  jumpToSlidesDeck({
+    workspaceId,
+    slug: created.slug,
+    title: created.title,
+    navigate,
+  });
   return created;
 }
 

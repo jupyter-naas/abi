@@ -25,6 +25,13 @@ from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestrati
 _JOB_NAME = "x_build_app_x_proxy"
 _OP_NAME = "x_build_app_x_proxy_op"
 _SCHEDULE_NAME = "x_build_app_x_proxy_hourly"
+_DAILY_REPORT_JOB_PREFIX = "report_send_counter_uas_daily_"
+_IN_PROGRESS_STATUSES = [
+    dg.DagsterRunStatus.QUEUED,
+    dg.DagsterRunStatus.NOT_STARTED,
+    dg.DagsterRunStatus.STARTING,
+    dg.DagsterRunStatus.STARTED,
+]
 
 
 _BUILD_APP_OP_CONFIG_SCHEMA = {
@@ -52,11 +59,23 @@ _BUILD_APP_OP_CONFIG_SCHEMA = {
             "scheduled behaviour."
         ),
     ),
+    "artifact_batch_size": dg.Field(
+        int,
+        is_required=False,
+        default_value=100,
+        description=(
+            "Maximum changed/recent user artifacts (and their media) materialized "
+            "per build. Bounds the initial 30-day backfill."
+        ),
+    ),
 }
 
 
 def _run_build_cycle(
-    *, full_users: bool = False, rebuild_projection: bool = False
+    *,
+    full_users: bool = False,
+    rebuild_projection: bool = False,
+    artifact_batch_size: int = 100,
 ) -> dict:
     """Populate from the triple store and rebuild the X app front."""
     from naas_abi_marketplace.applications.x import ABIModule
@@ -71,7 +90,11 @@ def _run_build_cycle(
         # Done up front so the publish below reads the rebuilt projection;
         # publish_x_app's own incremental refresh then has nothing left to do.
         summary["projection_rebuild"] = refresh_x_cache(module, full=True)
-    summary["app"] = publish_x_app(module, full_users=full_users)
+    summary["app"] = publish_x_app(
+        module,
+        full_users=full_users,
+        direct_user_limit=max(0, artifact_batch_size),
+    )
     logger.info(f"XBuildAppOrchestration: done — {summary}")
     return summary
 
@@ -102,6 +125,7 @@ class XBuildAppOrchestration(DagsterOrchestration):
             return _run_build_cycle(
                 full_users=bool(config.get("full_users", False)),
                 rebuild_projection=bool(config.get("rebuild_projection", False)),
+                artifact_batch_size=int(config.get("artifact_batch_size", 100)),
             )
 
         # In-process executor: share the code-server's warm engine instead of
@@ -110,13 +134,29 @@ class XBuildAppOrchestration(DagsterOrchestration):
         def build_job():
             build_op()
 
-        schedule = dg.ScheduleDefinition(
+        @dg.schedule(
             name=_SCHEDULE_NAME,
             job=build_job,
             cron_schedule="0 * * * *",  # top of every hour
             execution_timezone="UTC",
             default_status=dg.DefaultScheduleStatus.RUNNING,
         )
+        def x_build_app_x_proxy_hourly(context: dg.ScheduleEvaluationContext):
+            runs = context.instance.get_runs(
+                filters=dg.RunsFilter(statuses=_IN_PROGRESS_STATUSES),
+                limit=100,
+            )
+            if any(
+                (run.job_name or "").startswith(_DAILY_REPORT_JOB_PREFIX)
+                for run in runs
+            ):
+                return dg.SkipReason(
+                    "A daily Counter-UAS report is in progress; "
+                    "deferring X Proxy rebuild."
+                )
+            return dg.RunRequest(run_key=None)
+
+        schedule = x_build_app_x_proxy_hourly
 
         return cls(
             definitions=dg.Definitions(

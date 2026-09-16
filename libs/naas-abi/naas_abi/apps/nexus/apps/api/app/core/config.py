@@ -12,6 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Namespace under which ABI serves the seed decks it ships. Reserved: a
 # configured source claiming it would shadow rows the picker depends on.
 ABI_SLIDES_TEMPLATE_NAMESPACE = "abi"
+ABI_DOCUMENTS_TEMPLATE_NAMESPACE = "abi"
 
 # Known-insecure secret keys that must be rejected
 _INSECURE_SECRETS = frozenset(
@@ -97,6 +98,25 @@ class SlidesTemplateSourceConfig(BaseModel):
         if value == ABI_SLIDES_TEMPLATE_NAMESPACE:
             raise ValueError(
                 f"'{ABI_SLIDES_TEMPLATE_NAMESPACE}' is reserved for the seeds "
+                "ABI ships. Pick another namespace for this source."
+            )
+        return value
+
+
+class DocumentsTemplateSourceConfig(BaseModel):
+    """One directory of Nexus Documents seed templates, contributed by config."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    namespace: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=32)
+    path: str = Field(min_length=1)
+
+    @field_validator("namespace")
+    @classmethod
+    def _namespace_is_not_reserved(cls, value: str) -> str:
+        if value == ABI_DOCUMENTS_TEMPLATE_NAMESPACE:
+            raise ValueError(
+                f"'{ABI_DOCUMENTS_TEMPLATE_NAMESPACE}' is reserved for the seeds "
                 "ABI ships. Pick another namespace for this source."
             )
         return value
@@ -209,6 +229,7 @@ FeatureKey = Literal[
     "settings",
     "code",
     "slides",
+    "documents",
 ]
 
 
@@ -232,6 +253,7 @@ class FeatureFlagsConfig(BaseModel):
             "datasets",
             "settings",
             "slides",
+            "documents",
         ]
     )
     role_baseline: dict[str, list[FeatureKey]] = Field(
@@ -250,6 +272,7 @@ class FeatureFlagsConfig(BaseModel):
                 "datasets",
                 "settings",
                 "slides",
+                "documents",
             ],
             "admin": [
                 "maps",
@@ -265,9 +288,10 @@ class FeatureFlagsConfig(BaseModel):
                 "datasets",
                 "settings",
                 "slides",
+                "documents",
             ],
-            "member": ["maps", "chat", "files", "datasets", "skills", "slides"],
-            "viewer": ["maps", "chat", "files", "datasets", "skills", "slides"],
+            "member": ["maps", "chat", "files", "datasets", "skills", "slides", "documents"],
+            "viewer": ["maps", "chat", "files", "datasets", "skills", "slides", "documents"],
         }
     )
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
@@ -397,6 +421,18 @@ class Settings(BaseSettings):
     slides_template_sources: list[SlidesTemplateSourceConfig] = Field(
         default_factory=list
     )
+    documents_template_sources: list[DocumentsTemplateSourceConfig] = Field(
+        default_factory=list
+    )
+    # Empty keeps ABI's own seed as the New Document default. A deploy that
+    # adds sources can point this at one of those ids so a plain create
+    # matches the picker, without ABI naming that source.
+    documents_default_template_id: str | None = Field(
+        default=None, max_length=96
+    )
+    # Qualified ids or bare stems omitted from the Documents picker. Create
+    # and apply still accept them, so existing documents keep working.
+    documents_hidden_template_ids: list[str] = Field(default_factory=list)
 
     # User seed configs (upserted by email on startup)
     users: list[UserSeedConfig] = Field(default_factory=list)

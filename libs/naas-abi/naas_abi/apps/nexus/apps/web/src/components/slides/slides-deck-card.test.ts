@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isSlidesDeckResult,
   slidesDeckCardFromToolCalls,
   slidesDeckHref,
   slidesDeckTitleFromToolOutput,
@@ -25,6 +26,40 @@ const CREATED_OUTPUT = JSON.stringify({
   branch: 'slides/ws-1/latest-news-about-ai',
   path: 'slides/ws-1/latest-news-about-ai/deck.html',
   workspace_id: 'ws-1',
+});
+
+const PUBLISHED_OUTPUT = JSON.stringify({
+  ok: true,
+  nexus_shipped: true,
+  slug: 'palantir',
+  title: 'Palantir',
+  workspace_id: 'ws-1',
+});
+
+describe('isSlidesDeckResult', () => {
+  it('accepts create-style results with slug (no nexus_shipped)', () => {
+    expect(isSlidesDeckResult(JSON.parse(CREATED_OUTPUT))).toBe(true);
+  });
+
+  it('accepts publish-style results only when ok and nexus_shipped', () => {
+    expect(isSlidesDeckResult(JSON.parse(PUBLISHED_OUTPUT))).toBe(true);
+    expect(
+      isSlidesDeckResult({
+        ok: true,
+        nexus_shipped: false,
+        slug: 'x',
+        title: 'X',
+      }),
+    ).toBe(false);
+    expect(isSlidesDeckResult({ nexus_shipped: true, slug: 'x', title: 'X' })).toBe(
+      false,
+    );
+  });
+
+  it('rejects missing slug or error payloads', () => {
+    expect(isSlidesDeckResult({ title: 'X' })).toBe(false);
+    expect(isSlidesDeckResult({ slug: 'x', error: 'nope' })).toBe(false);
+  });
 });
 
 describe('slidesDeckCardFromToolCalls', () => {
@@ -70,6 +105,15 @@ describe('slidesDeckCardFromToolCalls', () => {
     );
   });
 
+  it('uses name when title is absent', () => {
+    const output = JSON.stringify({
+      slug: 'brief-deck',
+      name: 'Brief Deck',
+      workspace_id: 'ws-1',
+    });
+    expect(slidesDeckCardFromToolCalls([toolCall({ output })])?.title).toBe('Brief Deck');
+  });
+
   it('prefers the created deck over a later write on the same deck', () => {
     const write = toolCall({
       id: 'tc-2',
@@ -98,6 +142,80 @@ describe('slidesDeckCardFromToolCalls', () => {
       slidesDeckCardFromToolCalls([toolCall({ output: CREATED_OUTPUT }), second])?.slug,
     ).toBe('second-deck');
   });
+
+  it('derives a deck card from a generic publish_deck result shape', () => {
+    expect(
+      slidesDeckCardFromToolCalls([
+        toolCall({
+          rawName: 'publish_deck',
+          toolName: 'Publish Deck',
+          output: PUBLISHED_OUTPUT,
+        }),
+      ]),
+    ).toEqual({
+      slug: 'palantir',
+      title: 'Palantir',
+      workspaceId: 'ws-1',
+    });
+  });
+
+  it('ignores publish-style results unless ok and nexus_shipped are both true', () => {
+    expect(
+      slidesDeckCardFromToolCalls([
+        toolCall({
+          rawName: 'publish_deck',
+          output: JSON.stringify({
+            ok: false,
+            nexus_shipped: false,
+            slug: 'nissan-brief',
+            title: 'Nissan Brief',
+            workspace_id: 'ws-1',
+          }),
+        }),
+      ]),
+    ).toBeNull();
+    expect(
+      slidesDeckCardFromToolCalls([
+        toolCall({
+          rawName: 'publish_deck',
+          output: JSON.stringify({
+            ok: true,
+            nexus_shipped: false,
+            slug: 'nissan-brief',
+            workspace_id: 'ws-1',
+          }),
+        }),
+      ]),
+    ).toBeNull();
+    expect(
+      slidesDeckCardFromToolCalls([
+        toolCall({
+          rawName: 'publish_deck',
+          output: JSON.stringify({
+            slug: 'nissan-brief',
+            nexus_shipped: true,
+            workspace_id: 'ws-1',
+          }),
+        }),
+      ]),
+    ).toBeNull();
+  });
+
+  it('still cards a shipped publish regardless of product tool name', () => {
+    // Downstream product tools (any name) keep working if they return the contract.
+    expect(
+      slidesDeckCardFromToolCalls([
+        toolCall({
+          rawName: 'create_slides_project',
+          output: PUBLISHED_OUTPUT,
+        }),
+      ]),
+    ).toEqual({
+      slug: 'palantir',
+      title: 'Palantir',
+      workspaceId: 'ws-1',
+    });
+  });
 });
 
 describe('slidesDeckTitleFromToolOutput', () => {
@@ -108,6 +226,12 @@ describe('slidesDeckTitleFromToolOutput', () => {
         JSON.stringify({ slug: 'materiaux-de-construction', title: 'Matériaux de construction' }),
       ),
     ).toBe('Matériaux de construction');
+  });
+
+  it('reads name when title is absent', () => {
+    expect(
+      slidesDeckTitleFromToolOutput(JSON.stringify({ slug: 'x', name: 'Named Deck' })),
+    ).toBe('Named Deck');
   });
 
   it('returns nothing for output with no title', () => {

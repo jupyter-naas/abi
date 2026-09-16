@@ -1,0 +1,3422 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-10T20:05:31.439729+00:00",
+  "revision": "3f031a8d9",
+  "extractor": "Graphify \u00b7 local AST",
+  "extractorVersion": "0.9.57",
+  "scope": "Python source in naas_abi and naas_abi_core. Tests counted separately; migrations excluded. Shared code architecture, not workspace deployment or live telemetry.",
+  "layers": [
+    {
+      "id": "applications",
+      "label": "Agents & applications",
+      "description": "ABI agents, workflows, pipelines and the Nexus application.",
+      "color": "#B8A3F5"
+    },
+    {
+      "id": "runtime",
+      "label": "Execution & models",
+      "description": "Engine, module lifecycle, agent execution and model abstractions.",
+      "color": "#8EACF5"
+    },
+    {
+      "id": "knowledge",
+      "label": "Knowledge & data",
+      "description": "Ontologies, structured datasets, vector search and the triple store.",
+      "color": "#62C5C2"
+    },
+    {
+      "id": "platform",
+      "label": "Platform services",
+      "description": "Service contracts for events, storage, secrets and integrations.",
+      "color": "#D5B679"
+    },
+    {
+      "id": "adapters",
+      "label": "Infrastructure adapters",
+      "description": "Concrete implementations of service ports; availability is not runtime health.",
+      "color": "#92A4BC"
+    }
+  ],
+  "components": [
+    {
+      "id": "adapters/activity_log",
+      "label": "Activity Log Adapters",
+      "layer": "adapters",
+      "files": 1,
+      "lines": 215,
+      "classes": 1,
+      "functions": 13,
+      "tests": 1,
+      "symbols": 16,
+      "sourcePaths": [
+        "naas_abi_core/services/activity_log/adapters/secondary/ActivityLogSqliteAdapter.py"
+      ]
+    },
+    {
+      "id": "adapters/bus",
+      "label": "Bus Adapters",
+      "layer": "adapters",
+      "files": 2,
+      "lines": 569,
+      "classes": 2,
+      "functions": 30,
+      "tests": 2,
+      "symbols": 31,
+      "sourcePaths": [
+        "naas_abi_core/services/bus/adapters/secondary/PythonQueueAdapter.py",
+        "naas_abi_core/services/bus/adapters/secondary/RabbitMQAdapter.py"
+      ]
+    },
+    {
+      "id": "adapters/cache",
+      "label": "Cache Adapters",
+      "layer": "adapters",
+      "files": 3,
+      "lines": 240,
+      "classes": 3,
+      "functions": 25,
+      "tests": 2,
+      "symbols": 35,
+      "sourcePaths": [
+        "naas_abi_core/services/cache/adapters/secondary/CacheFSAdapter.py",
+        "naas_abi_core/services/cache/adapters/secondary/CacheObjectStorageAdapter.py",
+        "naas_abi_core/services/cache/adapters/secondary/CacheRedisAdapter.py"
+      ]
+    },
+    {
+      "id": "adapters/coding_environment",
+      "label": "Coding Environment Adapters",
+      "layer": "adapters",
+      "files": 7,
+      "lines": 1545,
+      "classes": 8,
+      "functions": 109,
+      "tests": 5,
+      "symbols": 140,
+      "sourcePaths": [
+        "naas_abi_core/services/coding_environment/adapters/secondary/CodeServerComposeAdapter.py",
+        "naas_abi_core/services/coding_environment/adapters/secondary/CoderAdapter.py",
+        "naas_abi_core/services/coding_environment/adapters/secondary/InMemoryAdapter.py",
+        "naas_abi_core/services/coding_environment/adapters/secondary/LocalDirectoryAdapter.py",
+        "naas_abi_core/services/coding_environment/adapters/secondary/OpencodeHarnessClient.py",
+        "naas_abi_core/services/coding_environment/adapters/secondary/__init__.py",
+        "naas_abi_core/services/coding_environment/adapters/secondary/abi_sidecar.py"
+      ]
+    },
+    {
+      "id": "adapters/dataset",
+      "label": "Dataset Adapters",
+      "layer": "adapters",
+      "files": 1,
+      "lines": 675,
+      "classes": 2,
+      "functions": 41,
+      "tests": 1,
+      "symbols": 45,
+      "sourcePaths": [
+        "naas_abi_core/services/dataset/adapters/secondary/DatasetSecondaryAdapterDuckLake.py"
+      ]
+    },
+    {
+      "id": "adapters/email",
+      "label": "Email Adapters",
+      "layer": "adapters",
+      "files": 6,
+      "lines": 481,
+      "classes": 5,
+      "functions": 16,
+      "tests": 5,
+      "symbols": 29,
+      "sourcePaths": [
+        "naas_abi_core/services/email/adapters/secondary/FilesystemAdapter.py",
+        "naas_abi_core/services/email/adapters/secondary/MicrosoftOutlookAdapter.py",
+        "naas_abi_core/services/email/adapters/secondary/SESAdapter.py",
+        "naas_abi_core/services/email/adapters/secondary/SMTPAdapter.py",
+        "naas_abi_core/services/email/adapters/secondary/SendGridAdapter.py",
+        "naas_abi_core/services/email/adapters/secondary/__init__.py"
+      ]
+    },
+    {
+      "id": "adapters/event",
+      "label": "Event Adapters",
+      "layer": "adapters",
+      "files": 3,
+      "lines": 277,
+      "classes": 1,
+      "functions": 9,
+      "tests": 1,
+      "symbols": 15,
+      "sourcePaths": [
+        "naas_abi_core/services/event/adapters/__init__.py",
+        "naas_abi_core/services/event/adapters/secondary/EventSQLiteAdapter.py",
+        "naas_abi_core/services/event/adapters/secondary/__init__.py"
+      ]
+    },
+    {
+      "id": "adapters/keyvalue",
+      "label": "Keyvalue Adapters",
+      "layer": "adapters",
+      "files": 2,
+      "lines": 265,
+      "classes": 3,
+      "functions": 19,
+      "tests": 2,
+      "symbols": 24,
+      "sourcePaths": [
+        "naas_abi_core/services/keyvalue/adapters/secondary/PythonAdapter.py",
+        "naas_abi_core/services/keyvalue/adapters/secondary/RedisAdapter.py"
+      ]
+    },
+    {
+      "id": "adapters/object_storage",
+      "label": "Object Storage Adapters",
+      "layer": "adapters",
+      "files": 4,
+      "lines": 664,
+      "classes": 5,
+      "functions": 35,
+      "tests": 3,
+      "symbols": 59,
+      "sourcePaths": [
+        "naas_abi_core/services/object_storage/adapters/secondary/ObjectStorageSecondaryAdapterFS.py",
+        "naas_abi_core/services/object_storage/adapters/secondary/ObjectStorageSecondaryAdapterNaas.py",
+        "naas_abi_core/services/object_storage/adapters/secondary/ObjectStorageSecondaryAdapterR2.py",
+        "naas_abi_core/services/object_storage/adapters/secondary/ObjectStorageSecondaryAdapterS3.py"
+      ]
+    },
+    {
+      "id": "adapters/source_control",
+      "label": "Source Control Adapters",
+      "layer": "adapters",
+      "files": 4,
+      "lines": 1813,
+      "classes": 3,
+      "functions": 117,
+      "tests": 3,
+      "symbols": 128,
+      "sourcePaths": [
+        "naas_abi_core/services/source_control/adapters/secondary/ForgejoAdapter.py",
+        "naas_abi_core/services/source_control/adapters/secondary/InMemoryAdapter.py",
+        "naas_abi_core/services/source_control/adapters/secondary/LocalGitAdapter.py",
+        "naas_abi_core/services/source_control/adapters/secondary/__init__.py"
+      ]
+    },
+    {
+      "id": "adapters/vector_store",
+      "label": "Vector Store Adapters",
+      "layer": "adapters",
+      "files": 3,
+      "lines": 949,
+      "classes": 3,
+      "functions": 46,
+      "tests": 2,
+      "symbols": 58,
+      "sourcePaths": [
+        "naas_abi_core/services/vector_store/adapters/QdrantAdapter.py",
+        "naas_abi_core/services/vector_store/adapters/QdrantInMemoryAdapter.py",
+        "naas_abi_core/services/vector_store/adapters/SqliteVecAdapter.py"
+      ]
+    },
+    {
+      "id": "abi/agents/AbiAgent",
+      "label": "AbiAgent",
+      "layer": "applications",
+      "files": 1,
+      "lines": 330,
+      "classes": 1,
+      "functions": 6,
+      "tests": 0,
+      "symbols": 11,
+      "sourcePaths": [
+        "naas_abi/agents/AbiAgent.py"
+      ]
+    },
+    {
+      "id": "abi/apps/analytics",
+      "label": "Analytics",
+      "layer": "applications",
+      "files": 1,
+      "lines": 0,
+      "classes": 0,
+      "functions": 0,
+      "tests": 0,
+      "symbols": 1,
+      "sourcePaths": [
+        "naas_abi/apps/analytics/__init__.py"
+      ]
+    },
+    {
+      "id": "abi/agents/CodingAgent",
+      "label": "CodingAgent",
+      "layer": "applications",
+      "files": 1,
+      "lines": 48,
+      "classes": 1,
+      "functions": 1,
+      "tests": 0,
+      "symbols": 3,
+      "sourcePaths": [
+        "naas_abi/agents/CodingAgent.py"
+      ]
+    },
+    {
+      "id": "abi/module/module",
+      "label": "Module",
+      "layer": "applications",
+      "files": 3,
+      "lines": 1588,
+      "classes": 16,
+      "functions": 19,
+      "tests": 2,
+      "symbols": 65,
+      "sourcePaths": [
+        "naas_abi/__init__.py",
+        "naas_abi/apply_nexus_platform_pipeline.py",
+        "naas_abi/cli.py"
+      ]
+    },
+    {
+      "id": "abi/apps/nexus",
+      "label": "Nexus",
+      "layer": "applications",
+      "files": 299,
+      "lines": 50662,
+      "classes": 634,
+      "functions": 1826,
+      "tests": 68,
+      "symbols": 3405,
+      "sourcePaths": [
+        "naas_abi/apps/nexus/apps/api/app/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/api/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/abi.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/admin.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/agents.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/analytics.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/auth.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/chat.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/files.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/graph.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/ontology.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/organizations.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/providers.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/search.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/secrets.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/speech.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/tenant.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/transcribe.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/view.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/websocket.py",
+        "naas_abi/apps/nexus/apps/api/app/api/endpoints/workspaces.py",
+        "naas_abi/apps/nexus/apps/api/app/api/router.py",
+        "naas_abi/apps/nexus/apps/api/app/core/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/core/config.py",
+        "naas_abi/apps/nexus/apps/api/app/core/database.py",
+        "naas_abi/apps/nexus/apps/api/app/core/datetime_compat.py",
+        "naas_abi/apps/nexus/apps/api/app/core/feature_flags.py",
+        "naas_abi/apps/nexus/apps/api/app/core/logging.py",
+        "naas_abi/apps/nexus/apps/api/app/core/org_seed.py",
+        "naas_abi/apps/nexus/apps/api/app/core/postgres_session_registry.py",
+        "naas_abi/apps/nexus/apps/api/app/core/workspace_catalog_seed.py",
+        "naas_abi/apps/nexus/apps/api/app/main.py",
+        "naas_abi/apps/nexus/apps/api/app/models.py",
+        "naas_abi/apps/nexus/apps/api/app/services/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/activity_log/HttpActivityLogMiddleware.py",
+        "naas_abi/apps/nexus/apps/api/app/services/activity_log/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/agents/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/agents/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/agents/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/agents/adapters/primary/agents__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/agents/adapters/secondary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/agents/adapters/secondary/postgres.py",
+        "naas_abi/apps/nexus/apps/api/app/services/agents/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/agents/handlers/agents__http_handler.py",
+        "naas_abi/apps/nexus/apps/api/app/services/agents/port.py",
+        "naas_abi/apps/nexus/apps/api/app/services/agents/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/analytics/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/analytics/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/analytics/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/analytics/adapters/primary/analytics__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/analytics/adapters/secondary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/analytics/adapters/secondary/analytics__secondary_adapter__event_log.py",
+        "naas_abi/apps/nexus/apps/api/app/services/analytics/adapters/secondary/analytics__secondary_adapter__object_storage.py",
+        "naas_abi/apps/nexus/apps/api/app/services/analytics/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/analytics/handlers/analytics__http_handler.py",
+        "naas_abi/apps/nexus/apps/api/app/services/analytics/ontologies/AnalyticsEventOntology.py",
+        "naas_abi/apps/nexus/apps/api/app/services/analytics/ontologies/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/analytics/port.py",
+        "naas_abi/apps/nexus/apps/api/app/services/analytics/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/apps/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/apps/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/apps/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/apps/adapters/primary/apps__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/apps/adapters/secondary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/apps/adapters/secondary/postgres.py",
+        "naas_abi/apps/nexus/apps/api/app/services/apps/app_html_access.py",
+        "naas_abi/apps/nexus/apps/api/app/services/apps/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/apps/handlers/apps__http_handler.py",
+        "naas_abi/apps/nexus/apps/api/app/services/apps/pages_sso.py",
+        "naas_abi/apps/nexus/apps/api/app/services/apps/port.py",
+        "naas_abi/apps/nexus/apps/api/app/services/apps/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/audit.py",
+        "naas_abi/apps/nexus/apps/api/app/services/auth/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/auth/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/auth/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/auth/adapters/primary/auth__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/auth/adapters/primary/auth__primary_adapter__dependencies.py",
+        "naas_abi/apps/nexus/apps/api/app/services/auth/adapters/primary/auth__primary_adapter__schemas.py",
+        "naas_abi/apps/nexus/apps/api/app/services/auth/adapters/secondary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/auth/adapters/secondary/postgres.py",
+        "naas_abi/apps/nexus/apps/api/app/services/auth/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/auth/handlers/auth__http_handler.py",
+        "naas_abi/apps/nexus/apps/api/app/services/auth/port.py",
+        "naas_abi/apps/nexus/apps/api/app/services/auth/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/adapters/primary/chat__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/adapters/primary/chat__primary_adapter__dependencies.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/adapters/primary/chat__primary_adapter__export.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/adapters/primary/chat__primary_adapter__schemas.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/adapters/primary/chat__primary_adapter__streaming.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/adapters/secondary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/adapters/secondary/postgres.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/chat__schema.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/chat_file_embeddings.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/chat_file_ingestion.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/chat_ingestion_jobs.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/chat_ingestion_worker.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/handlers/chat__http_handler.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/port.py",
+        "naas_abi/apps/nexus/apps/api/app/services/chat/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/code_review/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/code_review/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/code_review/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/code_review/adapters/primary/code_review__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/code_review/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/coding_environment/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/coding_environment/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/coding_environment/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/coding_environment/adapters/primary/coding_environment__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/coding_environment/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/datasets/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/datasets/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/datasets/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/datasets/adapters/primary/datasets__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/datasets/adapters/primary/datasets__primary_adapter__dependencies.py",
+        "naas_abi/apps/nexus/apps/api/app/services/datasets/adapters/primary/datasets__primary_adapter__schemas.py",
+        "naas_abi/apps/nexus/apps/api/app/services/datasets/datasets__schema.py",
+        "naas_abi/apps/nexus/apps/api/app/services/datasets/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/datasets/handlers/datasets__http_handler.py",
+        "naas_abi/apps/nexus/apps/api/app/services/datasets/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/datasets/sql_safe.py",
+        "naas_abi/apps/nexus/apps/api/app/services/exceptions.py",
+        "naas_abi/apps/nexus/apps/api/app/services/files/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/files/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/files/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/files/adapters/primary/files__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/files/adapters/primary/files__primary_adapter__dependencies.py",
+        "naas_abi/apps/nexus/apps/api/app/services/files/adapters/primary/files__primary_adapter__schemas.py",
+        "naas_abi/apps/nexus/apps/api/app/services/files/drive_roots.py",
+        "naas_abi/apps/nexus/apps/api/app/services/files/files__schema.py",
+        "naas_abi/apps/nexus/apps/api/app/services/files/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/files/handlers/files__http_handler.py",
+        "naas_abi/apps/nexus/apps/api/app/services/files/legacy_storage_migration.py",
+        "naas_abi/apps/nexus/apps/api/app/services/files/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/adapters/primary/graph__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/adapters/primary/graph__primary_adapter__dependencies.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/adapters/primary/graph__primary_adapter__schemas.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/discovery_triples_export.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/graph__schema.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/handlers/graph__http_handler.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/query/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/query/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/query/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/query/adapters/primary/graph_query__primary_adapter__schemas.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/query/adapters/secondary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/query/adapters/secondary/graph_query__secondary_adapter__triplestore.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/query/column_discovery.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/query/compiler.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/query/count_key.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/query/guards.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/query/port.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/query/query__schema.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/query/search.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/query/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/query/sparql_safe.py",
+        "naas_abi/apps/nexus/apps/api/app/services/graph/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/iam/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/iam/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/iam/adapters/secondary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/iam/adapters/secondary/postgres.py",
+        "naas_abi/apps/nexus/apps/api/app/services/iam/authorization.py",
+        "naas_abi/apps/nexus/apps/api/app/services/iam/port.py",
+        "naas_abi/apps/nexus/apps/api/app/services/iam/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/invites/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/invites/sign_in_email.py",
+        "naas_abi/apps/nexus/apps/api/app/services/modules/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/modules/handlers.py",
+        "naas_abi/apps/nexus/apps/api/app/services/modules/schema.py",
+        "naas_abi/apps/nexus/apps/api/app/services/modules/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/ollama.py",
+        "naas_abi/apps/nexus/apps/api/app/services/ontology/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/ontology/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/ontology/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/ontology/adapters/primary/ontology__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/ontology/adapters/primary/ontology__primary_adapter__dependencies.py",
+        "naas_abi/apps/nexus/apps/api/app/services/ontology/adapters/primary/ontology__primary_adapter__schemas.py",
+        "naas_abi/apps/nexus/apps/api/app/services/ontology/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/ontology/handlers/ontology__http_handler.py",
+        "naas_abi/apps/nexus/apps/api/app/services/ontology/ontology__schema.py",
+        "naas_abi/apps/nexus/apps/api/app/services/ontology/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/openai_gateway/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/openai_gateway/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/openai_gateway/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/openai_gateway/adapters/primary/openai_gateway__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/openai_gateway/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/openrouter_attribution.py",
+        "naas_abi/apps/nexus/apps/api/app/services/organizations/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/organizations/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/organizations/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/organizations/adapters/primary/organizations__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/organizations/adapters/secondary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/organizations/adapters/secondary/postgres.py",
+        "naas_abi/apps/nexus/apps/api/app/services/organizations/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/organizations/handlers/organizations__http_handler.py",
+        "naas_abi/apps/nexus/apps/api/app/services/organizations/port.py",
+        "naas_abi/apps/nexus/apps/api/app/services/organizations/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/platform/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/platform/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/platform/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/platform/adapters/primary/platform__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/platform/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/provider_runtime.py",
+        "naas_abi/apps/nexus/apps/api/app/services/providers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/providers/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/providers/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/providers/adapters/primary/providers__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/providers/adapters/primary/providers__primary_adapter__schemas.py",
+        "naas_abi/apps/nexus/apps/api/app/services/providers/adapters/secondary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/providers/adapters/secondary/providers__secondary_adapter__postgres.py",
+        "naas_abi/apps/nexus/apps/api/app/services/providers/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/providers/handlers/providers__http_handler.py",
+        "naas_abi/apps/nexus/apps/api/app/services/providers/model_catalog.py",
+        "naas_abi/apps/nexus/apps/api/app/services/providers/port.py",
+        "naas_abi/apps/nexus/apps/api/app/services/providers/providers__schema.py",
+        "naas_abi/apps/nexus/apps/api/app/services/providers/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/rate_limit.py",
+        "naas_abi/apps/nexus/apps/api/app/services/refresh_token.py",
+        "naas_abi/apps/nexus/apps/api/app/services/registry.py",
+        "naas_abi/apps/nexus/apps/api/app/services/registry_bootstrap.py",
+        "naas_abi/apps/nexus/apps/api/app/services/search/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/search/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/search/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/search/adapters/primary/search__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/search/adapters/primary/search__primary_adapter__dependencies.py",
+        "naas_abi/apps/nexus/apps/api/app/services/search/adapters/primary/search__primary_adapter__schemas.py",
+        "naas_abi/apps/nexus/apps/api/app/services/search/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/search/handlers/search__http_handler.py",
+        "naas_abi/apps/nexus/apps/api/app/services/search/search__schema.py",
+        "naas_abi/apps/nexus/apps/api/app/services/search/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/secrets/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/secrets/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/secrets/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/secrets/adapters/primary/secrets__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/secrets/adapters/secondary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/secrets/adapters/secondary/postgres.py",
+        "naas_abi/apps/nexus/apps/api/app/services/secrets/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/secrets/handlers/secrets__http_handler.py",
+        "naas_abi/apps/nexus/apps/api/app/services/secrets/port.py",
+        "naas_abi/apps/nexus/apps/api/app/services/secrets/secrets__schema.py",
+        "naas_abi/apps/nexus/apps/api/app/services/secrets/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/secrets_crypto.py",
+        "naas_abi/apps/nexus/apps/api/app/services/service_base.py",
+        "naas_abi/apps/nexus/apps/api/app/services/skills/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/skills/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/skills/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/skills/adapters/primary/skills__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/skills/adapters/secondary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/skills/adapters/secondary/postgres.py",
+        "naas_abi/apps/nexus/apps/api/app/services/skills/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/skills/handlers/skills__http_handler.py",
+        "naas_abi/apps/nexus/apps/api/app/services/skills/port.py",
+        "naas_abi/apps/nexus/apps/api/app/services/skills/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/slides/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/slides/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/slides/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/slides/adapters/primary/slides__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/slides/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/tenant/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/tenant/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/tenant/tenant__schema.py",
+        "naas_abi/apps/nexus/apps/api/app/services/view/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/view/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/websocket/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/websocket/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/websocket/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/websocket/adapters/primary/websocket__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/websocket/admin_events.py",
+        "naas_abi/apps/nexus/apps/api/app/services/websocket/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/websocket/handlers/websocket__http_handler.py",
+        "naas_abi/apps/nexus/apps/api/app/services/websocket/runtime.py",
+        "naas_abi/apps/nexus/apps/api/app/services/websocket/service.py",
+        "naas_abi/apps/nexus/apps/api/app/services/workspaces/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/workspaces/adapters/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/workspaces/adapters/primary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/workspaces/adapters/primary/workspaces__primary_adapter__FastAPI.py",
+        "naas_abi/apps/nexus/apps/api/app/services/workspaces/adapters/secondary/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/workspaces/adapters/secondary/postgres.py",
+        "naas_abi/apps/nexus/apps/api/app/services/workspaces/handlers/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/services/workspaces/handlers/workspaces__http_handler.py",
+        "naas_abi/apps/nexus/apps/api/app/services/workspaces/port.py",
+        "naas_abi/apps/nexus/apps/api/app/services/workspaces/service.py",
+        "naas_abi/apps/nexus/apps/api/app/utils/__init__.py",
+        "naas_abi/apps/nexus/apps/api/app/utils/public_urls.py",
+        "naas_abi/apps/nexus/apps/api/run_migrations.py",
+        "naas_abi/apps/nexus/apps/api/src/worker.py",
+        "naas_abi/apps/nexus/assets/__init__.py",
+        "naas_abi/apps/nexus/assets/slides/__init__.py",
+        "naas_abi/apps/nexus/assets/slides/templates/__init__.py",
+        "naas_abi/apps/nexus/ontology/scripts/generate_all_processes.py",
+        "naas_abi/apps/nexus/ontology/scripts/generate_process_ontologies.py",
+        "naas_abi/apps/nexus/scripts/build_abi_architecture.py"
+      ]
+    },
+    {
+      "id": "abi/agents/OntologyEngineerAgent",
+      "label": "OntologyEngineerAgent",
+      "layer": "applications",
+      "files": 1,
+      "lines": 150,
+      "classes": 2,
+      "functions": 6,
+      "tests": 0,
+      "symbols": 10,
+      "sourcePaths": [
+        "naas_abi/agents/OntologyEngineerAgent.py"
+      ]
+    },
+    {
+      "id": "abi/orchestrations/orchestrations",
+      "label": "Orchestrations",
+      "layer": "applications",
+      "files": 1,
+      "lines": 16,
+      "classes": 1,
+      "functions": 1,
+      "tests": 0,
+      "symbols": 3,
+      "sourcePaths": [
+        "naas_abi/orchestrations/DemoOrchestration.py"
+      ]
+    },
+    {
+      "id": "abi/apps/oxigraph_admin",
+      "label": "Oxigraph Admin",
+      "layer": "applications",
+      "files": 2,
+      "lines": 549,
+      "classes": 1,
+      "functions": 27,
+      "tests": 0,
+      "symbols": 54,
+      "sourcePaths": [
+        "naas_abi/apps/oxigraph_admin/main.py",
+        "naas_abi/apps/oxigraph_admin/terminal_style.py"
+      ]
+    },
+    {
+      "id": "abi/pipelines/pipelines",
+      "label": "Pipelines",
+      "layer": "applications",
+      "files": 6,
+      "lines": 1785,
+      "classes": 18,
+      "functions": 48,
+      "tests": 4,
+      "symbols": 98,
+      "sourcePaths": [
+        "naas_abi/pipelines/AddIndividualPipeline.py",
+        "naas_abi/pipelines/InsertDataSPARQLPipeline.py",
+        "naas_abi/pipelines/MergeIndividualsPipeline.py",
+        "naas_abi/pipelines/NexusPlatformPipeline.py",
+        "naas_abi/pipelines/RemoveIndividualPipeline.py",
+        "naas_abi/pipelines/UpdateDataPropertyPipeline.py"
+      ]
+    },
+    {
+      "id": "abi/agents/PlatformServicesAgent",
+      "label": "PlatformServicesAgent",
+      "layer": "applications",
+      "files": 1,
+      "lines": 115,
+      "classes": 2,
+      "functions": 5,
+      "tests": 0,
+      "symbols": 9,
+      "sourcePaths": [
+        "naas_abi/agents/PlatformServicesAgent.py"
+      ]
+    },
+    {
+      "id": "abi/agents/slides",
+      "label": "Slides",
+      "layer": "applications",
+      "files": 3,
+      "lines": 863,
+      "classes": 0,
+      "functions": 34,
+      "tests": 2,
+      "symbols": 61,
+      "sourcePaths": [
+        "naas_abi/agents/slides/__init__.py",
+        "naas_abi/agents/slides/policy.py",
+        "naas_abi/agents/slides/title.py"
+      ]
+    },
+    {
+      "id": "abi/agents/SlidesAgent",
+      "label": "SlidesAgent",
+      "layer": "applications",
+      "files": 1,
+      "lines": 236,
+      "classes": 2,
+      "functions": 7,
+      "tests": 0,
+      "symbols": 13,
+      "sourcePaths": [
+        "naas_abi/agents/SlidesAgent.py"
+      ]
+    },
+    {
+      "id": "abi/apps/sparql_terminal",
+      "label": "Sparql Terminal",
+      "layer": "applications",
+      "files": 2,
+      "lines": 307,
+      "classes": 1,
+      "functions": 16,
+      "tests": 0,
+      "symbols": 29,
+      "sourcePaths": [
+        "naas_abi/apps/sparql_terminal/main.py",
+        "naas_abi/apps/sparql_terminal/terminal_style.py"
+      ]
+    },
+    {
+      "id": "abi/agents/tools",
+      "label": "Tools",
+      "layer": "applications",
+      "files": 6,
+      "lines": 3451,
+      "classes": 0,
+      "functions": 159,
+      "tests": 3,
+      "symbols": 151,
+      "sourcePaths": [
+        "naas_abi/agents/tools/__init__.py",
+        "naas_abi/agents/tools/coding_tools.py",
+        "naas_abi/agents/tools/nexus_admin_tools.py",
+        "naas_abi/agents/tools/platform_tools.py",
+        "naas_abi/agents/tools/slides_tools.py",
+        "naas_abi/agents/tools/web_tools.py"
+      ]
+    },
+    {
+      "id": "abi/workflows/workflows",
+      "label": "Workflows",
+      "layer": "applications",
+      "files": 5,
+      "lines": 1295,
+      "classes": 15,
+      "functions": 45,
+      "tests": 5,
+      "symbols": 102,
+      "sourcePaths": [
+        "naas_abi/workflows/AgentRecommendationWorkflow.py",
+        "naas_abi/workflows/ArtificialAnalysisWorkflow.py",
+        "naas_abi/workflows/GetObjectPropertiesFromClassWorkflow.py",
+        "naas_abi/workflows/GetSubjectGraphWorkflow.py",
+        "naas_abi/workflows/SearchIndividualWorkflow.py"
+      ]
+    },
+    {
+      "id": "services/dataset",
+      "label": "Dataset",
+      "layer": "knowledge",
+      "files": 3,
+      "lines": 328,
+      "classes": 14,
+      "functions": 27,
+      "tests": 3,
+      "symbols": 54,
+      "sourcePaths": [
+        "naas_abi_core/services/dataset/DatasetFactory.py",
+        "naas_abi_core/services/dataset/DatasetPort.py",
+        "naas_abi_core/services/dataset/DatasetService.py"
+      ]
+    },
+    {
+      "id": "abi/ontologies/ontologies",
+      "label": "Ontologies",
+      "layer": "knowledge",
+      "files": 84,
+      "lines": 4885,
+      "classes": 165,
+      "functions": 108,
+      "tests": 0,
+      "symbols": 554,
+      "sourcePaths": [
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/Agent.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/Book.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/Disposition.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/DocumentContentEntity.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/FormDocument.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/GenericallyDependentContinuant.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/JournalArticle.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/MaterialEntity.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/Organization.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/Person.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/Process.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/Quality.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/Report.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/Role.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/Site.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/Spreadsheet.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/TemporalInstant.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/TemporalRegion.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/abi/Transcript.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/AIModel.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/AddUserToWorkspace.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/Agent.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/AgentIntent.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/AgentRole.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/AgentTool.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/AuthenticationStatus.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/Capabilities.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/Conversation.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/ConversationRole.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/CreateUser.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/CreateWorkspace.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/DeploymentSite.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/FileRole.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/FileSystem.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/FileSystemRole.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/Files.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/FrontEndEvent.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/GraphFilter.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/GraphFilterRole.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/GraphView.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/GraphViewRole.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/KnowledgeGraph.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/KnowledgeGraphRole.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/Login.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/LoginInterval.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/Logout.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/LogoutInterval.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/MarketplaceAppRole.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/MarketplaceApps.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/Message.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/MessageRole.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/NexusOrganization.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/Ontology.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/OntologyClass.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/OntologyClassRole.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/OntologyModule.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/OntologyModuleRole.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/OntologyObjectProperty.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/OntologyObjectPropertyRole.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/OntologyRole.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/Page.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/PageView.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/Search.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/SearchRole.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/Server.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/Session.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/Tenant.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/User.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/UserSite.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/VisitSession.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/VisitSessionInterval.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/Workspace.py",
+        "naas_abi/ontologies/classes/ontology_naas_ai/nexus/WorkspaceRole.py",
+        "naas_abi/ontologies/classes/purl_obolibrary_org/obo/Disposition.py",
+        "naas_abi/ontologies/classes/purl_obolibrary_org/obo/GenericallyDependentContinuant.py",
+        "naas_abi/ontologies/classes/purl_obolibrary_org/obo/MaterialEntity.py",
+        "naas_abi/ontologies/classes/purl_obolibrary_org/obo/Process.py",
+        "naas_abi/ontologies/classes/purl_obolibrary_org/obo/Quality.py",
+        "naas_abi/ontologies/classes/purl_obolibrary_org/obo/Role.py",
+        "naas_abi/ontologies/classes/purl_obolibrary_org/obo/Site.py",
+        "naas_abi/ontologies/classes/purl_obolibrary_org/obo/TemporalRegion.py",
+        "naas_abi/ontologies/modules/ABIOntology.py",
+        "naas_abi/ontologies/modules/BFO7BucketsProcessOntology.py",
+        "naas_abi/ontologies/modules/NexusPlatformOntology.py"
+      ]
+    },
+    {
+      "id": "services/ontology",
+      "label": "Ontology",
+      "layer": "knowledge",
+      "files": 3,
+      "lines": 89,
+      "classes": 4,
+      "functions": 6,
+      "tests": 0,
+      "symbols": 15,
+      "sourcePaths": [
+        "naas_abi_core/services/ontology/OntologyPorts.py",
+        "naas_abi_core/services/ontology/OntologyService.py",
+        "naas_abi_core/services/ontology/adaptors/secondary/OntologyService_SecondaryAdaptor_NERPort.py"
+      ]
+    },
+    {
+      "id": "services/triple_store",
+      "label": "Triple Store",
+      "layer": "knowledge",
+      "files": 23,
+      "lines": 5698,
+      "classes": 40,
+      "functions": 205,
+      "tests": 11,
+      "symbols": 366,
+      "sourcePaths": [
+        "naas_abi_core/services/triple_store/TripleStoreFactory.py",
+        "naas_abi_core/services/triple_store/TripleStorePorts.py",
+        "naas_abi_core/services/triple_store/TripleStoreService.py",
+        "naas_abi_core/services/triple_store/adaptors/secondary/AWSNeptune.py",
+        "naas_abi_core/services/triple_store/adaptors/secondary/ApacheJenaTDB2.py",
+        "naas_abi_core/services/triple_store/adaptors/secondary/Oxigraph.py",
+        "naas_abi_core/services/triple_store/adaptors/secondary/TripleStoreService__SecondaryAdaptor__Filesystem.py",
+        "naas_abi_core/services/triple_store/adaptors/secondary/TripleStoreService__SecondaryAdaptor__ObjectStorage.py",
+        "naas_abi_core/services/triple_store/adaptors/secondary/TripleStoreService__SecondaryAdaptor__OxigraphEmbedded.py",
+        "naas_abi_core/services/triple_store/adaptors/secondary/base/TripleStoreService__SecondaryAdaptor__FileBase.py",
+        "naas_abi_core/services/triple_store/ontologies/__init__.py",
+        "naas_abi_core/services/triple_store/ontologies/classes/ontology_naas_ai/abi/triple_store/GraphCleared.py",
+        "naas_abi_core/services/triple_store/ontologies/classes/ontology_naas_ai/abi/triple_store/GraphCreated.py",
+        "naas_abi_core/services/triple_store/ontologies/classes/ontology_naas_ai/abi/triple_store/GraphDropped.py",
+        "naas_abi_core/services/triple_store/ontologies/classes/ontology_naas_ai/abi/triple_store/SchemaLoaded.py",
+        "naas_abi_core/services/triple_store/ontologies/classes/ontology_naas_ai/abi/triple_store/SchemaRemoved.py",
+        "naas_abi_core/services/triple_store/ontologies/classes/ontology_naas_ai/abi/triple_store/TripleStoreError.py",
+        "naas_abi_core/services/triple_store/ontologies/classes/ontology_naas_ai/abi/triple_store/TriplesInserted.py",
+        "naas_abi_core/services/triple_store/ontologies/classes/ontology_naas_ai/abi/triple_store/TriplesRemoved.py",
+        "naas_abi_core/services/triple_store/ontologies/modules/TripleStoreEventOntology.py",
+        "naas_abi_core/services/triple_store/ontologies/modules/__init__.py",
+        "naas_abi_core/services/triple_store/oxigraph_server.py",
+        "naas_abi_core/services/triple_store/resolve.py"
+      ]
+    },
+    {
+      "id": "services/vector_store",
+      "label": "Vector Store",
+      "layer": "knowledge",
+      "files": 13,
+      "lines": 976,
+      "classes": 18,
+      "functions": 42,
+      "tests": 3,
+      "symbols": 94,
+      "sourcePaths": [
+        "naas_abi_core/services/vector_store/IVectorStorePort.py",
+        "naas_abi_core/services/vector_store/VectorStoreFactory.py",
+        "naas_abi_core/services/vector_store/VectorStoreService.py",
+        "naas_abi_core/services/vector_store/__init__.py",
+        "naas_abi_core/services/vector_store/ontologies/__init__.py",
+        "naas_abi_core/services/vector_store/ontologies/classes/ontology_naas_ai/abi/vector_store/CollectionDeleted.py",
+        "naas_abi_core/services/vector_store/ontologies/classes/ontology_naas_ai/abi/vector_store/CollectionEnsured.py",
+        "naas_abi_core/services/vector_store/ontologies/classes/ontology_naas_ai/abi/vector_store/DocumentUpdated.py",
+        "naas_abi_core/services/vector_store/ontologies/classes/ontology_naas_ai/abi/vector_store/DocumentsAdded.py",
+        "naas_abi_core/services/vector_store/ontologies/classes/ontology_naas_ai/abi/vector_store/DocumentsDeleted.py",
+        "naas_abi_core/services/vector_store/ontologies/classes/ontology_naas_ai/abi/vector_store/VectorStoreError.py",
+        "naas_abi_core/services/vector_store/ontologies/modules/VectorStoreEventOntology.py",
+        "naas_abi_core/services/vector_store/ontologies/modules/__init__.py"
+      ]
+    },
+    {
+      "id": "services/activity_log",
+      "label": "Activity Log",
+      "layer": "platform",
+      "files": 3,
+      "lines": 142,
+      "classes": 6,
+      "functions": 14,
+      "tests": 4,
+      "symbols": 26,
+      "sourcePaths": [
+        "naas_abi_core/services/activity_log/ActivityLogFactory.py",
+        "naas_abi_core/services/activity_log/ActivityLogPort.py",
+        "naas_abi_core/services/activity_log/ActivityLogService.py"
+      ]
+    },
+    {
+      "id": "services/bus",
+      "label": "Bus",
+      "layer": "platform",
+      "files": 8,
+      "lines": 676,
+      "classes": 9,
+      "functions": 24,
+      "tests": 3,
+      "symbols": 64,
+      "sourcePaths": [
+        "naas_abi_core/services/bus/BusPorts.py",
+        "naas_abi_core/services/bus/BusService.py",
+        "naas_abi_core/services/bus/ontologies/__init__.py",
+        "naas_abi_core/services/bus/ontologies/classes/ontology_naas_ai/abi/bus/BusError.py",
+        "naas_abi_core/services/bus/ontologies/classes/ontology_naas_ai/abi/bus/BusMessageEnqueued.py",
+        "naas_abi_core/services/bus/ontologies/classes/ontology_naas_ai/abi/bus/BusMessagePublished.py",
+        "naas_abi_core/services/bus/ontologies/modules/BusEventOntology.py",
+        "naas_abi_core/services/bus/ontologies/modules/__init__.py"
+      ]
+    },
+    {
+      "id": "services/cache",
+      "label": "Cache",
+      "layer": "platform",
+      "files": 9,
+      "lines": 1082,
+      "classes": 17,
+      "functions": 68,
+      "tests": 1,
+      "symbols": 118,
+      "sourcePaths": [
+        "naas_abi_core/services/cache/CacheFactory.py",
+        "naas_abi_core/services/cache/CachePort.py",
+        "naas_abi_core/services/cache/CacheService.py",
+        "naas_abi_core/services/cache/ontologies/__init__.py",
+        "naas_abi_core/services/cache/ontologies/classes/ontology_naas_ai/abi/cache/CacheDeleted.py",
+        "naas_abi_core/services/cache/ontologies/classes/ontology_naas_ai/abi/cache/CacheError.py",
+        "naas_abi_core/services/cache/ontologies/classes/ontology_naas_ai/abi/cache/CacheSet.py",
+        "naas_abi_core/services/cache/ontologies/modules/CacheEventOntology.py",
+        "naas_abi_core/services/cache/ontologies/modules/__init__.py"
+      ]
+    },
+    {
+      "id": "services/email",
+      "label": "Email",
+      "layer": "platform",
+      "files": 10,
+      "lines": 675,
+      "classes": 9,
+      "functions": 22,
+      "tests": 2,
+      "symbols": 55,
+      "sourcePaths": [
+        "naas_abi_core/services/email/EmailFactory.py",
+        "naas_abi_core/services/email/EmailMessageBuilder.py",
+        "naas_abi_core/services/email/EmailPorts.py",
+        "naas_abi_core/services/email/EmailService.py",
+        "naas_abi_core/services/email/__init__.py",
+        "naas_abi_core/services/email/ontologies/__init__.py",
+        "naas_abi_core/services/email/ontologies/classes/ontology_naas_ai/abi/email/EmailError.py",
+        "naas_abi_core/services/email/ontologies/classes/ontology_naas_ai/abi/email/EmailSent.py",
+        "naas_abi_core/services/email/ontologies/modules/EmailEventOntology.py",
+        "naas_abi_core/services/email/ontologies/modules/__init__.py"
+      ]
+    },
+    {
+      "id": "services/event",
+      "label": "Event",
+      "layer": "platform",
+      "files": 17,
+      "lines": 1631,
+      "classes": 15,
+      "functions": 75,
+      "tests": 1,
+      "symbols": 163,
+      "sourcePaths": [
+        "naas_abi_core/services/event/EventCodec.py",
+        "naas_abi_core/services/event/EventFactory.py",
+        "naas_abi_core/services/event/EventFilter.py",
+        "naas_abi_core/services/event/EventPort.py",
+        "naas_abi_core/services/event/EventService.py",
+        "naas_abi_core/services/event/__init__.py",
+        "naas_abi_core/services/event/benchmark.py",
+        "naas_abi_core/services/event/ontologies/__init__.py",
+        "naas_abi_core/services/event/ontologies/classes/__init__.py",
+        "naas_abi_core/services/event/ontologies/classes/ontology_naas_ai/__init__.py",
+        "naas_abi_core/services/event/ontologies/classes/ontology_naas_ai/abi/LogProcess.py",
+        "naas_abi_core/services/event/ontologies/classes/ontology_naas_ai/abi/__init__.py",
+        "naas_abi_core/services/event/ontologies/classes/purl_obolibrary_org/__init__.py",
+        "naas_abi_core/services/event/ontologies/classes/purl_obolibrary_org/obo/Process.py",
+        "naas_abi_core/services/event/ontologies/classes/purl_obolibrary_org/obo/__init__.py",
+        "naas_abi_core/services/event/ontologies/modules/EventOntology.py",
+        "naas_abi_core/services/event/ontologies/modules/__init__.py"
+      ]
+    },
+    {
+      "id": "services/keyvalue",
+      "label": "Keyvalue",
+      "layer": "platform",
+      "files": 8,
+      "lines": 629,
+      "classes": 11,
+      "functions": 28,
+      "tests": 4,
+      "symbols": 64,
+      "sourcePaths": [
+        "naas_abi_core/services/keyvalue/KeyValuePorts.py",
+        "naas_abi_core/services/keyvalue/KeyValueService.py",
+        "naas_abi_core/services/keyvalue/ontologies/__init__.py",
+        "naas_abi_core/services/keyvalue/ontologies/classes/ontology_naas_ai/abi/keyvalue/KeyValueDeleted.py",
+        "naas_abi_core/services/keyvalue/ontologies/classes/ontology_naas_ai/abi/keyvalue/KeyValueError.py",
+        "naas_abi_core/services/keyvalue/ontologies/classes/ontology_naas_ai/abi/keyvalue/KeyValueSet.py",
+        "naas_abi_core/services/keyvalue/ontologies/modules/KeyValueEventOntology.py",
+        "naas_abi_core/services/keyvalue/ontologies/modules/__init__.py"
+      ]
+    },
+    {
+      "id": "services/object_storage",
+      "label": "Object Storage",
+      "layer": "platform",
+      "files": 12,
+      "lines": 692,
+      "classes": 13,
+      "functions": 43,
+      "tests": 3,
+      "symbols": 87,
+      "sourcePaths": [
+        "naas_abi_core/services/object_storage/ObjectStorageFactory.py",
+        "naas_abi_core/services/object_storage/ObjectStoragePort.py",
+        "naas_abi_core/services/object_storage/ObjectStorageService.py",
+        "naas_abi_core/services/object_storage/ontologies/__init__.py",
+        "naas_abi_core/services/object_storage/ontologies/classes/__init__.py",
+        "naas_abi_core/services/object_storage/ontologies/classes/ontology_naas_ai/__init__.py",
+        "naas_abi_core/services/object_storage/ontologies/classes/ontology_naas_ai/abi/__init__.py",
+        "naas_abi_core/services/object_storage/ontologies/classes/ontology_naas_ai/abi/object_storage/ObjectDeleted.py",
+        "naas_abi_core/services/object_storage/ontologies/classes/ontology_naas_ai/abi/object_storage/ObjectPut.py",
+        "naas_abi_core/services/object_storage/ontologies/classes/ontology_naas_ai/abi/object_storage/__init__.py",
+        "naas_abi_core/services/object_storage/ontologies/modules/ObjectStorageEventOntology.py",
+        "naas_abi_core/services/object_storage/ontologies/modules/__init__.py"
+      ]
+    },
+    {
+      "id": "services/secret",
+      "label": "Secret",
+      "layer": "platform",
+      "files": 11,
+      "lines": 833,
+      "classes": 14,
+      "functions": 44,
+      "tests": 3,
+      "symbols": 90,
+      "sourcePaths": [
+        "naas_abi_core/services/secret/Secret.py",
+        "naas_abi_core/services/secret/SecretPorts.py",
+        "naas_abi_core/services/secret/adaptors/secondary/Base64Secret.py",
+        "naas_abi_core/services/secret/adaptors/secondary/NaasSecret.py",
+        "naas_abi_core/services/secret/adaptors/secondary/dotenv_secret_secondaryadaptor.py",
+        "naas_abi_core/services/secret/ontologies/__init__.py",
+        "naas_abi_core/services/secret/ontologies/classes/ontology_naas_ai/abi/secret/SecretError.py",
+        "naas_abi_core/services/secret/ontologies/classes/ontology_naas_ai/abi/secret/SecretRemoved.py",
+        "naas_abi_core/services/secret/ontologies/classes/ontology_naas_ai/abi/secret/SecretSet.py",
+        "naas_abi_core/services/secret/ontologies/modules/SecretEventOntology.py",
+        "naas_abi_core/services/secret/ontologies/modules/__init__.py"
+      ]
+    },
+    {
+      "id": "services/source_control",
+      "label": "Source Control",
+      "layer": "platform",
+      "files": 11,
+      "lines": 929,
+      "classes": 35,
+      "functions": 65,
+      "tests": 2,
+      "symbols": 155,
+      "sourcePaths": [
+        "naas_abi_core/services/source_control/SourceControlFactory.py",
+        "naas_abi_core/services/source_control/SourceControlPorts.py",
+        "naas_abi_core/services/source_control/SourceControlService.py",
+        "naas_abi_core/services/source_control/__init__.py",
+        "naas_abi_core/services/source_control/ontologies/__init__.py",
+        "naas_abi_core/services/source_control/ontologies/classes/ontology_naas_ai/abi/source_control/ProposalMergeBlocked.py",
+        "naas_abi_core/services/source_control/ontologies/classes/ontology_naas_ai/abi/source_control/ProposalMerged.py",
+        "naas_abi_core/services/source_control/ontologies/classes/ontology_naas_ai/abi/source_control/ProposalOpened.py",
+        "naas_abi_core/services/source_control/ontologies/classes/ontology_naas_ai/abi/source_control/ReviewSubmitted.py",
+        "naas_abi_core/services/source_control/ontologies/modules/SourceControlEventOntology.py",
+        "naas_abi_core/services/source_control/ontologies/modules/__init__.py"
+      ]
+    },
+    {
+      "id": "services/agent",
+      "label": "Agent",
+      "layer": "runtime",
+      "files": 24,
+      "lines": 7149,
+      "classes": 47,
+      "functions": 240,
+      "tests": 16,
+      "symbols": 395,
+      "sourcePaths": [
+        "naas_abi_core/services/agent/Agent.py",
+        "naas_abi_core/services/agent/CoordinatorAgent.py",
+        "naas_abi_core/services/agent/IntentAgent.py",
+        "naas_abi_core/services/agent/OpencodeAgent.py",
+        "naas_abi_core/services/agent/OpencodeSessionService.py",
+        "naas_abi_core/services/agent/SqliteCheckpointSaver.py",
+        "naas_abi_core/services/agent/beta/IntentMapper.py",
+        "naas_abi_core/services/agent/beta/LocalModel.py",
+        "naas_abi_core/services/agent/beta/VectorStore.py",
+        "naas_abi_core/services/agent/context.py",
+        "naas_abi_core/services/agent/intents/default_intents.py",
+        "naas_abi_core/services/agent/ontologies/__init__.py",
+        "naas_abi_core/services/agent/ontologies/classes/ontology_naas_ai/abi/agent/AgentAIMessageEmitted.py",
+        "naas_abi_core/services/agent/ontologies/classes/ontology_naas_ai/abi/agent/AgentInvocationCompleted.py",
+        "naas_abi_core/services/agent/ontologies/classes/ontology_naas_ai/abi/agent/AgentModelCalled.py",
+        "naas_abi_core/services/agent/ontologies/classes/ontology_naas_ai/abi/agent/AgentRouted.py",
+        "naas_abi_core/services/agent/ontologies/classes/ontology_naas_ai/abi/agent/AgentToolCalled.py",
+        "naas_abi_core/services/agent/ontologies/classes/ontology_naas_ai/abi/agent/AgentToolResponded.py",
+        "naas_abi_core/services/agent/ontologies/classes/ontology_naas_ai/abi/agent/AgentUserMessageReceived.py",
+        "naas_abi_core/services/agent/ontologies/modules/AgentEventOntology.py",
+        "naas_abi_core/services/agent/ontologies/modules/__init__.py",
+        "naas_abi_core/services/agent/tools/default_tools.py",
+        "naas_abi_core/services/agent/tools/utils.py",
+        "naas_abi_core/services/agent/tools/workspace_tools.py"
+      ]
+    },
+    {
+      "id": "core/apps",
+      "label": "Apps",
+      "layer": "runtime",
+      "files": 7,
+      "lines": 1716,
+      "classes": 3,
+      "functions": 57,
+      "tests": 3,
+      "symbols": 89,
+      "sourcePaths": [
+        "naas_abi_core/apps/api/abi_api_key_auth.py",
+        "naas_abi_core/apps/api/api.py",
+        "naas_abi_core/apps/api/openapi_doc.py",
+        "naas_abi_core/apps/dagster/dagster.py",
+        "naas_abi_core/apps/mcp/mcp_server.py",
+        "naas_abi_core/apps/terminal_agent/main.py",
+        "naas_abi_core/apps/terminal_agent/terminal_style.py"
+      ]
+    },
+    {
+      "id": "services/coding_environment",
+      "label": "Coding Environment",
+      "layer": "runtime",
+      "files": 13,
+      "lines": 670,
+      "classes": 28,
+      "functions": 39,
+      "tests": 2,
+      "symbols": 119,
+      "sourcePaths": [
+        "naas_abi_core/services/coding_environment/CodingEnvironmentFactory.py",
+        "naas_abi_core/services/coding_environment/CodingEnvironmentPorts.py",
+        "naas_abi_core/services/coding_environment/CodingEnvironmentService.py",
+        "naas_abi_core/services/coding_environment/__init__.py",
+        "naas_abi_core/services/coding_environment/ontologies/__init__.py",
+        "naas_abi_core/services/coding_environment/ontologies/classes/ontology_naas_ai/abi/coding_environment/WorkspaceAccessGranted.py",
+        "naas_abi_core/services/coding_environment/ontologies/classes/ontology_naas_ai/abi/coding_environment/WorkspaceDeleted.py",
+        "naas_abi_core/services/coding_environment/ontologies/classes/ontology_naas_ai/abi/coding_environment/WorkspaceProvisionFailed.py",
+        "naas_abi_core/services/coding_environment/ontologies/classes/ontology_naas_ai/abi/coding_environment/WorkspaceProvisioned.py",
+        "naas_abi_core/services/coding_environment/ontologies/classes/ontology_naas_ai/abi/coding_environment/WorkspaceStarted.py",
+        "naas_abi_core/services/coding_environment/ontologies/classes/ontology_naas_ai/abi/coding_environment/WorkspaceStopped.py",
+        "naas_abi_core/services/coding_environment/ontologies/modules/CodingEnvironmentEventOntology.py",
+        "naas_abi_core/services/coding_environment/ontologies/modules/__init__.py"
+      ]
+    },
+    {
+      "id": "core/engine",
+      "label": "Engine",
+      "layer": "runtime",
+      "files": 26,
+      "lines": 3980,
+      "classes": 90,
+      "functions": 154,
+      "tests": 16,
+      "symbols": 310,
+      "sourcePaths": [
+        "naas_abi_core/engine/Engine.py",
+        "naas_abi_core/engine/EngineProxy.py",
+        "naas_abi_core/engine/IEngine.py",
+        "naas_abi_core/engine/conftest.py",
+        "naas_abi_core/engine/context.py",
+        "naas_abi_core/engine/engine_configuration/EngineConfiguration.py",
+        "naas_abi_core/engine/engine_configuration/EngineConfiguration_ActivityLogService.py",
+        "naas_abi_core/engine/engine_configuration/EngineConfiguration_BusService.py",
+        "naas_abi_core/engine/engine_configuration/EngineConfiguration_CacheService.py",
+        "naas_abi_core/engine/engine_configuration/EngineConfiguration_CodingEnvironmentService.py",
+        "naas_abi_core/engine/engine_configuration/EngineConfiguration_DatasetService.py",
+        "naas_abi_core/engine/engine_configuration/EngineConfiguration_Deploy.py",
+        "naas_abi_core/engine/engine_configuration/EngineConfiguration_EmailService.py",
+        "naas_abi_core/engine/engine_configuration/EngineConfiguration_EventService.py",
+        "naas_abi_core/engine/engine_configuration/EngineConfiguration_GenericLoader.py",
+        "naas_abi_core/engine/engine_configuration/EngineConfiguration_KeyValueService.py",
+        "naas_abi_core/engine/engine_configuration/EngineConfiguration_ModelRegistryService.py",
+        "naas_abi_core/engine/engine_configuration/EngineConfiguration_ObjectStorageService.py",
+        "naas_abi_core/engine/engine_configuration/EngineConfiguration_SecretService.py",
+        "naas_abi_core/engine/engine_configuration/EngineConfiguration_SourceControlService.py",
+        "naas_abi_core/engine/engine_configuration/EngineConfiguration_TripleStoreService.py",
+        "naas_abi_core/engine/engine_configuration/EngineConfiguration_VectorStoreService.py",
+        "naas_abi_core/engine/engine_configuration/utils/PydanticModelValidator.py",
+        "naas_abi_core/engine/engine_loaders/EngineModuleLoader.py",
+        "naas_abi_core/engine/engine_loaders/EngineOntologyLoader.py",
+        "naas_abi_core/engine/engine_loaders/EngineServiceLoader.py"
+      ]
+    },
+    {
+      "id": "core/foundation",
+      "label": "Foundation",
+      "layer": "runtime",
+      "files": 1,
+      "lines": 1,
+      "classes": 0,
+      "functions": 0,
+      "tests": 0,
+      "symbols": 1,
+      "sourcePaths": [
+        "naas_abi_core/__init__.py"
+      ]
+    },
+    {
+      "id": "core/integration",
+      "label": "Integration",
+      "layer": "runtime",
+      "files": 2,
+      "lines": 35,
+      "classes": 3,
+      "functions": 1,
+      "tests": 0,
+      "symbols": 7,
+      "sourcePaths": [
+        "naas_abi_core/integration/__init__.py",
+        "naas_abi_core/integration/integration.py"
+      ]
+    },
+    {
+      "id": "services/model_registry",
+      "label": "Model Registry",
+      "layer": "runtime",
+      "files": 4,
+      "lines": 531,
+      "classes": 6,
+      "functions": 36,
+      "tests": 1,
+      "symbols": 68,
+      "sourcePaths": [
+        "naas_abi_core/services/model_registry/ModelRegistryFactory.py",
+        "naas_abi_core/services/model_registry/ModelRegistryPort.py",
+        "naas_abi_core/services/model_registry/ModelRegistryService.py",
+        "naas_abi_core/services/model_registry/__init__.py"
+      ]
+    },
+    {
+      "id": "core/models",
+      "label": "Models",
+      "layer": "runtime",
+      "files": 6,
+      "lines": 537,
+      "classes": 11,
+      "functions": 3,
+      "tests": 0,
+      "symbols": 24,
+      "sourcePaths": [
+        "naas_abi_core/models/Model.py",
+        "naas_abi_core/models/opencode/Base.py",
+        "naas_abi_core/models/opencode/OpencodeFileEvent.py",
+        "naas_abi_core/models/opencode/OpencodeMessage.py",
+        "naas_abi_core/models/opencode/OpencodeSession.py",
+        "naas_abi_core/models/opencode/__init__.py"
+      ]
+    },
+    {
+      "id": "core/module",
+      "label": "Module",
+      "layer": "runtime",
+      "files": 9,
+      "lines": 777,
+      "classes": 9,
+      "functions": 33,
+      "tests": 2,
+      "symbols": 62,
+      "sourcePaths": [
+        "naas_abi_core/module/Module.py",
+        "naas_abi_core/module/ModuleAgentLoader.py",
+        "naas_abi_core/module/ModuleComponentLoader.py",
+        "naas_abi_core/module/ModuleModelLoader.py",
+        "naas_abi_core/module/ModuleOrchestrationLoader.py",
+        "naas_abi_core/module/ModulePipelineLoader.py",
+        "naas_abi_core/module/ModuleToolLoader.py",
+        "naas_abi_core/module/ModuleUtils.py",
+        "naas_abi_core/module/ModuleWorkflowLoader.py"
+      ]
+    },
+    {
+      "id": "core/modules",
+      "label": "Modules",
+      "layer": "runtime",
+      "files": 5,
+      "lines": 429,
+      "classes": 8,
+      "functions": 17,
+      "tests": 0,
+      "symbols": 30,
+      "sourcePaths": [
+        "naas_abi_core/modules/bfo/__init__.py",
+        "naas_abi_core/modules/cco/__init__.py",
+        "naas_abi_core/modules/templatablesparqlquery/__init__.py",
+        "naas_abi_core/modules/templatablesparqlquery/workflows/GenericWorkflow.py",
+        "naas_abi_core/modules/templatablesparqlquery/workflows/TemplatableSparqlQueryLoader.py"
+      ]
+    },
+    {
+      "id": "core/orchestrations",
+      "label": "Orchestrations",
+      "layer": "runtime",
+      "files": 2,
+      "lines": 22,
+      "classes": 2,
+      "functions": 4,
+      "tests": 0,
+      "symbols": 8,
+      "sourcePaths": [
+        "naas_abi_core/orchestrations/DagsterOrchestration.py",
+        "naas_abi_core/orchestrations/Orchestrations.py"
+      ]
+    },
+    {
+      "id": "core/pipeline",
+      "label": "Pipeline",
+      "layer": "runtime",
+      "files": 2,
+      "lines": 74,
+      "classes": 3,
+      "functions": 3,
+      "tests": 0,
+      "symbols": 13,
+      "sourcePaths": [
+        "naas_abi_core/pipeline/__init__.py",
+        "naas_abi_core/pipeline/pipeline.py"
+      ]
+    },
+    {
+      "id": "core/services",
+      "label": "Services",
+      "layer": "runtime",
+      "files": 2,
+      "lines": 22,
+      "classes": 1,
+      "functions": 4,
+      "tests": 0,
+      "symbols": 7,
+      "sourcePaths": [
+        "naas_abi_core/services/ServiceBase.py",
+        "naas_abi_core/services/__init__.py"
+      ]
+    },
+    {
+      "id": "core/utils",
+      "label": "Utils",
+      "layer": "runtime",
+      "files": 25,
+      "lines": 9746,
+      "classes": 23,
+      "functions": 286,
+      "tests": 11,
+      "symbols": 473,
+      "sourcePaths": [
+        "naas_abi_core/utils/Expose.py",
+        "naas_abi_core/utils/Graph.py",
+        "naas_abi_core/utils/JSON.py",
+        "naas_abi_core/utils/LazyLoader.py",
+        "naas_abi_core/utils/Logger.py",
+        "naas_abi_core/utils/OntologyReasoner.py",
+        "naas_abi_core/utils/OntologyYaml.py",
+        "naas_abi_core/utils/SPARQL.py",
+        "naas_abi_core/utils/Storage.py",
+        "naas_abi_core/utils/StorageUtils.py",
+        "naas_abi_core/utils/String.py",
+        "naas_abi_core/utils/Workers.py",
+        "naas_abi_core/utils/__init__.py",
+        "naas_abi_core/utils/onto2py/__init__.py",
+        "naas_abi_core/utils/onto2py/__main__.py",
+        "naas_abi_core/utils/onto2py/onto2py.py",
+        "naas_abi_core/utils/ontology_checker.py",
+        "naas_abi_core/utils/process_api.py",
+        "naas_abi_core/utils/validate_bfo_ontology.py",
+        "naas_abi_core/utils/versionstore/__init__.py",
+        "naas_abi_core/utils/versionstore/benchmark.py",
+        "naas_abi_core/utils/versionstore/registry.py",
+        "naas_abi_core/utils/versionstore/revision.py",
+        "naas_abi_core/utils/versionstore/store.py",
+        "naas_abi_core/utils/versionstore/uuid7.py"
+      ]
+    },
+    {
+      "id": "core/workflow",
+      "label": "Workflow",
+      "layer": "runtime",
+      "files": 2,
+      "lines": 53,
+      "classes": 3,
+      "functions": 2,
+      "tests": 0,
+      "symbols": 8,
+      "sourcePaths": [
+        "naas_abi_core/workflow/__init__.py",
+        "naas_abi_core/workflow/workflow.py"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "source": "abi/agents/AbiAgent",
+      "target": "abi/agents/tools",
+      "count": 4,
+      "relations": {
+        "imports": 2,
+        "calls": 2
+      }
+    },
+    {
+      "source": "abi/agents/AbiAgent",
+      "target": "abi/module/module",
+      "count": 1,
+      "relations": {
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/agents/AbiAgent",
+      "target": "core/module",
+      "count": 1,
+      "relations": {
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/agents/AbiAgent",
+      "target": "core/modules",
+      "count": 1,
+      "relations": {
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/agents/AbiAgent",
+      "target": "services/agent",
+      "count": 10,
+      "relations": {
+        "imports_from": 2,
+        "inherits": 1,
+        "references": 3,
+        "calls": 2,
+        "imports": 2
+      }
+    },
+    {
+      "source": "abi/agents/CodingAgent",
+      "target": "services/agent",
+      "count": 8,
+      "relations": {
+        "imports_from": 2,
+        "inherits": 1,
+        "references": 1,
+        "imports": 3,
+        "calls": 1
+      }
+    },
+    {
+      "source": "abi/agents/OntologyEngineerAgent",
+      "target": "abi/module/module",
+      "count": 1,
+      "relations": {
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/agents/OntologyEngineerAgent",
+      "target": "services/agent",
+      "count": 11,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "references": 6,
+        "calls": 2,
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/agents/PlatformServicesAgent",
+      "target": "abi/agents/tools",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "abi/agents/PlatformServicesAgent",
+      "target": "abi/module/module",
+      "count": 1,
+      "relations": {
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/agents/PlatformServicesAgent",
+      "target": "services/agent",
+      "count": 11,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "references": 6,
+        "calls": 2,
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/agents/SlidesAgent",
+      "target": "abi/agents/slides",
+      "count": 11,
+      "relations": {
+        "imports": 5,
+        "calls": 6
+      }
+    },
+    {
+      "source": "abi/agents/SlidesAgent",
+      "target": "abi/agents/tools",
+      "count": 2,
+      "relations": {
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "abi/agents/SlidesAgent",
+      "target": "services/agent",
+      "count": 10,
+      "relations": {
+        "imports_from": 2,
+        "inherits": 1,
+        "references": 3,
+        "calls": 3,
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/agents/slides",
+      "target": "abi/module/module",
+      "count": 1,
+      "relations": {
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/agents/slides",
+      "target": "services/agent",
+      "count": 1,
+      "relations": {
+        "imports_from": 1
+      }
+    },
+    {
+      "source": "abi/agents/slides",
+      "target": "services/model_registry",
+      "count": 4,
+      "relations": {
+        "imports": 3,
+        "calls": 1
+      }
+    },
+    {
+      "source": "abi/agents/tools",
+      "target": "abi/agents/slides",
+      "count": 16,
+      "relations": {
+        "imports": 8,
+        "calls": 8
+      }
+    },
+    {
+      "source": "abi/agents/tools",
+      "target": "abi/apps/nexus",
+      "count": 24,
+      "relations": {
+        "imports": 14,
+        "imports_from": 1,
+        "calls": 9
+      }
+    },
+    {
+      "source": "abi/agents/tools",
+      "target": "abi/module/module",
+      "count": 3,
+      "relations": {
+        "imports": 3
+      }
+    },
+    {
+      "source": "abi/agents/tools",
+      "target": "adapters/coding_environment",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "abi/agents/tools",
+      "target": "core/engine",
+      "count": 2,
+      "relations": {
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "abi/agents/tools",
+      "target": "core/utils",
+      "count": 2,
+      "relations": {
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "abi/agents/tools",
+      "target": "services/agent",
+      "count": 13,
+      "relations": {
+        "imports_from": 5,
+        "imports": 3,
+        "calls": 5
+      }
+    },
+    {
+      "source": "abi/agents/tools",
+      "target": "services/source_control",
+      "count": 4,
+      "relations": {
+        "imports_from": 1,
+        "imports": 2,
+        "calls": 1
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "abi/agents/slides",
+      "count": 12,
+      "relations": {
+        "imports": 6,
+        "calls": 6
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "abi/agents/tools",
+      "count": 12,
+      "relations": {
+        "imports": 6,
+        "calls": 6
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "abi/module/module",
+      "count": 31,
+      "relations": {
+        "imports": 31
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "abi/ontologies/ontologies",
+      "count": 239,
+      "relations": {
+        "references": 234,
+        "imports_from": 1,
+        "imports": 2,
+        "calls": 2
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "adapters/coding_environment",
+      "count": 8,
+      "relations": {
+        "imports_from": 2,
+        "imports": 3,
+        "calls": 3
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "core/apps",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "core/engine",
+      "count": 4,
+      "relations": {
+        "imports": 2,
+        "calls": 2
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "core/models",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "imports": 2
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "core/utils",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "services/activity_log",
+      "count": 6,
+      "relations": {
+        "imports_from": 2,
+        "references": 1,
+        "imports": 2,
+        "calls": 1
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "services/agent",
+      "count": 12,
+      "relations": {
+        "imports_from": 2,
+        "references": 3,
+        "imports": 4,
+        "calls": 3
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "services/cache",
+      "count": 22,
+      "relations": {
+        "imports_from": 9,
+        "references": 3,
+        "imports": 10
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "services/coding_environment",
+      "count": 39,
+      "relations": {
+        "imports_from": 4,
+        "references": 19,
+        "imports": 16
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "services/dataset",
+      "count": 15,
+      "relations": {
+        "imports_from": 5,
+        "references": 5,
+        "imports": 5
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "services/email",
+      "count": 23,
+      "relations": {
+        "imports_from": 5,
+        "references": 12,
+        "calls": 1,
+        "imports": 5
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "services/event",
+      "count": 9,
+      "relations": {
+        "imports_from": 3,
+        "inherits": 1,
+        "imports": 3,
+        "calls": 2
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "services/object_storage",
+      "count": 43,
+      "relations": {
+        "imports_from": 14,
+        "references": 15,
+        "imports": 14
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "services/source_control",
+      "count": 90,
+      "relations": {
+        "imports_from": 6,
+        "references": 51,
+        "calls": 3,
+        "imports": 30
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "services/triple_store",
+      "count": 40,
+      "relations": {
+        "imports_from": 3,
+        "references": 34,
+        "imports": 3
+      }
+    },
+    {
+      "source": "abi/apps/nexus",
+      "target": "services/vector_store",
+      "count": 7,
+      "relations": {
+        "imports_from": 2,
+        "references": 3,
+        "imports": 2
+      }
+    },
+    {
+      "source": "abi/apps/oxigraph_admin",
+      "target": "abi/module/module",
+      "count": 1,
+      "relations": {
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/apps/oxigraph_admin",
+      "target": "services/triple_store",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "references": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/apps/sparql_terminal",
+      "target": "abi/module/module",
+      "count": 1,
+      "relations": {
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/apps/sparql_terminal",
+      "target": "services/triple_store",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "references": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/module/module",
+      "target": "abi/agents/slides",
+      "count": 3,
+      "relations": {
+        "re_exports": 1,
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "abi/module/module",
+      "target": "abi/apps/nexus",
+      "count": 7,
+      "relations": {
+        "re_exports": 2,
+        "imports": 2,
+        "imports_from": 1,
+        "calls": 2
+      }
+    },
+    {
+      "source": "abi/module/module",
+      "target": "abi/pipelines/pipelines",
+      "count": 6,
+      "relations": {
+        "imports": 3,
+        "calls": 3
+      }
+    },
+    {
+      "source": "abi/module/module",
+      "target": "core/module",
+      "count": 7,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 2,
+        "re_exports": 1,
+        "imports": 3
+      }
+    },
+    {
+      "source": "abi/module/module",
+      "target": "services/activity_log",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "re_exports": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/module/module",
+      "target": "services/bus",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "re_exports": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/module/module",
+      "target": "services/cache",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "re_exports": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/module/module",
+      "target": "services/dataset",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "re_exports": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/module/module",
+      "target": "services/email",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "re_exports": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/module/module",
+      "target": "services/event",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "re_exports": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/module/module",
+      "target": "services/model_registry",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "re_exports": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/module/module",
+      "target": "services/object_storage",
+      "count": 6,
+      "relations": {
+        "imports_from": 2,
+        "references": 1,
+        "re_exports": 1,
+        "imports": 2
+      }
+    },
+    {
+      "source": "abi/module/module",
+      "target": "services/secret",
+      "count": 5,
+      "relations": {
+        "imports_from": 1,
+        "re_exports": 1,
+        "imports": 2,
+        "calls": 1
+      }
+    },
+    {
+      "source": "abi/module/module",
+      "target": "services/triple_store",
+      "count": 6,
+      "relations": {
+        "imports_from": 2,
+        "references": 1,
+        "re_exports": 1,
+        "imports": 2
+      }
+    },
+    {
+      "source": "abi/module/module",
+      "target": "services/vector_store",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "re_exports": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/orchestrations/orchestrations",
+      "target": "core/orchestrations",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/pipelines/pipelines",
+      "target": "abi/module/module",
+      "count": 4,
+      "relations": {
+        "imports": 4
+      }
+    },
+    {
+      "source": "abi/pipelines/pipelines",
+      "target": "abi/ontologies/ontologies",
+      "count": 22,
+      "relations": {
+        "imports_from": 1,
+        "references": 10,
+        "imports": 10,
+        "calls": 1
+      }
+    },
+    {
+      "source": "abi/pipelines/pipelines",
+      "target": "abi/workflows/workflows",
+      "count": 6,
+      "relations": {
+        "imports_from": 1,
+        "imports": 3,
+        "calls": 2
+      }
+    },
+    {
+      "source": "abi/pipelines/pipelines",
+      "target": "core/engine",
+      "count": 8,
+      "relations": {
+        "imports_from": 4,
+        "imports": 4
+      }
+    },
+    {
+      "source": "abi/pipelines/pipelines",
+      "target": "core/pipeline",
+      "count": 42,
+      "relations": {
+        "inherits": 18,
+        "references": 6,
+        "imports": 12,
+        "imports_from": 6
+      }
+    },
+    {
+      "source": "abi/pipelines/pipelines",
+      "target": "core/utils",
+      "count": 26,
+      "relations": {
+        "imports_from": 14,
+        "imports": 6,
+        "calls": 6
+      }
+    },
+    {
+      "source": "abi/pipelines/pipelines",
+      "target": "services/agent",
+      "count": 1,
+      "relations": {
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/pipelines/pipelines",
+      "target": "services/object_storage",
+      "count": 2,
+      "relations": {
+        "imports_from": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/pipelines/pipelines",
+      "target": "services/triple_store",
+      "count": 12,
+      "relations": {
+        "imports_from": 6,
+        "imports": 6
+      }
+    },
+    {
+      "source": "abi/workflows/workflows",
+      "target": "abi/module/module",
+      "count": 2,
+      "relations": {
+        "imports": 2
+      }
+    },
+    {
+      "source": "abi/workflows/workflows",
+      "target": "core/engine",
+      "count": 2,
+      "relations": {
+        "imports_from": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "abi/workflows/workflows",
+      "target": "core/utils",
+      "count": 12,
+      "relations": {
+        "imports_from": 8,
+        "imports": 2,
+        "calls": 2
+      }
+    },
+    {
+      "source": "abi/workflows/workflows",
+      "target": "core/workflow",
+      "count": 31,
+      "relations": {
+        "inherits": 15,
+        "references": 1,
+        "imports_from": 5,
+        "imports": 10
+      }
+    },
+    {
+      "source": "abi/workflows/workflows",
+      "target": "services/triple_store",
+      "count": 6,
+      "relations": {
+        "imports_from": 3,
+        "imports": 3
+      }
+    },
+    {
+      "source": "adapters/activity_log",
+      "target": "services/activity_log",
+      "count": 9,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "references": 3,
+        "calls": 1,
+        "imports": 3
+      }
+    },
+    {
+      "source": "adapters/bus",
+      "target": "core/utils",
+      "count": 1,
+      "relations": {
+        "imports_from": 1
+      }
+    },
+    {
+      "source": "adapters/bus",
+      "target": "services/bus",
+      "count": 6,
+      "relations": {
+        "imports_from": 2,
+        "inherits": 2,
+        "imports": 2
+      }
+    },
+    {
+      "source": "adapters/cache",
+      "target": "services/cache",
+      "count": 34,
+      "relations": {
+        "imports_from": 3,
+        "inherits": 3,
+        "references": 10,
+        "calls": 9,
+        "imports": 9
+      }
+    },
+    {
+      "source": "adapters/cache",
+      "target": "services/object_storage",
+      "count": 5,
+      "relations": {
+        "imports_from": 2,
+        "references": 1,
+        "imports": 2
+      }
+    },
+    {
+      "source": "adapters/coding_environment",
+      "target": "services/agent",
+      "count": 2,
+      "relations": {
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "adapters/coding_environment",
+      "target": "services/coding_environment",
+      "count": 89,
+      "relations": {
+        "imports_from": 4,
+        "inherits": 4,
+        "references": 32,
+        "calls": 24,
+        "imports": 25
+      }
+    },
+    {
+      "source": "adapters/dataset",
+      "target": "services/dataset",
+      "count": 36,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "references": 16,
+        "calls": 8,
+        "imports": 10
+      }
+    },
+    {
+      "source": "adapters/email",
+      "target": "services/email",
+      "count": 42,
+      "relations": {
+        "imports_from": 8,
+        "inherits": 5,
+        "references": 7,
+        "imports": 16,
+        "calls": 6
+      }
+    },
+    {
+      "source": "adapters/event",
+      "target": "services/event",
+      "count": 14,
+      "relations": {
+        "imports_from": 2,
+        "inherits": 1,
+        "references": 3,
+        "calls": 5,
+        "imports": 3
+      }
+    },
+    {
+      "source": "adapters/keyvalue",
+      "target": "services/keyvalue",
+      "count": 12,
+      "relations": {
+        "imports_from": 2,
+        "inherits": 2,
+        "imports": 4,
+        "calls": 4
+      }
+    },
+    {
+      "source": "adapters/object_storage",
+      "target": "services/object_storage",
+      "count": 19,
+      "relations": {
+        "imports_from": 3,
+        "inherits": 3,
+        "references": 3,
+        "calls": 2,
+        "imports": 8
+      }
+    },
+    {
+      "source": "adapters/source_control",
+      "target": "services/source_control",
+      "count": 223,
+      "relations": {
+        "imports_from": 3,
+        "inherits": 3,
+        "references": 84,
+        "calls": 71,
+        "imports": 62
+      }
+    },
+    {
+      "source": "adapters/vector_store",
+      "target": "services/vector_store",
+      "count": 27,
+      "relations": {
+        "imports_from": 3,
+        "inherits": 3,
+        "references": 9,
+        "calls": 3,
+        "imports": 9
+      }
+    },
+    {
+      "source": "core/apps",
+      "target": "core/engine",
+      "count": 12,
+      "relations": {
+        "imports_from": 3,
+        "references": 2,
+        "calls": 3,
+        "imports": 4
+      }
+    },
+    {
+      "source": "core/apps",
+      "target": "core/orchestrations",
+      "count": 2,
+      "relations": {
+        "imports_from": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "core/apps",
+      "target": "core/utils",
+      "count": 2,
+      "relations": {
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "core/apps",
+      "target": "services/agent",
+      "count": 5,
+      "relations": {
+        "imports_from": 1,
+        "references": 1,
+        "imports": 2,
+        "calls": 1
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "adapters/activity_log",
+      "count": 2,
+      "relations": {
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "adapters/bus",
+      "count": 4,
+      "relations": {
+        "imports": 2,
+        "calls": 2
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "adapters/cache",
+      "count": 6,
+      "relations": {
+        "imports": 3,
+        "calls": 3
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "adapters/coding_environment",
+      "count": 8,
+      "relations": {
+        "imports": 4,
+        "calls": 4
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "adapters/dataset",
+      "count": 2,
+      "relations": {
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "adapters/email",
+      "count": 10,
+      "relations": {
+        "imports": 5,
+        "calls": 5
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "adapters/event",
+      "count": 2,
+      "relations": {
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "adapters/keyvalue",
+      "count": 4,
+      "relations": {
+        "imports": 2,
+        "calls": 2
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "adapters/object_storage",
+      "count": 8,
+      "relations": {
+        "imports": 4,
+        "calls": 4
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "adapters/source_control",
+      "count": 6,
+      "relations": {
+        "imports": 3,
+        "calls": 3
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "adapters/vector_store",
+      "count": 6,
+      "relations": {
+        "imports": 3,
+        "calls": 3
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "core/module",
+      "count": 29,
+      "relations": {
+        "imports_from": 6,
+        "references": 14,
+        "imports": 9
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "core/utils",
+      "count": 1,
+      "relations": {
+        "imports_from": 1
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "services/activity_log",
+      "count": 17,
+      "relations": {
+        "imports_from": 5,
+        "references": 6,
+        "calls": 1,
+        "imports": 5
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "services/bus",
+      "count": 17,
+      "relations": {
+        "imports_from": 5,
+        "references": 6,
+        "calls": 1,
+        "imports": 5
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "services/cache",
+      "count": 26,
+      "relations": {
+        "imports_from": 5,
+        "references": 12,
+        "inherits": 2,
+        "calls": 1,
+        "imports": 6
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "services/coding_environment",
+      "count": 15,
+      "relations": {
+        "imports_from": 4,
+        "references": 6,
+        "calls": 1,
+        "imports": 4
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "services/dataset",
+      "count": 17,
+      "relations": {
+        "imports_from": 5,
+        "references": 6,
+        "calls": 1,
+        "imports": 5
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "services/email",
+      "count": 17,
+      "relations": {
+        "imports_from": 5,
+        "references": 6,
+        "calls": 1,
+        "imports": 5
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "services/event",
+      "count": 22,
+      "relations": {
+        "imports_from": 6,
+        "references": 9,
+        "calls": 1,
+        "imports": 6
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "services/keyvalue",
+      "count": 17,
+      "relations": {
+        "imports_from": 5,
+        "references": 6,
+        "calls": 1,
+        "imports": 5
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "services/model_registry",
+      "count": 17,
+      "relations": {
+        "imports_from": 4,
+        "references": 8,
+        "calls": 1,
+        "imports": 4
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "services/object_storage",
+      "count": 17,
+      "relations": {
+        "imports_from": 5,
+        "references": 6,
+        "calls": 1,
+        "imports": 5
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "services/secret",
+      "count": 31,
+      "relations": {
+        "imports_from": 8,
+        "references": 7,
+        "calls": 5,
+        "imports": 11
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "services/source_control",
+      "count": 15,
+      "relations": {
+        "imports_from": 4,
+        "references": 6,
+        "calls": 1,
+        "imports": 4
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "services/triple_store",
+      "count": 34,
+      "relations": {
+        "imports_from": 6,
+        "references": 7,
+        "calls": 8,
+        "imports": 13
+      }
+    },
+    {
+      "source": "core/engine",
+      "target": "services/vector_store",
+      "count": 17,
+      "relations": {
+        "imports_from": 5,
+        "references": 6,
+        "calls": 1,
+        "imports": 5
+      }
+    },
+    {
+      "source": "core/foundation",
+      "target": "core/utils",
+      "count": 2,
+      "relations": {
+        "imports_from": 1,
+        "re_exports": 1
+      }
+    },
+    {
+      "source": "core/module",
+      "target": "core/engine",
+      "count": 6,
+      "relations": {
+        "imports_from": 2,
+        "references": 2,
+        "imports": 2
+      }
+    },
+    {
+      "source": "core/module",
+      "target": "core/integration",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "references": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "core/module",
+      "target": "core/models",
+      "count": 4,
+      "relations": {
+        "imports_from": 1,
+        "imports": 3
+      }
+    },
+    {
+      "source": "core/module",
+      "target": "core/orchestrations",
+      "count": 6,
+      "relations": {
+        "imports_from": 2,
+        "references": 2,
+        "imports": 2
+      }
+    },
+    {
+      "source": "core/module",
+      "target": "core/pipeline",
+      "count": 6,
+      "relations": {
+        "imports_from": 2,
+        "references": 2,
+        "imports": 2
+      }
+    },
+    {
+      "source": "core/module",
+      "target": "core/utils",
+      "count": 14,
+      "relations": {
+        "imports_from": 7,
+        "references": 2,
+        "imports": 4,
+        "calls": 1
+      }
+    },
+    {
+      "source": "core/module",
+      "target": "core/workflow",
+      "count": 6,
+      "relations": {
+        "imports_from": 2,
+        "references": 2,
+        "imports": 2
+      }
+    },
+    {
+      "source": "core/module",
+      "target": "services/model_registry",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "references": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "core/modules",
+      "target": "core/module",
+      "count": 21,
+      "relations": {
+        "imports_from": 3,
+        "inherits": 6,
+        "re_exports": 3,
+        "imports": 9
+      }
+    },
+    {
+      "source": "core/modules",
+      "target": "core/utils",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "core/modules",
+      "target": "services/object_storage",
+      "count": 6,
+      "relations": {
+        "imports_from": 2,
+        "re_exports": 2,
+        "imports": 2
+      }
+    },
+    {
+      "source": "core/modules",
+      "target": "services/triple_store",
+      "count": 15,
+      "relations": {
+        "imports_from": 5,
+        "references": 2,
+        "re_exports": 3,
+        "imports": 5
+      }
+    },
+    {
+      "source": "core/pipeline",
+      "target": "core/utils",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "core/pipeline",
+      "target": "services/triple_store",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "references": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "core/services",
+      "target": "core/engine",
+      "count": 2,
+      "relations": {
+        "imports_from": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "core/utils",
+      "target": "core/pipeline",
+      "count": 1,
+      "relations": {
+        "imports": 1
+      }
+    },
+    {
+      "source": "core/utils",
+      "target": "core/workflow",
+      "count": 1,
+      "relations": {
+        "imports": 1
+      }
+    },
+    {
+      "source": "core/utils",
+      "target": "services/object_storage",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "references": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "core/utils",
+      "target": "services/triple_store",
+      "count": 7,
+      "relations": {
+        "imports_from": 2,
+        "references": 3,
+        "imports": 2
+      }
+    },
+    {
+      "source": "core/workflow",
+      "target": "core/utils",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/activity_log",
+      "target": "adapters/activity_log",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "services/activity_log",
+      "target": "core/services",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/agent",
+      "target": "core/engine",
+      "count": 9,
+      "relations": {
+        "imports_from": 2,
+        "imports": 3,
+        "calls": 4
+      }
+    },
+    {
+      "source": "services/agent",
+      "target": "core/models",
+      "count": 22,
+      "relations": {
+        "imports_from": 6,
+        "references": 7,
+        "calls": 3,
+        "imports": 6
+      }
+    },
+    {
+      "source": "services/agent",
+      "target": "core/utils",
+      "count": 11,
+      "relations": {
+        "imports_from": 7,
+        "inherits": 2,
+        "imports": 2
+      }
+    },
+    {
+      "source": "services/agent",
+      "target": "services/cache",
+      "count": 8,
+      "relations": {
+        "imports_from": 4,
+        "imports": 4
+      }
+    },
+    {
+      "source": "services/agent",
+      "target": "services/event",
+      "count": 9,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 7,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/bus",
+      "target": "core/services",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/bus",
+      "target": "services/event",
+      "count": 5,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 3,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/cache",
+      "target": "adapters/cache",
+      "count": 6,
+      "relations": {
+        "imports_from": 2,
+        "imports": 2,
+        "calls": 2
+      }
+    },
+    {
+      "source": "services/cache",
+      "target": "core/engine",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "references": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/cache",
+      "target": "core/services",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/cache",
+      "target": "core/utils",
+      "count": 4,
+      "relations": {
+        "imports_from": 1,
+        "imports": 2,
+        "calls": 1
+      }
+    },
+    {
+      "source": "services/cache",
+      "target": "services/event",
+      "count": 5,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 3,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/cache",
+      "target": "services/object_storage",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "references": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/coding_environment",
+      "target": "adapters/coding_environment",
+      "count": 11,
+      "relations": {
+        "imports_from": 3,
+        "imports": 4,
+        "calls": 4
+      }
+    },
+    {
+      "source": "services/coding_environment",
+      "target": "core/services",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/coding_environment",
+      "target": "services/event",
+      "count": 5,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 2,
+        "imports": 2
+      }
+    },
+    {
+      "source": "services/dataset",
+      "target": "adapters/dataset",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "services/dataset",
+      "target": "core/services",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/email",
+      "target": "adapters/email",
+      "count": 15,
+      "relations": {
+        "imports_from": 5,
+        "imports": 5,
+        "calls": 5
+      }
+    },
+    {
+      "source": "services/email",
+      "target": "core/services",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/email",
+      "target": "services/event",
+      "count": 4,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 2,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/event",
+      "target": "adapters/bus",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "services/event",
+      "target": "adapters/event",
+      "count": 14,
+      "relations": {
+        "imports_from": 2,
+        "imports": 2,
+        "calls": 10
+      }
+    },
+    {
+      "source": "services/event",
+      "target": "core/services",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/event",
+      "target": "core/utils",
+      "count": 4,
+      "relations": {
+        "imports_from": 1,
+        "imports": 2,
+        "calls": 1
+      }
+    },
+    {
+      "source": "services/event",
+      "target": "services/bus",
+      "count": 15,
+      "relations": {
+        "imports_from": 4,
+        "references": 3,
+        "inherits": 1,
+        "imports": 4,
+        "calls": 3
+      }
+    },
+    {
+      "source": "services/keyvalue",
+      "target": "core/services",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/keyvalue",
+      "target": "services/event",
+      "count": 5,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 3,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/model_registry",
+      "target": "core/models",
+      "count": 31,
+      "relations": {
+        "imports_from": 2,
+        "references": 20,
+        "calls": 2,
+        "imports": 7
+      }
+    },
+    {
+      "source": "services/model_registry",
+      "target": "core/services",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/object_storage",
+      "target": "adapters/object_storage",
+      "count": 13,
+      "relations": {
+        "imports_from": 4,
+        "imports": 4,
+        "calls": 5
+      }
+    },
+    {
+      "source": "services/object_storage",
+      "target": "core/services",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/object_storage",
+      "target": "core/utils",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "services/object_storage",
+      "target": "services/event",
+      "count": 4,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 2,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/secret",
+      "target": "core/services",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/secret",
+      "target": "core/utils",
+      "count": 1,
+      "relations": {
+        "imports_from": 1
+      }
+    },
+    {
+      "source": "services/secret",
+      "target": "services/event",
+      "count": 5,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 3,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/source_control",
+      "target": "adapters/source_control",
+      "count": 8,
+      "relations": {
+        "imports_from": 2,
+        "imports": 3,
+        "calls": 3
+      }
+    },
+    {
+      "source": "services/source_control",
+      "target": "core/services",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/source_control",
+      "target": "services/event",
+      "count": 5,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 2,
+        "imports": 2
+      }
+    },
+    {
+      "source": "services/triple_store",
+      "target": "core/services",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/triple_store",
+      "target": "core/utils",
+      "count": 22,
+      "relations": {
+        "references": 15,
+        "imports_from": 1,
+        "imports": 2,
+        "calls": 4
+      }
+    },
+    {
+      "source": "services/triple_store",
+      "target": "services/event",
+      "count": 10,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 8,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/triple_store",
+      "target": "services/keyvalue",
+      "count": 2,
+      "relations": {
+        "imports_from": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/triple_store",
+      "target": "services/object_storage",
+      "count": 8,
+      "relations": {
+        "imports_from": 3,
+        "references": 1,
+        "imports": 3,
+        "calls": 1
+      }
+    },
+    {
+      "source": "services/vector_store",
+      "target": "adapters/vector_store",
+      "count": 2,
+      "relations": {
+        "imports": 1,
+        "calls": 1
+      }
+    },
+    {
+      "source": "services/vector_store",
+      "target": "core/services",
+      "count": 3,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 1,
+        "imports": 1
+      }
+    },
+    {
+      "source": "services/vector_store",
+      "target": "services/event",
+      "count": 8,
+      "relations": {
+        "imports_from": 1,
+        "inherits": 6,
+        "imports": 1
+      }
+    }
+  ],
+  "extraction": {
+    "nodes": 8897,
+    "edges": 25761,
+    "skippedFiles": []
+  }
+}

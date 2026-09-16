@@ -14,7 +14,10 @@ import { nextChatUrl } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useAgentsStore } from '@/stores/agents';
 import {
+  officeSurfaceFromPath,
+  pickDocumentsOfficeAgent,
   pickFeaturePaneAgent,
+  pickPaneOfficeAgent,
   pickSlidesOfficeAgent,
   pickWorkspaceDefaultAgent,
 } from '@/lib/pick-workspace-default-agent';
@@ -23,13 +26,21 @@ import { useFeaturePaneStore } from '@/stores/feature-pane';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
+import { dispatchDocumentUpdated, isDocumentsWriteTool, useDocumentsStore } from '@/stores/documents';
 import { dispatchSlidesDeckUpdated, isSlidesWriteTool, useSlidesStore } from '@/stores/slides';
 import { noteAppProjectToolResult, noteAppProjectToolStart } from '@/stores/app-projects';
+import {
+  sectionsDocumentCardFromToolCalls,
+  sectionsDocumentTitleFromToolOutput,
+} from '@/components/documents/documents-card';
+import { DocumentsCardView } from '@/components/documents/documents-deck-card-view';
 import {
   slidesDeckCardFromToolCalls,
   slidesDeckTitleFromToolOutput,
 } from '@/components/slides/slides-deck-card';
 import { SlidesDeckCardView } from '@/components/slides/slides-deck-card-view';
+import { DocumentInfoBlock } from './document-info-block';
+import { DocumentsFilesBlock } from './documents-files-block';
 import { FilesBlock } from './files-block';
 import { PresentationInfoBlock } from './presentation-info-block';
 import { SuggestionsBlock } from './suggestions-block';
@@ -51,6 +62,10 @@ import {
   reservedOutputTokensForModel,
   resolveContextWindow,
 } from '@/lib/chat-context-usage';
+import { autoTitleOpenDocumentIfNeeded } from '@/lib/documents-project-actions';
+import { firstUserPrompt } from '@/lib/office-auto-title';
+import { openDocumentBranch, openDocumentPath } from '@/lib/documents-pane-conversation';
+import { autoTitleOpenDeckIfNeeded } from '@/lib/slides-project-actions';
 import { slidesOpenDeckBranch, slidesOpenDeckPath } from '@/lib/slides-pane-conversation';
 import { ContextUsageMeter } from './context-usage-meter';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
@@ -866,13 +881,22 @@ export function ChatInterface({
   }, [isPane]);
 
   const createSurfaceConversation = useCallback(
-    (projectId?: string) =>
-      createConversation(projectId, {
+    (projectId?: string) => {
+      const officeSurface = officeSurfaceFromPath(
+        typeof window !== 'undefined' ? window.location.pathname : '',
+      );
+      return createConversation(projectId, {
         surface,
-        slidesSlug: isPane
-          ? useSlidesStore.getState().selectedSlug ?? undefined
-          : undefined,
-      }),
+        slidesSlug:
+          isPane && officeSurface.onSlides
+            ? useSlidesStore.getState().selectedSlug ?? undefined
+            : undefined,
+        documentsSlug:
+          isPane && officeSurface.onDocuments
+            ? useDocumentsStore.getState().selectedSlug ?? undefined
+            : undefined,
+      });
+    },
     [createConversation, surface, isPane]
   );
 
@@ -942,8 +966,7 @@ export function ChatInterface({
   const slidesSelectedIndex = useSlidesStore((s) => s.selectedIndex);
   const slidesSlideCount = useSlidesStore((s) => s.slideCount);
   const slidesChatContext = useMemo(() => {
-    const onSlides =
-      typeof pathname === 'string' && pathname.includes('/slides') && Boolean(slidesSlug);
+    const onSlides = officeSurfaceFromPath(pathname).onSlides && Boolean(slidesSlug);
     if (!onSlides || !slidesSlug) return null;
     return {
       slides: {
@@ -966,6 +989,38 @@ export function ChatInterface({
     currentWorkspaceId,
     slidesSelectedIndex,
     slidesSlideCount,
+  ]);
+
+  const documentsSlug = useDocumentsStore((s) => s.selectedSlug);
+  const documentsTitle = useDocumentsStore((s) => s.selectedTitle);
+  const documentsMode = useDocumentsStore((s) => s.editorMode);
+  const documentsSelectedIndex = useDocumentsStore((s) => s.selectedIndex);
+  const documentsSectionCount = useDocumentsStore((s) => s.sectionCount);
+  const documentsChatContext = useMemo(() => {
+    const onDocuments = officeSurfaceFromPath(pathname).onDocuments && Boolean(documentsSlug);
+    if (!onDocuments || !documentsSlug) return null;
+    return {
+      documents: {
+        slug: documentsSlug,
+        title: documentsTitle || documentsSlug,
+        mode: documentsMode,
+        workspace_id: currentWorkspaceId || undefined,
+        branch: openDocumentBranch(currentWorkspaceId || '', documentsSlug),
+        path: openDocumentPath(currentWorkspaceId || '', documentsSlug),
+        selected_index:
+          documentsSectionCount > 0 ? documentsSelectedIndex : undefined,
+        section_count:
+          documentsSectionCount > 0 ? documentsSectionCount : undefined,
+      },
+    };
+  }, [
+    pathname,
+    documentsSlug,
+    documentsTitle,
+    documentsMode,
+    currentWorkspaceId,
+    documentsSelectedIndex,
+    documentsSectionCount,
   ]);
 
   const codeActiveBranch = useCodeStore((s) => s.activeBranch);
@@ -996,11 +1051,23 @@ export function ChatInterface({
   const chatRequestContext = useMemo(() => {
     const merged = {
       ...(slidesChatContext ?? {}),
+      ...(documentsChatContext ?? {}),
       ...(codingChatContext ?? {}),
       ...(featurePaneContext ?? {}),
     };
     return Object.keys(merged).length > 0 ? merged : null;
-  }, [slidesChatContext, codingChatContext, featurePaneContext]);
+  }, [slidesChatContext, documentsChatContext, codingChatContext, featurePaneContext]);
+
+  useEffect(() => {
+    if (!isPane) return;
+    const surface = officeSurfaceFromPath(pathname);
+    if (!surface.onDocuments && !surface.onSlides) return;
+    const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+    const picked = pickPaneOfficeAgent(agents, surface);
+    if (picked && useWorkspaceStore.getState().paneAgent !== picked.id) {
+      useWorkspaceStore.getState().setPaneAgent(picked.id);
+    }
+  }, [isPane, pathname]);
 
   useEffect(() => {
     if (!mounted || isPane) return;
@@ -1881,16 +1948,19 @@ export function ChatInterface({
     if ((!sourceText.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading) return;
     isSubmittingRef.current = true;
     let effectiveAgent = agentOverride ?? selectedAgent;
+    const officeSurface = officeSurfaceFromPath(pathname);
     // Pane can hydrate with paneAgent="" before agents sync; resolve the
     // section's office agent (else the workspace default) so the stream has
-    // a real agent id.
+    // a real agent id. Route wins over a leftover Documents/Slides bind from
+    // the other office surface.
     if (!effectiveAgent) {
       const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
-      const resolved = slidesChatContext
-        ? (pickSlidesOfficeAgent(agents) ?? pickWorkspaceDefaultAgent(agents))
-        : isPane
-          ? pickFeaturePaneAgent(agents, getPaneSurfaceForPath(pathname))
-          : pickWorkspaceDefaultAgent(agents);
+      const resolved =
+        officeSurface.onSlides || officeSurface.onDocuments
+          ? (pickPaneOfficeAgent(agents, officeSurface) ?? pickWorkspaceDefaultAgent(agents))
+          : isPane
+            ? pickFeaturePaneAgent(agents, getPaneSurfaceForPath(pathname))
+            : pickWorkspaceDefaultAgent(agents);
       if (resolved) {
         effectiveAgent = resolved.id;
         if (isPane) {
@@ -1899,13 +1969,22 @@ export function ChatInterface({
           useWorkspaceStore.getState().setSelectedAgent(resolved.id);
         }
       }
-    } else if (slidesChatContext) {
+    } else if (officeSurface.onSlides) {
       const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
       const slides = pickSlidesOfficeAgent(agents);
       if (slides) {
         effectiveAgent = slides.id;
         if (isPane && useWorkspaceStore.getState().paneAgent !== slides.id) {
           useWorkspaceStore.getState().setPaneAgent(slides.id);
+        }
+      }
+    } else if (officeSurface.onDocuments) {
+      const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const documents = pickDocumentsOfficeAgent(agents);
+      if (documents) {
+        effectiveAgent = documents.id;
+        if (isPane && useWorkspaceStore.getState().paneAgent !== documents.id) {
+          useWorkspaceStore.getState().setPaneAgent(documents.id);
         }
       }
     }
@@ -2025,6 +2104,26 @@ export function ChatInterface({
     });
 
     const userMessage = sourceText.trim() || (currentImages.length > 0 ? 'What is in this image?' : '');
+    const conversationAfterSend = useWorkspaceStore
+      .getState()
+      .conversations.find((conversation) => conversation.id === conversationId);
+    const officeTitleBrief = firstUserPrompt(userMessage, conversationAfterSend?.messages);
+    if (workspaceIdForSend && documentsChatContext?.documents) {
+      void autoTitleOpenDocumentIfNeeded({
+        workspaceId: workspaceIdForSend,
+        slug: documentsChatContext.documents.slug,
+        title: documentsChatContext.documents.title,
+        brief: officeTitleBrief,
+      });
+    }
+    if (workspaceIdForSend && slidesChatContext?.slides) {
+      void autoTitleOpenDeckIfNeeded({
+        workspaceId: workspaceIdForSend,
+        slug: slidesChatContext.slides.slug,
+        title: slidesChatContext.slides.title,
+        brief: officeTitleBrief,
+      });
+    }
     // Only clear the input field if the message came from the input
     if (messageOverride === undefined) {
       handleInputChange('');
@@ -2184,6 +2283,9 @@ export function ChatInterface({
           if (isSlidesWriteTool(rawTool)) {
             useSlidesStore.getState().setAgentWriting(true);
           }
+          if (isDocumentsWriteTool(rawTool)) {
+            useDocumentsStore.getState().setAgentWriting(true);
+          }
           noteAppProjectToolStart(rawTool);
         };
 
@@ -2209,13 +2311,24 @@ export function ChatInterface({
 
           // After Abi writes a Slides deck, nudge the open preview to reload.
           const raw = (target.rawName || target.toolName || '').toLowerCase();
-          if (isSlidesWriteTool(raw)) {
+          if (isSlidesWriteTool(raw, output)) {
             let slug: string | undefined;
             let writeFailed = false;
+            let projectRenamed = false;
+            let parsedOutput: Record<string, unknown> | null = null;
             try {
-              const parsed = JSON.parse(output) as { slug?: string; error?: unknown };
-              if (typeof parsed?.slug === 'string') slug = parsed.slug;
-              if (parsed && parsed.error) writeFailed = true;
+              parsedOutput = JSON.parse(output) as {
+                slug?: string;
+                error?: unknown;
+                project_renamed?: unknown;
+                created?: unknown;
+                nexus_shipped?: unknown;
+                title?: unknown;
+                workspace_id?: unknown;
+              };
+              if (typeof parsedOutput?.slug === 'string') slug = parsedOutput.slug;
+              if (parsedOutput && parsedOutput.error) writeFailed = true;
+              if (parsedOutput?.project_renamed === true) projectRenamed = true;
             } catch {
               /* tool output may be plain text */
             }
@@ -2225,7 +2338,35 @@ export function ChatInterface({
               // write, so pick the new name up for the pane and sidebar.
               const deckTitle = slidesDeckTitleFromToolOutput(output);
               if (deckTitle) useSlidesStore.getState().setSelectedTitle(deckTitle);
-              dispatchSlidesDeckUpdated({ slug, source: target.rawName || target.toolName });
+              dispatchSlidesDeckUpdated({
+                slug,
+                source: target.rawName || target.toolName,
+                title: projectRenamed ? deckTitle : undefined,
+              });
+              // New decks from chat (create_slides_project and other deck-shaped
+              // publishes) stay in chat: the presentation card is derived from
+              // tool output and the user opens it. Do not auto-navigate.
+            }
+          }
+          if (isDocumentsWriteTool(raw)) {
+            let slug: string | undefined;
+            let writeFailed = false;
+            try {
+              const parsed = JSON.parse(output) as { slug?: string; error?: unknown };
+              if (typeof parsed?.slug === 'string') slug = parsed.slug;
+              if (parsed && parsed.error) writeFailed = true;
+            } catch {
+              /* tool output may be plain text */
+            }
+            useDocumentsStore.getState().setAgentWriting(false);
+            if (!writeFailed) {
+              const documentTitle = sectionsDocumentTitleFromToolOutput(output);
+              if (documentTitle) useDocumentsStore.getState().setSelectedTitle(documentTitle);
+              dispatchDocumentUpdated({
+                slug,
+                source: target.rawName || target.toolName,
+                title: documentTitle || undefined,
+              });
             }
           }
           if (
@@ -2535,15 +2676,21 @@ export function ChatInterface({
         // Mark any still-running tool as done
         streamToolCalls.forEach((t) => { if (t.status === 'running') t.status = 'done'; });
         const finalToolCalls = streamToolCalls.length > 0 ? [...streamToolCalls] : undefined;
-        updateLastMessage(
-          conversationId!,
-          finalContent,
-          thinkingDuration,
-          streamSources.length > 0 ? streamSources : undefined,
-          hasDetailedActivity ? streamActivityLine : null,
-          finalToolCalls,
-          executionTime,
-        );
+        // Sticky office agents sometimes end the SSE with call_model + [DONE]
+        // and no text. Drop the empty assistant row instead of leaving a blank bubble.
+        if (!finalContent && !(finalToolCalls && finalToolCalls.length > 0) && assistantMessageIdRef) {
+          useWorkspaceStore.getState().removeMessage(conversationId!, assistantMessageIdRef);
+        } else {
+          updateLastMessage(
+            conversationId!,
+            finalContent,
+            thinkingDuration,
+            streamSources.length > 0 ? streamSources : undefined,
+            hasDetailedActivity ? streamActivityLine : null,
+            finalToolCalls,
+            executionTime,
+          );
+        }
         // Persist execution metadata to backend. Keyed on ``assistantMessageIdRef``
         // for the same reason as the id swap above: the React state
         // ``streamingMessageId`` captured in this closure is stale (still null on
@@ -2808,19 +2955,22 @@ export function ChatInterface({
     setInput('');
   }, [input, isLoading]);
 
-  // Whether the "Suggestions" / "Files" / deck-identity containers render
+  // Whether the "Suggestions" / "Files" / artifact-identity containers render
   // above the composer input box. Order is Suggestions, then Files, then
-  // the deck-identity strip last (directly touching the input) — each
-  // block picks up its own top border/radius via the CSS `first:` variant,
-  // so whichever one actually renders first "wins" it regardless of which
+  // the identity strip last (directly touching the input). Slides uses
+  // PresentationInfoBlock; Documents uses DocumentInfoBlock. Each block
+  // picks up its own top border/radius via the CSS `first:` variant, so
+  // whichever one actually renders first "wins" it regardless of which
   // siblings are hidden. Drives the input box dropping its own top
   // border/radius so the whole stack reads as one seamless card with no gap
-  // between them. FilesBlock hides itself when nothing has changed this
-  // session, so it does not factor into showComposerHeaderBlock below.
+  // between them. Files blocks hide themselves when nothing has changed this
+  // session, so they do not factor into showComposerHeaderBlock below.
   const showSuggestionsBlock =
     activeSuggestions(selectedAgentData?.suggestions as ChatSuggestion[] | undefined).length > 0;
   const showPresentationInfoBlock = isPane && !!slidesChatContext;
-  const showComposerHeaderBlock = showSuggestionsBlock || showPresentationInfoBlock;
+  const showDocumentInfoBlock = isPane && !!documentsChatContext;
+  const showComposerHeaderBlock =
+    showSuggestionsBlock || showPresentationInfoBlock || showDocumentInfoBlock;
 
   return (
     <div className="relative flex h-full min-h-0 flex-1">
@@ -2832,7 +2982,7 @@ export function ChatInterface({
           <EmptyState
             selectedAgentName={selectedAgentData?.name || selectedAgent}
             logoUrl={selectedAgentData?.logoUrl ?? undefined}
-            slidesOpen={Boolean(slidesChatContext)}
+            slidesOpen={officeSurfaceFromPath(pathname).onSlides}
           />
         ) : (
           <div className="mx-auto max-w-3xl space-y-6">
@@ -2842,7 +2992,7 @@ export function ChatInterface({
                 message={message}
                 currentSelectedAgent={selectedAgent}
                 showConnecting={showConnecting}
-                showStop={Boolean(streamingMessageId)}
+                showStop={streamingMessageId === message.id}
                 onStop={stableStopStream}
                 onPreviewUrl={setPreviewUrl}
                 requestSentAt={requestSentAt}
@@ -2897,6 +3047,28 @@ export function ChatInterface({
               <PresentationInfoBlock
                 slug={slidesChatContext.slides.slug}
                 title={slidesChatContext.slides.title}
+                workspaceId={currentWorkspaceId}
+              />
+            </>
+          ) : isPane && documentsChatContext ? (
+            <>
+              {showSuggestionsBlock && (
+                <SuggestionsBlock
+                  agentId={selectedAgent}
+                  suggestions={selectedAgentData?.suggestions}
+                  onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
+                  onSuggestionHover={(value) => setInput(value)}
+                  onSuggestionLeave={() => setInput('')}
+                />
+              )}
+              <DocumentsFilesBlock
+                slug={documentsChatContext.documents.slug}
+                path={documentsChatContext.documents.path}
+                workspaceId={currentWorkspaceId}
+              />
+              <DocumentInfoBlock
+                slug={documentsChatContext.documents.slug}
+                title={documentsChatContext.documents.title}
                 workspaceId={currentWorkspaceId}
               />
             </>
@@ -3175,9 +3347,11 @@ export function ChatInterface({
                       ? 'Ask about the image...'
                       : pendingFileAttachments.length > 0
                         ? 'Ask about the file...'
-                        : slidesChatContext
+                        : officeSurfaceFromPath(pathname).onSlides
                           ? 'Describe the deck: topic, audience, how many slides...'
-                          : 'Send a message...'
+                          : officeSurfaceFromPath(pathname).onDocuments
+                            ? 'Describe the document: topic, audience...'
+                            : 'Send a message...'
                   }
                   // placeholder={searchEnabled ? "Search the web..." : attachedImages.length > 0 ? "Ask about the image..." : "Send a message..."}
                   className="chat-composer-input max-h-36 min-h-[24px] w-full resize-none overflow-y-hidden bg-transparent outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-muted-foreground"
@@ -3505,6 +3679,15 @@ function formatToolCallLabel(prefix: string, name: string): string {
   return `${prefix}: ${name}`;
 }
 
+function stripToolCallMarkup(content: string): string {
+  if (!content) return content;
+  return content
+    .replace(/\[tool_call:[^\]]*\][\s\S]*?\[\/tool_call\]/gi, '')
+    .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function ToolCallsDropdown({
   toolCalls,
   isProcessing,
@@ -3586,30 +3769,37 @@ function ToolCallsDropdown({
 
   return (
     <div className="mb-2 w-full">
-      <button
-        type="button"
-        onClick={() => setIsOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <Wrench size={11} className="shrink-0" />
-        <span className="flex-1 truncate text-left">{headerLabel}</span>
-        {isProcessing && (
-          <span className="inline-flex shrink-0">
-            <TypingDots />
-          </span>
-        )}
-        {isProcessing && showStop && (
+      <div className="flex w-full items-center gap-1.5 text-[11px] text-muted-foreground">
+        <button
+          type="button"
+          onClick={() => setIsOpen((v) => !v)}
+          aria-expanded={isOpen}
+          className="flex min-w-0 flex-1 items-center gap-1.5 transition-colors hover:text-foreground"
+        >
+          <Wrench size={11} className="shrink-0" />
+          <span className="flex-1 truncate text-left">{headerLabel}</span>
+          {isProcessing && (
+            <span className="inline-flex shrink-0">
+              <TypingDots />
+            </span>
+          )}
+          <ChevronDown size={11} className={cn('shrink-0 transition-transform', isOpen && 'rotate-180')} />
+        </button>
+        {showStop && (
           <button
             type="button"
-            className="ml-1 shrink-0 rounded px-1.5 py-0.5 text-xs hover:bg-muted"
-            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onStop(); }}
+            className="relative z-20 shrink-0 rounded px-1.5 py-0.5 text-xs pointer-events-auto hover:bg-muted hover:text-foreground"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onStop();
+            }}
             title="Stop generation"
           >
             Stop
           </button>
         )}
-        <ChevronDown size={11} className={cn('shrink-0 transition-transform', isOpen && 'rotate-180')} />
-      </button>
+      </div>
 
       {isOpen && (
         <div className="mt-1.5 overflow-hidden rounded-lg border border-border/50 bg-background/50 divide-y divide-border/30">
@@ -3779,10 +3969,14 @@ const MessageBubble = React.memo(function MessageBubble({
   const [copiedCodeKey, setCopiedCodeKey] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
-  // Deck Abi built during this turn, shown as a card that opens it in Slides.
+  // Artifact Abi built during this turn, shown as a card that opens it.
   const messageWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const slidesDeckCard = useMemo(
     () => (isUser ? null : slidesDeckCardFromToolCalls(message.toolCalls)),
+    [isUser, message.toolCalls],
+  );
+  const documentsCard = useMemo(
+    () => (isUser ? null : sectionsDocumentCardFromToolCalls(message.toolCalls)),
     [isUser, message.toolCalls],
   );
   // true = iframe-embeddable → open in preview panel
@@ -3813,14 +4007,19 @@ const MessageBubble = React.memo(function MessageBubble({
   // Unwrap JSON-wrapped content if the provider returned {"content": "..."}
   const displayContent = (() => {
     const raw = message.content;
-    if (typeof raw !== 'string' || !raw.trim().startsWith('{')) return raw;
-    try {
-      const obj = JSON.parse(raw);
-      if (obj && typeof obj === 'object' && typeof obj.content === 'string') return obj.content;
-    } catch {
-      // ignore
+    if (typeof raw !== 'string') return raw;
+    let text = raw;
+    if (raw.trim().startsWith('{')) {
+      try {
+        const obj = JSON.parse(raw);
+        if (obj && typeof obj === 'object' && typeof obj.content === 'string') {
+          text = obj.content;
+        }
+      } catch {
+        // ignore
+      }
     }
-    return raw;
+    return stripToolCallMarkup(text);
   })();
 
   // Parse thinking content from <think>...</think> tags
@@ -4367,10 +4566,16 @@ const MessageBubble = React.memo(function MessageBubble({
           })()}
         </div>
 
-        {/* Deck built this turn: opens it in the Slides surface */}
+        {/* Artifact built this turn: opens it on the Slides or Documents surface */}
         {slidesDeckCard && (
           <SlidesDeckCardView
             card={slidesDeckCard}
+            currentWorkspaceId={messageWorkspaceId ?? ''}
+          />
+        )}
+        {documentsCard && (
+          <DocumentsCardView
+            card={documentsCard}
             currentWorkspaceId={messageWorkspaceId ?? ''}
           />
         )}

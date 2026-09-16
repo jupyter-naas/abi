@@ -44,6 +44,7 @@ class DatasetAdapterDuckLakeConfiguration(BaseModel):
 
     catalog: str = "sqlite:storage/datasets.sqlite"
     data_path: str = "storage/datasets/"
+    data_inlining_row_limit: int = Field(default=1000, ge=0)
     max_retries: int = Field(default=10, ge=0)
     retry_base_delay_seconds: float = Field(default=0.05, ge=0)
     retry_max_delay_seconds: float = Field(default=1.0, ge=0)

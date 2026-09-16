@@ -505,7 +505,11 @@ def x_app_publish_enabled(module) -> bool:
 
 
 def publish_x_app(
-    module, *, enabled: bool | None = None, full_users: bool = False
+    module,
+    *,
+    enabled: bool | None = None,
+    full_users: bool = False,
+    direct_user_limit: int = 100,
 ) -> dict:
     """(Re)publish the X app dashboard + snapshots for all followed queries.
 
@@ -533,7 +537,11 @@ def publish_x_app(
         module.engine.services.triple_store,
         namespace=module.configuration.ontology_namespace,
     )
-    published = hub.publish(followed_count_entries(module), full_users=full_users)
+    published = hub.publish(
+        followed_count_entries(module),
+        full_users=full_users,
+        direct_user_limit=direct_user_limit,
+    )
     if projection is not None:
         published = {**published, "projection": projection}
     return published

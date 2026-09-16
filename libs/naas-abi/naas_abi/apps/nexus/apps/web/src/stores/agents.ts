@@ -242,8 +242,9 @@ export const useAgentsStore = create<AgentsState>()(
 
             // Pick the best agent to surface in the chat UI.
             // Priority: workspace default → Abi → first enabled.
-            const { pickFeaturePaneAgent, pickSlidesOfficeAgent, pickWorkspaceDefaultAgent } =
-              await import('@/lib/pick-workspace-default-agent');
+            const { pickFeaturePaneAgent, pickWorkspaceDefaultAgent } = await import(
+              '@/lib/pick-workspace-default-agent'
+            );
 
             const { useWorkspaceStore } = await import('./workspace');
             const ws = useWorkspaceStore.getState();
@@ -261,25 +262,39 @@ export const useAgentsStore = create<AgentsState>()(
             // another agent still in this workspace. A leftover id from
             // another workspace must not stick.
             // On a feature section the pane prefers that feature's office
-            // agent (Apps on /apps); an open item forces it,
-            // like a deck.
+            // agent (Apps on /apps); an open item forces it, like a deck.
+            // Route segment only for the office surfaces: a leftover slug
+            // from the other one must not pin Documents on /slides or Slides
+            // on /documents, and a slug like board-documents must not flip
+            // the surface.
             const { featureOpenResource, getPaneSurfaceForPath } = await import(
               '@/lib/feature-office-agents'
             );
-            const { useSlidesStore } = await import('./slides');
+            const { isNexusDocumentsAgent, officeSurfaceFromPath, pickPaneOfficeAgent } =
+              await import('@/lib/pick-workspace-default-agent');
             const { useFeaturePaneStore } = await import('./feature-pane');
-            const onSlides = Boolean(useSlidesStore.getState().selectedSlug);
             const routePath = typeof window === 'undefined' ? '' : window.location.pathname;
             const routeSurface = getPaneSurfaceForPath(routePath);
+            const { onSlides, onDocuments } = officeSurfaceFromPath(routePath);
+            if (
+              onDocuments &&
+              !force &&
+              !formattedAgents.some((agent) => agent.enabled && isNexusDocumentsAgent(agent))
+            ) {
+              await get().fetchAgents(workspaceId, true);
+              return;
+            }
             const featureItemOpen = Boolean(
               featureOpenResource(routePath, useFeaturePaneStore.getState().resource),
             );
-            const panePreferred = onSlides
-              ? (pickSlidesOfficeAgent(formattedAgents) ?? preferred)
-              : (pickFeaturePaneAgent(formattedAgents, routeSurface) ?? preferred);
+            const panePreferred =
+              (onSlides || onDocuments
+                ? pickPaneOfficeAgent(formattedAgents, { onSlides, onDocuments })
+                : pickFeaturePaneAgent(formattedAgents, routeSurface)) ?? preferred;
             const currentPane = ws.paneAgent;
             if (
               onSlides ||
+              onDocuments ||
               featureItemOpen ||
               !ws.paneAgentExplicitlySelected ||
               !inRoster(currentPane)

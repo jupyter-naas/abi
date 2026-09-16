@@ -1,0 +1,22 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix ds: <http://ontology.naas.ai/abi/dataset/> .
+
+ds:DatasetEventOntology a owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/EventService> .
+
+ds:DatasetCatalogPressure a owl:Class ;
+    rdfs:subClassOf abi:LogProcess ;
+    rdfs:label "Dataset catalog pressure" ;
+    rdfs:comment "Unflushed insertion records reached a warning threshold; this does not indicate data loss." .
+
+ds:datasetName a owl:DatatypeProperty ;
+    rdfs:domain ds:DatasetCatalogPressure ; rdfs:range xsd:string .
+ds:namespace a owl:DatatypeProperty ;
+    rdfs:domain ds:DatasetCatalogPressure ; rdfs:range xsd:string .
+ds:inlinedRecords a owl:DatatypeProperty ;
+    rdfs:domain ds:DatasetCatalogPressure ; rdfs:range xsd:nonNegativeInteger .
+ds:thresholdRecords a owl:DatatypeProperty ;
+    rdfs:domain ds:DatasetCatalogPressure ; rdfs:range xsd:positiveInteger .

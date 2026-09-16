@@ -24,6 +24,7 @@ def test_dataset_service_configuration(tmp_path):
     adapter = configuration.dataset_adapter.load()
     assert isinstance(adapter, IDatasetPort)
     assert isinstance(adapter, DatasetSecondaryAdapterDuckLake)
+    assert adapter._data_inlining_row_limit == 1000
 
     service = configuration.load()
     assert isinstance(service, DatasetService)
@@ -66,3 +67,18 @@ def test_dataset_defaults_do_not_overlap_object_storage_namespace():
 
     assert configuration.catalog == "sqlite:storage/datasets.sqlite"
     assert configuration.data_path == "storage/datasets/"
+    assert configuration.data_inlining_row_limit == 1000
+
+
+def test_dataset_inlining_configuration(tmp_path):
+    with pytest.raises(ValueError):
+        DatasetAdapterDuckLakeConfiguration(data_inlining_row_limit=-1)
+    configuration = DatasetAdapterConfiguration(
+        adapter="ducklake",
+        config={
+            "catalog": f"sqlite:{tmp_path / 'catalog.sqlite'}",
+            "data_path": str(tmp_path / "data"),
+            "data_inlining_row_limit": 2000,
+        },
+    )
+    assert configuration.load()._data_inlining_row_limit == 2000

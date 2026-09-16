@@ -48,6 +48,24 @@ describe('isSlidesWriteTool', () => {
     expect(isSlidesWriteTool('create_slides_project')).toBe(true);
   });
 
+  it('recognizes shipped publish results by shape, not product tool name', () => {
+    const shipped = JSON.stringify({
+      ok: true,
+      nexus_shipped: true,
+      slug: 'palantir',
+      title: 'Palantir',
+    });
+    expect(isSlidesWriteTool('publish_deck', shipped)).toBe(true);
+    expect(isSlidesWriteTool('any_custom_publish', shipped)).toBe(true);
+    expect(
+      isSlidesWriteTool(
+        'publish_deck',
+        JSON.stringify({ ok: true, nexus_shipped: false, slug: 'x' }),
+      ),
+    ).toBe(false);
+    expect(isSlidesWriteTool('publish_deck')).toBe(false);
+  });
+
   it('ignores read-only and unrelated tools', () => {
     expect(isSlidesWriteTool('read_slides_deck')).toBe(false);
     expect(isSlidesWriteTool('list_slides_projects')).toBe(false);

@@ -30,8 +30,12 @@ Served through ``/app-html/x/apps/x_proxy/…`` before the Nexus static catch-al
 
 from __future__ import annotations
 
+import hashlib
+import json
 import mimetypes
 import re
+import threading
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import Response
@@ -42,7 +46,13 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import (
     DEFAULT_APP_PREFIX,
 )
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
+
+if TYPE_CHECKING:
+    from naas_abi_marketplace.applications.x.apps.x_proxy.cache.reader import (
+        CacheReader,
+    )
 
 APP_HTML_INDEX_PATH = "/app-html/x/apps/x_proxy/index.html"
 APP_HTML_INDEX_DIR = "/app-html/x/apps/x_proxy/"
@@ -56,8 +66,13 @@ LEGACY_APP_HTML_PREFIX = "/app-html/x/apps/x/"
 # Dataset JSON. ``search_users/posts/<shard>.json`` is one level deeper than the
 # page snapshots, hence the optional second segment.
 _SNAPSHOT_RE = re.compile(
-    r"^(globals|count_recent_tweets|search_recents_tweets|search_users)"
+    r"^(globals|count_recent_tweets|search_recents_tweets|search_tweets|search_users)"
     r"(/[A-Za-z0-9_-]+)?/[A-Za-z0-9_.-]+\.json$"
+)
+_DIRECT_ARTIFACT_RE = re.compile(
+    r"^(?:posts/by-id/\d+/(?:post\.json|media/[a-f0-9]{64}\.[a-z0-9]{1,5})"
+    r"|users/by-handle/[a-z0-9_]{1,64}/"
+    r"(?:user\.json|media/(?:avatar|banner)-[a-f0-9]{64}\.[a-z0-9]{1,5}))$"
 )
 # Legacy data/*.json paths (older hub publishes) - keep serving if present.
 _LEGACY_DATA_RE = re.compile(r"^data/[A-Za-z0-9_.-]+\.json$")
@@ -118,11 +133,7 @@ def _media_type(name: str, default: str = "application/octet-stream") -> str:
 def _storage_prefixes(app_prefix: str, subdir: str | None = None) -> tuple[str, ...]:
     """Preferred object-storage prefix, then the other app root (rename fallback)."""
     primary = app_prefix.rstrip("/")
-    alt = (
-        LEGACY_APP_PREFIX
-        if primary == DEFAULT_APP_PREFIX
-        else DEFAULT_APP_PREFIX
-    )
+    alt = LEGACY_APP_PREFIX if primary == DEFAULT_APP_PREFIX else DEFAULT_APP_PREFIX
     if subdir:
         return (f"{primary}/{subdir}", f"{alt}/{subdir}")
     return (primary, alt)
@@ -144,10 +155,20 @@ def _serve_object(
         except Exceptions.ObjectNotFound as exc:
             last_exc = exc
             continue
+        etag = f'"{hashlib.sha256(content).hexdigest()}"'
+        headers = _frame_ancestor_headers(request)
+        headers["ETag"] = etag
+        full_path = f"{prefix}/{name}"
+        if "/media/" in full_path or "/_next/static/" in full_path:
+            headers["Cache-Control"] = "private, max-age=31536000, immutable"
+        else:
+            headers["Cache-Control"] = "private, max-age=0, must-revalidate"
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers=headers)
         return Response(
             content=content,
             media_type=media_type,
-            headers=_frame_ancestor_headers(request),
+            headers=headers,
         )
     raise HTTPException(status_code=404, detail=str(last_exc)) from last_exc
 
@@ -204,6 +225,38 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, object_storage_service: ObjectStorageService) -> None:
         super().__init__(app)
         self._object_storage = object_storage_service
+        self._search_reader: CacheReader | None = None
+        self._search_state: dict = {}
+        self._search_lock = threading.Lock()
+
+    def _search_tweets(self, query: str, page: int, per_page: int) -> bytes:
+        from naas_abi_marketplace.applications.x.apps.x_proxy.cache.reader import (
+            CacheReader,
+        )
+
+        with self._search_lock:
+            current = CacheReader(self._object_storage)
+            state = current.projection_state()
+            if self._search_reader is None or state != self._search_state:
+                reader = current
+                self._search_reader = reader
+                self._search_state = state
+            else:
+                reader = self._search_reader
+            total, posts = reader.search_tweets(
+                query,
+                offset=page * per_page,
+                limit=per_page,
+            )
+        return json.dumps(
+            {
+                "count": total,
+                "page": page,
+                "per_page": per_page,
+                "posts": posts,
+            },
+            separators=(",", ":"),
+        ).encode()
 
     def _index(self, request: Request, *, app_prefix: str = DEFAULT_APP_PREFIX):
         return _serve_object(
@@ -214,7 +267,9 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
             request,
         )
 
-    def _page(self, rel: str, request: Request, *, app_prefix: str = DEFAULT_APP_PREFIX):
+    def _page(
+        self, rel: str, request: Request, *, app_prefix: str = DEFAULT_APP_PREFIX
+    ):
         """The exported HTML for one page of the app.
 
         A page the current publish does not carry falls back to the app root,
@@ -243,6 +298,29 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
         if matched is None:
             return await call_next(request)
         app_prefix, rel = matched
+
+        if rel == "search_tweets/query.json":
+            query = str(request.query_params.get("q") or "")[:200]
+            try:
+                page = max(0, int(request.query_params.get("page") or 0))
+                per_page = max(
+                    1, min(100, int(request.query_params.get("per_page") or 100))
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400, detail="page and per_page must be integers"
+                ) from exc
+            content = await run_in_threadpool(
+                self._search_tweets, query, page, per_page
+            )
+            return Response(
+                content=content,
+                media_type="application/json; charset=utf-8",
+                headers={
+                    **_frame_ancestor_headers(request),
+                    "Cache-Control": "private, max-age=30",
+                },
+            )
 
         if not rel or rel == "index.html":
             try:
@@ -291,6 +369,14 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                 rel,
                 request,
                 "application/json; charset=utf-8",
+                app_prefix=app_prefix,
+            )
+
+        if _DIRECT_ARTIFACT_RE.fullmatch(rel):
+            return _serve_relative(
+                self._object_storage,
+                rel,
+                request,
                 app_prefix=app_prefix,
             )
 

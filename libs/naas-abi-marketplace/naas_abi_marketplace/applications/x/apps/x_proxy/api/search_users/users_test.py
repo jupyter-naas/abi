@@ -165,6 +165,92 @@ def test_first_publish_builds_every_shard():
     assert all(e.get("fingerprint") for e in _manifest(storage)["shards"].values())
 
 
+def test_cache_materializes_posts_in_bounded_shard_batches(monkeypatch):
+    class _RecordingCache:
+        def __init__(self) -> None:
+            self.post_queries: list[list[str]] = []
+
+        def projection_state(self) -> dict:
+            return {}
+
+        def author_index(self) -> list[dict]:
+            return [_A, _B]
+
+        def descriptions(self) -> dict[str, str]:
+            return {}
+
+        def display_names(self) -> dict[str, str]:
+            return {}
+
+        def accounts_by_username(self) -> dict[str, dict]:
+            return {}
+
+        def posts_by_username(self, usernames: list[str]) -> dict[str, list[dict]]:
+            self.post_queries.append(list(usernames))
+            return {
+                username: [
+                    {
+                        "created_at": "2026-07-07T12:00:00+00:00",
+                        "text": f"post by {username}",
+                    }
+                ]
+                for username in usernames
+            }
+
+    assert user_shard("alice") != user_shard("bob")
+    storage = _FakeObjectStorage()
+    cache = _RecordingCache()
+    ctx = _RecordingContext(storage, [])
+    ctx.cache = cache
+    monkeypatch.setattr(users, "CACHE_SHARD_BATCH_SIZE", 1)
+
+    users.publish(ctx)
+
+    assert sorted(cache.post_queries) == [["alice"], ["bob"]]
+
+
+def test_warm_usernames_publishes_only_explicit_report_posts(monkeypatch):
+    storage = _FakeObjectStorage()
+    shard = user_shard("alice")
+    storage.put_object(
+        "x/apps/x_proxy/search_users",
+        "shards.json",
+        json.dumps({"shards": {shard: {}}}).encode(),
+    )
+    ctx = _RecordingContext(storage, [_A])
+    published: list[tuple[str, list[str], bool]] = []
+
+    def _record_publish_user(
+        _storage, username: str, bundle: dict, *, force_posts: bool = False
+    ) -> dict:
+        published.append(
+            (
+                username,
+                [str(post.get("tweet_id")) for post in bundle["posts"]],
+                force_posts,
+            )
+        )
+        return {}
+
+    monkeypatch.setattr(users, "publish_user", _record_publish_user)
+    summary = users.warm_usernames(
+        ctx,
+        ["alice"],
+        posts_by_user={
+            "alice": [
+                {
+                    "tweet_id": "2098019155375198538",
+                    "text": "Linked from report email",
+                }
+            ]
+        },
+    )
+
+    assert ctx.posts_queried == []
+    assert published == [("alice", ["2098019155375198538"], True)]
+    assert summary == {"warmed_usernames": 1, "shards_touched": 1}
+
+
 def test_republish_with_no_change_queries_nothing_and_writes_nothing():
     """The whole point: an unchanged shard costs no SPARQL and no upload."""
     storage = _FakeObjectStorage()
@@ -245,7 +331,7 @@ def test_an_unchanged_tweet_graph_skips_the_rebuild_entirely():
     written_before = dict(storage.objects)
 
     ctx = _RecordingContext(storage, [_A, _B], graph_state=_STATE)
-    summary = users.publish(ctx)
+    summary = users.publish(ctx, direct_user_limit=0)
 
     assert summary["skipped"] is True
     assert summary["users"] == 2
@@ -370,3 +456,51 @@ def test_no_authors_writes_an_empty_manifest():
     }
     assert _manifest(storage)["shards"] == {}
     assert ctx.posts_queried == []
+
+
+def test_direct_artifact_publication_is_bounded(monkeypatch):
+    storage = _FakeObjectStorage()
+    authors = [_author(f"user{i}", 1, "2026-09-11T12:00:00+00:00") for i in range(6)]
+    published: list[str] = []
+    monkeypatch.setattr(users, "is_recent_post", lambda _post: True)
+    monkeypatch.setattr(
+        users,
+        "publish_user",
+        lambda _storage, username, _bundle: (
+            published.append(username) or {"username": username, "skipped": False}
+        ),
+    )
+
+    summary = users.publish(
+        _RecordingContext(storage, authors),
+        direct_user_limit=2,
+    )
+
+    assert summary["direct_users"] == 2
+    assert len(published) == 2
+
+
+def test_unchanged_source_continues_bounded_direct_backfill(monkeypatch):
+    storage = _FakeObjectStorage()
+    authors = [_author(f"user{i}", 1, "2026-09-11T12:00:00+00:00") for i in range(4)]
+    published: set[str] = set()
+
+    def _publish(_storage, username, _bundle):
+        skipped = username in published
+        published.add(username)
+        return {"username": username, "skipped": skipped}
+
+    monkeypatch.setattr(users, "is_recent_post", lambda _post: True)
+    monkeypatch.setattr(users, "publish_user", _publish)
+    users.publish(
+        _RecordingContext(storage, authors, graph_state=_STATE),
+        direct_user_limit=1,
+    )
+    second = users.publish(
+        _RecordingContext(storage, authors, graph_state=_STATE),
+        direct_user_limit=1,
+    )
+
+    assert second["skipped"] is True
+    assert second["direct_users"] == 1
+    assert len(published) == 2

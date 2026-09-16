@@ -203,15 +203,41 @@ class XTweetGraphBuilder:
             return None
         label = f"Tweet language {lang_code}"
         uri = self.uri("TweetLanguage", lang_code)
+        tweet_uri = URIRef(tweet._uri)
         instance = TweetLanguage(
             _uri=uri,
             label=label,
             language_code=lang_code,
-            inheresIn=[URIRef(tweet._uri)],
+            inheresIn=[tweet_uri],
         )
         if self.label_exists(label, TweetLanguage._class_uri):
-            return instance, Graph()
+            # Language individual is shared per BCP-47 code. Still assert the
+            # tweet link every time — otherwise only the first tweet of each
+            # language gets ``abi:inheresIn`` and report SPARQL returns UNK.
+            link = Graph()
+            link.add(
+                (
+                    URIRef(uri),
+                    URIRef("http://ontology.naas.ai/abi/inheresIn"),
+                    tweet_uri,
+                )
+            )
+            link.add(
+                (
+                    tweet_uri,
+                    URIRef("http://ontology.naas.ai/x/hasLanguage"),
+                    URIRef(uri),
+                )
+            )
+            return instance, link
         graph = instance.rdf()
+        graph.add(
+            (
+                tweet_uri,
+                URIRef("http://ontology.naas.ai/x/hasLanguage"),
+                URIRef(uri),
+            )
+        )
         self.mark_existing(TweetLanguage._class_uri, label)
         return instance, graph
 

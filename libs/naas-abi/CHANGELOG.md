@@ -2,6 +2,62 @@
 
 <!-- version list -->
 
+## v2.69.0 (2026-09-15)
+
+### Features
+
+- **nexus**: Detect slide decks by result shape
+  ([`c229191`](https://github.com/jupyter-naas/abi/commit/c22919166e91cc006b28dd7bc82e3f36063ff8d9))
+
+
+## v2.68.1 (2026-09-14)
+
+### Bug Fixes
+
+- **core,nexus**: Release sticky office turns that would leave empty bubbles
+  ([`333e5d8`](https://github.com/jupyter-naas/abi/commit/333e5d8de15984905c21ad244462acc4485dfad7))
+
+- **documents**: Satisfy ruff SIM103 in retains_active_turn
+  ([`ba96f93`](https://github.com/jupyter-naas/abi/commit/ba96f930e5544d144d341a1f6c489ef19030eeae))
+
+
+## v2.68.0 (2026-09-14)
+
+### Bug Fixes
+
+- **nexus**: Add title to slides deck updated event detail
+  ([`47249c9`](https://github.com/jupyter-naas/abi/commit/47249c999b6c570fd2078222c01987355d3e729d))
+
+- **nexus**: Export slides auto-title helper for chat
+  ([`b447ab9`](https://github.com/jupyter-naas/abi/commit/b447ab97780d95f77a02d1dc56456ea67ea8d2db))
+
+### Chores
+
+- Drop documents CLI and template ADR from integration
+  ([`21e04ad`](https://github.com/jupyter-naas/abi/commit/21e04ad2b4abc6fe2d6fdb8d7d1508b015b9035b))
+
+### Features
+
+- **nexus**: Add Documents office product
+  ([`f917aa5`](https://github.com/jupyter-naas/abi/commit/f917aa5d475724075c94f87ddf99b90e92a93f4d))
+
+
+## v2.67.0 (2026-09-11)
+
+### Bug Fixes
+
+- **lint**: Sort apply_nexus_platform_pipeline_test imports
+  ([`8f28056`](https://github.com/jupyter-naas/abi/commit/8f280561fa4e21bc9eb234b8b737bb255ce50158))
+
+
+## v2.66.1 (2026-09-10)
+
+### Bug Fixes
+
+- **apply_nexus_platform_pipeline**: Handle Fuseki write lock busy error
+  ([`612e978`](https://github.com/jupyter-naas/abi/commit/612e9780b1e080bbe26b00b131c02f24d8a23996))
+
+
 ## v2.66.0 (2026-09-10)
 
 ### Features

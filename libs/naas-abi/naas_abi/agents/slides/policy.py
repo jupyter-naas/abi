@@ -279,6 +279,8 @@ def slides_creation_requested(message: str) -> bool:
 
     Requires both a making verb and a deck noun so "summarise this document"
     or a passing mention of a slide does not hijack an ordinary chat turn.
+    Product-domain shorthand that omits a deck noun belongs in the product
+    agent that owns that domain, not here.
     """
     text = (message or "").strip()
     if not text:

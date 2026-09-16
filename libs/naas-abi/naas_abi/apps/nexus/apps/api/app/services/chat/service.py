@@ -8,6 +8,7 @@ from typing import Any, Protocol
 from uuid import uuid4
 
 import numpy as np
+from naas_abi.agents.conversation_title import conversation_title_from_prompt
 from naas_abi.agents.feature.context import render_feature_context_block
 from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthPersistencePort
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
@@ -197,6 +198,33 @@ def _selected_slide_lines(slides: dict) -> list[str]:
     return lines
 
 
+def _untitled_slides_rename_hint(title: str, slug: str) -> str:
+    try:
+        from naas_abi.agents.slides.title import is_placeholder_deck_title
+    except Exception:
+        return ""
+    if not is_placeholder_deck_title(title or slug):
+        return ""
+    return (
+        "If the open deck is still Untitled, call rename_deck first with a "
+        "short topic title, then write.\n"
+    )
+
+
+def _untitled_documents_rename_hint(title: str, slug: str) -> str:
+    try:
+        from naas_abi.agents.documents.title import is_placeholder_document_title
+    except Exception:
+        return ""
+    if not is_placeholder_document_title(title or slug):
+        return ""
+    return (
+        "If the open document is still Untitled, call rename_document first "
+        "with a short topic title, then fill the open template. "
+        "Do not leave seed placeholder copy. Do not append after the footer.\n"
+    )
+
+
 def _render_slides_context_block(
     client_context: dict | None,
     workspace_id: str | None = None,
@@ -262,7 +290,8 @@ def _render_slides_context_block(
         "4. After that write, report what changed. Do not list or read the "
         "whole deck again. No lorem. No Context / Approach / Plan filler when "
         "the user asked for a situation brief.\n"
-        "Keep the seed template CSS and structure. Cite sources in footer or "
+        + _untitled_slides_rename_hint(title, slug)
+        + "Keep the seed template CSS and structure. Cite sources in footer or "
         "source lines if the layout allows. "
         "A tiny copy edit (title typo, color tweak) may skip search. "
         "Edit HTML sections only. Preview is the HTML stage. PPTX export "
@@ -270,7 +299,97 @@ def _render_slides_context_block(
         "FOOTER_TXT. For a small copy edit after research (or a title-only tweak), "
         "call replace_in_slides_deck with section_index=0 and "
         "occurrence=0 (matches &amp; on cover h1; do not use occurrence=1 "
-        "for the title).\n"
+        "for the title).\n" + "\n".join(lines) + "\n"
+    )
+
+
+def _selected_document_lines(documents_ctx: dict) -> list[str]:
+    count_raw = documents_ctx.get("section_count")
+    index_raw = documents_ctx.get("selected_index")
+    count: int | None = None
+    index: int | None = None
+    try:
+        if count_raw is not None:
+            count = int(count_raw)
+    except (TypeError, ValueError):
+        count = None
+    try:
+        if index_raw is not None:
+            index = int(index_raw)
+    except (TypeError, ValueError):
+        index = None
+    lines: list[str] = []
+    if count is not None:
+        lines.append(f"- section_count: {count}")
+    if index is not None:
+        human = f"{index + 1} of {count}" if count is not None else str(index + 1)
+        lines.append(f"- selected_section_index: {index} (section {human} in the editor)")
+    return lines
+
+
+def _render_documents_context_block(
+    client_context: dict | None,
+    workspace_id: str | None = None,
+) -> str:
+    """Inject open Documents file so the agent researches, then edits that file."""
+    if not isinstance(client_context, dict):
+        return ""
+    documents = client_context.get("documents")
+    if not isinstance(documents, dict):
+        return ""
+    slug = str(documents.get("slug") or "").strip()
+    if not slug:
+        return ""
+    ws = str(documents.get("workspace_id") or workspace_id or "").strip()
+    default_path = (
+        f"documents/{ws}/{slug}/document.html" if ws else f"documents/{slug}/document.html"
+    )
+    default_branch = f"documents/{ws}/{slug}" if ws else f"documents/{slug}"
+    path = str(documents.get("path") or default_path).strip()
+    branch = str(documents.get("branch") or default_branch).strip()
+    title = str(documents.get("title") or "").strip()
+    mode = str(documents.get("mode") or "").strip()
+    today = datetime.now().date().isoformat()
+    year = today[:4]
+    lines = [
+        f"- slug: {slug}",
+        f"- path: {path}",
+        f"- branch: {branch}",
+        f"- today: {today}",
+    ]
+    if ws:
+        lines.append(f"- workspace_id: {ws}")
+    if title:
+        lines.append(f"- title: {title}")
+    if mode:
+        lines.append(f"- editor_mode: {mode}")
+    lines.extend(_selected_document_lines(documents))
+    return (
+        "\n\n## Open Documents file\n"
+        "The user is editing this document in the Documents overlay right now. "
+        "If you do not have apply_document_commands, insert_heading, "
+        "insert_paragraph, replace_in_document, or write_document, call "
+        "transfer_to_Documents immediately and stop.\n"
+        "You are operating on its Coder workspace files (sidecar) when available; "
+        "Forgejo remains the Save/history snapshot. Do not ask which document, slug, "
+        "file, or template. Omit slug on Documents tool calls; tools default to this "
+        "open file.\n"
+        "selected_section_index below is the heading the user has selected in the "
+        "editor, 0-based, same index space as after_heading on the Documents tools.\n"
+        "Plan, then write. For news, current events, or factual briefs:\n"
+        f"1. Call web_search once first (at most 4). Include {year}. Then write.\n"
+        "2. Do not list leftover sections. Do not read or write leftover <section> blocks.\n"
+        "3. Fill the open template with one fill_document_slots call "
+        "(title, subtitle, intro, note, quote, sections, tables). "
+        "Do not call apply_document_commands on a fill turn. "
+        "Do not leave seed placeholder copy. Do not append after the footer. "
+        "Do not write the memo only in chat. "
+        "Do not call read_document after writing. "
+        "replace_in_document is not bound. Writes go into .doc-body.\n"
+        "4. After that one write, stop and reply. leftover empty is done. "
+        "leftover_placeholders wait for a later turn. "
+        "Do not call fill_document_slots again. Do not reread.\n"
+        + _untitled_documents_rename_hint(title, slug)
         + "\n".join(lines)
         + "\n"
     )
@@ -300,9 +419,7 @@ def _render_coding_context_block(client_context: dict | None) -> str:
         "ready. Do not ask which repository or branch. Prefer read_coding_file, "
         "write_coding_file, list_coding_dir, and run_in_coding_sandbox for direct "
         "edits. For larger multi-file refactors, use run_coding_harness_task to "
-        "delegate to the managed OpenCode harness in the same checkout.\n"
-        + "\n".join(lines)
-        + "\n"
+        "delegate to the managed OpenCode harness in the same checkout.\n" + "\n".join(lines) + "\n"
     )
 
 
@@ -347,9 +464,7 @@ def render_user_context_block(
     ]
     technical_lines = [f"- {label}: {value}" for label, value in technical_fields if value]
     technical_block = (
-        ("\n\nTechnical context:\n" + "\n".join(technical_lines))
-        if technical_lines
-        else ""
+        ("\n\nTechnical context:\n" + "\n".join(technical_lines)) if technical_lines else ""
     )
     return (
         "\n\nYou are speaking with the following user. Use this profile to "
@@ -389,6 +504,9 @@ class ChatService:
         slides_block = _render_slides_context_block(client_context, workspace_id)
         if slides_block:
             system_prompt += slides_block
+        documents_block = _render_documents_context_block(client_context, workspace_id)
+        if documents_block:
+            system_prompt += documents_block
         coding_block = _render_coding_context_block(client_context)
         if coding_block:
             system_prompt += coding_block
@@ -401,7 +519,9 @@ class ChatService:
             system_prompt += _MULTI_AGENT_NOTICE
             return system_prompt
 
-        addendum = await self.build_user_context_addendum(prior_messages, user_id, workspace_id, conversation_id)
+        addendum = await self.build_user_context_addendum(
+            prior_messages, user_id, workspace_id, conversation_id
+        )
         return system_prompt + addendum
 
     async def build_abi_injection_preamble(
@@ -427,6 +547,10 @@ class ChatService:
         slides_block = _render_slides_context_block(client_context, workspace_id)
         if slides_block.strip():
             parts.append(slides_block.strip())
+
+        documents_block = _render_documents_context_block(client_context, workspace_id)
+        if documents_block.strip():
+            parts.append(documents_block.strip())
 
         coding_block = _render_coding_context_block(client_context)
         if coding_block.strip():
@@ -776,7 +900,7 @@ class ChatService:
                 created = await self.create_conversation(
                     context=context,
                     workspace_id=workspace_id,
-                    title=request_message[:50] + ("..." if len(request_message) > 50 else ""),
+                    title=conversation_title_from_prompt(request_message),
                     agent=agent,
                     now=now,
                 )
@@ -795,7 +919,7 @@ class ChatService:
                 context=context,
                 conversation_id=conversation_id,
                 workspace_id=workspace_id,
-                title=request_message[:50] + ("..." if len(request_message) > 50 else ""),
+                title=conversation_title_from_prompt(request_message),
                 agent=agent,
                 now=now,
             )
@@ -813,7 +937,7 @@ class ChatService:
         created = await self.create_conversation(
             context=context,
             workspace_id=workspace_id,
-            title=request_message[:50] + ("..." if len(request_message) > 50 else ""),
+            title=conversation_title_from_prompt(request_message),
             agent=agent,
             now=now,
         )

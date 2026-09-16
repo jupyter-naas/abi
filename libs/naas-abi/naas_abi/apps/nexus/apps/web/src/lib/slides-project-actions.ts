@@ -1,4 +1,9 @@
 import { slidesApiErrorMessage } from '@/lib/create-slides-project';
+import {
+  autoDeckTitle,
+  isPlaceholderDeckTitle,
+  shouldAutoTitleDeck,
+} from '@/lib/office-auto-title';
 import { authFetch } from '@/stores/auth';
 import { dispatchSlidesDeckUpdated, useSlidesStore, type SlidesProject } from '@/stores/slides';
 
@@ -45,4 +50,25 @@ export async function patchSlidesProject(
   }
   dispatchSlidesDeckUpdated({ slug });
   return project;
+}
+
+export async function autoTitleOpenDeckIfNeeded(opts: {
+  workspaceId: string;
+  slug: string;
+  title?: string | null;
+  brief: string;
+}): Promise<string | null> {
+  const brief = (opts.brief || '').trim();
+  if (!opts.workspaceId || !opts.slug || !brief || brief.startsWith('/')) return null;
+  if (!shouldAutoTitleDeck(opts.title, opts.slug)) return null;
+  const next = autoDeckTitle(brief);
+  if (!next || isPlaceholderDeckTitle(next)) return null;
+  useSlidesStore.getState().setSelectedTitle(next);
+  dispatchSlidesDeckUpdated({ slug: opts.slug, source: 'auto_title' });
+  try {
+    await patchSlidesProject(opts.workspaceId, opts.slug, { title: next });
+    return next;
+  } catch {
+    return next;
+  }
 }

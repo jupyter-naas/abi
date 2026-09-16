@@ -38,6 +38,7 @@ export const SLIDES_DECK_UPDATED_EVENT = 'slides-deck-updated';
 export type SlidesDeckUpdatedDetail = {
   slug?: string;
   source?: string;
+  title?: string;
 };
 
 export type SlidesDeckSource = 'sidecar' | 'forgejo' | null;
@@ -153,15 +154,22 @@ export const useSlidesStore = create<SlidesState>()(
 );
 
 /**
- * Every backend tool in slides_tools.py that persists a deck change — must
+ * Every backend tool in slides_tools.py that persists a deck change: must
  * stay in sync with that file's `@tool` defs. Missing one here means a real
  * edit (e.g. insert_slide) never triggers a Files/version refresh: the
  * chat-driven write succeeds, but the composer strip goes stale until the
  * user does something else that happens to match.
+ *
+ * Also accepts any tool whose JSON output is a shipped deck publish
+ * (ok + nexus_shipped + slug), so product tools that create/write under the
+ * hood still refresh the open preview without a name allowlist.
  */
-export function isSlidesWriteTool(rawName: string | null | undefined): boolean {
-  const raw = (rawName || '').toLowerCase();
-  return (
+export function isSlidesWriteTool(
+  rawName: string | null | undefined,
+  output?: string | null,
+): boolean {
+  const raw = (rawName || '').toLowerCase().replace(/[\s-]+/g, '_');
+  if (
     raw.includes('write_slides') ||
     raw.includes('replace_in_slides') ||
     raw.includes('insert_slide') ||
@@ -169,7 +177,18 @@ export function isSlidesWriteTool(rawName: string | null | undefined): boolean {
     raw.includes('duplicate_slide') ||
     raw.includes('reorder_slides') ||
     raw.includes('create_slides_project')
-  );
+  ) {
+    return true;
+  }
+  if (!output || !output.trim()) return false;
+  try {
+    const parsed = JSON.parse(output) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object' || parsed.error) return false;
+    const slug = typeof parsed.slug === 'string' ? parsed.slug.trim() : '';
+    return Boolean(slug) && parsed.ok === true && parsed.nexus_shipped === true;
+  } catch {
+    return false;
+  }
 }
 
 export function dispatchSlidesDeckUpdated(detail: SlidesDeckUpdatedDetail = {}) {

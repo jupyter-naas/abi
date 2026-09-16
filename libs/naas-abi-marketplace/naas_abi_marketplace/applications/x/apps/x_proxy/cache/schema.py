@@ -31,6 +31,7 @@ CACHE_PREFIX = "x/cache"
 POSTS_DIR = f"{CACHE_PREFIX}/posts"
 AUTHORS_KEY = "authors.parquet"
 MANIFEST_KEY = "manifest.json"
+PROCESSED_ENVELOPES_KEY = "processed_envelopes.json"
 
 # Where the ingest writes its envelopes - the log this projection reads.
 ENVELOPE_PREFIX = "x/search_recent_tweets"
@@ -46,7 +47,9 @@ WATERMARK_KEY = "x:cache:watermark"
 # 2: added ``full_text``. Without it the tweets table truncated every long post,
 #    because X returns a cut-off ``text`` and the untruncated content only in
 #    ``note_tweet.text`` - which is what the graph stores as ``x:full_text``.
-SCHEMA_VERSION = 2
+# 3: incremental refresh tracks exact envelope keys. A timestamp watermark can
+#    skip a late-arriving/backfill object whose key is older than the watermark.
+SCHEMA_VERSION = 3
 
 # A post is one row per (tweet_id, kind, query_slug) - the same post answering
 # two different queries is two rows. ``kind`` separates the posts that answered

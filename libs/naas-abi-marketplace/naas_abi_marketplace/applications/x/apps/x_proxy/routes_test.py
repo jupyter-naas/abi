@@ -130,6 +130,89 @@ def test_snapshots_and_assets_still_serve() -> None:
     assert "javascript" in asset.headers["content-type"]
 
 
+def test_search_tweet_indexes_are_served() -> None:
+    client = _client(
+        _published(
+            **{
+                f"{DEFAULT_APP_PREFIX}/search_tweets/posts_preview.json": (
+                    b'{"posts":[["123"]]}'
+                ),
+                f"{DEFAULT_APP_PREFIX}/search_tweets/posts.json": (
+                    b'{"posts":[["123"]]}'
+                ),
+            }
+        )
+    )
+    for name in ("posts_preview.json", "posts.json"):
+        response = client.get(f"{BASE}/search_tweets/{name}")
+        assert response.status_code == 200
+        assert response.json()["posts"] == [["123"]]
+
+
+def test_server_side_tweet_search_is_paged(monkeypatch) -> None:
+    from naas_abi_marketplace.applications.x.apps.x_proxy.cache.reader import (
+        CacheReader,
+    )
+
+    monkeypatch.setattr(
+        CacheReader,
+        "projection_state",
+        lambda _self: {"watermark": "now", "schema_version": 3},
+    )
+    monkeypatch.setattr(
+        CacheReader,
+        "search_tweets",
+        lambda _self, query, *, offset, limit: (
+            1,
+            [{"tweet_id": "123", "text": query, "offset": offset, "limit": limit}],
+        ),
+    )
+
+    response = _client(_published()).get(
+        f"{BASE}/search_tweets/query.json?q=drone&page=2&per_page=25"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "count": 1,
+        "page": 2,
+        "per_page": 25,
+        "posts": [{"tweet_id": "123", "text": "drone", "offset": 50, "limit": 25}],
+    }
+
+
+def test_direct_artifacts_and_media_are_served_with_cache_validators() -> None:
+    digest = "a" * 64
+    client = _client(
+        _published(
+            **{
+                f"{DEFAULT_APP_PREFIX}/posts/by-id/123/post.json": b'{"post":{}}',
+                f"{DEFAULT_APP_PREFIX}/posts/by-id/123/media/{digest}.png": b"png",
+                f"{DEFAULT_APP_PREFIX}/users/by-handle/alice/user.json": b'{"bundle":{}}',
+            }
+        )
+    )
+    post = client.get(f"{BASE}/posts/by-id/123/post.json")
+    assert post.status_code == 200
+    assert post.headers["etag"]
+    assert "must-revalidate" in post.headers["cache-control"]
+    cached = client.get(
+        f"{BASE}/posts/by-id/123/post.json",
+        headers={"If-None-Match": post.headers["etag"]},
+    )
+    assert cached.status_code == 304
+
+    media = client.get(f"{BASE}/posts/by-id/123/media/{digest}.png")
+    assert media.status_code == 200
+    assert media.headers["content-type"].startswith("image/png")
+    assert "immutable" in media.headers["cache-control"]
+
+
+def test_unapproved_nested_artifact_path_falls_through() -> None:
+    response = _client(_published()).get(f"{BASE}/posts/by-id/not-a-number/post.json")
+    assert response.json() == {"detail": "App HTML not found"}
+
+
 def test_nothing_published_falls_through_to_the_catch_all() -> None:
     client = _client(_FakeObjectStorage({}))
     for path in ("/", "/users/search/"):

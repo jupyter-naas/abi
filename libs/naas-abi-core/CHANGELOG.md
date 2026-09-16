@@ -2,6 +2,55 @@
 
 <!-- version list -->
 
+## v2.36.2 (2026-09-14)
+
+### Bug Fixes
+
+- **core,nexus**: Release sticky office turns that would leave empty bubbles
+  ([`333e5d8`](https://github.com/jupyter-naas/abi/commit/333e5d8de15984905c21ad244462acc4485dfad7))
+
+
+## v2.36.1 (2026-09-14)
+
+### Bug Fixes
+
+- **core**: Preserve IntentAgent subclass on duplicate
+  ([`f701a27`](https://github.com/jupyter-naas/abi/commit/f701a27820f2b22985e386cfa2edb224018a73c8))
+
+
+## v2.36.0 (2026-09-14)
+
+### Features
+
+- **nexus**: Add Documents office product
+  ([`f917aa5`](https://github.com/jupyter-naas/abi/commit/f917aa5d475724075c94f87ddf99b90e92a93f4d))
+
+
+## v2.35.1 (2026-09-11)
+
+### Bug Fixes
+
+- **lint**: Nosec quoted DuckLake identifiers in inlined_row_count
+  ([`66c6899`](https://github.com/jupyter-naas/abi/commit/66c6899dfdb5cc10d52c9fb11c004e44d3c9f3a4))
+
+
+## v2.35.0 (2026-09-10)
+
+### Features
+
+- **core**: Add dataset flushing, compaction, and catalog monitoring
+  ([#1263](https://github.com/jupyter-naas/abi/pull/1263),
+  [`a4009c7`](https://github.com/jupyter-naas/abi/commit/a4009c76f0cf342d0f17a81dd9273fcf97bb02a3))
+
+
+## v2.34.1 (2026-09-10)
+
+### Performance Improvements
+
+- **core**: Reuse a shared connection for DuckLake dataset reads
+  ([`c9beaea`](https://github.com/jupyter-naas/abi/commit/c9beaeaf49a2dbd10b9d65c7f7cff1ca89cc5337))
+
+
 ## v2.34.0 (2026-09-10)
 
 ### Bug Fixes

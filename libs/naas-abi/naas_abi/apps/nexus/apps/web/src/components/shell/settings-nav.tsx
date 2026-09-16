@@ -6,6 +6,7 @@ import {
   Cpu,
   Download,
   HardDrive,
+  Blocks,
   Server,
   Shield,
   Users,
@@ -41,6 +42,7 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     items: [
       { href: '/settings/theme', label: 'Theme', icon: Brush },
       { href: '/settings/members', label: 'Members', icon: Users },
+      { href: '/settings/infrastructure', label: 'Infrastructure', icon: Blocks },
       { href: '/settings/servers', label: 'Servers', icon: Server },
       { href: '/settings/secrets', label: 'Secrets', icon: Shield },
       { href: '/settings/export', label: 'Data Export', icon: Download },
