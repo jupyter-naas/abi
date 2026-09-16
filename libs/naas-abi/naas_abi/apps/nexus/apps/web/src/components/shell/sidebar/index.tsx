@@ -225,10 +225,12 @@ export function Sidebar() {
       case 'search':   return getWorkspacePath(currentWorkspaceId, '/search');
       case 'chat':     return getWorkspacePath(currentWorkspaceId, '/chat');
       case 'ontology': {
-        const ontologyPath =
-          useOntologyStore.getState().selectedOntologyPath
-          ?? '/app/libs/naas-abi-core/naas_abi_core/modules/bfo/ontologies/modules/bfo-core.ttl';
-        const params = new URLSearchParams({ view: 'network', ontology: ontologyPath });
+        // No hardcoded fallback: ontologies are enabled per workspace, so a
+        // fixed default would 404 wherever it is disabled. Without a stored
+        // selection, land on the consolidated view instead.
+        const ontologyPath = useOntologyStore.getState().selectedOntologyPath;
+        const params = new URLSearchParams({ view: 'network' });
+        if (ontologyPath) params.set('ontology', ontologyPath);
         return getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`);
       }
       case 'graph':    return getWorkspacePath(currentWorkspaceId, '/graph/network');

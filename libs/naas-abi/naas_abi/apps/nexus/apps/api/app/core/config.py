@@ -356,9 +356,11 @@ class WorkspaceSeedConfig(BaseModel):
     default_agent: str | None = None
     agents: list[str] | None = None
     apps: list[str] | None = None
-    # Ontology catalog ids (``module:filename.ttl``). Exclusive when a list
-    # is set: listed on, others off. ``None`` keeps the full engine listing.
-    # An empty list shows none. owl:imports are not implied; name every file.
+    # Ontology catalog ids (``module:filename.ttl``), seeded the same way as
+    # ``apps``: listed files are enabled on first boot, everything else stays
+    # off, and Settings > Ontologies owns the state from then on (a stored
+    # row always wins over this list). ``None`` or an empty list simply seeds
+    # nothing. owl:imports are not implied; name every file.
     ontologies: list[str] | None = None
 
 

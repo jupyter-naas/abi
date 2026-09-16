@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -135,22 +136,83 @@ def ontology_matches_seed(path: str, module_name: str, seed_refs: Sequence[str])
     return False
 
 
+def ontology_catalog_id(path: str, module_name: str) -> str:
+    """Stable ``ontology_configs.ontology_id`` for a catalog file.
+
+    ``module:filename.ttl`` rather than the raw path: absolute paths differ
+    between a container (``/app/libs/...``) and a checkout, so a path-keyed
+    row would silently stop matching after a deploy. This is also the form
+    ``WorkspaceSeedConfig.ontologies`` already uses, so a YAML entry and a
+    stored row name the same file.
+    """
+    return f"{_module_key(module_name)}:{Path(_posix(path)).name.lower()}"
+
+
+def ontology_config_lookup_ids(path: str, module_name: str) -> list[str]:
+    """Ids a stored row may use for this file, most canonical first.
+
+    The catalog always advertises ``ontology_catalog_id``, but
+    ``_seed_workspace_ontologies`` stores whatever form the YAML used (bare
+    filename, ``module:filename.ttl``, or a full path), so accept those too.
+    """
+    canonical = ontology_catalog_id(path, module_name)
+    aliases = {
+        normalize_ontology_ref(alias)
+        for alias in ontology_catalog_aliases(path, module_name)
+    }
+    aliases.discard(canonical)
+    aliases.discard("")
+    return [canonical, *sorted(aliases)]
+
+
+def resolve_ontology_enabled(
+    path: str,
+    module_name: str,
+    enabled_by_id: Mapping[str, bool],
+    seed_refs: Sequence[str] | None,
+) -> bool:
+    """DB row wins; otherwise the seed list; otherwise off.
+
+    Same precedence as :func:`resolve_app_enabled`: ontologies are opt-in,
+    so a file named by neither source stays disabled.
+    """
+    for ontology_id in ontology_config_lookup_ids(path, module_name):
+        if ontology_id in enabled_by_id:
+            return enabled_by_id[ontology_id]
+    if seed_refs:
+        return ontology_matches_seed(path, module_name, seed_refs)
+    return False
+
+
+@dataclass(frozen=True)
+class OntologyCatalogScope:
+    """Per-workspace enablement view over the engine ontology catalog.
+
+    ``enabled_by_id`` holds this workspace's ``ontology_configs`` rows and
+    wins outright; ``seed_refs`` is ``WorkspaceSeedConfig.ontologies`` and
+    only pre-enables files that have no row yet.
+    """
+
+    enabled_by_id: Mapping[str, bool] = field(default_factory=dict)
+    seed_refs: Sequence[str] | None = None
+
+    def allows(self, path: str, module_name: str) -> bool:
+        return resolve_ontology_enabled(
+            path, module_name, self.enabled_by_id, self.seed_refs
+        )
+
+
 def filter_ontology_catalog(
     items: Sequence[Any],
-    seed_refs: Sequence[str] | None,
+    scope: OntologyCatalogScope | None,
 ) -> list[Any]:
-    """Restrict catalog rows to the seed list.
+    """Restrict catalog rows to the ontologies enabled for a workspace.
 
-    ``None`` keeps the full engine listing (existing deployments). An empty
-    list returns nothing. A non-empty list is exclusive: listed on, others
-    off. owl:imports are not added.
+    ``None`` keeps the full engine listing and is only reached when a
+    request carries no workspace context. With a scope every file is off
+    unless a stored row or the seed list turns it on. owl:imports are not
+    added: they follow their parent file's access.
     """
-    if seed_refs is None:
+    if scope is None:
         return list(items)
-    if not seed_refs:
-        return []
-    return [
-        item
-        for item in items
-        if ontology_matches_seed(item.path, item.module_name, seed_refs)
-    ]
+    return [item for item in items if scope.allows(item.path, item.module_name)]

@@ -10,7 +10,8 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
-    workspace_seed_for_slug,
+    OntologyCatalogScope,
+    ontology_catalog_id,
 )
 from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.primary.ontology__primary_adapter__dependencies import (  # noqa: E501
     get_ontology_service,
@@ -38,7 +39,15 @@ from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import 
     OntologyServiceUnavailableError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.ontology.service import OntologyService
-from sqlalchemy import select
+from naas_abi.apps.nexus.apps.api.app.services.ontology_configs.adapters.primary.ontology_configs__primary_adapter__dependencies import (  # noqa: E501
+    get_ontology_configs_service,
+)
+from naas_abi.apps.nexus.apps.api.app.services.ontology_configs.scope import (
+    build_ontology_catalog_scope,
+)
+from naas_abi.apps.nexus.apps.api.app.services.ontology_configs.service import (
+    OntologyConfigsService,
+)
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
@@ -85,37 +94,31 @@ def _edge_to_schema(edge) -> OntologyOverviewGraphEdge:
     )
 
 
-async def _workspace_slug(workspace_id: str) -> str | None:
-    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
-
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(WorkspaceModel.slug).where(WorkspaceModel.id == workspace_id)
-        )
-        return result.scalar_one_or_none()
-
-
 async def ontology_catalog_scope(
     workspace_id: str | None = Query(None),
     current_user: User = Depends(get_current_user_required),
-) -> list[str] | None:
-    """Seed list for this workspace, or None to keep the full engine catalog."""
+    configs_service: OntologyConfigsService = Depends(get_ontology_configs_service),
+) -> OntologyCatalogScope | None:
+    """Enablement scope for this workspace, or None with no workspace context.
+
+    Every ontology route depends on this, so a disabled ontology is invisible
+    to listings *and* rejected by the per-path routes below. Requests that
+    carry no ``workspace_id`` have no per-workspace config to resolve against
+    and keep the full engine catalog — Settings is the only surface that can
+    change enablement, and it always scopes to a workspace.
+    """
     if not workspace_id:
         return None
     await require_workspace_access(current_user.id, workspace_id)
-    seed = workspace_seed_for_slug(await _workspace_slug(workspace_id))
-    if seed is None or getattr(seed, "ontologies", None) is None:
-        return None
-    return list(seed.ontologies)
+    return await build_ontology_catalog_scope(workspace_id, configs_service)
 
 
 async def _require_catalog_path(
     ontology_path: str,
-    catalog_refs: list[str] | None,
+    catalog_scope: OntologyCatalogScope | None,
     ontology_service: OntologyService,
 ) -> None:
-    files = await ontology_service.list_ontology_files(catalog_refs=catalog_refs)
+    files = await ontology_service.list_ontology_files(catalog_scope=catalog_scope)
     if ontology_path not in {item.path for item in files}:
         raise OntologyPathNotFoundError(f"Ontology path not found: {ontology_path}")
 
@@ -126,11 +129,11 @@ async def _require_catalog_path(
 @router.get("")
 async def list_ontology_items(
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_scope: OntologyCatalogScope | None = Depends(ontology_catalog_scope),
 ) -> dict:
     """List all ontology items (OWL Classes and Object Properties)."""
     try:
-        items = await ontology_service.list_items(catalog_refs=catalog_refs)
+        items = await ontology_service.list_items(catalog_scope=catalog_scope)
     except OntologyServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"items": [_item_to_schema(i) for i in items]}
@@ -140,12 +143,12 @@ async def list_ontology_items(
 async def list_classes(
     ontology_path: str | None = Query(None, alias="ontology_path"),
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_scope: OntologyCatalogScope | None = Depends(ontology_catalog_scope),
 ) -> dict:
     """List ontology classes by file path (or all when omitted)."""
     try:
         items = await ontology_service.list_classes(
-            ontology_path=ontology_path, catalog_refs=catalog_refs
+            ontology_path=ontology_path, catalog_scope=catalog_scope
         )
     except OntologyPathNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -158,12 +161,12 @@ async def list_classes(
 async def list_relations(
     ontology_path: str | None = Query(None, alias="ontology_path"),
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_scope: OntologyCatalogScope | None = Depends(ontology_catalog_scope),
 ) -> dict:
     """List ontology object properties by file path (or all when omitted)."""
     try:
         items = await ontology_service.list_relations(
-            ontology_path=ontology_path, catalog_refs=catalog_refs
+            ontology_path=ontology_path, catalog_scope=catalog_scope
         )
     except OntologyPathNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -175,11 +178,11 @@ async def list_relations(
 @router.get("/ontologies")
 async def list_ontology_files(
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_scope: OntologyCatalogScope | None = Depends(ontology_catalog_scope),
 ) -> dict:
-    """List ontology files in the workspace catalog."""
+    """List the ontology files enabled for this workspace."""
     try:
-        items = await ontology_service.list_ontology_files(catalog_refs=catalog_refs)
+        items = await ontology_service.list_ontology_files(catalog_scope=catalog_scope)
     except OntologyServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {
@@ -187,6 +190,7 @@ async def list_ontology_files(
             OntologyFileItem(
                 name=i.name,
                 path=i.path,
+                ontology_id=ontology_catalog_id(i.path, i.module_name),
                 module_name=i.module_name,
                 submodule_name=i.submodule_name,
                 description=i.description,
@@ -194,6 +198,10 @@ async def list_ontology_files(
                 contributors=i.contributors,
                 date=i.date,
                 imports=i.imports,
+                # Everything reaching here is already enabled (the scope
+                # filtered the rest out); the flag keeps the shape aligned
+                # with /api/ontology-configs/ for clients that merge both.
+                enabled=True,
             )
             for i in items
         ]
@@ -204,11 +212,11 @@ async def list_ontology_files(
 async def get_ontology_overview_stats(
     ontology_path: str = Query(..., alias="ontology_path", min_length=1),
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_scope: OntologyCatalogScope | None = Depends(ontology_catalog_scope),
 ) -> OntologyOverviewStats:
     """Return element counts for a specific ontology path."""
     try:
-        await _require_catalog_path(ontology_path, catalog_refs, ontology_service)
+        await _require_catalog_path(ontology_path, catalog_scope, ontology_service)
         stats = await ontology_service.get_overview_stats(ontology_path=ontology_path)
     except OntologyPathNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -229,11 +237,11 @@ async def get_ontology_overview_stats(
 @router.get("/overview/stats/all")
 async def get_all_ontologies_overview_stats(
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_scope: OntologyCatalogScope | None = Depends(ontology_catalog_scope),
 ) -> OntologyOverviewAggregateStats:
     """Return consolidated overview stats across the workspace catalog."""
     try:
-        stats = await ontology_service.get_all_overview_stats(catalog_refs=catalog_refs)
+        stats = await ontology_service.get_all_overview_stats(catalog_scope=catalog_scope)
     except OntologyServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail="Failed to compute consolidated ontology overview stats") from exc
     return OntologyOverviewAggregateStats(
@@ -253,12 +261,12 @@ async def get_all_ontologies_overview_stats(
 async def get_ontology_type_counts(
     ontology_path: str | None = Query(None, alias="ontology_path"),
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_scope: OntologyCatalogScope | None = Depends(ontology_catalog_scope),
 ) -> OntologyTypeCounts:
     """Return counts for owl:NamedIndividual and owl:DatatypeProperty."""
     try:
         counts = await ontology_service.get_type_counts(
-            ontology_path=ontology_path, catalog_refs=catalog_refs
+            ontology_path=ontology_path, catalog_scope=catalog_scope
         )
     except OntologyPathNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -276,12 +284,12 @@ async def get_ontology_type_counts(
 async def get_ontology_overview_graph(
     ontology_path: str | None = Query(None, alias="ontology_path"),
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_scope: OntologyCatalogScope | None = Depends(ontology_catalog_scope),
 ) -> OntologyOverviewGraph:
     """Return ontology dependency graph based on owl:imports relations."""
     try:
         graph = await ontology_service.get_overview_graph(
-            ontology_path=ontology_path, catalog_refs=catalog_refs
+            ontology_path=ontology_path, catalog_scope=catalog_scope
         )
     except OntologyPathNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -307,11 +315,11 @@ async def get_class_parents(
     ontology_path: str = Query(..., alias="ontology_path"),
     class_iris: list[str] = Query(..., alias="class_iris"),
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_scope: OntologyCatalogScope | None = Depends(ontology_catalog_scope),
 ) -> OntologyOverviewGraph:
     """Return direct rdfs:subClassOf parents for the given class IRIs."""
     try:
-        await _require_catalog_path(ontology_path, catalog_refs, ontology_service)
+        await _require_catalog_path(ontology_path, catalog_scope, ontology_service)
         result = await ontology_service.get_class_parents(
             class_iris=class_iris,
             ontology_path=ontology_path,
@@ -331,7 +339,7 @@ async def get_subclassof_hierarchy(
     ontology_path: str = Query(..., alias="ontology_path"),
     class_iris: list[str] = Query(..., alias="class_iris"),
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_scope: OntologyCatalogScope | None = Depends(ontology_catalog_scope),
 ) -> OntologyOverviewGraph:
     """Return the full rdfs:subClassOf hierarchy starting from class_iris.
 
@@ -339,7 +347,7 @@ async def get_subclassof_hierarchy(
     dict, so the frontend can group nodes by level without recomputing BFS.
     """
     try:
-        await _require_catalog_path(ontology_path, catalog_refs, ontology_service)
+        await _require_catalog_path(ontology_path, catalog_scope, ontology_service)
         result = await ontology_service.get_subclassof_hierarchy(
             class_iris=class_iris,
             ontology_path=ontology_path,
@@ -450,11 +458,11 @@ async def import_reference_ontology(
 async def export_ontology_file(
     ontology_path: str = Query(..., alias="ontology_path", min_length=1),
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_scope: OntologyCatalogScope | None = Depends(ontology_catalog_scope),
 ) -> FileResponse:
     """Export a selected ontology file as attachment."""
     try:
-        await _require_catalog_path(ontology_path, catalog_refs, ontology_service)
+        await _require_catalog_path(ontology_path, catalog_scope, ontology_service)
         path = await ontology_service.export_ontology_file(ontology_path=ontology_path)
     except OntologyPathNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

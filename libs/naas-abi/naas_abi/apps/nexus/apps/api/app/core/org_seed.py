@@ -27,8 +27,12 @@ from naas_abi.apps.nexus.apps.api.app.core.config import (
 )
 from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
+    normalize_ontology_ref,
+)
 from naas_abi.apps.nexus.apps.api.app.models import (
     AppConfigModel,
+    OntologyConfigModel,
     OrganizationMemberModel,
     OrganizationModel,
     UserModel,
@@ -357,6 +361,7 @@ async def _upsert_workspace(
         await _ensure_workspace_member(session, workspace.id, member.id, member_role)
 
     await _seed_workspace_apps(session, workspace.id, workspace_cfg.apps)
+    await _seed_workspace_ontologies(session, workspace.id, workspace_cfg.ontologies)
 
 
 async def _seed_workspace_apps(
@@ -394,6 +399,54 @@ async def _seed_workspace_apps(
         logger.info(
             "Seeded app_id=%s enabled on workspace_id=%s",
             app_id,
+            workspace_id,
+        )
+
+
+async def _seed_workspace_ontologies(
+    session: AsyncSession,
+    workspace_id: str,
+    ontology_refs: list[str] | None,
+) -> None:
+    """Insert missing enabled rows for seeded ontologies. Existing rows win.
+
+    Mirrors :func:`_seed_workspace_apps`: the YAML list is an *initial*
+    enable set, not a permanent whitelist, so a file a workspace later
+    disables in Settings stays disabled across restarts.
+
+    Refs are normalized (``normalize_ontology_ref``) rather than resolved
+    against the engine catalog: seeding runs before any TTL is parsed, and
+    ``resolve_ontology_enabled`` matches stored rows on every alias form.
+    """
+    if not ontology_refs:
+        return
+    now = datetime.now(UTC).replace(tzinfo=None)
+    for raw in ontology_refs:
+        ontology_id = normalize_ontology_ref(str(raw or ""))
+        if not ontology_id:
+            continue
+        result = await session.execute(
+            select(OntologyConfigModel).where(
+                (OntologyConfigModel.workspace_id == workspace_id)
+                & (OntologyConfigModel.ontology_id == ontology_id)
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is not None:
+            continue
+        session.add(
+            OntologyConfigModel(
+                id=f"ont-{uuid4().hex[:12]}",
+                workspace_id=workspace_id,
+                ontology_id=ontology_id,
+                enabled=True,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        logger.info(
+            "Seeded ontology_id=%s enabled on workspace_id=%s",
+            ontology_id,
             workspace_id,
         )
 

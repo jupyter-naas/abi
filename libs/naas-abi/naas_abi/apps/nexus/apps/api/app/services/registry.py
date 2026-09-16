@@ -18,6 +18,9 @@ if TYPE_CHECKING:
     from naas_abi.apps.nexus.apps.api.app.services.graph.service import GraphService
     from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMService
     from naas_abi.apps.nexus.apps.api.app.services.ontology.service import OntologyService
+    from naas_abi.apps.nexus.apps.api.app.services.ontology_configs.service import (
+        OntologyConfigsService,
+    )
     from naas_abi.apps.nexus.apps.api.app.services.organizations.service import OrganizationService
     from naas_abi.apps.nexus.apps.api.app.services.search.service import SearchService
     from naas_abi.apps.nexus.apps.api.app.services.skills.service import SkillService
@@ -36,6 +39,7 @@ class RegistryServices:
     organizations: OrganizationService
     graph: GraphService
     ontology: OntologyService
+    ontology_configs: OntologyConfigsService
 
 
 class ServiceRegistry:
@@ -94,6 +98,10 @@ class ServiceRegistry:
     @property
     def ontology(self) -> OntologyService:
         return self._services.ontology
+
+    @property
+    def ontology_configs(self) -> OntologyConfigsService:
+        return self._services.ontology_configs
 
 
 async def get_service_registry(db: AsyncSession = Depends(get_db)):

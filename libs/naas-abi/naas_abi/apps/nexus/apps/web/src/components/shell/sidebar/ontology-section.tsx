@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import {
   BrainCircuit, ChevronRight, Box, Link2,
@@ -21,7 +21,6 @@ type OntologyFile = {
   name: string;
   path: string;
   moduleName: string;
-  submoduleName?: string;
   description?: string;
 };
 
@@ -30,22 +29,12 @@ type OntologyFileApiItem = {
   path?: string;
   module_name?: string;
   moduleName?: string;
-  submodule_name?: string | null;
-  submoduleName?: string | null;
   description?: string | null;
-};
-
-type ModuleSubmoduleGroup = {
-  moduleName: string;
-  filesWithoutSubmodule: OntologyFile[];
-  submodules: Array<[string, OntologyFile[]]>;
 };
 
 export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const router = useRouter();
   const [ontologyFiles, setOntologyFiles] = useState<OntologyFile[]>([]);
-  const [expandedOntologyModules, setExpandedOntologyModules] = useState<string[]>([]);
-  const [expandedOntologySubmodules, setExpandedOntologySubmodules] = useState<string[]>([]);
   const [loadingOntologyFiles, setLoadingOntologyFiles] = useState(false);
   const { currentWorkspaceId } = useWorkspaceStore();
   const {
@@ -80,37 +69,6 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
     });
   };
 
-  const groupedOntologyFiles = useMemo(() => {
-    const grouped = new Map<string, OntologyFile[]>();
-    for (const ontologyFile of ontologyFiles) {
-      if (!grouped.has(ontologyFile.moduleName)) {
-        grouped.set(ontologyFile.moduleName, []);
-      }
-      grouped.get(ontologyFile.moduleName)?.push(ontologyFile);
-    }
-    return Array.from(grouped.entries());
-  }, [ontologyFiles]);
-
-  const groupedByModuleAndSubmodule = useMemo<ModuleSubmoduleGroup[]>(() => (
-    groupedOntologyFiles.map(([moduleName, moduleFiles]: [string, OntologyFile[]]) => {
-      const filesWithoutSubmodule = moduleFiles.filter((file) => !file.submoduleName);
-      const submodulesMap = new Map<string, OntologyFile[]>();
-      for (const file of moduleFiles) {
-        if (!file.submoduleName) {
-          continue;
-        }
-        if (!submodulesMap.has(file.submoduleName)) {
-          submodulesMap.set(file.submoduleName, []);
-        }
-        submodulesMap.get(file.submoduleName)?.push(file);
-      }
-      const submodules = Array.from(submodulesMap.entries()).sort(([a], [b]) => (
-        a.localeCompare(b, undefined, { sensitivity: 'base' })
-      ));
-      return { moduleName, filesWithoutSubmodule, submodules };
-    })
-  ), [groupedOntologyFiles]);
-
   useEffect(() => {
     const fetchOntologyFiles = async () => {
       setLoadingOntologyFiles(true);
@@ -130,13 +88,11 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
             name: file.name,
             path: file.path,
             moduleName: file.module_name || file.moduleName || 'Unknown module',
-            submoduleName: file.submodule_name || file.submoduleName || undefined,
             description: file.description || undefined,
           });
           return acc;
         }, []).sort((a: OntologyFile, b: OntologyFile) =>
-            a.moduleName.localeCompare(b.moduleName, undefined, { sensitivity: 'base' })
-            || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+            a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
           );
         setOntologyFiles(normalizedFiles);
 
@@ -152,24 +108,9 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
         } else if (!stillValid) {
           setSelectedOntologyPath(null);
         }
-
-        setExpandedOntologyModules(
-          Array.from(new Set(normalizedFiles.map((file) => file.moduleName)))
-        );
-        setExpandedOntologySubmodules(
-          Array.from(
-            new Set(
-              normalizedFiles
-                .filter((file) => file.submoduleName)
-                .map((file) => `${file.moduleName}::${file.submoduleName}`)
-            )
-          )
-        );
       } catch (error) {
         console.error('Failed to fetch ontology files:', error);
         setOntologyFiles([]);
-        setExpandedOntologyModules([]);
-        setExpandedOntologySubmodules([]);
       } finally {
         setLoadingOntologyFiles(false);
       }
@@ -232,138 +173,44 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
         document.body
       )}
 
-      {/* Ontologies by module */}
+      {/* Ontologies */}
       <div className="space-y-0.5">
-        {groupedByModuleAndSubmodule.map((group: ModuleSubmoduleGroup) => {
-          const { moduleName, filesWithoutSubmodule, submodules } = group;
-          const moduleExpanded = expandedOntologyModules.includes(moduleName);
+        {ontologyFiles.map((ontologyFile: OntologyFile) => {
+          const isSelected = selectedOntologyPath === ontologyFile.path;
+          const ontologyDescription = ontologyFile.description
+            || `${ontologyFile.moduleName} - ${ontologyFile.path}`;
           return (
-            <div key={moduleName} className="space-y-0.5">
-              <button
-                onClick={() => setExpandedOntologyModules((prev: string[]) => (
-                  prev.includes(moduleName)
-                    ? prev.filter((value: string) => value !== moduleName)
-                    : [...prev, moduleName]
-                ))}
-                className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-workspace-accent-10 hover:text-foreground"
-              >
-                <ChevronRight
-                  size={10}
-                  className={cn('flex-shrink-0 transition-transform', moduleExpanded && 'rotate-90')}
-                />
-                <span className="flex-1 truncate">{moduleName}</span>
-                <span className="text-[10px] text-muted-foreground">
-                  {filesWithoutSubmodule.length + submodules.reduce(
-                    (acc: number, entry: [string, OntologyFile[]]) => acc + entry[1].length,
-                    0
-                  )}
-                </span>
-              </button>
-              {moduleExpanded && (
-                <div className="ml-4 space-y-0.5">
-                  {filesWithoutSubmodule.map((ontologyFile: OntologyFile) => (
-                    (() => {
-                      const isSelected = selectedOntologyPath === ontologyFile.path;
-                      const ontologyDescription = ontologyFile.description
-                        || `${ontologyFile.moduleName} - ${ontologyFile.path}`;
-                      return (
-                        <button
-                          key={`${moduleName}:${ontologyFile.path}`}
-                          onClick={() => {
-                            setSelectedOntologyPath(ontologyFile.path);
-                            const params = new URLSearchParams({
-                              view: 'network',
-                              ontology: ontologyFile.path,
-                            });
-                            router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
-                          }}
-                          className={cn(
-                            "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-workspace-accent-10",
-                            isSelected && "bg-workspace-accent-10 text-workspace-accent"
-                          )}
-                          onMouseEnter={(event) => showOntologyTooltip(
-                            event,
-                            ontologyFile.name,
-                            ontologyDescription
-                          )}
-                          onMouseLeave={() => setOntologyTooltip(null)}
-                          aria-current={isSelected ? 'page' : undefined}
-                        >
-                          <FileCode size={12} className="flex-shrink-0 text-workspace-accent" />
-                          <span className="flex-1 truncate">{ontologyFile.name}</span>
-                        </button>
-                      );
-                    })()
-                  ))}
-                  {submodules.map((entry: [string, OntologyFile[]]) => {
-                    const [submoduleName, submoduleFiles] = entry;
-                    const submoduleKey = `${moduleName}::${submoduleName}`;
-                    const submoduleExpanded = expandedOntologySubmodules.includes(submoduleKey);
-                    return (
-                      <div key={submoduleKey} className="space-y-0.5">
-                        <button
-                          onClick={() => setExpandedOntologySubmodules((prev: string[]) => (
-                            prev.includes(submoduleKey)
-                              ? prev.filter((value: string) => value !== submoduleKey)
-                              : [...prev, submoduleKey]
-                          ))}
-                          className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-workspace-accent-10 hover:text-foreground"
-                        >
-                          <ChevronRight
-                            size={10}
-                            className={cn('flex-shrink-0 transition-transform', submoduleExpanded && 'rotate-90')}
-                          />
-                          <span className="flex-1 truncate">{submoduleName}</span>
-                          <span className="text-[10px] text-muted-foreground">{submoduleFiles.length}</span>
-                        </button>
-                        {submoduleExpanded && (
-                          <div className="ml-4 space-y-0.5">
-                            {submoduleFiles.map((ontologyFile: OntologyFile) => (
-                              (() => {
-                                const isSelected = selectedOntologyPath === ontologyFile.path;
-                                const ontologyDescription = ontologyFile.description
-                                  || `${ontologyFile.moduleName} / ${submoduleName} - ${ontologyFile.path}`;
-                                return (
-                                  <button
-                                    key={`${submoduleKey}:${ontologyFile.path}`}
-                                    onClick={() => {
-                                      setSelectedOntologyPath(ontologyFile.path);
-                                      const params = new URLSearchParams({
-                                        view: 'network',
-                                        ontology: ontologyFile.path,
-                                      });
-                                      router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
-                                    }}
-                                    className={cn(
-                                      "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-workspace-accent-10",
-                                      isSelected && "bg-workspace-accent-10 text-workspace-accent"
-                                    )}
-                                    onMouseEnter={(event) => showOntologyTooltip(
-                                      event,
-                                      ontologyFile.name,
-                                      ontologyDescription
-                                    )}
-                                    onMouseLeave={() => setOntologyTooltip(null)}
-                                    aria-current={isSelected ? 'page' : undefined}
-                                  >
-                                    <FileCode size={12} className="flex-shrink-0 text-workspace-accent" />
-                                    <span className="flex-1 truncate">{ontologyFile.name}</span>
-                                  </button>
-                                );
-                              })()
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+            <button
+              key={ontologyFile.path}
+              onClick={() => {
+                setSelectedOntologyPath(ontologyFile.path);
+                const params = new URLSearchParams({
+                  view: 'network',
+                  ontology: ontologyFile.path,
+                });
+                router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
+              }}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-workspace-accent-10",
+                isSelected && "bg-workspace-accent-10 text-workspace-accent"
               )}
-            </div>
+              onMouseEnter={(event) => showOntologyTooltip(
+                event,
+                ontologyFile.name,
+                ontologyDescription
+              )}
+              onMouseLeave={() => setOntologyTooltip(null)}
+              aria-current={isSelected ? 'page' : undefined}
+            >
+              <FileCode size={12} className="flex-shrink-0 text-workspace-accent" />
+              <span className="flex-1 truncate">{ontologyFile.name}</span>
+            </button>
           );
         })}
         {!loadingOntologyFiles && ontologyFiles.length === 0 && (
-          <p className="px-2 py-1 text-xs text-muted-foreground">No ontology files found</p>
+          <p className="px-2 py-1 text-xs text-muted-foreground">
+            No ontologies enabled. Turn them on in Settings &rarr; Ontologies.
+          </p>
         )}
         {loadingOntologyFiles && (
           <p className="px-2 py-1 text-xs text-muted-foreground">Loading ontologies...</p>

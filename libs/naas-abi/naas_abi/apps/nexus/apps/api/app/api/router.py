@@ -36,6 +36,9 @@ from naas_abi.apps.nexus.apps.api.app.services.documents.handlers import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.handlers import router as files_router
 from naas_abi.apps.nexus.apps.api.app.services.modules.handlers import router as modules_router
+from naas_abi.apps.nexus.apps.api.app.services.ontology_configs.handlers import (
+    router as ontology_configs_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.handlers import (
     router as openai_gateway_router,
 )
@@ -69,6 +72,9 @@ api_router.include_router(code_review_router, prefix="/code-review", tags=["code
 api_router.include_router(platform_router, prefix="/platform", tags=["platform"])
 api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(ontology.router, prefix="/ontology", tags=["ontology"])
+api_router.include_router(
+    ontology_configs_router, prefix="/ontology-configs", tags=["ontology-configs"]
+)
 api_router.include_router(graph.router, prefix="/graph", tags=["graph"])
 api_router.include_router(view.router, prefix="/view", tags=["view"])
 api_router.include_router(agents_router, prefix="/agents", tags=["agents"])

@@ -738,6 +738,28 @@ class AppConfigModel(Base):
     )
 
 
+class OntologyConfigModel(Base):
+    __tablename__ = "ontology_configs"
+
+    id = Column(String, primary_key=True)
+    workspace_id = Column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Reference ontology catalog key: "<module>:<filename.ttl>" (e.g.
+    # "bfo:bfo-core.ttl"). Not the absolute path, which differs between a
+    # container and a checkout. See core.workspace_catalog_seed.
+    ontology_id = Column(String(1024), nullable=False, index=True)
+    enabled = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id", "ontology_id", name="uq_ontology_configs_workspace_ontology"
+        ),
+    )
+
+
 # ============================================
 # Secrets
 # ============================================

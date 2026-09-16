@@ -45,6 +45,8 @@ class ReferenceOntology(BaseModel):
 class OntologyFileItem(BaseModel):
     name: str
     path: str
+    # Stable catalog key ("<module>:<filename.ttl>") used by ontology_configs.
+    ontology_id: str | None = None
     module_name: str
     submodule_name: str | None = None
     description: str | None = None
@@ -52,6 +54,8 @@ class OntologyFileItem(BaseModel):
     contributors: list[str] | None = None
     date: str | None = None
     imports: list[str] | None = None
+    # Per-workspace enable state; this listing only returns enabled files.
+    enabled: bool = True
 
 
 class OntologyOverviewStats(BaseModel):
