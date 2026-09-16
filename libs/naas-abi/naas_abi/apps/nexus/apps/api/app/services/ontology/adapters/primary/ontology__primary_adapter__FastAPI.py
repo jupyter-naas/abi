@@ -136,6 +136,19 @@ async def list_ontology_items(
     return {"items": [_item_to_schema(i) for i in items]}
 
 
+@router.get("/dictionary")
+async def workspace_dictionary(
+    workspace_id: str = Query(..., min_length=1),
+    ontology_service: OntologyService = Depends(get_ontology_service),
+    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+) -> dict:
+    """Complete dictionary of the workspace's visible ontology file catalog."""
+    try:
+        return await ontology_service.workspace_dictionary(catalog_refs=catalog_refs)
+    except OntologyServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @router.get("/classes")
 async def list_classes(
     ontology_path: str | None = Query(None, alias="ontology_path"),

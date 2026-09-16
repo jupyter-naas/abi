@@ -1,0 +1,14 @@
+.ontology-context-note { color:var(--muted-foreground-hex); font-size:12px; line-height:1.6; }
+.ontology-context-link, .ontology-context-usage-group button { color:var(--workspace-accent, var(--color-primary)); font-size:12px; }
+.ontology-context-link:hover, .ontology-context-usage-group button:hover { text-decoration:underline; }
+.ontology-context-used { margin-top:16px; border:1px solid var(--border-hex); border-radius:var(--org-border-radius,6px); overflow:hidden; }
+.ontology-context-used h2 { margin:0; padding:10px 16px; border-bottom:1px solid var(--border-hex); font-size:14px; font-weight:500; }
+.ontology-context-used h2 span, .ontology-context-used h3 span { margin-left:8px; color:var(--muted-foreground-hex); font-size:12px; font-weight:400; }
+.ontology-context-used > p, .ontology-context-used > button { margin:10px 16px; }
+.ontology-context-usage-group { padding:4px 16px 12px; }
+.ontology-context-usage-group h3 { font-size:12px; font-weight:600; margin-bottom:6px; }
+.ontology-context-usage-group ul { list-style:none; padding:0; }
+.ontology-context-usage-group li { padding:6px 0; border-bottom:1px solid var(--border-hex); font-size:13px; }
+.ontology-context-usage-group button { font-size:13px; }
+.ontology-context-usage-group li > span:first-of-type { color:var(--muted-foreground-hex); }
+.ontology-context-usage-group small { display:block; color:var(--muted-foreground-hex); font-size:11px; }

@@ -1,0 +1,17 @@
+.ontology-term-network { display:flex; flex-direction:column; flex:1; min-width:0; min-height:0; background:var(--background-hex); }
+.ontology-term-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid var(--border-hex); }
+.ontology-term-toolbar h1 { flex:1 1 180px; min-width:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; font-weight:600; }
+.ontology-term-controls, .ontology-term-layout { display:flex; flex-wrap:wrap; gap:4px; }
+.ontology-term-toolbar button { display:flex; align-items:center; justify-content:center; gap:6px; min-height:30px; padding:5px 10px; border:1px solid var(--border-hex); border-radius:var(--org-border-radius,4px); background:var(--card-hex,var(--background-hex)); color:var(--muted-foreground-hex); font-size:12px; cursor:pointer; }
+.ontology-term-toolbar button:hover { color:var(--foreground-hex); }
+.ontology-term-toolbar button[aria-pressed="true"] { color:var(--background-hex); background:var(--foreground-hex); border-color:var(--foreground-hex); }
+.ontology-term-toolbar .ontology-term-details { color:var(--workspace-accent,var(--color-primary)); border-color:transparent; }
+.ontology-term-canvas { position:relative; flex:1; min-width:0; min-height:0; background:var(--muted-bg-hex,var(--background-hex)); }
+.ontology-term-viewport { position:absolute; inset:0 208px 0 0; display:flex; min-width:0; min-height:0; }
+.ontology-term-canvas > div:last-child:not(.ontology-term-viewport) { max-height:calc(100% - 32px); }
+.ontology-term-status { display:flex; flex-wrap:wrap; align-items:center; gap:12px; min-height:36px; padding:8px 16px; border-top:1px solid var(--border-hex); color:var(--muted-foreground-hex); font-size:12px; }
+.ontology-term-status > span { min-width:0; overflow-wrap:anywhere; }
+.ontology-term-status button { color:var(--workspace-accent,var(--color-primary)); cursor:pointer; }
+.ontology-term-status button:hover { text-decoration:underline; }
+.ontology-term-network button:focus-visible { outline:2px solid var(--workspace-accent,var(--color-primary)); outline-offset:2px; }
+@media(max-width:700px) { .ontology-term-toolbar h1 { flex-basis:100%; } .ontology-term-viewport { right:192px; } }

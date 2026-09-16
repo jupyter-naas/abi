@@ -762,6 +762,11 @@ interface VisNetworkProps {
   /** Edge ids to highlight on the canvas (supports multi-hop chain selection). */
   selectedEdgeIds?: string[];
   onNodeSelect: (nodeId: string | null) => void;
+  onNodeDoubleClick?: (nodeId: string) => void;
+  /** Use supplied node coordinates without the initial physics simulation. */
+  fixedLayout?: boolean;
+  /** Draw system navigation levels in the workspace accent, without ontology arrows. */
+  systemOverview?: boolean;
   onEdgeSelect: (edgeId: string | null) => void;
   stabilizeKey?: number;
   layoutDirection?: 'LR' | 'TD';
@@ -819,6 +824,9 @@ export function VisNetwork({
   selectedNodeId,
   selectedEdgeIds = [],
   onNodeSelect,
+  onNodeDoubleClick,
+  fixedLayout = false,
+  systemOverview = false,
   onEdgeSelect,
   stabilizeKey,
   layoutDirection,
@@ -836,6 +844,7 @@ export function VisNetwork({
   const nodesDataRef = useRef<DataSet<Node>>(new DataSet());
   const edgesDataRef = useRef<DataSet<Edge>>(new DataSet());
   const onNodeSelectRef = useRef(onNodeSelect);
+  const onNodeDoubleClickRef = useRef(onNodeDoubleClick);
   const onEdgeSelectRef = useRef(onEdgeSelect);
   const getNodeTitleRef = useRef(getNodeTitle);
   useEffect(() => { getNodeTitleRef.current = getNodeTitle; }, [getNodeTitle]);
@@ -908,8 +917,9 @@ export function VisNetwork({
 
   useEffect(() => {
     onNodeSelectRef.current = onNodeSelect;
+    onNodeDoubleClickRef.current = onNodeDoubleClick;
     onEdgeSelectRef.current = onEdgeSelect;
-  }, [onNodeSelect, onEdgeSelect]);
+  }, [onNodeSelect, onNodeDoubleClick, onEdgeSelect]);
 
   const nodesByIri = useMemo(() => {
     const map = new Map<string, GraphNode>();
@@ -1009,9 +1019,20 @@ export function VisNetwork({
     // drawn beneath it (the line runs to the node center while only the arrow is
     // clipped to the border), making edges appear to float on top of the node.
     // Keeping the node fully opaque preserves the occlusion of that segment.
-    const background = dimmed ? fadeHexTowardWhite(colors.background, 0.82) : colors.background;
-    const border = dimmed ? fadeHexTowardWhite(colors.border, 0.7) : colors.border;
-    const textColor = dimmed ? '#94a3b8' : '#ffffff';
+    let background = dimmed ? fadeHexTowardWhite(colors.background, 0.82) : colors.background;
+    let border = dimmed ? fadeHexTowardWhite(colors.border, 0.7) : colors.border;
+    let textColor = dimmed ? '#94a3b8' : '#ffffff';
+    if (systemOverview && containerRef.current) {
+      const style = getComputedStyle(containerRef.current);
+      const accentValue = style.getPropertyValue('--workspace-accent').trim();
+      const accent = hexToRgb(accentValue) ? accentValue : colors.border;
+      const canvasColor = style.getPropertyValue('--background-hex').trim();
+      const primary = node.properties.is_primary === true;
+      background = primary ? accent : node.properties.system_level === 'subsystem'
+        ? hexToRgb(canvasColor) ? canvasColor : '#ffffff' : fadeHexTowardWhite(accent, 0.9);
+      border = accent;
+      textColor = primary ? '#ffffff' : accent;
+    }
     const image = nodeCardSvgDataUri({
       width,
       height,
@@ -1045,16 +1066,17 @@ export function VisNetwork({
       x: hierPos?.x ?? node.x,
       y: hierPos?.y ?? node.y,
     };
-  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri, hierarchicalPositions, anyNodeSelected, circularNodes]);
+  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri, hierarchicalPositions, anyNodeSelected, circularNodes, systemOverview]);
 
   const toVisEdge = useCallback((edge: GraphEdge): Edge => {
     const isHierarchical = edge.properties?.relation_kind === 'is_a';
-    const baseColor = isHierarchical ? '#000000' : (EDGE_COLORS[edge.type] || '#94a3b8');
+    const grouping = systemOverview && edge.properties?.relation_kind === 'system_group';
+    const baseColor = grouping ? '#cbd5e1' : isHierarchical ? '#000000' : (EDGE_COLORS[edge.type] || '#94a3b8');
     const isSelected = edge.properties?.selected === true;
     const dimmed = anyEdgeSelected && !isSelected;
     const color = dimmed ? 'rgba(148,163,184,0.25)' : baseColor;
     const fontColor = dimmed ? 'rgba(100,116,139,0.35)' : (isHierarchical ? '#000000' : '#64748b');
-    const labelText = isHierarchical
+    const labelText = isHierarchical || grouping
       ? undefined
       : (
           edge.label
@@ -1066,7 +1088,7 @@ export function VisNetwork({
       ? '#18181b'
       : '#ffffff';
     const smoothCfg = parallelEdgeSmooth.get(edge.id) ?? { enabled: false as const };
-    const baseWidth = edge.weight || (isHierarchical ? 1 : 2);
+    const baseWidth = edge.weight || (grouping ? 1 : isHierarchical ? 1 : 2);
     return {
       id: edge.id,
       from: edge.source,
@@ -1079,7 +1101,7 @@ export function VisNetwork({
         hover: baseColor,
         opacity: dimmed ? 0.35 : 1,
       },
-      arrows: { to: { enabled: true, scaleFactor: isSelected ? 1 : 0.8 } },
+      arrows: { to: { enabled: !grouping, scaleFactor: isSelected ? 1 : 0.8 } },
       font: labelText
         ? {
             size: isSelected ? 10 : 9,
@@ -1103,7 +1125,7 @@ export function VisNetwork({
       selectionWidth: Math.max(baseWidth + 1, 3),
       dashes: isHierarchical,
     };
-  }, [anyEdgeSelected, parallelEdgeSmooth]);
+  }, [anyEdgeSelected, parallelEdgeSmooth, systemOverview]);
 
   // Network options - simple config, let vis-network handle zoom.
   // autoResize is disabled because its synchronous resize handling triggers the
@@ -1181,6 +1203,10 @@ export function VisNetwork({
       }
     });
 
+    networkRef.current.on('doubleClick', (params) => {
+      if (params.nodes.length) onNodeDoubleClickRef.current?.(params.nodes[0] as string);
+    });
+
     // Observe the container and redraw inside requestAnimationFrame. Deferring
     // the resize work out of the ResizeObserver callback avoids the synchronous
     // "ResizeObserver loop completed with undelivered notifications" error.
@@ -1240,7 +1266,7 @@ export function VisNetwork({
   useEffect(() => {
     const net = networkRef.current;
     if (!net) return;
-    if (layoutDirection) return;
+    if (layoutDirection || fixedLayout) return;
     if (physicsEnabled) {
       net.setOptions({ physics: { enabled: true } });
       return;
@@ -1251,7 +1277,7 @@ export function VisNetwork({
       nodePositionsRef.current.set(id, pos as { x: number; y: number });
     });
     net.setOptions({ physics: { enabled: false } });
-  }, [physicsEnabled, layoutDirection]);
+  }, [physicsEnabled, layoutDirection, fixedLayout]);
 
   // Update nodes
   useEffect(() => {
@@ -1278,6 +1304,16 @@ export function VisNetwork({
         layoutHasIsaEdgesRef.current = false;
         nodePositionsRef.current.clear();
       }
+    }
+
+    if (fixedLayout) {
+      const net = networkRef.current;
+      net?.setOptions({ physics: { enabled: false } });
+      nodesDataRef.current.clear();
+      nodesDataRef.current.add(uniqueNodes.map(toVisNode));
+      isStabilizedRef.current = true;
+      const frame = requestAnimationFrame(() => applySavedViewportOrFit({ fitDurationMs: 300 }));
+      return () => cancelAnimationFrame(frame);
     }
 
     if (layoutDirection) {
@@ -1498,7 +1534,7 @@ export function VisNetwork({
     } finally {
       prevLayoutDirectionRef.current = layoutDirection;
     }
-  }, [nodes, toVisNode, layoutDirection, applySavedViewportOrFit, useBucketLayout]);
+  }, [nodes, toVisNode, layoutDirection, applySavedViewportOrFit, useBucketLayout, fixedLayout]);
 
   /**
    * If no code path consumes `pendingFilterViewportApplyRef` this frame (e.g. edges-only refresh),
@@ -1591,7 +1627,7 @@ export function VisNetwork({
   // Skip when in hierarchical layout — positions are already fixed.
   useEffect(() => {
     if (stabilizeKey === undefined || stabilizeKey === 0) return;
-    if (!networkRef.current || layoutDirection) return;
+    if (!networkRef.current || layoutDirection || fixedLayout) return;
     isStabilizedRef.current = false;
     networkRef.current.setOptions({ physics: { enabled: true } });
     networkRef.current.once('stabilizationIterationsDone', () => {
@@ -1606,19 +1642,19 @@ export function VisNetwork({
       }
     });
     networkRef.current.stabilize(200);
-  }, [stabilizeKey, layoutDirection]);
+  }, [stabilizeKey, layoutDirection, fixedLayout]);
 
   // Compact the graph when a node is selected by reducing spring length by 15%.
   useEffect(() => {
     const net = networkRef.current;
-    if (!net || layoutDirection) return;
+    if (!net || layoutDirection || fixedLayout) return;
     const baseSpringLength = useBucketLayout ? 200 : 250;
     net.setOptions({
       physics: {
         forceAtlas2Based: { springLength: selectedNodeId ? baseSpringLength * 0.85 : baseSpringLength },
       },
     });
-  }, [selectedNodeId, useBucketLayout, layoutDirection]);
+  }, [selectedNodeId, useBucketLayout, layoutDirection, fixedLayout]);
 
   // Handle selected node — select visually and pan to center on it without changing zoom.
   // Double-RAF delay lets the canvas finish resizing (inspector open/close) before we pan.
@@ -1627,6 +1663,13 @@ export function VisNetwork({
 
     const hadSelected = prevSelectedNodeIdRef.current !== null;
     prevSelectedNodeIdRef.current = selectedNodeId;
+
+    // Keep overview nodes under the pointer so a second click can drill down.
+    if (fixedLayout) {
+      if (selectedNodeId && nodesDataRef.current.get(selectedNodeId)) networkRef.current.selectNodes([selectedNodeId]);
+      else networkRef.current.unselectAll();
+      return;
+    }
 
     let cancelled = false;
 
@@ -1661,7 +1704,7 @@ export function VisNetwork({
     });
 
     return () => { cancelled = true; };
-  }, [selectedNodeId]);
+  }, [selectedNodeId, fixedLayout]);
 
   // Highlight selected edges on the canvas.
   useEffect(() => {

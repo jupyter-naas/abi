@@ -12,6 +12,7 @@ import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFilesStore } from '@/stores/files';
 import { useOntologyStore } from '@/stores/ontology';
+import { lastOntologyRoute } from '@/lib/ontology-navigation';
 import {
   DEFAULT_NAV_ORDER,
   dragThresholdPx,
@@ -218,17 +219,14 @@ export function Sidebar() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sidebarNavOrder, canMaps, canChat, canFiles, canDatasets, canApps, canMarketplace, canSearch, canOntology, canGraph, canCode, canSlides, canDocuments]);
 
-  const getDefaultPath = (sectionId: SidebarSection): string => {
+  const getDefaultPath = useCallback((sectionId: SidebarSection): string => {
     switch (sectionId) {
       case 'home':     return getWorkspacePath(currentWorkspaceId, '/home');
       case 'maps':     return getWorkspacePath(currentWorkspaceId, '/maps/presence');
       case 'search':   return getWorkspacePath(currentWorkspaceId, '/search');
       case 'chat':     return getWorkspacePath(currentWorkspaceId, '/chat');
       case 'ontology': {
-        const ontologyPath =
-          useOntologyStore.getState().selectedOntologyPath
-          ?? '/app/libs/naas-abi-core/naas_abi_core/modules/bfo/ontologies/modules/bfo-core.ttl';
-        const params = new URLSearchParams({ view: 'network', ontology: ontologyPath });
+        const params = lastOntologyRoute(currentWorkspaceId);
         return getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`);
       }
       case 'graph':    return getWorkspacePath(currentWorkspaceId, '/graph/network');
@@ -244,7 +242,7 @@ export function Sidebar() {
       case 'workspaces':   return getWorkspacePath(currentWorkspaceId, '/home');
       case 'events':       return getWorkspacePath(currentWorkspaceId, '/admin/events');
     }
-  };
+  }, [currentWorkspaceId]);
 
   useEffect(() => {
     if (!currentWorkspaceId) return;
@@ -252,7 +250,7 @@ export function Sidebar() {
       if (section.id === 'search') continue;
       router.prefetch(getDefaultPath(section.id));
     }
-  }, [currentWorkspaceId, orderedSections, router]);
+  }, [currentWorkspaceId, getDefaultPath, orderedSections, router]);
 
   const handleSectionClick = (section: SectionDef) => {
     setHoverTip(null);

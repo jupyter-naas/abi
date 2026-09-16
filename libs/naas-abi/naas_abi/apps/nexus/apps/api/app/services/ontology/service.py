@@ -607,6 +607,29 @@ class OntologyService:
         )
         return [*classes, *relations]
 
+    async def workspace_dictionary(self, catalog_refs: list[str] | None) -> dict[str, Any]:
+        """Project only the files admitted by the workspace ontology catalog."""
+        from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_dictionary import (
+            build_workspace_dictionary,
+        )
+
+        files = await self.list_ontology_files(catalog_refs=catalog_refs)
+        sources = []
+        errors = []
+        for file in files:
+            source = {"path": file.path, "name": file.name, "moduleName": file.module_name}
+            try:
+                # Never follow imports: imported files must independently be visible.
+                sources.append((source, _load_ontology_graph(file.path)))
+            except Exception:
+                logger.exception("Could not read dictionary source %s", file.path)
+                errors.append({"path": file.path, "name": file.name, "message": "Could not read this ontology file."})
+        return {
+            "items": build_workspace_dictionary(sources),
+            "file_count": len(files), "loaded_file_count": len(sources),
+            "errors": errors, "complete": not errors,
+        }
+
     async def list_classes(
         self,
         ontology_path: str | None,

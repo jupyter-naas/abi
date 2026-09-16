@@ -378,3 +378,24 @@ def test_custom_browser_host_is_allowed_by_cors(monkeypatch) -> None:
     finally:
         monkeypatch.undo()
         importlib.reload(dev)
+
+
+def test_restart_reuses_port_after_closed_connections(monkeypatch) -> None:
+    """TIME_WAIT must not shift the API URL away from the running frontend."""
+    import socket
+
+    monkeypatch.setattr(dev, "BIND_HOST", "127.0.0.1")
+    with socket.socket() as server:
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.settimeout(1)
+        server.bind(("127.0.0.1", 0))
+        port = server.getsockname()[1]
+        server.listen()
+        assert dev._port_in_use(port)
+        with socket.create_connection(("127.0.0.1", port), timeout=1) as client:
+            connection, _ = server.accept()
+            with connection:
+                connection.shutdown(socket.SHUT_WR)
+                assert client.recv(1) == b""
+    assert not dev._port_in_use(port)
+    assert dev._find_free_port("api", port) == port

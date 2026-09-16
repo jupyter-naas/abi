@@ -3,18 +3,19 @@
 import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  BrainCircuit, ChevronRight, Box, Link2,
-  RefreshCw, Upload, Download, BookOpen, FileCode,
+  BrainCircuit, ChevronRight, Box, Network,
+  BookOpen, FileCode, Folder,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { OntologyDictionary } from './ontology-dictionary';
 import { cn } from '@/lib/utils';
 import { useOntologyStore } from '@/stores/ontology';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
+import { ontologyBrowser, systemRoute } from '@/lib/ontology-navigation';
 import { ontologyApiQuery } from '@/lib/ontology-query';
 import { CollapsibleSection } from './collapsible-section';
-import { SidebarToolbar, SidebarToolbarButton } from './sidebar-toolbar';
 import { getWorkspacePath } from './utils';
 
 type OntologyFile = {
@@ -43,15 +44,21 @@ type ModuleSubmoduleGroup = {
 
 export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const routeQuery = searchParams?.toString() || '';
+  const pathname = usePathname();
+  const dictionaryMode = ontologyBrowser(routeQuery) === 'dictionary';
+  const isSystemHome = searchParams?.get('view') === 'system'
+    && !searchParams?.get('subsystem') && !searchParams?.get('process');
   const [ontologyFiles, setOntologyFiles] = useState<OntologyFile[]>([]);
   const [expandedOntologyModules, setExpandedOntologyModules] = useState<string[]>([]);
   const [expandedOntologySubmodules, setExpandedOntologySubmodules] = useState<string[]>([]);
   const [loadingOntologyFiles, setLoadingOntologyFiles] = useState(false);
+  const [filesWorkspaceId, setFilesWorkspaceId] = useState<string | null>(null);
+  const [filesError, setFilesError] = useState<string | null>(null);
   const { currentWorkspaceId } = useWorkspaceStore();
   const {
-    items: ontologyItems,
-    loading: ontologyLoading,
-    clearCache: clearOntologyCache,
+    graphRefreshTrigger,
     referenceOntologies,
     expandedReferences,
     toggleReference,
@@ -112,8 +119,10 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
   ), [groupedOntologyFiles]);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchOntologyFiles = async () => {
       setLoadingOntologyFiles(true);
+      setFilesError(null);
       try {
         const apiUrl = getApiUrl();
         const response = await authFetch(`${apiUrl}/api/ontology/ontologies${ontologyApiQuery()}`);
@@ -138,20 +147,9 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
             a.moduleName.localeCompare(b.moduleName, undefined, { sensitivity: 'base' })
             || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
           );
+        if (cancelled) return;
         setOntologyFiles(normalizedFiles);
-
-        const selected = useOntologyStore.getState().selectedOntologyPath;
-        const stillValid = Boolean(
-          selected && normalizedFiles.some((file) => file.path === selected)
-        );
-        if (!stillValid && normalizedFiles.length > 0) {
-          const firstPath = normalizedFiles[0].path;
-          setSelectedOntologyPath(firstPath);
-          const params = new URLSearchParams({ view: 'network', ontology: firstPath });
-          router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
-        } else if (!stillValid) {
-          setSelectedOntologyPath(null);
-        }
+        setFilesWorkspaceId(currentWorkspaceId);
 
         setExpandedOntologyModules(
           Array.from(new Set(normalizedFiles.map((file) => file.moduleName)))
@@ -166,17 +164,44 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
           )
         );
       } catch (error) {
+        if (cancelled) return;
+        setFilesWorkspaceId(currentWorkspaceId);
+        setFilesError('Could not load workspace files. Use View → Refresh to retry.');
         console.error('Failed to fetch ontology files:', error);
         setOntologyFiles([]);
         setExpandedOntologyModules([]);
         setExpandedOntologySubmodules([]);
       } finally {
-        setLoadingOntologyFiles(false);
+        if (!cancelled) setLoadingOntologyFiles(false);
       }
     };
 
     fetchOntologyFiles();
-  }, [currentWorkspaceId, router, setSelectedOntologyPath]);
+    return () => { cancelled = true; };
+  }, [currentWorkspaceId, graphRefreshTrigger]);
+
+  useEffect(() => {
+    if (pathname !== getWorkspacePath(currentWorkspaceId, '/ontology')) return;
+    if (filesWorkspaceId !== currentWorkspaceId || loadingOntologyFiles || filesError) return;
+    const route = new URLSearchParams(routeQuery);
+    const selected = route.get('ontology');
+    const valid = ontologyFiles.some(file => file.path === selected);
+    setSelectedOntologyPath(valid ? selected : null);
+    if (!dictionaryMode && !selected && ontologyFiles.length) {
+      route.set('browser', 'files');
+      route.set('ontology', ontologyFiles[0].path);
+      router.replace(`?${route}`, { scroll: false });
+    }
+  }, [currentWorkspaceId, dictionaryMode, filesError, filesWorkspaceId, loadingOntologyFiles, ontologyFiles, pathname, routeQuery, router, setSelectedOntologyPath]);
+
+  function openFile(path: string) {
+    const params = new URLSearchParams(routeQuery);
+    params.set('browser', 'files');
+    params.set('view', 'network');
+    params.set('ontology', path);
+    params.delete('term'); params.delete('termType');
+    router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params}`));
+  }
 
   return (
     <CollapsibleSection
@@ -184,40 +209,18 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
       icon={<BrainCircuit size={18} />}
       label="Ontology"
       description="Define classes, relationships, and schemas"
-      href={getWorkspacePath(currentWorkspaceId, '/ontology?view=network')}
+      href={getWorkspacePath(currentWorkspaceId, '/ontology')}
       collapsed={collapsed}
       detailOnly={detailOnly}
     >
-      {/* Toolbar */}
-      <SidebarToolbar>
-        <SidebarToolbarButton
-          icon={<Box size={14} />}
-          label="New Class"
-          onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/ontology?view=create-entity'))}
-        />
-        <SidebarToolbarButton
-          icon={<Link2 size={14} />}
-          label="New Object Property"
-          onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/ontology?view=create-relationship'))}
-        />
-        <SidebarToolbarButton
-          icon={<Upload size={14} />}
-          label="Import Ontology"
-          onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/ontology/import'))}
-        />
-        <SidebarToolbarButton
-          icon={<Download size={14} />}
-          label="Export Ontology"
-          onClick={() => router.push(getWorkspacePath(currentWorkspaceId, '/ontology/export'))}
-        />
-        <SidebarToolbarButton
-          icon={<RefreshCw size={14} />}
-          label="Refresh (clear cache)"
-          onClick={() => clearOntologyCache()}
-          disabled={ontologyLoading}
-          spinning={ontologyLoading}
-        />
-      </SidebarToolbar>
+      {dictionaryMode ? <h2 className="px-2 pb-2 pt-2">
+        <button type="button" title="Back to system overview" aria-label="System home"
+          onClick={() => router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${systemRoute(routeQuery)}`), { scroll: false })}
+          aria-current={isSystemHome ? 'page' : undefined}
+          className={cn('flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] font-medium hover:bg-workspace-accent-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-workspace-accent', isSystemHome && 'bg-workspace-accent-10 text-workspace-accent')}>
+          <Network size={14} aria-hidden="true" /><span>System</span>
+        </button>
+      </h2> : <h2 className="px-2 pb-2 pt-2 text-[13px] font-medium">Files</h2>}
       {ontologyTooltip && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed z-[100] whitespace-nowrap rounded-md border border-border bg-popover px-3 py-2 text-sm shadow-lg animate-in fade-in-0 zoom-in-95 duration-100"
@@ -232,6 +235,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
         document.body
       )}
 
+      {dictionaryMode ? <OntologyDictionary files={filesWorkspaceId === currentWorkspaceId ? ontologyFiles : []} filesLoading={loadingOntologyFiles || filesWorkspaceId !== currentWorkspaceId} filesError={filesWorkspaceId === currentWorkspaceId ? filesError : null} /> : <>
       {/* Ontologies by module */}
       <div className="space-y-0.5">
         {groupedByModuleAndSubmodule.map((group: ModuleSubmoduleGroup) => {
@@ -251,8 +255,8 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                   size={10}
                   className={cn('flex-shrink-0 transition-transform', moduleExpanded && 'rotate-90')}
                 />
-                <span className="flex-1 truncate">{moduleName}</span>
-                <span className="text-[10px] text-muted-foreground">
+                <Folder size={12} className="shrink-0" /><span className="flex-1 truncate">{moduleName}</span>
+                <span className="text-xs text-muted-foreground">
                   {filesWithoutSubmodule.length + submodules.reduce(
                     (acc: number, entry: [string, OntologyFile[]]) => acc + entry[1].length,
                     0
@@ -269,16 +273,9 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                       return (
                         <button
                           key={`${moduleName}:${ontologyFile.path}`}
-                          onClick={() => {
-                            setSelectedOntologyPath(ontologyFile.path);
-                            const params = new URLSearchParams({
-                              view: 'network',
-                              ontology: ontologyFile.path,
-                            });
-                            router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
-                          }}
+                          onClick={() => openFile(ontologyFile.path)}
                           className={cn(
-                            "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-workspace-accent-10",
+                            "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] leading-5 transition-colors hover:bg-workspace-accent-10",
                             isSelected && "bg-workspace-accent-10 text-workspace-accent"
                           )}
                           onMouseEnter={(event) => showOntologyTooltip(
@@ -290,7 +287,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                           aria-current={isSelected ? 'page' : undefined}
                         >
                           <FileCode size={12} className="flex-shrink-0 text-workspace-accent" />
-                          <span className="flex-1 truncate">{ontologyFile.name}</span>
+                          <span className="min-w-0 flex-1"><span className="block truncate font-mono text-[13px] leading-5">{ontologyFile.path.split(/[\\/]/).pop()}</span><span className="block truncate text-xs text-muted-foreground">{ontologyFile.name}</span></span>
                         </button>
                       );
                     })()
@@ -313,8 +310,8 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                             size={10}
                             className={cn('flex-shrink-0 transition-transform', submoduleExpanded && 'rotate-90')}
                           />
-                          <span className="flex-1 truncate">{submoduleName}</span>
-                          <span className="text-[10px] text-muted-foreground">{submoduleFiles.length}</span>
+                          <Folder size={12} className="shrink-0" /><span className="flex-1 truncate">{submoduleName}</span>
+                          <span className="text-xs text-muted-foreground">{submoduleFiles.length}</span>
                         </button>
                         {submoduleExpanded && (
                           <div className="ml-4 space-y-0.5">
@@ -326,16 +323,9 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                                 return (
                                   <button
                                     key={`${submoduleKey}:${ontologyFile.path}`}
-                                    onClick={() => {
-                                      setSelectedOntologyPath(ontologyFile.path);
-                                      const params = new URLSearchParams({
-                                        view: 'network',
-                                        ontology: ontologyFile.path,
-                                      });
-                                      router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`));
-                                    }}
+                                    onClick={() => openFile(ontologyFile.path)}
                                     className={cn(
-                                      "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-workspace-accent-10",
+                                      "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] leading-5 transition-colors hover:bg-workspace-accent-10",
                                       isSelected && "bg-workspace-accent-10 text-workspace-accent"
                                     )}
                                     onMouseEnter={(event) => showOntologyTooltip(
@@ -347,7 +337,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                                     aria-current={isSelected ? 'page' : undefined}
                                   >
                                     <FileCode size={12} className="flex-shrink-0 text-workspace-accent" />
-                                    <span className="flex-1 truncate">{ontologyFile.name}</span>
+                                    <span className="min-w-0 flex-1"><span className="block truncate font-mono text-[13px] leading-5">{ontologyFile.path.split(/[\\/]/).pop()}</span><span className="block truncate text-xs text-muted-foreground">{ontologyFile.name}</span></span>
                                   </button>
                                 );
                               })()
@@ -362,9 +352,10 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
             </div>
           );
         })}
-        {!loadingOntologyFiles && ontologyFiles.length === 0 && (
+        {!loadingOntologyFiles && !filesError && filesWorkspaceId === currentWorkspaceId && ontologyFiles.length === 0 && (
           <p className="px-2 py-1 text-xs text-muted-foreground">No ontology files found</p>
         )}
+        {filesError && <p role="alert" className="px-2 py-1 text-xs text-destructive">{filesError}</p>}
         {loadingOntologyFiles && (
           <p className="px-2 py-1 text-xs text-muted-foreground">Loading ontologies...</p>
         )}
@@ -373,7 +364,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
       {/* Reference Ontologies */}
       {referenceOntologies.length > 0 && (
         <div className="space-y-0.5 border-t border-border/50 pt-2 mt-2">
-          <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             References ({referenceOntologies.length})
           </p>
           {referenceOntologies.map((ref) => {
@@ -382,7 +373,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
               <div key={ref.id} className="space-y-0.5">
                 <button
                   onClick={() => toggleReference(ref.id)}
-                  className="group flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-workspace-accent-10"
+                  className="group flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-[13px] leading-5 transition-colors hover:bg-workspace-accent-10"
                 >
                   <ChevronRight
                     size={10}
@@ -390,7 +381,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                   />
                   <BookOpen size={12} className="flex-shrink-0 text-amber-500" />
                   <span className="flex-1 truncate font-medium">{ref.name}</span>
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     {ref.classes.length}c / {ref.properties.length}p
                   </span>
                 </button>
@@ -414,7 +405,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
                       </button>
                     ))}
                     {ref.classes.length > 10 && (
-                      <p className="px-2 py-0.5 text-[10px] text-muted-foreground">
+                      <p className="px-2 py-0.5 text-xs text-muted-foreground">
                         +{ref.classes.length - 10} more classes
                       </p>
                     )}
@@ -426,12 +417,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
         </div>
       )}
 
-      {/* Empty state */}
-      {ontologyItems.length === 0 && referenceOntologies.length === 0 && ontologyFiles.length === 0 && (
-        <p className="px-2 py-2 text-xs text-muted-foreground">
-          {ontologyLoading ? 'Loading...' : 'No items yet'}
-        </p>
-      )}
+      </>}
     </CollapsibleSection>
   );
 }
