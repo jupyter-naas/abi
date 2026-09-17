@@ -10,6 +10,10 @@ Managed services:
   - api         (FastAPI, uvicorn)
   - dagster     (Dagster dev UI)
   - nexus-web   (Next.js dev server)
+
+Optional (not started by default — pass `--service nats` to include):
+  - nats        (NATS/JetStream, for the Stage 1 NATS-distributed-modules
+                 work; requires the `nats-server` binary on PATH)
 """
 
 from __future__ import annotations
@@ -83,7 +87,19 @@ SERVICE_PORT_BASES = {
     "api": 9879,        # 9879..10778
     "dagster": 11000,   # 11000..11899
     "nexus-web": 12000, # 12000..12899
+    "nats": 13000,      # 13000..13899 (client port; see NATS_MONITOR_PORT_OFFSET)
 }
+
+# nats-server needs two ports: the client port (allocated like every other
+# service, above) and an HTTP monitoring port used for the /healthz readiness
+# probe. Rather than give it a second full ServiceSpec, derive the monitor
+# port from the client one — +1000 stays clear of every other service's
+# 900-wide window even with the maximum per-worktree offset.
+NATS_MONITOR_PORT_OFFSET = 1000
+
+
+def _nats_monitor_port(client_port: int) -> int:
+    return client_port + NATS_MONITOR_PORT_OFFSET
 
 NEXUS_ROOT = Path("libs/naas-abi/naas_abi/apps/nexus")
 NEXUS_WEB_DIR = NEXUS_ROOT / "apps" / "web"
@@ -94,6 +110,17 @@ ALT_NEXUS_WEB_DIR = ALT_NEXUS_ROOT / "apps" / "web"
 # to it on boot. nexus-web is independent of oxigraph but ordered last so
 # the API URL is available when Next.js starts polling it.
 ALL_SERVICES = ("oxigraph", "api", "dagster", "nexus-web")
+
+# Selectable via `--service`, but not part of the default `abi dev up` set --
+# nothing reads these unless you ask for them (config.yaml's bus_adapter
+# still defaults to "python_queue", not "nats_jetstream"). Add explicitly:
+# `abi dev up --service api --service nats`.
+OPTIONAL_SERVICES = ("nats",)
+
+# The full universe of names `--service`/`abi dev status`/`abi dev logs`
+# accept. `_validate_services` still defaults to just `ALL_SERVICES` when
+# nothing is explicitly selected.
+KNOWN_SERVICES = ALL_SERVICES + OPTIONAL_SERVICES
 
 # `abi dev up` exists to watch the stack come up, and the slowest part of api
 # boot — `Engine.load()`, behind the lazy app factory — narrates itself only at
@@ -325,6 +352,46 @@ def _launch_oxigraph(spec: ServiceSpec) -> int:
     return _spawn(spec, cmd, _project_root(), env)
 
 
+def _nats_url(ports: dict[str, int]) -> str:
+    # Server-to-server (api/dagster -> nats), same host, never a browser.
+    return f"nats://{PROBE_HOST}:{ports['nats']}"
+
+
+def _launch_nats(spec: ServiceSpec) -> int:
+    """Launch a native `nats-server` process with JetStream enabled.
+
+    Unlike oxigraph (an embedded Python module via pyoxigraph), NATS has no
+    pure-Python server -- this shells out to the real `nats-server` binary,
+    the same one the docker-compose service and CI run. Not bundled or
+    auto-installed; matches how nexus-web already requires `pnpm`/`npx` on
+    PATH rather than vendoring Node.
+    """
+    binary = shutil.which("nats-server")
+    if binary is None:
+        raise click.ClickException(
+            "`nats-server` is not on PATH. Install it (e.g. `brew install "
+            "nats-server` on macOS, or see https://github.com/nats-io/"
+            "nats-server/releases) and retry, or drop `--service nats` to "
+            "run without it."
+        )
+    store_path = _project_root() / "storage" / "nats"
+    store_path.mkdir(parents=True, exist_ok=True)
+    env = os.environ.copy()
+    cmd = [
+        binary,
+        "-js",
+        "-sd",
+        str(store_path),
+        "-a",
+        BIND_HOST,
+        "-p",
+        str(spec.port),
+        "-m",
+        str(_nats_monitor_port(spec.port)),
+    ]
+    return _spawn(spec, cmd, _project_root(), env)
+
+
 def _launch_api(
     spec: ServiceSpec, ports: dict[str, int], log_level: str | None = None
 ) -> int:
@@ -519,7 +586,17 @@ SERVICE_READY_PATHS = {
     "api": "/",
     "dagster": "/",
     "nexus-web": "/",
+    "nats": "/healthz",  # probed against the derived monitor port, not ports["nats"] -- see _ready_probe_port
 }
+
+
+def _ready_probe_port(name: str, port: int) -> int:
+    """Port to HTTP-probe for readiness -- usually `port`, except nats.
+
+    `ports["nats"]` is the client (protocol) port, not an HTTP endpoint;
+    the monitoring server nats-server also exposes lives on a derived port.
+    """
+    return _nats_monitor_port(port) if name == "nats" else port
 
 
 def _start_service(
@@ -558,6 +635,8 @@ def _start_service(
 
     if name == "oxigraph":
         pid = _launch_oxigraph(spec)
+    elif name == "nats":
+        pid = _launch_nats(spec)
     elif name == "api":
         pid = _launch_api(spec, ports, log_level)
     elif name == "nexus-web":
@@ -634,6 +713,7 @@ _SERVICE_STYLES = {
     "api": "green",
     "dagster": "blue",
     "nexus-web": "magenta",
+    "nats": "yellow",
 }
 
 
@@ -664,7 +744,7 @@ def _build_status_panel(
     table.add_column("Health", justify="center")
 
     started_names = {spec.name for spec in started}
-    visible = [name for name in ALL_SERVICES if name in started_names]
+    visible = [name for name in KNOWN_SERVICES if name in started_names]
     for idx, name in enumerate(visible, start=1):
         port = ports[name]
         style = _SERVICE_STYLES.get(name, "white")
@@ -718,7 +798,7 @@ def _health_probe_loop(
             alive = pid is not None and _pid_alive(pid)
             ready = (
                 _http_ready(
-                    port,
+                    _ready_probe_port(spec.name, port),
                     path=SERVICE_READY_PATHS.get(spec.name, "/"),
                     timeout=0.4,
                 )
@@ -1369,14 +1449,14 @@ def _follow_until_interrupt(
 def _validate_services(selected: tuple[str, ...]) -> list[str]:
     if not selected:
         return list(ALL_SERVICES)
-    unknown = [s for s in selected if s not in ALL_SERVICES]
+    unknown = [s for s in selected if s not in KNOWN_SERVICES]
     if unknown:
         raise click.BadParameter(
             f"Unknown service(s): {', '.join(unknown)}. "
-            f"Choose from: {', '.join(ALL_SERVICES)}."
+            f"Choose from: {', '.join(KNOWN_SERVICES)}."
         )
-    # Preserve canonical order (api → dagster → nexus-web).
-    return [s for s in ALL_SERVICES if s in selected]
+    # Preserve canonical order (api → dagster → nexus-web → nats).
+    return [s for s in KNOWN_SERVICES if s in selected]
 
 
 @click.group("dev")
@@ -1389,8 +1469,12 @@ def dev() -> None:
     "--service",
     "services",
     multiple=True,
-    type=click.Choice(ALL_SERVICES),
-    help="Limit to the given service(s). Repeat the flag. Default: start all.",
+    type=click.Choice(KNOWN_SERVICES),
+    help=(
+        "Limit to the given service(s). Repeat the flag. Default: start "
+        f"{', '.join(ALL_SERVICES)} ({', '.join(OPTIONAL_SERVICES)} "
+        "available but opt-in)."
+    ),
 )
 @click.option(
     "-d",
@@ -1490,7 +1574,7 @@ def dev_up(
     "--service",
     "services",
     multiple=True,
-    type=click.Choice(ALL_SERVICES),
+    type=click.Choice(KNOWN_SERVICES),
     help="Limit to the given service(s). Default: stop all.",
 )
 def dev_down(services: tuple[str, ...]) -> None:
@@ -1499,7 +1583,9 @@ def dev_down(services: tuple[str, ...]) -> None:
     if not _instance_path().exists():
         click.echo("No dev instance allocated — nothing to stop.")
         return
-    instance = json.loads(_instance_path().read_text())
+    # _load_or_create_instance (not a raw json.loads) so an instance.json
+    # from before "nats" existed gets it backfilled rather than KeyError-ing.
+    instance = _load_or_create_instance()
     ports: dict[str, int] = instance["ports"]
     # Stop in reverse order so consumers (api) come down after their deps.
     for name in reversed(selected):
@@ -1513,12 +1599,12 @@ def dev_status() -> None:
     if not _instance_path().exists():
         click.echo("No dev instance allocated yet. Run `abi dev up`.")
         return
-    instance = json.loads(_instance_path().read_text())
+    instance = _load_or_create_instance()
     click.echo(f"Project: {instance['project_root']}")
     click.echo(f"Offset:  {instance['offset']}")
     click.echo()
     click.echo(f"{'Service':<12} {'Port':<7} {'PID':<10} {'HTTP':<13} URL")
-    for name in ALL_SERVICES:
+    for name in KNOWN_SERVICES:
         port = instance["ports"][name]
         spec = _service_spec(name, port)
         pid = _read_pid(spec)
@@ -1528,7 +1614,8 @@ def dev_status() -> None:
             pid_status = f"{pid} (alive)"
         else:
             pid_status = f"{pid} (dead)"
-        http = "ready" if _http_ready(port, path=SERVICE_READY_PATHS.get(name, "/")) else "down"
+        ready_port = _ready_probe_port(name, port)
+        http = "ready" if _http_ready(ready_port, path=SERVICE_READY_PATHS.get(name, "/")) else "down"
         click.echo(
             f"{name:<12} {port:<7} {pid_status:<10} {http:<13} "
             f"{_service_url(port)}"
@@ -1538,7 +1625,7 @@ def dev_status() -> None:
 @dev.command("logs")
 @click.argument(
     "service",
-    type=click.Choice(ALL_SERVICES),
+    type=click.Choice(KNOWN_SERVICES),
     required=True,
 )
 @click.option("-f", "--follow", is_flag=True, default=False, help="Tail follow.")
@@ -1552,10 +1639,12 @@ def dev_status() -> None:
 )
 def dev_logs(service: str, follow: bool, lines: int) -> None:
     """Print (and optionally follow) a service's log file."""
-    instance = json.loads(_instance_path().read_text()) if _instance_path().exists() else None
-    if instance is None:
+    if not _instance_path().exists():
         click.echo("No dev instance allocated yet. Run `abi dev up`.")
         return
+    # _load_or_create_instance (not a raw json.loads) so an instance.json
+    # from before "nats" existed gets it backfilled rather than KeyError-ing.
+    instance = _load_or_create_instance()
     spec = _service_spec(service, instance["ports"][service])
     log_file = _log_path(spec)
     if not log_file.exists():
@@ -1572,7 +1661,7 @@ def dev_logs(service: str, follow: bool, lines: int) -> None:
 def dev_ports() -> None:
     """Print the ports allocated to this worktree."""
     instance = _load_or_create_instance()
-    for name in ALL_SERVICES:
+    for name in KNOWN_SERVICES:
         click.echo(f"{name:<12} {instance['ports'][name]}")
 
 
@@ -1591,7 +1680,7 @@ _NUKE_TARGETS: tuple[str, ...] = (
 def _running_services(ports: dict[str, int]) -> list[str]:
     """Names of services with a live PID."""
     alive: list[str] = []
-    for name in ALL_SERVICES:
+    for name in KNOWN_SERVICES:
         port = ports.get(name)
         if port is None:
             continue
