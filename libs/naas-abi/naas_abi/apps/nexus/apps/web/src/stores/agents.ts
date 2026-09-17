@@ -242,7 +242,7 @@ export const useAgentsStore = create<AgentsState>()(
 
             // Pick the best agent to surface in the chat UI.
             // Priority: workspace default → Abi → first enabled.
-            const { pickFeaturePaneAgent, pickWorkspaceDefaultAgent } = await import(
+            const { pickWorkspaceDefaultAgent } = await import(
               '@/lib/pick-workspace-default-agent'
             );
 
@@ -267,14 +267,16 @@ export const useAgentsStore = create<AgentsState>()(
             // from the other one must not pin Documents on /slides or Slides
             // on /documents, and a slug like board-documents must not flip
             // the surface.
-            const { featureOpenResource, getPaneSurfaceForPath } = await import(
-              '@/lib/feature-office-agents'
-            );
+            const { appAgentRefForPane, featureOpenResource, getPaneSurfaceForPath } =
+              await import('@/lib/feature-office-agents');
             const { isNexusDocumentsAgent, officeSurfaceFromPath, pickPaneOfficeAgent } =
               await import('@/lib/pick-workspace-default-agent');
+            const { pickPaneAgentForSurface } = await import('@/lib/feature-agent-pane');
             const { useFeaturePaneStore } = await import('./feature-pane');
             const routePath = typeof window === 'undefined' ? '' : window.location.pathname;
             const routeSurface = getPaneSurfaceForPath(routePath);
+            const featurePaneResource = useFeaturePaneStore.getState().resource;
+            const appAgentRef = appAgentRefForPane(routePath, featurePaneResource);
             const { onSlides, onDocuments } = officeSurfaceFromPath(routePath);
             if (
               onDocuments &&
@@ -285,12 +287,13 @@ export const useAgentsStore = create<AgentsState>()(
               return;
             }
             const featureItemOpen = Boolean(
-              featureOpenResource(routePath, useFeaturePaneStore.getState().resource),
+              featureOpenResource(routePath, featurePaneResource),
             );
             const panePreferred =
               (onSlides || onDocuments
                 ? pickPaneOfficeAgent(formattedAgents, { onSlides, onDocuments })
-                : pickFeaturePaneAgent(formattedAgents, routeSurface)) ?? preferred;
+                : pickPaneAgentForSurface(formattedAgents, routeSurface, appAgentRef)) ??
+              preferred;
             const currentPane = ws.paneAgent;
             if (
               onSlides ||

@@ -22,3 +22,17 @@ def test_module_app_dir_follows_the_catalog_asset_map(
     assert adapter.module_app_dir("bob:budget") == nested
     assert adapter.module_app_dir("bob:missing") is None
     assert adapter.module_app_dir("no-separator") is None
+
+
+def test_build_app_info_reads_manifest_agent(tmp_path: Path) -> None:
+    app_dir = tmp_path / "map"
+    app_dir.mkdir()
+    info = adapter._build_app_info(
+        "operations.counter_uas",
+        app_dir,
+        {
+            "name": "Counter-UAS Map",
+            "agent": "operations.counter_uas CounterUASAgent",
+        },
+    )
+    assert info.agent == "operations.counter_uas CounterUASAgent"

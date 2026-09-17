@@ -119,6 +119,7 @@ def _detail(app: Any, enabled: bool, workspace_id: str) -> dict[str, Any]:
             "license": app.license,
             "tier": app.tier,
             "keywords": list(app.keywords or []),
+            "agent": getattr(app, "agent", None),
             "pricing": app.pricing.model_dump() if app.pricing else None,
             "has_demo_login": bool(app.demo_login),
             "open_in_nexus": (

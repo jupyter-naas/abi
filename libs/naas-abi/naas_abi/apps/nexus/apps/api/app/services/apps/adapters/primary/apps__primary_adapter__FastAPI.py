@@ -195,7 +195,13 @@ def _build_app_info(
         maintainer=manifest.get("maintainer"),
         pricing=pricing,
         dependencies=dict(manifest.get("dependencies") or {}),
+        agent=_normalize_manifest_agent(manifest.get("agent")),
     )
+
+
+def _normalize_manifest_agent(raw: Any) -> str | None:
+    text = str(raw or "").strip()
+    return text if text and " " in text else None
 
 
 def _iter_loaded_modules() -> Iterator[Any]:

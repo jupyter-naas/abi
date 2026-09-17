@@ -81,6 +81,8 @@ export type FeatureResource = {
   kind: string;
   id: string;
   label?: string;
+  /** Manifest ``agent`` (``module AgentClass``) when an app declares one. */
+  agent?: string;
   /** Recent runtime errors of the open item (the Apps editor preview). */
   errors?: string[];
 };
@@ -130,6 +132,17 @@ export function featureOpenResource(
   if (!feature) return null;
   if (published && published.feature === feature && published.id) return published;
   return resourceFromPath(pathname);
+}
+
+/** Manifest ``agent`` for the app open on an Apps route (right pane binding). */
+export function appAgentRefForPane(
+  pathname: string | null | undefined,
+  published: FeatureResource | null,
+): string | null {
+  if (getFeatureForWorkspacePath(pathname || '') !== 'apps') return null;
+  const open = featureOpenResource(pathname, published);
+  const agent = open?.agent?.trim();
+  return agent || null;
 }
 
 export type FeatureChatContext = {

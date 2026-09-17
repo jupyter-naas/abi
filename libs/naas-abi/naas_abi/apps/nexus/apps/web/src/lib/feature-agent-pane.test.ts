@@ -11,6 +11,7 @@ const DEFAULT_ID = 'agent-default';
 const ABI_ID = 'agent-abi';
 const APPS_ID = 'agent-apps';
 const SLIDES_ID = 'agent-slides';
+const CUAS_ID = 'agent-cuas';
 
 function seedAgents(withApps = true, withDefault = true): void {
   useAgentsStore.setState({
@@ -47,6 +48,13 @@ function seedAgents(withApps = true, withDefault = true): void {
             } as Agent,
           ]
         : []),
+      {
+        id: CUAS_ID,
+        name: 'Counter-UAS',
+        class_name: 'operations.counter_uas.agents.CounterUASAgent/CounterUASAgent',
+        enabled: true,
+        isDefault: false,
+      } as Agent,
     ],
   });
 }
@@ -110,6 +118,14 @@ describe('bindFeaturePaneAgent', () => {
     useWorkspaceStore.getState().setPaneAgent('agent-from-another-workspace', true);
     bindFeaturePaneAgent('apps');
     expect(useWorkspaceStore.getState().paneAgent).toBe(APPS_ID);
+  });
+
+  it('binds a manifest agent when the app declares one', () => {
+    bindFeaturePaneAgent('apps', {
+      force: true,
+      appAgentRef: 'operations.counter_uas CounterUASAgent',
+    });
+    expect(useWorkspaceStore.getState().paneAgent).toBe(CUAS_ID);
   });
 });
 

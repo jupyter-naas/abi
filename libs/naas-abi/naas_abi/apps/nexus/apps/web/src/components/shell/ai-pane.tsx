@@ -9,9 +9,12 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
 import { useFeaturePaneStore } from '@/stores/feature-pane';
 import { useSlidesStore } from '@/stores/slides';
-import { bindFeaturePaneAgent } from '@/lib/feature-agent-pane';
-import { featureOpenResource, getPaneSurfaceForPath } from '@/lib/feature-office-agents';
-import { pickFeaturePaneAgent } from '@/lib/pick-workspace-default-agent';
+import { bindFeaturePaneAgent, pickPaneAgentForSurface } from '@/lib/feature-agent-pane';
+import {
+  appAgentRefForPane,
+  featureOpenResource,
+  getPaneSurfaceForPath,
+} from '@/lib/feature-office-agents';
 import { ColumnResizeHandle } from './column-resize-handle';
 import dynamic from 'next/dynamic';
 
@@ -60,14 +63,14 @@ export function AIPane() {
   const slidesSlug = useSlidesStore((s) => s.selectedSlug);
   const featureResource = useFeaturePaneStore((s) => s.resource);
   const agents = useAgentsStore((s) => s.agents);
+  const openResource = featureOpenResource(pathname, featureResource);
   const openItemId =
-    surface === 'slides'
-      ? slidesSlug
-      : (featureOpenResource(pathname, featureResource)?.id ?? null);
+    surface === 'slides' ? slidesSlug : (openResource?.id ?? null);
+  const appAgentRef = appAgentRefForPane(pathname, featureResource);
   useEffect(() => {
     if (!contextPanelOpen) return;
-    bindFeaturePaneAgent(surface, { force: Boolean(openItemId) });
-  }, [contextPanelOpen, surface, openItemId, agents]);
+    bindFeaturePaneAgent(surface, { force: Boolean(openItemId), appAgentRef });
+  }, [contextPanelOpen, surface, openItemId, appAgentRef, agents]);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -124,7 +127,11 @@ export function AIPane() {
     // default) unless the user picked another agent in the selector
     // (history tabs must not count as an explicit pick).
     if (!ws.paneAgentExplicitlySelected) {
-      const preferred = pickFeaturePaneAgent(useAgentsStore.getState().agents, surface);
+      const preferred = pickPaneAgentForSurface(
+        useAgentsStore.getState().agents,
+        surface,
+        appAgentRef,
+      );
       if (preferred) ws.setPaneAgent(preferred.id);
     }
     setShowHistory(false);

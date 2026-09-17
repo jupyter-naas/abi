@@ -1,4 +1,5 @@
 import type { FeatureKey } from '@/lib/feature-access';
+import { pickAgentByRef } from '@/lib/parse-agent-ref';
 import { pickFeaturePaneAgent } from '@/lib/pick-workspace-default-agent';
 import { useAgentsStore } from '@/stores/agents';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -12,13 +13,25 @@ import { useWorkspaceStore } from '@/stores/workspace';
  * ...) because an agent without the feature's tools burns the turn on
  * transfers.
  */
+export function pickPaneAgentForSurface(
+  agents: ReturnType<typeof useAgentsStore.getState>['agents'],
+  surface: FeatureKey | null,
+  appAgentRef?: string | null,
+) {
+  if (surface === 'apps' && appAgentRef) {
+    const appAgent = pickAgentByRef(agents, appAgentRef);
+    if (appAgent) return appAgent;
+  }
+  return pickFeaturePaneAgent(agents, surface);
+}
+
 export function bindFeaturePaneAgent(
   surface: FeatureKey | null,
-  opts?: { force?: boolean },
+  opts?: { force?: boolean; appAgentRef?: string | null },
 ): string | null {
   const ws = useWorkspaceStore.getState();
   const agents = useAgentsStore.getState().agents;
-  const target = pickFeaturePaneAgent(agents, surface);
+  const target = pickPaneAgentForSurface(agents, surface, opts?.appAgentRef);
   if (!target) return null;
   const currentStillValid = Boolean(
     ws.paneAgent && agents.some((a) => a.enabled && a.id === ws.paneAgent),
@@ -36,7 +49,7 @@ export function bindFeaturePaneAgent(
  */
 export function openFeatureAgentPane(
   surface: FeatureKey,
-  opts?: { freshChat?: boolean; resourceId?: string | null },
+  opts?: { freshChat?: boolean; resourceId?: string | null; appAgentRef?: string | null },
 ): string | null {
   const ws = useWorkspaceStore.getState();
   ws.setContextPanelOpen(true);
@@ -46,5 +59,6 @@ export function openFeatureAgentPane(
   }
   return bindFeaturePaneAgent(surface, {
     force: Boolean(opts?.resourceId) || Boolean(opts?.freshChat),
+    appAgentRef: opts?.appAgentRef,
   });
 }

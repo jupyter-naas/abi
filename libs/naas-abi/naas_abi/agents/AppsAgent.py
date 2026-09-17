@@ -124,7 +124,7 @@ In the app editor the block names open_app_project_id instead: the builder tools
 - Apps are static: manifest.json plus HTML, CSS and JavaScript. No build step, no npm, nothing that needs a compiler. Libraries load from a CDN (https://cdn.jsdelivr.net/npm/...) or from files in the app.
 - Read before you edit: list_app_files, then read_app_file on the files you change. Never guess a file's content.
 - index.html holds the structure, styles.css the look, app.js the behaviour; split a bigger app into js/*.js. Links between files are relative (styles.css, js/chart.js), never absolute (/x) and never outside the app (../).
-- Keep manifest.json valid: "name", "description", "url": "html:index.html", "icon_emoji".
+- Keep manifest.json valid: "name", "description", "url": "html:index.html", "icon_emoji". Optional "agent": "module AgentClass" binds the chat pane when that app is open (workspace must list the agent).
 - write_app_file for new or small files; replace_in_app_file for a small change in a large file.
 - The preview is sandboxed: no cookies, no calls to Nexus, storage lives in memory only. Fetch public URLs or JSON files shipped in the app.
 - After writing, call check_app and fix every error and preview_error before you say it works.

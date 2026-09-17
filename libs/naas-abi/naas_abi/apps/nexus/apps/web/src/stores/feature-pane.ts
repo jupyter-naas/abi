@@ -34,6 +34,7 @@ export function usePublishFeatureResource(resource: FeatureResource | null): voi
   const kind = resource?.kind;
   const id = resource?.id;
   const label = resource?.label;
+  const agent = resource?.agent;
   const errorsKey = JSON.stringify(resource?.errors ?? []);
   useEffect(() => {
     if (!feature || !kind || !id) return;
@@ -43,9 +44,10 @@ export function usePublishFeatureResource(resource: FeatureResource | null): voi
       kind,
       id,
       ...(label ? { label } : {}),
+      ...(agent ? { agent } : {}),
       ...(errors.length ? { errors } : {}),
     };
     useFeaturePaneStore.getState().setResource(published);
     return () => useFeaturePaneStore.getState().clearResource(published);
-  }, [feature, kind, id, label, errorsKey]);
+  }, [feature, kind, id, label, agent, errorsKey]);
 }

@@ -402,10 +402,18 @@ export default function AppsPage() {
     }
   };
 
-  // The open app rides into the right chat pane: the Apps agent binds and its
-  // tools default to this app (no "which app?").
+  // The open app rides into the right chat pane: manifest ``agent`` overrides
+  // the Apps office agent when the workspace lists that agent.
   usePublishFeatureResource(
-    activeApp ? { feature: 'apps', kind: 'app', id: activeApp.id, label: activeApp.name } : null,
+    activeApp
+      ? {
+          feature: 'apps',
+          kind: 'app',
+          id: activeApp.id,
+          label: activeApp.name,
+          ...(activeApp.app?.agent ? { agent: activeApp.app.agent } : {}),
+        }
+      : null,
   );
 
   useEffect(() => {

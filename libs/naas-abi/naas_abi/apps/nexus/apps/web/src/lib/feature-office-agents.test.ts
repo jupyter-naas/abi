@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FEATURE_OFFICE_AGENTS,
   featureChatContext,
+  appAgentRefForPane,
   featureOpenResource,
   getPaneSurfaceForPath,
   isFeatureOfficeAgent,
@@ -226,5 +227,31 @@ describe('featureChatContext', () => {
     expect(featureChatContext('/workspace/ws-1/slides/deck-1', null)).toBeNull();
     expect(featureChatContext('/workspace/ws-1/home', null)).toBeNull();
     expect(featureChatContext(null, null)).toBeNull();
+  });
+});
+
+describe('appAgentRefForPane', () => {
+  const appsPath = '/workspace/ws-1/apps';
+
+  it('returns manifest agent when an app is published on Apps', () => {
+    expect(
+      appAgentRefForPane(appsPath, {
+        feature: 'apps',
+        kind: 'app',
+        id: 'operations.counter_uas:map',
+        agent: 'operations.counter_uas CounterUASAgent',
+      }),
+    ).toBe('operations.counter_uas CounterUASAgent');
+  });
+
+  it('is null off the Apps route', () => {
+    expect(
+      appAgentRefForPane('/workspace/ws-1/chat', {
+        feature: 'apps',
+        kind: 'app',
+        id: 'x',
+        agent: 'operations.counter_uas CounterUASAgent',
+      }),
+    ).toBeNull();
   });
 });

@@ -16,12 +16,16 @@ import { useAgentsStore } from '@/stores/agents';
 import {
   officeSurfaceFromPath,
   pickDocumentsOfficeAgent,
-  pickFeaturePaneAgent,
   pickPaneOfficeAgent,
   pickSlidesOfficeAgent,
   pickWorkspaceDefaultAgent,
 } from '@/lib/pick-workspace-default-agent';
-import { featureChatContext, getPaneSurfaceForPath } from '@/lib/feature-office-agents';
+import { pickPaneAgentForSurface } from '@/lib/feature-agent-pane';
+import {
+  appAgentRefForPane,
+  featureChatContext,
+  getPaneSurfaceForPath,
+} from '@/lib/feature-office-agents';
 import { useFeaturePaneStore } from '@/stores/feature-pane';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { noteSkillsToolResult, useSkillsStore, type Skill } from '@/stores/skills';
@@ -1802,7 +1806,11 @@ export function ChatInterface({
         officeSurface.onSlides || officeSurface.onDocuments
           ? (pickPaneOfficeAgent(agents, officeSurface) ?? pickWorkspaceDefaultAgent(agents))
           : isPane
-            ? pickFeaturePaneAgent(agents, getPaneSurfaceForPath(pathname))
+            ? pickPaneAgentForSurface(
+                agents,
+                getPaneSurfaceForPath(pathname),
+                appAgentRefForPane(pathname, useFeaturePaneStore.getState().resource),
+              )
             : pickWorkspaceDefaultAgent(agents);
       if (resolved) {
         effectiveAgent = resolved.id;
@@ -4333,7 +4341,9 @@ const MessageBubble = React.memo(function MessageBubble({
         >
           {(() => {
             const when = formatMessageStamp(message.timestamp);
-            if (isUser) return [senderName, when].filter(Boolean).join(' · ');
+            // A user's own message needs no byline — the side and fill say who
+            // sent it. Only the agent line names its sender and model.
+            if (isUser) return when;
             const modelRaw =
               message.modelId ||
               agent?.modelIds?.[0] ||
