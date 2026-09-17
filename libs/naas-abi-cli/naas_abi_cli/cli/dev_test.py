@@ -10,6 +10,8 @@ the literal. These two must not drift back together.
 import importlib
 from typing import TYPE_CHECKING
 
+import pytest
+
 # `naas_abi_cli.cli` re-exports the click Group as `dev`, which shadows the
 # module of the same name — import the module explicitly.
 dev = importlib.import_module("naas_abi_cli.cli.dev")
@@ -378,3 +380,65 @@ def test_custom_browser_host_is_allowed_by_cors(monkeypatch) -> None:
     finally:
         monkeypatch.undo()
         importlib.reload(dev)
+
+
+# =============================================================================
+# nats — opt-in service (docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md)
+#
+# Unlike oxigraph (embedded via pyoxigraph), nats-server is a real external
+# binary this shells out to, and it must never start unless explicitly
+# selected — config.yaml's bus_adapter still defaults to "python_queue".
+# =============================================================================
+
+def test_nats_is_available_but_not_default() -> None:
+    assert "nats" not in dev.ALL_SERVICES
+    assert "nats" in dev.OPTIONAL_SERVICES
+    assert "nats" in dev.KNOWN_SERVICES
+
+
+def test_validate_services_default_excludes_nats() -> None:
+    assert "nats" not in dev._validate_services(())
+
+
+def test_validate_services_accepts_nats_when_explicit() -> None:
+    assert dev._validate_services(("api", "nats")) == ["api", "nats"]
+
+
+def test_nats_monitor_port_is_derived_from_the_client_port() -> None:
+    assert dev._nats_monitor_port(13000) == 13000 + dev.NATS_MONITOR_PORT_OFFSET
+
+
+def test_ready_probe_port_targets_the_monitor_port_for_nats() -> None:
+    assert dev._ready_probe_port("nats", 13000) == dev._nats_monitor_port(13000)
+
+
+def test_ready_probe_port_is_a_no_op_for_every_other_service() -> None:
+    for name in dev.ALL_SERVICES:
+        assert dev._ready_probe_port(name, 9999) == 9999
+
+
+def test_nats_binds_the_ipv4_literal_and_both_ports(monkeypatch) -> None:
+    """Server-to-server hop: no DNS, no ::1 ambiguity — same discipline as oxigraph."""
+    captured: dict = {}
+    monkeypatch.setattr(
+        dev,
+        "_spawn",
+        lambda spec, cmd, cwd, env: captured.update(cmd=cmd) or 1234,
+    )
+    monkeypatch.setattr(dev.shutil, "which", lambda name: "/usr/local/bin/nats-server")
+
+    client_port = 13380
+    dev._launch_nats(_spec("nats", client_port))
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("-a") + 1] == "127.0.0.1"
+    assert cmd[cmd.index("-p") + 1] == str(client_port)
+    assert cmd[cmd.index("-m") + 1] == str(dev._nats_monitor_port(client_port))
+    assert "-js" in cmd
+
+
+def test_nats_raises_a_helpful_error_when_the_binary_is_missing(monkeypatch) -> None:
+    monkeypatch.setattr(dev.shutil, "which", lambda name: None)
+
+    with pytest.raises(dev.click.ClickException, match="nats-server.*PATH"):
+        dev._launch_nats(_spec("nats", 13380))
