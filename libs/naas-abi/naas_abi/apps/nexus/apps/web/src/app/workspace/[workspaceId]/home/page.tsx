@@ -69,7 +69,7 @@ export default function HomePage() {
               <span className="flex h-14 w-14 items-center justify-center bg-black/35 shadow-lg">
                 {section === 'chat' ? <MessageSquare size={28} /> : <Folder size={28} />}
               </span>
-              <span className="w-full truncate text-center text-[11px] font-medium leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
+              <span className="w-full break-words text-center text-[11px] font-medium leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
                 {section === 'chat' ? 'Chat' : 'Files'}
               </span>
             </button>
@@ -81,6 +81,12 @@ export default function HomePage() {
               className="flex w-[88px] flex-col items-center gap-3 text-white"
               onClick={() => {
                 if (!currentWorkspaceId) return;
+                // Launching an app from the desk hands the content area to
+                // the app: close the feature column so it opens at full width.
+                // The dock stays — collapsing it only swaps one panel for a
+                // second identical PanelLeft button in the topnav. `null` keeps
+                // lastActivePanelSection, so reopening restores the section.
+                setActivePanelSection(null);
                 router.push(appsPath(currentWorkspaceId, app.app_id));
               }}
               title={app.name}
@@ -99,7 +105,7 @@ export default function HomePage() {
                   {app.icon_emoji || app.name.slice(0, 1)}
                 </span>
               )}
-              <span className="w-full truncate text-center text-[11px] font-medium leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
+              <span className="w-full break-words text-center text-[11px] font-medium leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
                 {app.name}
               </span>
             </button>
@@ -134,7 +140,7 @@ export default function HomePage() {
               <span className="flex h-14 w-14 items-center justify-center bg-black/35 shadow-lg">
                 {item.type === 'folder' ? <Folder size={28} /> : <File size={28} />}
               </span>
-              <span className="w-full truncate text-center text-[11px] font-medium leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
+              <span className="w-full break-words text-center text-[11px] font-medium leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
                 {item.name}
               </span>
             </button>

@@ -3534,26 +3534,6 @@ function EmptyState({
   );
 }
 
-function TypingDots() {
-  // Discrete caret blink, consistent with login header
-  const [on, setOn] = useState(true);
-  useEffect(() => {
-    const id = setInterval(() => setOn(v => !v), 520);
-    return () => clearInterval(id);
-  }, []);
-  return (
-    <span
-      className="inline-block align-baseline w-[2px]"
-      style={{
-        backgroundColor: 'currentColor',
-        height: '1em',
-        transform: 'translateY(0.08em)',
-        opacity: on ? 0.9 : 0,
-      }}
-    />
-  );
-}
-
 function formatToolCallLabel(prefix: string, name: string): string {
   if (prefix === 'Agent') return name;
   if (prefix === 'Tool') return name;
@@ -3628,8 +3608,15 @@ function ToolCallsDropdown({
     return () => clearInterval(interval);
   }, [isProcessing]);
 
-  // Collapsed shows only the tail; expanded shows the whole run.
-  const visibleToolCalls = isOpen ? toolCalls : toolCalls.slice(-1);
+  // Expanded always shows the whole run. Collapsed shows the running step
+  // while there is one — that is the live progress line — and nothing at all
+  // once the answer has landed, where the header's "N steps" already says
+  // what happened and the detail is a click away.
+  const visibleToolCalls = isOpen
+    ? toolCalls
+    : isProcessing
+      ? toolCalls.slice(-1)
+      : [];
 
   const stepsLabel = `${toolCalls.length} step${toolCalls.length !== 1 ? 's' : ''}`;
   const headerLabel = isProcessing
@@ -3649,11 +3636,6 @@ function ToolCallsDropdown({
         >
           <Wrench size={11} className="shrink-0" />
           <span className="flex-1 truncate text-left">{headerLabel}</span>
-          {isProcessing && (
-            <span className="inline-flex shrink-0">
-              <TypingDots />
-            </span>
-          )}
           <ChevronDown size={11} className={cn('shrink-0 transition-transform', isOpen && 'rotate-180')} />
         </button>
       </div>
@@ -3662,11 +3644,13 @@ function ToolCallsDropdown({
           boxes. Collapsed still shows the last step, so the header keeps
           saying what the agent just did (or is doing) without being expanded;
           opening it breaks out the whole run, each step still expandable. */}
-      <div className="mt-1.5 min-w-0">
-        {visibleToolCalls.map((tool) => (
-          <ToolCallRow key={tool.id} tool={tool} />
-        ))}
-      </div>
+      {visibleToolCalls.length > 0 && (
+        <div className="mt-1.5 min-w-0">
+          {visibleToolCalls.map((tool) => (
+            <ToolCallRow key={tool.id} tool={tool} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -4379,11 +4363,6 @@ const MessageBubble = React.memo(function MessageBubble({
                 <span className="truncate">{activityLine}</span>
               ) : (
                 <span className="truncate">Processing...</span>
-              )}
-              {isStillProcessing && (
-                <span className="inline-flex shrink-0">
-                  <TypingDots />
-                </span>
               )}
             </div>
           )}
