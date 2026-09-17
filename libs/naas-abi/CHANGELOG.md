@@ -2,6 +2,57 @@
 
 <!-- version list -->
 
+## v2.70.0 (2026-09-17)
+
+### Bug Fixes
+
+- **chat**: Add missing class to suggestion label for styling
+  ([`1760261`](https://github.com/jupyter-naas/abi/commit/1760261309225894948070a9ebb368160c9e43a3))
+
+- **chat-interface**: Improve stop button behavior and clean up streaming state
+  ([`40d3688`](https://github.com/jupyter-naas/abi/commit/40d36881c88ccedb7d1291c7a72ec3bbbf4fba58))
+
+- **web**: Improve text wrapping and UI behavior in workspace home and chat interface
+  ([`c7b5317`](https://github.com/jupyter-naas/abi/commit/c7b5317564125992eb8774c9574c693379af6122))
+
+### Code Style
+
+- **web**: Improve table cell word wrapping and responsive layout in globals.css
+  ([`c318bf9`](https://github.com/jupyter-naas/abi/commit/c318bf943b382205190d68c98a03d1611cd23981))
+
+### Features
+
+- **abi-orchestrator**: Always enable Abi agent and pack naas_abi agents in chat roster
+  ([`4b28516`](https://github.com/jupyter-naas/abi/commit/4b2851655be75137fb18800e407ba448052fa6e5))
+
+- **apps**: Add apps last open session storage key and new app creation UI
+  ([`943a23e`](https://github.com/jupyter-naas/abi/commit/943a23e24b26c06a733c1f0e551e57b334b1d33b))
+
+- **apps**: Add support for optional manifest agent binding chat pane
+  ([`fc76e13`](https://github.com/jupyter-naas/abi/commit/fc76e13d1da0f75aa7282b3777f1c7b3f31ac6cb))
+
+- **bedrock**: Add GPT-5.6 Sol model support on Amazon Bedrock
+  ([`42a9fdf`](https://github.com/jupyter-naas/abi/commit/42a9fdf21c40f8d7090583932a4ef33ffda1a689))
+
+- **chat**: Add panel open state persistence in SuggestionsBlock component
+  ([`98ce3ef`](https://github.com/jupyter-naas/abi/commit/98ce3ef63b962e2e8a1da5ee8474155f628291c5))
+
+- **chat**: Wrap GFM tables in scrollable container inside message bubbles
+  ([`8aa40db`](https://github.com/jupyter-naas/abi/commit/8aa40db721a3c605962f72aedea21c08ba9edaa5))
+
+- **chat-interface**: Add suggestion preview mode to composer input
+  ([`41cdced`](https://github.com/jupyter-naas/abi/commit/41cdced786d74e54f5c2b2b5098d879c5573c365))
+
+- **nexus-build-app**: Add role-based visibility for office agents
+  ([`02276d4`](https://github.com/jupyter-naas/abi/commit/02276d49c4f37924f647eb3ca8101dd2155a2f18))
+
+- **nexus-build-app**: Enhance in-process ABI agent model resolution
+  ([`2a2621a`](https://github.com/jupyter-naas/abi/commit/2a2621aedf675c485e01ea2cf801412268278a91))
+
+- **skills**: Add Skills office agent for skill creation and management
+  ([`fba50dd`](https://github.com/jupyter-naas/abi/commit/fba50ddc4bb068a3faa804270531366fa618f57a))
+
+
 ## v2.69.0 (2026-09-15)
 
 ### Features
