@@ -493,9 +493,17 @@ aside.glass :focus-visible {
 .chat-message-body .chat-table-scroll th,
 .chat-message-body .chat-table-scroll td {
   @apply px-3 py-2 text-left align-top;
-  /* break-word, not anywhere: `anywhere` also shrinks the column's min-content
-   * width, which chops short headers ("Cate gory") to fit. */
+  /* break-word, not anywhere: at cell level `anywhere` shrinks every column's
+   * min-content width, so ordinary words split too ("externa l", "bundle d").
+   * Only the long-identifier tokens below opt into mid-token breaking. */
   overflow-wrap: break-word;
+  word-break: normal;
+}
+
+/* Headers never wrap: their widths are the table's min-content floor, which is
+ * what keeps the body columns from being squeezed into one-word-per-line. */
+.chat-message-body .chat-table-scroll thead th {
+  white-space: nowrap;
 }
 
 .chat-message-body .chat-table-scroll thead th {
@@ -511,15 +519,32 @@ aside.glass :focus-visible {
 }
 
 /* Long identifiers (`module.app:id`) are the one thing allowed to break
- * mid-token, so one code cell cannot force the table wide — with a floor on
- * the column so the id wraps in readable chunks instead of one char per line. */
+ * mid-token, so no single cell can force the table wider than the bubble.
+ * Scoped to the inline token, not the cell: any prose beside it still wraps at
+ * word boundaries. No min-width floor here — a floor is exactly what used to
+ * pin the table wide and hand it to the wrapper's scrollbar. */
 .chat-message-body .chat-table-scroll code {
   @apply text-[11px];
+}
+
+.chat-message-body .chat-table-scroll td code,
+.chat-message-body .chat-table-scroll td strong {
   overflow-wrap: anywhere;
 }
 
-.chat-message-body .chat-table-scroll td:has(code) {
-  min-width: 9rem;
+/* Phone widths: six columns cannot hold full words at 390px, so trade density
+ * for fit — tighter cells, wrappable headers, and mid-word breaks everywhere.
+ * The wrapper keeps overflow-x-auto as the last resort if even this overflows. */
+@media (max-width: 640px) {
+  .chat-message-body .chat-table-scroll thead th {
+    white-space: normal;
+  }
+
+  .chat-message-body .chat-table-scroll th,
+  .chat-message-body .chat-table-scroll td {
+    @apply px-2 py-1.5 text-[11px];
+    overflow-wrap: anywhere;
+  }
 }
 
 /* Mobile shell layout: bump dense chrome for touch targets and readability. */
