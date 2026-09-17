@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
+import { Send, Plus, Bot, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
@@ -575,7 +575,11 @@ export function ChatInterface({
   const isSubmittingRef = useRef(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const streamControllerRef = useRef<AbortController | null>(null);
-  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  // Stop can be pressed before the request is even built (the composer button
+  // flips as soon as the message is sent, but the AbortController is only
+  // created several awaits later). This ref carries that intent across the gap
+  // so the button is never a no-op.
+  const stopRequestedRef = useRef(false);
   const [showConnecting, setShowConnecting] = useState(false);
   const gotFirstTokenRef = useRef(false);
   const connectingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1976,6 +1980,7 @@ export function ChatInterface({
     setImageError(null);
     // setSearchEnabled(false); // Reset search toggle after sending
     setRequestSentAt(Date.now());
+    stopRequestedRef.current = false;
     setIsLoading(true);
 
     try {
@@ -2061,7 +2066,6 @@ export function ChatInterface({
           const convNow = useWorkspaceStore.getState().conversations.find(c => c.id === conversationId);
           const lastMsg = convNow?.messages[convNow.messages.length - 1];
           assistantMessageIdRef = lastMsg?.id || null;
-          setStreamingMessageId(assistantMessageIdRef);
         }
         // Setup connecting indicator
         gotFirstTokenRef.current = false;
@@ -2353,6 +2357,7 @@ export function ChatInterface({
         try {
           const controller = new AbortController();
           streamControllerRef.current = controller;
+          if (stopRequestedRef.current) controller.abort();
           const response = await fetch(`${getApiBase()}/api/chat/stream`, {
           method: 'POST',
           headers: { 
@@ -2417,10 +2422,9 @@ export function ChatInterface({
                 // First frame swap: the backend emits the real DB uuid for the
                 // assistant row on the opening event. Replace the local
                 // placeholder id so subsequent PATCHes (metadata, feedback)
-                // hit the real row. We use the local ``assistantMessageIdRef``
-                // because the React state ``streamingMessageId`` captured in
-                // this closure is stale (the setState before the SSE loop
-                // hasn't flushed yet).
+                // hit the real row. The id lives in the local
+                // ``assistantMessageIdRef`` rather than React state precisely
+                // because this closure would capture a stale value.
                 if (typeof parsed.assistant_message_id === 'string' && parsed.assistant_message_id) {
                   const backendId = parsed.assistant_message_id as string;
                   if (assistantMessageIdRef && assistantMessageIdRef !== backendId) {
@@ -2429,7 +2433,6 @@ export function ChatInterface({
                       assistantMessageIdRef,
                       backendId,
                     );
-                    setStreamingMessageId(backendId);
                     assistantMessageIdRef = backendId;
                   }
                 }
@@ -2539,10 +2542,10 @@ export function ChatInterface({
           );
         }
         // Persist execution metadata to backend. Keyed on ``assistantMessageIdRef``
-        // for the same reason as the id swap above: the React state
-        // ``streamingMessageId`` captured in this closure is stale (still null on
-        // the first turn), which silently skipped this PATCH and lost the steps
-        // and execution time on reload.
+        // for the same reason as the id swap above: React state captured in
+        // this closure would be stale (still null on the first turn), which
+        // silently skipped this PATCH and lost the steps and execution time on
+        // reload.
         if (assistantMessageIdRef && (finalToolCalls || executionTime !== undefined)) {
           const apiUrl = getApiUrl();
           authFetch(
@@ -2589,7 +2592,6 @@ export function ChatInterface({
         }
       } finally {
         setIsStreaming(false);
-        setStreamingMessageId(null);
         useSlidesStore.getState().setAgentWriting(false);
         if (connectingTimerRef.current) clearTimeout(connectingTimerRef.current);
         setShowConnecting(false);
@@ -2598,8 +2600,13 @@ export function ChatInterface({
       } else {
         // Non-streaming for other providers
         const thinkingStartTime = Date.now();
-        
+
+        const controller = new AbortController();
+        streamControllerRef.current = controller;
+        if (stopRequestedRef.current) controller.abort();
+
         const response = await fetch(`${getApiBase()}/api/chat/complete`, {
+          signal: controller.signal,
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -2714,7 +2721,10 @@ export function ChatInterface({
       // } else {
       // For other errors, update the placeholder if it exists, otherwise add new message
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      if (conversationId) {
+      // Stop leaves whatever already arrived in place; it is not a failure.
+      const wasAborted =
+        (error as { name?: string } | null)?.name === 'AbortError' || stopRequestedRef.current;
+      if (conversationId && !wasAborted) {
           if (isStreaming) {
             updateLastMessage(conversationId, `❌ Error: ${errorMessage}\n\nPlease try again or check your provider settings.`);
           } else {
@@ -2729,6 +2739,7 @@ export function ChatInterface({
       setIsLoading(false);
       setIsStreaming(false);
       isSubmittingRef.current = false;
+      streamControllerRef.current = null;
       useSlidesStore.getState().setAgentWriting(false);
     }
   };
@@ -2775,6 +2786,7 @@ export function ChatInterface({
   }, []);
 
   const stableStopStream = useCallback(() => {
+    stopRequestedRef.current = true;
     streamControllerRef.current?.abort();
   }, []);
 
@@ -2839,8 +2851,6 @@ export function ChatInterface({
                 message={message}
                 currentSelectedAgent={selectedAgent}
                 showConnecting={showConnecting}
-                showStop={streamingMessageId === message.id}
-                onStop={stableStopStream}
                 onPreviewUrl={setPreviewUrl}
                 requestSentAt={requestSentAt}
                 onRegenerate={stableRegenerate}
@@ -2849,7 +2859,8 @@ export function ChatInterface({
             ))}
             {isLoading && !isStreaming && (
               <div className="flex items-start gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-workspace-accent text-white">
+                {/* Same geometry as an answer: avatar, gap, filled bubble. */}
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-workspace-accent text-white">
                   <Bot size={16} />
                 </div>
                 <div className="flex items-center gap-2 rounded-2xl bg-muted px-4 py-3">
@@ -3348,18 +3359,33 @@ export function ChatInterface({
                       </button>
                     )}
 
-                    {/* Send: org-radius filled square (not a circle) */}
-                    <button
-                      type="submit"
-                      disabled={(!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading}
-                      className={cn(
-                        'chat-composer-action chat-composer-action-send',
-                        (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && !isLoading && 'is-ready'
-                      )}
-                      aria-label="Send message"
-                    >
-                      <ArrowUp size={18} />
-                    </button>
+                    {/* Send / Stop: org-radius filled square (not a circle).
+                        One control, two states — once the message is sent it
+                        becomes Stop, so cancelling is where the hand already is
+                        rather than out in the answer bubble. */}
+                    {isLoading || isStreaming ? (
+                      <button
+                        type="button"
+                        onClick={stableStopStream}
+                        className="chat-composer-action chat-composer-action-send is-ready"
+                        title="Stop generation"
+                        aria-label="Stop generation"
+                      >
+                        <Square size={14} fill="currentColor" />
+                      </button>
+                    ) : (
+                      <button
+                        type="submit"
+                        disabled={!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0}
+                        className={cn(
+                          'chat-composer-action chat-composer-action-send',
+                          (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && 'is-ready'
+                        )}
+                        aria-label="Send message"
+                      >
+                        <ArrowUp size={18} />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3539,21 +3565,19 @@ function stripToolCallMarkup(content: string): string {
 function ToolCallsDropdown({
   toolCalls,
   isProcessing,
-  showStop,
-  onStop,
   startTime,
 }: {
   toolCalls: ToolCall[];
   isProcessing: boolean;
-  showStop: boolean;
-  onStop: () => void;
   startTime?: number | null;
 }) {
-  const [isOpen, setIsOpen] = useState(true);
-  const [autoCollapsed, setAutoCollapsed] = useState(false);
+  // Collapsed by default, including while the run is in flight: the collapsed
+  // view already shows the live last step, which is what the old auto-open was
+  // for. Expanding is therefore always a deliberate act, so nothing collapses
+  // it again behind the user's back.
+  const [isOpen, setIsOpen] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [lastDurationSeconds, setLastDurationSeconds] = useState<number | null>(null);
-  const wasProcessingRef = useRef(false);
   const processingStartRef = useRef<number | null>(null);
 
   const formatDuration = (seconds: number) => {
@@ -3565,24 +3589,12 @@ function ToolCallsDropdown({
   };
 
   useEffect(() => {
-    if (isProcessing) {
-      wasProcessingRef.current = true;
-      if (processingStartRef.current === null) {
-        processingStartRef.current = startTime ?? Date.now();
-        setElapsedSeconds(Math.floor((Date.now() - processingStartRef.current) / 1000));
-      }
-      if (autoCollapsed) {
-        setIsOpen(true);
-        setAutoCollapsed(false);
-      }
-    } else if (wasProcessingRef.current && !autoCollapsed) {
-      const timer = setTimeout(() => {
-        setIsOpen(false);
-        setAutoCollapsed(true);
-      }, 3000);
-      return () => clearTimeout(timer);
+    if (!isProcessing) return;
+    if (processingStartRef.current === null) {
+      processingStartRef.current = startTime ?? Date.now();
+      setElapsedSeconds(Math.floor((Date.now() - processingStartRef.current) / 1000));
     }
-  }, [isProcessing, autoCollapsed, startTime]);
+  }, [isProcessing, startTime]);
 
   useEffect(() => {
     if (!isProcessing) {
@@ -3607,6 +3619,9 @@ function ToolCallsDropdown({
 
     return () => clearInterval(interval);
   }, [isProcessing]);
+
+  // Collapsed shows only the tail; expanded shows the whole run.
+  const visibleToolCalls = isOpen ? toolCalls : toolCalls.slice(-1);
 
   const stepsLabel = `${toolCalls.length} step${toolCalls.length !== 1 ? 's' : ''}`;
   const headerLabel = isProcessing
@@ -3633,29 +3648,17 @@ function ToolCallsDropdown({
           )}
           <ChevronDown size={11} className={cn('shrink-0 transition-transform', isOpen && 'rotate-180')} />
         </button>
-        {showStop && (
-          <button
-            type="button"
-            className="relative z-20 shrink-0 rounded px-1.5 py-0.5 text-xs pointer-events-auto hover:bg-muted hover:text-foreground"
-            onPointerDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onStop();
-            }}
-            title="Stop generation"
-          >
-            Stop
-          </button>
-        )}
       </div>
 
-      {isOpen && (
-        <div className="mt-1.5 overflow-hidden rounded-lg border border-border/50 bg-background/50 divide-y divide-border/30">
-          {toolCalls.map((tool) => (
-            <ToolCallRow key={tool.id} tool={tool} />
-          ))}
-        </div>
-      )}
+      {/* Steps read as one continuous list rather than a stack of framed
+          boxes. Collapsed still shows the last step, so the header keeps
+          saying what the agent just did (or is doing) without being expanded;
+          opening it breaks out the whole run, each step still expandable. */}
+      <div className="mt-1.5 min-w-0">
+        {visibleToolCalls.map((tool) => (
+          <ToolCallRow key={tool.id} tool={tool} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -3714,7 +3717,9 @@ function ToolCallRow({ tool }: { tool: ToolCall }) {
   }, [clipboardText]);
 
   return (
-    <div className="min-w-0 px-3 py-2">
+    // No horizontal padding: the row's own icon sits at the list's left edge,
+    // which puts its label on the same x as the header's label above it.
+    <div className="min-w-0 py-1">
       <button
         type="button"
         disabled={!hasDetails}
@@ -3794,8 +3799,6 @@ const MessageBubble = React.memo(function MessageBubble({
   message,
   currentSelectedAgent,
   showConnecting,
-  showStop,
-  onStop,
   onPreviewUrl,
   requestSentAt,
   onRegenerate,
@@ -3804,8 +3807,6 @@ const MessageBubble = React.memo(function MessageBubble({
   message: Message;
   currentSelectedAgent: string;
   showConnecting: boolean;
-  showStop: boolean;
-  onStop: () => void;
   onPreviewUrl?: (url: string) => void;
   requestSentAt?: number | null;
   onRegenerate?: (message: Message) => void;
@@ -4222,42 +4223,35 @@ const MessageBubble = React.memo(function MessageBubble({
   );
 
   return (
-    <div className={cn('flex items-start gap-3', isUser && 'flex-row-reverse')}>
-      <div
-        className={cn(
-          'flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden',
-          isUser
-            ? (user?.avatar
-                ? 'rounded-full bg-transparent' // Show uploaded/profile avatar
-                : 'rounded-full bg-secondary text-secondary-foreground') // Fallback icon bubble
-            : agent?.logoUrl
-              ? 'rounded-md bg-transparent'  // Agent with logo: square, no bg (transparent)
-              : 'rounded-md bg-workspace-accent text-white'  // Agent without logo: square with accent bg
-        )}
-      >
-        {isUser ? (
-          user?.avatar ? (
+    <div className={cn('flex items-start', isUser ? 'justify-end' : 'gap-3')}>
+      {/* Teams-style: the agent's icon anchors its answer on the left. A user
+          message needs no avatar — side and fill already identify it.
+          The offset drops it past the byline that opens the column, so its top
+          edge meets the bubble's, not the byline's. The three terms mirror the
+          byline's own box: its pt-0.5, its leading-4 line, and the column's
+          space-y-1 gap — change one of those and this has to follow. */}
+      {!isUser && (
+        <div
+          className={cn(
+            'mt-[calc(0.125rem+1rem+0.25rem)] flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-md',
+            agent?.logoUrl ? 'bg-transparent' : 'bg-workspace-accent text-white'
+          )}
+        >
+          {agent?.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={user.avatar} alt={user?.name || 'You'} className="h-full w-full object-cover" />
+            <img
+              src={getLogoUrl(agent.logoUrl)}
+              alt={agent.name}
+              className="h-full w-full object-cover"
+              onError={(event) => {
+                event.currentTarget.style.display = 'none';
+              }}
+            />
           ) : (
-            <User size={16} />
-          )
-        ) : agent?.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={getLogoUrl(agent.logoUrl)}
-            alt={agent.name}
-            className="h-full w-full object-cover"
-            onError={(event) => {
-              event.currentTarget.style.display = 'none';
-            }}
-          />
-        ) : (
-          <Bot size={16} />
-        )}
-      </div>
-      {/* Assistant answers take the rest of the row (tables need the width);
-          user messages stay a right-aligned bubble. */}
+            <Bot size={16} />
+          )}
+        </div>
+      )}
       <div
         className={cn(
           'min-w-0 space-y-1',
@@ -4331,6 +4325,28 @@ const MessageBubble = React.memo(function MessageBubble({
           </div>
         )}
         
+        <div
+          className={cn(
+            'px-1 pt-0.5 text-[12px] leading-4 text-muted-foreground',
+            isUser && 'text-right'
+          )}
+        >
+          {(() => {
+            const when = formatMessageStamp(message.timestamp);
+            if (isUser) return [senderName, when].filter(Boolean).join(' · ');
+            const modelRaw =
+              message.modelId ||
+              agent?.modelIds?.[0] ||
+              agent?.resolvedModelId ||
+              agent?.modelId ||
+              null;
+            const modelLabel = modelDisplayName(catalogModels, modelRaw) ?? modelRaw;
+            return [senderName, modelLabel ? `model: ${modelLabel}` : null, when]
+              .filter(Boolean)
+              .join(' · ');
+          })()}
+        </div>
+
         {/* Main response bubble */}
         <div
           className={cn(
@@ -4340,33 +4356,14 @@ const MessageBubble = React.memo(function MessageBubble({
               '[&_p]:my-2 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_li]:pt-0.5 [&_li]:leading-relaxed [&_h1]:text-base [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_h4]:text-sm [&_h4]:font-semibold [&_h4]:mt-2 [&_h4]:mb-0.5 [&_h5]:text-sm [&_h5]:font-medium [&_h5]:mt-1.5 [&_h6]:text-sm [&_h6]:font-medium [&_h6]:mt-1 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:font-mono [&_pre]:my-0 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border/70 [&_pre]:bg-background/80 [&_pre]:p-3 [&_pre]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:rounded-none [&_pre_code]:text-inherit'
           )}
         >
-          {/* Sender name inside bubble (WhatsApp-style) */}
-          <div className={cn(
-            'text-xs font-bold mb-1.5 pb-1',
-            isUser 
-              ? 'text-left text-white border-b border-white/20' 
-              : 'text-left text-workspace-accent border-b border-border'
-          )}>
-            <div className="flex items-center gap-2">
-              <span>{senderName}</span>
-              {/* {isFromDifferentAgent && (
-                <span className="rounded-full border border-amber-300/50 bg-amber-100/70 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:border-amber-900/60 dark:bg-amber-900/30 dark:text-amber-300">
-                  Not current agent
-                </span>
-              )} */}
-            </div>
-          </div>
-
           {!isUser && message.toolCalls && message.toolCalls.length > 0 && (
             <ToolCallsDropdown
               toolCalls={message.toolCalls}
               isProcessing={isStillProcessing}
-              showStop={showStop}
-              onStop={onStop}
               startTime={requestSentAt}
             />
           )}
-          {!isUser && !message.toolCalls && (activityLine || (isStillProcessing && showStop)) && (
+          {!isUser && !message.toolCalls && activityLine && (
             <div className="mb-2 flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
               {activityLine ? (
                 <span className="truncate">{activityLine}</span>
@@ -4378,20 +4375,11 @@ const MessageBubble = React.memo(function MessageBubble({
                   <TypingDots />
                 </span>
               )}
-              {isStillProcessing && showStop && (
-                <button
-                  className="ml-auto shrink-0 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted"
-                  onClick={(e) => { e.preventDefault(); onStop(); }}
-                  title="Stop generation"
-                >
-                  Stop
-                </button>
-              )}
             </div>
           )}
           
           {isUser ? (
-            <p className="whitespace-pre-wrap text-left">
+            <p className="whitespace-pre-wrap text-right">
               {(response as string).match(URL_REGEX) ? linkifyText(response as string, true) : response}
             </p>
           ) : isStillProcessing ? (
@@ -4407,28 +4395,6 @@ const MessageBubble = React.memo(function MessageBubble({
               {transformBareUrls(responseForRender as string)}
             </ReactMarkdown>
           )}
-        </div>
-
-        <div
-          className={cn(
-            'px-1 pt-0.5 text-[10px] leading-4 text-muted-foreground',
-            isUser && 'text-right'
-          )}
-        >
-          {(() => {
-            const when = formatMessageStamp(message.timestamp);
-            if (isUser) return when;
-            const modelRaw =
-              message.modelId ||
-              agent?.modelIds?.[0] ||
-              agent?.resolvedModelId ||
-              agent?.modelId ||
-              null;
-            const modelLabel = modelDisplayName(catalogModels, modelRaw) ?? modelRaw;
-            return [senderName, modelLabel ? `model: ${modelLabel}` : null, when]
-              .filter(Boolean)
-              .join(' · ');
-          })()}
         </div>
 
         {/* Artifact built this turn: opens it on the Slides or Documents surface */}
