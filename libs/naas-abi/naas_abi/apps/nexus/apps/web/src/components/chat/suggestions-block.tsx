@@ -50,6 +50,11 @@ export function SuggestionsBlock({
     setOpen(agentId ? openState.load(agentId) : false);
   }, [agentId]);
 
+  const setPanelOpen = (next: boolean) => {
+    setOpen(next);
+    if (agentId) openState.save(agentId, next);
+  };
+
   const toggleOpen = () => {
     setOpen((value) => {
       const next = !value;
@@ -61,14 +66,17 @@ export function SuggestionsBlock({
   if (chips.length === 0) return null;
 
   const activate = (suggestion: ChatSuggestion) => {
+    onSuggestionLeave?.();
     if (suggestion.cta) {
       const sectionId = (CTA_SECTION_MAP[suggestion.cta] ??
         suggestion.cta.replace(/^\//, '')) as SidebarSection;
       setActivePanelSection(sectionId);
       router.push(suggestion.cta);
+      setPanelOpen(false);
       return;
     }
     onSuggestionClick(suggestion.value);
+    setPanelOpen(false);
   };
 
   return (
