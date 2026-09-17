@@ -6,6 +6,7 @@ import {
   featureOpenResource,
   getPaneSurfaceForPath,
   isFeatureOfficeAgent,
+  isNaasAbiAgent,
   resourceFromPath,
 } from './feature-office-agents';
 import {
@@ -112,6 +113,23 @@ describe('isFeatureOfficeAgent', () => {
       isFeatureOfficeAgent({ name: 'Shop', class_name: 'acme.agents.ShopAppsAgent/ShopAppsAgent' }, 'apps'),
     ).toBe(false);
     expect(isFeatureOfficeAgent({ name: 'Apps' }, 'chat')).toBe(false);
+  });
+});
+
+describe('isNaasAbiAgent', () => {
+  it('matches Abi and every office agent naas_abi ships', () => {
+    expect(isNaasAbiAgent(abi)).toBe(true);
+    expect(isNaasAbiAgent(apps)).toBe(true);
+    expect(isNaasAbiAgent(slides)).toBe(true);
+  });
+
+  it('ignores other modules, and agents with no class at all', () => {
+    expect(isNaasAbiAgent({ class_name: 'acme.agents.AppsAgent/AppsAgent' })).toBe(false);
+    expect(isNaasAbiAgent({ class_name: 'naas_abi_marketplace.ai.chatgpt/ChatGPTAgent' })).toBe(
+      false,
+    );
+    expect(isNaasAbiAgent(orchestrator)).toBe(false);
+    expect(isNaasAbiAgent({ class_name: null })).toBe(false);
   });
 });
 

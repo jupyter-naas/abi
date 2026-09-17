@@ -51,6 +51,19 @@ export function isNexusAbiAgent(agent: OfficeAgentLike): boolean {
   return className.endsWith('/AbiAgent') && className.startsWith('naas_abi.');
 }
 
+/**
+ * True for any agent class naas_abi ships — Abi and every office agent —
+ * and never for a lookalike from another module.
+ *
+ * The chat roster packs these behind "Show N more": an office agent is
+ * reached from the pane of its own section, so listing it beside the agents
+ * you actually open a conversation with only pushes those out of the preview.
+ */
+export function isNaasAbiAgent(agent: OfficeAgentLike): boolean {
+  const className = agent.class_name ?? '';
+  return className.startsWith('naas_abi.') && className.includes('/');
+}
+
 function workspaceSegments(pathname: string): string[] {
   const parts = pathname.split(/[?#]/)[0].split('/').filter(Boolean);
   const workspaceIndex = parts.indexOf('workspace');

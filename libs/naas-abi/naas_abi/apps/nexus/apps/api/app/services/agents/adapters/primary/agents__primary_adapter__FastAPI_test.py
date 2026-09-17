@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
     _canonical_agent_sort_key,
     _class_declared_model_ids,
+    _nexus_abi_class_name,
+    _roster_alignment,
     _workspace_agent_roster,
     pick_workspace_chat_agent_id,
     pick_workspace_documents_agent_id,
@@ -83,6 +85,67 @@ def test_workspace_agent_roster_uses_seed_when_present() -> None:
 
 def test_workspace_agent_roster_unseeded_is_default_only() -> None:
     assert _workspace_agent_roster(None, "mod/Default") == {"mod/Default"}
+
+
+def test_nexus_abi_class_name_only_matches_our_orchestrator() -> None:
+    """Abi is force-enabled on every roster, so the match must not be loose.
+
+    An ``AbiAgent`` from another module would otherwise be switched on in a
+    workspace that never listed it.
+    """
+    assert (
+        _nexus_abi_class_name(
+            [
+                "naas_abi.agents.AppsAgent/AppsAgent",
+                "naas_abi.agents.AbiAgent/AbiAgent",
+            ]
+        )
+        == "naas_abi.agents.AbiAgent/AbiAgent"
+    )
+    assert _nexus_abi_class_name(["acme.agents.AbiAgent/AbiAgent"]) is None
+    assert _nexus_abi_class_name(["naas_abi.agents.AbiAgentHelper/AbiAgentHelper"]) is None
+    assert _nexus_abi_class_name([]) is None
+
+
+ABI = "naas_abi.agents.AbiAgent/AbiAgent"
+REGISTRY = ["axi.agents.AxiAgent/AxiAgent", "naas_abi.agents.AppsAgent/AppsAgent", ABI]
+
+
+def test_roster_alignment_always_enables_the_orchestrator() -> None:
+    """Abi rides on every roster, whatever the workspace listed."""
+    roster, align = _roster_alignment({"axi.agents.AxiAgent/AxiAgent"}, None, REGISTRY)
+    assert roster == {"axi.agents.AxiAgent/AxiAgent", ABI}
+    assert align is True
+
+    roster, align = _roster_alignment(None, "axi.agents.AxiAgent/AxiAgent", REGISTRY)
+    assert roster == {"axi.agents.AxiAgent/AxiAgent", ABI}
+    assert align is True
+
+
+def test_roster_alignment_keeps_the_empty_roster_guard() -> None:
+    """No seed and no resolvable default still means "touch nothing".
+
+    Abi is added after the decision, so it must not turn this case into
+    "roster = {Abi}" and disable every other row.
+    """
+    roster, align = _roster_alignment(None, None, REGISTRY)
+    assert roster == {ABI}
+    assert align is False
+
+
+def test_roster_alignment_still_empties_an_explicitly_empty_seed() -> None:
+    """``agents: []`` disables everything but the orchestrator."""
+    roster, align = _roster_alignment(set(), None, REGISTRY)
+    assert roster == {ABI}
+    assert align is True
+
+
+def test_roster_alignment_without_abi_in_the_registry() -> None:
+    roster, align = _roster_alignment(
+        {"axi.agents.AxiAgent/AxiAgent"}, None, ["axi.agents.AxiAgent/AxiAgent"]
+    )
+    assert roster == {"axi.agents.AxiAgent/AxiAgent"}
+    assert align is True
 
 
 def test_pick_workspace_chat_agent_rejects_foreign_and_disabled_ids() -> None:
