@@ -1,6 +1,6 @@
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
-from threading import Event
+from threading import Event, Thread
 from unittest.mock import Mock, patch
 
 import pytest
@@ -205,6 +205,37 @@ def test_udf_registration_failure_closes_connection(tmp_path):
     ):
         DocumentSecondaryAdapterSQLite(str(tmp_path / "failure.sqlite"))
     connection.close.assert_called_once()
+
+
+def test_close_during_connect_prevents_the_new_connection_from_being_used(tmp_path):
+    adapter = DocumentSecondaryAdapterSQLite(str(tmp_path / "race.sqlite"))
+    started = Event()
+    proceed = Event()
+    real_connect = adapter._connect
+
+    def delayed_connect():
+        started.set()
+        assert proceed.wait(timeout=5)
+        return real_connect()
+
+    adapter._connect = delayed_connect
+    outcome: dict[str, BaseException | None] = {}
+
+    def opener():
+        try:
+            with adapter._connection():
+                outcome["error"] = None
+        except DocumentStorageError as exc:
+            outcome["error"] = exc
+
+    thread = Thread(target=opener)
+    thread.start()
+    assert started.wait(timeout=5)
+    adapter.close()
+    proceed.set()
+    thread.join(timeout=5)
+
+    assert isinstance(outcome["error"], DocumentStorageError)
 
 
 def test_memory_adapter_persists_until_closed():

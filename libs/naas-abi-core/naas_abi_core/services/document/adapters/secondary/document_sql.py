@@ -288,9 +288,13 @@ class DocumentSQL(ABC):
                     if self.pg:
                         # A fixed-width hash keeps unique B-tree entries bounded
                         # even for arbitrarily long values; NULLIF still exempts
-                        # missing/null fields from the constraint.
+                        # missing/null fields from the constraint. SHA-256 (not
+                        # MD5) avoids false UniqueViolations from a crafted hash
+                        # collision between two distinct values.
                         sparse = f"NULLIF({raw}, 'null'::jsonb)"
-                        expressions.append(f"(md5(({sparse})::text))")
+                        expressions.append(
+                            f"(encode(sha256(({sparse})::text::bytea), 'hex'))"
+                        )
                     else:
                         expressions.append(f"document_json_key_v2({raw})")
                 else:

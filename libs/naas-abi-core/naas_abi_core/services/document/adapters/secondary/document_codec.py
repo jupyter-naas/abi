@@ -59,6 +59,10 @@ def encode(value: Value) -> Any:
         }
     if isinstance(value, bytes):
         return {"$t": "bytes", "$v": base64.b64encode(value).decode("ascii")}
+    if isinstance(value, float) and value == 0.0:
+        # PostgreSQL's `numeric` type has no negative-zero representation, so
+        # normalize -0.0 to 0.0 here to keep both backends round-trip identical.
+        return 0.0
     if isinstance(value, list):
         return [encode(item) for item in value]
     if isinstance(value, dict):

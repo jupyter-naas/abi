@@ -76,7 +76,7 @@ def test_unique_field_index_is_bounded_and_sparse_on_postgresql(compiler):
     if compiler.pg:
         # A fixed-width hash keeps the B-tree entry bounded for arbitrarily
         # long values; NULLIF still exempts missing/null fields (sparse).
-        assert "md5(" in statement
+        assert "sha256(" in statement
         assert "NULLIF" in statement
     else:
         assert "document_json_key_v2" in statement

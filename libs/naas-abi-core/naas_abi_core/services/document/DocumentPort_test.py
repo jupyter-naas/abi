@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import pytest
 from naas_abi_core.services.document.DocumentPort import (
+    MAX_IN_VALUES,
     CollectionSpec,
     FieldSpec,
     validate_data,
@@ -94,3 +95,14 @@ def test_query_rejects_invalid_operator_arguments(where):
 def test_query_rejects_oversized_pages(limit):
     with pytest.raises(ValueError, match="1000"):
         validate_query((), limit=limit)
+
+
+@pytest.mark.parametrize("operator", ["in", "nin"])
+def test_query_rejects_oversized_in_lists(operator):
+    with pytest.raises(ValueError, match=str(MAX_IN_VALUES)):
+        validate_query([("x", operator, list(range(MAX_IN_VALUES + 1)))])
+
+
+@pytest.mark.parametrize("operator", ["in", "nin"])
+def test_query_accepts_in_list_at_the_size_limit(operator):
+    validate_query([("x", operator, list(range(MAX_IN_VALUES)))])

@@ -27,6 +27,7 @@ Operator = Literal[
 Predicate: TypeAlias = tuple[str, Operator, Value]
 OrderBy: TypeAlias = tuple[str, Literal["asc", "desc"]] | None
 MAX_PAGE_SIZE = 1000
+MAX_IN_VALUES = 500
 
 
 class DocumentNotFound(Exception):
@@ -207,8 +208,11 @@ def validate_query(
         validate_value(value)
         if operator == "exists" and type(value) is not bool:
             raise ValueError("exists requires a boolean")
-        if operator in ("in", "nin") and not isinstance(value, list):
-            raise ValueError("in/nin require a list")
+        if operator in ("in", "nin"):
+            if not isinstance(value, list):
+                raise ValueError("in/nin require a list")
+            if len(value) > MAX_IN_VALUES:
+                raise ValueError(f"in/nin lists cannot exceed {MAX_IN_VALUES} values")
         if operator in ("lt", "lte", "gt", "gte") and (
             value is None or isinstance(value, (list, dict))
         ):

@@ -1,4 +1,5 @@
 import json
+import math
 from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
@@ -87,6 +88,11 @@ def test_numeric_keys_follow_json_decimal_not_binary_float_value():
     assert compare_numeric_text(sqlite_numeric_text(raw), "1000000000000000128") == -1
     assert compare_numeric_text("5e-324", "0") == 1
     assert decode(json.loads(raw)) == 1000000000000000100
+
+
+def test_negative_zero_is_normalized_for_backend_portability():
+    assert math.copysign(1, encode(-0.0)) == 1
+    assert math.copysign(1, encode({"x": [-0.0]})["x"][0]) == 1
 
 
 def test_legacy_numeric_keys_remain_available_during_index_upgrade():

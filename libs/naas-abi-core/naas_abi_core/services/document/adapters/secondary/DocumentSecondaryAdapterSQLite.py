@@ -101,6 +101,13 @@ class DocumentSecondaryAdapterSQLite(DocumentSQL):
                 yield self._memory_connection
                 return
         connection = self._connect()
+        with self._lock:
+            # close() may have run while _connect() was opening this file
+            # connection; re-check so a closed adapter never hands out a
+            # freshly opened connection to the caller.
+            if self._closed:
+                connection.close()
+                raise DocumentStorageError("Document adapter is closed")
         try:
             yield connection
         finally:
