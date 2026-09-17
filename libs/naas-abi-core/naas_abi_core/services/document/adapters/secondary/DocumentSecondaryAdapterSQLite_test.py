@@ -94,6 +94,24 @@ class TestDocumentSecondaryAdapterSQLite(DocumentSecondaryAdapterContract):
         with pytest.raises(UniqueViolation):
             docs.put("module", "records", "duplicate", {'quoted"field': "value"}, None)
 
+    def test_whitespace_only_ddl_differences_do_not_trigger_index_churn(self, docs):
+        spec = CollectionSpec(
+            name="records", fields=(FieldSpec(name="x", type="string", indexed=True),)
+        )
+        docs.ensure_collection("module", spec)
+        name, statement = docs.index_statements("module", spec)[0]
+        # A version-dependent reprint that only differs in whitespace must not
+        # be treated as an outdated index and force a rebuild.
+        reformatted = statement.replace(" ON ", "  ON  ")
+        assert reformatted != statement
+        with docs.transaction(write=True) as connection:
+            docs.ensure_index(connection, name, reformatted)
+        with docs.transaction() as connection:
+            stored = connection.execute(
+                "SELECT sql FROM sqlite_master WHERE name = ?", (name,)
+            ).fetchone()[0]
+        assert stored == statement.replace(" IF NOT EXISTS", "")
+
     def test_file_readers_and_writers_use_independent_connections(self, docs):
         reading, release = Event(), Event()
 

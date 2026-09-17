@@ -66,3 +66,40 @@ def test_compound_uniqueness_redeclaration_ignores_field_order(compiler):
     old = CollectionSpec(name="records", unique_together=(("team", "slug"),))
     new = CollectionSpec(name="records", unique_together=(("slug", "team"),))
     assert compiler.merge_spec(old, new) == old
+
+
+def test_unique_field_index_is_bounded_and_sparse_on_postgresql(compiler):
+    spec = CollectionSpec(
+        name="records", fields=(FieldSpec(name="x", type="string", unique=True),)
+    )
+    _, statement = compiler.index_statements("namespace", spec)[0]
+    if compiler.pg:
+        # A fixed-width hash keeps the B-tree entry bounded for arbitrarily
+        # long values; NULLIF still exempts missing/null fields (sparse).
+        assert "md5(" in statement
+        assert "NULLIF" in statement
+    else:
+        assert "document_json_key_v2" in statement
+
+
+def test_sort_parts_is_a_named_tuple(compiler):
+    parts = compiler.sort_parts("x")
+    assert (parts.rank, parts.numeric, parts.text) == tuple(parts)
+    bounded = parts._replace(text=f"left({parts.text}, 256)")
+    assert bounded.rank == parts.rank and bounded.text != parts.text
+
+
+def test_in_predicate_narrows_with_gin_hint_only_on_postgresql(compiler):
+    params: list = []
+    predicate = compiler.predicates([("x", "in", ["a", "b"])], params)
+    if compiler.pg:
+        assert predicate.count("data @> CAST(") == 2
+    else:
+        assert "data @>" not in predicate
+
+
+def test_nin_and_empty_in_predicates_never_add_a_gin_hint(compiler):
+    for where in ([("x", "nin", ["a", "b"])], [("x", "in", [])]):
+        params: list = []
+        predicate = compiler.predicates(where, params)
+        assert "data @>" not in predicate

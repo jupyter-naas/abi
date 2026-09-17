@@ -122,6 +122,29 @@ class DocumentSecondaryAdapterContract(ABC):
                 for d in service.iterate("records", order_by=("x", direction), batch=1)
             ] == expected
 
+    @pytest.mark.parametrize("kind", ["string", "bytes"])
+    def test_unique_index_accepts_long_incompressible_values(self, docs, kind):
+        import random
+        import string
+
+        from naas_abi_core.services.document.DocumentService import DocumentService
+
+        rng = random.Random(1258)
+        prefix = "".join(rng.choices(string.ascii_letters + string.digits, k=5000))
+        values = [prefix + suffix for suffix in ("a", "b")]
+        if kind == "bytes":
+            values = [value.encode() for value in values]
+        service = DocumentService(docs, "module")
+        service.ensure_collection(
+            CollectionSpec(
+                name="records", fields=(FieldSpec(name="x", type=kind, unique=True),)
+            )
+        )
+        service.put("records", "0", {"x": values[0]})
+        service.put("records", "1", {"x": values[1]})
+        with pytest.raises(UniqueViolation):
+            service.put("records", "2", {"x": values[0]})
+
     def test_generator_filters_cannot_expand_bulk_deletion(self, docs):
         from naas_abi_core.services.document.DocumentService import DocumentService
 

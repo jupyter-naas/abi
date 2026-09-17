@@ -167,11 +167,14 @@ transaction per operation, and one documents table plus a collection catalog in 
 schema. A namespace column scopes all statements and partial indexes. A GIN index
 accelerates containment candidates; exact equality still checks full values.
 `indexed=True` indexes type rank, numeric value, and a bounded 256-character
-prefix of the text/bytes sort key. This keeps optional B-tree entries below
-PostgreSQL's size limit even for long incompressible values. Queries and cursors
-compare full values; sorting strings/bytes can require an explicit sort, while
-type/numeric ordering can use the leading index expressions. Equality candidates
-continue to use the GIN index.
+prefix of the text/bytes sort key. `unique=True` instead indexes a fixed-width
+hash of the value, sparse via the same NULLIF exemption. Both keep optional
+and unique B-tree entries below PostgreSQL's size limit even for long
+incompressible values. Queries and cursors compare full values; sorting
+strings/bytes can require an explicit sort, while type/numeric ordering can
+use the leading index expressions. Equality candidates, including `in`,
+continue to use the GIN index; `ne`/`nin` cannot, since containment only
+narrows a positive match.
 Collection locks coordinate writes with declaration changes and teardown; CAS
 updates/deletes check the version in the modifying statement. Boot DDL is
 serialized across processes and runs on every adapter initialization.

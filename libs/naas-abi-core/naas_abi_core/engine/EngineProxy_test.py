@@ -131,3 +131,71 @@ def test_engine_proxy_services_denies_dataset_service_when_not_allowed():
     assert proxy.services.dataset_available() is False
     with pytest.raises(ValueError, match="does not have access"):
         _ = proxy.services.dataset
+
+
+def test_engine_proxy_services_exposes_document_service_scoped_to_module():
+    from unittest.mock import MagicMock
+
+    from naas_abi_core.services.document.DocumentPort import IDocumentAdapter
+    from naas_abi_core.services.document.DocumentService import DocumentService
+
+    root = DocumentService._for_engine(MagicMock(spec=IDocumentAdapter))
+    engine = _DummyEngine(services=IEngine.Services(document=root))
+
+    proxy = EngineProxy(
+        engine=engine,
+        module_name="test_module",
+        module_dependencies=ModuleDependencies(modules=[], services=[DocumentService]),
+    )
+
+    assert proxy.services.document_available() is True
+    assert proxy.services.document.namespace == "test_module"
+
+
+def test_engine_proxy_services_denies_document_service_when_not_allowed():
+    from unittest.mock import MagicMock
+
+    from naas_abi_core.services.document.DocumentPort import IDocumentAdapter
+    from naas_abi_core.services.document.DocumentService import DocumentService
+
+    root = DocumentService._for_engine(MagicMock(spec=IDocumentAdapter))
+    engine = _DummyEngine(services=IEngine.Services(document=root))
+
+    proxy = EngineProxy(
+        engine=engine,
+        module_name="test_module",
+        module_dependencies=ModuleDependencies(modules=[], services=[]),
+    )
+
+    assert proxy.services.document_available() is False
+    with pytest.raises(ValueError, match="does not have access"):
+        _ = proxy.services.document
+
+
+def test_engine_proxy_document_view_is_cached_and_rebound_when_root_changes():
+    """The scoped per-module DocumentService view is expensive to recreate
+    (it binds a namespace), so it must be cached across repeated access and
+    only rebuilt if the engine swaps in a different root document service."""
+    from unittest.mock import MagicMock
+
+    from naas_abi_core.services.document.DocumentPort import IDocumentAdapter
+    from naas_abi_core.services.document.DocumentService import DocumentService
+
+    root = DocumentService._for_engine(MagicMock(spec=IDocumentAdapter))
+    engine = _DummyEngine(services=IEngine.Services(document=root))
+
+    proxy = EngineProxy(
+        engine=engine,
+        module_name="test_module",
+        module_dependencies=ModuleDependencies(modules=[], services=[DocumentService]),
+    )
+
+    first = proxy.services.document
+    assert proxy.services.document is first
+
+    other_root = DocumentService._for_engine(MagicMock(spec=IDocumentAdapter))
+    engine.services = IEngine.Services(document=other_root)
+
+    second = proxy.services.document
+    assert second is not first
+    assert second.namespace == "test_module"

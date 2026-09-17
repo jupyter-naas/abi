@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from contextlib import AbstractContextManager
 from datetime import UTC, datetime
 from functools import lru_cache
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 from naas_abi_core.services.document.adapters.secondary.document_codec import (
     ValueKind,
@@ -38,6 +38,14 @@ from naas_abi_core.services.document.DocumentPort import (
     validate_value,
     validate_version,
 )
+
+
+class SortParts(NamedTuple):
+    """Portable ORDER BY expressions: type rank, numeric value, text key."""
+
+    rank: str
+    numeric: str
+    text: str
 
 
 class DocumentSQL(ABC):
@@ -82,7 +90,11 @@ class DocumentSQL(ABC):
             return f"({expression} ->> {self.literal(key)})"
         return f"json_extract({expression}, {self.literal('$.' + json.dumps(key))})"
 
-    def sort_parts(self, field: str) -> list[str]:
+    @property
+    def id_collation(self) -> str:
+        return '"C"' if self.pg else "BINARY"
+
+    def sort_parts(self, field: str) -> SortParts:
         """Portable scalar order; containers tie by type, then document ID."""
         expression = self.field(field)
         kind = self.kind(expression)
@@ -122,9 +134,8 @@ class DocumentSQL(ABC):
             if self.pg
             else f"document_bytes_key({value})"
         )
-        collation = '"C"' if self.pg else "BINARY"
-        text = f"(CASE WHEN {kind} = {string_type} THEN {scalar} WHEN {tag} = 'datetime' THEN {value} WHEN {tag} = 'bytes' THEN {binary} ELSE '' END COLLATE {collation})"
-        return [f"({rank})", f"({numeric})", text]
+        text = f"(CASE WHEN {kind} = {string_type} THEN {scalar} WHEN {tag} = 'datetime' THEN {value} WHEN {tag} = 'bytes' THEN {binary} ELSE '' END COLLATE {self.id_collation})"
+        return SortParts(f"({rank})", f"({numeric})", text)
 
     def equal(self, expression: str, value: Value, params: list[Any]) -> str:
         raw = dumps(encode(value))
@@ -136,6 +147,18 @@ class DocumentSQL(ABC):
             return f"({key} IS NULL AND {expression} IS NOT NULL)"
         params.append(sqlite_json_key(raw))
         return f"{key} = {self.p}"
+
+    def gin_hint(self, field: str, values: Sequence[Value], params: list[Any]) -> str:
+        """Containment candidates for a positive equality match on `field`.
+
+        The caller still runs the exact equality check; this only narrows
+        candidates for the planner via the GIN index.
+        """
+        clauses = []
+        for value in values:
+            params.append(dumps({storage_key(field): encode(value)}))
+            clauses.append(f"data @> CAST({self.p} AS JSONB)")
+        return "(" + " OR ".join(clauses) + ")"
 
     def predicates(self, where: Sequence[Predicate], params: list[Any]) -> str:
         clauses = []
@@ -151,8 +174,7 @@ class DocumentSQL(ABC):
                     )
                 elif self.pg:
                     # GIN narrows candidates; equality still enforces exact objects/arrays.
-                    params.append(dumps({storage_key(field): encode(value)}))
-                    clause += f" AND data @> CAST({self.p} AS JSONB)"
+                    clause += f" AND {self.gin_hint(field, [value], params)}"
             elif operator in ("in", "nin"):
                 assert isinstance(value, list)
                 clause = (
@@ -164,6 +186,8 @@ class DocumentSQL(ABC):
                     clause = (
                         f"{expression} IS NOT NULL AND NOT COALESCE({clause}, FALSE)"
                     )
+                elif self.pg and value:
+                    clause += f" AND {self.gin_hint(field, value, params)}"
             elif operator == "contains":
                 if self.pg:
                     item = "member.value"
@@ -261,17 +285,20 @@ class DocumentSQL(ABC):
             for field in fields:
                 raw = self.field(field)
                 if unique:
-                    expressions.append(
-                        f"(NULLIF({raw}, 'null'::jsonb))"
-                        if self.pg
-                        else f"document_json_key_v2({raw})"
-                    )
+                    if self.pg:
+                        # A fixed-width hash keeps unique B-tree entries bounded
+                        # even for arbitrarily long values; NULLIF still exempts
+                        # missing/null fields from the constraint.
+                        sparse = f"NULLIF({raw}, 'null'::jsonb)"
+                        expressions.append(f"(md5(({sparse})::text))")
+                    else:
+                        expressions.append(f"document_json_key_v2({raw})")
                 else:
                     parts = self.sort_parts(field)
                     if self.pg:
                         # B-tree entries are bounded even for arbitrarily long
                         # strings/bytes. Queries still compare the full value.
-                        parts[2] = f"left({parts[2]}, 256)"
+                        parts = parts._replace(text=f"left({parts.text}, 256)")
                     expressions.extend(parts)
             statements.append(
                 (
@@ -367,16 +394,16 @@ class DocumentSQL(ABC):
             dict[str, Value], decode(json.loads(raw) if isinstance(raw, str) else raw)
         )
 
+    @staticmethod
+    def read_datetime(value: Any) -> datetime:
+        return datetime.fromisoformat(value) if isinstance(value, str) else value
+
     def document(self, row: Any) -> Document:
         return Document(
             id=row[0],
             data=self.read_data(row[1]),
-            created_at=datetime.fromisoformat(row[2])
-            if isinstance(row[2], str)
-            else row[2],
-            updated_at=datetime.fromisoformat(row[3])
-            if isinstance(row[3], str)
-            else row[3],
+            created_at=self.read_datetime(row[2]),
+            updated_at=self.read_datetime(row[3]),
             version=row[4],
         )
 
@@ -462,25 +489,30 @@ class DocumentSQL(ABC):
         where = validate_query(where, order_by, limit)
         params: list[Any] = [namespace, collection]
         condition = self.predicates(where, params)
-        collation = '"C"' if self.pg else "BINARY"
-        parts = ([] if order_by is None else self.sort_parts(order_by[0])) + [
-            f"id COLLATE {collation}"
+        parts = ([] if order_by is None else list(self.sort_parts(order_by[0]))) + [
+            f"id COLLATE {self.id_collation}"
         ]
         descending = order_by is not None and order_by[1] == "desc"
-        fingerprint = hashlib.sha256(
-            dumps(
-                encode(
-                    [
-                        namespace,
-                        collection,
-                        sorted(
-                            [list(p) for p in where], key=lambda p: dumps(encode(p))
-                        ),
-                        list(order_by) if order_by else None,
-                    ]
-                )
-            ).encode()
-        ).hexdigest()
+
+        def query_fingerprint() -> str:
+            return hashlib.sha256(
+                dumps(
+                    encode(
+                        [
+                            namespace,
+                            collection,
+                            sorted(
+                                [list(p) for p in where], key=lambda p: dumps(encode(p))
+                            ),
+                            list(order_by) if order_by else None,
+                        ]
+                    )
+                ).encode()
+            ).hexdigest()
+
+        # Only computed when actually needed: validating an incoming cursor,
+        # or stamping a next_cursor when there is a following page.
+        fingerprint = query_fingerprint() if cursor is not None else None
         if cursor is not None:
             try:
                 token = json.loads(
@@ -532,6 +564,8 @@ class DocumentSQL(ABC):
                 if order_by is None
                 else list(value_sort_parts(last.data.get(order_by[0])))
             ) + [last.id]
+            if fingerprint is None:
+                fingerprint = query_fingerprint()
             next_cursor = base64.urlsafe_b64encode(
                 dumps({"v": 1, "q": fingerprint, "key": last_key}).encode()
             ).decode()

@@ -125,11 +125,14 @@ class DocumentService(ServiceBase):
         order_by: OrderBy = None,
         batch: int = 500,
     ) -> Iterator[Document]:
+        # where/collection are validated once here rather than by find() on
+        # every page, since neither changes across pages of the same query.
         where = validate_query(where, order_by, batch)
+        collection = validate_name(collection)
         cursor = None
         while True:
-            page = self.find(
-                collection, where=where, order_by=order_by, limit=batch, cursor=cursor
+            page = self.__adapter.find(
+                self.namespace, collection, where, order_by, batch, cursor
             )
             yield from page.items
             cursor = page.cursor

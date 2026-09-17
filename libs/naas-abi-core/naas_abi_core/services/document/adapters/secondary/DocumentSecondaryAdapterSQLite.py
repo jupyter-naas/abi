@@ -114,11 +114,18 @@ class DocumentSecondaryAdapterSQLite(DocumentSQL):
         ).fetchone()
         # Repair indexes built using the old JSON-path accessor. Rebuild and
         # uniqueness validation share ensure_collection's write transaction.
-        if existing is not None and existing[0] != statement.replace(
-            " IF NOT EXISTS", ""
-        ):
+        # Compared on normalized text: SQLite stores CREATE INDEX statements
+        # essentially verbatim, but drops "IF NOT EXISTS" and, across
+        # versions, may reformat insignificant whitespace.
+        if existing is not None and self._normalized_ddl(
+            existing[0]
+        ) != self._normalized_ddl(statement):
             connection.execute(f"DROP INDEX {name}")
         super().ensure_index(connection, name, statement)
+
+    @staticmethod
+    def _normalized_ddl(statement: str) -> str:
+        return " ".join(statement.replace(" IF NOT EXISTS", "").split())
 
     @contextmanager
     def transaction(self, *, write: bool = False) -> Iterator[sqlite3.Connection]:

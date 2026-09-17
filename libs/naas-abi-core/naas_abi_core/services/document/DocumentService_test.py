@@ -133,6 +133,29 @@ def test_engine_root_cannot_use_an_implicit_storage_namespace(adapter):
     adapter.put.assert_not_called()
 
 
+def test_iterate_validates_the_query_once_not_once_per_page(
+    service, adapter, monkeypatch
+):
+    now = datetime.now(UTC)
+    adapter.find.side_effect = [
+        Page([Document("one", {}, now, now, 1)], "opaque"),
+        Page([Document("two", {}, now, now, 1)], None),
+    ]
+    calls = []
+    from naas_abi_core.services.document import DocumentService as module
+
+    original = module.validate_query
+
+    def counting_validate_query(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(module, "validate_query", counting_validate_query)
+    items = list(service.iterate("records", where=[("x", "eq", 1)], batch=1))
+    assert [d.id for d in items] == ["one", "two"]
+    assert len(calls) == 1
+
+
 def test_failed_filter_iteration_does_not_start_bulk_deletion(service, adapter):
     def predicates():
         yield ("x", "eq", 1)
