@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.tools import StructuredTool
 from naas_abi_core.modules.templatablesparqlquery import (
     ABIModule as TemplatableSparqlQueryABIModule,
 )
-from unittest.mock import MagicMock
 
 
 def _mock_sparql_tool(name: str) -> StructuredTool:
@@ -20,8 +21,8 @@ def _mock_sparql_tool(name: str) -> StructuredTool:
 
 
 class _StubTemplatableSparqlModule(TemplatableSparqlQueryABIModule):
-    def get_tools(self, tool_names: list[str]) -> list[StructuredTool]:
-        return [_mock_sparql_tool(name) for name in tool_names]
+    def get_tools(self, tool_names: list[str] | None = None) -> list:
+        return [_mock_sparql_tool(name) for name in tool_names or []]
 
 
 @pytest.fixture(autouse=True)

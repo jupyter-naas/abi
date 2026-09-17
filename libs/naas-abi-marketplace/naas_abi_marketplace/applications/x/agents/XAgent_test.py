@@ -1,6 +1,6 @@
 import pytest
 from naas_abi_core import logger
-from signals.x.agents.XAgent import XAgent
+from naas_abi_marketplace.applications.x.agents.XAgent import XAgent
 
 # Tool names the agent should expose. API tools come from the XIntegration
 # `as_tools` factory; SPARQL tools come from XSparqlQueries.ttl via the

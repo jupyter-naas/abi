@@ -1315,37 +1315,79 @@ def _resolve_inprocess_abi_agent(agent_name: str):
         return instance
 
 
+_INPROCESS_LLM_MODEL_ALIASES: dict[str, str] = {
+    "openai.gpt-5.6-sol": "gpt-5.6-sol",
+    "openai.gpt-oss-120b-1:0": "gpt-oss-120b",
+}
+
+
+def _normalize_inprocess_llm_model(model_id: str | None) -> str | None:
+    if not model_id:
+        return None
+    mid = model_id.strip()
+    return _INPROCESS_LLM_MODEL_ALIASES.get(mid, mid)
+
+
+def _inprocess_llm_model_for_agent(
+    agent_name: str, config_llm: str | None
+) -> str | None:
+    """Resolve the chat model id for an in-process ABI agent turn."""
+    normalized = _normalize_inprocess_llm_model(config_llm)
+    if "AxiAgent" not in (agent_name or ""):
+        return normalized
+    try:
+        from axi import ABIModule
+
+        ds = str(
+            ABIModule.get_instance().configuration.decision_support_chat_model
+        ).strip()
+        if ds:
+            return _normalize_inprocess_llm_model(ds)
+    except Exception:
+        pass
+    return normalized
+
+
 def _retarget_inprocess_chat_model(agent: Any, model_id: str) -> None:
     """Swap the chat model on a duplicated agent without rebuilding intents.
 
     ``Agent.New(model_id=...)`` reconstructs IntentMapper and re-embeds, which
     401s when OPENAI_API_KEY is actually an OpenRouter key. Keep the cached
     mapper; only rebind tools onto the requested model.
+
+    Applies recursively to nested sub-agents so orchestrators (e.g. Axi) and
+    delegated specialists (e.g. Counter-UAS) share the same per-request model.
     """
     from naas_abi.agents.slides import load_slides_chat_model
     from naas_abi_core.services.agent.tools.utils import can_bind_tools
 
     chat_model = load_slides_chat_model(model_id)
     base = getattr(chat_model, "model", chat_model)
-    agent._chat_model = base
-    tools_to_bind: list[Any] = []
-    tools_to_bind.extend(getattr(agent, "_structured_tools", []) or [])
-    tools_to_bind.extend(getattr(agent, "_native_tools", []) or [])
-    if tools_to_bind and can_bind_tools(base):
-        agent._chat_model_with_tools = base.bind_tools(tools_to_bind)
-        requires_ws = getattr(type(agent), "_requires_workspace", None)
-        if callable(requires_ws):
-            gated = [t for t in tools_to_bind if not requires_ws(t)]
-            agent._chat_model_without_workspace_tools = (
-                base.bind_tools(gated)
-                if len(gated) != len(tools_to_bind)
-                else agent._chat_model_with_tools
-            )
-        else:
-            agent._chat_model_without_workspace_tools = agent._chat_model_with_tools
-        return
-    agent._chat_model_with_tools = base
-    agent._chat_model_without_workspace_tools = base
+
+    def _apply_to_node(node: Any) -> None:
+        node._chat_model = base
+        tools_to_bind: list[Any] = []
+        tools_to_bind.extend(getattr(node, "_structured_tools", []) or [])
+        tools_to_bind.extend(getattr(node, "_native_tools", []) or [])
+        if tools_to_bind and can_bind_tools(base):
+            node._chat_model_with_tools = base.bind_tools(tools_to_bind)
+            requires_ws = getattr(type(node), "_requires_workspace", None)
+            if callable(requires_ws):
+                gated = [t for t in tools_to_bind if not requires_ws(t)]
+                node._chat_model_without_workspace_tools = (
+                    base.bind_tools(gated)
+                    if len(gated) != len(tools_to_bind)
+                    else node._chat_model_with_tools
+                )
+            else:
+                node._chat_model_without_workspace_tools = node._chat_model_with_tools
+            return
+        node._chat_model_with_tools = base
+        node._chat_model_without_workspace_tools = base
+
+    _apply_to_node(agent)
+    for sub_agent in getattr(agent, "_agents", None) or []:
+        _retarget_inprocess_chat_model(sub_agent, model_id)
 
 
 def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
@@ -1484,7 +1526,9 @@ async def stream_with_abi_inprocess(
 
     agent_name = config.model
     template_agent = _resolve_inprocess_abi_agent(agent_name)
-    llm_model = (getattr(config, "llm_model", None) or "").strip() or None
+    llm_model = _inprocess_llm_model_for_agent(
+        agent_name, (getattr(config, "llm_model", None) or "").strip() or None
+    )
     if template_agent is None:
         with _INPROCESS_AGENT_LOCK:
             available_hint = ", ".join(_INPROCESS_AGENT_HINTS[:20]) or "unavailable"
@@ -1600,3 +1644,16 @@ async def stream_with_abi_inprocess(
 
     if not emitted and final_replay:
         yield "\n".join(final_replay)
+        emitted = True
+
+    if not emitted:
+        fallback = await asyncio.to_thread(agent.invoke, latest_user_message)
+        if isinstance(fallback, str) and fallback.strip():
+            yield fallback.strip()
+            emitted = True
+
+    if not emitted:
+        yield (
+            "\n\n**Error:** The agent produced no visible response. "
+            "Start a new chat or check `docker compose logs abi --tail=80`."
+        )
