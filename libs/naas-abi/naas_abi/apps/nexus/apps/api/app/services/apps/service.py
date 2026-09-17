@@ -60,6 +60,28 @@ class AppsService:
         adapter = self._require_adapter()
         return await adapter.update(workspace_id, app_id, updates)
 
+    async def upsert_app_config(
+        self,
+        workspace_id: str,
+        app_id: str,
+        updates: AppConfigUpdateInput,
+    ) -> AppConfigRecord:
+        """Update the row, or create it when absent (PATCH semantics).
+
+        A missing ``enabled`` on create falls back to the default (off). The
+        HTTP toggle and the Apps agent both go through here.
+        """
+        record = await self.update_app_config(workspace_id, app_id, updates)
+        if record is not None:
+            return record
+        return await self.create_app_config(
+            AppConfigCreateInput(
+                workspace_id=workspace_id,
+                app_id=app_id,
+                enabled=False if updates.enabled is None else updates.enabled,
+            )
+        )
+
     async def delete_app_config(self, workspace_id: str, app_id: str) -> bool:
         adapter = self._require_adapter()
         return await adapter.delete(workspace_id, app_id)

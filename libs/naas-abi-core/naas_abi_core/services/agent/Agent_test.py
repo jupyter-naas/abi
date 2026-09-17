@@ -228,13 +228,64 @@ def test_agent_one_tool_agent_response(model):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _strip(name, messages):
-    """Call the unbound method with a lightweight self (only ._name is used)."""
+def _strip(name, messages, sub_agents=()):
+    """Call the unbound method with a lightweight self (._name, ._agents)."""
     from types import SimpleNamespace
 
     from naas_abi_core.services.agent.Agent import Agent
 
-    return Agent._strip_inbound_handoff_artifacts(SimpleNamespace(_name=name), messages)
+    agents = [SimpleNamespace(_name=n) for n in sub_agents]
+    return Agent._strip_inbound_handoff_artifacts(
+        SimpleNamespace(_name=name, _agents=agents), messages
+    )
+
+
+def _handoff(target, tid):
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    call = {"name": f"transfer_to_{target}", "args": {}, "id": tid, "type": "tool_call"}
+    return [
+        AIMessage(content="", tool_calls=[call], id=f"ai-{tid}"),
+        ToolMessage(
+            content=f"__handoff__:{target}",
+            name=f"transfer_to_{target}",
+            tool_call_id=tid,
+            id=f"tm-{tid}",
+        ),
+    ]
+
+
+def test_strip_removes_every_upstream_handoff_in_a_chain():
+    """Bob -> Abi -> Apps: Apps must not see Bob's ``__handoff__:Abi`` either.
+    Left in, it read as "task done" and Apps answered without its tools."""
+    from langchain_core.messages import HumanMessage
+
+    messages = [
+        HumanMessage(content="List my graphs", id="h1"),
+        *_handoff("Abi", "t1"),
+        *_handoff("Knowledge_Graph", "t2"),
+    ]
+
+    cleaned = _strip("Knowledge_Graph", messages)
+
+    assert [m.content for m in cleaned] == ["List my graphs"]
+
+
+def test_strip_keeps_the_agents_own_outbound_handoffs():
+    from langchain_core.messages import HumanMessage
+
+    messages = [
+        HumanMessage(content="List my apps", id="h1"),
+        *_handoff("Abi", "t1"),
+        *_handoff("Apps", "t2"),
+    ]
+
+    cleaned = _strip("Abi", messages, sub_agents=["Apps"])
+
+    names = [getattr(m, "name", None) for m in cleaned]
+    assert "transfer_to_Abi" not in names
+    assert "transfer_to_Apps" in names
+    assert len(cleaned) == 3
 
 
 def test_strip_removes_orphan_tool_use_block_in_list_content():

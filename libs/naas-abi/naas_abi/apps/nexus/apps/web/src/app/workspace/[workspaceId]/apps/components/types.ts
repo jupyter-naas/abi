@@ -33,6 +33,7 @@ export interface AppInfo {
   keywords?: string[];
   tier?: string | null;
   maintainer?: string | null;
+  agent?: string | null;
   installed: boolean;
   enabled: boolean;
 }

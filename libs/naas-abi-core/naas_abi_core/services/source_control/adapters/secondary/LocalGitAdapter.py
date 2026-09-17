@@ -264,16 +264,24 @@ class LocalGitAdapter(ISourceControlAdapter):
         env = _git_env(author_name or "abi", author_email or "abi@local")
         self._run("checkout", branch, cwd=repo_path, env=env)
         added: list[str] = []
+        removed: list[str] = []
         for item in writes:
             rel = item.path.lstrip("/")
             target = repo_path / rel
+            if item.delete:
+                if target.is_file():
+                    removed.append(rel)
+                continue
             target.parent.mkdir(parents=True, exist_ok=True)
             if isinstance(item.content, bytes):
                 target.write_bytes(item.content)
             else:
                 target.write_text(item.content, encoding="utf-8")
             added.append(rel)
-        self._run("add", "--", *added, cwd=repo_path, env=env)
+        if removed:
+            self._run("rm", "-q", "--", *removed, cwd=repo_path, env=env)
+        if added:
+            self._run("add", "--", *added, cwd=repo_path, env=env)
         self._run("commit", "-m", message, cwd=repo_path, env=env)
         sha = self._run("rev-parse", "HEAD", cwd=repo_path, env=env)
         return Commit(sha=sha, message=message, author=author_name or "abi")

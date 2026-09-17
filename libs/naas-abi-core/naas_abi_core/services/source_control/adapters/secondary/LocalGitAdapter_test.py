@@ -206,3 +206,37 @@ def test_upsert_files_is_one_commit(adapter: LocalGitAdapter) -> None:
         ).data
         == b"\x89PNG"
     )
+
+
+def test_upsert_files_deletes_in_the_same_commit(adapter: LocalGitAdapter) -> None:
+    repo = adapter.ensure_repo(owner="abi", name="demo")
+    repo_id = f"{repo.owner}/{repo.name}"
+    branch = "apps/ws/demo"
+    adapter.create_branch(repo_id=repo_id, name=branch, from_ref="main")
+    adapter.upsert_files(
+        repo_id=repo_id,
+        files=(
+            FileWrite(path="apps/ws/demo/old.js", content="x"),
+            FileWrite(path="apps/ws/demo/index.html", content="<p>1</p>"),
+        ),
+        message="Seed",
+        branch=branch,
+    )
+    before = adapter.list_commits(repo_id=repo_id, ref=branch, limit=20)
+    adapter.upsert_files(
+        repo_id=repo_id,
+        files=(
+            FileWrite(path="apps/ws/demo/old.js", content="", delete=True),
+            FileWrite(path="apps/ws/demo/gone.js", content="", delete=True),
+            FileWrite(path="apps/ws/demo/index.html", content="<p>2</p>"),
+        ),
+        message="Rename",
+        branch=branch,
+    )
+    after = adapter.list_commits(repo_id=repo_id, ref=branch, limit=20)
+    assert len(after) == len(before) + 1
+    names = {
+        e.name
+        for e in adapter.list_contents(repo_id=repo_id, path="apps/ws/demo", ref=branch)
+    }
+    assert names == {"index.html"}

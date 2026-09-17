@@ -209,3 +209,34 @@ def test_upsert_files_is_one_commit() -> None:
         adapter.get_file(repo_id=repo_id, path="slides/ws/demo/assets/hero.png").data
         == b"\x89PNG"
     )
+
+
+def test_upsert_files_deletes_in_the_same_commit() -> None:
+    adapter = InMemoryAdapter()
+    repo_id = _repo(adapter)
+    adapter.create_branch(repo_id=repo_id, name="apps/ws/demo", from_ref="main")
+    adapter.upsert_files(
+        repo_id=repo_id,
+        files=(
+            FileWrite(path="apps/ws/demo/old.js", content="x"),
+            FileWrite(path="apps/ws/demo/index.html", content="<p>1</p>"),
+        ),
+        message="Seed",
+        branch="apps/ws/demo",
+    )
+    adapter.upsert_files(
+        repo_id=repo_id,
+        files=(
+            FileWrite(path="apps/ws/demo/old.js", content="", delete=True),
+            FileWrite(path="apps/ws/demo/gone.js", content="", delete=True),
+            FileWrite(path="apps/ws/demo/index.html", content="<p>2</p>"),
+        ),
+        message="Rename",
+        branch="apps/ws/demo",
+    )
+    with pytest.raises(RepoNotFoundError):
+        adapter.get_file(repo_id=repo_id, path="apps/ws/demo/old.js")
+    assert (
+        adapter.get_file(repo_id=repo_id, path="apps/ws/demo/index.html").text
+        == "<p>2</p>"
+    )

@@ -32,19 +32,30 @@ def _fake_chat_model(*_args, **_kwargs) -> ChatModel:
 
 
 def _fake_abimodule() -> type:
+    """The module surface ``_build_agent`` reads: the model registry it asks
+    for a chat model, and the configured ontology engineer model/provider."""
     return type(
         "_FakeABIModule",
         (),
         {
             "get_instance": classmethod(
                 lambda cls: SimpleNamespace(
+                    configuration=SimpleNamespace(
+                        ontology_engineer_model="dummy",
+                        ontology_engineer_provider="dummy",
+                    ),
                     engine=SimpleNamespace(
+                        services=SimpleNamespace(
+                            model_registry=SimpleNamespace(
+                                get_chat_model=_fake_chat_model
+                            )
+                        ),
                         modules={
                             "naas_abi_marketplace.ai.chatgpt": SimpleNamespace(
                                 configuration=SimpleNamespace(openai_api_key="test-key")
                             )
-                        }
-                    )
+                        },
+                    ),
                 )
             )
         },
@@ -61,7 +72,6 @@ def test_get_bfo_7_buckets_ontology_is_loaded_from_source_file():
 
 def test_new_builds_grounded_prompt_and_disables_default_intents(monkeypatch):
     monkeypatch.setattr("naas_abi.ABIModule", _fake_abimodule(), raising=False)
-    monkeypatch.setattr(OntologyEngineerAgent, "get_model", staticmethod(_fake_chat_model))
 
     agent = OntologyEngineerAgent.New()
     prompt = agent.configuration.get_system_prompt([])
@@ -78,7 +88,6 @@ def test_new_builds_grounded_prompt_and_disables_default_intents(monkeypatch):
 
 def test_create_agent_uses_class_new(monkeypatch):
     monkeypatch.setattr("naas_abi.ABIModule", _fake_abimodule(), raising=False)
-    monkeypatch.setattr(OntologyEngineerAgent, "get_model", staticmethod(_fake_chat_model))
 
     agent = create_agent()
 

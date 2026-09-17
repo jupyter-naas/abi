@@ -1,10 +1,28 @@
+"""Live routing checks for Abi: real model, real sub-agents, real intents.
+
+These call the model and assert on its wording, so they are opt-in like the
+other integration suites (``ABI_LIVE_AGENT_TESTS=1``). They also need the
+sub-agents they route to (ChatGPT, Grok, Gemini, Knowledge_Graph_Builder)
+enabled in the loaded config. The structural contracts that must hold on
+every run live in ``FeatureAgents_test.py`` and ``AbiAgent_slides_test.py``.
+"""
+
+import os
+
 import pytest
-from naas_abi.agents.AbiAgent import create_agent as create_abi_agent
+from naas_abi.agents.AbiAgent import AbiAgent
+
+pytestmark = [
+    pytest.mark.skipif(
+        not os.environ.get("ABI_LIVE_AGENT_TESTS"),
+        reason="set ABI_LIVE_AGENT_TESTS=1 to run (calls a live model)",
+    ),
+]
 
 
 @pytest.fixture
 def agent():
-    return create_abi_agent()
+    return AbiAgent.New()
 
 
 # ------------------------------------------------------------
