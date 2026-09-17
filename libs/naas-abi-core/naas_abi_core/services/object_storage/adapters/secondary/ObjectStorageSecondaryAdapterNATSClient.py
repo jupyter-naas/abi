@@ -19,8 +19,10 @@ Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): a JWT asserting
 ``service_identity`` is issued once and attached on the ``Nats-Auth-Token``
 header of every request, reissued only when it is close to expiry rather
 than on every call. ``ObjectStoragePrimaryAdapterNATS`` must read the token
-from that exact header -- both sides of this contract must agree on the
-name.
+from that exact header -- both sides read ``AUTH_HEADER`` from
+``object_storage_nats_contract``, a neutral module neither adapter owns, so
+this file never has to import from the primary adapter's module (or vice
+versa) just to agree on a header name.
 
 ``get_object_stream``/``put_object_stream`` are explicitly out of scope for
 this v1 contract (see the ``.proto`` file's header comment): there is no
@@ -46,7 +48,7 @@ from naas_abi_core import logger
 from naas_abi_core.engine.nats_auth import DEFAULT_TTL, issue_service_token
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.object_storage.v1 import object_storage_pb2
-from naas_abi_core.services.object_storage.adapters.primary.object_storage__primary_adapter__NATS import (
+from naas_abi_core.services.object_storage.adapters.object_storage_nats_contract import (
     AUTH_HEADER,
     SUBJECT_PREFIX,
 )

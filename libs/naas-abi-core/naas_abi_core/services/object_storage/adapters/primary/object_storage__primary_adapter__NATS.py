@@ -9,9 +9,9 @@ is the server side; the matching client is
 Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): one shared
 secret, one claim -- which known first-party process holds the token. Every
 incoming request must carry a valid token in the ``Nats-Auth-Token`` header
-(``AUTH_HEADER`` below). Both sides of this contract must agree on that
-header name; nothing enforces the agreement beyond both files reading the
-same constant.
+(``AUTH_HEADER``, imported from ``object_storage_nats_contract`` below --
+that's a neutral module neither adapter owns, so this file and the client's
+don't depend on each other; see that module's docstring for why).
 
 ``get_object_stream``/``put_object_stream`` are explicitly out of scope for
 this v1 contract (see the ``.proto`` file's header comment): they have no
@@ -33,6 +33,12 @@ from naas_abi_core.engine.nats_auth import (
 )
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.object_storage.v1 import object_storage_pb2
+from naas_abi_core.services.object_storage.adapters.object_storage_nats_contract import (
+    AUTH_HEADER,
+    SERVICE_NAME,
+    SERVICE_VERSION,
+    SUBJECT_PREFIX,
+)
 from naas_abi_core.services.object_storage.ObjectStoragePort import (
     Exceptions,
     IObjectStorageAdapter,
@@ -42,14 +48,13 @@ from naas_abi_core.services.object_storage.ObjectStoragePort import (
 from nats.micro.request import Request
 from nats.micro.service import Service
 
-SERVICE_NAME = "object_storage"
-SERVICE_VERSION = "1.0.0"
-SUBJECT_PREFIX = "abi.svc.object_storage.v1"
-
-# Header carrying the Stage 1 service JWT (see naas_abi_core.engine.nats_auth).
-# ObjectStorageSecondaryAdapterNATSClient attaches the token under this exact
-# header name -- both sides of this contract must agree on it.
-AUTH_HEADER = "Nats-Auth-Token"
+__all__ = [
+    "AUTH_HEADER",
+    "SERVICE_NAME",
+    "SERVICE_VERSION",
+    "SUBJECT_PREFIX",
+    "ObjectStoragePrimaryAdapterNATS",
+]
 
 _RequestT = TypeVar("_RequestT", bound=Message)
 _ResponseT = TypeVar("_ResponseT", bound=Message)
