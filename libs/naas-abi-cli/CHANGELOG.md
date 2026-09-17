@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.24.0 (2026-09-17)
+
+### Features
+
+- **nexus-build-app**: Add role-based visibility for office agents
+  ([`02276d4`](https://github.com/jupyter-naas/abi/commit/02276d49c4f37924f647eb3ca8101dd2155a2f18))
+
+
 ## v2.23.0 (2026-09-14)
 
 ### Chores
