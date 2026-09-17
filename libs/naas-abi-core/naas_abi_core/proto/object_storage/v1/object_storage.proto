@@ -1,0 +1,107 @@
+// NATS-RPC contract for the object_storage kernel domain.
+// Mirrors naas_abi_core/services/object_storage/ObjectStoragePort.py 1:1 for
+// the non-streaming methods. See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
+//
+// Scope of this v1 contract, deliberately: `get_object_stream`/`put_object_stream`
+// are NOT included. Streaming multi-gigabyte binary content through a single
+// Protobuf request/response message doesn't fit this shape — a real design
+// for that (likely a JetStream Object Store-backed transfer, not request/reply)
+// is future work, not something to force into v1. A primary adapter serving
+// this contract MUST reject those two operations explicitly rather than
+// silently buffering a stream into memory.
+//
+// Subjects (see "Protobuf contract shapes" in the RFC):
+//   abi.svc.object_storage.v1.get_object
+//   abi.svc.object_storage.v1.put_object
+//   abi.svc.object_storage.v1.delete_object
+//   abi.svc.object_storage.v1.list_objects
+//   abi.svc.object_storage.v1.list_objects_recursive
+//   abi.svc.object_storage.v1.get_object_metadata
+syntax = "proto3";
+
+package abi.object_storage.v1;
+
+import "naas_abi_core/proto/common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+message ObjectMetaData {
+  string file_path = 1;
+  string file_name = 2;
+  int64 file_size_bytes = 3;
+  optional google.protobuf.Timestamp created_time = 4;
+  optional google.protobuf.Timestamp modified_time = 5;
+  optional google.protobuf.Timestamp accessed_time = 6;
+  optional string permissions = 7;
+  optional string mime_type = 8;
+  optional string encoding = 9;
+}
+
+message GetObjectRequest {
+  abi.common.v1.CallContext context = 1;
+  string prefix = 2;
+  string key = 3;
+}
+message GetObjectResponse {
+  oneof result {
+    bytes content = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+message PutObjectRequest {
+  abi.common.v1.CallContext context = 1;
+  string prefix = 2;
+  string key = 3;
+  bytes content = 4;
+}
+message PutObjectResponse {
+  // Empty on success — the error, if any, is the whole signal.
+  optional abi.common.v1.CallError error = 1;
+}
+
+message DeleteObjectRequest {
+  abi.common.v1.CallContext context = 1;
+  string prefix = 2;
+  string key = 3;
+}
+message DeleteObjectResponse {
+  optional abi.common.v1.CallError error = 1;
+}
+
+message ListObjectsRequest {
+  abi.common.v1.CallContext context = 1;
+  string prefix = 2;
+}
+message ListObjectsResponse {
+  oneof result {
+    Keys keys = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+message ListObjectsRecursiveRequest {
+  abi.common.v1.CallContext context = 1;
+  string prefix = 2;
+}
+message ListObjectsRecursiveResponse {
+  oneof result {
+    Keys keys = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+message Keys {
+  repeated string keys = 1;
+}
+
+message GetObjectMetadataRequest {
+  abi.common.v1.CallContext context = 1;
+  string prefix = 2;
+  string key = 3;
+}
+message GetObjectMetadataResponse {
+  oneof result {
+    ObjectMetaData metadata = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
