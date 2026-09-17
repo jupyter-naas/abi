@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v2.37.0 (2026-09-17)
+
+### Features
+
+- **bedrock**: Add GPT-5.6 Sol model support on Amazon Bedrock
+  ([`42a9fdf`](https://github.com/jupyter-naas/abi/commit/42a9fdf21c40f8d7090583932a4ef33ffda1a689))
+
+- **nexus-build-app**: Add role-based visibility for office agents
+  ([`02276d4`](https://github.com/jupyter-naas/abi/commit/02276d49c4f37924f647eb3ca8101dd2155a2f18))
+
+
 ## v2.36.2 (2026-09-14)
 
 ### Bug Fixes
