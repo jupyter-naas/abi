@@ -767,7 +767,7 @@ export function ChatInterface({
 } = {}) {
   const isPane = surface === 'pane';
   const [mounted, setMounted] = useState(false);
-  const [input, setInput] = useState('');
+  const [input, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [requestSentAt, setRequestSentAt] = useState<number | null>(null);
   const isSubmittingRef = useRef(false);
@@ -805,6 +805,32 @@ export function ChatInterface({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // True while the composer only shows a suggestion preview (hover writes the
+  // prompt into the textarea without the caret ever entering it). The composer
+  // keeps its current height for the whole preview: autosizing per hovered
+  // suggestion makes the box grow and shrink as the pointer moves between a
+  // one-line and a two-line suggestion, which shifts the list under the pointer
+  // and reads as a flicker. Height follows the content again as soon as the
+  // caret is in the textarea.
+  const suggestionPreviewRef = useRef(false);
+
+  // Every composer write that isn't a hover preview (typing, sidebar seeds,
+  // slash completion, send) leaves preview mode, so autosizing resumes.
+  const setInput = useCallback((value: string) => {
+    suggestionPreviewRef.current = false;
+    setInputValue(value);
+  }, []);
+
+  const previewSuggestion = useCallback((value: string) => {
+    suggestionPreviewRef.current = true;
+    setInputValue(value);
+  }, []);
+
+  const clearSuggestionPreview = useCallback(() => {
+    suggestionPreviewRef.current = true;
+    setInputValue('');
+  }, []);
+
   const autosizeComposer = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -818,12 +844,23 @@ export function ChatInterface({
   }, []);
 
   useLayoutEffect(() => {
+    if (suggestionPreviewRef.current) return;
     autosizeComposer();
   }, [input, autosizeComposer]);
+
+  // Taking the caret into the composer ends the preview: whatever text is in
+  // there is now editable, so it gets a matching height.
+  const handleComposerFocus = useCallback(() => {
+    if (!suggestionPreviewRef.current) return;
+    suggestionPreviewRef.current = false;
+    autosizeComposer();
+  }, [autosizeComposer]);
 
   const focusChatInput = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
+
+    suggestionPreviewRef.current = false;
 
     // Ensure the textarea is in the tree and laid out (new conversation switches
     // can re-render the composer).
@@ -1110,7 +1147,7 @@ export function ChatInterface({
     setInput(pendingComposerText);
     useWorkspaceStore.getState().setPendingComposerText(null);
     focusChatInput();
-  }, [pendingComposerText, mounted, focusChatInput, isPane]);
+  }, [pendingComposerText, mounted, focusChatInput, isPane, setInput]);
 
   // ---------- Slash-command autocomplete ----------
   const [slashIndex, setSlashIndex] = useState(0);
@@ -1153,7 +1190,7 @@ export function ChatInterface({
       setInput(`/${slug} `);
       focusChatInput();
     },
-    [focusChatInput]
+    [focusChatInput, setInput]
   );
 
   // Listen for new messages from WebSocket
@@ -2953,7 +2990,7 @@ export function ChatInterface({
       new CustomEvent(COMPARE_SEND_EVENT, { detail: { text } })
     );
     setInput('');
-  }, [input, isLoading]);
+  }, [input, isLoading, setInput]);
 
   // Whether the "Suggestions" / "Files" / artifact-identity containers render
   // above the composer input box. Order is Suggestions, then Files, then
@@ -3035,8 +3072,8 @@ export function ChatInterface({
                   agentId={selectedAgent}
                   suggestions={selectedAgentData?.suggestions}
                   onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
-                  onSuggestionHover={(value) => setInput(value)}
-                  onSuggestionLeave={() => setInput('')}
+                  onSuggestionHover={previewSuggestion}
+                  onSuggestionLeave={clearSuggestionPreview}
                 />
               )}
               <FilesBlock
@@ -3057,8 +3094,8 @@ export function ChatInterface({
                   agentId={selectedAgent}
                   suggestions={selectedAgentData?.suggestions}
                   onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
-                  onSuggestionHover={(value) => setInput(value)}
-                  onSuggestionLeave={() => setInput('')}
+                  onSuggestionHover={previewSuggestion}
+                  onSuggestionLeave={clearSuggestionPreview}
                 />
               )}
               <DocumentsFilesBlock
@@ -3078,8 +3115,8 @@ export function ChatInterface({
                 agentId={selectedAgent}
                 suggestions={selectedAgentData?.suggestions}
                 onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
-                onSuggestionHover={(value) => setInput(value)}
-                onSuggestionLeave={() => setInput('')}
+                onSuggestionHover={previewSuggestion}
+                onSuggestionLeave={clearSuggestionPreview}
               />
             )
           )}
@@ -3308,6 +3345,7 @@ export function ChatInterface({
                 <textarea
                   ref={textareaRef}
                   value={input}
+                  onFocus={handleComposerFocus}
                   onChange={(e) => handleInputChange(e.target.value)}
                   onKeyDown={(e) => {
                     if (showSlashMenu) {
