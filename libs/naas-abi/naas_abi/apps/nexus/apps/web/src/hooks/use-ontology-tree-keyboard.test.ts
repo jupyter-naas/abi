@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { KeyboardEvent } from 'react';
-import { ontologyTreeKeyDown } from './use-ontology-tree-keyboard';
+import type { KeyboardEvent, MouseEvent } from 'react';
+import { ontologyTreeKeyDown, ontologyTreePointerClick } from './use-ontology-tree-keyboard';
 
 /** Small DOM fixture; no browser, requests, or workspace access are involved. */
 export class TreeElement {
@@ -25,6 +25,8 @@ export class TreeElement {
   closest(selector: string): TreeElement | null { return this.matches(selector) ? this : this.parentElement?.closest(selector) || null; }
   contains(node?: TreeElement | null): boolean { return !!node && (node === this || this.children.some(child => child.contains(node))); }
   querySelectorAll(selector: string): TreeElement[] { return this.children.flatMap(child => [...(child.matches(selector) ? [child] : []), ...child.querySelectorAll(selector)]); }
+  setAttribute(name: string, value: string) { this.attrs[name] = value; }
+  removeAttribute(name: string) { delete this.attrs[name]; }
   getAttribute(name: string) { return this.attrs[name] ?? null; }
   hasAttribute(name: string) { return name in this.attrs; }
   focus() { TreeElement.focused = this; }
@@ -89,4 +91,36 @@ test('typing, modified shortcuts, Enter, unrelated controls and other panels kee
   assert.equal(press(root, new TreeElement('input'), 'ArrowDown').prevented, false);
   assert.equal(press(new TreeElement('nav'), a, 'ArrowDown').prevented, false);
   assert.equal(b.clicks, 0);
+});
+
+
+test('pointer clicks move focus off the old row before selection; arrows continue from the clicked row', () => {
+  const root = new TreeElement('nav'); const a = item('a'); const b = item('b'); const c = item('c');
+  const label = new TreeElement('span'); b.append(label);
+  root.append(row().append(a), row().append(b), row().append(c));
+  a.focus();
+  ontologyTreePointerClick({ currentTarget: root, target: label, detail: 1, button: 0 } as unknown as MouseEvent<HTMLElement>);
+  assert.equal(TreeElement.focused, b);
+  assert.equal(root.getAttribute('data-ontology-input'), 'pointer');
+  assert.equal(b.clicks, 0, 'focus does not trigger a second selection');
+  press(root, b, 'ArrowDown');
+  assert.equal(TreeElement.focused, c);
+  assert.equal(c.clicks, 1);
+  assert.equal(root.getAttribute('data-ontology-input'), 'keyboard');
+});
+
+test('keyboard activation, secondary clicks and disabled or unrelated targets keep their native focus', () => {
+  const root = new TreeElement('nav'); const a = item('a'); const b = item('b');
+  root.append(row().append(a), row().append(b)); a.focus();
+  root.setAttribute('data-ontology-input', 'keyboard');
+  for (const event of [
+    { target: b, detail: 0, button: 0 },
+    { target: b, detail: 1, button: 2 },
+    { target: b, detail: 1, button: 0, defaultPrevented: true },
+    { target: new TreeElement('button'), detail: 1, button: 0 },
+  ]) ontologyTreePointerClick({ currentTarget: root, ...event } as unknown as MouseEvent<HTMLElement>);
+  b.disabled = true;
+  ontologyTreePointerClick({ currentTarget: root, target: b, detail: 1, button: 0 } as unknown as MouseEvent<HTMLElement>);
+  assert.equal(TreeElement.focused, a);
+  assert.equal(root.getAttribute('data-ontology-input'), 'keyboard');
 });

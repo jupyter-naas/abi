@@ -1,4 +1,22 @@
-[data-ontology-tree-item]:focus-visible {
-  outline:2px solid var(--workspace-accent,var(--color-primary));
-  outline-offset:-2px;
+/* Mouse and keyboard use the same filled highlight, without a focus border. */
+[data-ontology-tree] button,
+[data-ontology-tree] button:focus,
+[data-ontology-tree] button:focus-visible {
+  outline:none;
+  box-shadow:none;
+}
+/* A stationary pointer must not leave a second highlighted row during navigation. */
+[data-ontology-tree] button:hover:not([aria-current="page"]):not([aria-pressed="true"]) {
+  background-color:transparent;
+}
+/* Folders/disclosures and a new term waiting for its route update remain visible to keyboard users. */
+[data-ontology-tree] button:focus-visible:not([aria-current="page"]):not([aria-pressed="true"]) {
+  background-color:color-mix(in srgb,var(--workspace-accent,var(--color-primary)) 10%,transparent);
+  color:var(--workspace-accent,var(--color-primary));
+}
+/* While keyboard focus moves, show only that row until the selection catches up. */
+[data-ontology-tree][data-ontology-input="keyboard"] button[aria-current="page"]:not(:focus),
+[data-ontology-tree][data-ontology-input="keyboard"] .ontology-system-tree-row[data-selected]:not(:focus-within) {
+  background-color:transparent;
+  color:inherit;
 }

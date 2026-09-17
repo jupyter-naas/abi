@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
+import Link from 'next/link';
+import { OntologyTopicIcon } from '@/components/ontology/ontology-topic-icon';
+import { useOntologyIconsStore } from '@/stores/ontology-icons';
+import { classDefinitionHref } from '@/lib/graph-instance-browser';
 import {
   AlertCircle,
   Box,
@@ -715,9 +719,7 @@ function IndividualDetailPanel({
 
       <div className="mb-6">
         <div className="mb-2 flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/30">
-            <Circle size={20} className="text-orange-500" />
-          </div>
+          <OntologyTopicIcon subject={{ id: instance.class_uri, name: instance.class_label, type: 'entity' }} />
           <div className="min-w-0 flex-1">
             <h2 className="text-lg font-semibold">{instanceLabel(instance)}</h2>
             <p className="truncate font-mono text-xs text-muted-foreground" title={instance.uri}>
@@ -740,9 +742,9 @@ function IndividualDetailPanel({
         </div>
         <div className="ml-13 flex items-center gap-2">
           <Box size={14} className="text-blue-500" />
-          <span className="text-sm text-muted-foreground">
+          {instance.class_uri && <Link href={classDefinitionHref(workspaceId, instance.class_uri)} className="text-sm text-workspace-accent hover:underline">
             {instance.class_label || compactUri(instance.class_uri)}
-          </span>
+          </Link>}
         </div>
       </div>
 
@@ -1606,7 +1608,10 @@ export default function IndividualsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const workspaceId = params.workspaceId as string;
+  const loadIcons = useOntologyIconsStore(state => state.load);
+  useEffect(() => { void loadIcons(workspaceId); }, [workspaceId, loadIcons]);
   const preSelectedUri = searchParams?.get('selected') ?? null;
+  const requestedGraph = searchParams?.get('graph') ?? null;
   const preSelectedClassUri = searchParams?.get('class') ?? null;
   const { selectedGraphId, visibleGraphIds, selectGraph } = useKnowledgeGraphStore();
 
@@ -1660,6 +1665,7 @@ export default function IndividualsPage() {
   }, [graphPacks]);
 
   const activeGraph = useMemo<ApiGraphInfo | null>(() => {
+    if (requestedGraph) return allGraphs.find(graph => graph.uri === requestedGraph) ?? null;
     if (selectedGraphId) {
       const match = allGraphs.find((g) => g.id === selectedGraphId);
       if (match) return match;
@@ -1669,7 +1675,11 @@ export default function IndividualsPage() {
       if (match) return match;
     }
     return allGraphs.find((g) => !isSystemGraph(g)) ?? allGraphs[0] ?? null;
-  }, [allGraphs, selectedGraphId, visibleGraphIds]);
+  }, [allGraphs, selectedGraphId, visibleGraphIds, requestedGraph]);
+
+  useEffect(() => {
+    if (requestedGraph && activeGraph && activeGraph.id !== selectedGraphId) selectGraph(activeGraph.id);
+  }, [requestedGraph, activeGraph, selectedGraphId, selectGraph]);
 
   const bucketOptions = useMemo(
     () =>
@@ -1748,7 +1758,7 @@ export default function IndividualsPage() {
     prevActiveGraphUriRef.current = activeGraph.uri;
     if (graphChanged) {
       setExpandedClasses(new Set());
-      setSelectedIndividualUri(null);
+      setSelectedIndividualUri(preSelectedUri);
       setCheckedUris(new Set());
     }
     let cancelled = false;
@@ -1777,7 +1787,7 @@ export default function IndividualsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeGraph, workspaceId]);
+  }, [activeGraph, workspaceId, preSelectedUri]);
 
   useEffect(() => {
     if (!activeGraph || !hasActiveFilter) {
@@ -2021,6 +2031,12 @@ export default function IndividualsPage() {
 
   const handleGraphChange = (graph: ApiGraphInfo) => {
     selectGraph(graph.id);
+    const query = new URLSearchParams(searchParams.toString());
+    query.set('graph', graph.uri);
+    query.delete('selected');
+    query.delete('class');
+    setSelectedClassUris([]);
+    router.replace(`/workspace/${workspaceId}/graph/individuals?${query}`, { scroll: false });
   };
 
   const allFilteredChecked =

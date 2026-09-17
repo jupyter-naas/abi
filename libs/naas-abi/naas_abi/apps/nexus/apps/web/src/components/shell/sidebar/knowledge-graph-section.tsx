@@ -1,5 +1,7 @@
 'use client';
 
+import { GraphClassBrowser } from '@/components/graph/graph-class-browser';
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Waypoints, MoreVertical, Trash2, Eraser, Plus, Bookmark, Folder,
@@ -781,6 +783,8 @@ export function KnowledgeGraphSection({ collapsed, detailOnly }: { collapsed: bo
           </div>
         )}
       </div>
+
+      {isNetworkRoute && currentWorkspaceId && <GraphClassBrowser workspaceId={currentWorkspaceId} />}
 
       {/* Composer — saved views */}
       <div className={cn('px-1', composerExpanded && 'pb-2')}>

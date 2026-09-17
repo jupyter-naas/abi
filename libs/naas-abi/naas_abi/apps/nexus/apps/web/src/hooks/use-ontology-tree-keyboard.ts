@@ -1,15 +1,25 @@
 'use client';
 
-import { useLayoutEffect, useRef, type FocusEvent, type KeyboardEvent } from 'react';
+import { useLayoutEffect, useRef, type FocusEvent, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
 import './ontology-tree-keyboard.css';
 
 const ROW = '[data-ontology-tree-row]';
 const ITEM = '[data-ontology-tree-item]';
 const TOGGLE = '[data-ontology-tree-toggle]';
+const INPUT_MODE = 'data-ontology-input';
 
 function ownedButton(row: Element, selector: string): HTMLButtonElement | undefined {
   if (row.matches(selector)) return row as HTMLButtonElement;
   return Array.from(row.querySelectorAll<HTMLButtonElement>(selector)).find(button => button.closest(ROW) === row);
+}
+
+/** Safari does not focus buttons on pointer clicks. Keep the keyboard origin on the clicked row. */
+export function ontologyTreePointerClick(event: MouseEvent<HTMLElement>) {
+  if (event.defaultPrevented || event.detail === 0 || event.button !== 0) return;
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button');
+  if (!button || button.disabled || !event.currentTarget.contains(button)) return;
+  event.currentTarget.setAttribute(INPUT_MODE, 'pointer');
+  button.focus({ preventScroll: true });
 }
 
 /** Arrow selection uses the same click action as the pointer, including canvas updates. */
@@ -28,6 +38,7 @@ export function ontologyTreeKeyDown(event: KeyboardEvent<HTMLElement>) {
     .filter(button => !button.disabled && !button.closest('[hidden], [aria-hidden="true"]'));
   const index = items.indexOf(current);
   if (index < 0) return;
+  root.setAttribute(INPUT_MODE, 'keyboard');
   event.preventDefault();
   event.stopPropagation();
   function select(button: HTMLButtonElement | undefined) {
@@ -65,7 +76,18 @@ export function useOntologyTreeKeyboard() {
   });
   return {
     ref,
-    onKeyDown: ontologyTreeKeyDown,
+    'data-ontology-tree': '',
+    onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+      if (['Tab', 'Enter', ' '].includes(event.key)) event.currentTarget.setAttribute(INPUT_MODE, 'keyboard');
+      ontologyTreeKeyDown(event);
+    },
+    onPointerDownCapture: (event: PointerEvent<HTMLElement>) => {
+      if (event.button === 0) event.currentTarget.setAttribute(INPUT_MODE, 'pointer');
+    },
+    onClickCapture: ontologyTreePointerClick,
+    onBlurCapture: (event: FocusEvent<HTMLElement>) => {
+      if (!event.relatedTarget || !event.currentTarget.contains(event.relatedTarget as Node)) event.currentTarget.removeAttribute(INPUT_MODE);
+    },
     onFocusCapture: (event: FocusEvent<HTMLElement>) => {
       const element = event.target as HTMLElement;
       const row = element.closest(ROW);

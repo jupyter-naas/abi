@@ -1,7 +1,10 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { ClassInstancesPanel } from '@/components/graph/class-instances-panel';
+import { useGraphClassCatalog } from '@/stores/graph-class-catalog';
+import '@/components/graph/instance-browser.css';
 import dynamic from 'next/dynamic';
 import { Header } from '@/components/shell/header';
 import {
@@ -471,6 +474,11 @@ function NetworkPane({
   kpis: ApiGraphKpis | null;
   cacheRefreshKey: number;
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const browseClassUri = searchParams.get('class');
+  const [schemaError, setSchemaError] = useState<string | null>(null);
+  const [schemaRetry, setSchemaRetry] = useState(0);
   const [loading, setLoading] = useState(true);
   const [nodes, setNodes] = useState<StoreGraphNode[]>([]);
   const [edges, setEdges] = useState<StoreGraphEdge[]>([]);
@@ -504,6 +512,8 @@ function NetworkPane({
     let cancelled = false;
     (async () => {
       setLoading(true);
+      setSchemaError(null);
+      useGraphClassCatalog.setState({ snapshot: { workspaceId, graphId: activeGraph.id, graphUri: activeGraph.uri, graphLabel: activeGraph.label, classes: [], loading: true, error: null } });
       try {
         const res = await authFetch(
           `${getApiUrl()}/api/graph/network/schema?workspace_id=${encodeURIComponent(workspaceId)}&graph_uri=${encodeURIComponent(activeGraph.uri)}`
@@ -512,6 +522,7 @@ function NetworkPane({
         const schema = (await res.json()) as ApiNetworkSchema;
 
         if (cancelled) return;
+        useGraphClassCatalog.setState({ snapshot: { workspaceId, graphId: activeGraph.id, graphUri: activeGraph.uri, graphLabel: activeGraph.label, classes: schema.nodes, loading: false, error: null } });
 
         const graphNodes: StoreGraphNode[] = schema.nodes.map((n) => {
           const label = n.class_label || compactUri(n.class_uri);
@@ -521,6 +532,8 @@ function NetworkPane({
             type: label,
             properties: {
               class_uri: n.class_uri,
+              class_label: label,
+              instance_count: n.count,
               bfo_parent_iri: n.bfo_parent_iri,
               selected: false,
             },
@@ -553,13 +566,39 @@ function NetworkPane({
         setSelectedPairEdges({});
         setRelationPicker(null);
       } catch {
-        // ignore errors silently — empty graph shown
+        if (!cancelled) {
+          const message = 'Could not load classes in this graph.';
+          setSchemaError(message);
+          setNodes([]);
+          setEdges([]);
+          useGraphClassCatalog.setState({ snapshot: { workspaceId, graphId: activeGraph.id, graphUri: activeGraph.uri, graphLabel: activeGraph.label, classes: [], loading: false, error: message } });
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
-  }, [workspaceId, activeGraph.uri, cacheRefreshKey]);
+    return () => {
+      cancelled = true;
+      const current = useGraphClassCatalog.getState().snapshot;
+      if (current?.workspaceId === workspaceId && current.graphUri === activeGraph.uri) useGraphClassCatalog.setState({ snapshot: null });
+    };
+  }, [workspaceId, activeGraph.uri, activeGraph.id, activeGraph.label, cacheRefreshKey, schemaRetry]);
+
+  // Class browsing is separate from Composer's join/query workflow.
+  useEffect(() => {
+    setSelectedClassIds(browseClassUri && nodes.some(node => node.id === browseClassUri) ? [browseClassUri] : []);
+    setSelectedEdgeIds([]);
+    setSelectedPairEdges({});
+    setRelationPicker(null);
+  }, [browseClassUri, nodes]);
+
+  const browseClass = nodes.find(node => node.id === browseClassUri);
+  const openClass = useCallback((classUri: string | null) => {
+    const query = new URLSearchParams(searchParams.toString());
+    query.set('graph', activeGraph.uri);
+    if (classUri) query.set('class', classUri); else query.delete('class');
+    router.replace(`/workspace/${workspaceId}/graph/network?${query}`, { scroll: false });
+  }, [workspaceId, activeGraph.uri, router, searchParams]);
 
   // ── Graph node selection ──────────────────────────────────────────────────
 
@@ -709,67 +748,6 @@ function NetworkPane({
       });
     },
     [clearSelection],
-  );
-
-  const handleNodeSelect = useCallback(
-    (nodeId: string | null) => {
-      if (!nodeId) {
-        clearSelection();
-        return;
-      }
-
-      setSelectedClassIds((prev) => {
-        if (prev.includes(nodeId)) {
-          const idx = prev.indexOf(nodeId);
-          const next = prev.slice(0, idx);
-          setSelectedEdgeIds((prevEdges) => prevEdges.slice(0, Math.max(0, idx)));
-          setSelectedPairEdges((prevPairs) => {
-            const trimmed: Record<string, string> = {};
-            for (let i = 0; i < next.length - 1; i++) {
-              const key = pairKey(next[i], next[i + 1]);
-              if (prevPairs[key]) trimmed[key] = prevPairs[key];
-            }
-            return trimmed;
-          });
-          setRelationPicker(null);
-          return next;
-        }
-
-        if (prev.length === 0) {
-          setSelectedEdgeIds([]);
-          setSelectedPairEdges({});
-          setRelationPicker(null);
-          return [nodeId];
-        }
-
-        const edgeList = filteredEdgesRef.current;
-        let parentId: string | null = null;
-        for (let i = 0; i < prev.length; i++) {
-          const candidate = prev[i];
-          if (edgesBetweenNodes(candidate, nodeId, edgeList).length > 0) {
-            parentId = candidate;
-            break;
-          }
-        }
-
-        if (!parentId) {
-          setSelectedEdgeIds([]);
-          setSelectedPairEdges({});
-          setRelationPicker(null);
-          return [nodeId];
-        }
-
-        const betweenEdges = edgesBetweenNodes(parentId, nodeId, edgeList);
-        if (betweenEdges.length === 1) {
-          setRelationPicker(null);
-          return appendNodeWithEdge(prev, parentId, nodeId, betweenEdges[0]);
-        }
-
-        setRelationPicker({ nodeId, parentId, edges: betweenEdges });
-        return prev;
-      });
-    },
-    [appendNodeWithEdge, clearSelection],
   );
 
   const handleRelationPick = useCallback(
@@ -1155,11 +1133,13 @@ function NetworkPane({
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="graph-browser-layout">
+    <div className="graph-browser-canvas">
+      {schemaError && <div className="graph-browser-message" role="alert">{schemaError} <button type="button" onClick={() => setSchemaRetry(value => value + 1)}>Retry</button></div>}
       {/* KPI cards — stacked above the graph so they never cover nodes.
           Hidden when a class is selected (table open), same as before. */}
       {!tableOpen && (
-        <div className="grid grid-cols-6 gap-3 px-3 pt-3 shrink-0">
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 px-3 pt-3 shrink-0">
           {kpis ? (
             <>
               <KpiCard label="Classes" value={kpis.classes.toLocaleString()} hint="Distinct rdf:type values (excluding OWL NamedIndividual)" icon={Network} />
@@ -1177,6 +1157,7 @@ function NetworkPane({
           )}
         </div>
       )}
+      {!schemaError && nodes.length === 0 && <div className="graph-browser-message">No instance classes in this graph yet.</div>}
       {/* Graph area */}
       <div
         className="relative overflow-hidden"
@@ -1187,7 +1168,7 @@ function NetworkPane({
           edges={displayEdges}
           selectedNodeId={selectedClassIds[0] ?? null}
           selectedEdgeIds={selectedEdgeIds}
-          onNodeSelect={handleNodeSelect}
+          onNodeSelect={openClass}
           onEdgeSelect={handleEdgeSelect}
           physicsEnabled={true}
           stabilizeKey={stabilizeKey}
@@ -1283,15 +1264,24 @@ function NetworkPane({
         </div>
       )}
     </div>
+    {browseClass && <ClassInstancesPanel
+      key={`${workspaceId}:${activeGraph.uri}:${browseClass.id}:${cacheRefreshKey}`}
+      workspaceId={workspaceId} graphUri={activeGraph.uri} graphLabel={activeGraph.label}
+      classUri={browseClass.id} classLabel={String(browseClass.properties.class_label)}
+      count={Number(browseClass.properties.instance_count)} onClose={() => openClass(null)}
+    />}
+    </div>
   );
 }
 
 export default function NetworkPage() {
   const params = useParams();
+  const requestedGraph = useSearchParams().get('graph');
   const workspaceId = params.workspaceId as string;
 
   const {
     selectedGraphId,
+    selectGraph,
     visibleGraphIds,
     cacheRefreshKey,
   } = useKnowledgeGraphStore();
@@ -1315,6 +1305,8 @@ export default function NetworkPage() {
   }, [graphPacks]);
 
   const activeGraph = useMemo<ApiGraphInfo | null>(() => {
+    // A deep link can select only a graph returned by the workspace catalog.
+    if (requestedGraph) return allGraphs.find(graph => graph.uri === requestedGraph) ?? null;
     if (selectedGraphId) {
       const match = allGraphs.find((g) => g.id === selectedGraphId);
       if (match) return match;
@@ -1324,7 +1316,11 @@ export default function NetworkPage() {
       if (match) return match;
     }
     return allGraphs.find((g) => !isSystemGraph(g)) ?? allGraphs[0] ?? null;
-  }, [allGraphs, selectedGraphId, visibleGraphIds]);
+  }, [allGraphs, selectedGraphId, visibleGraphIds, requestedGraph]);
+
+  useEffect(() => {
+    if (requestedGraph && activeGraph && activeGraph.id !== selectedGraphId) selectGraph(activeGraph.id);
+  }, [requestedGraph, activeGraph, selectedGraphId, selectGraph]);
 
   const loadGraphs = useCallback(async () => {
     setGraphsLoading(true);
@@ -1349,7 +1345,8 @@ export default function NetworkPage() {
   }, [loadGraphs]);
 
   useEffect(() => {
-    if (!activeGraph) { setKpis(null); return; }
+    setKpis(null);
+    if (!activeGraph) return;
     let cancelled = false;
     (async () => {
       try {
@@ -1394,7 +1391,7 @@ export default function NetworkPage() {
                 <p className="text-sm text-muted-foreground">No graphs available in this workspace.</p>
               </div>
             ) : (
-              <NetworkPane workspaceId={workspaceId} activeGraph={activeGraph} kpis={kpis} cacheRefreshKey={cacheRefreshKey} />
+              <NetworkPane key={`${workspaceId}:${activeGraph.uri}`} workspaceId={workspaceId} activeGraph={activeGraph} kpis={kpis} cacheRefreshKey={cacheRefreshKey} />
             )}
           </div>
         </div>

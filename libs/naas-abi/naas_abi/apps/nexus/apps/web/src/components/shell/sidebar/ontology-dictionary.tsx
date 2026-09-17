@@ -74,7 +74,7 @@ export function OntologyDictionary({files, filesLoading, filesError}: {
     const selected = searchParams?.get('term') === term.id && searchParams?.get('termType') === term.type;
     return <button type="button" data-ontology-tree-item={itemKey} data-ontology-tree-select onClick={() => selectTerm(term)} aria-current={selected ? 'page' : undefined}
       title={`${term.name}\n${term.id}`}
-      className={cn('flex min-w-0 flex-1 items-center rounded-md min-h-7 px-2 py-1 text-left text-xs leading-[18px] hover:bg-workspace-accent-10', selected && 'bg-workspace-accent-10 text-workspace-accent')}>
+      className={cn('flex min-w-0 flex-1 items-center rounded-md min-h-7 px-2 py-1 text-left text-xs leading-[18px]', selected && 'bg-workspace-accent-10 text-workspace-accent')}>
       <OntologyTopicIcon subject={term} className="ontology-sidebar-topic-icon" />
       <span className="min-w-0 truncate">{term.name}</span>
       <span className="sr-only">{dictionaryKindLabel(term.type)}</span>
