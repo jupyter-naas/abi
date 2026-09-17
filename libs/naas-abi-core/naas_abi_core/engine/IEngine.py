@@ -95,6 +95,9 @@ class IEngine:
             )
             return self.__object_storage
 
+        def object_storage_available(self) -> bool:
+            return self.__object_storage is not None
+
         @property
         def dataset(self) -> DatasetService:
             assert self.__dataset is not None, "Dataset service is not initialized"

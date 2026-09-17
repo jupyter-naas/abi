@@ -8,6 +8,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
 )
 from naas_abi_core.engine.engine_loaders.EngineModuleLoader import EngineModuleLoader
+from naas_abi_core.engine.engine_loaders.EngineNATSLoader import EngineNATSLoader
 from naas_abi_core.engine.engine_loaders.EngineOntologyLoader import (
     EngineOntologyLoader,
 )
@@ -20,12 +21,19 @@ class Engine(IEngine):
     __configuration: EngineConfiguration
     __engine_module_loader: EngineModuleLoader
     __engine_service_loader: EngineServiceLoader
+    __engine_nats_loader: EngineNATSLoader
 
     __modules: dict[
         str, BaseModule
     ]  # Must not set a default value to prevent modules to try to access modules inside constructors.
 
     __services: IEngine.Services
+
+    # Started NATS primary adapters, if config.yaml has a top-level `nats:`
+    # block -- otherwise always []. No shutdown hook consumes this yet (see
+    # docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md); kept
+    # so one can be added later without also having to plumb this through.
+    __nats_primary_adapters: list[object]
 
     @property
     def configuration(self) -> EngineConfiguration:
@@ -49,6 +57,7 @@ class Engine(IEngine):
         self.__configuration = EngineConfiguration.load_configuration(configuration)
         self.__engine_module_loader = EngineModuleLoader(self.__configuration)
         self.__engine_service_loader = EngineServiceLoader(self.__configuration)
+        self.__engine_nats_loader = EngineNATSLoader(self.__configuration)
 
     def load(self, module_names: list[str] | None = None):
         # Per-module CLI invocations (e.g. ``abi chat <module> <agent>``)
@@ -86,6 +95,12 @@ class Engine(IEngine):
             module_dependencies
         )
         logger.debug("Engine services loaded")
+
+        # Config-gated: a no-op unless config.yaml has a top-level `nats:`
+        # block. See EngineNATSLoader / EngineConfiguration.NATSConfiguration.
+        self.__nats_primary_adapters = self.__engine_nats_loader.expose_services(
+            self.__services
+        )
 
         logger.debug("Loading engine modules")
         self.__modules = self.__engine_module_loader.load_modules(self, module_names)
