@@ -2566,7 +2566,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "2.68.0"
+version = "2.69.0"
 source = { editable = "../naas-abi" }
 dependencies = [
     { name = "aiosqlite" },
@@ -2683,7 +2683,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "2.36.0"
+version = "2.36.2"
 source = { editable = "../naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -2757,21 +2757,25 @@ requires-dist = [
     { name = "naas-abi-core", extras = ["aws"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["dagster"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["microsoft"], marker = "extra == 'all'" },
+    { name = "naas-abi-core", extras = ["nats"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["openrouter"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["qdrant"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["rabbitmq"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["redis"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["sqlite-vec"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["ssh"], marker = "extra == 'all'" },
+    { name = "nats-py", marker = "extra == 'nats'", specifier = ">=2.16.0" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "pandas-stubs", specifier = ">=2.3.2.250926" },
     { name = "paramiko", marker = "extra == 'ssh'", specifier = ">=3.5.1,<4.0.0" },
     { name = "pika", marker = "extra == 'rabbitmq'" },
     { name = "pillow", specifier = ">=12.0.0" },
     { name = "pip", specifier = ">=25.1.1" },
+    { name = "protobuf", marker = "extra == 'nats'", specifier = ">=6.33.5" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.0.0" },
     { name = "pydantic", specifier = ">=2.11.5" },
     { name = "pydash", specifier = ">=8.0.5" },
+    { name = "pyjwt", marker = "extra == 'nats'", specifier = ">=2.11.0" },
     { name = "pyoxigraph", specifier = ">=0.5.5" },
     { name = "pytz", specifier = ">=2025.2" },
     { name = "pyyaml", specifier = ">=6.0.3" },
@@ -2789,7 +2793,7 @@ requires-dist = [
     { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
     { name = "types-tqdm", specifier = ">=4.67.0.20250809" },
 ]
-provides-extras = ["ssh", "aws", "qdrant", "sqlite-vec", "all", "openrouter", "dagster", "redis", "rabbitmq", "microsoft"]
+provides-extras = ["ssh", "aws", "qdrant", "sqlite-vec", "all", "openrouter", "dagster", "redis", "rabbitmq", "nats", "microsoft"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2798,11 +2802,12 @@ dev = [
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "python-semantic-release", specifier = ">=9.21.0" },
     { name = "testcontainers", specifier = ">=4.13.2" },
+    { name = "types-protobuf" },
 ]
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "3.48.0"
+version = "3.48.1"
 source = { editable = "../naas-abi-marketplace" }
 dependencies = [
     { name = "ijson" },
@@ -4779,8 +4784,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography" },
-    { name = "jeepney" },
+    { name = "cryptography", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "jeepney", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [

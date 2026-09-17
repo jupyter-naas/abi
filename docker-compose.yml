@@ -476,6 +476,32 @@ services:
       - abi-network
 
   # -----------------------------------------------------------------------------
+  # NATS - Distributed module fabric (JetStream: bus, RPC, discovery)
+  # -----------------------------------------------------------------------------
+  # Opt-in alongside RabbitMQ, not a replacement yet — see
+  # docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md. `-js` enables
+  # JetStream; `-m 8222` exposes the monitoring/health endpoint used below and by
+  # the NATS Services framework's $SRV.* discovery subjects.
+  nats:
+    image: nats:2-alpine
+    pull_policy: always
+    restart: unless-stopped
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports:
+      - 4222:4222 # client connections
+      - 8222:8222 # HTTP monitoring
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 10
+    networks:
+      - abi-network
+
+  # -----------------------------------------------------------------------------
   # Redis - In-memory Cache / Message Broker
   # -----------------------------------------------------------------------------
   redis:
@@ -615,6 +641,7 @@ volumes:
 
   minio_data:     # MinIO object storage data
   rabbitmq_data:  # RabbitMQ message bus data
+  nats_data:      # NATS JetStream persistence (streams, KV, module registry)
   redis_data:     # Redis persistence data
   caddy_data:     # Caddy certificates and ACME data
   caddy_config:   # Caddy runtime configuration
