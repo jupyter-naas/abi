@@ -112,7 +112,7 @@ export function SuggestionsBlock({
                   onClick={() => activate(suggestion)}
                 >
                   <span className="chat-slides-composer-row-text">
-                    <span className="chat-slides-composer-row-name">{suggestion.label}</span>
+                    <span className="chat-slides-composer-row-name chat-suggestion-row-name">{suggestion.label}</span>
                     {hint ? <span className="chat-slides-composer-row-hint">{hint}</span> : null}
                   </span>
                 </button>
