@@ -108,43 +108,43 @@ def test_nexus_abi_class_name_only_matches_our_orchestrator() -> None:
 
 
 ABI = "naas_abi.agents.AbiAgent/AbiAgent"
-REGISTRY = ["axi.agents.AxiAgent/AxiAgent", "naas_abi.agents.AppsAgent/AppsAgent", ABI]
+AXI = "axi.agents.AxiAgent/AxiAgent"
+REGISTRY = [AXI, "naas_abi.agents.AppsAgent/AppsAgent", ABI]
+ORCHESTRATORS = {ABI, AXI}
 
 
 def test_roster_alignment_always_enables_the_orchestrator() -> None:
-    """Abi rides on every roster, whatever the workspace listed."""
-    roster, align = _roster_alignment({"axi.agents.AxiAgent/AxiAgent"}, None, REGISTRY)
-    assert roster == {"axi.agents.AxiAgent/AxiAgent", ABI}
+    """Abi and Axi ride on every roster, whatever the workspace listed."""
+    roster, align = _roster_alignment({AXI}, None, REGISTRY)
+    assert roster == ORCHESTRATORS
     assert align is True
 
-    roster, align = _roster_alignment(None, "axi.agents.AxiAgent/AxiAgent", REGISTRY)
-    assert roster == {"axi.agents.AxiAgent/AxiAgent", ABI}
+    roster, align = _roster_alignment(None, AXI, REGISTRY)
+    assert roster == ORCHESTRATORS
     assert align is True
 
 
 def test_roster_alignment_keeps_the_empty_roster_guard() -> None:
     """No seed and no resolvable default still means "touch nothing".
 
-    Abi is added after the decision, so it must not turn this case into
-    "roster = {Abi}" and disable every other row.
+    Orchestrators are added after the decision, so they must not turn this
+    case into a forced align that disables every other row.
     """
     roster, align = _roster_alignment(None, None, REGISTRY)
-    assert roster == {ABI}
+    assert roster == ORCHESTRATORS
     assert align is False
 
 
 def test_roster_alignment_still_empties_an_explicitly_empty_seed() -> None:
-    """``agents: []`` disables everything but the orchestrator."""
+    """``agents: []`` disables everything but the orchestrators."""
     roster, align = _roster_alignment(set(), None, REGISTRY)
-    assert roster == {ABI}
+    assert roster == ORCHESTRATORS
     assert align is True
 
 
 def test_roster_alignment_without_abi_in_the_registry() -> None:
-    roster, align = _roster_alignment(
-        {"axi.agents.AxiAgent/AxiAgent"}, None, ["axi.agents.AxiAgent/AxiAgent"]
-    )
-    assert roster == {"axi.agents.AxiAgent/AxiAgent"}
+    roster, align = _roster_alignment({AXI}, None, [AXI])
+    assert roster == {AXI}
     assert align is True
 
 

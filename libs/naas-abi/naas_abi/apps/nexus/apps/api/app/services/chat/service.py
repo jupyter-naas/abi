@@ -138,20 +138,17 @@ _MULTI_AGENT_NOTICE = (
 
 logger = logging.getLogger(__name__)
 
-_CREATE_SKILL_INSTRUCTIONS = (
+# Skills are written and saved by the Skills office agent (naas_abi
+# SkillsAgent), which calls create_skill. Nothing here asks a model to draft
+# one into the conversation: a JSON block the user has to save by hand was
+# both a worse experience and a dead end for clients with no Nexus UI.
+_SKILLS_HANDOFF_NOTE = (
     "\n\n## Creating skills\n"
-    "If the user's message starts with `/create-skill`, help them turn the rest of it (a short "
-    "description of a recurring task) into a reusable skill. Propose a name, a url-safe "
-    "kebab-case slug, a one-sentence description, and a well-written prompt that captures the "
-    "task with a clear goal, constraints, and expected output format. Present the draft as a "
-    "fenced code block using the language tag `skill` containing a single JSON object with "
-    "exactly these keys: name, slug, description, prompt. Briefly explain your choices outside "
-    "the code block. Do not attempt to save it yourself — the user reviews and saves it from "
-    "the UI with one click.\n"
-    "Critical: the slug is the chat command users will type later (e.g. `/weekly-report`). "
-    "Never use `skills` or `create-skill` as the slug — those are reserved builtin commands. "
-    "Derive the slug from the task itself (what the skill does), not from the `/create-skill` "
-    "invocation.\n"
+    "Creating, editing and deleting skills is the Skills agent's job: it writes the prompt "
+    "and saves the skill itself. When the user asks for a new skill (or starts a message with "
+    "`/create-skill`), hand the request to the Skills agent when you can transfer, otherwise "
+    "tell them to ask Skills in the chat or to use Settings > Skills. Never draft a skill as a "
+    "fenced `skill` block or any other payload for the user to save by hand.\n"
 )
 
 _SKILLS_CATALOG_HEADER = (
@@ -578,13 +575,13 @@ class ChatService:
     async def _build_skills_block(
         self, context: RequestContext | None, workspace_id: str | None
     ) -> str:
-        """Skills catalog + built-in command instructions, injected fresh into the
-        system prompt on every turn. Keeping it always-resident (rather than a
+        """Skills catalog + the note that creating one belongs to the Skills
+        agent, injected fresh into the system prompt on every turn. Keeping it always-resident (rather than a
         one-off prompt expansion at invocation time) is what lets the agent decide
         on its own, turn after turn, whether a skill applies — mirroring how
         Claude's own Skills stay visible in context instead of being invoked once
         and forgotten."""
-        block = _CREATE_SKILL_INSTRUCTIONS
+        block = _SKILLS_HANDOFF_NOTE
         if not self.skills_service or not context or not workspace_id:
             return block
         try:

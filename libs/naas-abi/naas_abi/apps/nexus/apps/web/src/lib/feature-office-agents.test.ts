@@ -45,7 +45,8 @@ describe('FEATURE_OFFICE_AGENTS', () => {
     expect(FEATURE_OFFICE_AGENTS.apps?.className).toBe('AppsAgent');
     expect(FEATURE_OFFICE_AGENTS.graph?.className).toBe('KnowledgeGraphAgent');
     expect(FEATURE_OFFICE_AGENTS['settings.organization']?.className).toBe('SettingsAgent');
-    expect(FEATURE_OFFICE_AGENTS.skills?.className).toBe('AgentCatalogAgent');
+    expect(FEATURE_OFFICE_AGENTS.agents?.className).toBe('AgentCatalogAgent');
+    expect(FEATURE_OFFICE_AGENTS.skills?.className).toBe('SkillsAgent');
     expect(FEATURE_OFFICE_AGENTS.chat).toBeUndefined();
     expect(Object.values(FEATURE_OFFICE_AGENTS).map((a) => a?.className)).not.toContain(
       'AbiAgent',

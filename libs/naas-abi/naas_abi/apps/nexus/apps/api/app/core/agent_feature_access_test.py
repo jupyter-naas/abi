@@ -8,6 +8,7 @@ from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
 APPS = "naas_abi.agents.AppsAgent/AppsAgent"
 ONTOLOGY = "naas_abi.agents.OntologyAgent/OntologyAgent"
 CATALOG = "naas_abi.agents.AgentCatalogAgent/AgentCatalogAgent"
+SETTINGS = "naas_abi.agents.SettingsAgent/SettingsAgent"
 ABI = "naas_abi.agents.AbiAgent/AbiAgent"
 AXI = "axi.agents.AxiAgent/AxiAgent"
 
@@ -26,8 +27,16 @@ def test_office_agent_follows_its_feature() -> None:
 
 
 def test_multi_feature_agent_survives_on_any_one() -> None:
-    assert feature_agent_visible(CATALOG, {"agents": False, "skills": True}) is True
-    assert feature_agent_visible(CATALOG, {"agents": False, "skills": False}) is False
+    assert (
+        feature_agent_visible(SETTINGS, {"settings": False, "settings.workspace": True})
+        is True
+    )
+    assert (
+        feature_agent_visible(
+            SETTINGS, {"settings": False, "settings.workspace": False}
+        )
+        is False
+    )
 
 
 def test_non_office_agents_are_never_gated() -> None:

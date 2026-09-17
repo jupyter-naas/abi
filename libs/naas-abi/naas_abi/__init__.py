@@ -634,6 +634,7 @@ class ABIModule(BaseModule):
                             - "naas_abi CodeAgent"
                             - "naas_abi SettingsAgent"
                             - "naas_abi AgentCatalogAgent"
+                            - "naas_abi SkillsAgent"
                           apps:
                             - example.module:dashboard
                           members:

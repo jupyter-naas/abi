@@ -383,9 +383,9 @@ COMPETENCY_QUESTIONS: dict[str, tuple[CompetencyQuestion, ...]] = {
     ),
     "Agent Catalog": (
         _q(
-            "What can I do with agents and skills in Nexus?",
+            "What can I do with the agent roster in Nexus?",
             "capabilities",
-            terms=("skill", "agent"),
+            terms=("agent", "roster"),
         ),
         _q(
             "How does a Nexus workspace roster decide which agents are enabled? Read the code and cite the files.",
@@ -405,9 +405,40 @@ COMPETENCY_QUESTIONS: dict[str, tuple[CompetencyQuestion, ...]] = {
             terms=("naas_abi appsagent",),
         ),
         _q(
-            "Comment créer une skill dans Nexus ?",
+            "Quel agent répond par défaut dans le chat Nexus ?",
             "operate",
-            terms=("create-skill", "skill"),
+            ("list_workspace_agents",),
+            ("agent",),
+        ),
+    ),
+    "Skills": (
+        _q(
+            "What can I do with Skills in Nexus?",
+            "capabilities",
+            terms=("skill", "/"),
+        ),
+        _q(
+            "How does a Nexus skill reach the agent that runs it? Read the code and cite the files.",
+            "implementation",
+            SOURCE_TOOLS,
+            ("_build_skills_block", "catalog", "system prompt"),
+        ),
+        _q(
+            "Turn my weekly sales recap into a reusable Nexus skill.",
+            "operate",
+            ("create_skill",),
+            ("/", "saved"),
+        ),
+        _q(
+            "Which skills do I have in this Nexus workspace?",
+            "operate",
+            ("list_workspace_skills",),
+            ("skill",),
+        ),
+        _q(
+            "Quel scope choisir pour qu'une skill Nexus serve à toute l'équipe ?",
+            "other",
+            terms=("workspace", "organization"),
         ),
     ),
 }

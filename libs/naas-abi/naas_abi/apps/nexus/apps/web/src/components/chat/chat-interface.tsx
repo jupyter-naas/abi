@@ -24,7 +24,7 @@ import {
 import { featureChatContext, getPaneSurfaceForPath } from '@/lib/feature-office-agents';
 import { useFeaturePaneStore } from '@/stores/feature-pane';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
-import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
+import { noteSkillsToolResult, useSkillsStore, type Skill } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
 import { dispatchDocumentUpdated, isDocumentsWriteTool, useDocumentsStore } from '@/stores/documents';
 import { dispatchSlidesDeckUpdated, isSlidesWriteTool, useSlidesStore } from '@/stores/slides';
@@ -97,14 +97,14 @@ const BUILTIN_SLASH_COMMANDS = [
   {
     slug: 'create-skill',
     name: 'Create a skill',
-    description: 'Ask the agent to draft a reusable skill prompt',
+    description: 'Hand the task to the Skills agent, which writes and saves it',
   },
 ];
 
 function formatSkillListing(skills: Skill[]): string {
   const enabled = skills.filter((s) => s.enabled);
   if (enabled.length === 0) {
-    return 'No skills yet. Type `/create-skill <what the skill should do>` and I will draft one for you.';
+    return 'No skills yet. Type `/create-skill <what the skill should do>` and the Skills agent will write and save one.';
   }
   const lines = [...enabled]
     .sort((a, b) => a.slug.localeCompare(b.slug))
@@ -117,206 +117,8 @@ function formatSkillListing(skills: Skill[]): string {
     '',
     ...lines,
     '',
-    'Run one with `/<slug> [extra instructions]`, or `/create-skill <description>` to create a new one.',
+    'Run one with `/<slug> [extra instructions]`, or `/create-skill <description>` to have the Skills agent add one.',
   ].join('\n');
-}
-
-/** Builtin slash commands that can never be skill slugs. */
-const RESERVED_SKILL_SLUGS = new Set(['skills', 'create-skill']);
-
-function normalizeSkillSlug(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/_/g, '-')
-    .replace(/[^a-z0-9-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-/** Prefer a task slug; never keep reserved builtins like create-skill. */
-function suggestSkillSlug(slug: string | undefined, name: string): string {
-  for (const candidate of [slug ?? '', name, `${name}-task`, 'custom-skill']) {
-    const normalized = normalizeSkillSlug(candidate);
-    if (normalized && !RESERVED_SKILL_SLUGS.has(normalized)) {
-      return normalized;
-    }
-  }
-  return 'custom-skill';
-}
-
-/** Card rendered for ```skill fenced blocks in assistant messages: shows the
- *  agent's skill draft with a scope picker and a one-click save. */
-function SkillDraftCard({ raw }: { raw: string }) {
-  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
-  const createSkill = useSkillsStore((s) => s.createSkill);
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [scope, setScope] = useState<SkillScope>('user');
-  const [showPrompt, setShowPrompt] = useState(false);
-  const [slugOverride, setSlugOverride] = useState<string | null>(null);
-  const [savedSlug, setSavedSlug] = useState<string | null>(null);
-
-  const draft = useMemo(() => {
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed.name === 'string' && typeof parsed.prompt === 'string') {
-        const name = parsed.name as string;
-        const rawSlug = typeof parsed.slug === 'string' ? (parsed.slug as string) : undefined;
-        const suggested = suggestSkillSlug(rawSlug, name);
-        return {
-          name,
-          slug: suggested,
-          originalSlug: rawSlug ? normalizeSkillSlug(rawSlug) : undefined,
-          description:
-            typeof parsed.description === 'string' ? (parsed.description as string) : undefined,
-          prompt: parsed.prompt as string,
-        };
-      }
-    } catch {
-      // Partial JSON while the message is still streaming
-    }
-    return null;
-  }, [raw]);
-
-  const effectiveSlug = slugOverride ?? draft?.slug ?? '';
-  const remappedReserved =
-    !!draft?.originalSlug &&
-    RESERVED_SKILL_SLUGS.has(draft.originalSlug) &&
-    effectiveSlug !== draft.originalSlug;
-
-  // Distinguish "still streaming" from "settled but unparseable". If the raw
-  // content stops growing for a moment and still won't parse, the draft was
-  // most likely truncated (e.g. the model hit max_tokens) — show an error and
-  // let the user retry, rather than spinning "Drafting skill…" forever.
-  const [settledUnparseable, setSettledUnparseable] = useState(false);
-  useEffect(() => {
-    if (draft) {
-      setSettledUnparseable(false);
-      return;
-    }
-    const snapshot = raw;
-    const timer = setTimeout(() => {
-      // Same content 1.2s later and still no valid draft → treat as truncated.
-      setSettledUnparseable((prev) => (snapshot === raw ? true : prev));
-    }, 1200);
-    return () => clearTimeout(timer);
-  }, [raw, draft]);
-
-  const handleSave = async () => {
-    if (!currentWorkspaceId || !draft) return;
-    const slug = suggestSkillSlug(effectiveSlug, draft.name);
-    setSaveState('saving');
-    setSaveError(null);
-    try {
-      const skill = await createSkill(currentWorkspaceId, {
-        name: draft.name,
-        slug,
-        description: draft.description,
-        prompt: draft.prompt,
-        scope,
-      });
-      setSavedSlug(skill.slug);
-      setSaveState('saved');
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save skill');
-      setSaveState('error');
-    }
-  };
-
-  if (!draft) {
-    if (settledUnparseable) {
-      return (
-        <div className="my-3 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-          The skill draft was cut off before it finished (the response likely hit its
-          length limit). Ask the agent to draft it again — try a shorter description.
-        </div>
-      );
-    }
-    return (
-      <div className="my-3 flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-        <Loader2 size={12} className="animate-spin" />
-        Drafting skill…
-      </div>
-    );
-  }
-
-  return (
-    <div className="my-3 rounded-lg border border-border bg-muted/30 p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground">{draft.name}</p>
-          <div className="mt-1 flex items-center gap-1 font-mono text-xs text-workspace-accent">
-            <span>/</span>
-            <input
-              type="text"
-              value={effectiveSlug}
-              onChange={(e) => {
-                setSlugOverride(normalizeSkillSlug(e.target.value));
-                setSaveError(null);
-              }}
-              disabled={saveState === 'saved' || saveState === 'saving'}
-              className="min-w-0 flex-1 rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-workspace-accent outline-none focus-visible:ring-1 focus-visible:ring-workspace-accent disabled:opacity-60"
-              aria-label="Skill command slug"
-            />
-          </div>
-          {remappedReserved && (
-            <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-              /{draft.originalSlug} is reserved. Using /{effectiveSlug} instead.
-            </p>
-          )}
-          {draft.description && (
-            <p className="mt-1 text-xs text-muted-foreground">{draft.description}</p>
-          )}
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={() => setShowPrompt(!showPrompt)}
-        className="mt-2 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-      >
-        {showPrompt ? 'Hide prompt' : 'Show prompt'}
-      </button>
-      {showPrompt && (
-        <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-md border border-border bg-background p-2 text-xs text-muted-foreground">
-          {draft.prompt}
-        </pre>
-      )}
-
-      <div className="mt-3 flex items-center gap-2">
-        <select
-          value={scope}
-          onChange={(e) => setScope(e.target.value as SkillScope)}
-          disabled={saveState === 'saved' || saveState === 'saving'}
-          className="rounded-md border border-border bg-background px-2 py-1 text-xs"
-        >
-          <option value="user">Private (only me)</option>
-          <option value="workspace">Workspace</option>
-          <option value="organization">Organization</option>
-        </select>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saveState === 'saved' || saveState === 'saving' || !effectiveSlug}
-          className={cn(
-            'flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors',
-            saveState === 'saved'
-              ? 'bg-workspace-accent/15 text-workspace-accent'
-              : 'bg-workspace-accent text-white hover:opacity-90'
-          )}
-        >
-          {saveState === 'saving' && <Loader2 size={12} className="animate-spin" />}
-          {saveState === 'saved' && <Check size={12} />}
-          {saveState === 'saved'
-            ? `Saved — use /${savedSlug ?? effectiveSlug}`
-            : saveState === 'saving'
-              ? 'Saving…'
-              : 'Save skill'}
-        </button>
-      </div>
-      {saveError && <p className="mt-2 text-xs text-destructive">{saveError}</p>}
-    </div>
-  );
 }
 
 /** Split text into segments; URLs become anchor elements so they get href styling and preview */
@@ -2116,14 +1918,16 @@ export function ChatInterface({
           addMessage(conversationId, { role: 'user', content: sourceText.trim() });
           addMessage(conversationId, {
             role: 'system',
-            content: `Unknown command \`/${command}\`. Type \`/skills\` to see available skills or \`/create-skill <description>\` to create one.`,
+            content: `Unknown command \`/${command}\`. Type \`/skills\` to see available skills or \`/create-skill <description>\` to have the Skills agent add one.`,
           });
           finishLocalCommand();
           return;
         }
       }
       // command === 'create-skill', or a matched skill slug: fall through to the
-      // normal send flow below, unmodified.
+      // normal send flow below, unmodified. /create-skill reaches the agent as
+      // plain text, and the orchestrator hands it to the Skills agent, which
+      // writes the prompt and saves the skill itself.
     }
 
     const currentImages = [...attachedImages]; // Copy before clearing
@@ -2414,6 +2218,12 @@ export function ChatInterface({
           }
           // After the Apps agent edits a project, reload the editor and preview.
           noteAppProjectToolResult(target.rawName || target.toolName || '', output);
+          // After the Skills agent saves a skill, /<slug> must resolve at once.
+          noteSkillsToolResult(
+            target.rawName || target.toolName || '',
+            output,
+            useWorkspaceStore.getState().currentWorkspaceId,
+          );
 
           const toolUrls = extractUrlsFromContent(output);
           if (toolUrls.length > 0) {
@@ -4385,11 +4195,6 @@ const MessageBubble = React.memo(function MessageBubble({
                 .join('')
               : '';
         const copyKey = `${language || 'plain'}:${codeContent}`;
-
-        // ```skill blocks are agent-drafted skills — render the save card.
-        if (language === 'skill') {
-          return <SkillDraftCard raw={codeContent} />;
-        }
 
         return (
           <div className="my-5">

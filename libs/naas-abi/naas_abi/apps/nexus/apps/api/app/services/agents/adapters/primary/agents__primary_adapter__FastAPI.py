@@ -304,6 +304,18 @@ def _nexus_abi_class_name(class_names: Iterable[str]) -> str | None:
     )
 
 
+def _nexus_axi_class_name(class_names: Iterable[str]) -> str | None:
+    """Registry key of the axi Axi orchestrator when the axi module is loaded."""
+    return next(
+        (
+            class_name
+            for class_name in class_names
+            if class_name.endswith("/AxiAgent") and class_name.startswith("axi.")
+        ),
+        None,
+    )
+
+
 def _roster_alignment(
     seeded_class_names: set[str] | None,
     default_class_name: str | None,
@@ -311,19 +323,21 @@ def _roster_alignment(
 ) -> tuple[set[str], bool]:
     """The classes to enable, and whether to align existing rows to them.
 
-    Abi is added to the roster after the alignment decision, never as its
-    trigger. It is the platform orchestrator every other agent hands off to,
-    so a workspace that forgot to list it must not end up with the
-    orchestrator switched off. Adding it before the decision would turn a
-    workspace with no seed and no resolvable default into ``roster = {Abi}``
-    and disable every other row — the very case the empty-roster guard exists
-    to protect.
+    Abi and Axi are added to the roster after the alignment decision, never as
+    their trigger. They are deployment orchestrators a workspace must not
+    switch off by omission. Adding them before the decision would turn a
+    workspace with no seed and no resolvable default into a tiny roster and
+    disable every other row — the very case the empty-roster guard exists to
+    protect.
     """
     roster = _workspace_agent_roster(seeded_class_names, default_class_name)
     align_to_roster = bool(roster) or seeded_class_names is not None
     abi_class_name = _nexus_abi_class_name(class_names)
     if abi_class_name:
         roster.add(abi_class_name)
+    axi_class_name = _nexus_axi_class_name(class_names)
+    if axi_class_name:
+        roster.add(axi_class_name)
     return roster, align_to_roster
 
 
@@ -633,7 +647,7 @@ async def _reconcile_workspace_agents(
     * **Backfill** a missing ``module_path`` on existing records.
     * **Align** ``enabled`` to the workspace roster on every sync: the
       ``agents:`` seed when present, otherwise the engine default only, plus
-      Abi in either case (see ``_roster_alignment``).
+      Abi and Axi when loaded (see ``_roster_alignment``).
 
     Returns the reconciled agent list (deleted records removed, created ones
     appended, backfilled ones refreshed).

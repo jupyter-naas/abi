@@ -17,7 +17,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.port import (
     ChatMessageRecord,
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import (
-    _CREATE_SKILL_INSTRUCTIONS,
+    _SKILLS_HANDOFF_NOTE,
     AGENT_SYSTEM_PROMPTS,
     REGENERATION_DIRECTIVE,
     ChatService,
@@ -636,7 +636,7 @@ async def test_complete_chat_request_forwards_injection_preamble_for_abi(monkeyp
     assert result.provider_used == "Abi (Abi)"
     preamble = captured["injection_preamble"]
     assert preamble is not None
-    assert _CREATE_SKILL_INSTRUCTIONS.strip() in preamble
+    assert _SKILLS_HANDOFF_NOTE.strip() in preamble
     assert "Alice Smith" in preamble
     assert "Acme Corp" in preamble
 
@@ -1045,7 +1045,7 @@ async def test_build_system_prompt_without_auth_adapter_returns_base() -> None:
         user_id="user-1",
     )
 
-    assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _CREATE_SKILL_INSTRUCTIONS
+    assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _SKILLS_HANDOFF_NOTE
 
 
 @pytest.mark.asyncio
@@ -1062,7 +1062,7 @@ async def test_build_system_prompt_swallows_auth_errors() -> None:
         user_id="user-1",
     )
 
-    assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _CREATE_SKILL_INSTRUCTIONS
+    assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _SKILLS_HANDOFF_NOTE
 
 
 @pytest.mark.asyncio
@@ -1378,7 +1378,7 @@ async def test_build_system_prompt_skips_skills_catalog_without_context() -> Non
         workspace_id="ws-1",
     )
 
-    assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _CREATE_SKILL_INSTRUCTIONS
+    assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _SKILLS_HANDOFF_NOTE
     skills_service.list_visible_skills.assert_not_awaited()
 
 
@@ -1399,7 +1399,7 @@ async def test_build_system_prompt_swallows_skills_catalog_errors() -> None:
         context=context,
     )
 
-    assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _CREATE_SKILL_INSTRUCTIONS
+    assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _SKILLS_HANDOFF_NOTE
 
 
 @pytest.mark.asyncio

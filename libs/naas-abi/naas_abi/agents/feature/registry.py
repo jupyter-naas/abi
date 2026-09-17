@@ -90,8 +90,14 @@ FEATURE_AGENTS: tuple[FeatureAgentSpec, ...] = (
     FeatureAgentSpec(
         "Agent Catalog",
         "AgentCatalogAgent",
-        ("agents", "skills"),
-        "the workspace's agents roster and skills",
+        ("agents",),
+        "the workspace's agents roster",
+    ),
+    FeatureAgentSpec(
+        "Skills",
+        "SkillsAgent",
+        ("skills",),
+        "skills: writing and saving a reusable prompt, editing or deleting one",
     ),
 )
 

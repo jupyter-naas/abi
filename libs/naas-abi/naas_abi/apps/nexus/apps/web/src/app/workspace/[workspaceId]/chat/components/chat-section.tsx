@@ -320,7 +320,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
             Skills
           </Link>
           {sortedSkills.length === 0 && (
-            <p className="chat-section-hint">Type /create-skill in the chat to add one</p>
+            <p className="chat-section-hint">Type /create-skill in the chat and the Skills agent adds one</p>
           )}
           {visibleSkills.map((skill) => (
             <div key={skill.id} className="chat-list-row-wrap">
