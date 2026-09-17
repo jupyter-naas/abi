@@ -36,6 +36,7 @@ from naas_abi_core.proto.object_storage.v1 import object_storage_pb2
 from naas_abi_core.services.object_storage.ObjectStoragePort import (
     Exceptions,
     IObjectStorageAdapter,
+    IObjectStorageDomain,
     ObjectMetaData,
 )
 from nats.micro.request import Request
@@ -83,19 +84,32 @@ def _metadata_to_pb(metadata: ObjectMetaData) -> object_storage_pb2.ObjectMetaDa
 
 
 class ObjectStoragePrimaryAdapterNATS:
-    """Serves an ``IObjectStorageAdapter`` over NATS RPC (request/reply).
+    """Serves object storage over NATS RPC (request/reply).
 
-    Wraps a real adapter instance and registers one NATS micro-service
-    endpoint per non-streaming ``IObjectStorageAdapter`` method. Each
-    endpoint authenticates the caller via ``Nats-Auth-Token`` before doing
-    anything else, then decodes the Protobuf request, calls straight
-    through to the wrapped adapter, and encodes a Protobuf response.
-    Errors -- auth failures, known domain exceptions, anything unexpected --
-    are always reported as a normal response carrying a populated
-    ``CallError``, never as a crashed handler or a raw NATS-level error.
+    Wraps a real adapter *or* the domain service and registers one NATS
+    micro-service endpoint per non-streaming method. Each endpoint
+    authenticates the caller via ``Nats-Auth-Token`` before doing anything
+    else, then decodes the Protobuf request, calls straight through to the
+    wrapped object, and encodes a Protobuf response. Errors -- auth
+    failures, known domain exceptions, anything unexpected -- are always
+    reported as a normal response carrying a populated ``CallError``, never
+    as a crashed handler or a raw NATS-level error.
+
+    Accepts either an ``IObjectStorageAdapter`` (a bare secondary adapter,
+    e.g. in tests) or an ``ObjectStorageService``/``IObjectStorageDomain``
+    (the real engine-loaded domain service) -- deliberately, not for
+    convenience: wrapping the raw adapter instead of the domain service
+    would silently skip ``ObjectStorageService``'s event publishing
+    (``ObjectPut``/``ObjectDeleted``) and prefix normalization for every
+    remote caller, which would only diverge from in-process behaviour, not
+    match it. ``EngineNATSLoader`` always passes the domain service.
     """
 
-    def __init__(self, adapter: IObjectStorageAdapter, jwt_secret: str) -> None:
+    def __init__(
+        self,
+        adapter: IObjectStorageAdapter | IObjectStorageDomain,
+        jwt_secret: str,
+    ) -> None:
         self._adapter = adapter
         self._jwt_secret = jwt_secret
         self._service: Service | None = None

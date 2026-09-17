@@ -224,6 +224,30 @@ class ApiConfiguration(BaseModel):
     port: int = 9879
 
 
+class NATSConfiguration(BaseModel):
+    """Cross-cutting NATS exposure config -- not a domain service, so it lives
+    at the top level next to ``api``/``deploy``/``global_config``, not nested
+    under ``services:``.
+
+    Its mere presence (non-null) is what triggers exposure: at engine load
+    time, every loaded service that has a NATS primary adapter available gets
+    one started automatically, wrapping the same instance every in-process
+    caller already uses -- see ``EngineNATSLoader``. No per-service opt-in
+    flag; add a service to the exposed set by giving it a primary adapter,
+    not by touching this config.
+
+    See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
+    ("Decisions locked in" -- Stage 1's JWT is deliberately minimal).
+
+    nats:
+      nats_url: "nats://127.0.0.1:4222"
+      jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
+    """
+
+    nats_url: str = "nats://127.0.0.1:4222"
+    jwt_secret: str
+
+
 class OpencodeProviderConfiguration(BaseModel):
     id: str
     key: str
@@ -317,6 +341,8 @@ class EngineConfiguration(BaseModel):
     services: ServicesConfiguration
 
     global_config: GlobalConfig
+
+    nats: NATSConfiguration | None = None
 
     modules: list[ModuleConfig]
 
