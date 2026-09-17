@@ -19,6 +19,7 @@ import {
   recordToOpenModule, toRecord, toTenantRecord,
   type AppRecord, type AppsResponse,
 } from '@/app/workspace/[workspaceId]/apps/components/types';
+import { forgetAppsLastOpen } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
 
 const CATEGORY_COLORS: Record<string, string> = {
   application: 'bg-purple-500/10 text-purple-500',
@@ -283,6 +284,7 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
       <div className="space-y-0.5">
         <Link
           href={basePath}
+          onClick={() => forgetAppsLastOpen(currentWorkspaceId)}
           className={cn(
             'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
             isOnApps && !openAppModule

@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
-import { appsPath, nextAppsRestoreUrl, shouldSkipAppsRestore } from './lib/apps-route';
 import {
-  AppWindow, ArrowLeft, ExternalLink, RefreshCw, AlertTriangle, Info, Pencil, Plus,
+  appsLastOpenKey, appsPath, forgetAppsLastOpen, nextAppsRestoreUrl, shouldSkipAppsRestore,
+} from './lib/apps-route';
+import {
+  AppWindow, ExternalLink, RefreshCw, AlertTriangle, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isBundledAppHtmlUrl, resolveAppEmbedUrl, resolveAppExternalUrl, appHtmlPathPrefix, pagesSsoAudience, withAppHtmlAccessToken, withPagesSsoToken } from '@/lib/app-html';
@@ -16,6 +18,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { usePublishFeatureResource } from '@/stores/feature-pane';
 import { usePrompt } from '@/components/ui/dialogs';
 import { appEditorPath, appProjectsApi, type AppProject } from '@/lib/app-projects';
+import { AppsMenuBar, type AppsMenuEntry } from '@/components/apps-builder/apps-menu-bar';
 import { ViewBar } from './components/view-bar';
 import { DatabaseBody } from './components/views';
 import { useAppViews } from './components/use-app-views';
@@ -24,19 +27,34 @@ import {
   type AppRecord, type AppsResponse,
 } from './components/types';
 
+// Editing an app (duplicate a module app into an app project, then open the
+// Apps editor) is off while the project workflow is being reworked. The menu
+// still shows, greyed: the bar keeps its shape and the feature stays visible
+// as something that is coming back. Flip this on to make it live again.
+const APP_EDIT_ENABLED = false;
+
 // ---------------------------------------------------------------------------
 // Embed view
 // ---------------------------------------------------------------------------
 
 function EmbedView({
   record,
+  records,
+  projects,
   onBack,
+  onNewApp,
   onEdit,
+  onOpenProject,
 }: {
   record: AppRecord;
+  /** Every app in the workspace: the Edit menu picks its target from here. */
+  records: AppRecord[];
+  projects: AppProject[];
   onBack: () => void;
+  onNewApp: () => void;
   /** Module apps only: duplicate into an app project and open the editor. */
-  onEdit?: () => void;
+  onEdit?: (target: AppRecord) => void;
+  onOpenProject: (project: AppProject) => void;
 }) {
   const url = record.url;
   const baseEmbedUrl = useMemo(() => resolveAppEmbedUrl(url), [url]);
@@ -166,34 +184,57 @@ function EmbedView({
       active ? 'bg-muted text-foreground' : 'text-muted-foreground',
     );
 
+  // Edit names its target instead of assuming the open app: the list is every
+  // app in the workspace, current one ticked, plus the app projects that open
+  // straight in the editor. Apps that cannot be edited stay visible but greyed,
+  // so the menu reads as the whole catalogue rather than a filtered remnant.
+  const editItems: AppsMenuEntry[] = [
+    { id: 'apps-heading', label: 'Apps', heading: true },
+    ...records.map((candidate) => ({
+      id: `app-${candidate.id}`,
+      label: candidate.name,
+      checked: candidate.id === record.id,
+      disabled: candidate.source !== 'module' || !onEdit,
+      title:
+        candidate.source === 'module'
+          ? `Edit a copy of ${candidate.name} in the Apps editor`
+          : `${candidate.name} is an external app — there is no source to edit`,
+      onSelect: () => onEdit?.(candidate),
+    })),
+    ...(projects.length
+      ? [
+          { id: 'sep-projects', separator: true },
+          { id: 'projects-heading', label: 'App projects', heading: true },
+          ...projects.map((project) => ({
+            id: `project-${project.slug}`,
+            label: `${project.icon_emoji ? `${project.icon_emoji} ` : ''}${project.title}`,
+            title: `Open ${project.title} in the Apps editor`,
+            onSelect: () => onOpenProject(project),
+          })),
+        ]
+      : []),
+  ];
+
   return (
     <div className="flex h-full flex-col">
       <Header
         title={record.name}
         nav={
-          <button
-            type="button"
-            onClick={onBack}
-            title="Back to apps"
-            className="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-muted-foreground transition-all hover:bg-muted hover:text-foreground"
-          >
-            <ArrowLeft size={16} className="shrink-0" />
-            <span className="truncate font-medium text-foreground">{record.name}</span>
-          </button>
+          <AppsMenuBar
+            onNewApp={onNewApp}
+            fileExtras={[{ id: 'all-apps', label: 'All apps', onSelect: onBack }]}
+            editItems={editItems}
+            editDisabled={!APP_EDIT_ENABLED}
+            editDisabledTitle="Editing an app is temporarily unavailable"
+            trailing={
+              <span className="ml-2 min-w-0 truncate border-l border-border pl-2 text-xs font-medium text-foreground">
+                {record.name}
+              </span>
+            }
+          />
         }
         actions={
           <>
-            {onEdit && (
-              <button
-                type="button"
-                onClick={onEdit}
-                title="Edit a copy of this app in the Apps editor"
-                className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-all hover:bg-muted hover:text-foreground"
-              >
-                <Pencil size={14} />
-                Edit
-              </button>
-            )}
             <button
               type="button"
               onClick={toggleDetail}
@@ -381,7 +422,7 @@ export default function AppsPage() {
     const title = await prompt({
       title: 'New app',
       description: 'A static app (HTML, CSS, JavaScript) you build with the Apps agent.',
-      placeholder: 'Budget tracker',
+      placeholder: 'Your App Name',
       confirmLabel: 'Create',
     });
     if (!title) return;
@@ -428,9 +469,10 @@ export default function AppsPage() {
   // Keyed on the URL workspace, not the store: the store lags a workspace
   // switch and used to rewrite Valeo back to the previous workspace.
   useEffect(() => {
-    if (!urlWorkspaceId) return;
+    const key = appsLastOpenKey(urlWorkspaceId);
+    if (!urlWorkspaceId || !key) return;
     try {
-      const saved = sessionStorage.getItem(`nexus.apps.last_open.${urlWorkspaceId}`);
+      const saved = sessionStorage.getItem(key);
       const next = nextAppsRestoreUrl({
         urlWorkspaceId,
         storeWorkspaceId: currentWorkspaceId,
@@ -485,13 +527,13 @@ export default function AppsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, records]);
 
-  const lastOpenKey = urlWorkspaceId ? `nexus.apps.last_open.${urlWorkspaceId}` : null;
+  const lastOpenKey = appsLastOpenKey(urlWorkspaceId);
 
   const handleClose = () => {
     setActiveApp(null);
     setOpenAppModule(null);
     setAppDetailOpen(false);
-    if (lastOpenKey) sessionStorage.removeItem(lastOpenKey);
+    forgetAppsLastOpen(urlWorkspaceId);
     router.replace(appsPath(urlWorkspaceId));
   };
 
@@ -530,8 +572,12 @@ export default function AppsPage() {
         )}
         <EmbedView
           record={activeApp}
+          records={records}
+          projects={projects}
           onBack={handleClose}
-          onEdit={activeApp.source === 'module' ? () => void handleEditModuleApp(activeApp) : undefined}
+          onNewApp={() => void handleNewApp()}
+          onEdit={(target) => void handleEditModuleApp(target)}
+          onOpenProject={(project) => router.push(appEditorPath(urlWorkspaceId, project.slug))}
         />
       </div>
     );
@@ -544,17 +590,7 @@ export default function AppsPage() {
       <Header
         title="Apps"
         subtitle="Your installed and configured apps"
-        actions={
-          <button
-            type="button"
-            onClick={() => void handleNewApp()}
-            title="Build a new app with the Apps agent"
-            className="flex h-8 items-center gap-1.5 rounded-md bg-workspace-accent px-2.5 text-xs font-semibold text-white transition-colors hover:bg-workspace-accent/90"
-          >
-            <Plus size={14} />
-            New app
-          </button>
-        }
+        nav={<AppsMenuBar onNewApp={() => void handleNewApp()} />}
       />
       {promptDialog}
       {projectError && (

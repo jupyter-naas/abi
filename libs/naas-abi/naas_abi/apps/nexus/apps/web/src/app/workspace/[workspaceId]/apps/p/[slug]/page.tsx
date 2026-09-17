@@ -9,7 +9,6 @@ import {
   GitBranch,
   History,
   Loader2,
-  Plus,
   RotateCcw,
   Save,
   Send,
@@ -20,6 +19,7 @@ import { MonacoEditor } from '@/components/monaco/monaco-editor';
 import { Header } from '@/components/shell/header';
 import { AppFileTree } from '@/components/apps-builder/app-file-tree';
 import { AppPreviewFrame } from '@/components/apps-builder/app-preview-frame';
+import { AppsMenuBar } from '@/components/apps-builder/apps-menu-bar';
 import { useConfirm, usePrompt } from '@/components/ui/dialogs';
 import {
   appEditorPath,
@@ -476,48 +476,59 @@ export default function AppEditorPage() {
     </button>
   );
 
+  const newApp = async () => {
+    const title = await prompt({ title: 'New app', placeholder: 'Your App Name', confirmLabel: 'Create' });
+    if (!title) return;
+    try {
+      const created = await appProjectsApi.create(workspaceId, title.trim());
+      router.push(appEditorPath(workspaceId, created.slug));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  // Same bar as the Apps index: section label, then File. The editor's own
+  // verbs stay as buttons beside it — they act on the open app, where the
+  // index has nothing but File to offer.
   const menuBar = (
-    <div className="flex min-w-0 flex-wrap items-center gap-1">
-      <button
-        type="button"
-        onClick={() => router.push(appsHome(workspaceId))}
-        title="Back to apps"
-        className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-      >
-        <ArrowLeft size={14} />
-      </button>
-      {menuBtn('Save', () => void save(), busy === 'save' ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />, {
-        disabled: !project || busy !== null,
-        title: 'Save (⌘S): one commit with every change',
-        primary: unsaved,
-      })}
-      {menuBtn('Discard', () => void discard(), <RotateCcw size={13} />, { disabled: !project?.dirty || busy !== null })}
-      {menuBtn('Check', () => void runCheck(), busy === 'check' ? <Loader2 size={13} className="animate-spin" /> : <Stethoscope size={13} />, { disabled: !project })}
-      {menuBtn('History', () => void toggleHistory(), <History size={13} />, { disabled: !project })}
-      {menuBtn('Submit', () => void submit(), busy === 'submit' ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />, {
-        disabled: !project || !submitConfig?.configured || busy !== null,
-        title: submitTitle,
-      })}
-      {menuBtn('New app', async () => {
-        const title = await prompt({ title: 'New app', placeholder: 'Budget tracker', confirmLabel: 'Create' });
-        if (!title) return;
-        try {
-          const created = await appProjectsApi.create(workspaceId, title.trim());
-          router.push(appEditorPath(workspaceId, created.slug));
-        } catch (e) {
-          setError((e as Error).message);
-        }
-      }, <Plus size={13} />)}
-      <div className="ml-2 flex min-w-0 items-center gap-2 border-l border-border pl-2 text-xs">
-        {project?.branch && (
-          <span className="flex items-center gap-1 truncate text-muted-foreground" title={`${project.repo_id} · ${project.branch}`}>
-            <GitBranch size={12} /> {project.branch}
-          </span>
-        )}
-        {unsaved && <span className="text-amber-600">Unsaved</span>}
-        {status && <span className="max-w-[20rem] truncate text-muted-foreground" title={status}>{status}</span>}
-      </div>
-    </div>
+    <AppsMenuBar
+      onNewApp={() => void newApp()}
+      leading={
+        <button
+          type="button"
+          onClick={() => router.push(appsHome(workspaceId))}
+          title="Back to apps"
+          className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <ArrowLeft size={14} />
+        </button>
+      }
+      trailing={
+        <>
+          {menuBtn('Save', () => void save(), busy === 'save' ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />, {
+            disabled: !project || busy !== null,
+            title: 'Save (⌘S): one commit with every change',
+            primary: unsaved,
+          })}
+          {menuBtn('Discard', () => void discard(), <RotateCcw size={13} />, { disabled: !project?.dirty || busy !== null })}
+          {menuBtn('Check', () => void runCheck(), busy === 'check' ? <Loader2 size={13} className="animate-spin" /> : <Stethoscope size={13} />, { disabled: !project })}
+          {menuBtn('History', () => void toggleHistory(), <History size={13} />, { disabled: !project })}
+          {menuBtn('Submit', () => void submit(), busy === 'submit' ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />, {
+            disabled: !project || !submitConfig?.configured || busy !== null,
+            title: submitTitle,
+          })}
+          <div className="ml-2 flex min-w-0 items-center gap-2 border-l border-border pl-2 text-xs">
+            {project?.branch && (
+              <span className="flex items-center gap-1 truncate text-muted-foreground" title={`${project.repo_id} · ${project.branch}`}>
+                <GitBranch size={12} /> {project.branch}
+              </span>
+            )}
+            {unsaved && <span className="text-amber-600">Unsaved</span>}
+            {status && <span className="max-w-[20rem] truncate text-muted-foreground" title={status}>{status}</span>}
+          </div>
+        </>
+      }
+    />
   );
 
   return (
