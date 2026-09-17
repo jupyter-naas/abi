@@ -4,9 +4,10 @@ Supports: Anthropic (Claude), OpenAI, Ollama, Cloudflare Workers AI, and custom 
 """
 
 import importlib
+import logging
 import pkgutil
 import threading
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from typing import Any, Literal
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -29,6 +30,8 @@ try:
     HAS_OPENAI = True
 except ImportError:
     HAS_OPENAI = False
+
+logger = logging.getLogger(__name__)
 
 
 class ProviderConfig(BaseModel):
@@ -752,7 +755,10 @@ async def complete_with_abi(
             latest_user_message = f"{injection_preamble.strip()}\n\n{latest_user_message}"
 
         # Per-request isolation: never execute against the cached singleton.
-        llm_model = (getattr(config, "llm_model", None) or "").strip() or None
+        llm_model = resolve_inprocess_llm_model_for_turn(
+            config.model,
+            (getattr(config, "llm_model", None) or "").strip() or None,
+        )
         agent = _duplicate_inprocess_agent(template_agent, thread_id)
         if llm_model:
             _retarget_inprocess_chat_model(agent, llm_model)
@@ -1328,24 +1334,53 @@ def _normalize_inprocess_llm_model(model_id: str | None) -> str | None:
     return _INPROCESS_LLM_MODEL_ALIASES.get(mid, mid)
 
 
-def _inprocess_llm_model_for_agent(
+_INPROCESS_LLM_MODEL_RESOLVERS: list[
+    Callable[[str, str | None], str | None]
+] = []
+
+
+def register_inprocess_llm_model_resolver(
+    resolver: Callable[[str, str | None], str | None],
+) -> None:
+    """Register a workspace hook to map in-process agent + request model ids."""
+    if resolver not in _INPROCESS_LLM_MODEL_RESOLVERS:
+        _INPROCESS_LLM_MODEL_RESOLVERS.append(resolver)
+
+
+def _ensure_inprocess_llm_resolvers_loaded() -> None:
+    if _INPROCESS_LLM_MODEL_RESOLVERS:
+        return
+    try:
+        from axi.agents.tools.inprocess_llm import resolve_inprocess_llm_model
+
+        register_inprocess_llm_model_resolver(resolve_inprocess_llm_model)
+    except ImportError:
+        pass
+
+
+def resolve_inprocess_llm_model_for_turn(
     agent_name: str, config_llm: str | None
 ) -> str | None:
     """Resolve the chat model id for an in-process ABI agent turn."""
+    _ensure_inprocess_llm_resolvers_loaded()
     normalized = _normalize_inprocess_llm_model(config_llm)
-    if "AxiAgent" not in (agent_name or ""):
-        return normalized
-    try:
-        from axi import ABIModule
-
-        ds = str(
-            ABIModule.get_instance().configuration.decision_support_chat_model
-        ).strip()
-        if ds:
-            return _normalize_inprocess_llm_model(ds)
-    except Exception:
-        pass
+    for resolver in _INPROCESS_LLM_MODEL_RESOLVERS:
+        try:
+            resolved = resolver(agent_name, normalized)
+        except Exception:
+            logger.exception("In-process LLM model resolver failed for %s", agent_name)
+            continue
+        if resolved and str(resolved).strip():
+            return _normalize_inprocess_llm_model(str(resolved).strip())
     return normalized
+
+
+def _load_inprocess_chat_model(model_id: str) -> Any:
+    """Load a registered chat model for in-process ABI agents (not Slides)."""
+    from naas_abi import ABIModule
+
+    registry = ABIModule.get_instance().engine.services.model_registry
+    return registry.get_chat_model(model_id)
 
 
 def _retarget_inprocess_chat_model(agent: Any, model_id: str) -> None:
@@ -1358,10 +1393,9 @@ def _retarget_inprocess_chat_model(agent: Any, model_id: str) -> None:
     Applies recursively to nested sub-agents so orchestrators (e.g. Axi) and
     delegated specialists (e.g. Counter-UAS) share the same per-request model.
     """
-    from naas_abi.agents.slides import load_slides_chat_model
     from naas_abi_core.services.agent.tools.utils import can_bind_tools
 
-    chat_model = load_slides_chat_model(model_id)
+    chat_model = _load_inprocess_chat_model(model_id)
     base = getattr(chat_model, "model", chat_model)
 
     def _apply_to_node(node: Any) -> None:
@@ -1526,7 +1560,7 @@ async def stream_with_abi_inprocess(
 
     agent_name = config.model
     template_agent = _resolve_inprocess_abi_agent(agent_name)
-    llm_model = _inprocess_llm_model_for_agent(
+    llm_model = resolve_inprocess_llm_model_for_turn(
         agent_name, (getattr(config, "llm_model", None) or "").strip() or None
     )
     if template_agent is None:

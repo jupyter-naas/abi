@@ -574,6 +574,16 @@ async def stream_chat_response(
             routed_llm = apply_documents_model_override(
                 incoming_llm, client_ctx, request.message
             )
+    if provider.type == "abi" and (provider.endpoint or "").startswith(
+        "inprocess://"
+    ):
+        from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
+            resolve_inprocess_llm_model_for_turn,
+        )
+
+        resolved = resolve_inprocess_llm_model_for_turn(provider.model, routed_llm)
+        if resolved:
+            routed_llm = resolved
     provider_config = ProviderConfig(
         id=provider.id,
         name=provider.name,
