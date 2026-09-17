@@ -4349,6 +4349,21 @@ const MessageBubble = React.memo(function MessageBubble({
           </LinkWithPreview>
         );
       },
+      // GFM tables are wider than the bubble: wrap them so they scroll inside
+      // it instead of spilling over the message. Cell styling lives in
+      // globals.css under .chat-message-body.
+      table: ({
+        children,
+        node: _node,
+        ...props
+      }: React.TableHTMLAttributes<HTMLTableElement> & {
+        children?: React.ReactNode;
+        node?: unknown;
+      }) => (
+        <div className="chat-table-scroll">
+          <table {...props}>{children}</table>
+        </div>
+      ),
       pre: ({
         children,
         ...props
@@ -4436,7 +4451,14 @@ const MessageBubble = React.memo(function MessageBubble({
           <Bot size={16} />
         )}
       </div>
-      <div className={cn('max-w-[80%] space-y-1', isUser && 'flex flex-col items-end')}>
+      {/* Assistant answers take the rest of the row (tables need the width);
+          user messages stay a right-aligned bubble. */}
+      <div
+        className={cn(
+          'min-w-0 space-y-1',
+          isUser ? 'flex max-w-[80%] flex-col items-end' : 'flex-1'
+        )}
+      >
         {/* Attached images (for user messages) */}
         {isUser && message.images && message.images.length > 0 && (
           <div className={cn('flex flex-wrap gap-2 mb-2', isUser && 'justify-end')}>
