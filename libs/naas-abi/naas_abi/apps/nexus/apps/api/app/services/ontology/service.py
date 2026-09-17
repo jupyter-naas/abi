@@ -11,6 +11,7 @@ from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
     filter_ontology_catalog,
+    ontology_matches_seed,
 )
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import (
     OntologyFileItemData,
@@ -28,12 +29,16 @@ from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import 
     ReferenceOntologyData,
     ReferencePropertyData,
 )
+from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_imports import (
+    clear_catalog_import_caches,
+    load_catalog_import_graph,
+)
 from naas_abi_core import logger
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from rdflib import Graph
-from rdflib.namespace import OWL, RDF, RDFS
+from rdflib.namespace import DC, DCTERMS, OWL, RDF, RDFS
 from rdflib.query import ResultRow
 from rdflib.term import URIRef
 
@@ -46,10 +51,10 @@ _graph_with_imports_cache: dict[str, Graph] = {}
 def clear_graph_caches() -> None:
     """Clear every in-memory and filesystem ontology cache.
 
-    Called by the API refresh endpoint so the next graph request rebuilds
-    everything from disk, including re-resolving all owl:imports.
+    Trusted internal reset. HTTP refresh only clears permission-keyed snapshots.
     """
     global _dynamic_uri_map_populated
+    clear_catalog_import_caches()
     _graph_with_imports_cache.clear()
     _dynamic_uri_to_path.clear()
     _suffix_to_dynamic_path.clear()
@@ -591,9 +596,12 @@ class OntologyService:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    async def clear_cache(self) -> None:
-        """Clear all in-memory and filesystem ontology graph caches."""
-        clear_graph_caches()
+    async def clear_cache(self, catalog_refs: list[str] | None = None) -> None:
+        """Workspace refresh only invalidates permission-keyed graph snapshots."""
+        if catalog_refs is not None:
+            clear_catalog_import_caches()
+        else:
+            clear_graph_caches()
 
     async def list_items(
         self, catalog_refs: list[str] | None = None
@@ -624,8 +632,10 @@ class OntologyService:
             except Exception:
                 logger.exception("Could not read dictionary source %s", file.path)
                 errors.append({"path": file.path, "name": file.name, "message": "Could not read this ontology file."})
+        declarations = build_workspace_dictionary(sources, include_ontologies=True)
         return {
-            "items": build_workspace_dictionary(sources),
+            "items": [item for item in declarations if item["type"] != "ontology"],
+            "ontologies": [item for item in declarations if item["type"] == "ontology"],
             "file_count": len(files), "loaded_file_count": len(sources),
             "errors": errors, "complete": not errors,
         }
@@ -723,8 +733,8 @@ class OntologyService:
         self, catalog_refs: list[str] | None = None
     ) -> list[OntologyFileItemData]:
         """List ontology files from registered modules, optionally seed-filtered."""
-        from rdflib import DCTERMS, OWL, RDF, Graph, URIRef
-
+        if catalog_refs == []:
+            return []
         try:
             abi_module = self._get_abi_module()
             abi_ontologies: list[str] = list(abi_module.ontologies)
@@ -745,6 +755,15 @@ class OntologyService:
                 if "sandbox" in ontology.lower() or not {"modules", "processes"}.intersection(catalog_folders):
                     continue
 
+                parts = ontology.split("/")
+                try:
+                    idx = parts.index("ontologies")
+                    module_name = parts[idx - 1] if idx > 0 else ""
+                except ValueError:
+                    module_name = parts[0] if parts else ""
+                if catalog_refs is not None and not ontology_matches_seed(ontology, module_name, catalog_refs):
+                    continue
+
                 ontology_graph = Graph()
                 ontology_graph.parse(ontology, format="turtle")
 
@@ -761,13 +780,6 @@ class OntologyService:
                 )
                 date = ontology_graph.value(URIRef(str(ontology_uri)), DCTERMS.date)
                 imports = list(ontology_graph.objects(URIRef(str(ontology_uri)), OWL.imports))
-
-                parts = ontology.split("/")
-                try:
-                    idx = parts.index("ontologies")
-                    module_name = parts[idx - 1] if idx > 0 else ""
-                except ValueError:
-                    module_name = parts[0] if parts else ""
 
                 ontology_files.append(
                     OntologyFileItemData(
@@ -877,10 +889,8 @@ class OntologyService:
         catalog_refs: list[str] | None = None,
     ) -> OntologyOverviewGraphData:
         """Return ontology dependency/class graph."""
-        store = self._get_triple_store()
         try:
             ontologies = await self.list_ontology_files(catalog_refs=catalog_refs)
-            _populate_dynamic_uri_map([item.path for item in ontologies])
             target_paths = self._resolve_ontology_paths(ontology_path, ontologies)
 
             if ontology_path:
@@ -943,7 +953,7 @@ class OntologyService:
                     # module-only graph: used for all queries (classes, properties, restrictions)
                     graph = _load_ontology_graph(path)
                     # imports graph: used only for BFO ancestor resolution — not for queries
-                    ancestor_graph = _load_ontology_graph_with_imports_cached(path)
+                    ancestor_graph = load_catalog_import_graph(path, [item.path for item in ontologies], _IMPORT_URI_TO_LOCAL)
 
                     for prefix, namespace in graph.namespaces():
                         p = str(prefix)
@@ -1180,7 +1190,13 @@ class OntologyService:
                     ontology_iri = str(subject)
                     if not ontology_iri or ontology_iri in ontologies_by_iri:
                         continue
-                    meta = _get_ontology_metadata(store, ontology_iri)
+                    subject = URIRef(ontology_iri)
+                    meta = {key: graph.value(subject, predicate) for key, predicate in {
+                        "label": RDFS.label, "comment": RDFS.comment, "versionInfo": OWL.versionInfo,
+                        "title": DCTERMS.title, "description": DCTERMS.description,
+                        "license": DCTERMS.license, "date": DCTERMS.date,
+                    }.items()}
+                    meta["date"] = meta["date"] or graph.value(subject, DC.date)
                     title = meta.get("title", "")
                     label = meta.get("label", "")
                     properties: dict[str, str] = {"iri": ontology_iri, "source_path": path}
@@ -1263,6 +1279,7 @@ class OntologyService:
         self,
         class_iris: list[str],
         ontology_path: str,
+        catalog_refs: list[str] | None = None,
     ) -> OntologyOverviewGraphData:
         """Return direct rdfs:subClassOf parents for the given class IRIs.
 
@@ -1272,7 +1289,9 @@ class OntologyService:
         if not class_iris:
             return OntologyOverviewGraphData(nodes=[], edges=[])
 
-        ancestor_graph = _load_ontology_graph_with_imports_cached(ontology_path)
+        ontologies = await self.list_ontology_files(catalog_refs=catalog_refs)
+        self._resolve_ontology_paths(ontology_path, ontologies)
+        ancestor_graph = load_catalog_import_graph(ontology_path, [item.path for item in ontologies], _IMPORT_URI_TO_LOCAL)
 
         # Build equivalence normalisation map: BFO IRI → canonical ABI IRI
         _cp_equiv: dict[str, str] = {}
@@ -1365,6 +1384,7 @@ class OntologyService:
         self,
         class_iris: list[str],
         ontology_path: str,
+        catalog_refs: list[str] | None = None,
     ) -> OntologyOverviewGraphData:
         """Return the full rdfs:subClassOf hierarchy for the given class IRIs.
 
@@ -1382,7 +1402,9 @@ class OntologyService:
         if not class_iris:
             return OntologyOverviewGraphData(nodes=[], edges=[])
 
-        ancestor_graph = _load_ontology_graph_with_imports_cached(ontology_path)
+        ontologies = await self.list_ontology_files(catalog_refs=catalog_refs)
+        self._resolve_ontology_paths(ontology_path, ontologies)
+        ancestor_graph = load_catalog_import_graph(ontology_path, [item.path for item in ontologies], _IMPORT_URI_TO_LOCAL)
 
         # 1. Collect every (sub, super) edge in the upward closure with one SPARQL query.
         iris_values = " ".join(f"<{iri}>" for iri in class_iris)

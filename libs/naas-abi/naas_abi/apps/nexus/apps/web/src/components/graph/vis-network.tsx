@@ -775,6 +775,8 @@ interface VisNetworkProps {
   selectedEdgeIds?: string[];
   onNodeSelect: (nodeId: string | null) => void;
   onNodeDoubleClick?: (nodeId: string) => void;
+  /** Double-click the canvas to centre and zoom into that point. Node actions take priority. */
+  zoomOnDoubleClick?: boolean;
   /** Use supplied node coordinates without the initial physics simulation. */
   fixedLayout?: boolean;
   /** Draw system navigation levels in the workspace accent, without ontology arrows. */
@@ -851,6 +853,7 @@ export function VisNetwork({
   selectedEdgeIds = [],
   onNodeSelect,
   onNodeDoubleClick,
+  zoomOnDoubleClick = false,
   fixedLayout: suppliedFixedLayout = false,
   systemOverview = false,
   processOverview = false,
@@ -883,6 +886,7 @@ export function VisNetwork({
   const edgesDataRef = useRef<DataSet<Edge>>(new DataSet());
   const onNodeSelectRef = useRef(onNodeSelect);
   const onNodeDoubleClickRef = useRef(onNodeDoubleClick);
+  const zoomOnDoubleClickRef = useRef(zoomOnDoubleClick);
   const onEdgeSelectRef = useRef(onEdgeSelect);
   const getNodeTitleRef = useRef(getNodeTitle);
   useEffect(() => { getNodeTitleRef.current = getNodeTitle; }, [getNodeTitle]);
@@ -974,8 +978,9 @@ export function VisNetwork({
   useEffect(() => {
     onNodeSelectRef.current = onNodeSelect;
     onNodeDoubleClickRef.current = onNodeDoubleClick;
+    zoomOnDoubleClickRef.current = zoomOnDoubleClick;
     onEdgeSelectRef.current = onEdgeSelect;
-  }, [onNodeSelect, onNodeDoubleClick, onEdgeSelect]);
+  }, [onNodeSelect, onNodeDoubleClick, onEdgeSelect, zoomOnDoubleClick]);
 
   const nodesByIri = useMemo(() => {
     const map = new Map<string, GraphNode>();
@@ -1298,7 +1303,21 @@ export function VisNetwork({
     });
 
     networkRef.current.on('doubleClick', (params) => {
-      if (params.nodes.length) onNodeDoubleClickRef.current?.(params.nodes[0] as string);
+      if (params.nodes.length) {
+        onNodeDoubleClickRef.current?.(params.nodes[0] as string);
+        return;
+      }
+      const net = networkRef.current;
+      const position = params.pointer?.canvas;
+      if (!zoomOnDoubleClickRef.current || !net || !position) return;
+      const scale = net.getScale();
+      net.moveTo({
+        position,
+        // Make the first zoom readable from an overview, then double each step.
+        // Keep the native wheel ceiling without zooming an existing view out.
+        scale: Math.max(scale, Math.min(10, Math.max(1, scale * 2))),
+        animation: { duration: 250, easingFunction: 'easeInOutQuad' },
+      });
     });
 
     // Observe the container and redraw inside requestAnimationFrame. Deferring
@@ -1849,6 +1868,11 @@ export function VisNetwork({
   return (
     <>
       <style jsx global>{`
+        /* Canvas focus keeps keyboard navigation without framing the whole graph. */
+        .vis-network:focus, .vis-network.vis-active {
+          outline: none;
+          box-shadow: none;
+        }
         /* Style vis-network navigation buttons to match platform */
         .vis-navigation {
           position: absolute !important;
@@ -1862,7 +1886,7 @@ export function VisNetwork({
           height: 32px !important;
           background-color: hsl(var(--card)) !important;
           border: 1px solid hsl(var(--border)) !important;
-          border-radius: 8px !important;
+          border-radius: 0 !important;
           box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1) !important;
           background-size: 16px 16px !important;
           background-position: center !important;

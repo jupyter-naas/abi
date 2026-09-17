@@ -38,6 +38,9 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(data["file_count"], 1)
             self.assertEqual(data["loaded_file_count"], 1)
             self.assertEqual(data["items"][0]["systemViewKind"], "system")
+            self.assertEqual([item["id"] for item in data["ontologies"]], ["urn:ontology"])
+            self.assertEqual(data["ontologies"][0]["metadata"]["label"], [str(root / "processes" / "Ledger.ttl")])
+            self.assertEqual((await service.workspace_dictionary([]))["ontologies"], [])
             self.assertEqual(await service.list_ontology_files(catalog_refs=[]), [])
 
     async def test_abi_process_catalog_contains_system_and_all_processes(self):

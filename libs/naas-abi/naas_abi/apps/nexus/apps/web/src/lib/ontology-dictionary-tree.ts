@@ -6,6 +6,8 @@ export type DictionaryTerm = {
   type: 'entity' | 'relationship' | 'attribute' | 'annotation' | 'individual';
   sources?: Array<{ path: string; name: string; moduleName: string }>;
   definitions?: Array<{ value: string; source_path: string }>;
+  /** File paths with non-empty literals for these exact RDF predicates. */
+  metadata?: Record<'label' | 'definition' | 'example', string[]>;
   parents?: DictionaryLink[];
   equivalents?: DictionaryLink[];
   systemViewKind?: string | null;

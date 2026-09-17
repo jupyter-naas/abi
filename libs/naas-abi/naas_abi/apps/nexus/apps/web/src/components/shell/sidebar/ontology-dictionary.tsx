@@ -8,13 +8,24 @@ import { useOntologyStore } from '@/stores/ontology';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { cn } from '@/lib/utils';
 import { buildDictionaryTree, filterDictionaryTree, dictionaryKindLabel, type DictionaryNode, type DictionaryTerm } from '@/lib/ontology-dictionary-tree';
-import { dictionaryFilter, dictionaryFilterRoute, termTabs, kindForView, termRoute } from '@/lib/ontology-navigation';
-import { dictionaryFiles, dictionaryFilesRoute, filterTermsByFiles, type DictionaryFile } from '@/lib/ontology-file-filter';
+import { dictionaryFilters, dictionaryFiltersRoute, termRoute } from '@/lib/ontology-navigation';
+import { dictionaryFiles, dictionaryFilesRoute, type DictionaryFile } from '@/lib/ontology-file-filter';
+import { systemOntologyPaths } from '@/lib/ontology-system-filter';
 import { getWorkspacePath } from './utils';
 import { OntologyTopicIcon } from '@/components/ontology/ontology-topic-icon';
 import { OntologySystemTree } from '@/components/ontology/ontology-system-tree';
+import { OntologySystemPicker } from './ontology-system-picker';
 import { OntologyFilePicker } from './ontology-file-picker';
+import { OntologyMultiPicker } from './ontology-multi-picker';
 import { useOntologyTreeKeyboard } from '@/hooks/use-ontology-tree-keyboard';
+
+const TYPE_OPTIONS: Array<{value: DictionaryTerm['type']; label: string}> = [
+  {value: 'entity', label: 'Classes'},
+  {value: 'relationship', label: 'Object Properties'},
+  {value: 'attribute', label: 'Data Properties'},
+  {value: 'annotation', label: 'Annotation Properties'},
+  {value: 'individual', label: 'Individuals'},
+];
 
 export function OntologyDictionary({files, filesLoading, filesError}: {
   files: DictionaryFile[]; filesLoading: boolean; filesError: string | null;
@@ -36,7 +47,8 @@ export function OntologyDictionary({files, filesLoading, filesError}: {
   const latestQuery = useRef(routeQuery);
   useEffect(() => { latestQuery.current = routeQuery; }, [routeQuery]);
   const selectedFiles = useMemo(() => dictionaryFiles(routeQuery), [routeQuery]);
-  const fileTerms = useMemo(() => filterTermsByFiles(terms, selectedFiles), [terms, selectedFiles]);
+  const systemPaths = useMemo(() => systemOntologyPaths(terms, routeQuery), [terms, routeQuery]);
+  const fileTerms = useMemo(() => terms.filter(term => (!selectedFiles.length && systemPaths === null) || term.sources?.some(source => (systemPaths === null || systemPaths.has(source.path)) && (!selectedFiles.length || selectedFiles.includes(source.path)))), [terms, selectedFiles, systemPaths]);
   function updateFiles(path?: string) {
     const selected = dictionaryFiles(latestQuery.current);
     const nextPaths = !path ? [] : selected.includes(path) ? selected.filter(value => value !== path) : [...selected, path];
@@ -47,7 +59,16 @@ export function OntologyDictionary({files, filesLoading, filesError}: {
   const [preferredLayout, setLayout] = useState<'alphabetical' | 'hierarchy' | 'buckets'>(systemMode ? 'buckets' : 'alphabetical');
   const layout = !systemMode && preferredLayout === 'buckets' ? 'alphabetical' : preferredLayout;
   const bucketsView = layout === 'buckets';
-  const kind = dictionaryFilter(searchParams?.toString() || '');
+  const kinds = useMemo(() => dictionaryFilters(routeQuery), [routeQuery]);
+  const typeLabel = !kinds.length ? 'All types' : kinds.length === 1 ? TYPE_OPTIONS.find(option => option.value === kinds[0])!.label : `${kinds.length} types selected`;
+  function updateTypes(type?: DictionaryTerm['type']) {
+    const current = dictionaryFilters(latestQuery.current);
+    const selected = !type ? [] : current.includes(type) ? current.filter(value => value !== type) : [...current, type];
+    const next = dictionaryFiltersRoute(latestQuery.current, selected);
+    latestQuery.current = next.toString();
+    if (bucketsView) setLayout('alphabetical');
+    router.push(`?${next}`, {scroll: false});
+  }
   const [closed, setClosed] = useState<Set<string>>(new Set());
   useEffect(() => { setClosed(new Set()); }, [query]);
   function toggleNode(id: string) {
@@ -59,7 +80,7 @@ export function OntologyDictionary({files, filesLoading, filesError}: {
     setClosed(new Set());
   }, [workspaceId, refresh, load]);
 
-  const scopedTerms = useMemo(() => fileTerms.filter(term => kind === 'all' || term.type === kind), [fileTerms, kind]);
+  const scopedTerms = useMemo(() => fileTerms.filter(term => !kinds.length || kinds.includes(term.type)), [fileTerms, kinds]);
   const matches = useMemo(() => scopedTerms.filter(term => `${term.name} ${term.description || ''}`.toLowerCase().includes(query.trim().toLowerCase())), [scopedTerms, query]);
   const tree = useMemo(() => filterDictionaryTree(buildDictionaryTree(scopedTerms), query), [scopedTerms, query]);
 
@@ -97,20 +118,20 @@ export function OntologyDictionary({files, filesLoading, filesError}: {
   }
 
   return <div className="space-y-2 px-2 pb-3">
+    <div className="ontology-sidebar-filters">
+      <OntologySystemPicker />
+      <OntologyFilePicker key={workspaceId} files={files} value={selectedFiles} onToggle={updateFiles} onClear={() => updateFiles()} loading={filesLoading} error={filesError} />
+      <OntologyMultiPicker key={`types:${workspaceId}`} items={TYPE_OPTIONS} value={kinds}
+        onToggle={type => updateTypes(type as DictionaryTerm['type'])} onClear={() => updateTypes()}
+        loading={false} error={null} label={typeLabel} noun="types" allLabel="All types" />
+    </div>
     <label className="relative block"><Search size={13} className="absolute left-2 top-2.5 text-muted-foreground" />
-      <input aria-label={bucketsView ? 'Search system elements' : 'Search terms and definitions'} placeholder={bucketsView ? 'Search system elements…' : 'Search terms and definitions…'} value={query} onChange={event => setQuery(event.target.value)}
+      <input aria-label={bucketsView ? 'Search system elements' : 'Search types and definitions'} placeholder={bucketsView ? 'Search system elements…' : 'Search types and definitions…'} value={query} onChange={event => setQuery(event.target.value)}
         className="w-full rounded-md border bg-background py-2 pl-7 pr-2 text-xs" /></label>
-    <OntologyFilePicker key={workspaceId} files={files} value={selectedFiles} onToggle={updateFiles} onClear={() => updateFiles()} loading={filesLoading} error={filesError} />
     <div className="flex flex-wrap gap-1" aria-label="Sidebar view">
       {(['alphabetical', 'hierarchy', ...(systemMode ? ['buckets' as const] : [])] as const).map(value => <button key={value} type="button" aria-pressed={layout === value} onClick={() => { setLayout(value); if (bucketsView !== (value === 'buckets')) setQuery(''); }}
         className={cn('rounded-md px-2 py-1 text-xs', layout === value ? 'bg-workspace-accent-10 text-workspace-accent' : 'text-muted-foreground hover:bg-muted')}>
         {value === 'alphabetical' ? 'A–Z' : value === 'hierarchy' ? 'Hierarchy' : '7 buckets'}</button>)}
-      {!bucketsView && <select aria-label="Filter dictionary by term type" value={kind}
-        onChange={event => router.push(`?${dictionaryFilterRoute(searchParams?.toString() || '', event.target.value as DictionaryTerm['type'] | 'all')}`, {scroll: false})}
-        className="ml-auto min-w-0 max-w-full rounded border bg-background px-2 py-1 text-xs">
-        <option value="all">All terms</option>
-        {termTabs.map(([view, label]) => <option key={view} value={kindForView(view)}>{label}</option>)}
-      </select>}
     </div>
     {loading ? <p role="status" className="text-xs text-muted-foreground">Loading terms…</p>
       : error ? <div role="alert" className="text-xs text-destructive">{error} <button type="button" onClick={() => { if (workspaceId) void load(workspaceId, refresh, true); }} className="underline">Retry</button></div>

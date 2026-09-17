@@ -111,9 +111,9 @@ export function OntologyTermNetwork({ term, terms, systemSidebar = false }: { te
       </>}
     </div>
     <div className="ontology-term-body" onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); selectNode(null); } }}>
-    <div className="ontology-term-canvas" data-process-overview={processView || undefined} data-bucket-legend={!systemSidebar || undefined}>
+    <div className="ontology-term-canvas" data-process-overview={processView || undefined}>
       <div className="ontology-term-viewport">
-        <VisNetwork key={`${processView ? 'process' : 'ontology'}:${layout}`} spacingKey={spacing.value} minimumAutoFitScale={1} nodes={canvasNodes} edges={visible.edges} selectedNodeId={selectedNode?.id || null}
+        <VisNetwork zoomOnDoubleClick key={`${processView ? 'process' : 'ontology'}:${layout}`} spacingKey={spacing.value} minimumAutoFitScale={1} nodes={canvasNodes} edges={visible.edges} selectedNodeId={selectedNode?.id || null}
           selectedEdgeIds={selectedEdge ? [selectedEdge.id] : []}
           onNodeSelect={selectNode}
           onEdgeSelect={id => { setSelectedEdgeId(id); if (id) setSelectedNodeId(null); }}

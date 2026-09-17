@@ -6,6 +6,7 @@ import { Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
+import { ontologyApiQuery } from '@/lib/ontology-query';
 import { useOntologyStore } from '@/stores/ontology';
 import { browserRoute, viewRoute, termTabs, ontologyBrowser } from '@/lib/ontology-navigation';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -92,7 +93,7 @@ export function OntologyMenuBar() {
             setRefreshing(true); setRefreshError(null);
             void (async () => {
               try {
-                const response = await authFetch(`${getApiUrl()}/api/ontology/cache/clear`, { method: 'POST' });
+                const response = await authFetch(`${getApiUrl()}/api/ontology/cache/clear${ontologyApiQuery()}`, { method: 'POST' });
                 if (!response.ok) throw new Error(`Refresh failed (${response.status}).`);
                 useOntologyStore.setState(state => ({ graphRefreshTrigger: state.graphRefreshTrigger + 1 }));
               } catch (error) {

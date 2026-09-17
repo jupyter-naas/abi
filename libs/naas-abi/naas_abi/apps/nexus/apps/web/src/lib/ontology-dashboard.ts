@@ -1,16 +1,57 @@
 import type { DictionaryTerm } from './ontology-dictionary-tree';
 import type { DictionaryFile } from './ontology-file-filter';
 import { termKey } from './ontology-context';
+import { dictionaryFilter, dictionaryFilterRoute } from './ontology-navigation';
 
 export const DASHBOARD_KINDS = [
-  { type: 'entity', label: 'Classes', symbol: 'Cl', color: '#3b82f6' },
-  { type: 'relationship', label: 'Object properties', symbol: 'Op', color: '#16a34a' },
-  { type: 'attribute', label: 'Data properties', symbol: 'Dp', color: '#9333ea' },
-  { type: 'annotation', label: 'Annotations', symbol: 'An', color: '#d97706' },
+  { type: 'ontology', label: 'Ontology', symbol: 'On', color: '#64748b' },
+  { type: 'entity', label: 'Class', symbol: 'Cl', color: '#3b82f6' },
+  { type: 'relationship', label: 'Object Property', symbol: 'Op', color: '#16a34a' },
+  { type: 'attribute', label: 'Data Property', symbol: 'Dp', color: '#9333ea' },
+  { type: 'annotation', label: 'Annotation Property', symbol: 'An', color: '#d97706' },
   { type: 'individual', label: 'Individuals', symbol: 'In', color: '#64748b' },
 ] as const;
 export type DashboardFile = DictionaryFile & { description?: string };
 export type DashboardTile = DashboardFile & { symbol: string; index: number; terms: DictionaryTerm[]; failed: boolean };
+export type OntologyDeclaration = Pick<DictionaryTerm, 'id' | 'name' | 'sources' | 'metadata'> & { type: 'ontology' };
+
+export const DASHBOARD_METADATA = [
+  { key: 'label', label: 'RDFS:label', predicate: 'rdfs:label' },
+  { key: 'definition', label: 'SKOS definition', predicate: 'skos:definition' },
+  { key: 'example', label: 'SKOS example', predicate: 'skos:example' },
+] as const;
+
+/** A declaration in several files counts once; file filters also scope its annotations. */
+export function dashboardCoverage(items: Array<DictionaryTerm | OntologyDeclaration>, paths: string[]) {
+  const declarations = new Map<string, Array<DictionaryTerm | OntologyDeclaration>>();
+  for (const item of items) {
+    if (!item.sources?.some(source => paths.includes(source.path))) continue;
+    const key = `${item.type}:${item.id}`;
+    declarations.set(key, [...(declarations.get(key) || []), item]);
+  }
+  const total = declarations.size;
+  return { total, metrics: DASHBOARD_METADATA.map(field => {
+    const present = [...declarations.values()].filter(copies => copies.some(item =>
+      item.metadata?.[field.key].some(path => paths.includes(path)))).length;
+    return { ...field, present, missing: total - present, ratio: total ? present / total : null };
+  }) };
+}
+
+export function dashboardOntologies(ontologies: OntologyDeclaration[], paths: string[]) {
+  return [...new Map(ontologies.filter(item => item.sources?.some(source => paths.includes(source.path)))
+    .map(item => [item.id, item])).values()];
+}
+
+/** Ontology tiles open their existing file view; other kinds retain the term filter route. */
+export function dashboardKindRoute(query: string, type: typeof DASHBOARD_KINDS[number]['type']) {
+  const params = new URLSearchParams(query);
+  const active = params.get('dashboardType') === 'ontology' ? 'ontology' : dictionaryFilter(query);
+  const next = dictionaryFilterRoute(query, type === 'ontology' || active === type ? 'all' : type);
+  next.set('view', 'overview');
+  next.delete('dashboardType');
+  if (type === 'ontology' && active !== type) next.set('dashboardType', 'ontology');
+  return next;
+}
 
 export function ontologySymbol(name: string) {
   const words = name.replace(/\.ttl$/i, '').replace(/([a-z])([A-Z])/g, '$1 $2')
@@ -39,6 +80,7 @@ export function dashboardTerms(tiles: DashboardTile[]) {
 export function dashboardRoute(query: string, file?: string) {
   const params = new URLSearchParams(query);
   params.set('view', 'overview');
+  params.delete('dashboardType');
   ['term', 'termType', 'system', 'subsystem', 'process'].forEach(key => params.delete(key));
   if (file) params.set('dashboardFile', file); else params.delete('dashboardFile');
   return params;

@@ -896,6 +896,7 @@ function OntologyNetworkView({
             </div>
           ) : (
             <VisNetwork
+              zoomOnDoubleClick
               spacingKey={spacing.value}
               minimumAutoFitScale={1}
               nodeSpacing={spacing.gap}

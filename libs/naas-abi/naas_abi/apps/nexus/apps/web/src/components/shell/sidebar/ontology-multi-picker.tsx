@@ -8,8 +8,8 @@ import './ontology-picker.css';
 
 export type OntologyPickerOption = { value: string; label: string; detail?: string; title?: string };
 
-/** Shared keyboard-accessible, cumulative picker for ontology files and systems. */
-export function OntologyMultiPicker({ items, value, onToggle, onClear, loading, error, label, allLabel, noun, arrowOnly = false, popupAnchorRef }: {
+/** Shared keyboard-accessible, cumulative picker for ontology files, systems and types. */
+export function OntologyMultiPicker({ items, value, onToggle, onClear, loading, error, label, allLabel, noun, arrowOnly = false, popupAnchorRef, action }: {
   items: OntologyPickerOption[];
   value: string[];
   onToggle: (value: string) => void;
@@ -21,6 +21,7 @@ export function OntologyMultiPicker({ items, value, onToggle, onClear, loading, 
   noun: string;
   arrowOnly?: boolean;
   popupAnchorRef?: RefObject<HTMLElement>;
+  action?: { label: string; onClick: () => void };
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -30,6 +31,7 @@ export function OntologyMultiPicker({ items, value, onToggle, onClear, loading, 
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const actionRef = useRef<HTMLButtonElement>(null);
   const listId = useId();
   const options = useMemo(() => items.filter(item => `${item.label} ${item.detail || ''}`.toLowerCase().includes(query.trim().toLowerCase())), [items, query]);
   const available = !loading && !error;
@@ -104,7 +106,10 @@ export function OntologyMultiPicker({ items, value, onToggle, onClear, loading, 
         <input ref={searchRef} value={query} onChange={event => { setQuery(event.target.value); setActiveIndex(0); }}
           onKeyDown={event => {
             if (event.key === 'Escape') { event.preventDefault(); close(true); }
-            else if (event.key === 'Tab') close(true);
+            else if (event.key === 'Tab') {
+              if (action && !event.shiftKey) { event.preventDefault(); actionRef.current?.focus(); }
+              else close(true);
+            }
             else if (event.key === 'ArrowDown') { event.preventDefault(); setActiveIndex(Math.min(active + 1, optionCount - 1)); }
             else if (event.key === 'ArrowUp') { event.preventDefault(); setActiveIndex(Math.max(active - 1, 0)); }
             else if (event.key === 'Enter') { event.preventDefault(); pick(active); }
@@ -136,6 +141,12 @@ export function OntologyMultiPicker({ items, value, onToggle, onClear, loading, 
           : !options.length && <p role="status" className="px-3 py-4 text-xs text-muted-foreground">No matching {noun}.</p>}
         {available && unavailableCount > 0 && <p role="status" className="border-t px-3 py-2 text-xs text-muted-foreground">{unavailableCount} selected {noun} unavailable. Choose {allLabel} to reset.</p>}
       </div>
+      {action && <button ref={actionRef} type="button" className="ontology-picker-action"
+        onKeyDown={event => {
+          if (event.key === 'Escape') { event.preventDefault(); close(true); }
+          else if (event.key === 'Tab' && event.shiftKey) { event.preventDefault(); searchRef.current?.focus(); }
+        }}
+        onClick={() => { close(true); action.onClick(); }}>{action.label}</button>}
     </div>, document.body)}
   </div>;
 }

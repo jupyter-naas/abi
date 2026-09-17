@@ -88,8 +88,8 @@ export function OntologySystemView({ terms, loading, error, partial }: { terms: 
         <div className="ontology-system-body" onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); setSelected(null); } }}>
         <div className="ontology-system-canvas">
           <div className="ontology-system-viewport">
-            <VisNetwork key={graphKey} spacingKey={spacing.value} minimumAutoFitScale={1} nodes={canvasNodes} edges={graph.edges} selectedNodeId={selectedNode?.id || null}
-              onNodeSelect={selectNode} onEdgeSelect={() => setSelected(null)} onNodeDoubleClick={selectNode}
+            <VisNetwork zoomOnDoubleClick key={graphKey} spacingKey={spacing.value} minimumAutoFitScale={1} nodes={canvasNodes} edges={graph.edges} selectedNodeId={selectedNode?.id || null}
+              onNodeSelect={selectNode} onEdgeSelect={() => setSelected(null)} onNodeDoubleClick={drill}
               orthogonalEdges={params?.get('connectors') !== 'curved'} fixedLayout systemOverview fillContainer physicsEnabled={false} preserveZoomOnResize preserveZoomOnSelection focusOnSelection focusRequestKey={focusRequestKey}
               viewStateKey={`ontology:system:${graphKey}`} />
           </div>

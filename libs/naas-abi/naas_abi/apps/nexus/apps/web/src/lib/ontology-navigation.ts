@@ -11,44 +11,62 @@ export const termTabs = [
 export function kindForView(view: string) {
   return (Object.keys(termViews) as DictionaryTerm['type'][]).find(kind => termViews[kind] === view);
 }
-export function dictionaryFilter(current: string): DictionaryTerm['type'] | 'all' {
+/** Repeated termFilter values accumulate; an empty selection means all types. */
+export function dictionaryFilters(current: string): DictionaryTerm['type'][] {
   const params = new URLSearchParams(current);
-  const filter = params.get('termFilter');
-  if (filter === 'all') return 'all';
-  if (filter && Object.prototype.hasOwnProperty.call(termViews, filter)) return filter as DictionaryTerm['type'];
-  return kindForView(params.get('view') || '') || 'all';
+  const filters = params.getAll('termFilter');
+  if (filters.includes('all')) return [];
+  const selected = [...new Set(filters.filter((filter): filter is DictionaryTerm['type'] => Object.prototype.hasOwnProperty.call(termViews, filter)))];
+  if (selected.length) return selected;
+  const inferred = kindForView(params.get('view') || '');
+  return inferred ? [inferred] : [];
+}
+export function dictionaryFilter(current: string): DictionaryTerm['type'] | 'all' {
+  const filters = dictionaryFilters(current);
+  return filters.length === 1 ? filters[0] : 'all';
+}
+function writeDictionaryFilters(params: URLSearchParams, filters: DictionaryTerm['type'][]) {
+  params.delete('termFilter');
+  if (!filters.length) params.set('termFilter', 'all');
+  else [...new Set(filters)].forEach(filter => params.append('termFilter', filter));
+}
+export function dictionaryFiltersRoute(current: string, filters: DictionaryTerm['type'][]) {
+  const params = new URLSearchParams(current);
+  const selected = [...new Set(filters)].filter(filter => Object.prototype.hasOwnProperty.call(termViews, filter));
+  writeDictionaryFilters(params, selected);
+  params.delete('dashboardType');
+  if (selected.length && !selected.includes(params.get('termType') as DictionaryTerm['type'])) {
+    params.delete('term'); params.delete('termType');
+    if (kindForView(params.get('view') || '')) params.set('view', termViews[selected[0]]);
+  }
+  return params;
 }
 export function dictionaryFilterRoute(current: string, filter: DictionaryTerm['type'] | 'all') {
-  const params = new URLSearchParams(current);
-  params.set('termFilter', filter);
-  if (filter !== 'all' && params.get('termType') !== filter) {
-    params.delete('term'); params.delete('termType');
-  }
-  if (kindForView(params.get('view') || '') && filter !== 'all') params.set('view', termViews[filter]);
-  return params;
+  return dictionaryFiltersRoute(current, filter === 'all' ? [] : [filter]);
 }
 export function termRoute(current: string, term: Pick<DictionaryTerm, 'id' | 'type'>) {
   const params = new URLSearchParams(current);
   ['system', 'subsystem', 'process'].forEach(key => params.delete(key));
   params.set('term', term.id); params.set('termType', term.type);
   params.set('view', termViews[term.type]);
-  // A linked term must remain visible when it belongs to a different kind.
-  if (params.has('termFilter') && params.get('termFilter') !== 'all') params.set('termFilter', term.type);
+  // Following a linked type expands the selection without discarding checked types.
+  const filters = dictionaryFilters(current);
+  if (params.has('termFilter') && filters.length && !filters.includes(term.type)) writeDictionaryFilters(params, [...filters, term.type]);
   return params;
 }
 export function viewRoute(current: string, view: string) {
   if (view === 'system') return systemRoute(current);
   const params = new URLSearchParams(current);
-  const filter = dictionaryFilter(current);
+  const filters = dictionaryFilters(current);
   const canvasView = ['details', 'network', 'overview'].includes(view);
   if (view === 'details') {
     const selectedKind = params.get('termType');
     const selectedView = selectedKind && Object.prototype.hasOwnProperty.call(termViews, selectedKind) ? termViews[selectedKind as DictionaryTerm['type']] : undefined;
-    view = selectedView || (filter === 'all' ? 'classes' : termViews[filter]);
+    view = selectedView || (filters.length ? termViews[filters[0]] : 'classes');
   }
   params.set('view', view);
   const kind = kindForView(view);
-  if (ontologyBrowser(current) === 'dictionary') params.set('termFilter', !canvasView && kind ? kind : filter);
+  if (ontologyBrowser(current) === 'dictionary') writeDictionaryFilters(params, !canvasView && kind ? [kind] : filters);
   if (kind && params.get('termType') !== kind) {
     params.delete('term'); params.delete('termType');
   }

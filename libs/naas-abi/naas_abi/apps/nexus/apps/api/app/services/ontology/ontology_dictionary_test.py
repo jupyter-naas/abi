@@ -15,7 +15,7 @@ PREFIX = '''@prefix ex: <https://example.org/> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 '''
-def source(name, content):
+def source(name: str, content: str) -> tuple[dict[str, str], Graph]:
     return ({'path': name + '.ttl', 'name': name, 'moduleName': name}, Graph().parse(data=PREFIX + content, format='turtle'))
 
 class DictionaryTests(unittest.TestCase):
@@ -167,6 +167,41 @@ class DictionaryTests(unittest.TestCase):
 
     def test_empty_catalog_is_empty(self):
         self.assertEqual(build_workspace_dictionary([]), [])
+
+    def test_coverage_uses_exact_nonempty_literals_and_visible_source_paths(self) -> None:
+        items = build_workspace_dictionary([
+            source('one', '''
+                ex:A a owl:Class; rdfs:comment "Not a SKOS definition";
+                    skos:altLabel "Not an RDFS label"; skos:example "  " .
+                ex:Empty a owl:Class; rdfs:label "  "; skos:definition "";
+                    skos:example ex:NotALiteral .
+            '''),
+            source('two', '''
+                ex:A rdfs:label "Explicit label"@fr;
+                    skos:definition "Actual definition"; skos:example "Example" .
+            '''),
+        ])
+        a = next(item for item in items if item['id'].endswith('/A'))
+        self.assertEqual(a['metadata'], {key: ['two.ttl'] for key in ('label', 'definition', 'example')})
+        self.assertEqual([s['path'] for s in a['sources']], ['one.ttl'])
+        empty = next(item for item in items if item['id'].endswith('/Empty'))
+        self.assertEqual(empty['metadata'], {key: [] for key in ('label', 'definition', 'example')})
+
+    def test_ontology_declarations_are_opt_in_deduplicated_and_do_not_follow_imports(self) -> None:
+        sources = [source('one', '''
+            ex:O a owl:Ontology; rdfs:label "Ontology";
+                owl:imports <file:///not-visible.ttl> .
+            ex:A a owl:Class . [] a owl:Ontology .
+        '''), source('two', 'ex:O a owl:Ontology; skos:definition "Shared ontology" .')]
+        self.assertEqual(len(build_workspace_dictionary(sources)), 1)
+        items = build_workspace_dictionary(sources, include_ontologies=True)
+        ontologies = [item for item in items if item['type'] == 'ontology']
+        self.assertEqual(len(items), 2)
+        self.assertEqual(len(ontologies), 1)
+        self.assertEqual(ontologies[0]['id'], 'https://example.org/O')
+        self.assertEqual([s['path'] for s in ontologies[0]['sources']], ['one.ttl', 'two.ttl'])
+        self.assertEqual(ontologies[0]['metadata']['label'], ['one.ttl'])
+        self.assertEqual(ontologies[0]['metadata']['definition'], ['two.ttl'])
 
 if __name__ == '__main__':
     unittest.main()

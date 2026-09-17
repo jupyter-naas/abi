@@ -17,7 +17,6 @@
 .ontology-term-body { display:flex; flex:1; min-width:0; min-height:0; }
 .ontology-term-canvas { position:relative; flex:1; min-width:0; min-height:0; background:var(--background-hex); }
 .ontology-term-viewport { position:absolute; inset:0; display:flex; min-width:0; min-height:0; }
-.ontology-term-canvas[data-bucket-legend] .ontology-term-viewport { right:208px; }
 .ontology-term-canvas > div:last-child:not(.ontology-term-viewport) { max-height:calc(100% - 32px); }
 .ontology-term-status { display:flex; flex-wrap:wrap; align-items:center; gap:12px; min-height:32px; padding:7px 16px; border-top:1px solid var(--border-hex); color:var(--muted-foreground-hex); font-size:12px; }
 .ontology-term-status > span { min-width:0; overflow-wrap:anywhere; }
@@ -25,4 +24,4 @@
 .ontology-term-status button:hover { text-decoration:underline; }
 .ontology-term-network :is(button,input,select):focus-visible { outline:2px solid var(--workspace-accent,var(--color-primary)); outline-offset:2px; }
 @media(max-width:900px) { .ontology-term-body { flex-direction:column; } .ontology-term-toolbar h1 { flex-basis:100%; } }
-@media(max-width:700px) { .ontology-term-toolbar { gap:6px 12px; } .ontology-term-canvas[data-bucket-legend] .ontology-term-viewport { right:192px; } }
+@media(max-width:700px) { .ontology-term-toolbar { gap:6px 12px; } }

@@ -9,6 +9,8 @@ from rdflib.namespace import DC, DCAT, DCTERMS, OWL, RDF, RDFS, SKOS
 
 def build_workspace_dictionary(
     sources: Iterable[tuple[dict[str, str], Graph]],
+    *,
+    include_ontologies: bool = False,
 ) -> list[dict[str, Any]]:
     """Merge declarations by kind and IRI, retaining every visible provenance.
 
@@ -68,11 +70,24 @@ def build_workspace_dictionary(
                 "buckets": buckets,
                 "status": literals(combined, iri, URIRef(namespace + "modelingStatus"))}
 
+    def metadata(iri: URIRef) -> dict[str, list[str]]:
+        # Keep exact predicates and provenance: display-name/comment fallbacks
+        # must never inflate metadata coverage, including after file filtering.
+        return {
+            name: sorted({source["path"] for source, graph in sources
+                          if any(value.strip() for value in literals(graph, iri, predicate))})
+            for name, predicate in (("label", RDFS.label),
+                                    ("definition", SKOS.definition),
+                                    ("example", SKOS.example))
+        }
+
     kinds = {
         OWL.Class: "entity", RDFS.Class: "entity",
         OWL.ObjectProperty: "relationship", OWL.DatatypeProperty: "attribute",
         OWL.AnnotationProperty: "annotation", OWL.NamedIndividual: "individual",
     }
+    if include_ontologies:
+        kinds[OWL.Ontology] = "ontology"
     terms: dict[tuple[str, str], dict[str, Any]] = {}
     for source, graph in sources:
         for rdf_type, kind in kinds.items():
@@ -86,6 +101,7 @@ def build_workspace_dictionary(
                     definitions = literals(combined, subject, SKOS.definition) or literals(combined, subject, RDFS.comment)
                     terms[key] = {
                         "id": str(subject), "name": label(subject), "type": kind,
+                        "metadata": metadata(subject),
                         "description": definitions[0] if definitions else None,
                         "definitions": [], "sources": [], "parents": parents,
                         "parent_id": parents[0]["id"] if parents else None,

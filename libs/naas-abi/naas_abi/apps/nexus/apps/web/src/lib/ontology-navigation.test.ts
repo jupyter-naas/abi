@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   browserRoute, dictionaryFilterRoute, lastOntologyRoute, normalizeOntologyRoute,
   ontologyBrowser, rememberOntologyRoute, termRoute, viewRoute,
+  dictionaryFilters, dictionaryFiltersRoute, systemRoute,
 } from './ontology-navigation';
 
 test('first visit opens the dashboard with the dictionary and no invented file scope', () => {
@@ -67,4 +68,48 @@ test('blocked browser storage cannot break navigation', () => {
     assert.doesNotThrow(() => rememberOntologyRoute('workspace-a', 'browser=files'));
     assert.equal(lastOntologyRoute('workspace-a').get('browser'), 'dictionary');
   } finally { Reflect.deleteProperty(globalThis, 'window'); }
+});
+
+test('type checkboxes support legacy links, multiple choices, duplicates and all types', () => {
+  assert.deepEqual(dictionaryFilters('view=attributes'), ['attribute']);
+  assert.deepEqual(dictionaryFilters('view=system&termFilter=attribute'), ['attribute']);
+  assert.deepEqual(dictionaryFilters('termFilter=entity&termFilter=attribute&termFilter=entity&termFilter=invalid'), ['entity','attribute']);
+  assert.deepEqual(dictionaryFilters('view=classes&termFilter=all'), []);
+  assert.deepEqual(dictionaryFilters('termFilter=all&termFilter=entity'), []);
+});
+
+test('checking a second type retains a compatible selection and all other filters', () => {
+  const current='view=classes&term=c&termType=entity&termFilter=entity&dictionaryFile=a&dictionaryFile=b&systemFilter=one&systemFilter=two&spacing=compact&connectors=orthogonal';
+  const next=dictionaryFiltersRoute(current,['entity','attribute']);
+  assert.deepEqual(next.getAll('termFilter'), ['entity','attribute']);
+  assert.equal(next.get('term'),'c');
+  assert.equal(next.get('view'),'classes');
+  assert.deepEqual(next.getAll('dictionaryFile'),['a','b']);
+  assert.deepEqual(next.getAll('systemFilter'),['one','two']);
+  assert.equal(next.get('spacing'),'compact');
+  assert.equal(next.get('connectors'),'orthogonal');
+  const removed=dictionaryFiltersRoute(next.toString(),['attribute']);
+  assert.equal(removed.has('term'),false);
+  assert.equal(removed.has('termType'),false);
+  assert.equal(removed.get('view'),'attributes');
+  const all=dictionaryFiltersRoute(removed.toString(),[]);
+  assert.equal(all.get('termFilter'),'all');
+  assert.deepEqual(dictionaryFilters(all.toString()),[]);
+});
+
+test('accumulated types survive term selection, canvas switches and system overview', () => {
+  let route=dictionaryFiltersRoute('browser=dictionary&view=overview', ['entity','attribute']);
+  route=termRoute(route.toString(),{id:'a',type:'attribute'});
+  route=viewRoute(route.toString(),'network');
+  route=viewRoute(route.toString(),'details');
+  assert.equal(route.get('view'),'attributes');
+  assert.equal(route.get('term'),'a');
+  assert.deepEqual(route.getAll('termFilter'),['entity','attribute']);
+  route=systemRoute(route.toString());
+  assert.deepEqual(route.getAll('termFilter'),['entity','attribute']);
+  route=viewRoute(route.toString(),'overview');
+  assert.deepEqual(route.getAll('termFilter'),['entity','attribute']);
+  route=termRoute(route.toString(),{id:'p',type:'relationship'});
+  assert.deepEqual(route.getAll('termFilter'),['entity','attribute','relationship']);
+  assert.equal(route.get('view'),'relations');
 });
