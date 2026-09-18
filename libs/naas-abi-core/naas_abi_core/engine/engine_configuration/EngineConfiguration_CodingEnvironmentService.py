@@ -52,8 +52,31 @@ class CodingEnvironmentAdapterLocalDirectoryConfiguration(BaseModel):
     opencode_startup_timeout: int = 15
 
 
+class CodingEnvironmentAdapterNATSConfiguration(BaseModel):
+    """Coding environment adapter NATS RPC client configuration.
+
+    Talks to a remote ``CodingEnvironmentPrimaryAdapterNATS`` over NATS
+    request/reply -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
+    (Stage 1) and naas_abi_core/proto/coding_environment/v1/coding_environment.proto.
+
+    coding_environment_adapter:
+      adapter: "nats_rpc"
+      config:
+        nats_url: "nats://127.0.0.1:4222"
+        jwt_secret: "{{ secret.NATS_SERVICE_JWT_SECRET }}"
+        service_identity: "api"
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    nats_url: str = "nats://127.0.0.1:4222"
+    jwt_secret: str
+    service_identity: str = "api"
+
+
 class CodingEnvironmentAdapterConfiguration(GenericLoader):
-    adapter: Literal["coder", "code_server", "in_memory", "local_directory", "custom"]
+    adapter: Literal[
+        "coder", "code_server", "in_memory", "local_directory", "nats_rpc", "custom"
+    ]
     config: dict | None = None
 
     @model_validator(mode="after")
@@ -91,6 +114,13 @@ class CodingEnvironmentAdapterConfiguration(GenericLoader):
                 "Invalid configuration for services.coding_environment."
                 "coding_environment_adapter 'local_directory' adapter",
             )
+        elif self.adapter == "nats_rpc":
+            pydantic_model_validator(
+                CodingEnvironmentAdapterNATSConfiguration,
+                self.config,
+                "Invalid configuration for services.coding_environment."
+                "coding_environment_adapter 'nats_rpc' adapter",
+            )
 
         return self
 
@@ -124,6 +154,13 @@ class CodingEnvironmentAdapterConfiguration(GenericLoader):
             )
 
             return LocalDirectoryAdapter(**self.config)
+        elif self.adapter == "nats_rpc":
+            assert self.config is not None, "config is required for nats_rpc adapter"
+            from naas_abi_core.services.coding_environment.adapters.secondary.CodingEnvironmentSecondaryAdapterNATSClient import (
+                CodingEnvironmentSecondaryAdapterNATSClient,
+            )
+
+            return CodingEnvironmentSecondaryAdapterNATSClient(**self.config)
         elif self.adapter == "custom":
             return super().load()
         else:
