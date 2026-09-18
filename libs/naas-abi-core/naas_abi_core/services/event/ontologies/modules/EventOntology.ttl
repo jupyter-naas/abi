@@ -52,3 +52,24 @@ abi:createdAt a owl:DatatypeProperty ;
     rdfs:domain abi:LogProcess ;
     rdfs:range xsd:dateTime ;
     skos:definition "ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller."@en .
+
+# Identity of whoever the event happened for. Plain identifiers, never names or
+# emails: resolve them against the identity graph of the deploying app (Nexus:
+# graph/nexus-identity, nexus:User --isUserAccountOf--> abi:Person).
+abi:actorUserId a owl:DatatypeProperty ;
+    rdfs:label "actor user id"@en ;
+    rdfs:domain abi:LogProcess ;
+    rdfs:range xsd:string ;
+    skos:definition "Identifier of the user account the event happened for. Populated by EventService.publish() from the request context if not set by the caller."@en .
+
+abi:actorWorkspaceId a owl:DatatypeProperty ;
+    rdfs:label "actor workspace id"@en ;
+    rdfs:domain abi:LogProcess ;
+    rdfs:range xsd:string ;
+    skos:definition "Identifier of the workspace the event happened in. Populated by EventService.publish() from the request context if not set by the caller."@en .
+
+abi:triggeredVia a owl:DatatypeProperty ;
+    rdfs:label "triggered via"@en ;
+    rdfs:domain abi:LogProcess ;
+    rdfs:range xsd:string ;
+    skos:definition "Channel that triggered the event, e.g. api, configuration, system. Populated by EventService.publish() from the request context if not set by the caller."@en .

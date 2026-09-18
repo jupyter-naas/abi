@@ -20,6 +20,29 @@ export function shouldSkipAppsRestore(): boolean {
   return skipAppsRestore;
 }
 
+/** sessionStorage key holding the last app opened in a workspace. */
+export function appsLastOpenKey(workspaceId: string | null | undefined): string | null {
+  return workspaceId ? `nexus.apps.last_open.${workspaceId}` : null;
+}
+
+/**
+ * Drop the remembered app so the section lands on the list.
+ *
+ * "All apps" has to be able to say no to the restore, or the section is a
+ * trap: open an app once and every later visit bounces straight back into
+ * it. The embed view's Back arrow already forgets it this way; the sidebar
+ * link now does the same, so both exits from an app mean the same thing.
+ */
+export function forgetAppsLastOpen(workspaceId: string | null | undefined): void {
+  const key = appsLastOpenKey(workspaceId);
+  if (!key) return;
+  try {
+    sessionStorage.removeItem(key);
+  } catch {
+    // sessionStorage unavailable (e.g. private mode restrictions) — ignore
+  }
+}
+
 export function appsPath(workspaceId: string, open?: string | null): string {
   const base = `/workspace/${workspaceId}/apps`;
   if (!open) return base;

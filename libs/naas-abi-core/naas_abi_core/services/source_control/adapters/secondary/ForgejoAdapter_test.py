@@ -541,3 +541,66 @@ def test_upsert_files_posts_one_change_files_commit() -> None:
         "slides/ws/demo/deck.html",
         "slides/ws/demo/assets/hero.png",
     }
+
+
+def test_upsert_files_sends_deletes_with_the_blob_sha() -> None:
+    ok = FakeResponse(
+        201,
+        {"commit": {"sha": "tree-2", "commit": {"message": "Rename", "author": {}}}},
+    )
+    session = FakeSession(
+        [
+            (
+                "GET",
+                "/repos/abi/monorepo/contents/apps/ws/demo/old.js",
+                FakeResponse(200, {"sha": "blob-old"}),
+            ),
+            (
+                "GET",
+                "/repos/abi/monorepo/contents/apps/ws/demo/gone.js",
+                FakeResponse(404, {}, "not found"),
+            ),
+            ("POST", "/repos/abi/monorepo/contents", ok),
+        ]
+    )
+    commit = _adapter(session).upsert_files(
+        repo_id="abi/monorepo",
+        files=(
+            FileWrite(path="apps/ws/demo/old.js", content="", delete=True),
+            FileWrite(path="apps/ws/demo/gone.js", content="", delete=True),
+        ),
+        message="Rename",
+        branch="apps/ws/demo",
+    )
+    assert commit.sha == "tree-2"
+    body = next(c for c in session.calls if c["method"] == "POST")["json"]
+    # A delete of a missing file is dropped: Forgejo rejects it without a sha.
+    assert body["files"] == [
+        {"path": "apps/ws/demo/old.js", "operation": "delete", "sha": "blob-old"}
+    ]
+
+
+def test_upsert_files_routes_a_single_delete_through_change_files() -> None:
+    ok = FakeResponse(
+        201,
+        {"commit": {"sha": "tree-3", "commit": {"message": "Drop", "author": {}}}},
+    )
+    session = FakeSession(
+        [
+            (
+                "GET",
+                "/repos/abi/monorepo/contents/apps/ws/demo/old.js",
+                FakeResponse(200, {"sha": "blob-old"}),
+            ),
+            ("POST", "/repos/abi/monorepo/contents", ok),
+        ]
+    )
+    _adapter(session).upsert_files(
+        repo_id="abi/monorepo",
+        files=(FileWrite(path="apps/ws/demo/old.js", content="", delete=True),),
+        message="Drop",
+        branch="apps/ws/demo",
+    )
+    assert not [c for c in session.calls if c["method"] == "PUT"]
+    body = next(c for c in session.calls if c["method"] == "POST")["json"]
+    assert body["files"][0]["operation"] == "delete"

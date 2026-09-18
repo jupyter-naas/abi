@@ -32,6 +32,7 @@ import { useOntologyStore } from '@/stores/ontology';
 import { useOntologyIconsStore } from '@/stores/ontology-icons';
 import { useOntologyDictionaryStore } from '@/stores/ontology-dictionary';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { usePublishFeatureResource } from '@/stores/feature-pane';
 import { termTabs, termViews, kindForView, termRoute, viewRoute, ontologyBrowser, normalizeOntologyRoute, lastOntologyRoute, rememberOntologyRoute } from '@/lib/ontology-navigation';
 import type { DictionaryTerm } from '@/lib/ontology-dictionary-tree';
 import { buildHoverTitle } from '@/components/graph/vis-network';
@@ -98,6 +99,11 @@ export default function OntologyPage() {
       void load(workspaceId, refresh, view === 'system' && !pending);
     }
   }, [workspaceId, refresh, load, view]);
+  usePublishFeatureResource(
+    selectedOntologyPath
+      ? { feature: 'ontology', kind: 'ontology', id: selectedOntologyPath, label: selectedOntologyPath.split(/[/:]/).pop() }
+      : null,
+  );
   useEffect(() => {
     const next = query ? normalizeOntologyRoute(query) : lastOntologyRoute(routeWorkspaceId);
     if (view !== requestedView) {

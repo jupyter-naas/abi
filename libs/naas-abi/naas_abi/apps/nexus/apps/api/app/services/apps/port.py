@@ -58,6 +58,8 @@ class AppInfo(BaseModel):
     maintainer: str | None = None
     pricing: AppPricing | None = None
     dependencies: dict[str, Any] = {}
+    # Optional manifest agent (``module AgentClass``); binds the chat pane when the app is open.
+    agent: str | None = None
 
     # Runtime
     installed: bool = False

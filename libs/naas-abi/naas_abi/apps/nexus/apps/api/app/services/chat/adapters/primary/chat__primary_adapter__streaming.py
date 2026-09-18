@@ -379,6 +379,15 @@ async def stream_chat_response(
                         if mode:
                             documents_active_mode.set(mode)
 
+                # Open Nexus feature (Apps, Ontology, ...) so feature agent
+                # tools default to the open item. Slides-parity.
+                from naas_abi.agents.feature import bind_feature_context
+
+                bind_feature_context(client_ctx)
+
+                # Arm the research gate for both surfaces. With no deck open
+                # this also flags a deck requested from the main chat, so the
+                # agent gets a slides-sized step budget.
                 from naas_abi.agents.documents import bind_documents_research_policy
                 from naas_abi.agents.slides import bind_slides_research_policy
 
@@ -565,6 +574,16 @@ async def stream_chat_response(
             routed_llm = apply_documents_model_override(
                 incoming_llm, client_ctx, request.message
             )
+    if provider.type == "abi" and (provider.endpoint or "").startswith(
+        "inprocess://"
+    ):
+        from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
+            resolve_inprocess_llm_model_for_turn,
+        )
+
+        resolved = resolve_inprocess_llm_model_for_turn(provider.model, routed_llm)
+        if resolved:
+            routed_llm = resolved
     provider_config = ProviderConfig(
         id=provider.id,
         name=provider.name,

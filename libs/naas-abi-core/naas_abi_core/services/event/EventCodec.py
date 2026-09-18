@@ -52,10 +52,15 @@ def to_event_dict(entity: Any) -> dict:
     if not _looks_like_entity(entity):
         return _coerce_for_json(entity)
 
+    # Each generated class declares only its own `_property_uris`; merge the
+    # MRO so inherited fields (e.g. LogProcess.actor_user_id) keep their IRI.
+    property_uris: dict[str, str] = {}
+    for klass in reversed(type(entity).__mro__):
+        property_uris.update(klass.__dict__.get("_property_uris", {}) or {})
     out: dict[str, Any] = {
         "_uri": entity._uri,
         "_class_uri": str(entity._class_uri),
-        "_property_uris": dict(getattr(entity, "_property_uris", {})),
+        "_property_uris": property_uris,
     }
 
     model_fields = getattr(type(entity), "model_fields", {})

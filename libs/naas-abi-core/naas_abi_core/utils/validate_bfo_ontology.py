@@ -248,6 +248,13 @@ def _build_local_ontology_index(search_root: str) -> dict[str, str]:
                     for s in g.subjects(RDF.type, OWL.Ontology):
                         if isinstance(s, URIRef):
                             index.setdefault(str(s), fpath)
+                        # OWL 2 lets owl:imports name the version IRI: the
+                        # vendored bfo-core.ttl is imported as
+                        # .../bfo/2020/bfo-core.ttl, its versionIRI. Without
+                        # this, BFO was fetched over HTTP on every check.
+                        for version in g.objects(s, OWL.versionIRI):
+                            if isinstance(version, URIRef):
+                                index.setdefault(str(version), fpath)
                 except Exception:  # noqa: BLE001,S112
                     continue
     except Exception:  # noqa: BLE001,S110

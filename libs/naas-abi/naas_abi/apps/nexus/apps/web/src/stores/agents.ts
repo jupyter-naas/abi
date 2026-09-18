@@ -84,6 +84,17 @@ const AGENTS_CACHE_TTL_MS = 5 * 60 * 1000;
 // resets on a full page reload; we still guard against parallel POSTs.
 const syncedWorkspaces = new Set<string>();
 
+/** Reconcile the roster once per workspace per session (the right pane).
+ *
+ * The pane binds each section's office agent, so it needs agents added to the
+ * config roster since the last sync. A plain GET would miss them. Syncing
+ * once, not on every navigation, keeps /agents/sync off the Apps load path.
+ */
+export async function ensureAgentsSynced(workspaceId: string): Promise<void> {
+  if (!workspaceId || syncedWorkspaces.has(workspaceId)) return;
+  await useAgentsStore.getState().fetchAgents(workspaceId, true);
+}
+
 // Reserved type names that always appear in the type selector.
 // "Default" is the workspace's default-chat agent (backend-backed via is_default).
 // "Custom" is the neutral fallback when no override is set.
@@ -230,19 +241,15 @@ export const useAgentsStore = create<AgentsState>()(
             });
 
             // Pick the best agent to surface in the chat UI.
-            // Priority: workspace default → first enabled.
-            const pickPreferred = (): Agent | undefined => {
-              const defaultEnabled = formattedAgents.find((a) => a.isDefault && a.enabled);
-              if (defaultEnabled) return defaultEnabled;
-              const defaultAny = formattedAgents.find((a) => a.isDefault);
-              if (defaultAny) return defaultAny;
-              return formattedAgents.find((a) => a.enabled);
-            };
+            // Priority: workspace default → Abi → first enabled.
+            const { pickWorkspaceDefaultAgent } = await import(
+              '@/lib/pick-workspace-default-agent'
+            );
 
             const { useWorkspaceStore } = await import('./workspace');
             const ws = useWorkspaceStore.getState();
             const currentSelected = ws.selectedAgent;
-            const preferred = pickPreferred();
+            const preferred = pickWorkspaceDefaultAgent(formattedAgents);
             if (!preferred) return;
             const inRoster = (id: string) =>
               Boolean(id && formattedAgents.some((a) => a.id === id));
@@ -254,15 +261,23 @@ export const useAgentsStore = create<AgentsState>()(
             // Right AI pane pins the workspace default unless the user picked
             // another agent still in this workspace. A leftover id from
             // another workspace must not stick.
+            // On a feature section the pane prefers that feature's office
+            // agent (Apps on /apps); an open item forces it, like a deck.
+            // Route segment only for the office surfaces: a leftover slug
+            // from the other one must not pin Documents on /slides or Slides
+            // on /documents, and a slug like board-documents must not flip
+            // the surface.
+            const { appAgentRefForPane, featureOpenResource, getPaneSurfaceForPath } =
+              await import('@/lib/feature-office-agents');
             const { isNexusDocumentsAgent, officeSurfaceFromPath, pickPaneOfficeAgent } =
               await import('@/lib/pick-workspace-default-agent');
-            const path =
-              typeof window !== 'undefined' ? window.location.pathname : '';
-            // Route segment only. A leftover selectedSlug from the other
-            // office surface must not pin Documents on /slides or Slides on
-            // /documents, and a slug like board-documents must not flip the
-            // surface.
-            const { onSlides, onDocuments } = officeSurfaceFromPath(path);
+            const { pickPaneAgentForSurface } = await import('@/lib/feature-agent-pane');
+            const { useFeaturePaneStore } = await import('./feature-pane');
+            const routePath = typeof window === 'undefined' ? '' : window.location.pathname;
+            const routeSurface = getPaneSurfaceForPath(routePath);
+            const featurePaneResource = useFeaturePaneStore.getState().resource;
+            const appAgentRef = appAgentRefForPane(routePath, featurePaneResource);
+            const { onSlides, onDocuments } = officeSurfaceFromPath(routePath);
             if (
               onDocuments &&
               !force &&
@@ -271,13 +286,19 @@ export const useAgentsStore = create<AgentsState>()(
               await get().fetchAgents(workspaceId, true);
               return;
             }
+            const featureItemOpen = Boolean(
+              featureOpenResource(routePath, featurePaneResource),
+            );
             const panePreferred =
-              pickPaneOfficeAgent(formattedAgents, { onSlides, onDocuments }) ??
+              (onSlides || onDocuments
+                ? pickPaneOfficeAgent(formattedAgents, { onSlides, onDocuments })
+                : pickPaneAgentForSurface(formattedAgents, routeSurface, appAgentRef)) ??
               preferred;
             const currentPane = ws.paneAgent;
             if (
               onSlides ||
               onDocuments ||
+              featureItemOpen ||
               !ws.paneAgentExplicitlySelected ||
               !inRoster(currentPane)
             ) {
