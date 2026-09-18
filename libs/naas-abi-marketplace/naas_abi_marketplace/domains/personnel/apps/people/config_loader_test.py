@@ -1,0 +1,218 @@
+"""Tests for the People Search configuration contract.
+
+The point of validating on the server is that a client learns at startup, by
+name, what is wrong with their config.yaml. These tests are that promise.
+"""
+
+from __future__ import annotations
+
+import copy
+from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
+from naas_abi_marketplace.domains.personnel.apps.people.config_loader import (
+    CONFIG_PATH,
+    REGISTERED_SECTION_IDS,
+    ConfigError,
+    load_config,
+    public_config,
+    public_page_urls,
+)
+
+SHIPPED = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+
+
+def write_config(tmp_path: Path, mutate) -> Path:
+    raw = copy.deepcopy(SHIPPED)
+    mutate(raw)
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    return path
+
+
+def fails(tmp_path: Path, mutate, message: str) -> None:
+    with pytest.raises(ConfigError) as error:
+        load_config(write_config(tmp_path, mutate))
+    assert message in str(error.value)
+
+
+class TestShippedConfig:
+    def test_it_loads(self) -> None:
+        config = load_config()
+        assert config["brand"]["name"]
+        assert config["data"]["namespace"] == "personnel"
+
+    def test_every_registered_section_is_configured(self) -> None:
+        """A registered section nobody configured would never be reachable."""
+        configured = {section["id"] for section in load_config()["profile"]["sections"]}
+        assert configured == set(REGISTERED_SECTION_IDS)
+
+    def test_brand_assets_exist_on_disk(self) -> None:
+        brand = load_config()["brand"]
+        assert brand["favicon_src"] == "assets/favicon.svg"
+        assert brand["logo_src"] == "assets/logo.svg"
+
+
+class TestPages:
+    def test_unregistered_page_is_named_in_the_error(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["app"]["pages"][0]["page_id"] = "dashboard"
+
+        fails(tmp_path, mutate, "not registered: dashboard")
+
+    def test_duplicate_order_is_rejected(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["app"]["pages"][1]["order"] = raw["app"]["pages"][0]["order"]
+
+        fails(tmp_path, mutate, "order is duplicated")
+
+    def test_duplicate_url_is_rejected(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["app"]["pages"][2]["url"] = raw["app"]["pages"][1]["url"]
+
+        fails(tmp_path, mutate, "url is duplicated")
+
+    def test_bad_url_token_is_rejected(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["app"]["pages"][1]["url"] = "Search Results"
+
+        fails(tmp_path, mutate, "must be lowercase letters")
+
+    def test_default_page_must_be_one_of_the_pages(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["app"]["default_page"] = "profile-x"
+
+        fails(tmp_path, mutate, "app.default_page is not one of the pages")
+
+    def test_home_owns_the_empty_url(self) -> None:
+        assert "" not in public_page_urls()
+
+
+class TestSections:
+    def test_unregistered_section_is_rejected(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["profile"]["sections"][0]["id"] = "publications"
+
+        fails(tmp_path, mutate, "not registered: publications")
+
+    def test_empty_text_is_required(self, tmp_path: Path) -> None:
+        """Hiding an empty section is a decision; leaving it blank is a bug."""
+
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["profile"]["sections"][1]["empty_text"] = ""
+
+        fails(tmp_path, mutate, "empty_text must be a non-empty string")
+
+    def test_sections_come_back_in_configured_order(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            for section in raw["profile"]["sections"]:
+                if section["id"] == "skills":
+                    section["order"] = 1
+
+        config = load_config(write_config(tmp_path, mutate))
+        assert config["profile"]["sections"][0]["id"] == "skills"
+
+    def test_disabled_section_is_dropped_from_the_public_config(
+        self, tmp_path: Path
+    ) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            for section in raw["profile"]["sections"]:
+                if section["id"] == "recommendations":
+                    section["enabled"] = False
+
+        config = public_config(write_config(tmp_path, mutate))
+        assert "recommendations" not in {s["id"] for s in config["profile"]["sections"]}
+
+
+class TestFactsAndSearch:
+    def test_fact_must_name_a_people_column(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["profile"]["facts"][0]["field"] = "favourite_colour"
+
+        fails(tmp_path, mutate, "is not a people column: favourite_colour")
+
+    def test_facet_must_name_a_people_column(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["search"]["facet_field"] = "department"
+
+        fails(tmp_path, mutate, "search.facet_field is not a people column")
+
+    def test_search_weight_must_be_positive(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["search"]["fields"][0]["weight"] = 0
+
+        fails(tmp_path, mutate, "weight must be a positive number")
+
+    def test_unsearchable_field_is_rejected(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["search"]["fields"][0]["name"] = "salary"
+
+        fails(tmp_path, mutate, "is not searchable: salary")
+
+
+class TestData:
+    def test_namespace_must_be_an_identifier(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["data"]["namespace"] = "personnel; drop table people"
+
+        fails(tmp_path, mutate, "data.namespace must be a SQL identifier")
+
+    def test_table_name_must_be_an_identifier(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["data"]["tables"]["people"] = "people--"
+
+        fails(tmp_path, mutate, "data.tables.people must be a SQL identifier")
+
+    def test_missing_table_is_named(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            del raw["data"]["tables"]["languages"]
+
+        fails(tmp_path, mutate, "data.tables is missing: languages")
+
+
+class TestBrandAssets:
+    def test_missing_asset_file_is_reported(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["brand"]["favicon_src"] = "assets/nope.svg"
+
+        fails(tmp_path, mutate, "points at a file that does not exist")
+
+    def test_traversal_out_of_the_app_is_refused(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["brand"]["logo_src"] = "assets/../../cockpit/web/favicon.svg"
+
+        fails(tmp_path, mutate, "must stay inside the app folder")
+
+    def test_asset_outside_the_assets_folder_is_refused(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["brand"]["logo_src"] = "web/css/app.css"
+
+        fails(tmp_path, mutate, "must be a path under assets/")
+
+    def test_no_favicon_is_allowed_and_falls_back_to_the_mark(
+        self, tmp_path: Path
+    ) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["brand"]["favicon_src"] = ""
+            raw["brand"]["logo_src"] = ""
+
+        config = load_config(write_config(tmp_path, mutate))
+        assert config["brand"]["favicon_src"] is None
+        assert config["brand"]["logo_src"] is None
+        assert config["brand"]["mark"]
+
+
+class TestPublicConfig:
+    def test_table_names_and_privacy_stay_on_the_server(self) -> None:
+        """The browser asks this app for people, never the warehouse directly."""
+        config = public_config()
+        assert "data" not in config
+        assert "privacy" not in config
+        assert "fields" not in config["search"]
+
+    def test_search_settings_the_browser_needs_are_published(self) -> None:
+        search = public_config()["search"]
+        assert search["min_autocomplete_chars"] >= 1
+        assert search["facet_label"]

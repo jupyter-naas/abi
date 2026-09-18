@@ -57,6 +57,56 @@
         "Strategy"
       ],
       "source": "https://demo.example/profiles/grace_lambert"
+    },
+    {
+      "process_type": "ActOfStudying",
+      "organization": "Bay Area Business School",
+      "program": "MBA",
+      "site": "San Francisco",
+      "start": "2008-09-01",
+      "end": "2010-06-30",
+      "duration": "2008 – 2010",
+      "skills": [
+        "Strategy"
+      ],
+      "source": "https://demo.example/profiles/grace_lambert"
     }
-  ]
+  ],
+  "profile": {
+    "slug": "grace_lambert",
+    "headline": "Board advisor - partnerships and product",
+    "about": "Twenty years of partner and product work across hardware and streaming, now advising boards on how the two fit together.",
+    "years_of_experience": 20,
+    "organization": "Demo",
+    "service_line": "Strategy",
+    "grade": "Partner",
+    "location": {
+      "office": "San Francisco",
+      "city": "San Francisco",
+      "country": "United States",
+      "country_code": "US"
+    },
+    "photo_path": "apps/people/web/assets/portraits/grace_lambert.svg",
+    "certifications": [],
+    "languages": [
+      {
+        "name": "English",
+        "proficiency": "Native or bilingual"
+      },
+      {
+        "name": "French",
+        "proficiency": "Professional working"
+      }
+    ],
+    "interests": [],
+    "recommendations": [
+      {
+        "author_first_name": "Hugo",
+        "author_last_name": "Girard",
+        "relationship": "Worked with Grace on the same board",
+        "written_on": "2024-06-21",
+        "content": "Grace asks the question everyone else has been avoiding, in the first ten minutes, and somehow nobody minds."
+      }
+    ]
+  }
 }

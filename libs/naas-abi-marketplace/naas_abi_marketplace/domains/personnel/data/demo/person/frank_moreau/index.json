@@ -58,5 +58,33 @@
       ],
       "source": "https://demo.example/profiles/frank_moreau"
     }
-  ]
+  ],
+  "profile": {
+    "slug": "frank_moreau",
+    "headline": "Account Executive - growth and revenue operations",
+    "about": "Sells, and builds the automation that makes selling repeatable.",
+    "years_of_experience": 8,
+    "organization": "Demo",
+    "service_line": "Growth",
+    "grade": "Manager",
+    "location": {
+      "office": "Paris Opéra",
+      "city": "Paris",
+      "country": "France",
+      "country_code": "FR"
+    },
+    "photo_path": "apps/people/web/assets/portraits/frank_moreau.svg",
+    "certifications": [
+      {
+        "name": "Demo CRM Specialist",
+        "issuer": "Demo Institute",
+        "issue_date": "2022-05-10",
+        "expiry_date": "2026-05-10",
+        "status": "active"
+      }
+    ],
+    "languages": [],
+    "interests": [],
+    "recommendations": []
+  }
 }

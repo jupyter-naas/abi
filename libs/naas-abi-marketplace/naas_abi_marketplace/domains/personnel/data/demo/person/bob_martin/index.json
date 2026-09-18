@@ -59,5 +59,41 @@
       ],
       "source": "https://demo.example/profiles/bob_martin"
     }
-  ]
+  ],
+  "profile": {
+    "slug": "bob_martin",
+    "headline": "CEO, Demo",
+    "about": "Founded Nexus Labs and now leads Demo. Spends most of his time with customers and the rest arguing about data models.",
+    "years_of_experience": 18,
+    "organization": "Demo",
+    "service_line": "Strategy",
+    "grade": "Partner",
+    "location": {
+      "office": "Paris Opéra",
+      "city": "Paris",
+      "country": "France",
+      "country_code": "FR"
+    },
+    "photo_path": "apps/people/web/assets/portraits/bob_martin.svg",
+    "certifications": [
+      {
+        "name": "Demo Data Strategy Practitioner",
+        "issuer": "Demo Institute",
+        "issue_date": "2020-01-20",
+        "status": "active"
+      }
+    ],
+    "languages": [
+      {
+        "name": "French",
+        "proficiency": "Native or bilingual"
+      },
+      {
+        "name": "English",
+        "proficiency": "Full professional"
+      }
+    ],
+    "interests": [],
+    "recommendations": []
+  }
 }

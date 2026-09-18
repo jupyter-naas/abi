@@ -27,3 +27,20 @@ app-personnel-cockpit:  ## run the cockpit dev server on existing datasets (no r
 
 app-personnel-cockpit-demo: demo-data  ## build demo datasets (source JSON → graph → data), then serve
 	$(PYTHON) "$(MODULE_DIR)/$(COCKPIT_API)"
+
+# ── People Search (apps/people) ────────────────────────────────────────────
+# person + experience -> graph -> datasets -> app
+PEOPLE_API := apps/people/api/dev_server.py
+PEOPLE_EXPORT := naas_abi_marketplace.domains.personnel.apps.people.scripts.export_people_from_graph
+
+.PHONY: people-graph people-datasets people app-personnel-people
+
+people-graph: demo-graph  ## demo person JSON -> pipelines -> graphs/demo/personnel.ttl
+
+people-datasets: people-graph  ## graph -> SPARQL -> dataset service
+	$(PYTHON) -m $(PEOPLE_EXPORT) $(EXPORT_ARGS)
+
+people: people-datasets app-personnel-people  ## rebuild the datasets, then serve
+
+app-personnel-people:  ## serve People Search on the existing datasets (no rebuild)
+	$(PYTHON) "$(MODULE_DIR)/$(PEOPLE_API)"

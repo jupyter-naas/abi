@@ -24,7 +24,7 @@ personnel:PersonnelOntology a owl:Ontology ;
   abi:ontologyResource "ontologies/modules/PersonnelOntology.ttl" ;
   abi:pythonResource "ontologies/modules/PersonnelOntology.py" ;
   dc:title "Personnel Ontology"@en ;
-  dc:description "Shared vocabulary for the personnel (S1) domain: the person, the employee and student roles they bear, the job position an employee role concretizes, and the records, contracts and qualities that outlive any one process. Process slices (ActOfWorkingProcess, ActOfStudyingProcess) import nothing from this file; this ontology imports them and they restrict these classes in context."@en ;
+  dc:description "Shared vocabulary for the personnel (S1) domain: the person, the employee and student roles they bear, the job position an employee role concretizes, and the records, contracts and qualities that outlive any one process. It also holds what a person is presented as: the profile summary and portrait published for them, the certifications they hold, the languages they speak, the interests they bear, the recommendations others write about them, and the grade and service line their employment places them in. Process slices (ActOfWorkingProcess, ActOfStudyingProcess) import nothing from this file; this ontology imports them and they restrict these classes in context."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Shared personnel classes. Process restrictions live in ontologies/processes/."@en ;
   dc11:contributor "Alice Dupont" ;
@@ -183,6 +183,214 @@ personnel:isEmploymentStatusOf a owl:ObjectProperty ;
     rdfs:domain personnel:EmploymentStatus ;
     rdfs:range abi:Person .
 
+# WHO ↔ HOW WE KNOW - person carries a certification
+personnel:hasCertification a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf personnel:isCertificationOf ;
+    rdfs:label "has certification"@en ;
+    skos:definition "Relates a person to a certification that generically depends on them."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range personnel:Certification .
+
+personnel:isCertificationOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf personnel:hasCertification ;
+    rdfs:label "is certification of"@en ;
+    skos:definition "Relates a certification to the person on which it generically depends."@en ;
+    rdfs:domain personnel:Certification ;
+    rdfs:range abi:Person .
+
+# HOW WE KNOW ↔ WHO - certification is issued by an organization
+personnel:issuedByOrganization a owl:ObjectProperty ;
+    owl:inverseOf personnel:isIssuerOfCertification ;
+    rdfs:label "issued by organization"@en ;
+    skos:definition "Relates a certification to the organization that issued it and stands behind what it attests."@en ;
+    rdfs:domain personnel:Certification ;
+    rdfs:range abi:Organization .
+
+personnel:isIssuerOfCertification a owl:ObjectProperty ;
+    owl:inverseOf personnel:issuedByOrganization ;
+    rdfs:label "is issuer of certification"@en ;
+    skos:definition "Relates an organization to a certification it issued."@en ;
+    rdfs:domain abi:Organization ;
+    rdfs:range personnel:Certification .
+
+# WHO ↔ HOW IT IS - person bears a language capability
+personnel:hasLanguageCapability a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:bearerOf ;
+    owl:inverseOf personnel:isLanguageCapabilityOf ;
+    rdfs:label "has language capability"@en ;
+    skos:definition "Relates a person to a language capability that inheres in them."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range personnel:LanguageCapability .
+
+personnel:isLanguageCapabilityOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:inheresIn ;
+    owl:inverseOf personnel:hasLanguageCapability ;
+    rdfs:label "is language capability of"@en ;
+    skos:definition "Relates a language capability to the person in whom it inheres."@en ;
+    rdfs:domain personnel:LanguageCapability ;
+    rdfs:range abi:Person .
+
+# HOW IT IS ↔ HOW WE KNOW - language capability is held for one language
+personnel:ofLanguage a owl:ObjectProperty ;
+    owl:inverseOf personnel:isLanguageOfCapability ;
+    rdfs:label "of language"@en ;
+    skos:definition "Relates a language capability to the language it is held for. The language is a CCO Language: a directive information content entity prescribing a canonical format for communication, shared by every speaker of it."@en ;
+    rdfs:domain personnel:LanguageCapability ;
+    rdfs:range cco:ont00001175 .
+
+personnel:isLanguageOfCapability a owl:ObjectProperty ;
+    owl:inverseOf personnel:ofLanguage ;
+    rdfs:label "is language of capability"@en ;
+    skos:definition "Relates a language to a capability held for it by some person."@en ;
+    rdfs:domain cco:ont00001175 ;
+    rdfs:range personnel:LanguageCapability .
+
+# WHO ↔ HOW WE KNOW - person is the subject of a recommendation
+personnel:hasRecommendation a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf personnel:isRecommendationOf ;
+    rdfs:label "has recommendation"@en ;
+    skos:definition "Relates a person to a recommendation written about them."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range personnel:Recommendation .
+
+personnel:isRecommendationOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf personnel:hasRecommendation ;
+    rdfs:label "is recommendation of"@en ;
+    skos:definition "Relates a recommendation to the person it is about."@en ;
+    rdfs:domain personnel:Recommendation ;
+    rdfs:range abi:Person .
+
+# HOW WE KNOW ↔ WHO - recommendation was written by a person
+personnel:hasRecommendationAuthor a owl:ObjectProperty ;
+    owl:inverseOf personnel:isAuthorOfRecommendation ;
+    rdfs:label "has recommendation author"@en ;
+    skos:definition "Relates a recommendation to the person who wrote it. Distinct from the person it is about: a recommendation always has two people."@en ;
+    rdfs:domain personnel:Recommendation ;
+    rdfs:range abi:Person .
+
+personnel:isAuthorOfRecommendation a owl:ObjectProperty ;
+    owl:inverseOf personnel:hasRecommendationAuthor ;
+    rdfs:label "is author of recommendation"@en ;
+    skos:definition "Relates a person to a recommendation they wrote about someone else."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range personnel:Recommendation .
+
+# WHO ↔ HOW IT IS - person bears an interest
+personnel:hasInterest a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:bearerOf ;
+    owl:inverseOf personnel:isInterestOf ;
+    rdfs:label "has interest"@en ;
+    skos:definition "Relates a person to an interest that inheres in them."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range personnel:Interest .
+
+personnel:isInterestOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:inheresIn ;
+    owl:inverseOf personnel:hasInterest ;
+    rdfs:label "is interest of"@en ;
+    skos:definition "Relates an interest to the person in whom it inheres."@en ;
+    rdfs:domain personnel:Interest ;
+    rdfs:range abi:Person .
+
+# HOW IT IS ↔ ANY - interest points at what it is an interest in
+personnel:hasInterestTarget a owl:ObjectProperty ;
+    owl:inverseOf personnel:isInterestTargetOf ;
+    rdfs:label "has interest target"@en ;
+    skos:definition "Relates an interest to the entity it is an interest in. Deliberately unrestricted in range: an interest can be in an organization, a person, a place or a subject that has no individual in this graph, in which case only personnel:interest_name is asserted."@en ;
+    rdfs:domain personnel:Interest .
+
+personnel:isInterestTargetOf a owl:ObjectProperty ;
+    owl:inverseOf personnel:hasInterestTarget ;
+    rdfs:label "is interest target of"@en ;
+    skos:definition "Relates an entity to an interest held in it."@en ;
+    rdfs:range personnel:Interest .
+
+# WHY ↔ WHO - employee role sits in a service line
+personnel:inServiceLine a owl:ObjectProperty ;
+    owl:inverseOf personnel:isServiceLineOfEmployeeRole ;
+    rdfs:label "in service line"@en ;
+    skos:definition "Relates an employee role to the service line of the employing organization within which it is borne."@en ;
+    rdfs:domain personnel:EmployeeRole ;
+    rdfs:range personnel:ServiceLine .
+
+personnel:isServiceLineOfEmployeeRole a owl:ObjectProperty ;
+    owl:inverseOf personnel:inServiceLine ;
+    rdfs:label "is service line of employee role"@en ;
+    skos:definition "Relates a service line to an employee role borne within it."@en ;
+    rdfs:domain personnel:ServiceLine ;
+    rdfs:range personnel:EmployeeRole .
+
+# WHO ↔ WHO - organization has a service line as a member part
+personnel:hasServiceLine a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:hasMemberPart ;
+    owl:inverseOf personnel:isServiceLineOf ;
+    rdfs:label "has service line"@en ;
+    skos:definition "Relates an organization to a service line that is a member part of it."@en ;
+    rdfs:domain abi:Organization ;
+    rdfs:range personnel:ServiceLine .
+
+personnel:isServiceLineOf a owl:ObjectProperty ;
+    owl:inverseOf personnel:hasServiceLine ;
+    rdfs:label "is service line of"@en ;
+    skos:definition "Relates a service line to the organization it is a member part of."@en ;
+    rdfs:domain personnel:ServiceLine ;
+    rdfs:range abi:Organization .
+
+# WHO ↔ HOW IT IS - person bears a grade
+personnel:hasGrade a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:bearerOf ;
+    owl:inverseOf personnel:isGradeOf ;
+    rdfs:label "has grade"@en ;
+    skos:definition "Relates a person to the grade quality that inheres in them."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range personnel:Grade .
+
+personnel:isGradeOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:inheresIn ;
+    owl:inverseOf personnel:hasGrade ;
+    rdfs:label "is grade of"@en ;
+    skos:definition "Relates a grade quality to the person in whom it inheres."@en ;
+    rdfs:domain personnel:Grade ;
+    rdfs:range abi:Person .
+
+# WHO ↔ HOW WE KNOW - person carries a portrait
+personnel:hasPortrait a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf personnel:isPortraitOf ;
+    rdfs:label "has portrait"@en ;
+    skos:definition "Relates a person to a portrait image of them."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range personnel:Portrait .
+
+personnel:isPortraitOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf personnel:hasPortrait ;
+    rdfs:label "is portrait of"@en ;
+    skos:definition "Relates a portrait image to the person it depicts."@en ;
+    rdfs:domain personnel:Portrait ;
+    rdfs:range abi:Person .
+
+# WHO ↔ HOW WE KNOW - person carries a profile summary
+personnel:hasProfileSummary a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf personnel:isProfileSummaryOf ;
+    rdfs:label "has profile summary"@en ;
+    skos:definition "Relates a person to the profile summary that states how they present themselves."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range personnel:ProfileSummary .
+
+personnel:isProfileSummaryOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf personnel:hasProfileSummary ;
+    rdfs:label "is profile summary of"@en ;
+    skos:definition "Relates a profile summary to the person it is about."@en ;
+    rdfs:domain personnel:ProfileSummary ;
+    rdfs:range abi:Person .
+
 #################################################################
 #    Data Properties
 #################################################################
@@ -274,6 +482,172 @@ personnel:completion_date a owl:DatatypeProperty ;
     rdfs:domain personnel:EnrollmentRecord ;
     rdfs:range  xsd:date .
 
+personnel:profile_slug a owl:DatatypeProperty ;
+    rdfs:label "profile slug"@en ;
+    skos:definition "Stable, lowercase, ASCII key identifying a person in profile URLs and dataset rows. Assigned by the system that publishes the profile, not by the person."@en ;
+    skos:example "'alice_dupont'."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range  xsd:string .
+
+personnel:certification_name a owl:DatatypeProperty ;
+    rdfs:label "certification name"@en ;
+    skos:definition "Name of the certification as published by the issuing organization."@en ;
+    skos:example "'Certified Information Systems Auditor'."@en ;
+    rdfs:domain personnel:Certification ;
+    rdfs:range  xsd:string .
+
+personnel:issue_date a owl:DatatypeProperty ;
+    rdfs:label "issue date"@en ;
+    skos:definition "Date on which the certification was issued."@en ;
+    rdfs:domain personnel:Certification ;
+    rdfs:range  xsd:date .
+
+personnel:expiry_date a owl:DatatypeProperty ;
+    rdfs:label "expiry date"@en ;
+    skos:definition "Date on which the certification ceases to be valid. Absent when the certification does not expire."@en ;
+    rdfs:domain personnel:Certification ;
+    rdfs:range  xsd:date .
+
+personnel:credential_id a owl:DatatypeProperty ;
+    rdfs:label "credential id"@en ;
+    skos:definition "Identifier the issuing organization assigned to this certification, by which it can be verified."@en ;
+    rdfs:domain personnel:Certification ;
+    rdfs:range  xsd:string .
+
+personnel:credential_url a owl:DatatypeProperty ;
+    rdfs:label "credential url"@en ;
+    skos:definition "Address at which the issuing organization publishes verification of this certification."@en ;
+    rdfs:domain personnel:Certification ;
+    rdfs:range  xsd:anyURI .
+
+personnel:certification_status a owl:DatatypeProperty ;
+    rdfs:label "certification status"@en ;
+    skos:definition "State of a certification at a point in time, e.g. 'active', 'expired', 'in-progress'."@en ;
+    rdfs:domain personnel:Certification ;
+    rdfs:range  xsd:string .
+
+personnel:language_name a owl:DatatypeProperty ;
+    rdfs:label "language name"@en ;
+    skos:definition "Name of the language a capability is held for, as displayed."@en ;
+    skos:example "'French'; 'Mandarin'."@en ;
+    rdfs:domain personnel:LanguageCapability ;
+    rdfs:range  xsd:string .
+
+personnel:proficiency_level a owl:DatatypeProperty ;
+    rdfs:label "proficiency level"@en ;
+    skos:definition "Reported level of a language capability. Free text rather than a code list: sources state it in incompatible scales (CEFR, 'native', 'professional working proficiency') and converting between them would assert more than the source does."@en ;
+    skos:example "'Native or bilingual'; 'C1'."@en ;
+    rdfs:domain personnel:LanguageCapability ;
+    rdfs:range  xsd:string .
+
+personnel:recommendation_content a owl:DatatypeProperty ;
+    rdfs:label "recommendation content"@en ;
+    skos:definition "Full text of the recommendation, as written by its author."@en ;
+    rdfs:domain personnel:Recommendation ;
+    rdfs:range  xsd:string .
+
+personnel:recommendation_date a owl:DatatypeProperty ;
+    rdfs:label "recommendation date"@en ;
+    skos:definition "Date on which the recommendation was written."@en ;
+    rdfs:domain personnel:Recommendation ;
+    rdfs:range  xsd:date .
+
+personnel:relationship_label a owl:DatatypeProperty ;
+    rdfs:label "relationship label"@en ;
+    skos:definition "How the author of a recommendation describes their working relationship with the person it is about."@en ;
+    skos:example "'Managed Alice directly'; 'Worked with Alice on the same team'."@en ;
+    rdfs:domain personnel:Recommendation ;
+    rdfs:range  xsd:string .
+
+personnel:interest_name a owl:DatatypeProperty ;
+    rdfs:label "interest name"@en ;
+    skos:definition "Name of what the interest is in, carried on the interest itself so an interest with no individual to point at is still stated."@en ;
+    skos:example "'Ocean conservation'."@en ;
+    rdfs:domain personnel:Interest ;
+    rdfs:range  xsd:string .
+
+personnel:interest_description a owl:DatatypeProperty ;
+    rdfs:label "interest description"@en ;
+    skos:definition "Sentence stating what the interest consists in."@en ;
+    rdfs:domain personnel:Interest ;
+    rdfs:range  xsd:string .
+
+personnel:interest_kind a owl:DatatypeProperty ;
+    rdfs:label "interest kind"@en ;
+    skos:definition "Category of the interest target, used to group interests for display, e.g. 'organization', 'school', 'person', 'topic'."@en ;
+    rdfs:domain personnel:Interest ;
+    rdfs:range  xsd:string .
+
+personnel:grade_value a owl:DatatypeProperty ;
+    rdfs:label "grade value"@en ;
+    skos:definition "Value of a grade, i.e. the seniority level the employing organization recognises for the person."@en ;
+    skos:example "'Partner'; 'Senior Manager'; 'Associate'."@en ;
+    rdfs:domain personnel:Grade ;
+    rdfs:range  xsd:string .
+
+personnel:portrait_url a owl:DatatypeProperty ;
+    rdfs:label "portrait url"@en ;
+    skos:definition "Address at which the portrait image can be retrieved."@en ;
+    rdfs:domain personnel:Portrait ;
+    rdfs:range  xsd:anyURI .
+
+personnel:portrait_path a owl:DatatypeProperty ;
+    rdfs:label "portrait path"@en ;
+    skos:definition "Repository-relative or object-storage path of the portrait image, for portraits that are not published at a public address."@en ;
+    rdfs:domain personnel:Portrait ;
+    rdfs:range  xsd:string .
+
+personnel:headline_text a owl:DatatypeProperty ;
+    rdfs:label "headline text"@en ;
+    skos:definition "One-line statement of what a person does, as they present it. Distinct from personnel:job_title, which is the title of the position the organization defines."@en ;
+    skos:example "'Partner, Audit - Consumer goods and food & beverage'."@en ;
+    rdfs:domain personnel:ProfileSummary ;
+    rdfs:range  xsd:string .
+
+personnel:summary_content a owl:DatatypeProperty ;
+    rdfs:label "summary content"@en ;
+    skos:definition "Full text of the profile summary: the paragraph a person or their organization publishes about them."@en ;
+    rdfs:domain personnel:ProfileSummary ;
+    rdfs:range  xsd:string .
+
+personnel:quote_content a owl:DatatypeProperty ;
+    rdfs:label "quote content"@en ;
+    skos:definition "Sentence attributed to the person in their own words, published alongside the summary."@en ;
+    rdfs:domain personnel:ProfileSummary ;
+    rdfs:range  xsd:string .
+
+personnel:years_of_experience a owl:DatatypeProperty ;
+    rdfs:label "years of experience"@en ;
+    skos:definition "Number of years of professional experience the profile summary claims. A claim carried by the summary and traceable to its source, not a figure computed from the acts of working in this graph: the graph holds only the working history that has been recorded."@en ;
+    rdfs:domain personnel:ProfileSummary ;
+    rdfs:range  xsd:integer .
+
+personnel:office_label a owl:DatatypeProperty ;
+    rdfs:label "office label"@en ;
+    skos:definition "Name by which an organization refers to a site, as it appears in its own directory."@en ;
+    skos:example "'Paris La Défense'."@en ;
+    rdfs:domain abi:Site ;
+    rdfs:range  xsd:string .
+
+personnel:city_name a owl:DatatypeProperty ;
+    rdfs:label "city name"@en ;
+    skos:definition "Name of the city a site is in."@en ;
+    rdfs:domain abi:Site ;
+    rdfs:range  xsd:string .
+
+personnel:country_name a owl:DatatypeProperty ;
+    rdfs:label "country name"@en ;
+    skos:definition "Name of the country a site is in."@en ;
+    rdfs:domain abi:Site ;
+    rdfs:range  xsd:string .
+
+personnel:country_code a owl:DatatypeProperty ;
+    rdfs:label "country code"@en ;
+    skos:definition "ISO 3166-1 alpha-2 code of the country a site is in, carried so places can be grouped and flagged without matching country names across languages."@en ;
+    skos:example "'FR'; 'SG'; 'ZA'."@en ;
+    rdfs:domain abi:Site ;
+    rdfs:range  xsd:string .
+
 #################################################################
 #    Classes - HOW WE KNOW
 #################################################################
@@ -328,6 +702,42 @@ personnel:AcademicDegree a owl:Class ;
     skos:definition "A certificate issued by an educational organization to a person to indicate that the person has satisfactorily completed a course of study. Equivalent to CCO Academic Degree."@en ;
     skos:example "Licence Informatique, Université de Rennes 1."@en .
 
+personnel:Certification a owl:Class ;
+    rdfs:subClassOf cco:ont00002002 ,
+      abi:GenericallyDependentContinuant ,
+      [ a owl:Restriction ; owl:onProperty personnel:isCertificationOf ; owl:someValuesFrom abi:Person ] ;
+    rdfs:label "Certification"@en ;
+    skos:definition "A certificate issued to a person by an organization to attest that they have demonstrated a competence, met a professional standard, or hold a licence to practise. Subclass of CCO Certificate, sibling of personnel:AcademicDegree."@en ;
+    skos:example "Certified Information Systems Auditor, issued by ISACA in 2019; Commissaire aux comptes."@en ;
+    rdfs:comment "Covers both certifications and licences: the difference is who may withhold it and what it permits, not what kind of entity it is. Where that distinction matters, state it with personnel:certification_status and the issuing organization."@en .
+
+personnel:Recommendation a owl:Class ;
+    rdfs:subClassOf abi:DocumentContentEntity ,
+      [ a owl:Restriction ; owl:onProperty personnel:isRecommendationOf ; owl:someValuesFrom abi:Person ] ,
+      [ a owl:Restriction ; owl:onProperty personnel:hasRecommendationAuthor ; owl:someValuesFrom abi:Person ] ;
+    rdfs:label "Recommendation"@en ;
+    skos:definition "A document content entity in which one person states, in their own words, what it was like to work with another and what that person is good at."@en ;
+    skos:example "'Alice rebuilt our close process in one quarter' - written by her former CFO, 2024-11-02."@en ;
+    rdfs:comment "Two people, and both are required: the subject it generically depends on, and the author who wrote it. An anonymous testimonial is not a recommendation in this sense and must not be minted as one."@en .
+
+personnel:Portrait a owl:Class ;
+    rdfs:subClassOf cco:ont00002004 ,
+      abi:GenericallyDependentContinuant ,
+      [ a owl:Restriction ; owl:onProperty personnel:isPortraitOf ; owl:someValuesFrom abi:Person ] ;
+    rdfs:label "Portrait"@en ;
+    skos:definition "An image that depicts a person, published to identify them. Subclass of CCO Image."@en ;
+    skos:example "The photograph published on a person's directory page."@en ;
+    rdfs:comment "The individual carries the address of the image (personnel:portrait_url or personnel:portrait_path), never the bytes. Image data belongs in object storage."@en .
+
+personnel:ProfileSummary a owl:Class ;
+    rdfs:subClassOf abi:DocumentContentEntity ,
+      [ a owl:Restriction ; owl:onProperty personnel:isProfileSummaryOf ; owl:someValuesFrom abi:Person ] ,
+      [ a owl:Restriction ; owl:onProperty personnel:isSourcedFrom ; owl:someValuesFrom personnel:ProfileDocument ] ;
+    rdfs:label "Profile Summary"@en ;
+    skos:definition "A document content entity that states how a person is presented in general: the one-line headline, the paragraph about them, an attributed quote, and the years of experience claimed for them."@en ;
+    skos:example "The headline and 'About' paragraph on a person's published directory page."@en ;
+    rdfs:comment "Person-level, where personnel:Mission is job-level: the summary spans a career, a mission describes one act of working. Sourced from a ProfileDocument so every claim it carries stays traceable to where it was published."@en .
+
 #################################################################
 #    Classes - WHY
 #################################################################
@@ -371,3 +781,40 @@ personnel:Remuneration a owl:Class ;
     rdfs:label "Remuneration"@en ;
     skos:definition "A quality borne by a person that specifies what they are paid for their work."@en ;
     skos:example "95000 EUR per year."@en .
+
+personnel:LanguageCapability a owl:Class ;
+    rdfs:subClassOf abi:Quality ,
+      [ a owl:Restriction ; owl:onProperty personnel:isLanguageCapabilityOf ; owl:someValuesFrom abi:Person ] ,
+      [ a owl:Restriction ; owl:onProperty personnel:ofLanguage ; owl:someValuesFrom cco:ont00001175 ] ;
+    rdfs:label "Language Capability"@en ;
+    skos:definition "A quality that inheres in a person and holds how well they can communicate in one language."@en ;
+    skos:example "Spanish at native or bilingual proficiency."@en ;
+    rdfs:comment "Deliberately NOT equivalent to CCO Language Skill (cco:ont00000181). That class is an Agent Capability and therefore a BFO realizable entity, which is disjoint from quality; this domain already models personnel:Skill as a quality, and asserting both would make the ontology inconsistent. The language itself is a CCO Language, reached through personnel:ofLanguage."@en .
+
+personnel:Interest a owl:Class ;
+    rdfs:subClassOf abi:Quality ,
+      [ a owl:Restriction ; owl:onProperty personnel:isInterestOf ; owl:someValuesFrom abi:Person ] ;
+    rdfs:label "Interest"@en ;
+    skos:definition "A quality that inheres in a person and holds what they follow, care about or give their attention to outside the duties of any one job."@en ;
+    skos:example "Ocean conservation; the alumni association of a school they attended."@en ;
+    rdfs:comment "Modelled as a quality for consistency with personnel:Skill rather than as a disposition. Points at its target with personnel:hasInterestTarget where an individual exists for it, and otherwise carries personnel:interest_name alone."@en .
+
+personnel:Grade a owl:Class ;
+    rdfs:subClassOf abi:Quality ,
+      [ a owl:Restriction ; owl:onProperty personnel:isGradeOf ; owl:someValuesFrom abi:Person ] ;
+    rdfs:label "Grade"@en ;
+    skos:definition "A quality that inheres in a person and holds the seniority level the employing organization recognises for them."@en ;
+    skos:example "'Partner' for a person admitted to the partnership."@en ;
+    rdfs:comment "Kept apart from personnel:job_title, which names a position, and from personnel:EmployeeRole, which is what the person bears. Two people with the same grade can hold different positions, and the same position can be held at different grades."@en .
+
+#################################################################
+#    Classes - WHO
+#################################################################
+
+personnel:ServiceLine a owl:Class ;
+    rdfs:subClassOf abi:Organization ,
+      [ a owl:Restriction ; owl:onProperty personnel:isServiceLineOf ; owl:someValuesFrom abi:Organization ] ;
+    rdfs:label "Service Line"@en ;
+    skos:definition "An organization that is a member part of a larger organization and groups the people who deliver one kind of service."@en ;
+    skos:example "Audit; Tax; Advisory; Financial Advisory Services."@en ;
+    rdfs:comment "An organization in its own right, not a label on a person: it has its own members, its own leadership and can be reorganized without any person changing. A person reaches their service line through the employee role they bear (personnel:inServiceLine)."@en .

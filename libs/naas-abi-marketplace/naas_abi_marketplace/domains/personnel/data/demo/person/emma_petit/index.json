@@ -41,6 +41,63 @@
         "Vue.js"
       ],
       "source": "https://demo.example/profiles/emma_petit"
+    },
+    {
+      "process_type": "ActOfStudying",
+      "organization": "Demo University",
+      "program": "Bachelor's Degree, Software Engineering",
+      "site": "Nantes",
+      "start": "2011-09-01",
+      "end": "2014-06-30",
+      "duration": "2011 – 2014",
+      "skills": [
+        "TypeScript"
+      ],
+      "source": "https://demo.example/profiles/emma_petit"
     }
-  ]
+  ],
+  "profile": {
+    "slug": "emma_petit",
+    "headline": "Solo maker, LaunchPad - former CTO at Demo",
+    "about": "Was CTO at Demo for four years. Now builds and ships her own products, alone, on purpose.",
+    "quote": "Small enough to rewrite in a weekend is a design constraint, not a limitation.",
+    "years_of_experience": 11,
+    "organization": "Demo",
+    "service_line": "Technology",
+    "grade": "Director",
+    "location": {
+      "office": "Nantes",
+      "city": "Nantes",
+      "country": "France",
+      "country_code": "FR"
+    },
+    "photo_path": "apps/people/web/assets/portraits/emma_petit.svg",
+    "certifications": [],
+    "languages": [
+      {
+        "name": "French",
+        "proficiency": "Native or bilingual"
+      }
+    ],
+    "interests": [
+      {
+        "name": "Indie software",
+        "description": "Writes about running a one-person product company.",
+        "kind": "topic"
+      },
+      {
+        "name": "Long-distance cycling",
+        "kind": "topic"
+      }
+    ],
+    "recommendations": [
+      {
+        "author_first_name": "Claire",
+        "author_last_name": "Bernard",
+        "relationship": "Reported to Emma",
+        "written_on": "2025-01-09",
+        "content": "Emma hired me and then got out of the way, which is harder than it sounds. The architecture decisions she made in 2021 are still holding."
+      }
+    ]
+  }
 }

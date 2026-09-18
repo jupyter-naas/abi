@@ -58,6 +58,93 @@
         "Business Analysis"
       ],
       "source": "https://demo.example/profiles/alice_dupont"
+    },
+    {
+      "process_type": "ActOfStudying",
+      "organization": "Demo University",
+      "program": "Master's Degree, Computer Science",
+      "site": "Paris",
+      "start": "2010-09-01",
+      "end": "2013-06-30",
+      "duration": "2010 – 2013",
+      "skills": [
+        "Python"
+      ],
+      "activities": "President of the data science society",
+      "source": "https://demo.example/profiles/alice_dupont"
     }
-  ]
+  ],
+  "profile": {
+    "slug": "alice_dupont",
+    "headline": "COO, Demo - platform operations and agent orchestration",
+    "about": "Runs platform operations at Demo, where she is responsible for how agents are deployed, monitored and retired. Came to operations from data engineering, and still writes the tooling her team runs on.",
+    "quote": "An operating model is only real once someone is on call for it.",
+    "years_of_experience": 12,
+    "organization": "Demo",
+    "service_line": "Operations",
+    "grade": "Partner",
+    "location": {
+      "office": "Paris La Défense",
+      "city": "Paris",
+      "country": "France",
+      "country_code": "FR"
+    },
+    "photo_path": "apps/people/web/assets/portraits/alice_dupont.svg",
+    "certifications": [
+      {
+        "name": "Certified Kubernetes Administrator",
+        "issuer": "Cloud Native Computing Foundation",
+        "issue_date": "2021-03-15",
+        "status": "active",
+        "credential_url": "https://demo.example/credentials/cka/alice-dupont"
+      },
+      {
+        "name": "Demo Platform Architect",
+        "issuer": "Demo Institute",
+        "issue_date": "2023-09-01",
+        "status": "active"
+      }
+    ],
+    "languages": [
+      {
+        "name": "French",
+        "proficiency": "Native or bilingual"
+      },
+      {
+        "name": "English",
+        "proficiency": "Full professional"
+      },
+      {
+        "name": "Spanish",
+        "proficiency": "Limited working"
+      }
+    ],
+    "interests": [
+      {
+        "name": "Open source infrastructure",
+        "description": "Maintains two small operator projects.",
+        "kind": "topic"
+      },
+      {
+        "name": "Ocean conservation",
+        "kind": "topic"
+      }
+    ],
+    "recommendations": [
+      {
+        "author_first_name": "Bob",
+        "author_last_name": "Martin",
+        "relationship": "Managed Alice directly",
+        "written_on": "2024-11-02",
+        "content": "Alice took an operations function that existed on a whiteboard and made it something the whole company could rely on. She is the person I want holding the pager on a launch night."
+      },
+      {
+        "author_first_name": "Claire",
+        "author_last_name": "Bernard",
+        "relationship": "Worked with Alice on the same team",
+        "written_on": "2025-02-18",
+        "content": "We rebuilt the deployment path together. Alice argued for the boring option every time, and every time she was right."
+      }
+    ]
+  }
 }

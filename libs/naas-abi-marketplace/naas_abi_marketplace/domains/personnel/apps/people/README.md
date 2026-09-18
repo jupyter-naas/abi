@@ -1,0 +1,116 @@
+# People Search
+
+A people directory: Google-style search, a profile page per person. Everything
+it shows comes from the personnel knowledge graph, and everything it looks like
+comes from `config.yaml`.
+
+```
+person + experience  ->  graph (ontology-backed)  ->  datasets  ->  app
+   pipelines/            graphs/demo/*.ttl           dataset        web/
+                                                     service
+```
+
+## Run it
+
+```bash
+cd libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel
+make people            # rebuild the graph and the datasets, then serve
+make app-personnel-people   # serve what is already exported
+PORT=4000 make app-personnel-people
+```
+
+Then open <http://localhost:3001/>. On WSL, if `localhost` does not answer from
+Windows, use the IP from `hostname -I`.
+
+Inside Nexus the same app is served from the manifest (`html:web/index.html`)
+and its API is mounted by this module, so nothing needs to be rebuilt to embed
+it.
+
+## Rebuild the datasets
+
+```bash
+make people-datasets                       # demo graph -> dataset service
+python -m naas_abi_marketplace.domains.personnel.apps.people.scripts.export_people_from_graph \
+    --graph /path/to/your.ttl \
+    --catalog sqlite:storage/datasets.sqlite --data-path storage/datasets/
+```
+
+The exporter runs the competency queries in
+`ontologies/queries/PersonnelSparqlQueries.ttl` and writes nine tables. It
+refuses to publish an email address or a phone number: a directory is not a
+place for contact details.
+
+| Table | One row per |
+|---|---|
+| `people` | person, plus the folded `search_text` the search matches on |
+| `people_experience` | role, grouped by employer with `group_seq` |
+| `people_education` | course of study |
+| `people_skills` | person and skill |
+| `people_certifications` | certification or licence |
+| `people_languages` | language a person works in |
+| `people_recommendations` | recommendation written about them |
+| `people_interests` | interest |
+| `people_sources` | source the profile was built from |
+
+## Make it yours
+
+Everything below is `config.yaml`. Nothing here needs a code change.
+
+| Section | What it controls |
+|---|---|
+| `brand` | Name, description, the letter used when no logo is set, **and the logo and favicon files** (named relative to `web/assets/`) |
+| `theme.css_variables` | Every colour, font and width, applied to `:root` |
+| `app.pages` | Which of the three pages exist, their labels, URL segments and order |
+| `search` | Which fields are searchable and how heavily they weight, the facet field and its label, snippet length, autocomplete threshold, page size, the example queries on the home page |
+| `profile.facts` | The row under the name on a profile |
+| `profile.sections` | Which sections appear, in what order, under what title, and what each says when it is empty |
+| `data` | The dataset namespace and the table names to read |
+| `privacy` | What the exporter refuses to publish |
+
+**Your own logo and favicon:** drop the files in `web/assets/`, then name them:
+
+```yaml
+brand:
+  mark: "F"                          # used when no logo file is set
+  logo_src: "assets/my-logo.svg"     # .svg, .png, .ico …
+  favicon_src: "assets/my-icon.png"
+```
+
+Both are optional. With neither, the app draws `brand.mark` in `--accent`, so it
+never ships someone else's logo by accident. A path that does not resolve is a
+startup error, not a broken image. The catalog tile is separate: that comes from
+`icon_emoji` / `avatar_url` in `manifest.json`, so change both together.
+
+**A different population:** point `data.tables` at your own tables, keeping the
+columns in `datasets.py`. `make people-datasets` is one way to fill them; any
+writer that produces those columns works.
+
+What configuration **cannot** do is invent a page or a profile section. Those are
+renderers, registered in `web/lib/registry.js` and `config_loader.py`. Adding one
+means adding it to both, in the same change.
+
+## Files
+
+```
+people/
+├── config.yaml              # the retargeting surface
+├── config_loader.py         # validates it, and decides what the browser sees
+├── datasets.py              # the nine table schemas and how they are read
+├── text.py                  # folding, shared by the exporter and search
+├── search_payload.py        # candidates from SQL, ranked and summarised
+├── profile_payload.py       # one person, assembled into sections
+├── scripts/                 # graph -> datasets
+├── api/                     # routes, dataset service resolution, dev server
+└── web/                     # the page: vanilla ES modules, no build step
+    └── assets/              # logo, favicon, demo portraits
+```
+
+## Demo data
+
+The eight people in the demo are fictional (`data/demo/person/*/index.json`).
+Some of them have no recommendations, no languages or no certifications, on
+purpose: the profile page has to show that a section is empty as clearly as it
+shows a full one, and a demo where everyone is complete never proves it.
+
+The portraits in `web/assets/portraits/` are abstract marks, not photographs. A
+fictional person has no face, and inventing one would be inventing a person.

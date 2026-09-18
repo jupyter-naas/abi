@@ -58,5 +58,38 @@
       ],
       "source": "https://demo.example/profiles/hugo_girard"
     }
-  ]
+  ],
+  "profile": {
+    "slug": "hugo_girard",
+    "headline": "Advisor - organizational design and agile coaching",
+    "about": "Helps engineering organizations change shape without losing the people in them.",
+    "years_of_experience": 16,
+    "organization": "Demo",
+    "service_line": "Operations",
+    "grade": "Senior Manager",
+    "location": {
+      "office": "Brussels",
+      "city": "Brussels",
+      "country": "Belgium",
+      "country_code": "BE"
+    },
+    "photo_path": "apps/people/web/assets/portraits/hugo_girard.svg",
+    "certifications": [
+      {
+        "name": "Certified Agile Coach",
+        "issuer": "Agile Partners",
+        "issue_date": "2014-11-01",
+        "status": "active"
+      }
+    ],
+    "languages": [],
+    "interests": [
+      {
+        "name": "Organizational design",
+        "description": "Writes a newsletter on team topologies.",
+        "kind": "topic"
+      }
+    ],
+    "recommendations": []
+  }
 }

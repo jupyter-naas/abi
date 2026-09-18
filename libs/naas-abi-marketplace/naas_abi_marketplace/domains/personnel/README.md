@@ -13,18 +13,22 @@ personnel/
 ├── agents/
 │   └── PersonnelAgent.py
 ├── utils/                       # shared helpers (IRI minting, compaction) — see utils/README.md
+├── person_sources.py            # reads data/demo/person/*/index.json (shared by both apps)
 ├── pipelines/
-│   ├── BirthRegistrationPipeline.py
-│   └── BirthRegistrationPipeline_test.py
+│   ├── ActOfWorkingPipeline.py      # employment
+│   ├── ActOfStudyingPipeline.py     # education
+│   ├── PersonProfilePipeline.py     # person-level facts a directory shows
+│   └── utils/graph_builders.py      # PersonnelGraphContext: the RDF writer
+├── data/demo/person/<slug>/index.json   # fictional demo sources
+├── graphs/demo/personnel.ttl            # generated instance graph
 ├── apps/
-│   └── cockpit/       # workforce analytics example (static UI)
+│   ├── cockpit/       # workforce analytics example (static UI)
+│   └── people/        # People Search: directory + profiles, config-driven
 └── ontologies/
     ├── modules/                 # domain vocabulary
     │   ├── PersonnelOntology.ttl
     │   └── PersonnelOntology.py             # generated
     ├── processes/               # process slices, one BFO process per file
-    │   ├── BirthProcess.ttl
-    │   ├── BirthProcess.py                  # generated
     │   ├── ActOfWorkingProcess.ttl
     │   ├── ActOfWorkingProcess.py           # generated
     │   ├── ActOfStudyingProcess.ttl
@@ -58,6 +62,24 @@ Supporting classes: `personnel:JobDescription` (the published document) and
 `personnel:EmploymentStatus` (a quality bearing `active` / `on-leave` / `notice-period` /
 `terminated`).
 
+The vocabulary also holds what a person is *presented* as, which a directory needs
+and an HR record does not:
+
+| Class | Bucket | Carries |
+|---|---|---|
+| `personnel:ProfileSummary` | HOW WE KNOW | Headline, summary, quote and the years of experience a source claims. Person-level, where `personnel:Mission` is job-level. Sourced from a `ProfileDocument`, so every claim stays traceable. |
+| `personnel:Portrait` | HOW WE KNOW | The address of a photograph (CCO Image subclass). Never the bytes. |
+| `personnel:Certification` | HOW WE KNOW | A certification or a licence (CCO Certificate subclass, sibling of `AcademicDegree`), its issuer, dates and credential URL. |
+| `personnel:Recommendation` | HOW WE KNOW | What one person wrote about another. Both people are required: an unsigned testimonial is not a recommendation. |
+| `personnel:LanguageCapability` | HOW IT IS | A language and the proficiency a source stated. Deliberately *not* equivalent to CCO Language Skill, which is a realizable and would contradict modelling `personnel:Skill` as a quality. |
+| `personnel:Interest` | HOW IT IS | What someone follows outside the duties of any one job. |
+| `personnel:Grade` | HOW IT IS | The seniority an organization recognises, kept apart from the title of any position. |
+| `personnel:ServiceLine` | WHO | An organization that is a member part of a larger one. A service line is not a label on a person. |
+
+`abi:Site` additionally carries `office_label`, `city_name`, `country_name` and
+`country_code`, so a place can be grouped and flagged without matching country
+names across languages.
+
 ## Process ledger roadmap
 
 The `processes/` folder tracks the personnel entries of the
@@ -66,7 +88,6 @@ Each entry is one BFO process decomposed across the seven buckets.
 
 | Status | Entry | What it records | Upstream |
 |:---:|---|---|---|
-| ✅ | `BirthProcess.ttl` | Recording the birth of a person | [`BirthRegistration.ttl`](https://github.com/NCOR-Organization/BFO-Process-Ledger/blob/master/src/ontology/bpl-processes/personnel/BirthRegistration.ttl) |
 | ✅ | `ActOfWorkingProcess.ttl` | Performing work for an organization | - |
 | ✅ | `ActOfStudyingProcess.ttl` | Acquiring a curriculum at an educational organization | - |
 | ☐ | `IdentityVerificationProcess.ttl` | Establishing and validating a person's identity | `identity-verification.ttl` |
@@ -78,80 +99,48 @@ Each entry is one BFO process decomposed across the seven buckets.
 The upstream repository is **private**; the links above resolve only for members of the
 NCOR organization.
 
-### How `BirthProcess.ttl` differs from upstream
+### Conventions these process files follow
 
-The file is the upstream entry adapted to this repository's conventions:
+`BirthProcess.ttl` used to be documented here; the file has since been removed and
+only the two acts remain. The conventions it established still hold for both:
 
-1. **Header rewritten** to the marketplace shape - `abi:pythonPackage` / `abi:ontologyResource` /
-   `abi:pythonResource` locator annotations, `dc:` remapped to Dublin Core *terms* with `dc11:`
-   for *elements 1.1*, one `owl:imports` statement per IRI, and `dc:source` pointing back at the
-   upstream file.
-2. **CCO mid-level imports added** (`EventOntology`, `AgentOntology`, `InformationEntityOntology`,
-   `ExtendedRelationOntology`). Without them the validator cannot trace `cco:ont00001237` (Birth)
-   back to a BFO seven-buckets root, because its parent `cco:ont00000007` (Natural Process) is
-   defined there; the latter two carry `is about`, `caused by` and `has output`.
-3. **`abi:inheresIn` restrictions** on `Weight`, `Length`, `GestationalAge`, `BiologicalSex`,
-   `BirthFunction` and `NewbornDisposition` (now declared in `PersonnelOntology.ttl`), anchoring
-   each to `cco:ont00000562` (Animal). The validator rejects an unanchored quality, role or
-   disposition. Upstream states the inverse (`Animal bearer_of Weight`) but not the forward
-   direction, so this is a strengthening rather than a change of meaning.
-4. **Source split out of the registration.** Upstream conflates the birth with its recording. Here
-   three occurrents are distinct: `cco:ont00001237` **Birth** (the natural process, exactly one per
-   person, never amended), `personnel:BirthDeclarationAct` (the **source** - an Act of
-   Representative Communication, `cco:ont00000379`, carrying who declared, when, and the verbatim
-   `declared_content`), and `personnel:BirthProcess` (the ledger entry). The
-   registration reaches its source through `personnel:hasInformationSource`, a sub-property of CCO
-   `caused by` (`cco:ont00001819`) - **not** of `bfo:BFO_0000063` *precedes*, which carries
-   temporal order and no provenance, forbids overlapping intervals, and could not range over a
-   document. Two people declaring the same birth produce two declaration acts and two registrations
-   over one and the same `Birth`.
-5. **Namespace corrected.** `BirthRecord`, `Weight`, `Length`, `GestationalAge`, `BiologicalSex`,
-   `BirthFunction` and `NewbornDisposition` were minted under `cco:` with invented local names that
-   do not exist in CCO. They now live under `personnel:`, with `owl:equivalentClass` to the real CCO
-   terms where one exists (`ont00000633` Weight, `ont00000738` Length, `ont00001033` Biological Sex).
-   `BirthRecord` also lost an `is concretized by` restriction onto the intersection of a process and
-   five qualities - necessarily empty under BFO's category disjointness, which made the class
-   unsatisfiable. It is now `is about` the birth and the output of the registration.
-6. **Shared classes live in the module.** Qualities, `BirthRecord`, names and kinship are declared
-   in `PersonnelOntology.ttl`. This process file only adds provenance properties and restrictions
-   on those IRIs. `abi:Person` / `abi:Site` / `abi:TemporalRegion` are not restated here; pipelines
-   import them from `ABIOntology`.
+1. **Shared classes live in the module.** A process slice adds provenance properties
+   and restrictions on IRIs declared in `PersonnelOntology.ttl`; `abi:Person`,
+   `abi:Site` and `abi:TemporalRegion` are not restated, and pipelines import them
+   from `ABIOntology`.
+2. **Everything is minted under `personnel:`.** A class that does not exist upstream
+   gets this namespace, never an invented local name under `cco:`.
 
 **The upstream `ex:` example individuals were dropped.** `BaseModule.on_load()` loads every TTL in
 this tree into the triple store, so `ex:JohnDoeJr` and friends would land in the live knowledge
 graph and show up in query results. TTL files here are schema-only; individuals come from
 pipelines.
 
-## Birth registration pipeline
+## Pipelines
 
-`pipelines/BirthRegistrationPipeline.py` is the write path for
-`BirthProcess`. It uses generated classes from the module
-(`BirthRecord`, qualities, …) and the process (`Birth`, `BirthDeclarationAct`,
-`BirthProcess`), plus `abi:Person` / `abi:Site` / `abi:TemporalRegion`.
+Three write paths, all building on `PersonnelGraphContext`
+(`pipelines/utils/graph_builders.py`) and all persisting only the triples they
+added:
 
-- **Minimum input:** `first_name` + `last_name` for the subject, plus a
-  **source of trust** - either a registrant person (material entity) or a
-  source document (GDC).
-- **One Birth per person touched, one declaration + registration per payload.**
-  Registering Jeremy with parents Pascal & Christine, declared by Florent,
-  creates **four** Births (Jeremy rich; Florent / Pascal / Christine as
-  name-only stubs), each with its own declaration act and registration. Later
-  enrichment adds a *new registration* over the *same* Birth, chained with
-  `personnel:updatesPriorRegistration` - the birth is never duplicated.
-- **The source is an occurrent.** A registrant person becomes the declaration
-  act's agent (`cco:ont00001833`); a source document becomes its output
-  (`cco:ont00001829`), since a birth certificate is itself the product of an
-  earlier attestation. Either way the when/where/what-was-said hangs off the
-  act, so the registration carries a single edge to it.
-- **Tool:** `register_birth`, exposed by `PersonnelAgent.get_pipeline_tools()`.
+| Pipeline | Tool | Writes |
+|---|---|---|
+| `ActOfWorkingPipeline` | `register_act_of_working` | One job: the act, its organization, site, temporal region, employee role, mission, contract and skills |
+| `ActOfStudyingPipeline` | `register_act_of_studying` | One course of study: the act, the educational organization, enrollment record and degree |
+| `PersonProfilePipeline` | `register_person_profile` | What holds of the person rather than of one job: profile summary, portrait, work location, service line, grade, certifications, languages, interests, recommendations |
+
+Run the profile pipeline **after** the acts of working for the same person: a
+service line attaches to the employee roles those acts create. The person is
+also recorded as a member part of the service line, so the facet survives
+someone whose working history has not been recorded.
 
 ## Demo graph + cockpit datasets
 
 Build input graph and committed app datasets:
 
 ```
-data/graph/personnel_demo.ttl              # individuals from ontology classes
-apps/cockpit/data/                   # committed cockpit JSON (canonical)
+data/demo/person/<slug>/index.json   # fictional sources, committed
+graphs/demo/personnel.ttl            # generated instance graph
+apps/cockpit/data/                   # committed cockpit JSON (structure reference)
 ```
 
 Regenerate from the personnel module root:
@@ -173,6 +162,32 @@ The cockpit UI reads datasets through ``apps/cockpit/api/``
 (``GET /api/personnel-cockpit/entities/demo/...``). ``ABIModule.on_initialized``
 logs which source won via ``cockpit_data_source()``.
 
+## People Search (`apps/people`)
+
+A configurable people directory: Google-style search, a LinkedIn-style profile
+page. It is the chain the rest of this module exists to support, end to end:
+
+```
+data/demo/person/*/index.json  ->  pipelines  ->  graphs/demo/personnel.ttl
+  ->  competency queries  ->  dataset service (9 typed tables)  ->  apps/people
+```
+
+```bash
+make people                  # rebuild the graph and the datasets, then serve
+make app-personnel-people    # serve what is already exported
+```
+
+Unlike cockpit, which reads JSON from ObjectStorage, this app reads SQL from the
+dataset service: `people` plus eight child tables in the `personnel` namespace,
+written by `apps/people/scripts/export_people_from_graph.py` and readable by the
+Nexus datasets API and `DatasetsAgent` as well as by the app.
+
+Everything it looks like is `apps/people/config.yaml` - brand, logo and favicon,
+theme tokens, which profile sections appear and in what order, what each says
+when it is empty, which fields are searchable and how heavily they weigh, and
+which tables to read. Configuration cannot create a page or a section; see
+`apps/people/AGENTS.md`.
+
 ## Queries
 
 `PersonnelSparqlQueries.ttl` declares templatable SPARQL queries. The
@@ -189,18 +204,25 @@ logs which source won via ``cockpit_data_source()``.
 | `find_open_job_positions` | What are we hiring for? | `limit` |
 | `find_positions_by_title` | Who fills the positions matching a title? | `job_title`, `limit` |
 | `find_headcount_by_job_family` | How is the org split across disciplines? | `limit` |
-| `find_birth_registrations` | Registered births, with person, site, time, record, trust | `limit` |
 | `find_working_processes` | Ongoing acts of working (person, org, site, contract, role) | `limit` |
 | `find_acts_of_studying` | Acts of studying (person, educational org, enrollment, role) | `limit` |
-| `find_person_birth_lineage` | Retrace every Birth process for a person (incl. prior chain) | `person_name`, `limit` |
+| `find_people_directory` | One row per person for a directory: name, headline, place, service line, grade | `limit` |
+| `find_profile_header` | One person's profile header, by profile slug | `person_slug` |
+| `find_person_skills` | Which skills each person bears | `limit` |
+| `find_certifications` | Certifications and licences people hold | `limit` |
+| `find_languages` | Languages people work in, with stated proficiency | `limit` |
+| `find_recommendations` | Recommendations written about people, with their authors | `limit` |
+| `find_interests` | What people follow outside any one job | `limit` |
 
 Loading by name is deliberate: **adding a query to the TTL is not enough**, its `rdfs:label` must
 also be registered in the list inside `PersonnelAgent.get_sparql_tools()` or the agent will not see it.
 
 Every query is grounded in the ontology - the agent can only be asked what the vocabulary actually
 models. Each term appearing in a `sparqlTemplate` is declared in `PersonnelOntology.ttl`,
-`BirthProcess.ttl` or an upper ontology they import, and every `{{ placeholder }}` has
-a matching `intentMapping:QueryArgument` carrying a validation pattern.
+a process slice or an upper ontology they import, and every `{{ placeholder }}` has
+a matching `intentMapping:QueryArgument` carrying a validation pattern. An argument
+missing any of its four predicates is not loaded, and the query that references it
+then renders with its placeholder unfilled.
 
 Headcount is deliberately computed from employment records with no `termination_date`. Counting
 `abi:Person` gives everyone ever recorded; counting `EmploymentRecord` double-counts rehires and
@@ -218,7 +240,7 @@ ABI_SKIP_ONTOLOGY_CHECK=1 uv run python -m naas_abi_core.utils.onto2py \
 ABI_SKIP_ONTOLOGY_CHECK=1 uv run python -m naas_abi_core.utils.onto2py \
   libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/ontologies/processes/ActOfStudyingProcess.ttl
 ABI_SKIP_ONTOLOGY_CHECK=1 uv run python -m naas_abi_core.utils.onto2py \
-  libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/ontologies/processes/BirthProcess.ttl
+  libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/ontologies/processes/ActOfWorkingProcess.ttl
 uv run python -m naas_abi_core.utils.onto2py \
   libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/ontologies/modules/PersonnelOntology.ttl
 uvx ruff check --fix libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/ontologies
@@ -231,6 +253,9 @@ the triple store in full.
 
 ## Status
 
-`PersonnelAgent` is wired to the SPARQL tools plus `register_birth`. Demo individuals live in
-`data/graph/personnel_demo.ttl` (`make demo-graph`). Live ingestion of employment still goes
-through that script rather than a `WorkingPipeline`.
+`PersonnelAgent` is wired to the SPARQL tools plus the three pipeline tools
+(`register_act_of_working`, `register_act_of_studying`, `register_person_profile`).
+Demo individuals live in `graphs/demo/personnel.ttl`, built from
+`data/demo/person/*/index.json` by `make demo-graph`. Two apps read that graph:
+`apps/cockpit` (workforce analytics, JSON in ObjectStorage) and `apps/people`
+(People Search, typed tables in the dataset service).

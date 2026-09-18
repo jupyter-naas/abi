@@ -58,6 +58,58 @@
         "Terraform"
       ],
       "source": "https://demo.example/profiles/claire_bernard"
+    },
+    {
+      "process_type": "ActOfStudying",
+      "organization": "Lyon Institute of Technology",
+      "program": "Engineering Degree, Distributed Systems",
+      "site": "Lyon",
+      "start": "2013-09-01",
+      "end": "2018-06-30",
+      "duration": "2013 – 2018",
+      "skills": [
+        "Kubernetes"
+      ],
+      "source": "https://demo.example/profiles/claire_bernard"
     }
-  ]
+  ],
+  "profile": {
+    "slug": "claire_bernard",
+    "headline": "CTO, Demo - platform engineering",
+    "about": "Builds the platform Demo runs on. Kubernetes since it was hard, Python since before that.",
+    "years_of_experience": 9,
+    "organization": "Demo",
+    "service_line": "Technology",
+    "grade": "Director",
+    "location": {
+      "office": "Lyon Part-Dieu",
+      "city": "Lyon",
+      "country": "France",
+      "country_code": "FR"
+    },
+    "photo_path": "apps/people/web/assets/portraits/claire_bernard.svg",
+    "certifications": [],
+    "languages": [
+      {
+        "name": "French",
+        "proficiency": "Native or bilingual"
+      },
+      {
+        "name": "English",
+        "proficiency": "Professional working"
+      },
+      {
+        "name": "German",
+        "proficiency": "Limited working"
+      }
+    ],
+    "interests": [
+      {
+        "name": "Mountain rescue volunteering",
+        "description": "Weekend volunteer with a local team.",
+        "kind": "topic"
+      }
+    ],
+    "recommendations": []
+  }
 }

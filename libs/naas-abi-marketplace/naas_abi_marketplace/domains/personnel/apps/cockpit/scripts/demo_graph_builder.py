@@ -9,12 +9,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from naas_abi_marketplace.domains.personnel.apps.cockpit.scripts.person_sources import (
-    load_person_sources,
-    sources_to_employees,
-    sources_to_experiences,
-    sources_to_profile_urls,
-)
 from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
     EmployeeRole,
     EmploymentRecord,
@@ -29,6 +23,13 @@ from naas_abi_marketplace.domains.personnel.paths import (
     ONTOLOGIES_DIR,
     PERSONNEL_ROOT,
 )
+from naas_abi_marketplace.domains.personnel.person_sources import (
+    load_person_sources,
+    sources_to_employees,
+    sources_to_experiences,
+    sources_to_profile_urls,
+    sources_to_profiles,
+)
 from naas_abi_marketplace.domains.personnel.pipelines.ActOfStudyingPipeline import (
     ActOfStudyingPipeline,
     ActOfStudyingPipelineConfiguration,
@@ -38,6 +39,11 @@ from naas_abi_marketplace.domains.personnel.pipelines.ActOfWorkingPipeline impor
     ActOfWorkingPipeline,
     ActOfWorkingPipelineConfiguration,
     ActOfWorkingPipelineParameters,
+)
+from naas_abi_marketplace.domains.personnel.pipelines.PersonProfilePipeline import (
+    PersonProfilePipeline,
+    PersonProfilePipelineConfiguration,
+    PersonProfilePipelineParameters,
 )
 from naas_abi_marketplace.domains.personnel.pipelines.utils.graph_builders import (
     PersonnelGraphContext,
@@ -158,6 +164,7 @@ def build_instances(source_dir: Path | None = None) -> Graph:
     employees = sources_to_employees(payloads)
     profile_urls = sources_to_profile_urls(payloads)
     experiences = sources_to_experiences(payloads)
+    profiles = sources_to_profiles(payloads)
 
     context = PersonnelGraphContext(creator="demo_graph_builder")
     working_cfg = ActOfWorkingPipelineConfiguration(
@@ -227,6 +234,22 @@ def build_instances(source_dir: Path | None = None) -> Graph:
         )
         if roster and context.last_position_uri:
             current_position[person_key] = context.last_position_uri
+
+    # After the acts of working, so the employee roles a service line attaches to
+    # already exist.
+    profile_pipeline = PersonProfilePipeline(
+        PersonProfilePipelineConfiguration(
+            triple_store=None, persist=False, context=context
+        )
+    )
+    for profile in profiles:
+        profile_pipeline.run(
+            PersonProfilePipelineParameters(
+                first_name=profile["first"],
+                last_name=profile["last"],
+                **{k: v for k, v in profile.items() if k not in ("first", "last")},
+            )
+        )
 
     _add_employment_records(context, employees=employees, current_position=current_position)
     return context.graph

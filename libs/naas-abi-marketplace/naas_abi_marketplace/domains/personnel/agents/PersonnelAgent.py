@@ -103,6 +103,13 @@ Help the user accomplish their human resources tasks using the tools available t
             "find_working_processes",
             "find_skills_developed",
             "find_acts_of_studying",
+            "find_people_directory",
+            "find_profile_header",
+            "find_person_skills",
+            "find_certifications",
+            "find_languages",
+            "find_recommendations",
+            "find_interests",
         ]
         return list(templatable_sparql_query_module.get_tools(personnel_sparql_tools))
 
