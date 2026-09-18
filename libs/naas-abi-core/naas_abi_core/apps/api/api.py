@@ -8,8 +8,10 @@ print(
     flush=True,
 )
 
+import asyncio
 import os
 import subprocess
+from contextlib import asynccontextmanager
 from importlib.resources import files
 from typing import Annotated
 
@@ -77,10 +79,30 @@ class LazyEngine:
 engine = LazyEngine()
 api_runtime_configuration = _load_api_runtime_configuration()
 
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    yield
+    # Shutdown phase. Read the private attribute directly, not through
+    # LazyEngine.__getattr__'s proxy -- going through the proxy would
+    # lazily construct and load a whole new Engine() just to shut down
+    # something that, in the common case (app never actually served a
+    # request needing it), was never loaded in the first place.
+    runtime_engine = engine._engine
+    if runtime_engine is None:
+        return
+    logger.debug("api: shutting down engine (NATS primary adapters, if any)")
+    # Engine.shutdown() is synchronous (it bridges to async NATS calls via
+    # nats_runtime.run_coro internally, same as every other engine-loading
+    # entry point) -- run it off the event loop so a slow drain can't block
+    # the rest of the shutdown sequence.
+    await asyncio.to_thread(runtime_engine.shutdown)
+
+
 # Init API
 TITLE = api_runtime_configuration.title
 DESCRIPTION = api_runtime_configuration.description
-app = FastAPI(title=TITLE, docs_url=None, redoc_url=None)
+app = FastAPI(title=TITLE, docs_url=None, redoc_url=None, lifespan=_lifespan)
 
 # Set logo path
 logo_path = api_runtime_configuration.logo_path
