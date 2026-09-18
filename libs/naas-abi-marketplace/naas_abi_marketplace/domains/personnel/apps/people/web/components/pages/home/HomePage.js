@@ -1,7 +1,7 @@
 import { searchBoxHtml, wireSearch } from "../../SearchBox.js";
 import { logoHtml } from "../../../lib/config.js";
 import { escapeHtml } from "../../../lib/dom.js";
-import { searchHref } from "../../../lib/routes.js";
+import { ontologyHref, searchHref } from "../../../lib/routes.js";
 
 export function mountHome(view, { config }) {
   const examples = config.search?.example_queries || [];
@@ -21,6 +21,9 @@ export function mountHome(view, { config }) {
               .join("")}</div>`
           : ""
       }
+      <p class="home-ontology">
+        <a class="home-ontology-link" href="${ontologyHref(config)}">Personnel ontology</a>
+      </p>
     </div>`;
   wireSearch(view, config);
   return { showTopbarSearch: false };

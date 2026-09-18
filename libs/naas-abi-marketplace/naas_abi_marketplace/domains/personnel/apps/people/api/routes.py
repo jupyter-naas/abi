@@ -22,6 +22,9 @@ from naas_abi_marketplace.domains.personnel.apps.people.config_loader import (
 from naas_abi_marketplace.domains.personnel.apps.people.datasets import (
     DatasetsMissingError,
 )
+from naas_abi_marketplace.domains.personnel.apps.people.ontology_payload import (
+    build_ontology_payload,
+)
 
 router = APIRouter(tags=["personnel-people"])
 
@@ -55,6 +58,11 @@ def get_suggest(q: str = Query("", max_length=200)) -> dict:
         }
     except DatasetsMissingError as exc:
         raise HTTPException(status_code=404, detail=exc.as_detail()) from exc
+
+
+@router.get("/ontology")
+def get_ontology() -> dict:
+    return build_ontology_payload()
 
 
 @router.get("/people/{slug}")

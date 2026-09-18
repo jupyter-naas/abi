@@ -26,7 +26,7 @@ CONFIG_PATH = APP_ROOT / "config.yaml"
 WEB_ROOT = APP_ROOT / "web"
 ASSETS_ROOT = WEB_ROOT / "assets"
 
-REGISTERED_PAGE_IDS = frozenset({"home", "results", "profile"})
+REGISTERED_PAGE_IDS = frozenset({"home", "results", "profile", "ontology"})
 REGISTERED_SECTION_IDS = (
     "about",
     "experience",
@@ -341,6 +341,7 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
         },
         "data": _validate_data(_mapping(config.get("data"), "data")),
         "privacy": config.get("privacy") or {},
+        "graph": config.get("graph") or {},
     }
 
 
@@ -370,6 +371,7 @@ def public_config(path: Path | None = None) -> dict[str, Any]:
         "theme": config["theme"],
         "search": search,
         "profile": {"facts": config["profile"]["facts"], "sections": sections},
+        "graph": config.get("graph") or {},
     }
 
 

@@ -30,3 +30,7 @@ export function fetchSuggestions(query) {
 export function fetchPerson(slug) {
   return getJson(`/people/${encodeURIComponent(slug)}`);
 }
+
+export function fetchOntology() {
+  return getJson("/ontology");
+}

@@ -32,6 +32,11 @@ export function searchHref(config, { query = "", facet = "" } = {}) {
   return `#/${page?.url || "search"}${suffix ? `?${suffix}` : ""}`;
 }
 
+export function ontologyHref(config) {
+  const page = (config.app?.pages || []).find((item) => item.page_id === "ontology");
+  return `#/${page?.url || "ontology"}`;
+}
+
 export function profileHref(config, slug, { query = "" } = {}) {
   const page = (config.app?.pages || []).find((item) => item.page_id === "profile");
   const params = new URLSearchParams();

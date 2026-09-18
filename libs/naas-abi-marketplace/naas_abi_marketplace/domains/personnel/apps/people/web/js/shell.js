@@ -18,6 +18,7 @@ const footer = document.getElementById("footer");
 const scrollMemory = new Map();
 let config = null;
 let currentHash = null;
+let activePageTeardown = null;
 
 /**
  * A portrait or a flag that fails to load is removed rather than left as a
@@ -59,6 +60,9 @@ async function render() {
   if (currentHash) scrollMemory.set(currentHash, window.scrollY);
   currentHash = window.location.hash || "#/";
 
+  activePageTeardown?.();
+  activePageTeardown = null;
+
   let state = { showTopbarSearch: true };
   try {
     state = (await mountPage(route.pageId, view, { config, ...route })) || state;
@@ -66,11 +70,13 @@ async function render() {
     view.innerHTML = `<div class="results"><div class="empty-state error-block">
       <h2>Something went wrong</h2><p>${escapeHtml(error.message)}</p></div></div>`;
   }
+  if (state.teardown) activePageTeardown = state.teardown;
   renderTopbar(state);
   watchContentAlign();
   renderFooter();
   document.title = state.title || config.brand?.name || "People";
-  window.scrollTo(0, scrollMemory.get(currentHash) || 0);
+  if (state.lockViewport) window.scrollTo(0, 0);
+  else window.scrollTo(0, scrollMemory.get(currentHash) || 0);
 }
 
 // "/" focuses the search field, the way a search page is expected to behave.
