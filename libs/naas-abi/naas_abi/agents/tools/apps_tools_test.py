@@ -15,7 +15,6 @@ from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_
 
 WSR = "acme.module:wsr"
 DOCS = "acme.module:docs"
-_HIDDEN_DEMO = "fixture"
 
 
 def _app(app_name: str, **extra: Any) -> AppInfo:
@@ -52,7 +51,7 @@ class _FakeAppsService:
 @pytest.fixture
 def apps(monkeypatch) -> dict[str, Any]:
     service = _FakeAppsService()
-    catalog = [_app("wsr", demo_login="demo", demo_password=_HIDDEN_DEMO), _app("docs")]
+    catalog = [_app("wsr", demo_login="demo", demo_password="s3cret"), _app("docs")]
     external = [
         SimpleNamespace(name="Status", url="https://status.example.com", description="")
     ]
@@ -110,7 +109,7 @@ def test_get_app_defaults_to_the_open_app_and_hides_the_password(apps) -> None:
 
     assert out["app_id"] == WSR
     assert out["has_demo_login"] is True
-    assert _HIDDEN_DEMO not in str(out)
+    assert "s3cret" not in str(out)
     assert out["open_in_nexus"] == "/workspace/ws-1/apps?open=acme.module%3Awsr"
 
 

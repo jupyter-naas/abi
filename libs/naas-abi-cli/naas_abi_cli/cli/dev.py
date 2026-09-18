@@ -200,9 +200,6 @@ def _service_url(port: int) -> str:
 
 def _port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        # Match the servers: closed connections in TIME_WAIT must not move a
-        # restarted service to a new port and leave its dependants behind.
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.settimeout(0.3)
         try:
             sock.bind((BIND_HOST, port))

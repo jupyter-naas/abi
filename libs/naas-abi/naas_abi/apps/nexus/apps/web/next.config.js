@@ -1,5 +1,4 @@
 const path = require('path');
-const { PHASE_DEVELOPMENT_SERVER } = require('next/constants');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -49,8 +48,4 @@ const nextConfig = {
   },
 };
 
-// Keep production builds from replacing chunks used by a running dev server.
-module.exports = (phase) => ({
-  ...nextConfig,
-  distDir: phase === PHASE_DEVELOPMENT_SERVER ? '.next-dev' : '.next',
-});
+module.exports = nextConfig;

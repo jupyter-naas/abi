@@ -375,11 +375,7 @@ def api():
     if reload_enabled:
         run_kwargs["app"] = "naas_abi_core.apps.api.api:get_app"
         run_kwargs["factory"] = True
-        from pathlib import Path
-
-        from naas_abi_core.apps.api.reload import reload_directories
-
-        run_kwargs["reload_dirs"] = reload_directories(Path.cwd())
+        run_kwargs["reload_dirs"] = ["src", "libs"]
     else:
         run_kwargs["app"] = get_app()
 
