@@ -128,8 +128,8 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
     recommendations = by_person("find_recommendations")
     interests = by_person("find_interests")
 
-    working = run_query(graph, queries["find_working_processes"], limit=ROW_LIMIT)
-    studying = run_query(graph, queries["find_acts_of_studying"], limit=ROW_LIMIT)
+    working = run_query(graph, queries["find_working_experiences"], limit=ROW_LIMIT)
+    studying = run_query(graph, queries["find_educations"], limit=ROW_LIMIT)
     by_label = {row["personLabel"]: slug for slug, row in people_by_slug.items()}
 
     experience: dict[str, list[dict[str, Any]]] = {}

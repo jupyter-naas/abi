@@ -93,11 +93,40 @@ Each entry is one BFO process decomposed across the seven buckets.
 | ☐ | `IdentityVerificationProcess.ttl` | Establishing and validating a person's identity | `identity-verification.ttl` |
 | ☐ | `ResidenceChangeProcess.ttl` | Recording a change of location or address | `residence-change.ttl` |
 | ☐ | `OnboardingProcess.ttl` | Integration of personnel into an organization | `onboarding.ttl` |
-| ☐ | `PersonnelProfilingProcess.ttl` | Recording qualifications, experience, skills and history | `personnel-profiling.ttl` |
+| ✅ | `PersonnelProfilingProcess.ttl` | Registering a person from a profile document (orchestrates working, studying, profile pipelines) | `personnel-profiling.ttl` |
 | ☐ | `SeparationProcess.ttl` | Departure of personnel from an organization | `separation.ttl` |
 
 The upstream repository is **private**; the links above resolve only for members of the
 NCOR organization.
+
+#### PersonnelProfilingProcess (planned, not implemented)
+
+NCOR’s **PersonnelProfilingProcess** is the ledger entry for “recording qualifications,
+experience, skills and history” as **one** process. In this repo that work is already
+**split on purpose**:
+
+- **Do not duplicate** job and degree episodes inside a profiling process. They stay
+  `ActOfWorking` / `ActOfStudying` instances with their seven-bucket decomposition.
+- **Do not move** certifications, languages, recommendations, interests, or the published
+  summary into a third process file today. They are **`PersonnelOntology` continuant**
+  classes asserted by `PersonProfilePipeline`, with provenance on `ProfileDocument`.
+
+When `PersonnelProfilingProcess.ttl` is added, it should **orchestrate and document**
+rather than re-store data:
+
+1. **Inputs:** one or more `ProfileDocument` IRIs (and optionally HR system exports).
+2. **Outputs (process participants / realized roles):** triggers invocation of
+   `register_act_of_working`, `register_act_of_studying`, and `register_person_profile`
+   in order (profile after working acts so service line membership can attach to roles).
+3. **Restrictions:** the process **may not** assert a second copy of `Mission`, `Skill`,
+   or `EnrollmentRecord` for the same source URL; it **links** to the acts and GDCs the
+   pipelines already wrote.
+4. **Agent surface:** a single tool (e.g. `register_profile_from_source`) that wraps the
+   three pipelines is enough for runtime; the TTL slice explains the NCOR decomposition.
+
+That keeps the ontology graph honest: two macro **career episode** processes plus a
+**profiling** process that is mostly **information-artifact processing** (reading a CV),
+not a substitute for working or studying.
 
 ### Conventions these process files follow
 
@@ -116,6 +145,27 @@ this tree into the triple store, so `ex:JohnDoeJr` and friends would land in the
 graph and show up in query results. TTL files here are schema-only; individuals come from
 pipelines.
 
+## Workflows
+
+| Workflow | Tool / CLI | Purpose |
+|---|---|---|
+| `DemoPersonGraphWorkflow` | `build_demo_person_graph` | Load every `data/demo/person/*/index.json` through `register_profile_from_source`, then add cockpit roster employment records |
+
+Parameters:
+
+- **`mode=demo`** (default): write **`graphs/demo/personnel.ttl`** locally (schema + instances). Does **not** touch the triple store. Used by `make demo-graph`.
+- **`mode=triple_store`**: insert **instance** triples into the personnel named graph (requires a running ABI engine with `TripleStoreService`).
+
+```bash
+# From the ABI repo root — same result as make demo-graph
+uv run python -m naas_abi_marketplace.domains.personnel.workflows.DemoPersonGraphWorkflow
+
+uv run python -m naas_abi_marketplace.domains.personnel.workflows.DemoPersonGraphWorkflow \
+  --mode demo --source-dir libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/data/demo/person
+```
+
+Implementation details live in `graph/demo.py` (shared with `apps/cockpit/scripts/demo_graph_builder.py`).
+
 ## Pipelines
 
 Three write paths, all building on `PersonnelGraphContext`
@@ -127,6 +177,7 @@ added:
 | `ActOfWorkingPipeline` | `register_act_of_working` | One job: the act, its organization, site, temporal region, employee role, mission, contract and skills |
 | `ActOfStudyingPipeline` | `register_act_of_studying` | One course of study: the act, the educational organization, enrollment record and degree |
 | `PersonProfilePipeline` | `register_person_profile` | What holds of the person rather than of one job: profile summary, portrait, work location, service line, grade, certifications, languages, interests, recommendations |
+| `ProfileFromSourcePipeline` | `register_profile_from_source` | One published source payload: all working/studying records, then person profile (same order as the demo graph builder) |
 
 Run the profile pipeline **after** the acts of working for the same person: a
 service line attaches to the employee roles those acts create. The person is
@@ -188,6 +239,36 @@ when it is empty, which fields are searchable and how heavily they weigh, and
 which tables to read. Configuration cannot create a page or a section; see
 `apps/people/AGENTS.md`.
 
+### Profile sections vs ontology layers
+
+People Search shows a LinkedIn-style resume, but the graph is **not** two macro
+processes alone. Episodes (jobs, degrees) are process-shaped; presentation and
+social proof are person-level continuant facts written by `PersonProfilePipeline`.
+The mapping below is what the **Ontology** page and profile **SparqlQuery** card
+reflect: each section’s competency query, the pipeline that populates it, and the
+main classes (BFO bucket in parentheses).
+
+| Profile section | Competency query | Write path | Main ontology touchpoints |
+|---|---|---|---|
+| Intro, **About**, profile **facts** | `find_profile_header` | `PersonProfilePipeline` | `ProfileSummary`, `Portrait`, `Grade`, `ServiceLine`, `Site` (GDC / quality / site); `isEmployedBy` is a convenience edge |
+| **Experience** | `find_working_experiences` | `ActOfWorkingPipeline` | `ActOfWorking` (process), `EmployeeRole`, `JobPosition`, `Mission`, `EmploymentContract`, `TemporalRegion`, `Site` |
+| **Education** | `find_educations` | `ActOfStudyingPipeline` | `ActOfStudying` (process), `EnrollmentRecord`, `StudentRole`, `AcademicDegree`, `Site`, `TemporalRegion` |
+| **Skills** (list on profile) | `find_person_skills` | Acts + export rollup | `Skill` (quality on person via `hasSkill`); acquired in acts via `developsSkill` / `isSkillDevelopedIn` |
+| **Licenses & certifications** | `find_certifications` | `PersonProfilePipeline` | `Certification` (GDC) |
+| **Languages** | `find_languages` | `PersonProfilePipeline` | `LanguageCapability` (quality) |
+| **Recommendations** | `find_recommendations` | `PersonProfilePipeline` | `Recommendation` (GDC), author `Person` + optional `ProfileSummary` |
+| **Interests** | `find_interests` | `PersonProfilePipeline` | `Interest` (quality) |
+| **Sources** (UI) | `find_profile_header`, `find_working_experiences` | export + graph | `ProfileDocument` / `source_url` on summary and missions |
+| Directory / search index | `find_people_directory` | export | Same header fields as `find_profile_header`, all people |
+
+Related query not wired to a profile section: `find_skills_developed` returns one
+row per person, skill **and act of working** (where the skill was acquired). Use
+it when the question is provenance; use `find_person_skills` for the flat list the
+profile section shows.
+
+Canonical section → query wiring lives in
+`apps/people/scripts/profile_sparql.py` (`SECTION_QUERY_NAMES`).
+
 ## Queries
 
 `PersonnelSparqlQueries.ttl` declares templatable SPARQL queries. The
@@ -204,8 +285,9 @@ which tables to read. Configuration cannot create a page or a section; see
 | `find_open_job_positions` | What are we hiring for? | `limit` |
 | `find_positions_by_title` | Who fills the positions matching a title? | `job_title`, `limit` |
 | `find_headcount_by_job_family` | How is the org split across disciplines? | `limit` |
-| `find_working_processes` | Ongoing acts of working (person, org, site, contract, role) | `limit` |
-| `find_acts_of_studying` | Acts of studying (person, educational org, enrollment, role) | `limit` |
+| `find_working_experiences` | Acts of working (person, org, site, contract, role, mission) | `limit` |
+| `find_skills_developed` | Skills with the act of working each was developed in | `limit` |
+| `find_educations` | Acts of studying (person, educational org, enrollment, role) | `limit` |
 | `find_people_directory` | One row per person for a directory: name, headline, place, service line, grade | `limit` |
 | `find_profile_header` | One person's profile header, by profile slug | `person_slug` |
 | `find_person_skills` | Which skills each person bears | `limit` |
@@ -240,6 +322,8 @@ ABI_SKIP_ONTOLOGY_CHECK=1 uv run python -m naas_abi_core.utils.onto2py \
 ABI_SKIP_ONTOLOGY_CHECK=1 uv run python -m naas_abi_core.utils.onto2py \
   libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/ontologies/processes/ActOfStudyingProcess.ttl
 ABI_SKIP_ONTOLOGY_CHECK=1 uv run python -m naas_abi_core.utils.onto2py \
+  libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/ontologies/processes/PersonnelProfilingProcess.ttl
+ABI_SKIP_ONTOLOGY_CHECK=1 uv run python -m naas_abi_core.utils.onto2py \
   libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/ontologies/processes/ActOfWorkingProcess.ttl
 uv run python -m naas_abi_core.utils.onto2py \
   libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/ontologies/modules/PersonnelOntology.ttl
@@ -253,8 +337,9 @@ the triple store in full.
 
 ## Status
 
-`PersonnelAgent` is wired to the SPARQL tools plus the three pipeline tools
-(`register_act_of_working`, `register_act_of_studying`, `register_person_profile`).
+`PersonnelAgent` is wired to the SPARQL tools plus pipeline tools
+(`register_profile_from_source`, `register_act_of_working`, `register_act_of_studying`,
+`register_person_profile`).
 Demo individuals live in `graphs/demo/personnel.ttl`, built from
 `data/demo/person/*/index.json` by `make demo-graph`. Two apps read that graph:
 `apps/cockpit` (workforce analytics, JSON in ObjectStorage) and `apps/people`

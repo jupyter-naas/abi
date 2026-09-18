@@ -171,9 +171,9 @@ def main() -> None:
         "find_positions_by_title": {"job_title": ""},
         "find_employee_by_id": {"employee_id": "E-10428"},
         "find_employee_roster": {"limit": "500"},
-        "find_working_processes": {"limit": "500"},
+        "find_working_experiences": {"limit": "500"},
         "find_skills_developed": {"limit": "500"},
-        "find_acts_of_studying": {"limit": "500"},
+        "find_educations": {"limit": "500"},
     }
     for label, template in templates.items():
         sparql = _strip_graph(_fill_args(template, **arg_overrides.get(label, {})))
@@ -243,7 +243,7 @@ def main() -> None:
     ]
     roster_rows, roster_source = build_roster_rows(
         employment_rows,
-        source_rows.get("find_working_processes", []),
+        source_rows.get("find_working_experiences", []),
         org_label=org_label,
     )
     print(f"  roster: {len(roster_rows)} rows from {roster_source}")
@@ -259,8 +259,8 @@ def main() -> None:
 
     kpis, roster_rows = build_workforce_metrics(
         roster_rows,
-        source_rows.get("find_working_processes", []),
-        source_rows.get("find_acts_of_studying", []),
+        source_rows.get("find_working_experiences", []),
+        source_rows.get("find_educations", []),
         org_label=org_label,
     )
 
@@ -272,9 +272,9 @@ def main() -> None:
 
     graph_payload = build_graph_page_payload(
         roster_rows,
-        source_rows.get("find_working_processes", []),
+        source_rows.get("find_working_experiences", []),
         source_rows.get("find_skills_developed", []),
-        source_rows.get("find_acts_of_studying", []),
+        source_rows.get("find_educations", []),
     )
     _dump(
         ENTITY_DATA / "graph" / "index.json",
@@ -292,8 +292,8 @@ def main() -> None:
         ENTITY_DATA / "logs" / "ledger.json",
         _envelope(
             build_ledger_log_rows(
-                source_rows.get("find_working_processes", []),
-                source_rows.get("find_acts_of_studying", []),
+                source_rows.get("find_working_experiences", []),
+                source_rows.get("find_educations", []),
                 owner_person_id=logs_config["owner"]["person"]["entity_id"],
                 owner_person_label=logs_config["owner"]["person"]["display_name"],
                 owner_agent_id=logs_config["owner"]["agent"]["entity_id"],

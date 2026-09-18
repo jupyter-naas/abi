@@ -153,16 +153,22 @@ def _sparql_string_literal(value: str) -> str:
 def restrict_to_profile_slug(sparql: str, slug: str) -> str:
     """Narrow a directory-wide competency query to one profile slug."""
     escaped = _sparql_string_literal(slug)
-    injection = f"""
-            FILTER EXISTS {{
-              ?person personnel:profile_slug ?__profileSlug .
-              FILTER(LCASE(STR(?__profileSlug)) = LCASE("{escaped}"))
-            }}
-"""
-    for marker in ("        ORDER BY", "        LIMIT"):
-        if marker in sparql:
-            return sparql.replace(marker, injection + marker, 1)
-    return sparql.rstrip() + injection
+    injection = (
+        "            FILTER EXISTS {\n"
+        "              ?person personnel:profile_slug ?__profileSlug .\n"
+        f'              FILTER(LCASE(STR(?__profileSlug)) = LCASE("{escaped}"))\n'
+        "            }\n"
+    )
+    # Must stay inside the WHERE `{ ... }` block — injecting before ORDER BY
+    # leaves FILTER outside the pattern and rdflib rejects the query.
+    for pattern in (
+        r"(\n        \}\n        ORDER BY)",
+        r"(\n        \}\n        LIMIT )",
+    ):
+        updated, count = re.subn(pattern, injection + r"\1", sparql, count=1)
+        if count:
+            return updated
+    raise ValueError("Could not inject profile slug filter into SPARQL template")
 
 
 def render_query_raw(

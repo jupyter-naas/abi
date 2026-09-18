@@ -100,9 +100,9 @@ Help the user accomplish their human resources tasks using the tools available t
             "find_open_job_positions",
             "find_positions_by_title",
             "find_headcount_by_job_family",
-            "find_working_processes",
+            "find_working_experiences",
             "find_skills_developed",
-            "find_acts_of_studying",
+            "find_educations",
             "find_people_directory",
             "find_profile_header",
             "find_person_skills",
@@ -115,7 +115,7 @@ Help the user accomplish their human resources tasks using the tools available t
 
     @classmethod
     def get_pipeline_tools(cls) -> list:
-        """Process registration tools (Act of Working, Act of Studying)."""
+        """Process registration and profile-from-source orchestration tools."""
         from naas_abi_marketplace.domains.personnel import ABIModule
         from naas_abi_marketplace.domains.personnel.pipelines.ActOfStudyingPipeline import (
             ActOfStudyingPipeline,
@@ -125,22 +125,34 @@ Help the user accomplish their human resources tasks using the tools available t
             ActOfWorkingPipeline,
             ActOfWorkingPipelineConfiguration,
         )
+        from naas_abi_marketplace.domains.personnel.pipelines.PersonProfilePipeline import (
+            PersonProfilePipeline,
+            PersonProfilePipelineConfiguration,
+        )
+        from naas_abi_marketplace.domains.personnel.pipelines.profile_from_source import (
+            ProfileFromSourcePipeline,
+            ProfileFromSourcePipelineConfiguration,
+        )
         from rdflib import URIRef
 
         module = ABIModule.get_instance()
         triple_store = module.engine.services.triple_store
         graph_name = URIRef(module.configuration.graph_name)
-        working = ActOfWorkingPipeline(
-            ActOfWorkingPipelineConfiguration(
-                triple_store=triple_store, graph_name=graph_name, persist=True
-            )
+        pipeline_cfg = dict(
+            triple_store=triple_store, graph_name=graph_name, persist=True
         )
-        studying = ActOfStudyingPipeline(
-            ActOfStudyingPipelineConfiguration(
-                triple_store=triple_store, graph_name=graph_name, persist=True
-            )
+        working = ActOfWorkingPipeline(ActOfWorkingPipelineConfiguration(**pipeline_cfg))
+        studying = ActOfStudyingPipeline(ActOfStudyingPipelineConfiguration(**pipeline_cfg))
+        profile = PersonProfilePipeline(PersonProfilePipelineConfiguration(**pipeline_cfg))
+        from_source = ProfileFromSourcePipeline(
+            ProfileFromSourcePipelineConfiguration(**pipeline_cfg)
         )
-        return [*working.as_tools(), *studying.as_tools()]
+        return [
+            *from_source.as_tools(),
+            *working.as_tools(),
+            *studying.as_tools(),
+            *profile.as_tools(),
+        ]
 
     @classmethod
     def get_tools(cls) -> list:

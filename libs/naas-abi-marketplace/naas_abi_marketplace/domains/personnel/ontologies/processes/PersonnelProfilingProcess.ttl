@@ -1,0 +1,89 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix personnel: <http://ontology.naas.ai/personnel/> .
+
+personnel:PersonnelProfilingProcess a owl:Ontology ;
+  # Slice: the profiling act and process-only properties. It does not restate
+  # missions, skills, enrollments or profile summaries — those remain the
+  # outputs of register_act_of_working, register_act_of_studying and
+  # register_person_profile (register_profile_from_source orchestrates them).
+  #
+  # Seven-bucket mapping for reading one published profile into the graph:
+  #   WHO          Person (the subject of the profile)
+  #   WHAT         ActOfPersonnelProfiling (this process)
+  #   WHEN         TemporalRegion (optional — when the read/registration occurred)
+  #   WHERE        Site (optional — where the document was retrieved)
+  #   WHY          (not modelled — no separate bearer role in v1)
+  #   HOW IT IS    (episode skills stay on working/studying acts)
+  #   HOW WE KNOW  ProfileDocument (input GDC at a retrievable URL)
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/personnel/PersonnelOntology> ;
+  rdfs:member "bpl-processes/personnel" ;
+  abi:pythonPackage "naas_abi_marketplace.domains.personnel" ;
+  abi:ontologyResource "ontologies/processes/PersonnelProfilingProcess.ttl" ;
+  abi:pythonResource "ontologies/processes/PersonnelProfilingProcess.py" ;
+  dc:title "Personnel Profiling Process Ontology"@en ;
+  dc:description "Process slice for personnel profiling: a planned act in which statements from a published profile document are registered as acts of working, acts of studying and person-level directory facts without duplicating episode data in a second store."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Runtime: register_profile_from_source. NCOR ledger entry personnel-profiling.ttl (upstream)."@en ;
+  dc11:contributor "Alice Dupont" ;
+  dc11:date "2026-09-18"^^xsd:date .
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+personnel:ActOfPersonnelProfiling a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:fromProfileDocument ; owl:someValuesFrom personnel:ProfileDocument ] ;
+  rdfs:label "Act of Personnel Profiling"@en ;
+  skos:definition "A Planned Act in which a person is registered in the knowledge graph from a published profile document: working and studying episodes plus person-level presentation facts, with provenance on the document URL."@en ;
+  skos:example "Registering Alice Dupont from https://demo.example/profiles/alice_dupont into the personnel graph."@en ;
+  rdfs:comment "Orchestration only. Episode triples are written by the working and studying pipelines; summary, certifications and social proof by the person profile pipeline."@en .
+
+#################################################################
+#    Object properties - process-only
+#################################################################
+
+personnel:hasActOfPersonnelProfiling a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf personnel:isActOfPersonnelProfilingOf ;
+  rdfs:label "has act of personnel profiling"@en ;
+  skos:definition "Relates a person to an act of personnel profiling in which they were registered from a profile document."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range personnel:ActOfPersonnelProfiling .
+
+personnel:isActOfPersonnelProfilingOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf personnel:hasActOfPersonnelProfiling ;
+  rdfs:label "is act of personnel profiling of"@en ;
+  skos:definition "Relates an act of personnel profiling to the person who is its subject."@en ;
+  rdfs:domain personnel:ActOfPersonnelProfiling ;
+  rdfs:range abi:Person .
+
+personnel:fromProfileDocument a owl:ObjectProperty ;
+  rdfs:subPropertyOf cco:ont00001808 ;
+  owl:inverseOf personnel:isProfileDocumentForProfiling ;
+  rdfs:label "from profile document"@en ;
+  skos:definition "Relates an act of personnel profiling to the profile document that was read as its source."@en ;
+  rdfs:domain personnel:ActOfPersonnelProfiling ;
+  rdfs:range personnel:ProfileDocument .
+
+personnel:isProfileDocumentForProfiling a owl:ObjectProperty ;
+  owl:inverseOf personnel:fromProfileDocument ;
+  rdfs:label "is profile document for profiling"@en ;
+  skos:definition "Relates a profile document to an act of personnel profiling that used it as input."@en ;
+  rdfs:domain personnel:ProfileDocument ;
+  rdfs:range personnel:ActOfPersonnelProfiling .

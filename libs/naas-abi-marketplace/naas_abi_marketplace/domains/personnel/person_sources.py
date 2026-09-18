@@ -119,6 +119,112 @@ def sources_to_experiences(payloads: list[dict]) -> list[dict]:
     return experiences
 
 
+def payload_to_profile_source_parameters(payload: dict) -> object:
+    """Build ``ProfileFromSourcePipelineParameters`` from one demo ``index.json``."""
+    from naas_abi_marketplace.domains.personnel.pipelines.PersonProfilePipeline import (
+        CertificationInput,
+        InterestInput,
+        LanguageInput,
+        RecommendationInput,
+    )
+    from naas_abi_marketplace.domains.personnel.pipelines.profile_from_source import (
+        ProfileBlockInput,
+        ProfileFromSourcePipelineParameters,
+        SourcePersonInput,
+        StudyingRecordInput,
+        WorkingRecordInput,
+    )
+
+    person = payload["person"]
+    records: list[WorkingRecordInput | StudyingRecordInput] = []
+    for record in payload.get("records") or []:
+        process_type = record.get("process_type")
+        start = _parse_date(record["start"])
+        end = _parse_date(record.get("end"))
+        if process_type == "ActOfStudying":
+            assert start is not None
+            records.append(
+                StudyingRecordInput(
+                    organization=record["organization"],
+                    program=record["program"],
+                    site=record["site"],
+                    start=start,
+                    end=end,
+                    duration=record.get("duration"),
+                    skills=list(record.get("skills") or []),
+                    activities=record.get("activities"),
+                    source=record.get("source"),
+                )
+            )
+            continue
+        if process_type == "ActOfWorking":
+            assert start is not None
+            records.append(
+                WorkingRecordInput(
+                    organization=record["organization"],
+                    title=record["title"],
+                    site=record["site"],
+                    start=start,
+                    end=end,
+                    duration=record.get("duration"),
+                    mission_label=record["mission_label"],
+                    mission=record["mission"],
+                    contract_type=record.get("contract_type"),
+                    skills=list(record.get("skills") or []),
+                    source=record.get("source"),
+                    remuneration_amount=record.get("remuneration_amount"),
+                    remuneration_currency=record.get("remuneration_currency") or "EUR",
+                )
+            )
+
+    profile_block = None
+    raw_profile = payload.get("profile")
+    if raw_profile:
+        location = raw_profile.get("location") or {}
+        profile_block = ProfileBlockInput(
+            slug=raw_profile.get("slug"),
+            headline=raw_profile.get("headline"),
+            about=raw_profile.get("about"),
+            quote=raw_profile.get("quote"),
+            years_of_experience=raw_profile.get("years_of_experience"),
+            organization=raw_profile.get("organization"),
+            service_line=raw_profile.get("service_line"),
+            grade=raw_profile.get("grade"),
+            office=location.get("office"),
+            city=location.get("city"),
+            country=location.get("country"),
+            country_code=location.get("country_code"),
+            photo_url=raw_profile.get("photo_url"),
+            photo_path=raw_profile.get("photo_path"),
+            certifications=[
+                CertificationInput.model_validate(item)
+                for item in (raw_profile.get("certifications") or [])
+            ],
+            languages=[
+                LanguageInput.model_validate(item)
+                for item in (raw_profile.get("languages") or [])
+            ],
+            interests=[
+                InterestInput.model_validate(item)
+                for item in (raw_profile.get("interests") or [])
+            ],
+            recommendations=[
+                RecommendationInput.model_validate(item)
+                for item in (raw_profile.get("recommendations") or [])
+            ],
+        )
+
+    return ProfileFromSourcePipelineParameters(
+        person=SourcePersonInput(
+            first_name=person["first_name"],
+            last_name=person["last_name"],
+            linkedin_profile_url=person.get("linkedin_profile_url"),
+        ),
+        records=records,
+        profile=profile_block,
+    )
+
+
 def sources_to_profiles(payloads: list[dict]) -> list[dict]:
     """Person-level profile blocks, one per person that carries a ``profile``.
 

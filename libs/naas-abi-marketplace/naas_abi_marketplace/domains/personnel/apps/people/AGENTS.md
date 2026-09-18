@@ -52,6 +52,10 @@ app exists to prevent.
 If the graph cannot answer step 4, the section has no business existing yet.
 Extend the ontology first.
 
+Which sections are **process-shaped** (ActOfWorking / ActOfStudying) vs **person-level**
+(PersonProfilePipeline) is documented in
+[`personnel/README.md`](../../README.md) under **Profile sections vs ontology layers**.
+
 ## Rules
 
 - **An empty section is an answer.** A person with no recommendations renders

@@ -26,11 +26,19 @@ PROCESS_SPECS: tuple[dict[str, str | Path | tuple[Path, ...]], ...] = (
         # ProfileDocument and Skill are declared in the working slice.
         "support_ontologies": (ONTOLOGIES_DIR / "processes" / "ActOfWorkingProcess.ttl",),
     },
+    {
+        "process_label": "Act of Personnel Profiling",
+        "process_class": f"{PERSONNEL_NS}ActOfPersonnelProfiling",
+        "process_ontology": ONTOLOGIES_DIR / "processes" / "PersonnelProfilingProcess.ttl",
+        "support_ontologies": (ONTOLOGIES_DIR / "processes" / "ActOfWorkingProcess.ttl",),
+    },
 )
 
 SHARED_ONTOLOGY = ONTOLOGIES_DIR / "modules" / "PersonnelOntology.ttl"
 
-EXCLUDED_CLASS_LABELS = frozenset({"Person", "Act of Working", "Act of Studying"})
+EXCLUDED_CLASS_LABELS = frozenset(
+    {"Person", "Act of Working", "Act of Studying", "Act of Personnel Profiling"}
+)
 
 # ABI classes referenced by personnel restrictions but not always labelled in slice TTLs.
 _ABI_CLASS_LABELS: dict[str, str] = {

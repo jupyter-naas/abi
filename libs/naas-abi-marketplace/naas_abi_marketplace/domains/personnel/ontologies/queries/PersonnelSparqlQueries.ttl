@@ -293,7 +293,7 @@ intentMapping:findHeadcountByJobFamilyQuery a intentMapping:TemplatableSparqlQue
 #-----------------------------------------------------------------
 
 intentMapping:findWorkingProcessesQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "find_working_processes"@en ;
+    rdfs:label "find_working_experiences"@en ;
     intentMapping:intentDescription "Return every act of working with the seven buckets it ties together: the person performing the work and the organization they work for (WHO), the site (WHERE), the temporal region and its bounding instants (WHEN), the employee role and the mission that role concretizes (WHY), the skills developed (HOW IT IS), and the contract and profile document it was sourced from (HOW WE KNOW). Backed by the ActOfWorkingProcess ontology." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -402,7 +402,7 @@ intentMapping:findSkillsDevelopedQuery a intentMapping:TemplatableSparqlQuery ;
     intentMapping:hasArgument intentMapping:personnelLimitArg .
 
 intentMapping:findActsOfStudyingQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "find_acts_of_studying"@en ;
+    rdfs:label "find_educations"@en ;
     intentMapping:intentDescription "Return every act of studying: the person enrolled, the educational organization, site, temporal region, enrollment record, programme name, and student role. Backed by the ActOfStudyingProcess ontology." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>

@@ -74,8 +74,8 @@ class TestQueries:
             "find_languages",
             "find_recommendations",
             "find_interests",
-            "find_working_processes",
-            "find_acts_of_studying",
+            "find_working_experiences",
+            "find_educations",
         ):
             assert name in queries, name
 

@@ -15,6 +15,12 @@ def test_profile_header_query_returns_one_row_for_demo_person() -> None:
     assert any(row[result["columns"].index("slug")] == "alice_dupont" for row in result["rows"])
 
 
+def test_certifications_query_runs_for_demo_person() -> None:
+    result = execute_profile_query("find_certifications", "alice_dupont", max_rows=10)
+    assert result["row_count"] >= 1
+    assert "certificationName" in result["columns"]
+
+
 def test_unknown_query_is_rejected() -> None:
     with pytest.raises(KeyError):
         execute_profile_query("find_active_employees", "alice_dupont")
