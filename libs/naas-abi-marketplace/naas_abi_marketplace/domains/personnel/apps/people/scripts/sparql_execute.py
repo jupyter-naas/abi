@@ -5,8 +5,8 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
-from naas_abi_marketplace.domains.personnel.apps.people import sparql_queries as sq
-from naas_abi_marketplace.domains.personnel.apps.people.profile_sparql import (
+from naas_abi_marketplace.domains.personnel.apps.people.scripts import sparql_queries as sq
+from naas_abi_marketplace.domains.personnel.apps.people.scripts.profile_sparql import (
     SECTION_QUERY_NAMES,
 )
 from naas_abi_marketplace.domains.personnel.paths import DEMO_GRAPH_FILE

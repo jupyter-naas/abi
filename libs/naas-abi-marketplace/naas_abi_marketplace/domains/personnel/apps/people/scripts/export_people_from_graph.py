@@ -19,10 +19,10 @@ from pathlib import Path
 from typing import Any
 
 from naas_abi_core.services.dataset.DatasetService import DatasetService
-from naas_abi_marketplace.domains.personnel.apps.people import datasets as ds
+from naas_abi_marketplace.domains.personnel.apps.people.scripts import datasets as ds
 from naas_abi_marketplace.domains.personnel.apps.people.config_loader import load_config
-from naas_abi_marketplace.domains.personnel.apps.people.text import search_text
-from naas_abi_marketplace.domains.personnel.apps.people import sparql_queries as sq
+from naas_abi_marketplace.domains.personnel.apps.people.scripts.text import search_text
+from naas_abi_marketplace.domains.personnel.apps.people.scripts import sparql_queries as sq
 from naas_abi_marketplace.domains.personnel.paths import DEMO_GRAPH_FILE, PERSONNEL_ROOT
 from rdflib import Graph
 

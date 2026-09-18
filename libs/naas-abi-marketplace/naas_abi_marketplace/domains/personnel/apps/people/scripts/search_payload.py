@@ -11,8 +11,8 @@ from __future__ import annotations
 from typing import Any
 
 from naas_abi_core.services.dataset.DatasetService import DatasetService
-from naas_abi_marketplace.domains.personnel.apps.people import datasets as ds
-from naas_abi_marketplace.domains.personnel.apps.people.text import (
+from naas_abi_marketplace.domains.personnel.apps.people.scripts import datasets as ds
+from naas_abi_marketplace.domains.personnel.apps.people.scripts.text import (
     query_tokens,
     truncate,
     words,

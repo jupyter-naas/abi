@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from naas_abi_core.utils.validate_bfo_ontology import _collect_all_restrictions
-from naas_abi_marketplace.domains.personnel.apps.people.bfo_bucket_resolution import (
+from naas_abi_marketplace.domains.personnel.apps.people.scripts.bfo_bucket_resolution import (
     infer_cockpit_bfo_bucket,
     load_bucket_inference_graph,
 )

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from naas_abi_marketplace.domains.personnel.apps.people.bfo_bucket_resolution import (
+from naas_abi_marketplace.domains.personnel.apps.people.scripts.bfo_bucket_resolution import (
     find_bfo_bucket_root_iri,
     infer_cockpit_bfo_bucket,
     load_bucket_inference_graph,

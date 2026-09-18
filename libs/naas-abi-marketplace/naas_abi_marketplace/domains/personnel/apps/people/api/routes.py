@@ -8,8 +8,8 @@ stay on the server.
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
-from naas_abi_marketplace.domains.personnel.apps.people import profile_payload
-from naas_abi_marketplace.domains.personnel.apps.people import (
+from naas_abi_marketplace.domains.personnel.apps.people.scripts import profile_payload
+from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
     search_payload as search_module,
 )
 from naas_abi_marketplace.domains.personnel.apps.people.api.service import (
@@ -19,13 +19,13 @@ from naas_abi_marketplace.domains.personnel.apps.people.config_loader import (
     load_config,
     public_config,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.datasets import (
+from naas_abi_marketplace.domains.personnel.apps.people.scripts.datasets import (
     DatasetsMissingError,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.ontology_payload import (
+from naas_abi_marketplace.domains.personnel.apps.people.scripts.ontology_payload import (
     build_ontology_payload,
 )
-from naas_abi_marketplace.domains.personnel.apps.people.sparql_execute import (
+from naas_abi_marketplace.domains.personnel.apps.people.scripts.sparql_execute import (
     SparqlExecutionError,
     execute_profile_query,
 )

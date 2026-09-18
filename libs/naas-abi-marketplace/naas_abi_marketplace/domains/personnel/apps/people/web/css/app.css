@@ -575,6 +575,12 @@ mark,
   min-width: 120px;
 }
 
+.fact-label,
+.fact-value {
+  margin: 0;
+  text-align: left;
+}
+
 .fact-label {
   display: block;
   color: var(--muted);

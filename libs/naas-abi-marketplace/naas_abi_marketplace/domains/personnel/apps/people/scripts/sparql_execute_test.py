@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from naas_abi_marketplace.domains.personnel.apps.people.sparql_execute import (
+from naas_abi_marketplace.domains.personnel.apps.people.scripts.sparql_execute import (
     execute_profile_query,
 )
 

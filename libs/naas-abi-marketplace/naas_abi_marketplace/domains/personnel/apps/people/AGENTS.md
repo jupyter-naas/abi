@@ -43,7 +43,7 @@ app exists to prevent.
 1. Write the renderer in `web/components/profile/sections.js` and add it to
    `SECTION_RENDERERS`.
 2. Add its id to `REGISTERED_SECTION_IDS` in `config_loader.py`.
-3. Add its table to `datasets.TABLES`, its shaping to `profile_payload._section_items`,
+3. Add its table to `scripts/datasets.TABLES`, its shaping to `scripts/profile_payload._section_items`,
    and its rows to `scripts/export_people_from_graph.py`.
 4. Add the competency query it reads to `ontologies/queries/PersonnelSparqlQueries.ttl`
    and register its label in `agents/PersonnelAgent.get_sparql_tools()`.

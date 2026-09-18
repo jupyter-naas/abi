@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from naas_abi_marketplace.domains.personnel.apps.people.ontology_payload import (
+from naas_abi_marketplace.domains.personnel.apps.people.scripts.ontology_payload import (
     build_ontology_payload,
 )
 

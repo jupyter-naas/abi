@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from naas_abi_marketplace.domains.personnel.apps.people import sparql_queries as sq
+from naas_abi_marketplace.domains.personnel.apps.people.scripts import sparql_queries as sq
 
 
 def test_format_sparql_dedents_prefix_and_where_blocks() -> None:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from naas_abi_marketplace.domains.personnel.apps.people.text import (
+from naas_abi_marketplace.domains.personnel.apps.people.scripts.text import (
     fold,
     query_tokens,
     search_text,
