@@ -347,9 +347,10 @@ mark,
 /* ── Results ─────────────────────────────────────────────── */
 .results {
   width: 100%;
-  max-width: var(--content-width);
-  padding: 20px 24px 56px;
+  max-width: min(var(--content-width), calc(100vw - var(--content-inset-left, 24px) - 24px));
+  padding: 20px 24px 56px 0;
   margin: 0;
+  margin-left: var(--content-inset-left, 24px);
 }
 
 .tabs {
@@ -496,9 +497,10 @@ mark,
 /* ── Profile ─────────────────────────────────────────────── */
 .profile {
   width: 100%;
-  max-width: var(--profile-width);
-  padding: 0 24px 56px;
-  margin: 0 auto;
+  max-width: min(var(--profile-width), calc(100vw - var(--content-inset-left, 24px) - 24px));
+  padding: 0 24px 56px 0;
+  margin: 0;
+  margin-left: var(--content-inset-left, 24px);
 }
 
 .intro {
@@ -785,12 +787,6 @@ mark,
 }
 
 /* ── Responsive ──────────────────────────────────────────── */
-@media (min-width: 1100px) {
-  .results {
-    margin-left: 120px;
-  }
-}
-
 @media (max-width: 980px) {
   .profile-columns {
     grid-template-columns: minmax(0, 1fr);
@@ -805,7 +801,7 @@ mark,
 
   .results,
   .profile {
-    padding-left: 16px;
+    margin-left: var(--content-inset-left, 16px);
     padding-right: 16px;
   }
 

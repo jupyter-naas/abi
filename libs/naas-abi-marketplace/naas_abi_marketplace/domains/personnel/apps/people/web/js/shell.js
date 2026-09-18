@@ -8,6 +8,7 @@
 import { searchBoxHtml, wireSearch } from "../components/SearchBox.js";
 import { applyBrand, applyTheme, loadAppConfig, logoHtml } from "../lib/config.js";
 import { escapeHtml } from "../lib/dom.js";
+import { syncContentAlign, watchContentAlign } from "../lib/layout.js";
 import { mountPage } from "../lib/registry.js";
 import { parseRoute } from "../lib/routes.js";
 
@@ -66,6 +67,7 @@ async function render() {
       <h2>Something went wrong</h2><p>${escapeHtml(error.message)}</p></div></div>`;
   }
   renderTopbar(state);
+  watchContentAlign();
   renderFooter();
   document.title = state.title || config.brand?.name || "People";
   window.scrollTo(0, scrollMemory.get(currentHash) || 0);
@@ -85,6 +87,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("hashchange", render);
+window.addEventListener("resize", syncContentAlign);
 
 (async function start() {
   try {
