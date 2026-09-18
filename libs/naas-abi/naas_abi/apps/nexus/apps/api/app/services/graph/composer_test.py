@@ -8,9 +8,9 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient, Response
 from naas_abi.apps.nexus.apps.api.app.services.graph.access_test import (
     ALICE,
+    ALPHA,
     BETA,
     PERSON,
-    ALPHA,
     ServiceIsolationTest,
     fixtures,
     scope,
