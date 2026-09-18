@@ -166,7 +166,7 @@ export const SECTION_RENDERERS = {
 
 export const REGISTERED_SECTION_IDS = Object.freeze(Object.keys(SECTION_RENDERERS));
 
-export function sectionHtml(section, tokens) {
+export function sectionHtml(section, tokens, { sidebar = false } = {}) {
   const render = SECTION_RENDERERS[section.id];
   if (!render) return "";
   const items = section.items || [];
@@ -174,8 +174,9 @@ export function sectionHtml(section, tokens) {
     ? render(items, tokens)
     : // An empty section is stated, not hidden: nothing recorded is an answer.
       `<p class="empty">${escapeHtml(section.empty_text)}</p>`;
+  const cardClass = sidebar ? "card profile-sidebar-card" : "card";
   return `
-    <section class="card" id="section-${escapeHtml(section.id)}">
+    <section class="${cardClass}" id="section-${escapeHtml(section.id)}" data-section-id="${escapeHtml(section.id)}">
       <h2>${escapeHtml(section.label)}</h2>
       ${body}
     </section>`;

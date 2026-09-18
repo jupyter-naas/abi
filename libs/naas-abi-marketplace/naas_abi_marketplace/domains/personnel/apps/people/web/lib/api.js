@@ -31,6 +31,17 @@ export function fetchPerson(slug) {
   return getJson(`/people/${encodeURIComponent(slug)}`);
 }
 
+export function fetchQueryResults(slug, queryName, { maxRows = 50 } = {}) {
+  const params = new URLSearchParams();
+  if (maxRows !== 50) params.set("max_rows", String(maxRows));
+  const suffix = params.toString();
+  return getJson(
+    `/people/${encodeURIComponent(slug)}/queries/${encodeURIComponent(queryName)}/run${
+      suffix ? `?${suffix}` : ""
+    }`,
+  );
+}
+
 export function fetchOntology() {
   return getJson("/ontology");
 }

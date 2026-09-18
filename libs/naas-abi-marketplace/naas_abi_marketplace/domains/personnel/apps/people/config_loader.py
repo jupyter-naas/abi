@@ -308,7 +308,20 @@ def _validate_data(data: dict[str, Any]) -> dict[str, Any]:
         name = _text(value, f"data.tables.{key}")
         if not IDENTIFIER.match(name):
             raise ConfigError(f"data.tables.{key} must be a SQL identifier: {name!r}")
-    return {"namespace": namespace, "tables": dict(tables)}
+
+    graph_out = {
+        "iri": "http://ontology.naas.ai/graph/personnel",
+        "label": "Personnel",
+    }
+    graph = data.get("graph")
+    if graph not in (None, {}):
+        graph_map = _mapping(graph, "data.graph")
+        if graph_map.get("iri") not in (None, ""):
+            graph_out["iri"] = _text(graph_map.get("iri"), "data.graph.iri")
+        if graph_map.get("label") not in (None, ""):
+            graph_out["label"] = _text(graph_map.get("label"), "data.graph.label")
+
+    return {"namespace": namespace, "tables": dict(tables), "graph": graph_out}
 
 
 def load_config(path: Path | None = None) -> dict[str, Any]:
@@ -341,7 +354,6 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
         },
         "data": _validate_data(_mapping(config.get("data"), "data")),
         "privacy": config.get("privacy") or {},
-        "graph": config.get("graph") or {},
     }
 
 
@@ -371,7 +383,7 @@ def public_config(path: Path | None = None) -> dict[str, Any]:
         "theme": config["theme"],
         "search": search,
         "profile": {"facts": config["profile"]["facts"], "sections": sections},
-        "graph": config.get("graph") or {},
+        "knowledge_graph": config["data"]["graph"],
     }
 
 

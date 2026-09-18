@@ -25,6 +25,10 @@ from naas_abi_marketplace.domains.personnel.apps.people.datasets import (
 from naas_abi_marketplace.domains.personnel.apps.people.ontology_payload import (
     build_ontology_payload,
 )
+from naas_abi_marketplace.domains.personnel.apps.people.sparql_execute import (
+    SparqlExecutionError,
+    execute_profile_query,
+)
 
 router = APIRouter(tags=["personnel-people"])
 
@@ -77,3 +81,24 @@ def get_person(slug: str) -> dict:
         raise HTTPException(status_code=404, detail=f"No profile for {slug}") from exc
     except DatasetsMissingError as exc:
         raise HTTPException(status_code=404, detail=exc.as_detail()) from exc
+
+
+@router.get("/people/{slug}/queries/{query_name}/run")
+def run_person_query(
+    slug: str,
+    query_name: str,
+    max_rows: int = Query(50, ge=1, le=200),
+) -> dict:
+    try:
+        profile_payload.profile(dataset_service(), load_config(), slug=slug)
+    except profile_payload.ProfileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"No profile for {slug}") from exc
+    except DatasetsMissingError as exc:
+        raise HTTPException(status_code=404, detail=exc.as_detail()) from exc
+
+    try:
+        return execute_profile_query(query_name, slug, max_rows=max_rows)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SparqlExecutionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc

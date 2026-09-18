@@ -22,17 +22,11 @@ from naas_abi_core.services.dataset.DatasetService import DatasetService
 from naas_abi_marketplace.domains.personnel.apps.people import datasets as ds
 from naas_abi_marketplace.domains.personnel.apps.people.config_loader import load_config
 from naas_abi_marketplace.domains.personnel.apps.people.text import search_text
-from naas_abi_marketplace.domains.personnel.paths import (
-    DEMO_GRAPH_FILE,
-    ONTOLOGIES_DIR,
-    PERSONNEL_ROOT,
-)
-from rdflib import RDF, RDFS, Graph, URIRef
+from naas_abi_marketplace.domains.personnel.apps.people import sparql_queries as sq
+from naas_abi_marketplace.domains.personnel.paths import DEMO_GRAPH_FILE, PERSONNEL_ROOT
+from rdflib import Graph
 
-INTENT = "http://ontology.naas.ai/intentMapping/"
-GRAPH_IRI = "http://ontology.naas.ai/graph/personnel"
-QUERIES_TTL = ONTOLOGIES_DIR / "queries" / "PersonnelSparqlQueries.ttl"
-ROW_LIMIT = 2000
+ROW_LIMIT = sq.DEFAULT_ROW_LIMIT
 
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 DIGIT_RUN_RE = re.compile(r"[\d][\d\s().-]{7,}")
@@ -70,40 +64,15 @@ def check_privacy(value: Any, *, where: str, config: dict[str, Any]) -> Any:
 
 
 def load_queries() -> dict[str, str]:
-    graph = Graph().parse(QUERIES_TTL, format="turtle")
-    return {
-        str(graph.value(subject, RDFS.label)): str(
-            graph.value(subject, URIRef(INTENT + "sparqlTemplate"))
-        )
-        for subject in graph.subjects(
-            RDF.type, URIRef(INTENT + "TemplatableSparqlQuery")
-        )
-    }
+    return sq.load_queries()
 
 
 def _strip_named_graph(sparql: str) -> str:
-    """Run the same query against a file, where there is only one graph."""
-    return re.sub(rf"GRAPH\s*<{re.escape(GRAPH_IRI)}>\s*\{{", "{", sparql)
-
-
-def _fill(template: str, **arguments: object) -> str:
-    filled = template
-    for name, value in arguments.items():
-        filled = filled.replace(f"{{{{ {name} }}}}", str(value))
-    return filled
+    return sq.strip_named_graph(sparql)
 
 
 def run_query(graph: Graph, template: str, **arguments: object) -> list[dict[str, Any]]:
-    sparql = _fill(_strip_named_graph(template), **arguments)
-    rows: list[dict[str, Any]] = []
-    for row in graph.query(sparql):
-        rows.append(
-            {
-                key: (None if value is None else str(value))
-                for key, value in row.asdict().items()
-            }
-        )
-    return rows
+    return sq.run_query(graph, template, **arguments)
 
 
 def _photo_url(row: dict[str, Any]) -> str | None:

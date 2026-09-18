@@ -13,6 +13,18 @@ from typing import Any
 
 from naas_abi_core.services.dataset.DatasetService import DatasetService
 from naas_abi_marketplace.domains.personnel.apps.people import datasets as ds
+from naas_abi_marketplace.domains.personnel.apps.people import sparql_queries as sq
+from naas_abi_marketplace.domains.personnel.apps.people.profile_sparql import (
+    competency_queries_for_profile,
+)
+
+
+def _knowledge_graph(config: dict[str, Any]) -> dict[str, str]:
+    graph = (config.get("data") or {}).get("graph") or {}
+    return {
+        "iri": str(graph.get("iri") or sq.GRAPH_IRI),
+        "label": str(graph.get("label") or "Personnel"),
+    }
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 CHILD_TABLES = (
@@ -231,6 +243,8 @@ def profile(
         "public_profile_url": person.get("public_profile_url"),
         "facts": _facts(person, config["profile"]["facts"]),
         "sections": sections,
+        "knowledge_graph": _knowledge_graph(config),
+        "competency_queries": competency_queries_for_profile(slug),
     }
 
 

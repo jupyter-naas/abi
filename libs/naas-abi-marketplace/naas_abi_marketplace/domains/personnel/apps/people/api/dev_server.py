@@ -13,13 +13,32 @@ import socket
 
 import uvicorn
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from naas_abi_marketplace.domains.personnel.apps.people.api.routes import router
 from naas_abi_marketplace.domains.personnel.apps.people.config_loader import (
     WEB_ROOT,
     ConfigError,
     public_config,
 )
+from starlette.responses import FileResponse, Response
+from starlette.staticfiles import StaticFiles
+
+
+class DevStaticFiles(StaticFiles):
+    """Local dev: skip 304 Not Modified so a normal reload picks up JS/CSS edits."""
+
+    def file_response(
+        self,
+        full_path,
+        stat_result,
+        scope,
+        status_code: int = 200,
+    ) -> Response:
+        response = FileResponse(
+            full_path, status_code=status_code, stat_result=stat_result
+        )
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        return response
 
 
 def create_app() -> FastAPI:
@@ -28,7 +47,7 @@ def create_app() -> FastAPI:
     app.include_router(router, prefix="/api/personnel-people")
     # One mount: brand files and portraits live under web/assets/, so the paths
     # in config.yaml resolve the same way here and inside Nexus.
-    app.mount("/", StaticFiles(directory=WEB_ROOT, html=True), name="web")
+    app.mount("/", DevStaticFiles(directory=WEB_ROOT, html=True), name="web")
     return app
 
 
