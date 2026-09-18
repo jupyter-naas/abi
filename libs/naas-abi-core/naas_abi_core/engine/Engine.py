@@ -1,5 +1,6 @@
 
 from naas_abi_core import logger
+from naas_abi_core.engine import nats_runtime
 from naas_abi_core.engine.context import (
     set_default_event_service,
     set_default_model_registry,
@@ -30,9 +31,7 @@ class Engine(IEngine):
     __services: IEngine.Services
 
     # Started NATS primary adapters, if config.yaml has a top-level `nats:`
-    # block -- otherwise always []. No shutdown hook consumes this yet (see
-    # docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md); kept
-    # so one can be added later without also having to plumb this through.
+    # block -- otherwise always []. Consumed by shutdown() below.
     __nats_primary_adapters: list[object]
 
     @property
@@ -58,6 +57,9 @@ class Engine(IEngine):
         self.__engine_module_loader = EngineModuleLoader(self.__configuration)
         self.__engine_service_loader = EngineServiceLoader(self.__configuration)
         self.__engine_nats_loader = EngineNATSLoader(self.__configuration)
+        # Set here, not only inside load(), so shutdown() is safe to call
+        # even if load() was never (or not yet) invoked.
+        self.__nats_primary_adapters = []
 
     def load(self, module_names: list[str] | None = None):
         # Per-module CLI invocations (e.g. ``abi chat <module> <agent>``)
@@ -146,6 +148,44 @@ class Engine(IEngine):
     def on_initialized(self):
         for module in self.__modules.values():
             module.on_initialized()
+
+    def shutdown(self) -> None:
+        """Gracefully tear down everything ``load()`` started over NATS.
+
+        A no-op if ``config.yaml`` never had a top-level ``nats:`` block
+        (``__nats_primary_adapters`` stays ``[]``, and closing the shared
+        runtime connection is safe -- see ``nats_runtime.close()``'s own
+        idempotence guard -- even if nothing ever connected it). Safe to
+        call more than once, and safe to call even if ``load()`` was never
+        invoked. Stops every started primary adapter first (draining its
+        subscriptions with the connection still up) before closing the
+        shared connection those adapters were registered on, not the other
+        order.
+
+        Callers: ``apps/api/api.py``'s FastAPI lifespan shutdown phase,
+        ``abi dev down``, and anywhere else that owns an ``Engine``'s
+        lifecycle end to end. An ungracefully-killed process (e.g. SIGKILL,
+        or a crash) still just drops the NATS connection, which the server
+        reaps naturally -- this only makes the *clean* shutdown path
+        actually clean, it's not required for correctness.
+        """
+        primaries, self.__nats_primary_adapters = self.__nats_primary_adapters, []
+        for primary in primaries:
+            try:
+                # __nats_primary_adapters is list[object] (it holds whichever
+                # of the 11 *PrimaryAdapterNATS classes EngineNATSLoader
+                # started, deliberately untyped there -- see its own return
+                # type) -- every one of them has an async stop(), just not
+                # one mypy can see through `object`.
+                nats_runtime.run_coro(primary.stop())  # type: ignore[attr-defined]
+            except Exception as exc:  # noqa: BLE001
+                # Best-effort: a slow/unresponsive primary must never block
+                # the rest of shutdown or crash the process on the way out.
+                logger.warning(
+                    f"Engine.shutdown: error stopping a NATS primary adapter "
+                    f"({type(primary).__name__}): {exc}"
+                )
+        nats_runtime.close()
 
 
 if __name__ == "__main__":
