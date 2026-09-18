@@ -180,13 +180,13 @@ class ServicesConfiguration(BaseModel):
     activity_log: ActivityLogServiceConfiguration = ActivityLogServiceConfiguration(
         activity_log_adapter=ActivityLogAdapterConfiguration(
             adapter="sqlite",
-            config=ActivityLogAdapterSqliteConfiguration().model_dump(),
+            config=ActivityLogAdapterSqliteConfiguration(),
         )
     )
     event: EventServiceConfiguration = EventServiceConfiguration(
         event_adapter=EventAdapterConfiguration(
             adapter="sqlite",
-            config=EventAdapterSqliteConfiguration().model_dump(),
+            config=EventAdapterSqliteConfiguration(),
         )
     )
     model_registry: ModelRegistryServiceConfiguration = (
