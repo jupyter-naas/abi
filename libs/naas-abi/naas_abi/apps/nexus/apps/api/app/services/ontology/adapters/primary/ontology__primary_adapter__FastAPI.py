@@ -9,9 +9,6 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
     require_workspace_access,
 )
-from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
-    workspace_seed_for_slug,
-)
 from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.primary.ontology__primary_adapter__dependencies import (  # noqa: E501
     get_ontology_service,
 )
@@ -31,14 +28,21 @@ from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.primary.ontolog
     ReferenceProperty,
     RelationshipCreate,
 )
+from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.secondary.ontology_icons_postgres import (
+    OntologyIconsPostgres,
+)
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import (
     OntologyFileNotFoundError,
     OntologyParseError,
     OntologyPathNotFoundError,
     OntologyServiceUnavailableError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_icons import (
+    EDIT_ROLES,
+    OntologyIconsService,
+)
 from naas_abi.apps.nexus.apps.api.app.services.ontology.service import OntologyService
-from sqlalchemy import select
+from pydantic import BaseModel, Field
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
@@ -85,29 +89,25 @@ def _edge_to_schema(edge) -> OntologyOverviewGraphEdge:
     )
 
 
-async def _workspace_slug(workspace_id: str) -> str | None:
+async def ontology_catalog_scope(
+    workspace_id: str = Query(..., min_length=1),
+    current_user: User = Depends(get_current_user_required),
+) -> list[str]:
+    """Authorize the workspace, then resolve its explicit YAML allowlist."""
+    await require_workspace_access(current_user.id, workspace_id)
+    return await _catalog_refs_for_workspace(workspace_id)
+
+
+async def _catalog_refs_for_workspace(workspace_id: str) -> list[str]:
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.resource_access_postgres import (
+        load_resource_policy,
+    )
 
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(WorkspaceModel.slug).where(WorkspaceModel.id == workspace_id)
-        )
-        return result.scalar_one_or_none()
+        saved = await load_resource_policy(db, workspace_id, "ontologies")
+    return list(saved.data["enabled"])
 
-
-async def ontology_catalog_scope(
-    workspace_id: str | None = Query(None),
-    current_user: User = Depends(get_current_user_required),
-) -> list[str] | None:
-    """Seed list for this workspace, or None to keep the full engine catalog."""
-    if not workspace_id:
-        return None
-    await require_workspace_access(current_user.id, workspace_id)
-    seed = workspace_seed_for_slug(await _workspace_slug(workspace_id))
-    if seed is None or getattr(seed, "ontologies", None) is None:
-        return None
-    return list(seed.ontologies)
 
 
 async def _require_catalog_path(
@@ -126,7 +126,7 @@ async def _require_catalog_path(
 @router.get("")
 async def list_ontology_items(
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_refs: list[str] = Depends(ontology_catalog_scope),
 ) -> dict:
     """List all ontology items (OWL Classes and Object Properties)."""
     try:
@@ -136,11 +136,24 @@ async def list_ontology_items(
     return {"items": [_item_to_schema(i) for i in items]}
 
 
+@router.get("/dictionary")
+async def workspace_dictionary(
+    workspace_id: str = Query(..., min_length=1),
+    ontology_service: OntologyService = Depends(get_ontology_service),
+    catalog_refs: list[str] = Depends(ontology_catalog_scope),
+) -> dict:
+    """Complete dictionary of the workspace's visible ontology file catalog."""
+    try:
+        return await ontology_service.workspace_dictionary(catalog_refs=catalog_refs)
+    except OntologyServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @router.get("/classes")
 async def list_classes(
     ontology_path: str | None = Query(None, alias="ontology_path"),
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_refs: list[str] = Depends(ontology_catalog_scope),
 ) -> dict:
     """List ontology classes by file path (or all when omitted)."""
     try:
@@ -158,7 +171,7 @@ async def list_classes(
 async def list_relations(
     ontology_path: str | None = Query(None, alias="ontology_path"),
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_refs: list[str] = Depends(ontology_catalog_scope),
 ) -> dict:
     """List ontology object properties by file path (or all when omitted)."""
     try:
@@ -175,7 +188,7 @@ async def list_relations(
 @router.get("/ontologies")
 async def list_ontology_files(
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_refs: list[str] = Depends(ontology_catalog_scope),
 ) -> dict:
     """List ontology files in the workspace catalog."""
     try:
@@ -204,7 +217,7 @@ async def list_ontology_files(
 async def get_ontology_overview_stats(
     ontology_path: str = Query(..., alias="ontology_path", min_length=1),
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_refs: list[str] = Depends(ontology_catalog_scope),
 ) -> OntologyOverviewStats:
     """Return element counts for a specific ontology path."""
     try:
@@ -229,7 +242,7 @@ async def get_ontology_overview_stats(
 @router.get("/overview/stats/all")
 async def get_all_ontologies_overview_stats(
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_refs: list[str] = Depends(ontology_catalog_scope),
 ) -> OntologyOverviewAggregateStats:
     """Return consolidated overview stats across the workspace catalog."""
     try:
@@ -253,7 +266,7 @@ async def get_all_ontologies_overview_stats(
 async def get_ontology_type_counts(
     ontology_path: str | None = Query(None, alias="ontology_path"),
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_refs: list[str] = Depends(ontology_catalog_scope),
 ) -> OntologyTypeCounts:
     """Return counts for owl:NamedIndividual and owl:DatatypeProperty."""
     try:
@@ -276,7 +289,7 @@ async def get_ontology_type_counts(
 async def get_ontology_overview_graph(
     ontology_path: str | None = Query(None, alias="ontology_path"),
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_refs: list[str] = Depends(ontology_catalog_scope),
 ) -> OntologyOverviewGraph:
     """Return ontology dependency graph based on owl:imports relations."""
     try:
@@ -307,7 +320,7 @@ async def get_class_parents(
     ontology_path: str = Query(..., alias="ontology_path"),
     class_iris: list[str] = Query(..., alias="class_iris"),
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_refs: list[str] = Depends(ontology_catalog_scope),
 ) -> OntologyOverviewGraph:
     """Return direct rdfs:subClassOf parents for the given class IRIs."""
     try:
@@ -315,6 +328,7 @@ async def get_class_parents(
         result = await ontology_service.get_class_parents(
             class_iris=class_iris,
             ontology_path=ontology_path,
+            catalog_refs=catalog_refs,
         )
     except OntologyPathNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -331,7 +345,7 @@ async def get_subclassof_hierarchy(
     ontology_path: str = Query(..., alias="ontology_path"),
     class_iris: list[str] = Query(..., alias="class_iris"),
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_refs: list[str] = Depends(ontology_catalog_scope),
 ) -> OntologyOverviewGraph:
     """Return the full rdfs:subClassOf hierarchy starting from class_iris.
 
@@ -343,6 +357,7 @@ async def get_subclassof_hierarchy(
         result = await ontology_service.get_subclassof_hierarchy(
             class_iris=class_iris,
             ontology_path=ontology_path,
+            catalog_refs=catalog_refs,
         )
     except OntologyPathNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -357,13 +372,10 @@ async def get_subclassof_hierarchy(
 @router.post("/cache/clear")
 async def clear_ontology_cache(
     ontology_service: OntologyService = Depends(get_ontology_service),
+    catalog_refs: list[str] = Depends(ontology_catalog_scope),
 ) -> dict:
-    """Clear all in-memory and filesystem ontology graph caches.
-
-    Forces the next graph request to rebuild from disk, including re-resolving
-    owl:imports. Safe to call at any time; triggered by the sidebar Refresh button.
-    """
-    await ontology_service.clear_cache()
+    """Refresh permission-keyed local graph snapshots after workspace authorization."""
+    await ontology_service.clear_cache(catalog_refs=catalog_refs)
     return {"success": True}
 
 
@@ -450,7 +462,7 @@ async def import_reference_ontology(
 async def export_ontology_file(
     ontology_path: str = Query(..., alias="ontology_path", min_length=1),
     ontology_service: OntologyService = Depends(get_ontology_service),
-    catalog_refs: list[str] | None = Depends(ontology_catalog_scope),
+    catalog_refs: list[str] = Depends(ontology_catalog_scope),
 ) -> FileResponse:
     """Export a selected ontology file as attachment."""
     try:
@@ -465,3 +477,61 @@ async def export_ontology_file(
         filename=path.name,
         media_type="application/octet-stream",
     )
+
+
+# Workspace-shared UI icons. Reads and writes use the same permitted catalog as the dictionary.
+class OntologyIconUpdate(BaseModel):
+    kind: str = Field(min_length=1, max_length=24)
+    resource_id: str = Field(min_length=1, max_length=8192)
+    icon: str | None = Field(default=None, max_length=160)
+
+
+def get_ontology_icons_service() -> OntologyIconsService:
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    return OntologyIconsService(OntologyIconsPostgres(AsyncSessionLocal))
+
+
+async def ontology_icons_access(
+    workspace_id: str = Query(..., min_length=1),
+    current_user: User = Depends(get_current_user_required),
+    ontology_service: OntologyService = Depends(get_ontology_service),
+) -> tuple[str, set[tuple[str, str]]]:
+    role = await require_workspace_access(current_user.id, workspace_id)
+    refs = await _catalog_refs_for_workspace(workspace_id)
+    dictionary = await ontology_service.workspace_dictionary(catalog_refs=refs)
+    files = await ontology_service.list_ontology_files(catalog_refs=refs)
+    allowed = {(item["type"], item["id"]) for item in dictionary["items"]}
+    allowed.update(("file", item.path) for item in files)
+    return role, allowed
+
+
+@router.get("/icons")
+async def list_ontology_icons(
+    workspace_id: str = Query(..., min_length=1),
+    access: tuple[str, set[tuple[str, str]]] = Depends(ontology_icons_access),
+    icons_service: OntologyIconsService = Depends(get_ontology_icons_service),
+) -> dict:
+    role, allowed = access
+    return {"items": await icons_service.list_icons(workspace_id, allowed),
+            "can_edit": role in EDIT_ROLES}
+
+
+@router.put("/icons")
+async def save_ontology_icon(
+    updates: OntologyIconUpdate,
+    workspace_id: str = Query(..., min_length=1),
+    current_user: User = Depends(get_current_user_required),
+    access: tuple[str, set[tuple[str, str]]] = Depends(ontology_icons_access),
+    icons_service: OntologyIconsService = Depends(get_ontology_icons_service),
+) -> dict:
+    role, allowed = access
+    try:
+        await icons_service.save_icon(workspace_id, role, current_user.id, allowed,
+                                      updates.kind, updates.resource_id, updates.icon)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"kind": updates.kind, "resource_id": updates.resource_id, "icon": updates.icon}

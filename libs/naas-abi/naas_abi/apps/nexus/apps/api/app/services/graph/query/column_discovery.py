@@ -67,6 +67,15 @@ def _int(row: dict, key: str) -> int:
         return 0
 
 
+def _class_anchor(class_uris: list[str], variable: str) -> str:
+    """Use indexed class lookups; a multi-type individual contributes only once."""
+    patterns = [f"{variable} a {sparql_iri(uri)} ." for uri in dict.fromkeys(class_uris)]
+    if len(patterns) == 1:
+        return patterns[0]
+    union = " UNION ".join(f"{{ {pattern} }}" for pattern in patterns)
+    return f"{{ SELECT DISTINCT {variable} WHERE {{ {union} }} }}"
+
+
 def discover_columns(
     store: IGraphQueryStore,
     *,
@@ -76,14 +85,21 @@ def discover_columns(
     type_graph_uris: list[str] | None = None,
 ) -> tuple[DiscoveredColumn, ...]:
     graphs = " ".join(sparql_iri(g) for g in graph_uris)
-    classes = " ".join(sparql_iri(c) for c in class_uris)
+    # Bind the selected rdf:type in the triple pattern. With VALUES ?cls joined
+    # outside GRAPH, Oxigraph can scan/join every type and predicate before applying
+    # the class filter, producing large intermediate joins for a small selection.
+    subject_anchor = _class_anchor(class_uris, "?s")
+    object_anchor = _class_anchor(class_uris, "?o")
+    ancestors = " UNION ".join(
+        f"{{ {sparql_iri(c)} rdfs:subClassOf* ?dom }}" for c in dict.fromkeys(class_uris)
+    )
     # A relation may be asserted in — and point INTO — a DIFFERENT named graph than the grain
     # (cross-graph relations). E.g. ``ExtractedItem --extracted_from_chunk--> Chunk`` lives in
     # the *extractions* graph while ``Chunk`` lives in *papers*; from Chunk this is an incoming
     # relation whose triple isn't in Chunk's graph at all. So the relation triple ``?s ?p ?o``
     # (GRAPH ?rg) and the related resource's type ``?o a ?tc`` / ``?s a ?sc`` (GRAPH ?tg/?sg)
     # are resolved in their own graph clauses spanning ``type_graph_uris`` (default: the grain's
-    # graphs), decoupled from the grain-type anchor ``GRAPH ?g {{ ?s a ?cls }}``. The grain
+    # graphs), decoupled from the selected class anchor in GRAPH ?g. The grain
     # anchor stays scoped to ``graph_uris`` so the grain itself is still the selected one.
     type_graphs = " ".join(sparql_iri(g) for g in (type_graph_uris or graph_uris))
 
@@ -92,8 +108,8 @@ def discover_columns(
         f"""
         SELECT ?p (COUNT(DISTINCT ?s) AS ?subjects) (COUNT(?o) AS ?objs)
                (COUNT(DISTINCT ?o) AS ?distinct_objs) (SAMPLE(DATATYPE(?o)) AS ?dt)
-        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?cls {{ {classes} }} GRAPH ?g {{
-            ?s a ?cls . ?s ?p ?o . FILTER(isLiteral(?o)) FILTER(?p != {sparql_iri(_RDF_TYPE)})
+        WHERE {{ VALUES ?g {{ {graphs} }} GRAPH ?g {{
+            {subject_anchor} ?s ?p ?o . FILTER(isLiteral(?o)) FILTER(?p != {sparql_iri(_RDF_TYPE)})
         }} }} GROUP BY ?p
         """
     )
@@ -103,8 +119,8 @@ def discover_columns(
     rel_rows = store.select(
         f"""
         SELECT ?p (COUNT(DISTINCT ?s) AS ?subjects) (COUNT(?o) AS ?objs)
-        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?cls {{ {classes} }} VALUES ?rg {{ {type_graphs} }}
-            GRAPH ?g {{ ?s a ?cls }}
+        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?rg {{ {type_graphs} }}
+            GRAPH ?g {{ {subject_anchor} }}
             GRAPH ?rg {{ ?s ?p ?o . FILTER(isIRI(?o)) FILTER(?p != {sparql_iri(_RDF_TYPE)}) }}
         }} GROUP BY ?p
         """
@@ -115,8 +131,8 @@ def discover_columns(
     tc_rows = store.select(
         f"""
         SELECT ?p ?tc (COUNT(DISTINCT ?s) AS ?subjects) (SAMPLE(?tg) AS ?tgraph)
-        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?cls {{ {classes} }} VALUES ?rg {{ {type_graphs} }}
-            GRAPH ?g {{ ?s a ?cls }}
+        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?rg {{ {type_graphs} }}
+            GRAPH ?g {{ {subject_anchor} }}
             GRAPH ?rg {{ ?s ?p ?o . FILTER(isIRI(?o)) FILTER(?p != {sparql_iri(_RDF_TYPE)}) }}
             VALUES ?tg {{ {type_graphs} }}
             GRAPH ?tg {{ ?o a ?tc . }}
@@ -130,8 +146,8 @@ def discover_columns(
     in_rel_rows = store.select(
         f"""
         SELECT ?p (COUNT(DISTINCT ?o) AS ?objects)
-        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?cls {{ {classes} }} VALUES ?rg {{ {type_graphs} }}
-            GRAPH ?g {{ ?o a ?cls }}
+        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?rg {{ {type_graphs} }}
+            GRAPH ?g {{ {object_anchor} }}
             GRAPH ?rg {{ ?s ?p ?o . FILTER(isIRI(?s)) FILTER(?p != {sparql_iri(_RDF_TYPE)}) }}
         }} GROUP BY ?p
         """
@@ -142,8 +158,8 @@ def discover_columns(
     in_tc_rows = store.select(
         f"""
         SELECT ?p ?sc (COUNT(DISTINCT ?o) AS ?objects) (SAMPLE(?sg) AS ?sgraph)
-        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?cls {{ {classes} }} VALUES ?rg {{ {type_graphs} }}
-            GRAPH ?g {{ ?o a ?cls }}
+        WHERE {{ VALUES ?g {{ {graphs} }} VALUES ?rg {{ {type_graphs} }}
+            GRAPH ?g {{ {object_anchor} }}
             GRAPH ?rg {{ ?s ?p ?o . FILTER(isIRI(?s)) FILTER(?p != {sparql_iri(_RDF_TYPE)}) }}
             VALUES ?sg {{ {type_graphs} }}
             GRAPH ?sg {{ ?s a ?sc . }}
@@ -158,10 +174,9 @@ def discover_columns(
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         SELECT DISTINCT ?prop ?ptype ?range
         WHERE {{ GRAPH {sparql_iri(schema_graph)} {{
-            VALUES ?cls {{ {classes} }}
             ?prop a ?ptype .
             FILTER(?ptype IN (owl:DatatypeProperty, owl:ObjectProperty, owl:AnnotationProperty))
-            ?prop rdfs:domain ?dom . ?cls rdfs:subClassOf* ?dom .
+            ?prop rdfs:domain ?dom . {ancestors}
             OPTIONAL {{ ?prop rdfs:range ?range . FILTER(isIRI(?range)) }}
         }} }}
         """

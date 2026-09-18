@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   Check,
@@ -15,7 +15,7 @@ import {
   UserPlus,
   X,
 } from 'lucide-react';
-import { Header } from '@/components/shell/header';
+import { GraphHeader as Header } from '@/components/graph/graph-header';
 import {
   ApiClassObjectProperty,
   RelationTargetPicker,
@@ -270,6 +270,7 @@ export default function CreateIndividualPage() {
   const params = useParams();
   const router = useRouter();
   const workspaceId = params.workspaceId as string;
+  const requestedGraph = useSearchParams().get('graph');
   const { selectedGraphId, selectGraph, setVisibleGraphs } = useKnowledgeGraphStore();
 
   const [graphs, setGraphs] = useState<ApiGraphInfo[]>([]);
@@ -349,13 +350,14 @@ export default function CreateIndividualPage() {
       return;
     }
     const preferred =
+      writableGraphs.find((g) => g.uri === requestedGraph) ??
       writableGraphs.find((g) => g.id === selectedGraphId) ??
       writableGraphs[0];
     setGraphUri((prev) => {
       if (prev && writableGraphs.some((g) => g.uri === prev)) return prev;
       return preferred.uri;
     });
-  }, [writableGraphs, selectedGraphId]);
+  }, [writableGraphs, selectedGraphId, requestedGraph]);
 
   useEffect(() => {
     if (!classUri) {

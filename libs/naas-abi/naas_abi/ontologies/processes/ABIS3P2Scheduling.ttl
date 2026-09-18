@@ -1,0 +1,166 @@
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:S3P2Ontology a owl:Ontology ;
+    rdfs:label "S3-P2 · Scheduling"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceSHA256 "0d2c2c1e42dc3dfcfb1a8661ddba31057e88de911af1bb8f21868ba3096c0763"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    dct:title "S3-P2 · Scheduling"@en ;
+    rdfs:comment "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    owl:imports abi:ABIProcessLedgerOntology .
+
+abi:S3P2Condition1 a owl:Class ;
+    rdfs:label "Scheduling timing condition"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Weekly; on change"@en ;
+    rdfs:comment "Ledger trigger/cadence/target: Weekly; on change. No occurrence or achieved timing is asserted."@en ;
+    rdfs:subClassOf abi:ExecutionCondition ;
+    skos:definition "Ledger trigger/cadence/target: Weekly; on change. No occurrence or achieved timing is asserted."@en .
+
+abi:S3P2ExecutionRole a owl:Class ;
+    rdfs:label "Scheduling execution role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "A proposed role realised in Scheduling and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom [ a owl:Class ;
+                    owl:unionOf ( abi:ResourceOwnersParticipant abi:S3SchedulerParticipant abi:SchedulingSystemHost ) ] ],
+        abi:ExecutionRole ;
+    skos:definition "A proposed role realised in Scheduling and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en .
+
+abi:S3P2Interval a owl:Class ;
+    rdfs:label "Scheduling execution interval"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The temporal region occupied by an execution of Scheduling; actual dates are unspecified."@en ;
+    rdfs:subClassOf abi:ExecutionInterval ;
+    skos:definition "The temporal region occupied by an execution of Scheduling; actual dates are unspecified."@en .
+
+abi:S3P2Objective1 a owl:Class ;
+    rdfs:label "Scheduling objective"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Efficient use of people and assets"@en ;
+    rdfs:comment "Intended outcome: Efficient use of people and assets. This is an objective specification, not a role or a guaranteed result."@en ;
+    rdfs:subClassOf abi:ObjectiveSpecification ;
+    skos:definition "Intended outcome: Efficient use of people and assets. This is an objective specification, not a role or a guaranteed result."@en .
+
+abi:S3P2Specification a owl:Class ;
+    rdfs:label "Scheduling specification"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The simulated ledger specification for S3-P2. It describes a possible process, not an executed run."@en ;
+    rdfs:subClassOf abi:ProcessSpecification ;
+    skos:definition "The simulated ledger specification for S3-P2. It describes a possible process, not an executed run."@en .
+
+abi:S3P2Step1 a owl:Class ;
+    rdfs:label "Scheduling · Collect demand"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 1 ;
+    rdfs:comment "Suggested step 1 of Scheduling: Collect demand. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S3P2 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 1 of Scheduling: Collect demand. Its ordering is a specification, not observed timing."@en .
+
+abi:S3P2Step2 a owl:Class ;
+    rdfs:label "Scheduling · Optimise"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 2 ;
+    rdfs:comment "Suggested step 2 of Scheduling: Optimise. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S3P2 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 2 of Scheduling: Optimise. Its ordering is a specification, not observed timing."@en .
+
+abi:S3P2Step3 a owl:Class ;
+    rdfs:label "Scheduling · Publish schedule"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 3 ;
+    rdfs:comment "Suggested step 3 of Scheduling: Publish schedule. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S3P2 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 3 of Scheduling: Publish schedule. Its ordering is a specification, not observed timing."@en .
+
+abi:S3P2 a owl:Class ;
+    rdfs:label "Scheduling"@en ;
+    abi:ledgerCode "S3-P2"@en ;
+    abi:ledgerHOWITIS "Schedule fill rate"@en ;
+    abi:ledgerHOWWEKNOW "Decision log"@en,
+        "Schedule record"@en ;
+    abi:ledgerWHEN "Weekly; on change"@en ;
+    abi:ledgerWHERE "Operations centre"@en ;
+    abi:ledgerWHO "Resource owners"@en,
+        "S3 scheduler"@en,
+        "Scheduling system"@en ;
+    abi:ledgerWHY "Efficient use of people and assets"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:qualityMappingStatus "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed ABI scheduling process. Suggested steps: Collect demand → Optimise → Publish schedule. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en,
+        "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty abi:pursuesObjective ;
+            owl:someValuesFrom abi:S3P2Objective1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000059 ;
+            owl:someValuesFrom abi:S3P2Specification ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:OperationsCentreSite ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:SchedulingSystemHost ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S3P2Step2 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:ResourceOwnersParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000199 ;
+            owl:someValuesFrom abi:S3P2Interval ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:ScheduleFillRateIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:S3SchedulerParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:DecisionLogRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:ScheduleRecordRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S3P2Step3 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000055 ;
+            owl:someValuesFrom abi:S3P2ExecutionRole ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasExecutionCondition ;
+            owl:someValuesFrom abi:S3P2Condition1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:usesInformation ;
+            owl:someValuesFrom abi:SchedulingSystemSoftware ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S3P2Step1 ],
+        abi:LedgerProcess,
+        abi:S3Process,
+        bfo:BFO_0000015 ;
+    skos:altLabel "S3-P2"@en ;
+    skos:definition "A proposed ABI scheduling process. Suggested steps: Collect demand → Optimise → Publish schedule. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en .
+

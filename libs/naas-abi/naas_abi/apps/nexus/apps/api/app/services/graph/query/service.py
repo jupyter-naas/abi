@@ -145,15 +145,18 @@ class GraphQueryService:
         store: IGraphQueryStore,
         *,
         owned_graphs: Callable[[str], Any],  # workspace_id → set[str] (sync or awaitable)
-        system_graphs: set[str],  # global read-only graphs (schema/nexus) any workspace may query
+        system_graphs: set[str],  # legacy constructor argument; never expands workspace grants
         count_cache: CountCache | None = None,
         page_cache: CountCache | None = None,  # caches the page ROWS (the expensive SPARQL)
         columns_cache: CountCache | None = None,  # caches column discovery (~5 SPARQL/call)
         now: Callable[[], str] | None = None,
+        cache_namespace: str = "",
     ) -> None:
+        self._cache_namespace = cache_namespace
         self._store = store
         self._owned_graphs = owned_graphs
-        self._system = system_graphs
+        # Kept for constructor compatibility. Only owned_graphs grants access.
+        _ = system_graphs
         self._cache = count_cache or NoCountCache()
         self._page_cache = page_cache or NoCountCache()
         self._columns_cache = columns_cache or NoCountCache()
@@ -187,8 +190,8 @@ class GraphQueryService:
             single_valued_predicates=frozenset(),
         )
         compiled = compile_query(spec, ctx, page)
-        ckey = count_cache_key(spec, workspace_id=workspace_id)
-        pkey = page_cache_key(spec, workspace_id=workspace_id, page=page)
+        ckey = self._cache_namespace + count_cache_key(spec, workspace_id=workspace_id)
+        pkey = self._cache_namespace + page_cache_key(spec, workspace_id=workspace_id, page=page)
 
         # Result cache: memoize the page's raw rows (the expensive SPARQL). `force_refresh`
         # bypasses both the page rows and the count so a re-tick always re-queries the store.
@@ -233,7 +236,8 @@ class GraphQueryService:
         )
 
     async def discover_columns(
-        self, *, workspace_id: str, graph_uris: list[str], class_uris: list[str]
+        self, *, workspace_id: str, graph_uris: list[str], class_uris: list[str],
+        force_refresh: bool = False,
     ) -> tuple:
         """Ontology ∪ data column discovery for an anchored class (ownership-guarded)."""
         owned = self._owned_graphs(workspace_id)
@@ -248,11 +252,11 @@ class GraphQueryService:
         type_graph_uris = sorted(set(owned) | set(graph_uris))
         # Column discovery fires ~5 SPARQL queries and rarely changes → cache it (the "add
         # column" dropdown latency). A cache miss/failure falls through to a live discovery.
-        ckey = columns_cache_key(
+        ckey = self._cache_namespace + columns_cache_key(
             workspace_id=workspace_id, graph_uris=graph_uris,
             class_uris=class_uris, type_graph_uris=type_graph_uris,
         )
-        cached = self._columns_cache.fetch(ckey)
+        cached = None if force_refresh else self._columns_cache.fetch(ckey)
         if cached is not None:
             return _columns_from_cache(cached)
         cols = await asyncio.to_thread(
@@ -266,7 +270,8 @@ class GraphQueryService:
         return cols
 
     async def search_entities(
-        self, *, workspace_id: str, graph_uris: list[str], query: str, limit: int = 20
+        self, *, workspace_id: str, graph_uris: list[str], query: str, limit: int = 20,
+        class_uris: list[str] | None = None,
     ) -> tuple:
         """Free-text search for classes ∪ individuals across the given (or all owned) graphs."""
         owned = self._owned_graphs(workspace_id)
@@ -281,7 +286,7 @@ class GraphQueryService:
         if not q:
             raise GraphQuerySpecError("query must be non-empty")
         return await asyncio.to_thread(
-            _search_entities, self._store, graph_uris=targets, query=q, limit=limit
+            _search_entities, self._store, graph_uris=targets, query=q, limit=limit, class_uris=class_uris
         )
 
     # ── Internals ─────────────────────────────────────────────────────────────────
@@ -289,10 +294,8 @@ class GraphQueryService:
     def _check_ownership(self, requested: tuple[str, ...], owned: set[str]) -> None:
         if not requested:
             raise GraphQuerySpecError("spec.graph_uris must be non-empty")
-        # A graph is queryable if the workspace owns it OR it's a global system graph
-        # (schema/nexus) that every workspace may read.
         requested_set = set(requested)
-        illegal = requested_set - (owned | self._system)
+        illegal = requested_set - owned
         if illegal:
             raise GraphAccessError(f"workspace does not own graph(s): {sorted(illegal)}")
 
