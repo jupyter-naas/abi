@@ -19,11 +19,13 @@ class CallContext(_message.Message):
     def __init__(self, trace_id: _Optional[str] = ..., timeout_ms: _Optional[int] = ..., principal_id: _Optional[str] = ..., workspace_id: _Optional[str] = ..., tenant_id: _Optional[str] = ...) -> None: ...
 
 class CallError(_message.Message):
-    __slots__ = ("code", "message", "retryable")
+    __slots__ = ("code", "message", "retryable", "status")
     CODE_FIELD_NUMBER: _ClassVar[int]
     MESSAGE_FIELD_NUMBER: _ClassVar[int]
     RETRYABLE_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
     code: str
     message: str
     retryable: bool
-    def __init__(self, code: _Optional[str] = ..., message: _Optional[str] = ..., retryable: _Optional[bool] = ...) -> None: ...
+    status: int
+    def __init__(self, code: _Optional[str] = ..., message: _Optional[str] = ..., retryable: _Optional[bool] = ..., status: _Optional[int] = ...) -> None: ...
