@@ -7,7 +7,7 @@ import { ontologyConnections, termConnections, isProcessTerm, type TermRef } fro
 import { termRoute } from '@/lib/ontology-navigation';
 import './ontology-context.css';
 
-export function OntologyUsedIn({term, terms}: {term: DictionaryTerm; terms: DictionaryTerm[]}) {
+export function OntologyUsedIn({term, terms, basePath}: {term: DictionaryTerm; terms: DictionaryTerm[]; basePath?: string}) {
   const router = useRouter(); const params = useSearchParams();
   const [expanded, setExpanded] = useState(false);
   const connections = useMemo(() => ontologyConnections(terms), [terms]);
@@ -16,9 +16,9 @@ export function OntologyUsedIn({term, terms}: {term: DictionaryTerm; terms: Dict
   const others = references.filter(edge => !isProcessTerm(edge.from, terms));
   function open(ref: TermRef) {
     if (!ref.type) return;
-    const next = termRoute(params?.toString() || '', {id: ref.id, type: ref.type});
+    const next = termRoute(basePath ? 'view=classes' : params?.toString() || '', {id: ref.id, type: ref.type});
     next.set('browser', 'dictionary');
-    router.push(`?${next}`, {scroll: false});
+    router.push(`${basePath || ""}?${next}`, {scroll: false});
   }
   return <section className="ontology-context-used">
     <h2>Used in <span>{references.length}</span></h2>

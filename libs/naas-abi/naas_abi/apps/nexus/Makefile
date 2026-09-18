@@ -168,14 +168,14 @@ build: ## Build production bundles
 
 clean: ## Clean all build artifacts and dependencies
 	@echo "$(YELLOW)Cleaning build artifacts...$(NC)"
-	@rm -rf node_modules apps/web/.next apps/web/node_modules apps/api/.pytest_cache apps/api/__pycache__ apps/api/app/__pycache__
+	@rm -rf node_modules apps/web/.next apps/web/.next-dev apps/web/node_modules apps/api/.pytest_cache apps/api/__pycache__ apps/api/app/__pycache__
 	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
 	@echo "$(GREEN)✓ Cleaned$(NC)"
 
 clean-cache: ## Clean Next.js cache only
 	@echo "$(YELLOW)Cleaning Next.js cache...$(NC)"
-	@rm -rf apps/web/.next
+	@rm -rf apps/web/.next apps/web/.next-dev
 	@echo "$(GREEN)✓ Cache cleaned$(NC)"
 
 # =============================================================================

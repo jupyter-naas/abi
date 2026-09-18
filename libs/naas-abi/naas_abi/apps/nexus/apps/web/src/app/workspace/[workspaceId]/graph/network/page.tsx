@@ -6,7 +6,7 @@ import { ClassInstancesPanel } from '@/components/graph/class-instances-panel';
 import { useGraphClassCatalog } from '@/stores/graph-class-catalog';
 import '@/components/graph/instance-browser.css';
 import dynamic from 'next/dynamic';
-import { Header } from '@/components/shell/header';
+import { GraphHeader as Header } from '@/components/graph/graph-header';
 import {
   AlertCircle,
   Check,
@@ -28,7 +28,6 @@ import {
   type GraphEdge as StoreGraphEdge,
   type GraphNode as StoreGraphNode,
 } from '@/stores/knowledge-graph';
-import { GraphDevBanner } from '@/components/graph/graph-dev-banner';
 import { buildHoverTitle, resolveNodeBucketKey } from '@/components/graph/vis-network';
 import {
   GraphNodeTable,
@@ -1366,7 +1365,6 @@ export default function NetworkPage() {
       <Header title="Knowledge Graph" />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
-          <GraphDevBanner />
           <div className="flex flex-1 overflow-hidden">
             {graphsLoading ? (
               <div className="flex flex-1 items-center justify-center">

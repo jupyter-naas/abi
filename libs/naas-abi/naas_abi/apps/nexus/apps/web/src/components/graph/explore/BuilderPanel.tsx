@@ -35,6 +35,8 @@ export interface BuilderPanelProps {
   classesLoading: boolean
   discovered: DiscoveredColumn[]
   discoveredLoading: boolean
+  discoveryError?: string | null
+  onRetryDiscovery?: () => void
   /** Discover a target class's fields, for relation-expansion (2-hop columns). */
   loadFields: (classUri: string) => Promise<DiscoveredColumn[]>
 }
@@ -48,6 +50,8 @@ export function BuilderPanel({
   classesLoading,
   discovered,
   discoveredLoading,
+  discoveryError,
+  onRetryDiscovery,
   loadFields,
 }: BuilderPanelProps) {
   const hasGraph = state.graphUris.length > 0
@@ -250,6 +254,9 @@ export function BuilderPanel({
             </span>
           ))}
           <AddColumnMenu
+            key={state.graphUris.join("|") + "::" + grainClass}
+            error={discoveryError}
+            onRetry={onRetryDiscovery}
             available={available}
             loading={discoveredLoading}
             disabled={!grainClass}
@@ -386,6 +393,8 @@ function GraphMultiSelect({
 }
 
 function AddColumnMenu({
+  error,
+  onRetry,
   available,
   loading,
   disabled,
@@ -395,6 +404,8 @@ function AddColumnMenu({
   ancestors,
   onAddAncestor,
 }: {
+  error?: string | null
+  onRetry?: () => void
   available: DiscoveredColumn[]
   loading: boolean
   disabled: boolean
@@ -475,6 +486,11 @@ function AddColumnMenu({
           <div className="max-h-72 overflow-y-auto py-1">
             {loading ? (
               <p className="px-3 py-2 text-xs text-muted-foreground">Loading columns…</p>
+            ) : error ? (
+              <div className="composer-discovery-error" role="alert">
+                <span>Could not load columns.</span>
+                <button type="button" onClick={onRetry}>Retry</button>
+              </div>
             ) : filtered.length === 0 ? (
               <p className="px-3 py-2 text-xs text-muted-foreground">No more columns</p>
             ) : (

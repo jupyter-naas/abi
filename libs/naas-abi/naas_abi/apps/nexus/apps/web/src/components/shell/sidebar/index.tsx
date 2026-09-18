@@ -229,7 +229,7 @@ export function Sidebar() {
         const params = lastOntologyRoute(currentWorkspaceId);
         return getWorkspacePath(currentWorkspaceId, `/ontology?${params.toString()}`);
       }
-      case 'graph':    return getWorkspacePath(currentWorkspaceId, '/graph/network');
+      case 'graph':    return getWorkspacePath(currentWorkspaceId, '/graph/explorer');
       case 'files':    return getWorkspacePath(currentWorkspaceId, '/files');
       case 'datasets': return getWorkspacePath(currentWorkspaceId, '/datasets');
       case 'code':     return getWorkspacePath(currentWorkspaceId, '/code');

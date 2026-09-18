@@ -9,9 +9,6 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
     require_workspace_access,
 )
-from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
-    workspace_seed_for_slug,
-)
 from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.primary.ontology__primary_adapter__dependencies import (  # noqa: E501
     get_ontology_service,
 )
@@ -46,7 +43,6 @@ from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_icons import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.ontology.service import OntologyService
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
@@ -93,17 +89,6 @@ def _edge_to_schema(edge) -> OntologyOverviewGraphEdge:
     )
 
 
-async def _workspace_slug(workspace_id: str) -> str | None:
-    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
-
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(WorkspaceModel.slug).where(WorkspaceModel.id == workspace_id)
-        )
-        return result.scalar_one_or_none()
-
-
 async def ontology_catalog_scope(
     workspace_id: str = Query(..., min_length=1),
     current_user: User = Depends(get_current_user_required),
@@ -114,10 +99,15 @@ async def ontology_catalog_scope(
 
 
 async def _catalog_refs_for_workspace(workspace_id: str) -> list[str]:
-    seed = workspace_seed_for_slug(await _workspace_slug(workspace_id))
-    if seed is None or getattr(seed, "ontologies", None) is None:
-        return []
-    return list(seed.ontologies)
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.resource_access_postgres import (
+        load_resource_policy,
+    )
+
+    async with AsyncSessionLocal() as db:
+        saved = await load_resource_policy(db, workspace_id, "ontologies")
+    return list(saved.data["enabled"])
+
 
 
 async def _require_catalog_path(

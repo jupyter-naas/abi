@@ -103,14 +103,22 @@ class HttpScopeTests(unittest.IsolatedAsyncioTestCase):
                 catalog_refs=["fixture:Public.ttl"]
             )
 
-    async def test_missing_null_and_empty_workspace_seeds_deny(self) -> None:
-        for seed in [None, SimpleNamespace(ontologies=None), SimpleNamespace(ontologies=[])]:
-            with (
-                self.subTest(seed=seed),
-                patch.object(http, "_workspace_slug", new=AsyncMock(return_value="fixture")),
-                patch.object(http, "workspace_seed_for_slug", return_value=seed),
-            ):
-                self.assertEqual(await http._catalog_refs_for_workspace("allowed"), [])
+    async def test_saved_empty_assignments_deny(self) -> None:
+        from unittest.mock import MagicMock
+
+        from naas_abi.apps.nexus.apps.api.app.core import database
+        from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary import (
+            resource_access_postgres as policies,
+        )
+
+        session = MagicMock()
+        session.return_value.__aenter__ = AsyncMock(return_value=SimpleNamespace())
+        session.return_value.__aexit__ = AsyncMock(return_value=False)
+        with patch.object(database, "AsyncSessionLocal", session), patch.object(
+            policies, "load_resource_policy", AsyncMock(return_value=SimpleNamespace(data={"enabled": []}))
+        ) as load:
+            self.assertEqual(await http._catalog_refs_for_workspace("allowed"), [])
+            self.assertEqual(load.call_args.args[1:], ("allowed", "ontologies"))
 
     async def test_private_paths_are_rejected_before_reads_and_export(self) -> None:
         with (

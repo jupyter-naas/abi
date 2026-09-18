@@ -12,10 +12,12 @@ import { ontologyBrowser, termRoute } from '@/lib/ontology-navigation';
 import { dictionaryKindLabel } from '@/lib/ontology-dictionary-tree';
 import { BookOpen, FileCode } from 'lucide-react';
 
-export function OntologyDictionaryEntry() {
+export function OntologyDictionaryEntry({ context }: { context?: { workspaceId: string; termId: string; basePath: string } } = {}) {
   const router = useRouter();
-  const params = useSearchParams();
-  const workspaceId = useWorkspaceStore(state => state.currentWorkspaceId);
+  const routeParams = useSearchParams();
+  const currentWorkspaceId = useWorkspaceStore(state => state.currentWorkspaceId);
+  const workspaceId = context?.workspaceId || currentWorkspaceId;
+  const params = context ? new URLSearchParams({ browser: 'dictionary', view: 'classes', term: context.termId, termType: 'entity' }) : routeParams;
   const { terms, loading, error, workspaceId: loadedWorkspace, errors } = useOntologyDictionaryStore();
   const scope = ontologyBrowser(params?.toString() || '') === 'dictionary' ? null : params?.get('ontology');
   const term = loadedWorkspace === workspaceId ? terms.find(item => item.id === params?.get('term') && item.type === params?.get('termType') && (!scope || item.sources?.some(source => source.path === scope))) : undefined;
@@ -25,7 +27,7 @@ export function OntologyDictionaryEntry() {
     return <button type="button" className="text-workspace-accent hover:underline" onClick={() => {
       const next = termRoute(params?.toString() || '', target);
       if (scope && !target.sources?.some(source => source.path === scope)) next.set('browser', 'dictionary');
-      router.push(`?${next}`);
+      router.push(`${context?.basePath || ""}?${next}`);
     }}>{name}</button>;
   };
   if (loading || loadedWorkspace !== workspaceId) return <p className="p-6 text-sm text-muted-foreground" role="status">Loading the workspace dictionary…</p>;
@@ -74,11 +76,11 @@ export function OntologyDictionaryEntry() {
         : <p className="px-4 py-4 text-sm text-muted-foreground">No properties with a named domain on this class or its parents.</p>}
       {!!errors.length && <p role="status" className="border-t px-4 py-2 text-xs text-muted-foreground">Some workspace files could not be read. Properties may be incomplete.</p>}
     </section>}
-    <OntologyUsedIn key={`${term.type}:${term.id}`} term={term} terms={terms} />
+    <OntologyUsedIn key={`${term.type}:${term.id}`} term={term} terms={terms} basePath={context?.basePath} />
     <section className="mt-6"><h2 className="text-sm font-semibold">Defined in {term.sources?.length} source {term.sources?.length === 1 ? 'file' : 'files'}</h2>
       <ul className="mt-3 space-y-2">{term.sources?.map(source => <li key={source.path}><button type="button" title={source.path} className="flex max-w-full items-start gap-2 text-left text-sm text-workspace-accent hover:underline" onClick={() => {
         const next = new URLSearchParams({ browser: 'files', view: params?.get('view') || 'classes', ontology: source.path, term: term.id, termType: term.type });
-        router.push(`?${next}`);
+        router.push(`${context?.basePath || ""}?${next}`);
       }}><FileCode size={16} className="mt-0.5 shrink-0 text-workspace-accent" /><span className="min-w-0"><span className="block break-words">{source.path.split('/').pop()}</span><span className="text-xs text-muted-foreground">{source.moduleName} · {source.name}</span></span></button></li>)}</ul>
     </section>
   </article>;

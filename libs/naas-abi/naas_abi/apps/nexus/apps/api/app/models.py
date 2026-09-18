@@ -814,3 +814,16 @@ class ModelCatalogRecordModel(Base):
 
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+class WorkspaceResourcePolicyModel(Base):
+    """Persisted workspace assignments; configuration is used only on first access."""
+
+    __tablename__ = "workspace_resource_policies"
+
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    resource_kind = Column(String(24), primary_key=True)
+    policy = Column(Text, nullable=False)
+    revision = Column(Integer, nullable=False, default=1)
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
