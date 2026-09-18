@@ -14,11 +14,19 @@ Extending to another service means adding one more branch to
 metaprogrammed dispatch, matching how ``EngineServiceLoader.load_services``
 itself lists every service explicitly rather than looping over a registry.
 
+``secret`` is exposed too, at Max's explicit direction, despite Stage 1's
+shared-JWT auth having no per-caller ARN/IAM authorization yet -- anyone
+holding a valid service token can read every secret this process's
+``Secret`` service is configured with. Accepted as a known, temporary gap
+("if it's adding security problems we will have to fix that anyway"), not
+an oversight -- revisit once Stage 2 per-caller authorization exists. It
+also has its own re-exposure guard shape (see ``expose_services`` below):
+``Secret`` fans out over a *list* of adapters, not one, so it's only
+skipped when literally every configured adapter is itself a NATS client
+(nothing local left to serve) rather than when any single one is.
+
 Deliberately NOT exposed here, on purpose (see the RFC / dev log for the
-full reasoning, not oversights):
-- ``secret`` -- Stage 1's shared-JWT auth has no per-caller ARN/IAM
-  authorization yet, so exposing raw secret retrieval over NATS would be a
-  real security regression. Revisit once Stage 2 authorization lands.
+full reasoning, not an oversight):
 - ``model_registry`` -- has no secondary-adapter-port/``Literal[...,"custom"]``
   slot to hang a NATS client on at all, and its ``get*`` methods return live
   LangChain client objects bound to local credentials/HTTP sessions --
@@ -74,6 +82,12 @@ from naas_abi_core.services.object_storage.adapters.primary.object_storage__prim
 )
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterNATSClient import (
     ObjectStorageSecondaryAdapterNATSClient,
+)
+from naas_abi_core.services.secret.adaptors.primary.secret__primary_adapter__NATS import (
+    SecretPrimaryAdapterNATS,
+)
+from naas_abi_core.services.secret.adaptors.secondary.SecretSecondaryAdapterNATSClient import (
+    SecretSecondaryAdapterNATSClient,
 )
 from naas_abi_core.services.source_control.adapters.primary.source_control__primary_adapter__NATS import (
     SourceControlPrimaryAdapterNATS,
@@ -132,6 +146,26 @@ class EngineNATSLoader:
             logger.debug(
                 "EngineNATSLoader: object_storage is itself a NATS client "
                 "(adapter: \"nats_rpc\") -- not re-exposing a remote proxy"
+            )
+
+        if services.secret_available() and not all(
+            isinstance(adapter, SecretSecondaryAdapterNATSClient)
+            for adapter in services.secret.adapters
+        ):
+            # Skip only when EVERY configured adapter is itself a NATS
+            # client -- Secret fans out over a list, so having a nats_rpc
+            # adapter alongside a real one (dotenv, naas, ...) still means
+            # there's something local worth serving.
+            primary_secret = SecretPrimaryAdapterNATS(
+                services.secret, nats_config.jwt_secret
+            )
+            nats_runtime.run_coro(primary_secret.start(nc))
+            started.append(primary_secret)
+            logger.debug("EngineNATSLoader: exposed secret over NATS")
+        elif services.secret_available():
+            logger.debug(
+                "EngineNATSLoader: secret is entirely backed by NATS clients "
+                "-- not re-exposing a remote proxy"
             )
 
         if services.dataset_available() and not isinstance(

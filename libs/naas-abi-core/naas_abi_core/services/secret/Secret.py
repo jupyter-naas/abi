@@ -51,6 +51,15 @@ class Secret(ServiceBase, ISecretService):
         super().__init__()
         self.__adapters = adapters
 
+    @property
+    def adapters(self) -> list[ISecretAdapter]:
+        """The wrapped secondary adapters -- public so callers (e.g.
+        ``EngineNATSLoader``) can check what this service is backed by,
+        mirroring ``ObjectStorageService.adapter`` (plural here since
+        ``Secret`` fans out over more than one, unlike every other kernel
+        service)."""
+        return self.__adapters
+
     def __publish_event(self, event: object) -> None:
         if not self.services_wired:
             return

@@ -70,11 +70,42 @@ class Base64SecretConfiguration(BaseModel):
         return Base64Secret(self.secret_adapter.load(), self.base64_secret_key)
 
 
+class SecretAdapterNATSConfiguration(BaseModel):
+    """Secret adapter NATS RPC client configuration.
+
+    Talks to a remote ``SecretPrimaryAdapterNATS`` over NATS request/reply
+    -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
+    (Stage 1) and naas_abi_core/proto/secret/v1/secret.proto.
+
+    Security note: Stage 1's shared-JWT auth has no per-caller
+    authorization -- anyone holding a valid service token can read every
+    secret the remote process exposes. Accepted as a known, temporary
+    Stage 1 gap, not an oversight -- revisit once Stage 2 per-caller
+    authorization exists.
+
+    Plugs into the existing multi-adapter fan-out exactly like dotenv/naas/
+    base64 already do -- add it as one more entry in secret_adapters, not
+    a top-level swap:
+
+    secret_adapters:
+      - adapter: "nats_rpc"
+        config:
+          nats_url: "nats://127.0.0.1:4222"
+          jwt_secret: "{{ secret.NATS_SERVICE_JWT_SECRET }}"
+          service_identity: "api"
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    nats_url: str = "nats://127.0.0.1:4222"
+    jwt_secret: str
+    service_identity: str = "api"
+
+
 class SecretAdapterConfiguration(GenericLoader):
-    adapter: Literal["dotenv", "naas", "base64", "custom"]
+    adapter: Literal["dotenv", "naas", "base64", "nats_rpc", "custom"]
     config: (
         DotenvSecretConfiguration | NaasSecretConfiguration | Base64SecretConfiguration
-        | None
+        | SecretAdapterNATSConfiguration | None
     ) = None
 
     @model_validator(mode="after")
@@ -100,6 +131,12 @@ class SecretAdapterConfiguration(GenericLoader):
                 NaasSecretConfiguration,
                 self.config,
                 "Invalid configuration for services.secret.secret_adapters 'naas' adapter",
+            )
+        if self.adapter == "nats_rpc":
+            pydantic_model_validator(
+                SecretAdapterNATSConfiguration,
+                self.config,
+                "Invalid configuration for services.secret.secret_adapters 'nats_rpc' adapter",
             )
         return self
 

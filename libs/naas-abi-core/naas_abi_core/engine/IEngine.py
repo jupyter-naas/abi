@@ -134,6 +134,9 @@ class IEngine:
             assert self.__secret is not None, "Secret service is not initialized"
             return self.__secret
 
+        def secret_available(self) -> bool:
+            return self.__secret is not None
+
         @property
         def bus(self) -> BusService:
             assert self.__bus is not None, "Bus service is not initialized"

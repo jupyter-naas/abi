@@ -61,6 +61,12 @@ from naas_abi_core.services.object_storage.adapters.primary.object_storage__prim
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterNATSClient import (
     ObjectStorageSecondaryAdapterNATSClient,
 )
+from naas_abi_core.services.secret.adaptors.primary.secret__primary_adapter__NATS import (
+    SecretPrimaryAdapterNATS,
+)
+from naas_abi_core.services.secret.adaptors.secondary.SecretSecondaryAdapterNATSClient import (
+    SecretSecondaryAdapterNATSClient,
+)
 from naas_abi_core.services.source_control.adapters.primary.source_control__primary_adapter__NATS import (
     SourceControlPrimaryAdapterNATS,
 )
@@ -99,7 +105,7 @@ _WIRED_SERVICES = [
     ("triple_store", TripleStorePrimaryAdapterNATS, TripleStoreSecondaryAdapterNATSClient, False),
 ]
 
-_ALL_FLAGS = [name for name, *_ in _WIRED_SERVICES]
+_ALL_FLAGS = [name for name, *_ in _WIRED_SERVICES] + ["secret"]
 
 
 def _services(available: dict[str, object] | None = None) -> MagicMock:
@@ -108,12 +114,25 @@ def _services(available: dict[str, object] | None = None) -> MagicMock:
     ``{"object_storage": some_client_instance}`` to mark a service loaded --
     a bool just gets a fresh MagicMock adapter, anything else is used as
     the adapter directly (e.g. a real client instance, to test the
-    re-exposure guard)."""
+    re-exposure guard).
+
+    ``secret`` is special-cased: it fans out over a *list* of adapters, not
+    one, so ``True`` gives it a single-entry list of one fresh real
+    (non-client) MagicMock adapter, and anything else is used as the list
+    directly -- see the dedicated ``test_expose_services_*_secret_*`` tests
+    below rather than the generic parametrized ones for its guard shape.
+    """
     available = available or {}
     services = MagicMock()
     for flag in _ALL_FLAGS:
         getattr(services, f"{flag}_available").return_value = flag in available
         value = available.get(flag)
+        if flag == "secret":
+            if value is True:
+                services.secret.adapters = [MagicMock()]
+            elif value is not None:
+                services.secret.adapters = value
+            continue
         adapter = MagicMock() if value is True else value
         if adapter is not None:
             getattr(services, flag).adapter = adapter
@@ -216,6 +235,84 @@ def test_expose_services_starts_one_primary_per_available_service(monkeypatch):
     services = _services({flag: True for flag in _ALL_FLAGS})
     started = loader.expose_services(services)
 
-    assert len(started) == len(_WIRED_SERVICES)
+    # +1 for secret, which isn't in _WIRED_SERVICES (different guard shape).
+    assert len(started) == len(_WIRED_SERVICES) + 1
     started_types = {type(p) for p in started}
-    assert started_types == {primary_cls for _, primary_cls, _, _ in _WIRED_SERVICES}
+    assert started_types == {
+        primary_cls for _, primary_cls, _, _ in _WIRED_SERVICES
+    } | {SecretPrimaryAdapterNATS}
+
+
+# ---------------------------------------------------------------------------
+# secret: exposed too (at Max's explicit direction, despite Stage 1's auth
+# gap), but with a different re-exposure guard shape -- Secret fans out over
+# a *list* of adapters, so it's only skipped when EVERY one of them is
+# itself a NATS client, not when any single one is.
+# ---------------------------------------------------------------------------
+
+
+def test_expose_services_starts_a_primary_adapter_for_secret(monkeypatch):
+    config = SimpleNamespace(
+        nats=NATSConfiguration(nats_url="nats://example:4222", jwt_secret="x" * 32)
+    )
+    loader = EngineNATSLoader(config)
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_runtime.get_connection", MagicMock()
+    )
+    run_coro = MagicMock(side_effect=lambda coro, *a, **k: coro.close())
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.run_coro", run_coro)
+
+    services = _services({"secret": True})
+    started = loader.expose_services(services)
+
+    assert len(started) == 1
+    assert isinstance(started[0], SecretPrimaryAdapterNATS)
+    assert started[0]._adapter is services.secret
+    run_coro.assert_called_once()
+
+
+def test_expose_services_does_not_re_expose_secret_when_every_adapter_is_remote(
+    monkeypatch,
+):
+    config = SimpleNamespace(nats=NATSConfiguration(jwt_secret="x" * 32))
+    loader = EngineNATSLoader(config)
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_runtime.get_connection", MagicMock()
+    )
+    run_coro = MagicMock(side_effect=lambda coro, *a, **k: coro.close())
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.run_coro", run_coro)
+
+    all_remote = [MagicMock(spec=SecretSecondaryAdapterNATSClient) for _ in range(2)]
+    services = _services({"secret": all_remote})
+
+    started = loader.expose_services(services)
+
+    assert started == []
+    run_coro.assert_not_called()
+
+
+def test_expose_services_still_exposes_secret_when_only_some_adapters_are_remote(
+    monkeypatch,
+):
+    """The realistic mixed case: a local dotenv/naas adapter alongside a
+    nats_rpc one that reaches a different, upstream secret store -- there's
+    still something local worth serving, so this must NOT be skipped
+    (confirms the guard is `all(...)`, not `any(...)`)."""
+    config = SimpleNamespace(
+        nats=NATSConfiguration(nats_url="nats://example:4222", jwt_secret="x" * 32)
+    )
+    loader = EngineNATSLoader(config)
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_runtime.get_connection", MagicMock()
+    )
+    run_coro = MagicMock(side_effect=lambda coro, *a, **k: coro.close())
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.run_coro", run_coro)
+
+    mixed = [MagicMock(), MagicMock(spec=SecretSecondaryAdapterNATSClient)]
+    services = _services({"secret": mixed})
+
+    started = loader.expose_services(services)
+
+    assert len(started) == 1
+    assert isinstance(started[0], SecretPrimaryAdapterNATS)
+    run_coro.assert_called_once()
