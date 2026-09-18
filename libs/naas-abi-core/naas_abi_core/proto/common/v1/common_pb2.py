@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n*naas_abi_core/proto/common/v1/common.proto\x12\rabi.common.v1\"r\n\x0b\x43\x61llContext\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x12\n\ntimeout_ms\x18\x02 \x01(\x05\x12\x14\n\x0cprincipal_id\x18\x03 \x01(\t\x12\x14\n\x0cworkspace_id\x18\x04 \x01(\t\x12\x11\n\ttenant_id\x18\x05 \x01(\t\"=\n\tCallError\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x11\n\tretryable\x18\x03 \x01(\x08\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n*naas_abi_core/proto/common/v1/common.proto\x12\rabi.common.v1\"r\n\x0b\x43\x61llContext\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x12\n\ntimeout_ms\x18\x02 \x01(\x05\x12\x14\n\x0cprincipal_id\x18\x03 \x01(\t\x12\x14\n\x0cworkspace_id\x18\x04 \x01(\t\x12\x11\n\ttenant_id\x18\x05 \x01(\t\"]\n\tCallError\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x11\n\tretryable\x18\x03 \x01(\x08\x12\x13\n\x06status\x18\x04 \x01(\x05H\x00\x88\x01\x01\x42\t\n\x07_statusb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,5 +34,5 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_CALLCONTEXT']._serialized_start=61
   _globals['_CALLCONTEXT']._serialized_end=175
   _globals['_CALLERROR']._serialized_start=177
-  _globals['_CALLERROR']._serialized_end=238
+  _globals['_CALLERROR']._serialized_end=270
 # @@protoc_insertion_point(module_scope)

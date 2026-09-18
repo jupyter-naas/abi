@@ -38,4 +38,9 @@ message CallError {
   // Whether the caller may safely retry this exact call. At-least-once NATS
   // delivery means every RPC needs this signal rather than callers guessing.
   bool retryable = 3;
+  // Optional numeric status carried by domain exceptions that have one (e.g.
+  // an upstream HTTP status code on a *Error(message, *, status=None)
+  // exception -- coding_environment, source_control). Unset when the
+  // originating exception has no such attribute; never defaulted to 0.
+  optional int32 status = 4;
 }
