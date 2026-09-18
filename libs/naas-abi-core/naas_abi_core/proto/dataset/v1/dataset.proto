@@ -1,0 +1,306 @@
+// NATS-RPC contract for the dataset kernel domain.
+// Mirrors naas_abi_core/services/dataset/DatasetPort.py 1:1 -- IDatasetPort has no
+// streaming/callback members, so this is a full mapping, no exclusions. See
+// docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
+//
+// Structured error details: CallError (naas_abi_core/proto/common/v1/common.proto) is
+// shared across every kernel domain and carries only a code/message/retryable/status --
+// it deliberately never grows service-specific fields. Several IDatasetPort exceptions
+// carry extra structured attributes the caller needs back verbatim (DatasetNotFoundError's
+// name/namespace, DatasetSnapshotConflictError's expected/current snapshot ids, ...), so
+// this contract defines its own DatasetError wrapper: a CallError plus a `oneof detail`
+// of small per-exception detail messages. Every response in this file reports its error
+// as one DatasetError (not a bare CallError) -- one error shape, reused unchanged across
+// all ten methods, whether or not a given method can actually raise the detailed
+// exceptions (unused detail arms are simply left unset) -- rather than a bespoke
+// oneof-of-error-types per response message that would vary method to method for no
+// benefit.
+//
+// Subjects (see "Protobuf contract shapes" in the RFC):
+//   abi.svc.dataset.v1.create
+//   abi.svc.dataset.v1.describe
+//   abi.svc.dataset.v1.list
+//   abi.svc.dataset.v1.write
+//   abi.svc.dataset.v1.query
+//   abi.svc.dataset.v1.flush
+//   abi.svc.dataset.v1.inlined_row_count
+//   abi.svc.dataset.v1.compact
+//   abi.svc.dataset.v1.list_snapshots
+//   abi.svc.dataset.v1.drop
+syntax = "proto3";
+
+package abi.dataset.v1;
+
+import "naas_abi_core/proto/common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+enum ColumnType {
+  COLUMN_TYPE_UNSPECIFIED = 0;
+  COLUMN_TYPE_STRING = 1;
+  COLUMN_TYPE_INTEGER = 2;
+  COLUMN_TYPE_BIGINT = 3;
+  COLUMN_TYPE_DOUBLE = 4;
+  COLUMN_TYPE_BOOLEAN = 5;
+  COLUMN_TYPE_DATE = 6;
+  COLUMN_TYPE_TIMESTAMP = 7;
+  COLUMN_TYPE_JSON = 8;
+}
+
+enum PartitionTransform {
+  PARTITION_TRANSFORM_UNSPECIFIED = 0;
+  PARTITION_TRANSFORM_IDENTITY = 1;
+  PARTITION_TRANSFORM_YEAR = 2;
+  PARTITION_TRANSFORM_MONTH = 3;
+  PARTITION_TRANSFORM_DAY = 4;
+}
+
+enum WriteMode {
+  WRITE_MODE_UNSPECIFIED = 0;
+  WRITE_MODE_APPEND = 1;
+  WRITE_MODE_REPLACE = 2;
+  WRITE_MODE_UPSERT = 3;
+}
+
+message ColumnSpec {
+  string name = 1;
+  ColumnType type = 2;
+}
+
+message PartitionSpec {
+  string column = 1;
+  PartitionTransform transform = 2;
+}
+
+message DatasetSpec {
+  string name = 1;
+  string namespace = 2;
+  repeated ColumnSpec columns = 3;
+  repeated PartitionSpec partitions = 4;
+  repeated string primary_key = 5;
+}
+
+message DatasetInfo {
+  string name = 1;
+  string namespace = 2;
+  repeated ColumnSpec columns = 3;
+  repeated PartitionSpec partitions = 4;
+  repeated string primary_key = 5;
+  int64 snapshot_id = 6;
+  string location = 7;
+}
+
+message DatasetInfoList {
+  repeated DatasetInfo items = 1;
+}
+
+message DatasetSnapshotInfo {
+  int64 snapshot_id = 1;
+  google.protobuf.Timestamp created_at = 2;
+}
+
+message DatasetSnapshotInfoList {
+  repeated DatasetSnapshotInfo items = 1;
+}
+
+message QueryResult {
+  repeated string columns = 1;
+  repeated google.protobuf.Struct rows = 2;
+}
+
+// -----------------------------------------------------------------------
+// Structured error details -- see the file header comment for the design.
+// -----------------------------------------------------------------------
+
+message DatasetNotFoundDetail {
+  string name = 1;
+  string namespace = 2;
+}
+
+message DatasetAlreadyExistsDetail {
+  string name = 1;
+  string namespace = 2;
+}
+
+message DatasetSnapshotNotFoundDetail {
+  int64 snapshot_id = 1;
+}
+
+message DatasetSnapshotConflictDetail {
+  int64 expected_snapshot_id = 1;
+  int64 current_snapshot_id = 2;
+}
+
+message DatasetError {
+  abi.common.v1.CallError error = 1;
+  oneof detail {
+    DatasetNotFoundDetail not_found = 2;
+    DatasetAlreadyExistsDetail already_exists = 3;
+    DatasetSnapshotNotFoundDetail snapshot_not_found = 4;
+    DatasetSnapshotConflictDetail snapshot_conflict = 5;
+  }
+}
+
+// -----------------------------------------------------------------------
+// create
+// -----------------------------------------------------------------------
+
+message CreateRequest {
+  abi.common.v1.CallContext context = 1;
+  DatasetSpec spec = 2;
+}
+message CreateResponse {
+  oneof result {
+    DatasetInfo info = 1;
+    DatasetError error = 2;
+  }
+}
+
+// -----------------------------------------------------------------------
+// describe
+// -----------------------------------------------------------------------
+
+message DescribeRequest {
+  abi.common.v1.CallContext context = 1;
+  string name = 2;
+  string namespace = 3;
+}
+message DescribeResponse {
+  oneof result {
+    DatasetInfo info = 1;
+    DatasetError error = 2;
+  }
+}
+
+// -----------------------------------------------------------------------
+// list
+// -----------------------------------------------------------------------
+
+message ListRequest {
+  abi.common.v1.CallContext context = 1;
+  // Unset means "no namespace filter" (IDatasetPort.list's namespace=None
+  // default) -- distinct from an explicit empty string.
+  optional string namespace = 2;
+}
+message ListResponse {
+  oneof result {
+    DatasetInfoList datasets = 1;
+    DatasetError error = 2;
+  }
+}
+
+// -----------------------------------------------------------------------
+// write
+// -----------------------------------------------------------------------
+
+message WriteRequest {
+  abi.common.v1.CallContext context = 1;
+  string name = 2;
+  repeated google.protobuf.Struct rows = 3;
+  string namespace = 4;
+  WriteMode mode = 5;
+  // Unset means "no optimistic-concurrency check" (IDatasetPort.write's
+  // snapshot_id=None default).
+  optional int64 snapshot_id = 6;
+}
+message WriteResponse {
+  oneof result {
+    DatasetInfo info = 1;
+    DatasetError error = 2;
+  }
+}
+
+// -----------------------------------------------------------------------
+// query
+// -----------------------------------------------------------------------
+
+message QueryRequest {
+  abi.common.v1.CallContext context = 1;
+  string sql = 2;
+  string namespace = 3;
+  // Unset means "query the current snapshot" (IDatasetPort.query's
+  // snapshot_id=None default).
+  optional int64 snapshot_id = 4;
+}
+message QueryResponse {
+  oneof result {
+    QueryResult query_result = 1;
+    DatasetError error = 2;
+  }
+}
+
+// -----------------------------------------------------------------------
+// flush
+// -----------------------------------------------------------------------
+
+message FlushRequest {
+  abi.common.v1.CallContext context = 1;
+  string name = 2;
+  string namespace = 3;
+}
+message FlushResponse {
+  oneof result {
+    QueryResult query_result = 1;
+    DatasetError error = 2;
+  }
+}
+
+// -----------------------------------------------------------------------
+// inlined_row_count
+// -----------------------------------------------------------------------
+
+message InlinedRowCountRequest {
+  abi.common.v1.CallContext context = 1;
+  string name = 2;
+  string namespace = 3;
+}
+message InlinedRowCountResponse {
+  oneof result {
+    int64 count = 1;
+    DatasetError error = 2;
+  }
+}
+
+// -----------------------------------------------------------------------
+// compact
+// -----------------------------------------------------------------------
+
+message CompactRequest {
+  abi.common.v1.CallContext context = 1;
+  string name = 2;
+  string namespace = 3;
+}
+message CompactResponse {
+  oneof result {
+    QueryResult query_result = 1;
+    DatasetError error = 2;
+  }
+}
+
+// -----------------------------------------------------------------------
+// list_snapshots
+// -----------------------------------------------------------------------
+
+message ListSnapshotsRequest {
+  abi.common.v1.CallContext context = 1;
+}
+message ListSnapshotsResponse {
+  oneof result {
+    DatasetSnapshotInfoList snapshots = 1;
+    DatasetError error = 2;
+  }
+}
+
+// -----------------------------------------------------------------------
+// drop
+// -----------------------------------------------------------------------
+
+message DropRequest {
+  abi.common.v1.CallContext context = 1;
+  string name = 2;
+  string namespace = 3;
+}
+message DropResponse {
+  // Empty on success -- the error, if any, is the whole signal.
+  optional DatasetError error = 1;
+}
