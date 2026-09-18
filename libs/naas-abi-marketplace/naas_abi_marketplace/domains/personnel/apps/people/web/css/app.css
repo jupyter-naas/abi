@@ -90,10 +90,19 @@ mark,
   color: var(--accent);
 }
 
-.brand-logo svg,
-.brand-logo img {
+.brand-logo svg {
   width: 100%;
   height: 100%;
+  display: block;
+}
+
+/* A client logo is usually a wordmark, not a square. The box gives it a height
+   and lets it take the width it needs, so nothing is stretched. */
+.brand-logo img {
+  width: auto;
+  height: 100%;
+  max-width: 100%;
+  object-fit: contain;
   display: block;
 }
 
@@ -130,9 +139,15 @@ mark,
 }
 
 .topbar-brand .brand-logo {
-  width: 30px;
+  width: auto;
+  min-width: 30px;
   height: 30px;
   font-size: 15px;
+}
+
+/* The letter fallback has no proportions of its own, so it stays square. */
+.topbar-brand .brand-logo.is-mark {
+  width: 30px;
 }
 
 .brand-name {
@@ -299,9 +314,14 @@ mark,
 }
 
 .home .brand-logo {
-  width: 84px;
+  width: auto;
+  min-width: 84px;
   height: 84px;
   font-size: 40px;
+}
+
+.home .brand-logo.is-mark {
+  width: 84px;
 }
 
 .home-title {
@@ -658,7 +678,9 @@ mark,
 }
 
 .source-graph-name {
-  font-weight: 600;
+  /* The graph is one source among the ones listed under it, not a heading for
+     them, so it is set like they are. */
+  font-weight: inherit;
 }
 
 .source-info {
@@ -1011,6 +1033,19 @@ body.sparql-modal-open {
 .sources li,
 .related li {
   margin-bottom: 10px;
+}
+
+/* A source that is not a web page: named, but not dressed up as a link. */
+.source-name {
+  display: block;
+  color: var(--ink);
+}
+
+.source-ref {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  word-break: break-word;
 }
 
 .profile-sidebar .profile-sidebar-card {

@@ -18,6 +18,23 @@ Every step is replaceable except the order. Never shortcut it by putting people
 data in this folder: an app with its own copy of the directory is the fork this
 app exists to prevent.
 
+## Instances
+
+This app is mounted more than once. `config_loader`, `build_router` and the
+exporter all take a config path; the one shipped here is a default, not the
+only one. Two consequences, both easy to break:
+
+- **Never read the shipped `config.yaml` implicitly** in code that serves a
+  request. Take the path, or the already-loaded config dict, as an argument.
+  `load_config()` with no argument is for scripts and tests.
+- **Never resolve an instance's file against `APP_ROOT`.** Brand files, the
+  graph TTL and portraits belong to whoever owns the config; use
+  `web_root_for(config_path)` and the `data.*` keys.
+
+`web/` is served to every instance from this package, so a path in the JS is a
+path in everyone's app. Instance-owned files are referenced relatively and
+instance-agnostic ones absolutely under the API prefix.
+
 ## The two contracts
 
 1. **Configuration may not create behaviour.** `config.yaml` can reorder,
@@ -81,6 +98,10 @@ Which sections are **process-shaped** (ActOfWorking / ActOfStudying) vs **person
 Python package `people` · catalog id `personnel-people` · API prefix
 `/api/personnel-people` · dataset namespace `personnel` · Nexus app id
 `naas_abi_marketplace.domains.personnel:people`.
+
+An instance picks its own prefix and namespace and keeps everything else.
+`src/personnel/apps/people` in the bob repo is `/api/personnel-people-fmz` and
+`personnel_fmz`.
 
 ## Tests
 

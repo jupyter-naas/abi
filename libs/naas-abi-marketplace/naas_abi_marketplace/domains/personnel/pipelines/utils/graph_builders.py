@@ -60,6 +60,17 @@ def utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def period_label(start: date | None, end: date | None) -> str:
+    """How a period reads when the source stated only part of it."""
+    if start and end:
+        return f"{start.strftime('%b %Y')} – {end.strftime('%b %Y')}"
+    if start:
+        return f"{start.strftime('%b %Y')} – Present"
+    if end:
+        return f"Until {end.strftime('%b %Y')}"
+    return "Date not recorded"
+
+
 @dataclass
 class PersonnelGraphContext:
     """Mutable builder state shared across process pipelines in one batch."""
@@ -456,10 +467,19 @@ class PersonnelGraphContext:
         *,
         key: str,
         label: str,
-        start: date,
+        start: date | None,
         end: date | None,
         duration: str | None = None,
-    ) -> str:
+    ) -> str | None:
+        """The region a record occupies, or ``None`` when it is undated.
+
+        A source that names neither a start nor an end has not told us when
+        anything happened. Minting a region anyway would put a temporal claim in
+        the graph that nobody made, so the record simply occupies no region.
+        """
+        if start is None and end is None:
+            return None
+
         def instant(bound: str, moment: date) -> str:
             uri = individual_uri(
                 str(ABI), "TemporalInstant", f"{key}-{bound}-{moment.isoformat()}"
@@ -477,14 +497,14 @@ class PersonnelGraphContext:
             )
             return uri
 
-        first_uri = instant("start", start)
+        first_uri = instant("start", start) if start else None
         last_uri = instant("end", end) if end else None
 
         region_uri = individual_uri(str(ABI), "TemporalRegion", key)
         region = AbiTemporalRegion(
             _uri=region_uri,
             label=label,
-            has_first_instant=[first_uri],
+            has_first_instant=[first_uri] if first_uri else None,
             has_last_instant=[last_uri] if last_uri else None,
             created=utc_now(),
             creator=self.creator,
@@ -505,14 +525,14 @@ class PersonnelGraphContext:
         *,
         person: Person,
         org: Organization,
-        site: Site,
+        site: Site | None,
         skills: list[Skill],
         profile: ProfileDocument | None,
         title: str,
         mission_label: str,
         mission_content: str,
         contract_type: str | None,
-        start: date,
+        start: date | None,
         end: date | None,
         duration: str | None,
         remuneration_amount: float | None = None,
@@ -522,11 +542,7 @@ class PersonnelGraphContext:
 
         temporal_uri = self.add_temporal_region(
             key=f"{key}-working",
-            label=(
-                f"{start.strftime('%b %Y')} – Present"
-                if end is None
-                else f"{start.strftime('%b %Y')} – {end.strftime('%b %Y')}"
-            ),
+            label=period_label(start, end),
             start=start,
             end=end,
             duration=duration,
@@ -614,8 +630,8 @@ class PersonnelGraphContext:
             _uri=working_uri,
             label=f"{title} @ {org.label}",
             hasParticipant=participants,
-            occursIn=[site._uri],
-            occupiesTemporalRegion=[temporal_uri],
+            occursIn=[site._uri] if site else None,
+            occupiesTemporalRegion=[temporal_uri] if temporal_uri else None,
             for_organization=[org._uri],
             has_contract=contract_uri,
             is_act_of_working_of=[person._uri],
@@ -627,7 +643,10 @@ class PersonnelGraphContext:
         self.graph += working.rdf()
 
         self.graph.add((URIRef(person._uri), PERSONNEL.hasActOfWorking, URIRef(working_uri)))
-        self.graph.add((URIRef(person._uri), PERSONNEL.hasWorkLocation, URIRef(site._uri)))
+        if site:
+            self.graph.add(
+                (URIRef(person._uri), PERSONNEL.hasWorkLocation, URIRef(site._uri))
+            )
         for skill in skills:
             self.graph.add(
                 (URIRef(skill._uri), PERSONNEL.isSkillDevelopedIn, URIRef(working_uri))
@@ -639,25 +658,23 @@ class PersonnelGraphContext:
         self,
         *,
         person: Person,
-        org: Organization,
-        site: Site,
+        org: Organization | None,
+        site: Site | None,
         skills: list[Skill],
         profile: ProfileDocument | None,
         program: str,
-        start: date,
+        start: date | None,
         end: date | None,
         duration: str | None = None,
         activities: str | None = None,
     ) -> str:
-        key = slug(person.label or "", org.label or "", program)
+        # A degree the source names without naming the school is still a degree
+        # the person holds. The act is recorded; who ran it simply is not known.
+        key = slug(person.label or "", org.label if org else "", program)
 
         temporal_uri = self.add_temporal_region(
             key=f"{key}-studying",
-            label=(
-                f"{start.strftime('%b %Y')} – Present"
-                if end is None
-                else f"{start.strftime('%b %Y')} – {end.strftime('%b %Y')}"
-            ),
+            label=period_label(start, end),
             start=start,
             end=end,
             duration=duration,
@@ -713,11 +730,11 @@ class PersonnelGraphContext:
         studying_uri = individual_uri(str(PERSONNEL), "ActOfStudying", key)
         studying = ActOfStudying(
             _uri=studying_uri,
-            label=f"{program} @ {org.label}",
+            label=f"{program} @ {org.label}" if org else program,
             hasParticipant=[person._uri],
-            occursIn=[site._uri],
-            occupiesTemporalRegion=[temporal_uri],
-            for_educational_organization=[org._uri],
+            occursIn=[site._uri] if site else None,
+            occupiesTemporalRegion=[temporal_uri] if temporal_uri else None,
+            for_educational_organization=[org._uri] if org else None,
             has_enrollment=enrollment._uri,
             has_degree=degree._uri,
             is_act_of_studying_of=[person._uri],
@@ -729,7 +746,10 @@ class PersonnelGraphContext:
         self.graph += studying.rdf()
 
         self.graph.add((URIRef(person._uri), PERSONNEL.hasActOfStudying, URIRef(studying_uri)))
-        self.graph.add((URIRef(person._uri), PERSONNEL.hasStudyLocation, URIRef(site._uri)))
+        if site:
+            self.graph.add(
+                (URIRef(person._uri), PERSONNEL.hasStudyLocation, URIRef(site._uri))
+            )
         for skill in skills:
             self.graph.add(
                 (URIRef(skill._uri), PERSONNEL.isSkillDevelopedIn, URIRef(studying_uri))

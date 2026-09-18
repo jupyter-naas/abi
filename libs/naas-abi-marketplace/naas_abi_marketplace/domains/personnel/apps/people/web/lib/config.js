@@ -5,7 +5,13 @@
  * validated in config.yaml is what the page renders.
  */
 
-export const API_BASE = "/api/personnel-people";
+/**
+ * Which API to ask. An instance page declares its own in a meta tag, because
+ * two instances of this app can be mounted in one process under two prefixes.
+ */
+export const API_BASE =
+  document.querySelector('meta[name="people-api-base"]')?.content?.replace(/\/$/, "") ||
+  "/api/personnel-people";
 
 let cached = null;
 

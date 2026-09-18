@@ -7,6 +7,12 @@ instead of rendering a blank section in someone's browser.
 Configuration can reorder, rename, retitle and hide what is registered; it
 cannot create a page or a profile section. The registered ids below are the
 contract with ``web/lib/registry.js``.
+
+A ``config.yaml`` need not be the one shipped here. Another module can pass its
+own path and get a second instance of this app - its own brand, its own tables,
+its own people - running on these same renderers. Everything that is per-app
+(brand files, portraits) is resolved against *that* file's folder; everything
+that is the app itself (pages, sections, SQL shapes) stays here.
 """
 
 from __future__ import annotations
@@ -25,6 +31,20 @@ CONFIG_PATH = APP_ROOT / "config.yaml"
 # /app-html/<module>/people/web/index.html. An asset outside web/ would 404 there.
 WEB_ROOT = APP_ROOT / "web"
 ASSETS_ROOT = WEB_ROOT / "assets"
+# The shared renderers, whichever instance is being configured. An instance
+# folder holds its own index.html and assets/; the JS and CSS are served from
+# here, so there is one copy of the app however many directories it serves.
+SHARED_WEB_ROOT = WEB_ROOT
+
+
+def app_root_for(config_path: Path | None = None) -> Path:
+    """The folder an instance's own files (web/, assets/) are resolved against."""
+    return (config_path or CONFIG_PATH).resolve().parent
+
+
+def web_root_for(config_path: Path | None = None) -> Path:
+    return app_root_for(config_path) / "web"
+
 
 REGISTERED_PAGE_IDS = frozenset({"home", "results", "profile", "ontology"})
 REGISTERED_SECTION_IDS = (
@@ -92,8 +112,13 @@ def _sequence(value: Any, path: str) -> list[Any]:
     return value
 
 
-def _asset(value: Any, path: str) -> str | None:
-    """Resolve a brand asset against ``assets/``; empty means 'use the mark'."""
+def _asset(value: Any, path: str, web_root: Path) -> str | None:
+    """Resolve a brand asset against ``assets/``; empty means 'use the mark'.
+
+    The path is relative because that is how the browser will ask for it: the
+    page and its assets are served from the same folder, whether that is this
+    app's web/ or another instance's.
+    """
     if value in (None, ""):
         return None
     relative = _text(value, path).lstrip("/")
@@ -101,17 +126,17 @@ def _asset(value: Any, path: str) -> str | None:
         raise ConfigError(f"{path} must stay inside the app folder")
     if not relative.startswith("assets/"):
         raise ConfigError(f"{path} must be a path under assets/")
-    if not (WEB_ROOT / relative).is_file():
+    if not (web_root / relative).is_file():
         raise ConfigError(f"{path} points at a file that does not exist: {relative}")
     return relative
 
 
-def _validate_brand(brand: dict[str, Any]) -> dict[str, Any]:
+def _validate_brand(brand: dict[str, Any], web_root: Path) -> dict[str, Any]:
     _text(brand.get("name"), "brand.name")
     _text(brand.get("mark"), "brand.mark")
     out = deepcopy(brand)
-    out["logo_src"] = _asset(brand.get("logo_src"), "brand.logo_src")
-    out["favicon_src"] = _asset(brand.get("favicon_src"), "brand.favicon_src")
+    out["logo_src"] = _asset(brand.get("logo_src"), "brand.logo_src", web_root)
+    out["favicon_src"] = _asset(brand.get("favicon_src"), "brand.favicon_src", web_root)
     return out
 
 
@@ -282,7 +307,7 @@ def _validate_search(search: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _validate_data(data: dict[str, Any]) -> dict[str, Any]:
+def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
     namespace = _text(data.get("namespace"), "data.namespace")
     if not IDENTIFIER.match(namespace):
         raise ConfigError(
@@ -309,9 +334,12 @@ def _validate_data(data: dict[str, Any]) -> dict[str, Any]:
         if not IDENTIFIER.match(name):
             raise ConfigError(f"data.tables.{key} must be a SQL identifier: {name!r}")
 
-    graph_out = {
+    graph_out: dict[str, Any] = {
         "iri": "http://ontology.naas.ai/graph/personnel",
         "label": "Personnel",
+        # The TTL the profile page re-runs a competency query against. None
+        # means the domain's own demo graph.
+        "file": None,
     }
     graph = data.get("graph")
     if graph not in (None, {}):
@@ -320,8 +348,30 @@ def _validate_data(data: dict[str, Any]) -> dict[str, Any]:
             graph_out["iri"] = _text(graph_map.get("iri"), "data.graph.iri")
         if graph_map.get("label") not in (None, ""):
             graph_out["label"] = _text(graph_map.get("label"), "data.graph.label")
+        if graph_map.get("file") not in (None, ""):
+            relative = _text(graph_map.get("file"), "data.graph.file")
+            resolved = (app_root / relative).resolve()
+            if not resolved.is_file():
+                raise ConfigError(
+                    f"data.graph.file points at a file that does not exist: {relative}"
+                )
+            graph_out["file"] = str(resolved)
 
-    return {"namespace": namespace, "tables": dict(tables), "graph": graph_out}
+    # Portraits are stated in the source relative to the module that owns them.
+    # This prefix is what comes off the front so the browser is left with a path
+    # it can ask this app for.
+    portrait_prefix = data.get("portrait_prefix")
+    if portrait_prefix in (None, ""):
+        portrait_prefix = "apps/people/web/"
+    else:
+        portrait_prefix = _text(portrait_prefix, "data.portrait_prefix")
+
+    return {
+        "namespace": namespace,
+        "tables": dict(tables),
+        "graph": graph_out,
+        "portrait_prefix": portrait_prefix,
+    }
 
 
 def load_config(path: Path | None = None) -> dict[str, Any]:
@@ -338,10 +388,14 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     _text(config.get("schema_version"), "schema_version")
     app = _mapping(config.get("app"), "app")
     profile = _mapping(config.get("profile"), "profile")
+    app_root = config_path.resolve().parent
 
     return {
+        "config_path": str(config_path.resolve()),
         "schema_version": config["schema_version"],
-        "brand": _validate_brand(_mapping(config.get("brand"), "brand")),
+        "brand": _validate_brand(
+            _mapping(config.get("brand"), "brand"), app_root / "web"
+        ),
         "app": {
             "default_page": app["default_page"],
             "pages": _validate_pages(app),
@@ -352,7 +406,7 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
             "facts": _validate_facts(profile),
             "sections": _validate_sections(profile),
         },
-        "data": _validate_data(_mapping(config.get("data"), "data")),
+        "data": _validate_data(_mapping(config.get("data"), "data"), app_root),
         "privacy": config.get("privacy") or {},
     }
 
@@ -376,6 +430,7 @@ def public_config(path: Path | None = None) -> dict[str, Any]:
     ]
     search = deepcopy(config["search"])
     search.pop("fields", None)
+    graph = config["data"]["graph"]
     return {
         "schema_version": config["schema_version"],
         "brand": config["brand"],
@@ -383,7 +438,9 @@ def public_config(path: Path | None = None) -> dict[str, Any]:
         "theme": config["theme"],
         "search": search,
         "profile": {"facts": config["profile"]["facts"], "sections": sections},
-        "knowledge_graph": config["data"]["graph"],
+        # The IRI and label name the graph on the Sources section. Where its TTL
+        # sits on disk is the server's business.
+        "knowledge_graph": {"iri": graph["iri"], "label": graph["label"]},
     }
 
 

@@ -84,10 +84,10 @@ def sources_to_experiences(payloads: list[dict]) -> list[dict]:
                     {
                         "kind": "studying",
                         "person": person_tuple,
-                        "organization": record["organization"],
+                        "organization": record.get("organization"),
                         "program": record["program"],
-                        "site": record["site"],
-                        "start": _parse_date(record["start"]),
+                        "site": record.get("site"),
+                        "start": _parse_date(record.get("start")),
                         "end": _parse_date(record.get("end")),
                         "duration": record.get("duration"),
                         "source": record.get("source"),
@@ -105,8 +105,8 @@ def sources_to_experiences(payloads: list[dict]) -> list[dict]:
                     "organization": record["organization"],
                     "title": record["title"],
                     "contract_type": record.get("contract_type"),
-                    "site": record["site"],
-                    "start": _parse_date(record["start"]),
+                    "site": record.get("site"),
+                    "start": _parse_date(record.get("start")),
                     "end": _parse_date(record.get("end")),
                     "duration": record.get("duration"),
                     "mission_label": record["mission_label"],
@@ -139,15 +139,17 @@ def payload_to_profile_source_parameters(payload: dict) -> object:
     records: list[WorkingRecordInput | StudyingRecordInput] = []
     for record in payload.get("records") or []:
         process_type = record.get("process_type")
-        start = _parse_date(record["start"])
+        # A source that does not state when a record began still describes a
+        # real role or course of study, so `start` is read like any other
+        # optional field rather than required.
+        start = _parse_date(record.get("start"))
         end = _parse_date(record.get("end"))
         if process_type == "ActOfStudying":
-            assert start is not None
             records.append(
                 StudyingRecordInput(
-                    organization=record["organization"],
+                    organization=record.get("organization"),
                     program=record["program"],
-                    site=record["site"],
+                    site=record.get("site"),
                     start=start,
                     end=end,
                     duration=record.get("duration"),
@@ -158,12 +160,11 @@ def payload_to_profile_source_parameters(payload: dict) -> object:
             )
             continue
         if process_type == "ActOfWorking":
-            assert start is not None
             records.append(
                 WorkingRecordInput(
                     organization=record["organization"],
                     title=record["title"],
-                    site=record["site"],
+                    site=record.get("site"),
                     start=start,
                     end=end,
                     duration=record.get("duration"),
@@ -196,6 +197,7 @@ def payload_to_profile_source_parameters(payload: dict) -> object:
             country_code=location.get("country_code"),
             photo_url=raw_profile.get("photo_url"),
             photo_path=raw_profile.get("photo_path"),
+            skills=list(raw_profile.get("skills") or []),
             certifications=[
                 CertificationInput.model_validate(item)
                 for item in (raw_profile.get("certifications") or [])
@@ -261,6 +263,7 @@ def sources_to_profiles(payloads: list[dict]) -> list[dict]:
                 "country_code": location.get("country_code"),
                 "photo_url": profile.get("photo_url"),
                 "photo_path": profile.get("photo_path"),
+                "skills": list(profile.get("skills") or []),
                 "source_url": person.get("linkedin_profile_url"),
                 "certifications": list(profile.get("certifications") or []),
                 "languages": list(profile.get("languages") or []),

@@ -15,18 +15,30 @@ import yaml
 from naas_abi_marketplace.domains.personnel.apps.people.config_loader import (
     CONFIG_PATH,
     REGISTERED_SECTION_IDS,
+    WEB_ROOT,
     ConfigError,
     load_config,
     public_config,
     public_page_urls,
+    web_root_for,
 )
 
 SHIPPED = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
 
 
 def write_config(tmp_path: Path, mutate) -> Path:
+    """A config.yaml in its own instance folder, the way a second app ships one.
+
+    Brand files are resolved against the folder holding the config, not against
+    this package, so the fixture has to lay out ``web/assets/`` the same way a
+    real instance does.
+    """
     raw = copy.deepcopy(SHIPPED)
     mutate(raw)
+    assets = tmp_path / "web" / "assets"
+    assets.mkdir(parents=True, exist_ok=True)
+    for name in ("logo.svg", "favicon.svg"):
+        (assets / name).write_bytes((WEB_ROOT / "assets" / name).read_bytes())
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
     return path
@@ -202,6 +214,63 @@ class TestBrandAssets:
         assert config["brand"]["favicon_src"] is None
         assert config["brand"]["logo_src"] is None
         assert config["brand"]["mark"]
+
+
+class TestSecondInstance:
+    """A config.yaml outside this package is a second app on the same renderers."""
+
+    def test_brand_files_resolve_against_the_config_folder(
+        self, tmp_path: Path
+    ) -> None:
+        path = write_config(tmp_path, lambda raw: None)
+        (tmp_path / "web" / "assets" / "client.svg").write_text("<svg/>")
+
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["brand"]["logo_src"] = "assets/client.svg"
+
+        config = load_config(write_config(tmp_path, mutate))
+        assert config["brand"]["logo_src"] == "assets/client.svg"
+        assert web_root_for(path) == tmp_path / "web"
+
+    def test_an_asset_only_the_shipped_app_has_is_reported_missing(
+        self, tmp_path: Path
+    ) -> None:
+        """Instances do not silently inherit this app's brand."""
+
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["brand"]["logo_src"] = "assets/portraits/alice_dupont.svg"
+
+        fails(tmp_path, mutate, "points at a file that does not exist")
+
+    def test_graph_file_is_resolved_and_kept_off_the_wire(
+        self, tmp_path: Path
+    ) -> None:
+        ttl = tmp_path / "instance.ttl"
+        ttl.write_text("")
+
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["data"]["graph"]["file"] = "instance.ttl"
+
+        path = write_config(tmp_path, mutate)
+        assert load_config(path)["data"]["graph"]["file"] == str(ttl.resolve())
+        assert "file" not in public_config(path)["knowledge_graph"]
+
+    def test_a_graph_file_that_is_not_there_fails_at_startup(
+        self, tmp_path: Path
+    ) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["data"]["graph"]["file"] = "nowhere.ttl"
+
+        fails(tmp_path, mutate, "data.graph.file points at a file that does not exist")
+
+    def test_portrait_prefix_defaults_to_this_app(self, tmp_path: Path) -> None:
+        assert load_config()["data"]["portrait_prefix"] == "apps/people/web/"
+
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["data"]["portrait_prefix"] = "apps/people/web/"
+
+        config = load_config(write_config(tmp_path, mutate))
+        assert config["data"]["portrait_prefix"] == "apps/people/web/"
 
 
 class TestPublicConfig:

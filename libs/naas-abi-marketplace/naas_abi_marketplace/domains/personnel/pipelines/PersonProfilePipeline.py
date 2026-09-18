@@ -3,8 +3,8 @@
 Employment and education stay in ActOfWorkingPipeline and ActOfStudyingPipeline.
 This pipeline writes what holds of the person rather than of one job: how they
 are presented, where they work from, what they are certified in, what languages
-they work in, what interests they bear, and what colleagues have written about
-them.
+they work in, what skills and interests they bear, and what colleagues have
+written about them.
 """
 
 from __future__ import annotations
@@ -83,6 +83,10 @@ class PersonProfilePipelineParameters(PipelineParameters):
     photo_url: str | None = None
     photo_path: str | None = None
     source_url: str | None = None
+    # A skill is a quality of the person. Acts of working record where one was
+    # developed; a source that states a skill without saying where it came from
+    # still states the skill.
+    skills: list[str] = []
     certifications: list[CertificationInput] = []
     languages: list[LanguageInput] = []
     interests: list[InterestInput] = []
@@ -167,6 +171,9 @@ class PersonProfilePipeline(Pipeline):
 
         if parameters.grade:
             context.ensure_grade(parameters.grade, person)
+
+        for skill_name in parameters.skills:
+            context.ensure_skill(skill_name, person)
 
         place = parameters.office or parameters.city or parameters.country
         if place:

@@ -51,8 +51,31 @@ function resolveKnowledgeGraph(knowledgeGraph, fallback) {
   };
 }
 
+/**
+ * A source the graph was built from. A published page is a link; anything else
+ * - an internal file, a directory extract - is named but not made clickable,
+ * because it is not something a browser can open.
+ */
+function sourceItemHtml(item) {
+  const label = escapeHtml(item.label || item.url || "");
+  const url = item.url || "";
+  if (!/^https?:\/\//i.test(url)) {
+    return `<li><span class="source-name">${label}</span> <span class="source-ref">${escapeHtml(url)}</span></li>`;
+  }
+  return `<li><a href="${escapeHtml(url)}" rel="noopener noreferrer" target="_blank">${label}</a></li>`;
+}
+
 function sourcesSidebarHtml(section, knowledgeGraph) {
   const graph = resolveKnowledgeGraph(knowledgeGraph);
+  // The graph says where this page's facts are read from; the items below say
+  // where the graph's facts came from. Both belong here: a profile nobody can
+  // trace back is not evidence of anything, so an empty list is stated.
+  const items = section?.items || [];
+  const sources = items.length
+    ? items.map(sourceItemHtml).join("")
+    : `<li><span class="empty">${escapeHtml(
+        section?.empty_text || "No source recorded for this profile.",
+      )}</span></li>`;
   return `
     <section class="card profile-sidebar-card" id="section-sources">
       <h2>${escapeHtml(section?.label || "Sources")}</h2>
@@ -69,6 +92,7 @@ function sourcesSidebarHtml(section, knowledgeGraph) {
             </span>
           </span>
         </li>
+        ${sources}
       </ul>
     </section>`;
 }

@@ -30,8 +30,12 @@ class ActOfWorkingPipelineParameters(PipelineParameters):
     last_name: Annotated[str, Field(min_length=1)]
     organization: Annotated[str, Field(min_length=1)]
     title: Annotated[str, Field(min_length=1)]
-    site: Annotated[str, Field(min_length=1)]
-    start: date
+    # A profile that lists a role without saying where it was held states no
+    # place. Borrowing the person's current city would invent one.
+    site: str | None = None
+    # A published profile often names a role without saying when it began. The
+    # record is still true; it simply occupies no temporal region.
+    start: date | None = None
     end: date | None = None
     duration: str | None = None
     mission_label: Annotated[str, Field(min_length=1)]
@@ -68,7 +72,7 @@ class ActOfWorkingPipeline(Pipeline):
         if parameters.source_url:
             profile = context.ensure_work_profile(person, parameters.source_url)
         org = context.ensure_org(parameters.organization)
-        site = context.ensure_site(parameters.site)
+        site = context.ensure_site(parameters.site) if parameters.site else None
         skill_nodes = [
             context.ensure_skill(name, person) for name in parameters.skills
         ]

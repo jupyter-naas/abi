@@ -3,11 +3,17 @@
 
     graph (ontology-backed)  ->  SPARQL  ->  dataset service  ->  app
 
-Reads ``graphs/demo/personnel.ttl`` by default, or the live triple store with
-``--triple-store``. Every value passes the privacy gate before it is written:
-this is a directory, not a place to publish contact details.
+Reads ``graphs/demo/personnel.ttl`` by default. Every value passes the privacy
+gate before it is written: this is a directory, not a place to publish contact
+details.
+
+``--config`` exports into another instance's namespace and tables, from
+whichever graph that instance is built from:
 
     python -m …apps.people.scripts.export_people_from_graph
+    python -m …apps.people.scripts.export_people_from_graph \
+        --config src/personnel/apps/people/config.yaml \
+        --graph  src/personnel/apps/people/graphs/personnel.ttl
 """
 
 from __future__ import annotations
@@ -30,9 +36,11 @@ ROW_LIMIT = sq.DEFAULT_ROW_LIMIT
 
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 DIGIT_RUN_RE = re.compile(r"[\d][\d\s().-]{7,}")
+URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 
 # A portrait path is stated relative to the domain root. The page is served out
-# of web/, so that prefix comes off and what is left is what the browser asks for.
+# of web/, so that prefix comes off and what is left is what the browser asks
+# for. An instance sets its own in ``data.portrait_prefix``.
 APP_PREFIX = "apps/people/web/"
 
 
@@ -56,6 +64,11 @@ def check_privacy(value: Any, *, where: str, config: dict[str, Any]) -> Any:
     privacy = config.get("privacy") or {}
     if privacy.get("reject_emails", True) and EMAIL_RE.search(value):
         raise PrivacyError(f"{where} contains an email address: {value!r}")
+    # A web address is not a phone number. Image CDNs and credential registries
+    # put long numeric ids in their paths, and refusing those would refuse every
+    # portrait rather than protect anyone.
+    if URL_RE.match(value):
+        return value
     if privacy.get("reject_long_digit_runs", True) and _has_long_digit_run(value):
         raise PrivacyError(
             f"{where} contains what looks like a phone number: {value!r}"
@@ -75,15 +88,15 @@ def run_query(graph: Graph, template: str, **arguments: object) -> list[dict[str
     return sq.run_query(graph, template, **arguments)
 
 
-def _photo_url(row: dict[str, Any]) -> str | None:
+def _photo_url(row: dict[str, Any], prefix: str = APP_PREFIX) -> str | None:
     url = row.get("portraitUrl")
     if url:
         return url
     path = row.get("portraitPath")
     if not path:
         return None
-    if path.startswith(APP_PREFIX):
-        return path[len(APP_PREFIX) :]
+    if path.startswith(prefix):
+        return path[len(prefix) :]
     return path
 
 
@@ -105,6 +118,7 @@ def _date(value: Any) -> str | None:
 def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     """Every table's rows, keyed by logical table name."""
     queries = load_queries()
+    portrait_prefix = config["data"].get("portrait_prefix") or APP_PREFIX
 
     directory = run_query(graph, queries["find_people_directory"], limit=ROW_LIMIT)
     # Everyone the directory returns is keyed by their slug; a person with none
@@ -170,6 +184,8 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
         group_index: dict[str, int] = {}
         for seq, item in enumerate(person_experience):
             organization = item.get("orgLabel") or ""
+            title = item.get("roleLabel") or item.get("jobTitle")
+            description = item.get("missionContent") or item.get("missionLabel")
             group_index.setdefault(organization, len(group_index))
             tables["experience"].append(
                 {
@@ -178,9 +194,11 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
                     "group_seq": group_index[organization],
                     "organization": organization or None,
                     "location": item.get("siteLabel"),
-                    "title": item.get("roleLabel") or item.get("jobTitle"),
-                    "description": item.get("missionContent")
-                    or item.get("missionLabel"),
+                    "title": title,
+                    # A source that named the role but not what it involved
+                    # leaves the mission equal to the title. Showing it twice
+                    # would look like two facts where the source gave one.
+                    "description": description if description != title else None,
                     "start_date": _date(item.get("temporalStart")),
                     "end_date": _date(item.get("temporalEnd")),
                     "duration_label": item.get("durationLabel"),
@@ -188,13 +206,18 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
             )
 
         for seq, item in enumerate(person_education):
+            degree = item.get("degreeLabel")
+            field = item.get("programName")
             tables["education"].append(
                 {
                     "slug": slug,
                     "seq": seq,
                     "school": item.get("orgLabel"),
-                    "degree": item.get("degreeLabel"),
-                    "field_of_study": item.get("programName"),
+                    "degree": degree,
+                    # The degree and the programme are one statement in the
+                    # graph unless the source distinguished them. Repeating it
+                    # in both columns reads as "Law, Law".
+                    "field_of_study": field if field != degree else None,
                     "description": item.get("activitiesContent"),
                     "start_date": _date(item.get("temporalStart")),
                     "end_date": _date(item.get("temporalEnd")),
@@ -259,12 +282,18 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
             if candidate and candidate not in source_urls:
                 source_urls.append(candidate)
         for seq, url in enumerate(source_urls):
+            # A source is only a published profile if it is on the web. An
+            # internal directory is often sourced from a file, and calling that
+            # a published profile would be a claim the source never made.
+            published = url.startswith(("http://", "https://"))
             tables["sources"].append(
                 {
                     "slug": slug,
                     "seq": seq,
                     "source_url": url,
-                    "source_label": "Published profile" if seq == 0 else "Source",
+                    "source_label": "Published profile"
+                    if published and seq == 0
+                    else "Source",
                 }
             )
 
@@ -318,7 +347,7 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
                 "headline": row.get("headline"),
                 "about": row.get("about"),
                 "quote": row.get("quote"),
-                "photo_url": _photo_url(row),
+                "photo_url": _photo_url(row, portrait_prefix),
                 "organization": row.get("organizationLabel"),
                 "office": row.get("officeLabel"),
                 "city": row.get("cityName"),
@@ -383,6 +412,12 @@ def main(argv: list[str] | None = None) -> int:
         help="TTL file to read (default: the committed demo graph)",
     )
     parser.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help="config.yaml of the instance to export into (default: this app's)",
+    )
+    parser.add_argument(
         "--catalog",
         default=None,
         help="DuckLake catalog, e.g. sqlite:storage/datasets.sqlite. "
@@ -393,7 +428,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    config = load_config()
+    config = load_config(args.config)
     print(f"Reading {args.graph}", flush=True)
     graph = load_graph(args.graph)
 

@@ -67,21 +67,17 @@ function experienceSection(items, tokens) {
 
 function educationSection(items, tokens) {
   return items
-    .map((item) =>
-      entry(
-        {
-          title: item.school,
-          meta: [
-            [item.degree, item.field_of_study].filter(Boolean).join(", "),
-            periodText(item, { presentLabel: "" }),
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          text: item.description,
-        },
-        tokens,
-      ),
-    )
+    .map((item) => {
+      const qualification = [item.degree, item.field_of_study].filter(Boolean).join(", ");
+      // A source that names a degree without its school still names something.
+      // The heading is whichever of the two the source gave, so the row never
+      // reads as an unattributed aside.
+      const title = item.school || qualification;
+      const meta = [item.school ? qualification : "", periodText(item, { presentLabel: "" })]
+        .filter(Boolean)
+        .join(" · ");
+      return entry({ title, meta, text: item.description }, tokens);
+    })
     .join("");
 }
 

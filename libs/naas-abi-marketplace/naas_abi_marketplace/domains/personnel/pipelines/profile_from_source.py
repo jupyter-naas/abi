@@ -50,8 +50,8 @@ class WorkingRecordInput(BaseModel):
     process_type: Literal["ActOfWorking"] = "ActOfWorking"
     organization: Annotated[str, Field(min_length=1)]
     title: Annotated[str, Field(min_length=1)]
-    site: Annotated[str, Field(min_length=1)]
-    start: date
+    site: str | None = None
+    start: date | None = None
     end: date | None = None
     duration: str | None = None
     mission_label: Annotated[str, Field(min_length=1)]
@@ -65,10 +65,10 @@ class WorkingRecordInput(BaseModel):
 
 class StudyingRecordInput(BaseModel):
     process_type: Literal["ActOfStudying"] = "ActOfStudying"
-    organization: Annotated[str, Field(min_length=1)]
+    organization: str | None = None
     program: Annotated[str, Field(min_length=1)]
-    site: Annotated[str, Field(min_length=1)]
-    start: date
+    site: str | None = None
+    start: date | None = None
     end: date | None = None
     duration: str | None = None
     skills: list[str] = []
@@ -97,6 +97,7 @@ class ProfileBlockInput(BaseModel):
     country_code: str | None = None
     photo_url: str | None = None
     photo_path: str | None = None
+    skills: list[str] = []
     certifications: list[CertificationInput] = []
     languages: list[LanguageInput] = []
     interests: list[InterestInput] = []
@@ -195,6 +196,7 @@ def apply_profile_source_payload(
                 photo_url=block.photo_url,
                 photo_path=block.photo_path,
                 source_url=default_profile_url,
+                skills=block.skills,
                 certifications=block.certifications,
                 languages=block.languages,
                 interests=block.interests,

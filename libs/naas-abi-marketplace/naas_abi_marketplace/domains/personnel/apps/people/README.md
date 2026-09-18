@@ -85,6 +85,46 @@ startup error, not a broken image. The catalog tile is separate: that comes from
 columns in `datasets.py`. `make people-datasets` is one way to fill them; any
 writer that produces those columns works.
 
+## A second directory, on the same app
+
+A client does not fork this folder. They make one of their own holding a
+`config.yaml`, a `web/index.html` and a `web/assets/` — nothing else — and mount
+this app from their module:
+
+```python
+from naas_abi_marketplace.domains.personnel.apps.people.api.mount import mount_people_app
+
+class ABIModule(BaseModule):
+    dependencies = ModuleDependencies(modules=[], services=[DatasetService])
+
+    def api(self, app):
+        mount_people_app(app, prefix="/api/their-people", config_path=HERE / "config.yaml")
+```
+
+`mount_people_app` adds the routes **and** serves this package's `web/` at
+`<prefix>/web`. Their `index.html` names both:
+
+```html
+<meta name="people-api-base" content="/api/their-people" />
+<link rel="stylesheet" href="/api/their-people/web/css/app.css" />
+<script type="module" src="/api/their-people/web/js/shell.js"></script>
+```
+
+Absolute, and under `/api/`, because Nexus proxies `/api/` and `/app-html/` and
+nothing else. Their own files stay relative (`assets/logo.svg`), so they resolve
+against their page in both the dev server and Nexus.
+
+Everything per-instance is resolved against the folder holding the config: brand
+files, `data.graph.file`, and `data.portrait_prefix`. Run one locally with
+
+```bash
+PEOPLE_APP_CONFIG=/path/to/their/config.yaml PEOPLE_API_PREFIX=/api/their-people \
+  python -m naas_abi_marketplace.domains.personnel.apps.people.api.dev_server
+```
+
+and export into it with `--config`. `src/personnel/apps/people` in the bob
+repo is a worked example.
+
 What configuration **cannot** do is invent a page or a profile section. Those are
 renderers, registered in `web/lib/registry.js` and `config_loader.py`. Adding one
 means adding it to both, in the same change.

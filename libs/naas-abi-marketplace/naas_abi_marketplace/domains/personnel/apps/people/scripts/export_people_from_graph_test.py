@@ -39,6 +39,9 @@ class TestPrivacyGate:
             "2018-2021",
             "Partner since 2019, 12 years of experience",
             "https://demo.example/profiles/alice_dupont",
+            # An image CDN path carrying a long numeric id: digits, not a number
+            # anyone can call.
+            "https://example.com/media/photo/57309031-1-eng-GB/6af7db652949-A-B.jpg",
             "Certified in 2019 · expires 2026",
             "",
             None,
@@ -52,6 +55,15 @@ class TestPrivacyGate:
     def test_the_error_says_where_it_was_found(self) -> None:
         with pytest.raises(export.PrivacyError, match=r"people\[3\].about"):
             export.check_privacy("a@b.com", where="people[3].about", config=CONFIG)
+
+    def test_an_email_inside_a_url_is_still_refused(self) -> None:
+        """Exempting URLs from the digit rule does not exempt them from the rest."""
+        with pytest.raises(export.PrivacyError):
+            export.check_privacy(
+                "https://demo.example/?to=alice.dupont@example.com",
+                where="people[0].public_profile_url",
+                config=CONFIG,
+            )
 
     def test_the_gate_can_be_turned_off_per_rule(self) -> None:
         """A client whose directory is internal may want phone numbers in it."""
