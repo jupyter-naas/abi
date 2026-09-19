@@ -1,4 +1,7 @@
 .ontology-context-note { color:var(--muted-foreground-hex); font-size:12px; line-height:1.6; }
+.ontology-context-network { margin-top:16px; }
+.ontology-context-network h2 { margin:0 0 12px; font-size:14px; font-weight:500; }
+.ontology-context-network .graph-detail-network { margin-top:0; }
 .ontology-context-link, .ontology-context-usage-group button { color:var(--workspace-accent, var(--color-primary)); font-size:12px; }
 .ontology-context-link:hover, .ontology-context-usage-group button:hover { text-decoration:underline; }
 .ontology-context-used { margin-top:16px; border:1px solid var(--border-hex); border-radius:var(--org-border-radius,6px); overflow:hidden; }

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   browserRoute, dictionaryFilterRoute, lastOntologyRoute, normalizeOntologyRoute,
-  ontologyBrowser, rememberOntologyRoute, termRoute, viewRoute,
+  ontologyBrowser, rememberOntologyRoute, termNetworkRoute, termRoute, viewRoute,
   dictionaryFilters, dictionaryFiltersRoute, systemRoute,
 } from './ontology-navigation';
 
@@ -112,4 +112,20 @@ test('accumulated types survive term selection, canvas switches and system overv
   route=termRoute(route.toString(),{id:'p',type:'relationship'});
   assert.deepEqual(route.getAll('termFilter'),['entity','attribute','relationship']);
   assert.equal(route.get('view'),'relations');
+});
+
+test('term network route keeps the same term on the Network tab', () => {
+  const fromDetails = termNetworkRoute(
+    'browser=dictionary&view=classes&term=urn:Person&termType=entity&termFilter=entity',
+    { id: 'urn:Person', type: 'entity' },
+  );
+  assert.equal(fromDetails.get('view'), 'network');
+  assert.equal(fromDetails.get('term'), 'urn:Person');
+  assert.equal(fromDetails.get('termType'), 'entity');
+  assert.equal(fromDetails.get('browser'), 'dictionary');
+  assert.equal(fromDetails.get('termFilter'), 'entity');
+  const fromEmbed = termNetworkRoute('view=classes', { id: 'urn:Person', type: 'entity' });
+  assert.equal(fromEmbed.get('view'), 'network');
+  assert.equal(fromEmbed.get('term'), 'urn:Person');
+  assert.equal(fromEmbed.get('termType'), 'entity');
 });

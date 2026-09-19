@@ -2,9 +2,10 @@
 
 import { create } from 'zustand';
 import { useEffect } from 'react';
-import { useAuthStore } from './auth';
+import { authFetch, useAuthStore } from './auth';
+import { getApiUrl } from '@/lib/config';
 import { readGraph } from '@/hooks/use-graph-request';
-import type { ExplorerCatalog } from '@/lib/graph-explorer';
+import type { ExplorerCatalog, ExplorerGraph } from '@/lib/graph-explorer';
 
 interface State {
   key: string;
@@ -63,13 +64,114 @@ export function invalidateGraphExplorer() {
   useGraphExplorerStore.setState({ key: '', data: null, loading: false, error: null, fetchedAt: 0 });
 }
 
+type GraphPack = { role_label: string; graphs: ExplorerGraph[] };
+
+interface ListState {
+  workspaceId: string;
+  graphs: ExplorerGraph[];
+  loading: boolean;
+  error: string | null;
+  fetchedAt: number;
+  load: (workspaceId: string, force?: boolean) => Promise<void>;
+}
+
+let listPending: AbortController | undefined;
+const LIST_TTL_MS = 60_000;
+
+export const useWorkspaceGraphListStore = create<ListState>((set, get) => ({
+  workspaceId: '',
+  graphs: [],
+  loading: false,
+  error: null,
+  fetchedAt: 0,
+  load: async (workspaceId, force = false) => {
+    const current = get();
+    if (
+      !workspaceId ||
+      (!force &&
+        current.workspaceId === workspaceId &&
+        (current.loading || Date.now() - current.fetchedAt < LIST_TTL_MS))
+    ) {
+      return;
+    }
+    listPending?.abort();
+    const controller = new AbortController();
+    listPending = controller;
+    set({
+      workspaceId,
+      graphs: current.workspaceId === workspaceId ? current.graphs : [],
+      loading: current.workspaceId !== workspaceId || current.graphs.length === 0,
+      error: null,
+    });
+    try {
+      const response = await authFetch(
+        `${getApiUrl()}/api/graph/list?workspace_id=${encodeURIComponent(workspaceId)}`,
+        { signal: controller.signal },
+      );
+      if (!response.ok) throw new Error(`Failed to load graphs (${response.status})`);
+      const packs = (await response.json()) as GraphPack[];
+      const seen = new Set<string>();
+      const graphs: ExplorerGraph[] = [];
+      for (const pack of Array.isArray(packs) ? packs : []) {
+        for (const graph of pack.graphs || []) {
+          if (seen.has(graph.uri)) continue;
+          seen.add(graph.uri);
+          graphs.push(graph);
+        }
+      }
+      if (!controller.signal.aborted && get().workspaceId === workspaceId) {
+        set({ graphs, loading: false, fetchedAt: Date.now(), error: null });
+      }
+    } catch (error) {
+      if (!controller.signal.aborted && get().workspaceId === workspaceId) {
+        set({
+          loading: false,
+          error: error instanceof Error ? error.message : 'Could not load graphs.',
+        });
+      }
+    }
+  },
+}));
+
 useAuthStore.subscribe((state, previous) => {
   if (state.user?.id !== previous.user?.id || Boolean(state.token) !== Boolean(previous.token)) {
     invalidateGraphExplorer();
+    listPending?.abort();
+    useWorkspaceGraphListStore.setState({
+      workspaceId: '',
+      graphs: [],
+      loading: false,
+      error: null,
+      fetchedAt: 0,
+    });
   }
 });
 
-/** Sidebar and canvas share one request; prior workspace/filter results never flash. */
+export function useWorkspaceGraphList(workspaceId: string) {
+  const state = useWorkspaceGraphListStore();
+  const { load } = state;
+  useEffect(() => {
+    void load(workspaceId);
+  }, [load, workspaceId]);
+  useEffect(() => {
+    const refresh = () => void load(workspaceId, true);
+    window.addEventListener('graph-list-update', refresh);
+    window.addEventListener('graph-cache-refresh', refresh);
+    return () => {
+      window.removeEventListener('graph-list-update', refresh);
+      window.removeEventListener('graph-cache-refresh', refresh);
+    };
+  }, [load, workspaceId]);
+  const mine = state.workspaceId === workspaceId;
+  return {
+    graphs: mine ? state.graphs : [],
+    loading: !mine || state.loading,
+    error: mine ? state.error : null,
+    retry: () => void load(workspaceId, true),
+  };
+}
+
+/** Class-count catalog for the selected graphs. The graph picker uses /api/graph/list. */
 export function useGraphExplorer(workspaceId: string, graphs: string[]) {
   const key = JSON.stringify([workspaceId, graphs]);
   const userId = useAuthStore(state => state.user?.id);

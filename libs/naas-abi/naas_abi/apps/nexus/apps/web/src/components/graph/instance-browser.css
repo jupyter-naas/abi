@@ -18,8 +18,10 @@
 .graph-instance-panel { display:flex; flex-direction:column; width:360px; max-width:45%; flex-shrink:0; min-height:0; overflow:hidden; border-left:1px solid var(--border-hex); background:var(--background-hex); font-size:13px; }
 .graph-browser-heading { display:flex; flex-shrink:0; align-items:flex-start; justify-content:space-between; gap:12px; padding:16px; border-bottom:1px solid var(--border-hex); }
 .graph-browser-heading > div { min-width:0; }
-.graph-browser-heading h2 { margin:10px 0 4px; font-size:18px; font-weight:600; line-height:24px; overflow-wrap:anywhere; }
+.graph-browser-heading .ontology-topic-icon { display:block; --ontology-topic-size:40px; margin-bottom:12px; color:var(--workspace-accent,var(--color-primary)); }
+.graph-browser-heading h2 { margin:0 0 4px; font-size:18px; font-weight:600; line-height:24px; overflow-wrap:anywhere; }
 .graph-browser-heading p { margin:0; color:var(--muted-foreground-hex); font-size:12px; }
+.graph-inspector-uri { margin:0 0 6px; color:var(--muted-foreground-hex); font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,monospace); font-size:11px; line-height:1.45; overflow-wrap:anywhere; }
 .graph-browser-icon-button { flex-shrink:0; padding:4px; color:var(--muted-foreground-hex); }
 .graph-browser-icon-button:hover { background:var(--muted-bg-hex); color:var(--foreground-hex); }
 .graph-browser-actions { display:flex; flex-wrap:wrap; gap:8px 16px; padding:10px 16px; font-size:12px; }

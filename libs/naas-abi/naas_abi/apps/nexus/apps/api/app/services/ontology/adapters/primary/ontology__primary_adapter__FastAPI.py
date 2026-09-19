@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import os
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
@@ -40,6 +43,7 @@ from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import 
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_icons import (
     EDIT_ROLES,
     OntologyIconsService,
+    valid_resource_iri,
 )
 from naas_abi.apps.nexus.apps.api.app.services.ontology.service import OntologyService
 from pydantic import BaseModel, Field
@@ -483,7 +487,12 @@ async def export_ontology_file(
 class OntologyIconUpdate(BaseModel):
     kind: str = Field(min_length=1, max_length=24)
     resource_id: str = Field(min_length=1, max_length=8192)
-    icon: str | None = Field(default=None, max_length=160)
+    icon: str | None = Field(default=None, max_length=2048)
+
+
+OBJECT_IMAGE_DIR = Path(__file__).resolve().parents[5] / "uploads" / "object-images"
+OBJECT_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".avif"}
+MAX_OBJECT_IMAGE_BYTES = 5 * 1024 * 1024
 
 
 def get_ontology_icons_service() -> OntologyIconsService:
@@ -491,28 +500,14 @@ def get_ontology_icons_service() -> OntologyIconsService:
     return OntologyIconsService(OntologyIconsPostgres(AsyncSessionLocal))
 
 
-async def ontology_icons_access(
-    workspace_id: str = Query(..., min_length=1),
-    current_user: User = Depends(get_current_user_required),
-    ontology_service: OntologyService = Depends(get_ontology_service),
-) -> tuple[str, set[tuple[str, str]]]:
-    role = await require_workspace_access(current_user.id, workspace_id)
-    refs = await _catalog_refs_for_workspace(workspace_id)
-    dictionary = await ontology_service.workspace_dictionary(catalog_refs=refs)
-    files = await ontology_service.list_ontology_files(catalog_refs=refs)
-    allowed = {(item["type"], item["id"]) for item in dictionary["items"]}
-    allowed.update(("file", item.path) for item in files)
-    return role, allowed
-
-
 @router.get("/icons")
 async def list_ontology_icons(
     workspace_id: str = Query(..., min_length=1),
-    access: tuple[str, set[tuple[str, str]]] = Depends(ontology_icons_access),
+    current_user: User = Depends(get_current_user_required),
     icons_service: OntologyIconsService = Depends(get_ontology_icons_service),
 ) -> dict:
-    role, allowed = access
-    return {"items": await icons_service.list_icons(workspace_id, allowed),
+    role = await require_workspace_access(current_user.id, workspace_id)
+    return {"items": await icons_service.list_icons(workspace_id, None),
             "can_edit": role in EDIT_ROLES}
 
 
@@ -521,10 +516,18 @@ async def save_ontology_icon(
     updates: OntologyIconUpdate,
     workspace_id: str = Query(..., min_length=1),
     current_user: User = Depends(get_current_user_required),
-    access: tuple[str, set[tuple[str, str]]] = Depends(ontology_icons_access),
+    ontology_service: OntologyService = Depends(get_ontology_service),
     icons_service: OntologyIconsService = Depends(get_ontology_icons_service),
 ) -> dict:
-    role, allowed = access
+    role = await require_workspace_access(current_user.id, workspace_id)
+    if updates.kind != "file" and valid_resource_iri(updates.resource_id):
+        allowed: set[tuple[str, str]] = set()
+    else:
+        refs = await _catalog_refs_for_workspace(workspace_id)
+        dictionary = await ontology_service.workspace_dictionary(catalog_refs=refs)
+        files = await ontology_service.list_ontology_files(catalog_refs=refs)
+        allowed = {(item["type"], item["id"]) for item in dictionary["items"]}
+        allowed.update(("file", item.path) for item in files)
     try:
         await icons_service.save_icon(workspace_id, role, current_user.id, allowed,
                                       updates.kind, updates.resource_id, updates.icon)
@@ -535,3 +538,27 @@ async def save_ontology_icon(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"kind": updates.kind, "resource_id": updates.resource_id, "icon": updates.icon}
+
+
+@router.post("/icons/upload")
+async def upload_object_image(
+    workspace_id: str = Query(..., min_length=1),
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user_required),
+) -> dict:
+    role = await require_workspace_access(current_user.id, workspace_id)
+    if role not in EDIT_ROLES:
+        raise HTTPException(status_code=403, detail="Only workspace members can upload images.")
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in OBJECT_IMAGE_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Upload a PNG, JPG, GIF, WEBP, SVG, or AVIF image.")
+    content = await file.read()
+    if len(content) > MAX_OBJECT_IMAGE_BYTES:
+        raise HTTPException(status_code=400, detail="Image must be 5MB or smaller.")
+    OBJECT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"{workspace_id}-{os.urandom(8).hex()}{ext}"
+    path = OBJECT_IMAGE_DIR / filename
+    path.write_bytes(content)
+    return {"url": f"/uploads/object-images/{filename}"}

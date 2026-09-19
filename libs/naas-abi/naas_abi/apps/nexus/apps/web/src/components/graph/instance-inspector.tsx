@@ -7,6 +7,8 @@ import { OntologyTopicIcon } from '@/components/ontology/ontology-topic-icon';
 import { useGraphRequest } from '@/hooks/use-graph-request';
 import { useOntologyIconsStore } from '@/stores/ontology-icons';
 import { classDefinitionHref, individualHref } from '@/lib/graph-instance-browser';
+import { resolveInstanceDisplayTitle } from '@/lib/instance-display-title';
+import { sortInstanceProperties } from '@/lib/instance-property-order';
 import './instance-browser.css';
 
 export interface DiscoveryInstance {
@@ -39,7 +41,11 @@ export function InstanceInspector({ instance, graphUri, graphLabel, workspaceId,
   const { data: detail, loading, error, retry } = useGraphRequest<InstanceDetail>('discovery/instance-detail', {
     workspace_id: workspaceId, graph_uri: graphUri, instance_uri: instance.uri,
   });
-  const label = detail?.label || instance.label || compactUri(instance.uri);
+  const label = resolveInstanceDisplayTitle({
+    uri: instance.uri,
+    label: detail?.label || instance.label,
+    dataProperties: detail?.data_properties,
+  });
   const classUri = detail?.class_uri || instance.class_uri;
   const classLabel = detail?.class_label || instance.class_label || compactUri(classUri);
   const relations = (detail?.relations ?? []).filter(relation => relation.role === roleFilter);
@@ -47,6 +53,7 @@ export function InstanceInspector({ instance, graphUri, graphLabel, workspaceId,
   return <section className="graph-instance-inspector" aria-label="Instance details">
     <header className="graph-browser-heading">
       <div><OntologyTopicIcon subject={{ id: classUri, name: classLabel || label, type: 'entity' }} /><h2>{label}</h2>
+        {instance.uri ? <p className="graph-inspector-uri">{instance.uri}</p> : null}
         {classUri && <Link className="graph-browser-class-link" href={classDefinitionHref(workspaceId, classUri)}>{classLabel}<ArrowUpRight size={13} /></Link>}
       </div>
       <button className="graph-browser-icon-button" type="button" aria-label="Close inspector" onClick={onClose}><X size={16} /></button>
@@ -55,7 +62,7 @@ export function InstanceInspector({ instance, graphUri, graphLabel, workspaceId,
       <p className="graph-browser-scope" title={graphUri}>Graph · {graphLabel || compactUri(graphUri)}</p>
       {loading ? <p className="graph-browser-message" role="status">Loading details…</p> : error ? <p className="graph-browser-message" role="alert">{error} <button type="button" onClick={retry}>Retry</button></p> : detail && <>
         <section className="graph-inspector-section"><h3>Properties <small>{detail.data_properties.length}</small></h3>
-          {detail.data_properties.length ? <dl className="graph-inspector-properties">{detail.data_properties.map((property, index) => <div key={`${property.predicate_uri}:${index}`}><dt title={property.predicate_uri}>{property.predicate_label || compactUri(property.predicate_uri)}</dt><dd>{property.value}</dd></div>)}</dl> : <p className="graph-browser-muted">No properties recorded.</p>}
+          {detail.data_properties.length ? <dl className="graph-inspector-properties">{sortInstanceProperties(detail.data_properties).map((property, index) => <div key={`${property.predicate_uri}:${index}`}><dt title={property.predicate_uri}>{property.predicate_label || compactUri(property.predicate_uri)}</dt><dd>{property.value}</dd></div>)}</dl> : <p className="graph-browser-muted">No properties recorded.</p>}
         </section>
         <section className="graph-inspector-section"><h3>Relationships <small>{detail.relations.length}</small></h3>
           <div className="graph-inspector-directions" aria-label="Relationship direction">{(['domain', 'range'] as const).map(role => <button type="button" key={role} aria-pressed={roleFilter === role} onClick={() => setRoleFilter(role)}>{role === 'domain' ? 'Outgoing' : 'Incoming'} <span>{detail.relations.filter(relation => relation.role === role).length}</span></button>)}</div>
@@ -65,7 +72,7 @@ export function InstanceInspector({ instance, graphUri, graphLabel, workspaceId,
           </li>)}</ul> : <p className="graph-browser-muted">No {roleFilter === 'domain' ? 'outgoing' : 'incoming'} relationships recorded.</p>}
         </section>
       </>}
-      <details className="graph-inspector-identifiers"><summary>Identifiers</summary><dl><dt>Instance</dt><dd>{instance.uri}</dd>{classUri && <><dt>Class</dt><dd>{classUri}</dd></>}<dt>Graph</dt><dd>{graphUri}</dd></dl></details>
+      <details className="graph-inspector-identifiers"><summary>Identifiers</summary><dl>{classUri && <><dt>Class</dt><dd>{classUri}</dd></>}<dt>Graph</dt><dd>{graphUri}</dd></dl></details>
     </div>
     <footer className="graph-inspector-footer"><Link href={individualHref(workspaceId, graphUri, classUri, instance.uri)}>Open full page <ArrowUpRight size={14} /></Link></footer>
   </section>;

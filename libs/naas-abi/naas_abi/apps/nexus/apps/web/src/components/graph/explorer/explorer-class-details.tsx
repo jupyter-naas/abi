@@ -4,6 +4,8 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import { OntologyDictionaryEntry } from '@/components/shell/sidebar/ontology-dictionary-entry';
+import { ImageSquare } from '@/components/image-square';
+import { OntologyTopicIcon } from '@/components/ontology/ontology-topic-icon';
 import { useOntologyDictionaryStore } from '@/stores/ontology-dictionary';
 import { useOntologyStore } from '@/stores/ontology';
 import { classDefinitionHref } from '@/lib/graph-instance-browser';
@@ -33,6 +35,9 @@ export function ExplorerClassDetails({ workspaceId, classUri, classInfo }: {
       <OntologyDictionaryEntry context={{ workspaceId, termId: classUri, basePath: `/workspace/${encodeURIComponent(workspaceId)}/ontology` }} />
     ) : (
       <section className="graph-explorer-missing-definition">
+        <ImageSquare
+          fallback={<OntologyTopicIcon subject={{ id: classUri, name: classInfo?.label || classUri, type: 'entity' }} />}
+        />
         <h1>{classInfo?.label || classUri}</h1>
         <p>This class is used in the selected graphs, but its definition is not available in the workspace ontology files.</p>
         <dl><dt>Class URI</dt><dd>{classUri}</dd></dl>

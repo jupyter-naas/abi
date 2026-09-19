@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {classTerms,explorerQuery,explorerScope,graphMode,groupComposerViews,toggleValue} from './graph-explorer';
+import {classTerms,explorerQuery,explorerScope,explorerScopeHasMultipleGraphs,explorerShowsGraphHint,graphMode,groupComposerViews,groupSearchHitsByClass,toggleValue} from './graph-explorer';
 import {buildDictionaryTree} from './ontology-dictionary-tree';
 
 test('Explorer defaults to dashboard and supports direct instance links', () => {
@@ -38,6 +38,38 @@ test('hierarchy preserves URI identity and survives cycles and duplicate class n
   assert.notEqual(tree[0].id,tree[0].children[0].id);
 });
 
+
+test('Search hits nest named instances under their rdf:type class', () => {
+  const groups = groupSearchHitsByClass([
+    {uri:'urn:Person',label:'Person',kind:'class',class_uri:'urn:Person',class_label:'Person',graph_uri:'urn:g',instance_count:3},
+    {uri:'urn:Alice',label:'Alice',kind:'individual',class_uri:'urn:Person',class_label:'Person',graph_uri:'urn:g',instance_count:0},
+    {uri:'urn:Carol',label:'Carol',kind:'individual',class_uri:'urn:Person',class_label:'Person',graph_uri:'urn:g',instance_count:0},
+    {uri:'urn:Acme',label:'Acme',kind:'individual',class_uri:'urn:Org',class_label:'Organization',graph_uri:'urn:g',instance_count:0},
+  ]);
+  assert.deepEqual(groups.map(g => g.class_label), ['Organization', 'Person']);
+  assert.deepEqual(groups[1].instances.map(item => item.label), ['Alice', 'Carol']);
+  assert.equal(groups[1].instance_count, 3);
+  assert.deepEqual(groups[0].instances.map(item => item.label), ['Acme']);
+});
+test('A class-only search hit stays a parent with no children so the list can load members', () => {
+  const groups = groupSearchHitsByClass([
+    {uri:'urn:Person',label:'Person',kind:'class',class_uri:'urn:Person',class_label:'Person',graph_uri:'urn:g',instance_count:6},
+  ]);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].class_uri, 'urn:Person');
+  assert.deepEqual(groups[0].instances, []);
+  assert.equal(groups[0].instance_count, 6);
+});
+
+test('Graph hints stay off for one selected graph or one visible graph', () => {
+  assert.equal(explorerScopeHasMultipleGraphs(['urn:alpha'], 4), false);
+  assert.equal(explorerScopeHasMultipleGraphs([], 1), false);
+  assert.equal(explorerScopeHasMultipleGraphs([], 4), true);
+  assert.equal(explorerScopeHasMultipleGraphs(['urn:a', 'urn:b'], 2), true);
+  assert.equal(explorerShowsGraphHint([], 4, ['urn:alpha', 'urn:alpha']), false);
+  assert.equal(explorerShowsGraphHint([], 4, ['urn:alpha', 'urn:other']), true);
+  assert.equal(explorerShowsGraphHint(['urn:alpha'], 4, ['urn:alpha', 'urn:other']), false);
+});
 
 test('Explorer tabs preserve the graph and class selection, including direct links', () => {
   const query = 'graph=urn%3AA&graph=urn%3AB&class=urn%3APerson&classFilter=urn%3APerson&list=hierarchy';

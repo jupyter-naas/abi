@@ -70,6 +70,96 @@ export function classTerms(classes: ExplorerClass[]): DictionaryTerm[] {
     parents: item.parents.map((id) => ({ id, name: names.get(id) || id })),
   }));
 }
+export interface ExplorerInstanceHit {
+  uri: string;
+  label: string;
+  graph_uri: string;
+  class_uri: string;
+  class_label: string;
+}
+
+export interface ClassInstanceGroup {
+  class_uri: string;
+  class_label: string;
+  instance_count: number;
+  instances: ExplorerInstanceHit[];
+}
+
+export const EXPLORER_SIDEBAR_INSTANCE_LIMIT = 50;
+
+/** All Graphs (empty selection) or two or more named graphs. One selected graph is never mixed. */
+export function explorerScopeHasMultipleGraphs(
+  scopeGraphs: readonly string[],
+  workspaceGraphCount: number,
+): boolean {
+  return scopeGraphs.length > 1 || (scopeGraphs.length === 0 && workspaceGraphCount > 1);
+}
+
+/** Trailing graph hint only when the current list can actually mix graphs. */
+export function explorerShowsGraphHint(
+  scopeGraphs: readonly string[],
+  workspaceGraphCount: number,
+  visibleGraphUris: readonly string[],
+): boolean {
+  if (!explorerScopeHasMultipleGraphs(scopeGraphs, workspaceGraphCount)) return false;
+  const seen = new Set<string>();
+  for (const uri of visibleGraphUris) {
+    if (uri) seen.add(uri);
+  }
+  return seen.size > 1;
+}
+
+/** Nest search hits as class parents with instance children. Class-only hits stay empty so the sidebar can load members. */
+export function groupSearchHitsByClass(
+  hits: Array<{
+    uri: string;
+    label: string;
+    kind: 'class' | 'individual';
+    class_uri: string;
+    class_label: string;
+    graph_uri: string;
+    instance_count: number;
+  }>,
+): ClassInstanceGroup[] {
+  const groups = new Map<string, ClassInstanceGroup>();
+  function group(uri: string, label: string, count = 0): ClassInstanceGroup {
+    const existing = groups.get(uri);
+    if (existing) {
+      if (label && existing.class_label === existing.class_uri) existing.class_label = label;
+      if (count) existing.instance_count = count;
+      return existing;
+    }
+    const created: ClassInstanceGroup = {
+      class_uri: uri,
+      class_label: label || uri,
+      instance_count: count,
+      instances: [],
+    };
+    groups.set(uri, created);
+    return created;
+  }
+  for (const hit of hits) {
+    if (hit.kind === 'class') {
+      group(hit.uri, hit.class_label || hit.label, hit.instance_count);
+      continue;
+    }
+    const parent = group(hit.class_uri || hit.uri, hit.class_label || hit.class_uri || hit.label);
+    parent.instances.push({
+      uri: hit.uri,
+      label: hit.label,
+      graph_uri: hit.graph_uri,
+      class_uri: hit.class_uri,
+      class_label: hit.class_label,
+    });
+  }
+  for (const item of groups.values()) {
+    item.instances.sort((a, b) => a.label.localeCompare(b.label) || a.uri.localeCompare(b.uri));
+  }
+  return [...groups.values()].sort(
+    (a, b) => a.class_label.localeCompare(b.class_label) || a.class_uri.localeCompare(b.class_uri),
+  );
+}
+
 export function groupComposerViews<
   T extends { path?: string | null; name?: string | null; label: string },
 >(views: T[]) {

@@ -12,10 +12,18 @@ import {
   filterDictionaryTree,
   type DictionaryNode,
 } from '@/lib/ontology-dictionary-tree';
-import { classTerms, explorerQuery, explorerScope, toggleValue } from '@/lib/graph-explorer';
-import { useGraphExplorer, useGraphExplorerStore } from '@/stores/graph-explorer';
+import {
+  classTerms,
+  explorerQuery,
+  explorerScope,
+  explorerShowsGraphHint,
+  groupSearchHitsByClass,
+  toggleValue,
+} from '@/lib/graph-explorer';
+import { useGraphExplorer, useGraphExplorerStore, useWorkspaceGraphList } from '@/stores/graph-explorer';
 import { useGraphSearch } from '@/hooks/use-graph-search';
 import { individualHref } from '@/lib/graph-instance-browser';
+import { ExplorerClassInstances } from './explorer-class-instances';
 import './graph-explorer.css';
 
 export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
@@ -32,6 +40,8 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
   const searching = search.trim().length > 0;
   useEffect(() => { setSearch(new URLSearchParams(query).get('find') || ''); }, [workspaceId, query]);
   const [closed, setClosed] = useState<Set<string>>(new Set());
+  const [openClasses, setOpenClasses] = useState<Set<string>>(new Set());
+  const list = useWorkspaceGraphList(workspaceId);
   const request = useGraphExplorer(workspaceId, scope.graphs);
   const loadIcons = useOntologyIconsStore((s) => s.load);
   useEffect(() => {
@@ -93,12 +103,74 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
     router.push(`${root}?${next}`, { scroll: false });
   };
   const select = (uri: string) => navigate({ class: uri, view: scope.dashboard ? 'instances' : scope.view, page: null });
-  const pickerProps = { loading: request.loading, error: request.error };
+  const selectedUri = new URLSearchParams(query).get('selected');
+  const graphLabels = Object.fromEntries(
+    [...list.graphs, ...(request.data?.graphs || [])].map((g) => [g.uri, g.label]),
+  );
+  const workspaceGraphCount = Math.max(list.graphs.length, request.data?.graphs.length || 0);
+  const openInstance = (instance: { uri: string; graph_uri: string; class_uri: string }) => {
+    router.push(
+      `${individualHref(workspaceId, instance.graph_uri, instance.class_uri, instance.uri)}${
+        searching ? `&find=${encodeURIComponent(search)}` : ''
+      }`,
+      { scroll: false },
+    );
+  };
+  const toggleClass = (uri: string) =>
+    setOpenClasses((prev) => {
+      const next = new Set(prev);
+      if (next.has(uri)) next.delete(uri);
+      else next.add(uri);
+      return next;
+    });
+  const searchGroups = useMemo(() => groupSearchHitsByClass(hits.results), [hits.results]);
+  const showSearchGraphHint = explorerShowsGraphHint(
+    scope.graphs,
+    workspaceGraphCount,
+    searchGroups.flatMap((group) => group.instances.map((hit) => hit.graph_uri)),
+  );
+  useEffect(() => {
+    const selected = JSON.parse(classesKey) as string[];
+    setOpenClasses((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const uri of selected) {
+        if (!next.has(uri)) {
+          next.add(uri);
+          changed = true;
+        }
+      }
+      if (scope.activeClass && !next.has(scope.activeClass)) {
+        next.add(scope.activeClass);
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [classesKey, scope.activeClass]);
+  useEffect(() => {
+    if (!searching || hits.loading) return;
+    setOpenClasses((prev) => {
+      const next = new Set(prev);
+      const classOnly = searchGroups.filter((group) => !group.instances.length);
+      for (const group of searchGroups) {
+        if (group.instances.length) next.add(group.class_uri);
+      }
+      if (classOnly.length === 1) next.add(classOnly[0].class_uri);
+      return next;
+    });
+  }, [searching, hits.loading, searchGroups]);
+  const graphPickerProps = {
+    loading: list.loading && list.graphs.length === 0,
+    error: list.error,
+  };
+  const classPickerProps = { loading: request.loading, error: request.error };
   const graphLabel =
     scope.graphs.length === 0
       ? 'All Graphs'
       : scope.graphs.length === 1
-        ? request.data?.graphs.find((g) => g.uri === scope.graphs[0])?.label || '1 graph'
+        ? list.graphs.find((g) => g.uri === scope.graphs[0])?.label ||
+          request.data?.graphs.find((g) => g.uri === scope.graphs[0])?.label ||
+          '1 graph'
         : `${scope.graphs.length} graphs`;
   const classLabel = !scope.classes.length
     ? 'All Classes'
@@ -106,33 +178,56 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
       ? classes.find((c) => c.uri === scope.classes[0])?.label || '1 class'
       : `${scope.classes.length} classes`;
   const isExplorer = path.endsWith('/explorer');
+  const instances = (uri: string, label: string) =>
+    openClasses.has(uri) ? (
+      <ExplorerClassInstances
+        workspaceId={workspaceId}
+        graphs={scope.graphs}
+        classUri={uri}
+        classLabel={label}
+        selectedUri={selectedUri}
+        graphLabels={graphLabels}
+        workspaceGraphCount={workspaceGraphCount}
+        onOpen={openInstance}
+      />
+    ) : null;
   function renderNode(node: DictionaryNode, parentPath: string): React.ReactNode {
     const uri = node.term?.id || node.id.replace(/^entity:/, '');
     const key = `${parentPath}/${uri}`;
-    const expanded = search !== '' || !closed.has(key);
+    const childrenOpen = search !== '' || !closed.has(key);
     const count = classes.find((c) => c.uri === uri)?.count || 0;
+    const instancesOpen = openClasses.has(uri);
+    const canExpand = node.children.length > 0 || count > 0;
     return (
       <li key={key} data-ontology-tree-row>
         <div className="graph-explorer-tree-row">
-          {node.children.length ? (
+          {canExpand ? (
             <button
               type="button"
               className="graph-explorer-disclosure"
               data-ontology-tree-toggle
-              aria-label={`${expanded ? 'Collapse' : 'Expand'} ${node.name}`}
-              aria-expanded={expanded}
-              onClick={() =>
-                setClosed((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(key)) next.delete(key);
-                  else next.add(key);
-                  return next;
-                })
-              }
+              aria-label={`${(node.children.length ? childrenOpen : instancesOpen) ? 'Collapse' : 'Expand'} ${node.name}`}
+              aria-expanded={node.children.length ? childrenOpen : instancesOpen}
+              onClick={() => {
+                if (node.children.length) {
+                  setClosed((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(key)) next.delete(key);
+                    else next.add(key);
+                    return next;
+                  });
+                  return;
+                }
+                if (count > 0) toggleClass(uri);
+              }}
             >
               <ChevronRight
                 size={12}
-                style={{ transform: expanded ? 'rotate(90deg)' : undefined }}
+                style={{
+                  transform: (node.children.length ? childrenOpen : instancesOpen)
+                    ? 'rotate(90deg)'
+                    : undefined,
+                }}
               />
             </button>
           ) : (
@@ -151,9 +246,10 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
             <small>{count || '—'}</small>
           </button>
         </div>
-        {expanded && node.children.length > 0 && (
+        {childrenOpen && node.children.length > 0 && (
           <ul>{node.children.map((child) => renderNode(child, key))}</ul>
         )}
+        {instances(uri, node.name)}
       </li>
     );
   }
@@ -170,8 +266,8 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
           Dashboard
         </button>
         <OntologyMultiPicker
-          {...pickerProps}
-          items={(request.data?.graphs || []).map((g) => ({
+          {...graphPickerProps}
+          items={list.graphs.map((g) => ({
             value: g.uri,
             label: g.label,
             title: g.uri,
@@ -191,7 +287,7 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
           }
         />
         <OntologyMultiPicker
-          {...pickerProps}
+          {...classPickerProps}
           items={classes
             .filter((c) => c.count > 0)
             .map((c) => ({
@@ -228,7 +324,7 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
             if (event.key === 'Escape') setSearch('');
             if (event.key === 'ArrowDown') {
               event.preventDefault();
-              document.querySelector<HTMLButtonElement>('.graph-explorer-search-results button[data-ontology-tree-select]')?.focus();
+              document.querySelector<HTMLButtonElement>('.graph-explorer-search-results button[data-ontology-tree-select], .graph-explorer-class-list button[data-ontology-tree-select]')?.focus();
             }
           }}
         />
@@ -238,32 +334,119 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
         <section {...treeKeyboard} className="graph-explorer-class-list graph-explorer-search-results" aria-label="Search results" aria-busy={hits.loading}>
           {search.trim().length < 2 ? <p className="graph-explorer-message">Type at least two characters.</p> : hits.loading ? <p className="graph-explorer-message" role="status">Searching…</p> : hits.error ? <p className="graph-explorer-message" role="alert">{hits.error} <button onClick={hits.retry}>Retry</button></p> : (
             <>
-              {(['individual', 'class'] as const).map(kind => {
-                const results = hits.results.filter(hit => hit.kind === kind);
-                if (!results.length) return null;
-                return <div key={kind}>
-                  <h3>{kind === 'individual' ? 'Instances' : 'Classes'} <small>{results.length === 30 ? '30+' : results.length}</small></h3>
-                  <ul>{results.map(hit => <li key={`${hit.graph_uri}:${hit.uri}`} data-ontology-tree-row>
-                    <button type="button" data-ontology-tree-item={`${hit.graph_uri}:${hit.uri}`} data-ontology-tree-select
-                      aria-current={new URLSearchParams(query).get('selected') === hit.uri && scope.graphs.includes(hit.graph_uri) ? 'page' : undefined}
-                      onClick={() => {
-                        if (hit.kind === 'class') navigate({graph: hit.graph_uri, class: hit.uri, selected: null, view: 'instances', page: null, find: search});
-                        else router.push(`${individualHref(workspaceId, hit.graph_uri, hit.class_uri, hit.uri)}&find=${encodeURIComponent(search)}`, {scroll: false});
-                      }}>
-                      <OntologyTopicIcon subject={{id: hit.class_uri, name: hit.class_label, type: 'entity'}} />
-                      <span className="graph-explorer-hit"><span>{hit.label}</span><small>{hit.kind === 'individual' ? `${hit.class_label} · ` : ''}{request.data?.graphs.find(g => g.uri === hit.graph_uri)?.label || hit.graph_uri}</small></span>
-                    </button>
-                  </li>)}</ul>
-                </div>;
-              })}
-              {hits.results.length === 0 && <p className="graph-explorer-message">No matching instances or classes in the selected graphs.</p>}
+              {searchGroups.length ? (
+                <ul>
+                  {searchGroups.map((group) => {
+                    const expanded = openClasses.has(group.class_uri);
+                    const hasChildren = group.instances.length > 0 || group.instance_count > 0;
+                    return (
+                      <li key={group.class_uri} data-ontology-tree-row>
+                        <div className="graph-explorer-tree-row">
+                          {hasChildren ? (
+                            <button
+                              type="button"
+                              className="graph-explorer-disclosure"
+                              data-ontology-tree-toggle
+                              aria-label={`${expanded ? 'Collapse' : 'Expand'} ${group.class_label}`}
+                              aria-expanded={expanded}
+                              onClick={() => toggleClass(group.class_uri)}
+                            >
+                              <ChevronRight
+                                size={12}
+                                style={{ transform: expanded ? 'rotate(90deg)' : undefined }}
+                              />
+                            </button>
+                          ) : (
+                            <span className="graph-explorer-disclosure" />
+                          )}
+                          <button
+                            type="button"
+                            data-ontology-tree-item={group.class_uri}
+                            data-ontology-tree-select
+                            aria-current={isExplorer && scope.activeClass === group.class_uri ? 'page' : undefined}
+                            title={group.class_uri}
+                            onClick={() =>
+                              navigate({
+                                class: group.class_uri,
+                                selected: null,
+                                view: 'instances',
+                                page: null,
+                                find: search,
+                              })
+                            }
+                          >
+                            <OntologyTopicIcon
+                              subject={{ id: group.class_uri, name: group.class_label, type: 'entity' }}
+                            />
+                            <span>{group.class_label}</span>
+                            <small>{group.instance_count || group.instances.length || '—'}</small>
+                          </button>
+                        </div>
+                        {expanded &&
+                          (group.instances.length ? (
+                            <ul>
+                              {group.instances.map((hit) => (
+                                <li key={`${hit.graph_uri}:${hit.uri}`} data-ontology-tree-row>
+                                  <div className="graph-explorer-tree-row">
+                                    <button
+                                      type="button"
+                                      data-ontology-tree-item={`${hit.graph_uri}:${hit.uri}`}
+                                      data-ontology-tree-select
+                                      aria-current={
+                                        selectedUri === hit.uri &&
+                                        (!scope.graphs.length || scope.graphs.includes(hit.graph_uri))
+                                          ? 'page'
+                                          : undefined
+                                      }
+                                      title={hit.uri}
+                                      onClick={() => openInstance(hit)}
+                                    >
+                                      <OntologyTopicIcon
+                                        subject={{
+                                          id: hit.class_uri,
+                                          name: hit.class_label,
+                                          type: 'entity',
+                                        }}
+                                      />
+                                      <span>{hit.label}</span>
+                                      {showSearchGraphHint && (
+                                        <small className="graph-explorer-graph-hint">
+                                          {graphLabels[hit.graph_uri] || hit.graph_uri}
+                                        </small>
+                                      )}
+                                    </button>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <ExplorerClassInstances
+                              workspaceId={workspaceId}
+                              graphs={scope.graphs}
+                              classUri={group.class_uri}
+                              classLabel={group.class_label}
+                              selectedUri={selectedUri}
+                              graphLabels={graphLabels}
+                              workspaceGraphCount={workspaceGraphCount}
+                              onOpen={openInstance}
+                            />
+                          ))}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="graph-explorer-message">
+                  No matching instances or classes in the selected graphs.
+                </p>
+              )}
             </>
           )}
         </section>
       ) : <>
       <div className="graph-explorer-tabs" aria-label="Class list layout">
         {[
-          ['az', 'A–Z'],
+          ['az', 'A-Z'],
           ['hierarchy', 'Hierarchy'],
         ].map(([value, label]) => (
           <button
@@ -286,27 +469,50 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
           {request.error} <button onClick={request.retry}>Retry</button>
         </p>
       ) : (
-        <section {...treeKeyboard} className="graph-explorer-class-list" aria-label="Classes">
+        <section {...treeKeyboard} className="graph-explorer-class-list" aria-label="Classes and instances">
           {scope.hierarchy ? (
             <ul>{tree.map((node) => renderNode(node, ''))}</ul>
           ) : (
             <ul>
-              {alphabetical.map((c) => (
-                <li key={c.uri} data-ontology-tree-row>
-                  <button
-                    type="button"
-                    data-ontology-tree-item={c.uri}
-                    data-ontology-tree-select
-                    aria-current={isExplorer && scope.activeClass === c.uri ? 'page' : undefined}
-                    onClick={() => select(c.uri)}
-                    title={c.uri}
-                  >
-                    <OntologyTopicIcon subject={{ id: c.uri, name: c.label, type: 'entity' }} />
-                    <span>{c.label}</span>
-                    <small>{c.count.toLocaleString()}</small>
-                  </button>
-                </li>
-              ))}
+              {alphabetical.map((c) => {
+                const expanded = openClasses.has(c.uri);
+                return (
+                  <li key={c.uri} data-ontology-tree-row>
+                    <div className="graph-explorer-tree-row">
+                      {c.count > 0 ? (
+                        <button
+                          type="button"
+                          className="graph-explorer-disclosure"
+                          data-ontology-tree-toggle
+                          aria-label={`${expanded ? 'Collapse' : 'Expand'} ${c.label}`}
+                          aria-expanded={expanded}
+                          onClick={() => toggleClass(c.uri)}
+                        >
+                          <ChevronRight
+                            size={12}
+                            style={{ transform: expanded ? 'rotate(90deg)' : undefined }}
+                          />
+                        </button>
+                      ) : (
+                        <span className="graph-explorer-disclosure" />
+                      )}
+                      <button
+                        type="button"
+                        data-ontology-tree-item={c.uri}
+                        data-ontology-tree-select
+                        aria-current={isExplorer && scope.activeClass === c.uri ? 'page' : undefined}
+                        onClick={() => select(c.uri)}
+                        title={c.uri}
+                      >
+                        <OntologyTopicIcon subject={{ id: c.uri, name: c.label, type: 'entity' }} />
+                        <span>{c.label}</span>
+                        <small>{c.count.toLocaleString()}</small>
+                      </button>
+                    </div>
+                    {instances(c.uri, c.label)}
+                  </li>
+                );
+              })}
             </ul>
           )}
           {!request.loading &&

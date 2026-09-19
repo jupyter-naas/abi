@@ -1,16 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import dynamic from 'next/dynamic';
 import type { GraphEdge, GraphNode } from '@/stores/knowledge-graph';
 import type { ApiDiscoveryInstance } from '../individuals-table';
+import { InstanceNetworkCanvas } from '../instance-network-canvas';
 
 export const preloadExplorerNetwork = () => import('../vis-network');
-
-const VisNetwork = dynamic(() => preloadExplorerNetwork().then(module => module.VisNetwork), {
-  ssr: false,
-  loading: () => <p className="graph-explorer-message" role="status">Loading network…</p>,
-});
 
 export interface ExplorerNetworkData {
   items: ApiDiscoveryInstance[];
@@ -48,14 +43,14 @@ export function ExplorerNetwork({ data, selected, onSelect, scopeKey }: {
   }, [data]);
   const edge = model.edges.find(item => item.id === selectedEdgeId);
   return <div className="graph-explorer-network">
-    <VisNetwork
-      nodes={model.nodes} edges={model.edges}
+    <InstanceNetworkCanvas
+      nodes={model.nodes}
+      edges={model.edges}
       selectedNodeId={selected?.graph_uri ? resourceId(selected.graph_uri, selected.uri) : null}
       selectedEdgeIds={edge ? [edge.id] : []}
       onNodeSelect={id => { setSelectedEdgeId(null); onSelect(id ? model.resources.get(id) || null : null); }}
       onEdgeSelect={id => setSelectedEdgeId(id)}
-      zoomOnDoubleClick focusOnSelection preserveZoomOnResize preserveZoomOnSelection
-      fillContainer nodeSpacing={60} minimumAutoFitScale={0.35} viewStateKey={scopeKey}
+      viewStateKey={scopeKey}
     />
     {edge && <div className="graph-explorer-network-relation" role="status">
       <span>{model.resources.get(edge.source)?.label} → {edge.label} → {model.resources.get(edge.target)?.label}</span>

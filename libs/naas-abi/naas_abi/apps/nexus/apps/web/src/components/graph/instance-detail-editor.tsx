@@ -1,15 +1,22 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Box, Check, Hash, Link2, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Box, Check, Hash, Link2, Loader2, Network, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ImageSquare } from '@/components/image-square';
 import { OntologyTopicIcon } from '@/components/ontology/ontology-topic-icon';
+import { resolveInstanceDisplayTitle } from '@/lib/instance-display-title';
+import { isImageHref, isMaterialIconValue, LOGO_URL_PREDICATE, logoUrlProperties, uploadObjectImage } from '@/lib/image-square';
+import { instanceImageValue } from '@/lib/instance-image';
+import { iconTarget, iconTargetKey } from '@/lib/ontology-icon-library';
+import { sortInstanceProperties } from '@/lib/instance-property-order';
 import { classDefinitionHref, individualHref } from '@/lib/graph-instance-browser';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
+import { useOntologyIconsStore } from '@/stores/ontology-icons';
 import { ApiClassObjectProperty, RelationTargetPicker, SearchableOption, SearchablePicker } from '@/components/graph/relation-pickers';
+import { InstanceDetailNetwork } from '@/components/graph/detail-network';
 import { useConfirm } from '@/components/ui/dialogs';
 import './graph-object.css';
-const RDFS_LABEL = 'http://www.w3.org/2000/01/rdf-schema#label';
 function propertyLabel(value: string) {
   return value.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/_/g, ' ').replace(/^./, s => s.toUpperCase());
 }
@@ -56,8 +63,16 @@ function compactUri(uri: string): string {
   return uri;
 }
 
-function instanceLabel(inst: ApiDiscoveryInstance): string {
-  return inst.label || inst.properties[RDFS_LABEL] || compactUri(inst.uri);
+function instanceTitle(
+  inst: ApiDiscoveryInstance,
+  detail: InstanceDetail | null,
+): string {
+  return resolveInstanceDisplayTitle({
+    uri: inst.uri,
+    label: inst.label || detail?.label,
+    properties: inst.properties,
+    dataProperties: detail?.data_properties,
+  });
 }
 
 interface ApiDatatypeProperty {
@@ -106,6 +121,11 @@ export function IndividualDetailPanel({
   onIndividualDeleted: () => void;
 }) {
   const { confirm, dialog: confirmDialog } = useConfirm();
+  const loadIcons = useOntologyIconsStore(state => state.load);
+  const saveIcon = useOntologyIconsStore(state => state.save);
+  const iconMap = useOntologyIconsStore(state => state.icons);
+  const iconsWorkspaceId = useOntologyIconsStore(state => state.workspaceId);
+  const canEditIcons = useOntologyIconsStore(state => state.canEdit);
   const [deletingKeys, setDeletingKeys] = useState<Set<string>>(new Set());
   const [deletingIndividual, setDeletingIndividual] = useState(false);
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -144,8 +164,29 @@ export function IndividualDetailPanel({
   };
 
   const classUri = detail?.class_uri || instance.class_uri;
-  const dataProperties = detail?.data_properties ?? [];
+  const title = instanceTitle(instance, detail);
+  const dataProperties = useMemo(
+    () => sortInstanceProperties(detail?.data_properties ?? []),
+    [detail]
+  );
+  const imageValue = instanceImageValue({
+    properties: instance.properties,
+    dataProperties,
+    relations: detail?.relations,
+  });
+  const imageTarget = iconTarget({ id: instance.uri, name: title, type: 'individual' });
+  const instanceOverride = imageTarget && iconsWorkspaceId === workspaceId ? iconMap[iconTargetKey(imageTarget)] : undefined;
+  const imageSrc = instanceOverride && isImageHref(instanceOverride)
+    ? instanceOverride
+    : instanceOverride && isMaterialIconValue(instanceOverride)
+      ? undefined
+      : imageValue;
+  const fallbackSubject = instanceOverride && isMaterialIconValue(instanceOverride)
+    ? { id: instance.uri, name: instance.class_label || title, type: 'individual' as const }
+    : { id: instance.class_uri, name: instance.class_label, type: 'entity' as const };
   const canAddProperties = datatypeProperties.length > 0 && !datatypePropertiesLoading;
+
+  useEffect(() => { void loadIcons(workspaceId); }, [workspaceId, loadIcons]);
 
   useEffect(() => {
     if (readOnly || !classUri) {
@@ -631,7 +672,7 @@ export function IndividualDetailPanel({
   const handleDeleteIndividual = async () => {
     const ok = await confirm({
       title: 'Delete individual?',
-      description: `This will permanently remove "${instanceLabel(instance)}" and all its triples from the graph.`,
+      description: `This will permanently remove "${title}" and all its triples from the graph.`,
       confirmLabel: 'Delete',
     });
     if (!ok) return;
@@ -654,17 +695,84 @@ export function IndividualDetailPanel({
     }
   };
 
+  const persistLogoUrl = async (value: string | null) => {
+    const existing = logoUrlProperties(dataProperties);
+    if (value) {
+      if (existing[0]) {
+        if (existing[0].value !== value) {
+          await mutate(`${getApiUrl()}/api/graph/nodes/data-property/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              workspace_id: workspaceId,
+              graph_uri: graphUri,
+              individual_uri: instance.uri,
+              predicate_uri: existing[0].predicate_uri,
+              old_value: existing[0].value,
+              new_value: value,
+            }),
+          });
+        }
+      } else {
+        await mutate(`${getApiUrl()}/api/graph/nodes/data-property/add`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workspace_id: workspaceId,
+            graph_uri: graphUri,
+            individual_uri: instance.uri,
+            predicate_uri: LOGO_URL_PREDICATE,
+            value,
+          }),
+        });
+      }
+      return;
+    }
+    for (const row of existing) {
+      await mutate(`${getApiUrl()}/api/graph/nodes/data-property/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          graph_uri: graphUri,
+          individual_uri: instance.uri,
+          predicate_uri: row.predicate_uri,
+          value: row.value,
+        }),
+      });
+    }
+  };
+
+  const handleImageCommit = async (value: string | null) => {
+    if (!imageTarget) throw new Error('This instance has no identifier.');
+    const href = value && isImageHref(value) ? value : null;
+    if (!readOnly && href) {
+      await persistLogoUrl(href);
+    }
+    await saveIcon(workspaceId, imageTarget, value);
+    if (!readOnly && href) onPropertyDeleted();
+  };
+
   return (
     <article className="graph-object-editor">
       {confirmDialog}
       {mutationError && <p role="alert" className="graph-object-error">{mutationError}</p>}
 
       <header className="graph-object-heading">
+        <ImageSquare
+          src={imageSrc}
+          fallback={<OntologyTopicIcon subject={fallbackSubject} />}
+          label={title}
+          currentIcon={instanceOverride && isMaterialIconValue(instanceOverride) ? instanceOverride : null}
+          disabled={!canEditIcons}
+          disabledReason="Your workspace role cannot change this image"
+          onCommit={imageTarget ? handleImageCommit : undefined}
+          onUpload={(file) => uploadObjectImage(workspaceId, file)}
+        />
         <div className="graph-object-title">
-          <OntologyTopicIcon subject={{ id: instance.class_uri, name: instance.class_label, type: 'entity' }} />
           <div className="min-w-0 flex-1">
-            <h1>{instanceLabel(instance)}</h1>
-
+            <h1>{title}</h1>
+            {instance.uri ? <p className="graph-object-identifier">{instance.uri}</p> : null}
           </div>
           {!readOnly && <button
             type="button"
@@ -680,13 +788,12 @@ export function IndividualDetailPanel({
             Remove
           </button>}
         </div>
-        <div className="ml-13 flex items-center gap-2">
+        <div className="graph-object-class">
           <Box size={14} className="text-blue-500" />
           {instance.class_uri && <Link href={classDefinitionHref(workspaceId, instance.class_uri)} className="text-sm text-workspace-accent hover:underline">
             {instance.class_label || compactUri(instance.class_uri)}
           </Link>}
         </div>
-        <details className="graph-object-identifier"><summary>Identifier</summary><code>{instance.uri}</code></details>
       </header>
 
       {loading ? (
@@ -994,6 +1101,27 @@ export function IndividualDetailPanel({
                 </>
               )}
             </details>}
+          </div>
+
+          <div className="mb-6">
+            <h3 className="mb-3 flex items-center gap-2 font-medium">
+              <Network size={16} className="text-sky-500" />
+              Network
+            </h3>
+            <InstanceDetailNetwork
+              layout="preview"
+              uri={instance.uri}
+              label={title}
+              classLabel={instance.class_label}
+              relations={detail?.relations ?? []}
+              workspaceId={workspaceId}
+              graphUri={graphUri}
+            />
+            {objectProperties.length === 0 && (
+              <p className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
+                No network to display.
+              </p>
+            )}
           </div>
 
           <div>

@@ -72,6 +72,14 @@ export function viewRoute(current: string, view: string) {
   }
   return params;
 }
+/** Details pin / Open Network: same term, Network tab. */
+export function termNetworkRoute(current: string, term: Pick<DictionaryTerm, 'id' | 'type'>) {
+  const next = viewRoute(current, 'network');
+  next.set('term', term.id);
+  next.set('termType', term.type);
+  next.set('browser', 'dictionary');
+  return next;
+}
 export function browserRoute(current: string, mode: string) {
   const params = new URLSearchParams(current);
   params.set('browser', mode);

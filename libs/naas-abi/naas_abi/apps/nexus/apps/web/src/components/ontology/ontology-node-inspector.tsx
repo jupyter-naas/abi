@@ -48,6 +48,7 @@ export function OntologyNodeInspector({ node, nodes, edges, terms, context, onCl
         <OntologyIconPicker subject={term || { name: node.label }} className="ontology-node-inspector-topic-icon" />
         <p className="ontology-node-inspector-kind"><span style={{ backgroundColor: node.color || BFO_BUCKET_BY_TYPE[node.type]?.color }} />{bucket ? `${bucket} · ` : ''}{kind}</p>
         <h2 ref={heading} tabIndex={-1}>{node.label}</h2>
+        {uri ? <p className="ontology-node-inspector-uri">{uri}</p> : null}
       </div>
       <button type="button" className="ontology-node-inspector-close" aria-label="Close inspector" onClick={onClose}><X size={15} /></button>
     </header>
@@ -65,7 +66,6 @@ export function OntologyNodeInspector({ node, nodes, edges, terms, context, onCl
         </li>)}</ul>
       </section>}
       {sources.length > 0 && <section><h3>{sources.length === 1 ? 'Source' : 'Sources'}</h3><ul className="ontology-node-inspector-sources">{sources.map(source => <li key={source.path} title={source.path}>{source.path.split('/').pop() || source.name}</li>)}</ul></section>}
-      {uri && <details className="ontology-node-inspector-uri"><summary>Identifier</summary><p>{uri}</p></details>}
     </div>
     <footer className="ontology-node-inspector-actions">
       {onFocus && <button type="button" onClick={onFocus}>Focus node</button>}

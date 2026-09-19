@@ -6,7 +6,7 @@ import { ontologySpacing } from '@/lib/ontology-spacing';
 import dynamic from 'next/dynamic';
 import { OntologyDictionaryEntry } from '@/components/shell/sidebar/ontology-dictionary-entry';
 import { OntologySystemView } from '@/components/ontology/ontology-system-view';
-import { OntologyTermNetwork } from '@/components/ontology/ontology-term-network';
+import { TermDetailNetwork } from '@/components/graph/detail-network';
 import { OntologyMenuBar } from '@/components/ontology/ontology-menu-bar';
 import { OntologyDashboard } from '@/components/ontology/ontology-dashboard';
 import '@/components/ontology/ontology-detail.css';
@@ -156,7 +156,7 @@ export default function OntologyPage() {
       {showDashboard ? <OntologyDashboard /> : view === 'system' ? <OntologySystemView terms={workspaceTerms} loading={dictionary.loading || dictionary.workspaceId !== workspaceId} error={dictionary.error} partial={dictionary.errors.length > 0} />
         : view === 'network' && requestedTermId ? dictionary.loading || dictionary.workspaceId !== workspaceId ? <p className="p-5 text-sm text-muted-foreground" role="status">Loading term connections…</p>
         : dictionary.error ? <p className="p-5 text-sm text-destructive" role="alert">{dictionary.error}</p>
-        : focusTerm ? <div className="flex min-w-0 flex-1 flex-col">{!!dictionary.errors.length && <p className="border-b px-5 py-2 text-xs text-destructive">Some workspace files could not be read. Connections may be incomplete.</p>}<OntologyTermNetwork key={`${workspaceId}:${focusTerm.type}:${focusTerm.id}`} term={focusTerm} terms={workspaceTerms} /></div>
+        : focusTerm ? <div className="flex min-w-0 flex-1 flex-col">{!!dictionary.errors.length && <p className="border-b px-5 py-2 text-xs text-destructive">Some workspace files could not be read. Connections may be incomplete.</p>}<TermDetailNetwork layout="page" term={focusTerm} terms={workspaceTerms} /></div>
         : <p className="p-5 text-sm text-muted-foreground">This term is not available in this workspace.</p>
         : view === 'network' ? <OntologyNetworkView key={`${workspaceId}:${selectedOntologyPath || 'all'}:${refresh}`} ontologyPath={selectedOntologyPath}
         graphNodes={graph.nodes} graphEdges={graph.edges} graphPrefixes={graph.prefixes} loadingGraph={loadingGraph} graphError={graphError} />

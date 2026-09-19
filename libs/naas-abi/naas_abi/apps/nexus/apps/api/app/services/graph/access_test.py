@@ -274,6 +274,18 @@ class ServiceIsolationTest(unittest.IsolatedAsyncioTestCase):
         self.raw = fixtures()
         self.service = self.service_class(lambda: self.raw, access_scope=scope())
 
+    async def test_list_uses_policy_not_store_scan(self):
+        missing = "urn:graph:policy-only"
+        access = scope(
+            WorkspaceGraphPolicyConfig(write=[missing], include_owned=False)
+        )
+        svc = self.service_class(lambda: self.raw, access_scope=access)
+        self.raw.list_graphs = lambda: (_ for _ in ()).throw(
+            AssertionError("list_graphs must not scan the store")
+        )
+        packs = await svc.list_graphs("alpha")
+        self.assertEqual({g.uri for p in packs for g in p.graphs}, {missing})
+
     async def test_catalog_overview_and_detail_isolate(self):
         packs = await self.service.list_graphs("alpha")
         self.assertEqual({g.uri for p in packs for g in p.graphs}, {ALPHA, REF})

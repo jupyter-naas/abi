@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { classDefinitionHref, individualHref, instancePage, instancePageRequest, INSTANCE_PAGE_SIZE } from './graph-instance-browser';
+import { classDefinitionHref, individualHref, instancePage, instancePageRequest, instancePageView, INSTANCE_PAGE_SIZE } from './graph-instance-browser';
+import { explorerQuery } from './graph-explorer';
 
 describe('graph instance browsing', () => {
   it('keeps a paged request scoped to one workspace, graph and class', () => {
@@ -35,6 +36,20 @@ describe('graph instance browsing', () => {
     assert.equal(url.searchParams.get('class'), 'urn:class:a#b');
     assert.equal(url.searchParams.get('selected'), uri);
     assert.equal(new URL(individualHref('workspace-a', 'urn:graph:a', ''), url).searchParams.has('class'), false);
+  });
+
+  it('opens the Network tab from the current instance query', () => {
+    const query = explorerQuery('graph=urn:g&selected=urn:a', { view: 'network' });
+    assert.equal(instancePageView(query), 'network');
+    assert.equal(new URLSearchParams(query).get('selected'), 'urn:a');
+    assert.equal(new URLSearchParams(query).get('graph'), 'urn:g');
+  });
+
+  it('treats the instance canvas as Details unless view=network', () => {
+    assert.equal(instancePageView(''), 'details');
+    assert.equal(instancePageView('graph=urn:g&selected=urn:a'), 'details');
+    assert.equal(instancePageView('graph=urn:g&selected=urn:a&view=details'), 'details');
+    assert.equal(instancePageView('graph=urn:g&selected=urn:a&view=network'), 'network');
   });
 
   it('opens a class definition in the same workspace dictionary', () => {

@@ -25,6 +25,11 @@ export function individualHref(workspaceId: string, graphUri: string, classUri: 
   return `/workspace/${encodeURIComponent(workspaceId)}/graph/individuals?${query}`;
 }
 
+/** Instance page tabs match Ontology/Explorer: Details is the default, Network is `?view=network`. */
+export function instancePageView(query: string): 'details' | 'network' {
+  return new URLSearchParams(query).get('view') === 'network' ? 'network' : 'details';
+}
+
 export function classDefinitionHref(workspaceId: string, classUri: string) {
   const query = new URLSearchParams({ browser: 'dictionary', view: 'classes', term: classUri, termType: 'entity' });
   return `/workspace/${encodeURIComponent(workspaceId)}/ontology?${query}`;

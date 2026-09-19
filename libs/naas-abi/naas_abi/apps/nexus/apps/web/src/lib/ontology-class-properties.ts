@@ -1,4 +1,5 @@
 import type { DictionaryTerm } from './ontology-dictionary-tree';
+import { propertyPriority } from './instance-property-order';
 
 /** Show explicit named domains, preserving their declarations rather than implying required fields. */
 export function classProperties(term: DictionaryTerm, terms: DictionaryTerm[]) {
@@ -17,5 +18,11 @@ export function classProperties(term: DictionaryTerm, terms: DictionaryTerm[]) {
   return terms.filter(item => item.type === 'relationship' || item.type === 'attribute')
     .map(property => ({property, declaredOn: (property.domain || []).filter(domain => ancestry.has(domain.id))}))
     .filter(entry => entry.declaredOn.length > 0)
-    .sort((a, b) => a.property.name.localeCompare(b.property.name));
+    .sort((a, b) => {
+      const rank =
+        propertyPriority(a.property.id, a.property.name) -
+        propertyPriority(b.property.id, b.property.name);
+      if (rank !== 0) return rank;
+      return a.property.name.localeCompare(b.property.name);
+    });
 }

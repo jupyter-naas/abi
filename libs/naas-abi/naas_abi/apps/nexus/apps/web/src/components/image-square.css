@@ -1,0 +1,238 @@
+.image-square {
+  display: block;
+  flex-shrink: 0;
+  width: 78px;
+  height: 78px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  border-radius: 0;
+  color: var(--workspace-accent, var(--color-primary));
+  background: var(--muted-bg-hex, #f4f4f5);
+}
+.image-square-face,
+.image-square img,
+.image-square svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+.image-square img {
+  object-fit: cover;
+}
+.image-square-button {
+  position: relative;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
+.image-square-button:disabled {
+  cursor: default;
+}
+.image-square-button:hover,
+.image-square-button:focus-visible {
+  outline: 2px solid var(--workspace-accent, var(--color-primary));
+  outline-offset: 2px;
+}
+.image-square-hint {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted-foreground-hex);
+  opacity: 0;
+  pointer-events: none;
+}
+.image-square-button:hover .image-square-hint,
+.image-square-button:focus-visible .image-square-hint {
+  opacity: 1;
+}
+.image-square-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: transparent;
+}
+.image-square-picker {
+  position: fixed;
+  z-index: 501;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--border-hex);
+  border-radius: 0;
+  background: var(--background-hex);
+  color: var(--foreground-hex);
+  box-shadow: 0 8px 28px #00000024;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.image-square-picker > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 14px 14px 10px;
+  gap: 12px;
+}
+.image-square-picker h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.image-square-picker header p {
+  margin: 3px 0 0;
+  font-size: 11px;
+  color: var(--muted-foreground-hex);
+}
+.image-square-picker-close {
+  padding: 3px;
+  cursor: pointer;
+}
+.image-square-picker-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 14px 10px;
+}
+.image-square-picker-tabs button {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--border-hex);
+  cursor: pointer;
+}
+.image-square-picker-tabs button[aria-selected="true"] {
+  color: var(--workspace-accent, var(--color-primary));
+  border-color: currentColor;
+}
+.image-square-picker-search,
+.image-square-picker-url label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 14px;
+  padding: 8px;
+  border: 1px solid var(--border-hex);
+  color: var(--muted-foreground-hex);
+}
+.image-square-picker-search input,
+.image-square-picker-url input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  color: var(--foreground-hex);
+  font-size: 12px;
+}
+.image-square-picker-results-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 6px;
+  color: var(--muted-foreground-hex);
+  font-size: 11px;
+}
+.image-square-picker-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 14px 14px;
+  overscroll-behavior: contain;
+}
+.image-square-picker-body > p {
+  margin: 4px 0 10px;
+  color: var(--muted-foreground-hex);
+}
+.image-square-picker-body > p button {
+  text-decoration: underline;
+}
+.image-square-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 4px;
+}
+.image-square-picker-grid button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 0;
+  cursor: pointer;
+}
+.image-square-picker-grid button > svg {
+  width: 26px;
+  height: 26px;
+}
+.image-square-picker-grid button:hover {
+  background: var(--muted-bg-hex);
+}
+.image-square-picker-grid button[aria-pressed="true"] {
+  color: var(--workspace-accent, var(--color-primary));
+  border-color: currentColor;
+}
+.image-square-picker-grid button > .image-square-picker-check {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  background: var(--background-hex);
+}
+.image-square-picker-placeholder {
+  width: 22px;
+  height: 22px;
+  background: var(--muted-bg-hex);
+}
+.image-square-picker-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px;
+  margin-top: 10px;
+  border: 1px solid var(--border-hex);
+  color: var(--workspace-accent, var(--color-primary));
+  cursor: pointer;
+}
+.image-square-picker-upload,
+.image-square-picker-url {
+  padding-top: 6px;
+}
+.image-square-picker-url label {
+  margin: 0;
+}
+.image-square-picker > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-hex);
+  flex-shrink: 0;
+}
+.image-square-picker footer button {
+  color: var(--workspace-accent, var(--color-primary));
+  cursor: pointer;
+}
+.image-square-picker button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.image-square-picker button:focus-visible,
+.image-square-button:focus-visible {
+  outline: 2px solid var(--workspace-accent, var(--color-primary));
+  outline-offset: 2px;
+  box-shadow: none;
+}
+.image-square-picker-search:focus-within,
+.image-square-picker-url label:focus-within {
+  border-color: var(--workspace-accent, var(--color-primary));
+}

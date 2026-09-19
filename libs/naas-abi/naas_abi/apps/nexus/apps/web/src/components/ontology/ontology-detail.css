@@ -15,5 +15,3 @@
     grid-template-columns: minmax(0, 1fr) 224px;
   }
 }
-
-.ontology-detail-topic-icon { --ontology-topic-size:40px; margin-bottom:12px; color:var(--workspace-accent,var(--color-primary)); }

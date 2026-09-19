@@ -488,7 +488,7 @@ class OntologyIconModel(Base):
     target_key = Column(String(64), primary_key=True)
     resource_kind = Column(String(24), nullable=False)
     resource_id = Column(Text, nullable=False)
-    icon_name = Column(String(160), nullable=False)
+    icon_name = Column(Text, nullable=False)
     updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 

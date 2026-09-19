@@ -34,7 +34,7 @@ export function OntologyMultiPicker({ items, value, onToggle, onClear, loading, 
   const actionRef = useRef<HTMLButtonElement>(null);
   const listId = useId();
   const options = useMemo(() => items.filter(item => `${item.label} ${item.detail || ''}`.toLowerCase().includes(query.trim().toLowerCase())), [items, query]);
-  const available = !loading && !error;
+  const available = !error && items.length > 0;
   const optionCount = 1 + (available ? options.length : 0);
   const active = Math.min(activeIndex, optionCount - 1);
   const unavailableCount = value.filter(value => !items.some(item => item.value === value)).length;
@@ -136,8 +136,8 @@ export function OntologyMultiPicker({ items, value, onToggle, onClear, loading, 
             </button>;
           })}
         </div>
-        {loading ? <p role="status" className="px-3 py-4 text-xs text-muted-foreground">Loading {noun}…</p>
-          : error ? <p role="alert" className="px-3 py-4 text-xs text-destructive">{error}</p>
+        {error ? <p role="alert" className="px-3 py-4 text-xs text-destructive">{error}</p>
+          : loading && !items.length ? <p role="status" className="px-3 py-4 text-xs text-muted-foreground">Loading {noun}…</p>
           : !options.length && <p role="status" className="px-3 py-4 text-xs text-muted-foreground">No matching {noun}.</p>}
         {available && unavailableCount > 0 && <p role="status" className="border-t px-3 py-2 text-xs text-muted-foreground">{unavailableCount} selected {noun} unavailable. Choose {allLabel} to reset.</p>}
       </div>

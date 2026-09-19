@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
+import { isImageHref, isMaterialIconValue } from '@/lib/image-square';
 import { iconTargetKey, type IconTarget } from '@/lib/ontology-icon-library';
 
 type IconRecord = IconTarget & { icon: string };
@@ -34,7 +35,7 @@ export const useOntologyIconsStore = create<IconsState>((set, get) => ({
       const data: { items?: IconRecord[]; can_edit?: boolean } = await response.json();
       if (!Array.isArray(data.items)) throw new Error('The workspace icons could not be read.');
       const icons: Record<string, string> = {};
-      for (const item of data.items) if (typeof item.kind === 'string' && typeof item.resource_id === 'string' && /^material-symbols-light:[a-z0-9-]+$/.test(item.icon)) icons[iconTargetKey(item)] = item.icon;
+      for (const item of data.items) if (typeof item.kind === 'string' && typeof item.resource_id === 'string' && typeof item.icon === 'string' && (isMaterialIconValue(item.icon) || isImageHref(item.icon))) icons[iconTargetKey(item)] = item.icon;
       if (request === generation) set({ ...(revision === writeRevision ? { icons } : {}), canEdit: data.can_edit === true, loading: false, loadedAt: Date.now() });
     } catch (error) {
       if (request === generation) set({ loading: false, error: error instanceof Error ? error.message : 'Could not load the workspace icons.' });

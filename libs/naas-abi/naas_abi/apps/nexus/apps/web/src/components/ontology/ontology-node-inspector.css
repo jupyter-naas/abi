@@ -18,9 +18,7 @@
 .ontology-node-inspector-connections button svg { flex-shrink:0; color:var(--muted-foreground-hex); }
 .ontology-node-inspector-connections button:hover { color:var(--workspace-accent,var(--color-primary)); }
 .ontology-node-inspector-sources { display:flex; flex-direction:column; gap:4px; color:var(--muted-foreground-hex); font-size:11px; overflow-wrap:anywhere; }
-.ontology-node-inspector-uri { color:var(--muted-foreground-hex); font-size:11px; }
-.ontology-node-inspector-uri summary { cursor:pointer; }
-.ontology-node-inspector-uri p { margin-top:6px; font-family:var(--font-mono,monospace); font-size:10px; }
+.ontology-node-inspector-uri { margin-top:6px; color:var(--muted-foreground-hex); font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,monospace); font-size:11px; line-height:1.45; overflow-wrap:anywhere; }
 .ontology-node-inspector-actions { display:flex; flex-wrap:wrap; gap:8px 16px; padding:12px 16px; border-top:1px solid var(--border-hex); }
 .ontology-node-inspector-actions button { display:flex; align-items:center; gap:6px; min-height:28px; color:var(--workspace-accent,var(--color-primary)); cursor:pointer; }
 .ontology-node-inspector-actions button:hover { text-decoration:underline; }

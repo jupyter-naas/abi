@@ -1,20 +1,27 @@
 
 .graph-object-page { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; height: 100%; background: var(--background-hex); color: var(--foreground-hex); font-size: 13px; }
 .graph-object-toolbar { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--border-hex); flex-shrink: 0; font-size: 12px; }
+.graph-object-tabs { display: flex; flex-shrink: 0; align-items: center; gap: 4px; min-height: 40px; padding: 4px 16px; border-bottom: 1px solid var(--border-hex); background: var(--muted-hex); font-size: 13px; }
+.graph-object-tabs button { padding: 4px 12px; color: var(--muted-foreground-hex); }
+.graph-object-tabs button[aria-current='page'],
+.graph-object-tabs button:not(:disabled):hover { background: var(--background-hex); color: var(--foreground-hex); }
+.graph-object-network { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--background-hex); }
+.graph-object-network .graph-object-status,
+.graph-object-network .graph-object-error,
+.graph-object-network .graph-detail-network-status { display: flex; flex: 1; align-items: center; justify-content: center; max-width: none; margin: 0; }
 .graph-object-toolbar a { display: inline-flex; align-items: center; gap: 6px; }
 .graph-object-toolbar > span { flex: 1; color: var(--muted-foreground-hex); }
 .graph-object-toolbar button { padding: 4px; }
 .graph-object-content { flex: 1; min-height: 0; overflow: auto; padding: 24px clamp(20px, 4vw, 64px); }
 .graph-object-editor { width: 100%; max-width: 960px; margin: 0 auto; font-size: 13px; }
 .graph-object-heading { padding: 8px 0 24px; margin-bottom: 24px; border-bottom: 1px solid var(--border-hex); }
-.graph-object-title { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.graph-object-title { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
 .graph-object-title h1 { font-size: 26px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
-.graph-object-title .ontology-topic-icon { --ontology-topic-size: 32px; }
-.graph-object-identifier { color: var(--muted-foreground-hex); font-size: 11px; margin-top: 12px; }
-.graph-object-identifier summary { cursor: pointer; }
-.graph-object-identifier code { display: block; margin-top: 8px; overflow-wrap: anywhere; }
+.graph-object-class { display: flex; align-items: center; gap: 8px; }
+.graph-object-identifier { color: var(--muted-foreground-hex); font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; line-height: 1.45; margin-top: 6px; overflow-wrap: anywhere; }
 .graph-object-editor h3 { font-size: 13px; }
 .graph-object-editor h3 svg { color: var(--muted-foreground-hex); }
+.graph-object-editor .graph-detail-network { margin-top: 0; }
 .graph-object-rows { border-top: 1px solid var(--border-hex); margin-bottom: 12px; }
 .graph-object-property, .graph-object-relation { padding: 10px 0; border-bottom: 1px solid var(--border-hex); font-size: 13px; }
 .graph-object-property { display: flex; align-items: flex-start; gap: 16px; }

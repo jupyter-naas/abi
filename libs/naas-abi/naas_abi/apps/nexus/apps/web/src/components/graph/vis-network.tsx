@@ -11,6 +11,14 @@ import { BFO_BUCKET_DEFS } from '@/lib/bfo-buckets';
 import { installOrthogonalEdges } from './orthogonal-network';
 import { compactNetworkPositions } from './compact-network-layout';
 import { fitReadableViewport, spacingViewport } from './network-viewport';
+import {
+  INSTANCE_NODE_FONT,
+  INSTANCE_NODE_SIZE,
+  instanceLabelVAdjust,
+  instanceNodeCtxRenderer,
+  instanceNodeLayoutBox,
+  wrapInstanceLabel,
+} from '@/lib/graph-network-view';
 
 const BFO_COLORS: Record<string, { background: string; border: string; highlight: string }> = Object.fromEntries(
   BFO_BUCKET_DEFS.map((d) => [d.type, { background: d.color, border: d.border, highlight: d.color }])
@@ -817,6 +825,11 @@ interface VisNetworkProps {
   /** When true, nodes are drawn as circles instead of rectangular cards. */
   circularNodes?: boolean;
   /**
+   * Instance graphs put the label above a native `dot` / `square`.
+   * Ontology class cards keep the default (`inside`) SVG label.
+   */
+  labelPlacement?: 'inside' | 'top';
+  /**
    * Changes when the surrounding panel layout changes (e.g. preview split
    * orientation). Triggers a fit so the graph recenters in the new viewport.
    */
@@ -825,6 +838,8 @@ interface VisNetworkProps {
   fillContainer?: boolean;
   /** Return the tooltip element shown on node hover. Defaults to no tooltip when omitted. */
   getNodeTitle?: (node: GraphNode) => HTMLElement | string | undefined;
+  /** When false, the canvas is a static pin: no zoom, pan, drag, or navigation buttons. */
+  interactive?: boolean;
 }
 
 /** Build a styled HTMLElement tooltip from an array of [key, value] row pairs. */
@@ -868,9 +883,11 @@ export function VisNetwork({
   physicsEnabled = false,
   useBucketLayout = false,
   circularNodes = false,
+  labelPlacement = 'inside',
   viewportLayoutKey,
   fillContainer = false,
   getNodeTitle,
+  interactive = true,
 }: VisNetworkProps) {
   const fixedLayout = suppliedFixedLayout || (nodeSpacing !== undefined && !layoutDirection && !physicsEnabled);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1033,9 +1050,11 @@ export function VisNetwork({
     if (nodeSpacing === undefined || suppliedFixedLayout || layoutDirection || physicsEnabled) return null;
     return compactNetworkPositions(nodes.map(node => ({
       id: node.id, label: node.label, group: node.type, primary: node.properties.is_primary === true,
-      ...computeNodeCardDimensions(wrapNodeLabelLines(node.label), Boolean(getNodeLogoUrl(node))),
+      ...(labelPlacement === 'top'
+        ? instanceNodeLayoutBox(node.label, node.properties.is_primary === true)
+        : computeNodeCardDimensions(wrapNodeLabelLines(node.label), Boolean(getNodeLogoUrl(node)))),
     })), edges, nodeSpacing);
-  }, [nodes, edges, nodeSpacing, suppliedFixedLayout, layoutDirection, physicsEnabled, getNodeLogoUrl]);
+  }, [nodes, edges, nodeSpacing, suppliedFixedLayout, layoutDirection, physicsEnabled, getNodeLogoUrl, labelPlacement]);
 
   // Fetch and cache logo images as data URIs so they can be embedded in SVG.
   useEffect(() => {
@@ -1098,6 +1117,43 @@ export function VisNetwork({
         shapeProperties: { borderRadius: 0 }, shadow: false,
       };
     }
+    if (labelPlacement === 'top') {
+      const primary = node.properties?.is_primary === true;
+      const size = primary ? INSTANCE_NODE_SIZE + 4 : INSTANCE_NODE_SIZE;
+      const labelLines = wrapInstanceLabel(node.label);
+      const dimmed = anyNodeSelected && node.properties?.selected !== true;
+      const background = dimmed ? fadeHexTowardWhite(colors.background, 0.82) : colors.background;
+      const border = dimmed ? fadeHexTowardWhite(colors.border, 0.7) : colors.border;
+      const dark = document.documentElement.classList.contains('dark');
+      const textColor = dimmed ? '#94a3b8' : (dark ? '#f4f4f5' : '#18181b');
+      const strokeColor = dark ? '#18181b' : '#ffffff';
+      const hierPos = hierarchicalPositions?.get(node.id) ?? compactPositions?.get(node.id);
+      return {
+        id: node.id,
+        label: labelLines.join('\n'),
+        title: getNodeTitleRef.current?.(node),
+        shape: 'custom',
+        ctxRenderer: instanceNodeCtxRenderer({ circular: circularNodes, textColor, strokeColor }),
+        size,
+        borderWidth: primary ? 2.5 : 2,
+        borderWidthSelected: 3,
+        font: {
+          size: INSTANCE_NODE_FONT,
+          face: 'Inter, system-ui, sans-serif',
+          color: textColor,
+          vadjust: instanceLabelVAdjust(size, labelLines.length),
+        },
+        color: {
+          background,
+          border,
+          highlight: { background: colors.highlight, border: colors.border },
+          hover: { background: colors.highlight, border: colors.border },
+        },
+        shadow: { enabled: true, color: 'rgba(0,0,0,0.18)', size: 4, x: 1, y: 1 },
+        x: hierPos?.x ?? node.x,
+        y: hierPos?.y ?? node.y,
+      };
+    }
     const logoUrl = getNodeLogoUrl(node);
     const labelLines = wrapNodeLabelLines(node.label);
     const logoDataUri = logoUrl ? logoDataByUrl[logoUrl] : undefined;
@@ -1144,9 +1200,12 @@ export function VisNetwork({
       x: hierPos?.x ?? node.x,
       y: hierPos?.y ?? node.y,
     };
-  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri, hierarchicalPositions, compactPositions, anyNodeSelected, circularNodes, systemOverview, processOverview]);
+  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri, hierarchicalPositions, compactPositions, anyNodeSelected, circularNodes, labelPlacement, systemOverview, processOverview]);
 
   const toVisEdge = useCallback((edge: GraphEdge): Edge => {
+    if (edge.properties?.layout_only) {
+      return { id: edge.id, from: edge.source, to: edge.target, hidden: true, physics: false };
+    }
     if (processOverview) {
       const color = String(edge.properties?.color || '#94a3b8');
       return {
@@ -1263,15 +1322,16 @@ export function VisNetwork({
       minVelocity: 0.75,
     },
     interaction: {
-      hover: true,
+      hover: interactive,
       tooltipDelay: 200,
-      multiselect: true,
+      multiselect: interactive,
       selectConnectedEdges: false,
       hoverConnectedEdges: false,
-      navigationButtons: true,  // Enable built-in navigation buttons
-      keyboard: { enabled: true, bindToWindow: false },
-      zoomView: true,
-      dragView: true,
+      navigationButtons: interactive,
+      keyboard: { enabled: interactive, bindToWindow: false },
+      zoomView: interactive,
+      dragView: interactive,
+      dragNodes: interactive,
     },
     layout: {
       improvedLayout: false,

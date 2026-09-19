@@ -24,7 +24,7 @@ function IconPickerSession({ subject, className, workspaceId }: { subject: Ontol
   const key = iconTargetKey(target);
   const ready = store.workspaceId === workspaceId && !store.loading;
   const override = store.workspaceId === workspaceId ? store.icons[key] : undefined;
-  const chosen = override?.slice(ICON_PREFIX.length) || ontologyTopicIcon(subject);
+  const chosen = override?.startsWith(ICON_PREFIX) ? override.slice(ICON_PREFIX.length) : ontologyTopicIcon(subject);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [catalog, setCatalog] = useState<string[] | null>(null);

@@ -17,6 +17,7 @@ import './graph-explorer.css';
 
 const number = (value: number) => value.toLocaleString();
 const palette = ['#3b82f6', '#0891b2', '#8b5cf6', '#d97706', '#16a34a', '#db2777'];
+
 function Dashboard({
   data,
   onGraph,

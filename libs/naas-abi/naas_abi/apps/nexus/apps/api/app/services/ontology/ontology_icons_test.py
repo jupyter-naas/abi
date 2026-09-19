@@ -60,10 +60,23 @@ class SharedIconsTests(unittest.IsolatedAsyncioTestCase):
         for kind, resource in (("entity", "urn:hidden"), ("annotation", "urn:term")):
             with self.assertRaises(LookupError):
                 await self.service.save_icon("a", "owner", "u", ALLOWED, kind, resource, ICON)
-        for icon in ("", "https://example.com/icon.svg", "<svg/>", "other:public"):
+        for icon in ("", "javascript:alert(1)", "<svg/>", "other:public", "data:image/png;base64,xx"):
             with self.assertRaises(ValueError):
                 await self.service.save_icon("a", "member", "u", ALLOWED, "entity", "urn:term", icon)
         self.assertEqual(await self.repo.list_icons("a"), [])
+
+    async def test_image_url_and_graph_individual_are_persisted(self):
+        image = "https://cdn.example/face.png"
+        iri = "http://example.org/person/1"
+        await self.service.save_icon("a", "member", "user1", ALLOWED, "individual", iri, image)
+        items = await self.service.list_icons("a", set())
+        self.assertEqual(items, [{"kind": "individual", "resource_id": iri, "icon": image}])
+        await self.service.save_icon("a", "admin", "user2", ALLOWED, "entity", "urn:term", image)
+        self.assertEqual((await self.service.list_icons("a", ALLOWED))[0]["icon"], image)
+        klass = "https://www.commoncoreontologies.org/ont00001262"
+        await self.service.save_icon("a", "member", "user1", set(), "entity", klass, ICON)
+        listed = await self.service.list_icons("a", set())
+        self.assertTrue(any(item["resource_id"] == klass and item["icon"] == ICON for item in listed))
 
     async def test_http_contract_authorization_catalog_scoping_and_shared_read(self):
         app = FastAPI()
@@ -91,6 +104,10 @@ class SharedIconsTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(result["can_edit"])
                 catalog.workspace_dictionary.assert_awaited_with(catalog_refs=["permitted:ontology.ttl"])
                 self.assertEqual((await client.put(url, json={**body, "resource_id": "urn:hidden"})).status_code, 404)
+                catalog.workspace_dictionary.reset_mock()
+                person = {"kind": "individual", "resource_id": "http://example.org/person/ada", "icon": ICON}
+                self.assertEqual((await client.put(url, json=person)).status_code, 200)
+                catalog.workspace_dictionary.assert_not_awaited()
                 access.return_value = "viewer"
                 self.assertFalse((await client.get(url)).json()["can_edit"])
                 self.assertEqual((await client.put(url, json=body)).status_code, 403)

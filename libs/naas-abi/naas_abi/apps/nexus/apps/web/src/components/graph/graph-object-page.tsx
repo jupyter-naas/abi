@@ -5,9 +5,12 @@ import Link from 'next/link';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { GraphHeader } from './graph-header';
 import { IndividualDetailPanel, type InstanceDetail } from './instance-detail-editor';
+import { InstanceDetailNetwork } from './detail-network';
 import { useGraphRequest } from '@/hooks/use-graph-request';
 import { authFetch, useAuthStore } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
+import { resolveInstanceDisplayTitle } from '@/lib/instance-display-title';
+import { instancePageView } from '@/lib/graph-instance-browser';
 import type { ExplorerGraph } from '@/lib/graph-explorer';
 import { explorerQuery } from '@/lib/graph-explorer';
 import './graph-object.css';
@@ -16,6 +19,7 @@ export function GraphObjectPage({workspaceId, graphUri, instanceUri}: {workspace
   const userId = useAuthStore(s => s.user?.id);
   const router = useRouter();
   const query = useSearchParams().toString();
+  const view = instancePageView(query);
   const key = JSON.stringify([workspaceId, graphUri, userId]);
   const [catalog, setCatalog] = useState<{key: string; graphs: ExplorerGraph[]; error: string | null} | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -47,14 +51,33 @@ export function GraphObjectPage({workspaceId, graphUri, instanceUri}: {workspace
     return () => window.removeEventListener('graph-cache-refresh', refresh);
   }, [refresh]);
   const changed = () => window.dispatchEvent(new Event('graph-cache-refresh'));
-  return <div className="graph-object-page">
+  const openView = (next: 'details' | 'network') => {
+    router.replace(`?${explorerQuery(query, { view: next })}`, { scroll: false });
+  };
+  const title = detail.data
+    ? resolveInstanceDisplayTitle({
+        uri: detail.data.uri,
+        label: detail.data.label,
+        dataProperties: detail.data.data_properties,
+      })
+    : instanceUri;
+  return <div className="graph-object-page" data-view={view}>
     <GraphHeader />
     <div className="graph-object-toolbar">
       <Link href={back}><ArrowLeft size={14} />Instances</Link>
       <span>{graph?.label || 'Instance'}{current && !current.error && graph ? ` · ${canWrite ? 'Editable' : 'Read-only'}` : ''}</span>
       <button type="button" onClick={refresh} aria-label="Refresh instance"><RefreshCw size={14} /></button>
     </div>
-    <main className="graph-object-content">
+    <nav className="graph-object-tabs" aria-label="Instance views">
+      {([['details', 'Details'], ['network', 'Network']] as const).map(([value, label]) =>
+        <button key={value} type="button" aria-current={view === value ? 'page' : undefined} onClick={() => openView(value)}>{label}</button>)}
+    </nav>
+    {view === 'network' ? <main className="graph-object-network">
+      {!graphUri ? <p className="graph-object-error" role="alert">Select a graph to open this instance.</p> : detail.error ? <p className="graph-object-error" role="alert">{detail.error} <button onClick={detail.retry}>Retry</button></p> : detail.loading || !detail.data ? <p className="graph-object-status" role="status">Loading network…</p> :
+        <InstanceDetailNetwork layout="page" uri={detail.data.uri} label={title} classLabel={detail.data.class_label}
+          relations={detail.data.relations ?? []}
+          workspaceId={workspaceId} graphUri={graphUri} />}
+    </main> : <main className="graph-object-content">
       {!graphUri ? <p className="graph-object-error" role="alert">Select a graph to open this instance.</p> : detail.error ? <p className="graph-object-error" role="alert">{detail.error} <button onClick={detail.retry}>Retry</button></p> : detail.loading || !detail.data ? <p className="graph-object-status" role="status">Loading instance…</p> : <>
         {isSchema && <p className="graph-object-notice">This instance comes from the Schema graph. Its properties are managed in the source ontology and are read-only here.</p>}
         {!isSchema && current && !canWrite && !current.error && <p className="graph-object-notice">This graph is read-only in this workspace.</p>}
@@ -64,6 +87,6 @@ export function GraphObjectPage({workspaceId, graphUri, instanceUri}: {workspace
           readOnly={!canWrite} instance={{...detail.data, properties: {}}} detail={detail.data} loading={false}
           onPropertyDeleted={changed} onIndividualDeleted={() => {changed(); router.push(back);}} />
       </>}
-    </main>
+    </main>}
   </div>;
 }

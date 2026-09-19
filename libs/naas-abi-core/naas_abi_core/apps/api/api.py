@@ -375,7 +375,24 @@ def api():
     if reload_enabled:
         run_kwargs["app"] = "naas_abi_core.apps.api.api:get_app"
         run_kwargs["factory"] = True
-        run_kwargs["reload_dirs"] = ["src", "libs"]
+        # Watch application Python under src only. `libs/naas-abi` is a symlink
+        # into the Nexus tree (tsx, .next-dev). kg.py and TTL are data, not
+        # API code: saving them used to stack WatchFiles reloads during Engine.load.
+        run_kwargs["reload_dirs"] = ["src"]
+        run_kwargs["reload_excludes"] = [
+            "*_test.py",
+            "kg.py",
+            "**/kg.py",
+            "*.ttl",
+            "**/*.ttl",
+            "*.tsx",
+            "*.ts",
+            "*.css",
+            "*.json",
+            ".next",
+            ".next-dev",
+            "node_modules",
+        ]
     else:
         run_kwargs["app"] = get_app()
 

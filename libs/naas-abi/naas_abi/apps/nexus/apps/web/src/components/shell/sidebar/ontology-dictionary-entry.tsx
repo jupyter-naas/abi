@@ -1,9 +1,15 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useOntologyDictionaryStore } from '@/stores/ontology-dictionary';
+import { useOntologyIconsStore } from '@/stores/ontology-icons';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { OntologyIconPicker } from '@/components/ontology/ontology-icon-picker';
+import { ImageSquare } from '@/components/image-square';
+import { OntologyTopicIcon } from '@/components/ontology/ontology-topic-icon';
+import { isMaterialIconValue, uploadObjectImage } from '@/lib/image-square';
+import { instanceImageValue } from '@/lib/instance-image';
+import { iconTarget, iconTargetKey } from '@/lib/ontology-icon-library';
 import '@/components/ontology/ontology-detail.css';
 import { OntologyUsedIn } from '@/components/ontology/ontology-used-in';
 import { classProperties } from '@/lib/ontology-class-properties';
@@ -17,6 +23,8 @@ export function OntologyDictionaryEntry({ context }: { context?: { workspaceId: 
   const routeParams = useSearchParams();
   const currentWorkspaceId = useWorkspaceStore(state => state.currentWorkspaceId);
   const workspaceId = context?.workspaceId || currentWorkspaceId;
+  const icons = useOntologyIconsStore();
+  useEffect(() => { if (workspaceId) void icons.load(workspaceId); }, [workspaceId, icons.load]);
   const params = context ? new URLSearchParams({ browser: 'dictionary', view: 'classes', term: context.termId, termType: 'entity' }) : routeParams;
   const { terms, loading, error, workspaceId: loadedWorkspace, errors } = useOntologyDictionaryStore();
   const scope = ontologyBrowser(params?.toString() || '') === 'dictionary' ? null : params?.get('ontology');
@@ -38,17 +46,36 @@ export function OntologyDictionaryEntry({ context }: { context?: { workspaceId: 
     {errors.length > 0 && <p className="text-sm text-destructive">Some ontology files could not be read. See the sidebar for details.</p>}
   </div>;
   const properties = classProperties(term, terms);
+  const owlImage = instanceImageValue({
+    relations: (term.relations || []).map(relation => ({
+      predicate_uri: relation.property.id,
+      predicate_label: relation.property.name,
+      other_uri: relation.target.id,
+    })),
+  });
+  const target = iconTarget(term);
+  const override = target && icons.workspaceId === workspaceId ? icons.icons[iconTargetKey(target)] : undefined;
+  const imageValue = !override ? owlImage : isMaterialIconValue(override) ? undefined : override;
   const missing = <span className="text-muted-foreground">Not specified</span>;
   const parentLabel = term.type === 'entity' ? 'Subclass of' : term.type === 'individual' ? 'Instance of' : 'Subproperty of';
   const renderLinks = (links: Array<{id: string; name: string}> | undefined, kind?: DictionaryTerm['type']) => links?.length
     ? <div className="flex flex-wrap gap-x-3 gap-y-1">{links.map(link => <span key={link.id}>{linkedTerm(link.id, link.name, kind)}</span>)}</div> : missing;
   const renderValues = (values?: string[]) => values?.length ? values.map(value => <p key={value}>{value}</p>) : missing;
   return <article className="min-w-0 flex-1 overflow-y-auto p-4 md:p-5">
-    <OntologyIconPicker subject={term} className="ontology-detail-topic-icon" />
+    <ImageSquare
+      src={imageValue}
+      fallback={<OntologyTopicIcon subject={term} />}
+      label={term.name}
+      currentIcon={override && isMaterialIconValue(override) ? override : null}
+      disabled={!workspaceId || !icons.canEdit}
+      disabledReason="Your workspace role cannot change this image"
+      onCommit={workspaceId && target ? async (value) => { await icons.save(workspaceId, target, value); } : undefined}
+      onUpload={workspaceId ? (file) => uploadObjectImage(workspaceId, file) : undefined}
+    />
     <h1 className="break-words text-xl font-semibold">{term.name}</h1>
+    <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{term.id}</p>
     <p className="mt-1 text-xs text-muted-foreground">{dictionaryKindLabel(term.type)}</p>
     <dl className="mt-5 divide-y rounded-md border text-sm">
-      <div className="grid gap-2 px-4 py-2.5 sm:grid-cols-[128px_minmax(0,1fr)]"><dt className="text-xs leading-6 text-muted-foreground">URIRef</dt><dd className="break-all font-mono text-xs leading-6">{term.id}</dd></div>
       <div className="grid gap-2 px-4 py-2.5 sm:grid-cols-[128px_minmax(0,1fr)]"><dt className="text-xs leading-6 text-muted-foreground">{parentLabel}</dt><dd className="leading-6">{renderLinks(term.parents, term.type === 'individual' ? 'entity' : term.type)}</dd></div>
       <div className="grid gap-2 px-4 py-2.5 sm:grid-cols-[128px_minmax(0,1fr)]"><dt className="text-xs leading-6 text-muted-foreground">Definition</dt><dd className="leading-6">
         {term.description || missing}

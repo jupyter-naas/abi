@@ -1899,14 +1899,15 @@ class GraphService:
                 )
             )
 
-        # Some triple-store adapters do not register graphs in the Nexus graph.
-        # Include any graph present in the triple store but missing from the Nexus graph.
-        # Schema and Nexus remain catalog/enrichment surfaces, not unknown data packs.
-        for raw_uri in store.list_graphs():
-            graph_uri = str(raw_uri)
-            if graph_uri in seen_uris or raw_uri in _PROTECTED_URIS:
+        # Policy grants (and owned graphs) that are not yet in the Nexus catalog.
+        # Do not call store.list_graphs(): that enumerates every named graph and
+        # stalls the dropdown behind store I/O.
+        extra_uris = self.access_scope.readable if self.access_scope is not None else set()
+        for graph_uri in extra_uris:
+            if graph_uri in seen_uris or URIRef(graph_uri) in _PROTECTED_URIS:
                 continue
-            graph_id = graph_uri.split("/")[-1]
+            graph_id = graph_uri.rstrip("/").split("/")[-1] or graph_uri
+            seen_uris.add(graph_uri)
             role_graphs.setdefault("unknown", []).append(
                 GraphInfoData(
                     id=graph_id,

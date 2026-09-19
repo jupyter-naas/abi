@@ -5,13 +5,15 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import type { DictionaryTerm } from '@/lib/ontology-dictionary-tree';
 import { ontologyConnections, termConnections, isProcessTerm, type TermRef } from '@/lib/ontology-context';
 import { termRoute } from '@/lib/ontology-navigation';
+import { TermDetailNetwork } from '@/components/graph/detail-network';
 import './ontology-context.css';
 
 export function OntologyUsedIn({term, terms, basePath}: {term: DictionaryTerm; terms: DictionaryTerm[]; basePath?: string}) {
   const router = useRouter(); const params = useSearchParams();
   const [expanded, setExpanded] = useState(false);
   const connections = useMemo(() => ontologyConnections(terms), [terms]);
-  const references = termConnections(term, connections).incoming;
+  const related = useMemo(() => termConnections(term, connections), [term, connections]);
+  const references = related.incoming;
   const processes = references.filter(edge => isProcessTerm(edge.from, terms));
   const others = references.filter(edge => !isProcessTerm(edge.from, terms));
   function open(ref: TermRef) {
@@ -20,7 +22,15 @@ export function OntologyUsedIn({term, terms, basePath}: {term: DictionaryTerm; t
     next.set('browser', 'dictionary');
     router.push(`${basePath || ""}?${next}`, {scroll: false});
   }
-  return <section className="ontology-context-used">
+  return <>
+    <section className="ontology-context-network">
+      <h2>Network</h2>
+      <TermDetailNetwork term={term} terms={terms} basePath={basePath} />
+      {!related.incoming.length && !related.outgoing.length && (
+        <p className="ontology-context-note">No network to display.</p>
+      )}
+    </section>
+    <section className="ontology-context-used">
     <h2>Used in <span>{references.length}</span></h2>
     <p className="ontology-context-note">References in ontology definitions.</p>
     {([['Processes', processes], ['Other definitions', others]] as const).map(([label, rows]) => rows.length > 0 && <div key={label} className="ontology-context-usage-group">
@@ -34,5 +44,6 @@ export function OntologyUsedIn({term, terms, basePath}: {term: DictionaryTerm; t
     {!references.length && <p className="ontology-context-note">No incoming references found in the loaded ontology declarations.</p>}
     {(processes.length > 5 || others.length > 5) && <button className="ontology-context-link" type="button" onClick={() => setExpanded(!expanded)}>{expanded ? 'Show fewer' : 'Show all references'}</button>}
     <p className="ontology-context-note">Question mappings and execution evidence are not connected yet.</p>
-  </section>;
+  </section>
+  </>;
 }
