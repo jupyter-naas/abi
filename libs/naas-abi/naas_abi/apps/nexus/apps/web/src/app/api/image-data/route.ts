@@ -4,7 +4,8 @@ import { readLocalImage } from '@/lib/local-image-file';
 export const runtime = 'nodejs';
 
 function toBase64(data: ArrayBuffer | Buffer): string {
-  return Buffer.from(data).toString('base64');
+  const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
+  return Buffer.from(bytes).toString('base64');
 }
 
 function asImageResponse(bytes: Buffer, contentType: string, raw: boolean) {

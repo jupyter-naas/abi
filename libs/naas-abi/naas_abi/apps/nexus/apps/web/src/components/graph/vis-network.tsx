@@ -20,6 +20,11 @@ import {
   wrapInstanceLabel,
 } from '@/lib/graph-network-view';
 
+/** vis-network `shape: 'custom'` option; missing from the published Node types. */
+type NetworkNode = Node & {
+  ctxRenderer?: ReturnType<typeof instanceNodeCtxRenderer>;
+};
+
 const BFO_COLORS: Record<string, { background: string; border: string; highlight: string }> = Object.fromEntries(
   BFO_BUCKET_DEFS.map((d) => [d.type, { background: d.color, border: d.border, highlight: d.color }])
 );
@@ -1095,7 +1100,7 @@ export function VisNetwork({
     };
   }, [getNodeLogoUrl, logoDataByUrl, nodes]);
 
-  const toVisNode = useCallback((node: GraphNode): Node => {
+  const toVisNode = useCallback((node: GraphNode): NetworkNode => {
     const colors = resolveBFOColor(node, nodesByIri) ?? BFO_COLORS['Entity'];
     if (processOverview || systemOverview) {
       const style = containerRef.current ? getComputedStyle(containerRef.current) : null;
