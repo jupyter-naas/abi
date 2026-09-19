@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.71.0 (2026-09-19)
+
+### Features
+
+- **nexus**: Add ontology dictionary, system views, and graph workspace policy
+  ([`62be339`](https://github.com/jupyter-naas/abi/commit/62be33980b4364a58478d12e3b163af3ba190742))
+
+
 ## v2.70.0 (2026-09-17)
 
 ### Bug Fixes
