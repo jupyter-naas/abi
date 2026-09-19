@@ -10,12 +10,16 @@ from __future__ import annotations
 
 from typing import Any
 
+from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
+    GraphServiceUnavailableError,
+)
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import (
     Binding,
     IGraphQueryStore,
     ResultRow,
 )
 from rdflib import URIRef
+from requests.exceptions import Timeout as RequestTimeout
 
 
 class GraphQueryTripleStoreAdapter(IGraphQueryStore):
@@ -27,14 +31,19 @@ class GraphQueryTripleStoreAdapter(IGraphQueryStore):
         # The triple-store adapters yield an iterator of rdflib ResultRow; the variable
         # names live on each row's `.labels` (name → index), not on a Result.vars.
         rows: list[ResultRow] = []
-        for row in self._store.query(sparql):
-            binding: ResultRow = {}
-            for name in getattr(row, "labels", None) or {}:
-                term = row[name]
-                if term is None:  # OPTIONAL miss → omit (sparse row)
-                    continue
-                binding[str(name)] = Binding(value=str(term), is_uri=isinstance(term, URIRef))
-            rows.append(binding)
+        try:
+            for row in self._store.query(sparql):
+                binding: ResultRow = {}
+                for name in getattr(row, "labels", None) or {}:
+                    term = row[name]
+                    if term is None:  # OPTIONAL miss → omit (sparse row)
+                        continue
+                    binding[str(name)] = Binding(value=str(term), is_uri=isinstance(term, URIRef))
+                rows.append(binding)
+        except (RequestTimeout, TimeoutError) as exc:
+            raise GraphServiceUnavailableError(
+                "The graph database took too long to respond. Retry the request."
+            ) from exc
         return rows
 
     def count(self, sparql: str) -> int:

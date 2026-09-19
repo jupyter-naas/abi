@@ -508,7 +508,7 @@ export const useOntologyStore = create<OntologyState>()(
       clearCache: async () => {
         try {
           const baseUrl = getApiUrl();
-          await authFetch(`${baseUrl}/api/ontology/cache/clear`, { method: 'POST' });
+          await authFetch(`${baseUrl}/api/ontology/cache/clear${ontologyApiQuery()}`, { method: 'POST' });
         } catch (err) {
           console.error('Failed to clear ontology cache:', err);
         }

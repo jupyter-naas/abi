@@ -1,5 +1,6 @@
 'use client';
 
+import { useWorkspaceStore } from '@/stores/workspace';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { SparqlStep } from '@/lib/sparql-steps';
@@ -217,7 +218,9 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphState>()(
 
       clearCache: async () => {
         try {
-          await authFetch(`${getApiUrl()}/api/graph/cache/clear`, { method: 'POST' });
+          const workspaceId = useWorkspaceStore.getState().currentWorkspaceId;
+          if (!workspaceId) return;
+          await authFetch(`${getApiUrl()}/api/graph/cache/clear?workspace_id=${encodeURIComponent(workspaceId)}`, { method: 'POST' });
         } catch (err) {
           console.error('Failed to clear graph cache:', err);
         }

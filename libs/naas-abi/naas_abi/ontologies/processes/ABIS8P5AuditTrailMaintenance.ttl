@@ -1,0 +1,170 @@
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:S8P5Ontology a owl:Ontology ;
+    rdfs:label "S8-P5 · Audit trail maintenance"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceSHA256 "0d2c2c1e42dc3dfcfb1a8661ddba31057e88de911af1bb8f21868ba3096c0763"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    dct:title "S8-P5 · Audit trail maintenance"@en ;
+    rdfs:comment "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    owl:imports abi:ABIProcessLedgerOntology .
+
+abi:S8P5Condition1 a owl:Class ;
+    rdfs:label "Audit trail maintenance timing condition"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Continuous"@en ;
+    rdfs:comment "Ledger trigger/cadence/target: Continuous. No occurrence or achieved timing is asserted."@en ;
+    rdfs:subClassOf abi:ExecutionCondition ;
+    skos:definition "Ledger trigger/cadence/target: Continuous. No occurrence or achieved timing is asserted."@en .
+
+abi:S8P5ExecutionRole a owl:Class ;
+    rdfs:label "Audit trail maintenance execution role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "A proposed role realised in Audit trail maintenance and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom [ a owl:Class ;
+                    owl:unionOf ( abi:AINHost abi:AuditorParticipant abi:FinanceOfficerParticipant ) ] ],
+        abi:ExecutionRole ;
+    skos:definition "A proposed role realised in Audit trail maintenance and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en .
+
+abi:S8P5Interval a owl:Class ;
+    rdfs:label "Audit trail maintenance execution interval"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The temporal region occupied by an execution of Audit trail maintenance; actual dates are unspecified."@en ;
+    rdfs:subClassOf abi:ExecutionInterval ;
+    skos:definition "The temporal region occupied by an execution of Audit trail maintenance; actual dates are unspecified."@en .
+
+abi:S8P5Objective1 a owl:Class ;
+    rdfs:label "Audit trail maintenance objective"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Defensible evidence for review"@en ;
+    rdfs:comment "Intended outcome: Defensible evidence for review. This is an objective specification, not a role or a guaranteed result."@en ;
+    rdfs:subClassOf abi:ObjectiveSpecification ;
+    skos:definition "Intended outcome: Defensible evidence for review. This is an objective specification, not a role or a guaranteed result."@en .
+
+abi:S8P5Specification a owl:Class ;
+    rdfs:label "Audit trail maintenance specification"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The simulated ledger specification for S8-P5. It describes a possible process, not an executed run."@en ;
+    rdfs:subClassOf abi:ProcessSpecification ;
+    skos:definition "The simulated ledger specification for S8-P5. It describes a possible process, not an executed run."@en .
+
+abi:S8P5Step1 a owl:Class ;
+    rdfs:label "Audit trail maintenance · Log actions"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 1 ;
+    rdfs:comment "Suggested step 1 of Audit trail maintenance: Log actions. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S8P5 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 1 of Audit trail maintenance: Log actions. Its ordering is a specification, not observed timing."@en .
+
+abi:S8P5Step2 a owl:Class ;
+    rdfs:label "Audit trail maintenance · Retain"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 2 ;
+    rdfs:comment "Suggested step 2 of Audit trail maintenance: Retain. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S8P5 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 2 of Audit trail maintenance: Retain. Its ordering is a specification, not observed timing."@en .
+
+abi:S8P5Step3 a owl:Class ;
+    rdfs:label "Audit trail maintenance · Produce on demand"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 3 ;
+    rdfs:comment "Suggested step 3 of Audit trail maintenance: Produce on demand. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S8P5 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 3 of Audit trail maintenance: Produce on demand. Its ordering is a specification, not observed timing."@en .
+
+abi:S8P5 a owl:Class ;
+    rdfs:label "Audit trail maintenance"@en ;
+    abi:ledgerCode "S8-P5"@en ;
+    abi:ledgerHOWITIS "Trail completeness"@en ;
+    abi:ledgerHOWWEKNOW "Audit trail"@en,
+        "Decision log"@en ;
+    abi:ledgerWHEN "Continuous"@en ;
+    abi:ledgerWHERE "Air-gapped zone"@en,
+        "On-premises data centre"@en ;
+    abi:ledgerWHO "AIN"@en,
+        "Auditor"@en,
+        "Finance officer"@en ;
+    abi:ledgerWHY "Defensible evidence for review"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:qualityMappingStatus "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed ABI audit trail maintenance process. Suggested steps: Log actions → Retain → Produce on demand. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en,
+        "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000055 ;
+            owl:someValuesFrom abi:S8P5ExecutionRole ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:AINHost ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S8P5Step2 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000059 ;
+            owl:someValuesFrom abi:S8P5Specification ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000199 ;
+            owl:someValuesFrom abi:S8P5Interval ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:pursuesObjective ;
+            owl:someValuesFrom abi:S8P5Objective1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S8P5Step3 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:AuditorParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasExecutionCondition ;
+            owl:someValuesFrom abi:S8P5Condition1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:AuditTrailRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S8P5Step1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:TrailCompletenessIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:OnPremisesDataCentreSite ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:DecisionLogRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:usesInformation ;
+            owl:someValuesFrom abi:AINSoftware ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:FinanceOfficerParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:AirGappedZoneSite ],
+        abi:LedgerProcess,
+        abi:S8Process,
+        bfo:BFO_0000015 ;
+    skos:altLabel "S8-P5"@en ;
+    skos:definition "A proposed ABI audit trail maintenance process. Suggested steps: Log actions → Retain → Produce on demand. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en .
+

@@ -1,0 +1,166 @@
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:S4P4Ontology a owl:Ontology ;
+    rdfs:label "S4-P4 · Asset registry"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceSHA256 "0d2c2c1e42dc3dfcfb1a8661ddba31057e88de911af1bb8f21868ba3096c0763"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    dct:title "S4-P4 · Asset registry"@en ;
+    rdfs:comment "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    owl:imports abi:ABIProcessLedgerOntology .
+
+abi:S4P4Condition1 a owl:Class ;
+    rdfs:label "Asset registry timing condition"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "On acquisition; on change"@en ;
+    rdfs:comment "Ledger trigger/cadence/target: On acquisition; on change. No occurrence or achieved timing is asserted."@en ;
+    rdfs:subClassOf abi:ExecutionCondition ;
+    skos:definition "Ledger trigger/cadence/target: On acquisition; on change. No occurrence or achieved timing is asserted."@en .
+
+abi:S4P4ExecutionRole a owl:Class ;
+    rdfs:label "Asset registry execution role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "A proposed role realised in Asset registry and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom [ a owl:Class ;
+                    owl:unionOf ( abi:AssetOwnerParticipant abi:OracleERPHost abi:S4ControllerParticipant ) ] ],
+        abi:ExecutionRole ;
+    skos:definition "A proposed role realised in Asset registry and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en .
+
+abi:S4P4Interval a owl:Class ;
+    rdfs:label "Asset registry execution interval"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The temporal region occupied by an execution of Asset registry; actual dates are unspecified."@en ;
+    rdfs:subClassOf abi:ExecutionInterval ;
+    skos:definition "The temporal region occupied by an execution of Asset registry; actual dates are unspecified."@en .
+
+abi:S4P4Objective1 a owl:Class ;
+    rdfs:label "Asset registry objective"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Full accountability of assets"@en ;
+    rdfs:comment "Intended outcome: Full accountability of assets. This is an objective specification, not a role or a guaranteed result."@en ;
+    rdfs:subClassOf abi:ObjectiveSpecification ;
+    skos:definition "Intended outcome: Full accountability of assets. This is an objective specification, not a role or a guaranteed result."@en .
+
+abi:S4P4Specification a owl:Class ;
+    rdfs:label "Asset registry specification"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The simulated ledger specification for S4-P4. It describes a possible process, not an executed run."@en ;
+    rdfs:subClassOf abi:ProcessSpecification ;
+    skos:definition "The simulated ledger specification for S4-P4. It describes a possible process, not an executed run."@en .
+
+abi:S4P4Step1 a owl:Class ;
+    rdfs:label "Asset registry · Register asset"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 1 ;
+    rdfs:comment "Suggested step 1 of Asset registry: Register asset. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S4P4 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 1 of Asset registry: Register asset. Its ordering is a specification, not observed timing."@en .
+
+abi:S4P4Step2 a owl:Class ;
+    rdfs:label "Asset registry · Tag"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 2 ;
+    rdfs:comment "Suggested step 2 of Asset registry: Tag. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S4P4 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 2 of Asset registry: Tag. Its ordering is a specification, not observed timing."@en .
+
+abi:S4P4Step3 a owl:Class ;
+    rdfs:label "Asset registry · Track lifecycle"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 3 ;
+    rdfs:comment "Suggested step 3 of Asset registry: Track lifecycle. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S4P4 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 3 of Asset registry: Track lifecycle. Its ordering is a specification, not observed timing."@en .
+
+abi:S4P4 a owl:Class ;
+    rdfs:label "Asset registry"@en ;
+    abi:ledgerCode "S4-P4"@en ;
+    abi:ledgerHOWITIS "Registry completeness"@en ;
+    abi:ledgerHOWWEKNOW "Asset registry"@en,
+        "Audit trail"@en ;
+    abi:ledgerWHEN "On acquisition; on change"@en ;
+    abi:ledgerWHERE "On-premises data centre"@en ;
+    abi:ledgerWHO "Asset owner"@en,
+        "Oracle ERP"@en,
+        "S4 controller"@en ;
+    abi:ledgerWHY "Full accountability of assets"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:qualityMappingStatus "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed ABI asset registry process. Suggested steps: Register asset → Tag → Track lifecycle. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en,
+        "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:OnPremisesDataCentreSite ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S4P4Step3 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S4P4Step1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:pursuesObjective ;
+            owl:someValuesFrom abi:S4P4Objective1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasExecutionCondition ;
+            owl:someValuesFrom abi:S4P4Condition1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000199 ;
+            owl:someValuesFrom abi:S4P4Interval ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:AssetOwnerParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:RegistryCompletenessIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:AssetRegistryRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000055 ;
+            owl:someValuesFrom abi:S4P4ExecutionRole ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:OracleERPHost ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:AuditTrailRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000059 ;
+            owl:someValuesFrom abi:S4P4Specification ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:usesInformation ;
+            owl:someValuesFrom abi:OracleERPSoftware ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S4P4Step2 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:S4ControllerParticipant ],
+        abi:LedgerProcess,
+        abi:S4Process,
+        bfo:BFO_0000015 ;
+    skos:altLabel "S4-P4"@en ;
+    skos:definition "A proposed ABI asset registry process. Suggested steps: Register asset → Tag → Track lifecycle. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en .
+

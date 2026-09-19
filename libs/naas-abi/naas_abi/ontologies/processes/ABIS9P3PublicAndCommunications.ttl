@@ -1,0 +1,159 @@
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:S9P3Ontology a owl:Ontology ;
+    rdfs:label "S9-P3 · Public and communications"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceSHA256 "0d2c2c1e42dc3dfcfb1a8661ddba31057e88de911af1bb8f21868ba3096c0763"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    dct:title "S9-P3 · Public and communications"@en ;
+    rdfs:comment "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    owl:imports abi:ABIProcessLedgerOntology .
+
+abi:S9P3Condition1 a owl:Class ;
+    rdfs:label "Public and communications timing condition"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "On event"@en ;
+    rdfs:comment "Ledger trigger/cadence/target: On event. No occurrence or achieved timing is asserted."@en ;
+    rdfs:subClassOf abi:ExecutionCondition ;
+    skos:definition "Ledger trigger/cadence/target: On event. No occurrence or achieved timing is asserted."@en .
+
+abi:S9P3ExecutionRole a owl:Class ;
+    rdfs:label "Public and communications execution role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "A proposed role realised in Public and communications and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom [ a owl:Class ;
+                    owl:unionOf ( abi:ApproverParticipant abi:CommsOfficerParticipant ) ] ],
+        abi:ExecutionRole ;
+    skos:definition "A proposed role realised in Public and communications and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en .
+
+abi:S9P3Interval a owl:Class ;
+    rdfs:label "Public and communications execution interval"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The temporal region occupied by an execution of Public and communications; actual dates are unspecified."@en ;
+    rdfs:subClassOf abi:ExecutionInterval ;
+    skos:definition "The temporal region occupied by an execution of Public and communications; actual dates are unspecified."@en .
+
+abi:S9P3Objective1 a owl:Class ;
+    rdfs:label "Public and communications objective"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Consistent external messaging"@en ;
+    rdfs:comment "Intended outcome: Consistent external messaging. This is an objective specification, not a role or a guaranteed result."@en ;
+    rdfs:subClassOf abi:ObjectiveSpecification ;
+    skos:definition "Intended outcome: Consistent external messaging. This is an objective specification, not a role or a guaranteed result."@en .
+
+abi:S9P3Specification a owl:Class ;
+    rdfs:label "Public and communications specification"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The simulated ledger specification for S9-P3. It describes a possible process, not an executed run."@en ;
+    rdfs:subClassOf abi:ProcessSpecification ;
+    skos:definition "The simulated ledger specification for S9-P3. It describes a possible process, not an executed run."@en .
+
+abi:S9P3Step1 a owl:Class ;
+    rdfs:label "Public and communications · Prepare"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 1 ;
+    rdfs:comment "Suggested step 1 of Public and communications: Prepare. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S9P3 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 1 of Public and communications: Prepare. Its ordering is a specification, not observed timing."@en .
+
+abi:S9P3Step2 a owl:Class ;
+    rdfs:label "Public and communications · Clear"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 2 ;
+    rdfs:comment "Suggested step 2 of Public and communications: Clear. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S9P3 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 2 of Public and communications: Clear. Its ordering is a specification, not observed timing."@en .
+
+abi:S9P3Step3 a owl:Class ;
+    rdfs:label "Public and communications · Publish"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 3 ;
+    rdfs:comment "Suggested step 3 of Public and communications: Publish. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S9P3 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 3 of Public and communications: Publish. Its ordering is a specification, not observed timing."@en .
+
+abi:S9P3 a owl:Class ;
+    rdfs:label "Public and communications"@en ;
+    abi:ledgerCode "S9-P3"@en ;
+    abi:ledgerHOWITIS "Approval status"@en ;
+    abi:ledgerHOWWEKNOW "Approval log"@en,
+        "Comms record"@en ;
+    abi:ledgerWHEN "On event"@en ;
+    abi:ledgerWHERE "Operations centre"@en ;
+    abi:ledgerWHO "Approver"@en,
+        "Comms officer"@en ;
+    abi:ledgerWHY "Consistent external messaging"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:qualityMappingStatus "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed ABI public and communications process. Suggested steps: Prepare → Clear → Publish. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en,
+        "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:ApproverParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:ApprovalLogRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S9P3Step1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000199 ;
+            owl:someValuesFrom abi:S9P3Interval ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000059 ;
+            owl:someValuesFrom abi:S9P3Specification ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:CommsOfficerParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:pursuesObjective ;
+            owl:someValuesFrom abi:S9P3Objective1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S9P3Step2 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S9P3Step3 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000055 ;
+            owl:someValuesFrom abi:S9P3ExecutionRole ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:ApprovalStatusIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:CommsRecordRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:OperationsCentreSite ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasExecutionCondition ;
+            owl:someValuesFrom abi:S9P3Condition1 ],
+        abi:LedgerProcess,
+        abi:S9Process,
+        bfo:BFO_0000015 ;
+    skos:altLabel "S9-P3"@en ;
+    skos:definition "A proposed ABI public and communications process. Suggested steps: Prepare → Clear → Publish. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en .
+

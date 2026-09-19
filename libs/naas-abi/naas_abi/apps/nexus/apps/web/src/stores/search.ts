@@ -1,5 +1,6 @@
 'use client';
 
+import { useWorkspaceStore } from '@/stores/workspace';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { authFetch } from './auth';
@@ -311,6 +312,7 @@ async function searchSource(
         body: JSON.stringify({
           query,
           source: source.id,
+          workspace_id: useWorkspaceStore.getState().currentWorkspaceId,
         }),
       });
       if (!privateResponse.ok) {
