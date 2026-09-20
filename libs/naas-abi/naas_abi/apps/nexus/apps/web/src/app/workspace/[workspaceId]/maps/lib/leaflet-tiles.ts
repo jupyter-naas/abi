@@ -1,9 +1,11 @@
-export const MAPS_TILE_LIGHT =
-  'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-export const MAPS_TILE_DARK =
-  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+// Standard OpenStreetMap tiles support interactive viewing without an API key.
+// Use their normal browser caching and keep attribution visible.
+export const MAPS_TILE_LIGHT = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+// Dark workspaces recolor only the maps-basemap tile layer in Maps CSS.
+// Theme changes reuse these key-free tiles and preserve data overlay colors.
+export const MAPS_TILE_DARK = MAPS_TILE_LIGHT;
 export const MAPS_TILE_ATTR =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 export function isMapsDarkMode(): boolean {
   if (typeof document === 'undefined') return false;
