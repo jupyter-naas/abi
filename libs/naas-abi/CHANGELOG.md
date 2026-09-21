@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.72.3 (2026-09-21)
+
+### Bug Fixes
+
+- **nexus-web**: Pack dock icons instead of compressing them
+  ([`d7c5782`](https://github.com/jupyter-naas/abi/commit/d7c5782737cfd04e9d5bdea35f030bfe0c8fbd73))
+
+
 ## v2.72.2 (2026-09-21)
 
 ### Bug Fixes
