@@ -13,7 +13,6 @@ from naas_abi_core import logger
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
-
 from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import (
     DEFAULT_APP_PREFIX,
 )

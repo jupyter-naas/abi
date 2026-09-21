@@ -6,13 +6,11 @@ from datetime import UTC, datetime
 
 import pytest
 from naas_abi_core.services.dataset.DatasetFactory import DatasetFactory
-
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import api as ds_api
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
     AUTHOR_STATS_V1,
     AUTHORS_V1,
     POSTS_V1,
-    X_DATASET_NAMESPACE,
     ensure_x_datasets,
     upsert_table,
 )

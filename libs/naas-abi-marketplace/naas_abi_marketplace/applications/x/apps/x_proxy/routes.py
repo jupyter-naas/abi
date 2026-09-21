@@ -51,7 +51,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 if TYPE_CHECKING:
     from naas_abi_core.services.dataset.DatasetPort import IDatasetPort
-
     from naas_abi_marketplace.applications.x import ABIModule
     from naas_abi_marketplace.applications.x.apps.x_proxy.cache.reader import (
         CacheReader,
@@ -256,7 +255,9 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
     def _dataset_graph_totals(self) -> bytes:
         from datetime import UTC, datetime
 
-        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import api as ds_api
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import (
+            api as ds_api,
+        )
 
         totals = ds_api.graph_totals(self._dataset)
         doc = {
@@ -266,7 +267,9 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
         return json.dumps(doc, separators=(",", ":")).encode()
 
     def _dataset_search_tweets(self, query: str, page: int, per_page: int) -> bytes:
-        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import api as ds_api
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import (
+            api as ds_api,
+        )
 
         total, posts = ds_api.search_tweets(
             self._dataset,
@@ -286,7 +289,9 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
         ).encode()
 
     def _dataset_users_search(self, query: str, page: int, per_page: int) -> bytes:
-        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import api as ds_api
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import (
+            api as ds_api,
+        )
 
         total, rows = ds_api.search_users(
             self._dataset,
@@ -337,7 +342,9 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
     def _dataset_user_posts(
         self, username: str, page: int, per_page: int, kind: str | None
     ) -> bytes:
-        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import api as ds_api
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import (
+            api as ds_api,
+        )
 
         profile, total, posts = ds_api.user_posts(
             self._dataset,
@@ -361,7 +368,9 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
         ).encode()
 
     def _dataset_post(self, tweet_id: str) -> bytes:
-        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import api as ds_api
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import (
+            api as ds_api,
+        )
 
         post = ds_api.post_by_id(self._dataset, tweet_id)
         if post is None:

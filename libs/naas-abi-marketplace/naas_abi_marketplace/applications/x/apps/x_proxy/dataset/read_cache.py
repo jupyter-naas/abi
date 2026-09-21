@@ -12,7 +12,6 @@ from collections.abc import Callable
 from typing import Any, Literal
 
 from naas_abi_core import logger
-
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
     PROJECTION_COMMITS_V1,
     X_DATASET_NAMESPACE,
@@ -31,7 +30,7 @@ def _cache_key(scope: SearchScope, query: str, page: int, per_page: int) -> tupl
 
 def _etag(generation: str, key: tuple[str, ...]) -> str:
     digest = hashlib.sha256(
-        f"{generation}\0{'\0'.join(key)}".encode("utf-8")
+        f"{generation}\0{'\0'.join(key)}".encode()
     ).hexdigest()[:32]
     return f'W/"{generation}-{digest}"'
 

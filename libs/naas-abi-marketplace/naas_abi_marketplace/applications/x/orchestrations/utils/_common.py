@@ -581,11 +581,10 @@ def publish_x_app(
         logger.info(f"publish_x_app: skipped ({reason})")
         return {"skipped": True, "reason": reason}
 
-    from naas_abi_marketplace.applications.x.apps.x_proxy.hub import XAppHubBuilder
-
     from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
         x_dataset_read_enabled,
     )
+    from naas_abi_marketplace.applications.x.apps.x_proxy.hub import XAppHubBuilder
 
     dataset_read = x_dataset_read_enabled(module)
     projection = None

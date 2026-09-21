@@ -6,7 +6,6 @@ import threading
 from typing import Any
 
 from naas_abi_core import logger
-
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
     MATCHED_TWEET_IDS_V1,
     POSTS_V1,

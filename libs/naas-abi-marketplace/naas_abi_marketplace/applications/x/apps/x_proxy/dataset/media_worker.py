@@ -15,7 +15,6 @@ from naas_abi_core import logger
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
-
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
     MEDIA_OBJECT_PREFIX,
     MEDIA_V1,

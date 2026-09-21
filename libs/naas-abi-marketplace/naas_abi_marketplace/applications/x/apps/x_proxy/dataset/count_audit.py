@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from naas_abi_core.engine.Engine import Engine
-
 from naas_abi_marketplace.applications.x.apps.x_proxy.cache.projection import (
     _read_processed_envelopes,
 )
@@ -16,11 +15,12 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.cache.schema import (
 from naas_abi_marketplace.applications.x.apps.x_proxy.cache.storage import walk
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import api as ds_api
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
-    AUTHORS_V1,
     AUTHOR_STATS_V1,
+    AUTHORS_V1,
     POSTS_V1,
     X_DATASET_NAMESPACE,
 )
+
 
 def main() -> None:
     engine = Engine(
