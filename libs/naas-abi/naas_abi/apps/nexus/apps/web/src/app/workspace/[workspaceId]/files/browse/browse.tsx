@@ -141,7 +141,7 @@ export default function FilesPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const workspaceId = params.workspaceId as string;
-  const spacing = ontologySpacing(searchParams?.toString() || '');
+  const spacing = ontologySpacing(searchParams?.toString() || '', 'comfortable');
   const setSpacing = useCallback(
     (value: OntologySpacingValue) => {
       const next = ontologySpacingRoute(searchParams?.toString() || '', value);
