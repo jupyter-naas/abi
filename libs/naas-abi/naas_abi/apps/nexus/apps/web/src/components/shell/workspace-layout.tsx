@@ -87,6 +87,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   const mobilePendingChatSlug = useWorkspaceStore((state) => state.mobilePendingChatSlug);
   const setMobilePendingChatSlug = useWorkspaceStore((state) => state.setMobilePendingChatSlug);
   const contextPanelOpen = useWorkspaceStore((state) => state.contextPanelOpen);
+  const activePanelSection = useWorkspaceStore((state) => state.activePanelSection);
   const { setTheme } = useTheme();
   const [orgBorderRadius, setOrgBorderRadius] = useState('0');
   const [moreOpen, setMoreOpen] = useState(false);
@@ -383,6 +384,10 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
       style={themeStyles}
       data-org-branded="true"
     >
+      {/* Workspaces list: left of the dock when the mark is open. Other
+          feature columns stay to the right of the dock, below TopNav. */}
+      {activePanelSection === 'workspaces' ? <SectionPanel /> : null}
+
       {/* Dock: workspace mark, nav, profile — a full top-to-bottom column of
           its own. Width matches the feature column by default and is resizable. */}
       <Sidebar />
@@ -395,8 +400,8 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
         <TopNav />
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
-          {/* Feature column: Chat, Files, Workspaces, ... */}
-          <SectionPanel />
+          {/* Feature column: Chat, Files, Events, ... */}
+          {activePanelSection === 'workspaces' ? null : <SectionPanel />}
 
           {/* Main content + the AI chat pane, opening below TopNav instead of
               beside a per-page-scoped header. */}

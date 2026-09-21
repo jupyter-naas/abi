@@ -1,10 +1,16 @@
-"""Unit tests for speech text preparation and language routing (no network)."""
+"""Unit tests for speech text preparation, language routing, and auth (no network)."""
 
+from collections.abc import AsyncIterator
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.speech import (
     MAX_INPUT_CHARS,
     detect_speech_language,
     prepare_speech_text,
+    router,
 )
+from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 
 
 def test_prepare_speech_text_strips_markdown() -> None:
@@ -32,3 +38,16 @@ def test_detect_speech_language_french() -> None:
 def test_detect_speech_language_english() -> None:
     text = "Hello Jeremy. I hear you perfectly. I am doing very well, thank you."
     assert detect_speech_language(text) == "en"
+
+
+async def _no_db() -> AsyncIterator[None]:
+    yield None
+
+
+def test_unauthenticated_post_speech_returns_401() -> None:
+    app = FastAPI()
+    app.include_router(router, prefix="/api/speech")
+    app.dependency_overrides[get_db] = _no_db
+    response = TestClient(app).post("/api/speech", json={})
+    assert response.status_code == 401
+    assert "Authorization" not in response.request.headers

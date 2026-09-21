@@ -7,8 +7,7 @@ import { WorkspaceMark, WorkspaceMarkFrame } from './workspace-mark';
 
 /**
  * Workspace mark at the top of the dock. Clicking it opens the Workspaces
- * list in the left feature column (SectionPanel), same chrome as Chat,
- * Events, and Files.
+ * list in a column to the left of the dock.
  */
 export function WorkspaceSwitcher() {
   const workspaces = useWorkspaceStore((s) => s.workspaces);

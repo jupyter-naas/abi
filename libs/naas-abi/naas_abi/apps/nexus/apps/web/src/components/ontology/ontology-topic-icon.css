@@ -1,0 +1,2 @@
+.ontology-topic-icon { display:block; flex-shrink:0; width:var(--ontology-topic-size,32px); height:var(--ontology-topic-size,32px); }
+.ontology-sidebar-topic-icon { --ontology-topic-size:16px; margin-right:6px; }

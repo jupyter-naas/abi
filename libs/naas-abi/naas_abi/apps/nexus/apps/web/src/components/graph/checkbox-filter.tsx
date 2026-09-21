@@ -157,7 +157,7 @@ export function CheckboxFilter({
             </div>
           )}
           <div className="max-h-56 overflow-y-auto py-1">
-            {loading ? (
+            {loading && options.length === 0 ? (
               <div className="flex items-center justify-center gap-2 px-3 py-4 text-xs text-muted-foreground">
                 <Loader2 size={12} className="animate-spin" />
                 Loading…

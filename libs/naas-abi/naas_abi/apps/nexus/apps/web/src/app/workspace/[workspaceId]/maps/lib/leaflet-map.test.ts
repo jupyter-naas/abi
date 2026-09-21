@@ -1,9 +1,42 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   canInvalidateMapsLeaflet,
+  captureMapsCamera,
+  mapsPinPopupHtml,
   observeMapsLeafletSize,
+  restoreMapsCamera,
   safeInvalidateMapsLeafletSize,
 } from './leaflet-map';
+
+describe('maps camera restore', () => {
+  it('flies back to the saved center and zoom', () => {
+    const flyTo = vi.fn();
+    const map = {
+      getCenter: () => ({ lat: 20, lng: 0 }),
+      getZoom: () => 3,
+      flyTo,
+    };
+    const camera = captureMapsCamera(map as never);
+    expect(camera).toEqual({ lat: 20, lng: 0, zoom: 3 });
+    restoreMapsCamera(map as never, { lat: 20, lng: 0, zoom: 3 });
+    expect(flyTo).toHaveBeenCalledWith([20, 0], 3, { duration: 0.55 });
+  });
+});
+
+describe('mapsPinPopupHtml', () => {
+  it('embeds a preview image that opens Street View', () => {
+    const html = mapsPinPopupHtml({
+      id: 'dc',
+      lat: 38.9031704,
+      lng: -77.0598347,
+      label: 'Washington, DC',
+    });
+    expect(html).toContain('/api/maps/streetview?lat=38.9031704');
+    expect(html).toContain('map_action=pano');
+    expect(html).toContain('<img ');
+    expect(html).not.toContain('Street View at this coordinate');
+  });
+});
 
 describe('observeMapsLeafletSize', () => {
   const observers: ResizeObserverCallback[] = [];

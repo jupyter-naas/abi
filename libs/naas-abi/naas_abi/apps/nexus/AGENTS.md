@@ -357,7 +357,7 @@ The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom
 
 | Bucket | Dataset | Route | Role |
 |---|---|---|---|
-| Public | OpenStreetMap | `/maps/openstreetmap` | Free OSM/CARTO basemap |
+| Public | OpenStreetMap | `/maps/openstreetmap` | Standard OpenStreetMap basemap |
 | Public | Earthquakes | `/maps/earthquakes` | USGS M≥2.5 past-day GeoJSON |
 | Public | Wildfires | `/maps/wildfires` | EONET named fires (7d); optional FIRMS VIIRS WMS when `FIRMS_MAP_KEY` set |
 | Public | Temperature | `/maps/temperature` | Open-Meteo current 2m air temp city samples |
@@ -368,11 +368,11 @@ The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom
 | Public | NWS Alerts | `/maps/nws-alerts` | US NWS active alerts via `/api/maps/nws` (User-Agent) |
 | Public | Tropical Storms | `/maps/tropical-storms` | NHC CurrentStorms via `/api/maps/nhc` |
 | Public | Volcanoes | `/maps/volcanoes` | NASA EONET volcano category (90d) |
-| Public | Flights | `/maps/flights` | airplanes.live sample tiles via `/api/maps/flights` |
+| Public | Flights | `/maps/flights` | Viewport adsb.lol (zoom 4+); global airplanes.live sample when zoomed out (`/api/maps/flights`) |
 | Public | Conflict Sites | `/maps/conflict` | Curated static OSINT pins in `maps/lib/conflict-sites.ts` |
 | Public | Gulf Strikes | `/maps/gulf-strikes` | Live Gulf / Iran / Israel strike RSS geopins via `/api/maps/gulf-strikes` |
 | Public | News | `/maps/news` | RSS proxy → light region geocode pins |
-| Public | AIS Vessels | `/maps/ais` | Reserved; honest empty state until a free/licensed feed |
+| Public | AIS Vessels | `/maps/ais` | AISStream snapshot when `AISSTREAM_API_KEY` is set on nexus-web; honest empty state otherwise |
 | Public | ISS | `/maps/iss` | open-notify ISS position (bonus thin orbit pin) |
 | Private | **Here** (presence) | `/maps/presence` | User map: laptop / this device, optional iPhone pin, GCP `abi-naas-app` |
 | Custom | *(empty upstream)* | `/maps/{id}` | Registered per deployment via `NEXT_PUBLIC_MAPS_CUSTOM_DATASETS`; do not ship product-specific datasets here |
@@ -384,9 +384,19 @@ The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom
    "icon": "MapPin", "order": 0, "endpoint": "/api/acme/sites" }]
 ```
 
-Every registered layer renders through `MapsCustomFeed` and fetches through the authed proxy at `/api/maps/custom/[datasetId]`, which requires a Bearer token plus `workspace_id` and is never cached. `endpoint` must be a **path on the Nexus API**: the proxy forwards the caller's token, so absolute and protocol-relative URLs are rejected at parse time, as are ids that are not route-safe and ids that shadow a built-in dataset.
+Every environment-registered layer renders through `MapsCustomFeed` and fetches through the authed proxy at `/api/maps/custom/[datasetId]`, which requires a Bearer token plus `workspace_id` and is never cached. `endpoint` must be a **path on the Nexus API**: the proxy forwards the caller's token, so absolute and protocol-relative URLs are rejected at parse time, as are ids that are not route-safe and ids that shadow a built-in dataset.
 
-Shared Leaflet bootstrap: `maps/lib/leaflet-map.ts` + `maps-feed-canvas.tsx`. CORS / User-Agent proxies live only under `/api/maps/*` (Maps-owned). FIRMS VIIRS WMS is proxied at `/api/maps/firms` only when `FIRMS_MAP_KEY` (or `NEXT_PUBLIC_FIRMS_MAP_KEY`) is set; without a key the Wildfires canvas is EONET-only (never ship a keyless/placeholder FIRMS WMS URL). OpenWeather temp tiles are not used (keys required).
+**Runtime graph layers.** Modules may instead call `register_map_layer(app, GraphMapLayer(...))` from their FastAPI hook. `GET /api/maps/layers?workspace_id=...` discovers only layers whose declared graph is readable. `/api/maps/layers/{id}` checks authentication, workspace membership and graph grants, then supplies a scoped store to the module projection. The browser loads these Custom layers through `MapsGraphFeed` without deployment-specific frontend configuration. Optional pin metadata (`entityUri`, `graphUri`, `country`, `precision`, `observedAt`, `sources`, `relationships`, `address`, `photoUrl`, `streetViewUrl`, `imageSearchUrl`) enables search, country filtering, the KG inspector, cited photos and constructed Street View / image-search links. The pin inspector is a place card: photo strip, title, action chips, then address. Cited `foaf:depiction` HTTPS URLs are included when present. `/api/maps/place` returns Google Place Photos and Details when `GOOGLE_PLACES_API_KEY` or `GOOGLE_MAPS_API_KEY` is set on nexus-web. Without a key, the first photo is Street View Static via `/api/maps/streetview` (OSM preview if that API is also keyless). Do not scrape Google Images or ship keys as `NEXT_PUBLIC_*` or `VITE_*`. Street View and Directions use lat/lng via the Google Maps URLs API; do not hardcode Place FIDs. Never substitute a local ledger when the live graph is empty. See `services/maps/AGENTS.md` and ADR `20260921_module_graph_map_layers.md`.
+
+A graph feed can supply optional `coverage: {pins: [...]}` alongside address `pins`. Coverage pins carry the same evidence metadata plus `memberIds` referencing address IDs in the same feed. This enables an Addresses / City coverage switch on the same Leaflet map. Natural Earth provides geographic boundaries only; city counts, country presence and drill-down membership come from the authorized module projection. Country fills support mouse and keyboard selection. Boundary-fetch failures leave city markers usable. No product-specific country lists or graph queries belong in ABI.
+
+Graph-layer evidence panels start closed, open from the Locations toolbar button or a marker, and float over the canvas at a compact width. Do not reserve a permanent inspector column. The mobile panel occupies at most 45% of the map height and keeps attribution visible.
+
+Basemap tiles use `https://tile.openstreetmap.org/{z}/{x}/{y}.png` directly in both themes, with visible OpenStreetMap attribution and normal browser caching/referrer behavior. No API key or tile proxy is required. Standard tile layers carry `maps-basemap`; dark-mode CSS recolors only their tile images and updates map chrome immediately when the workspace theme changes. Never apply the filter to the entire map or to thematic/WMS overlays, markers, or attribution. Do not restore unauthenticated CARTO raster URLs: they return an API-key watermark. Follow [OSM tile policy](https://operations.osmfoundation.org/policies/tiles/); do not prefetch or bulk-download tiles.
+
+Shared Leaflet bootstrap: `maps/lib/leaflet-map.ts` + `maps-feed-canvas.tsx`. CORS / User-Agent proxies live only under `/api/maps/*` (Maps-owned). FIRMS VIIRS WMS is proxied at `/api/maps/firms` only when `FIRMS_MAP_KEY` (or `NEXT_PUBLIC_FIRMS_MAP_KEY`) is set; without a key the Wildfires canvas is EONET-only (never ship a keyless/placeholder FIRMS WMS URL). OpenWeather temp tiles are not used (keys required). AIS is a process-local AISStream WebSocket on the Node Maps runtime (`next start` / Docker nexus-web); Cloudflare Pages isolates cannot hold the stream and must report that. Live flights and AIS pass map bounds on pan/zoom. Toolbar meta shows source, coverage, and observation age. `fetchPins` may return either a pin array or a `MapsFeedResult`.
+
+Map initialization must receive the effect's abort signal and check it after lazy imports, before constructing Leaflet. Feed refreshes share the same setup promise; teardown owns only that effect's map and markers. Keep Strict Mode enabled. `maps/components/maps-feed-canvas.test.ts` mounts the real component and Leaflet in jsdom to cover remounts, marker selection, country filtering and stale requests after dataset changes. Run `pnpm test maps-feed-canvas.test.ts leaflet-map.test.ts maps-feed.test.ts maps-view.test.ts maps-pin-media.test.ts datasets.test.ts src/app/api/maps/ais/store.test.ts src/app/api/maps/flights/route.test.ts src/app/api/maps/streetview/route.test.ts`, then `pnpm typecheck`. Vitest and jsdom are locked local development dependencies.
 
 ```
 src/app/workspace/[workspaceId]/maps/

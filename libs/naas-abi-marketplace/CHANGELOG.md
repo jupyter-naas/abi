@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.49.1 (2026-09-18)
+
+### Bug Fixes
+
+- **x_proxy**: Update script paths in build.sh
+  ([`8b320e8`](https://github.com/jupyter-naas/abi/commit/8b320e8145003bf230eed2ecd47e5167c58046ef))
+
+
 ## v3.49.0 (2026-09-17)
 
 ### Features
