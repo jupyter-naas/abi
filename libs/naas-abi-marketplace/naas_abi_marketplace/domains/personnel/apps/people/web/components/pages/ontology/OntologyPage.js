@@ -61,7 +61,7 @@ export async function mountOntology(view, { config }) {
     restrictions: true,
     properties: false,
     layout: "network",
-    zones: { topLevel: true, buckets: true }, // drawn in the BFO zones layout: Occurrents/Continuants, and the 7 buckets
+    zones: { topLevel: true, buckets: false }, // drawn in the BFO zones layout: Occurrents/Continuants on, the 7 buckets off
     file: ALL_FILES,
     buckets: new Set(),
     hidden: new Set(),
@@ -87,7 +87,7 @@ export async function mountOntology(view, { config }) {
             <label title="Show restrictions declared on the classes"><input type="checkbox" data-relation="restrictions" checked />Restrictions</label>
             <label title="Show object property relationships"><input type="checkbox" data-relation="properties" />Properties</label>
             <label class="ontology-zones-toggle ontology-zones-first" title="Show the top-level zones and their titles: Occurrents and Continuants"><input type="checkbox" data-zone="topLevel" checked />Zone Top Level</label>
-            <label class="ontology-zones-toggle" title="Show a zone and its title for each BFO bucket: Who, What, When, Where, Why, How it is, How we know"><input type="checkbox" data-zone="buckets" checked />Zone BFO 7 Buckets</label>
+            <label class="ontology-zones-toggle" title="Show a zone and its title for each BFO bucket: Who, What, When, Where, Why, How it is, How we know"><input type="checkbox" data-zone="buckets" />Zone BFO 7 Buckets</label>
           </div>
           <label class="ontology-select">Layout
             <select class="ontology-layout-select">

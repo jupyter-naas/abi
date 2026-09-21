@@ -58,7 +58,7 @@ export function mountNetwork(host, { onSelectNode, onSelectEdge, onOpenNode } = 
   let zones = [];
   let bands = [];
   let showBands = true; // the OCCURRENTS / CONTINUANTS bands and their titles
-  let showBuckets = true; // the bucket zones and their titles
+  let showBuckets = false; // the bucket zones and their titles: off until asked for
   let room = {}; // what the layout left outside the outermost cards
   let sidesOf = null; // which sides connectors use, in the BFO zone layout only
   let view = { scale: 1, x: 0, y: 0 }; // screen = world * scale + (x, y)
