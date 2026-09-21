@@ -3,6 +3,7 @@
 import React from 'react';
 import {
   Activity,
+  Building2,
   AlertTriangle,
   Bell,
   Brain,
@@ -29,6 +30,7 @@ import type { LucideIcon } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-is-mobile';
+import { useGraphMapLayers } from '../lib/use-graph-map-layers';
 import { useMapsStore } from '@/stores/maps';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from '@/components/shell/sidebar/collapsible-section';
@@ -44,6 +46,7 @@ import './maps-components.css';
 
 const mapsIconMap: Record<string, LucideIcon> = {
   Activity,
+  Building2,
   AlertTriangle,
   Bell,
   Brain,
@@ -169,6 +172,7 @@ export function MapsDatasetGroups({
   const pathname = usePathname();
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const { datasetId } = parseMapsRoute(pathname);
+  const graphLayers = useGraphMapLayers();
   const { expandedCategories, toggleCategory } = useMapsStore();
 
   const openDataset = (id: string) => {
@@ -177,8 +181,9 @@ export function MapsDatasetGroups({
 
   return (
     <div className="maps-section-list">
+      {graphLayers.error && <p className="maps-status maps-status--error">{graphLayers.error}</p>}
       {MAPS_CATEGORIES.map(({ id, label }) => {
-        const datasets = getMapsDatasetsByCategory(id);
+        const datasets = [...getMapsDatasetsByCategory(id), ...(id === 'custom' ? graphLayers.layers : [])];
         // Hide empty buckets (Custom stays empty upstream until a product overlay injects datasets).
         if (datasets.length === 0) return null;
         return (

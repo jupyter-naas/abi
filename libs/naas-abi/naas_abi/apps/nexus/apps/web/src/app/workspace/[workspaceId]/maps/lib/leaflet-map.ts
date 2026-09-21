@@ -5,6 +5,7 @@ import {
   MAPS_TILE_DARK,
   MAPS_TILE_LIGHT,
 } from './leaflet-tiles';
+import { resolvePinMedia } from './maps-pin-media';
 
 export interface MapsLatLng {
   lat: number;
@@ -19,6 +20,23 @@ export interface MapsPinMarker {
   detail?: string;
   color?: string;
   size?: number;
+  entityUri?: string;
+  graphUri?: string;
+  classLabel?: string;
+  country?: string;
+  precision?: string;
+  observedAt?: string;
+  sources?: Array<{title: string; url: string}>;
+  memberIds?: string[];
+  relationships?: Array<{label: string; value: string; entityUri?: string}>;
+  address?: string;
+  photoUrl?: string;
+  photoSource?: string;
+  streetViewUrl?: string;
+  streetViewFallbackUrl?: string;
+  imageSearchUrl?: string;
+  websiteUrl?: string;
+  phone?: string;
 }
 
 /** Escape text for Leaflet popup HTML. */
@@ -28,6 +46,19 @@ export function escapeMapsHtml(value: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+export function mapsPinPopupHtml(pin: MapsPinMarker): string {
+  const media = resolvePinMedia(pin);
+  const addressHtml = pin.address
+    ? `<div class="maps-pin-popup__meta">${escapeMapsHtml(pin.address)}</div>`
+    : '';
+  const detailHtml = pin.detail
+    ? `<div class="maps-pin-popup__meta">${escapeMapsHtml(pin.detail)}</div>`
+    : '';
+  const previewSrc = media.photoUrl ?? media.previewUrl;
+  const previewHtml = `<a class="maps-pin-popup__photo" href="${escapeMapsHtml(media.streetViewUrl)}" target="_blank" rel="noreferrer"><img src="${escapeMapsHtml(previewSrc)}" alt="" referrerpolicy="no-referrer"/></a>`;
+  return `<div class="maps-pin-popup"><strong>${escapeMapsHtml(pin.label)}</strong>${addressHtml}${detailHtml}${previewHtml}<div class="maps-pin-popup__actions"><a class="maps-pin-popup__streetview-btn" href="${escapeMapsHtml(media.streetViewUrl)}" target="_blank" rel="noreferrer">Open Street View</a></div></div>`;
 }
 
 export function mapsPinHtml(color: string, size: number): string {
@@ -125,14 +156,20 @@ export function observeMapsLeafletSize(map: LeafletMap): () => void {
 export async function createMapsLeaflet(
   container: HTMLElement,
   view: { center?: MapsLatLng; zoom?: number } = {},
+  signal?: AbortSignal,
 ): Promise<{ L: typeof import('leaflet'); map: LeafletMap }> {
+  signal?.throwIfAborted();
   const L = await import('leaflet');
   await import('leaflet/dist/leaflet.css');
+  // Strict Mode cleanup or navigation can happen while the modules load.
+  // Check before Leaflet claims the DOM container, not after creating the map.
+  signal?.throwIfAborted();
   const map = L.map(container, {
     zoomControl: true,
     attributionControl: true,
   });
   L.tileLayer(isMapsDarkMode() ? MAPS_TILE_DARK : MAPS_TILE_LIGHT, {
+    className: 'maps-basemap',
     attribution: MAPS_TILE_ATTR,
     maxZoom: 18,
   }).addTo(map);
@@ -154,6 +191,7 @@ export function addMapsPinMarkers(
   map: LeafletMap,
   pins: MapsPinMarker[],
   markers: Marker[],
+  onSelect?: (pin: MapsPinMarker) => void,
 ): MapsLatLng[] {
   const bounds: MapsLatLng[] = [];
   for (const pin of pins) {
@@ -165,17 +203,35 @@ export function addMapsPinMarkers(
       iconSize: [size, size],
       iconAnchor: [size / 2, size / 2],
     });
-    const marker = L.marker([pin.lat, pin.lng], { icon }).addTo(map);
-    const detailHtml = pin.detail
-      ? `<div class="maps-pin-popup__meta">${escapeMapsHtml(pin.detail)}</div>`
-      : '';
-    marker.bindPopup(
-      `<div class="maps-pin-popup"><strong>${escapeMapsHtml(pin.label)}</strong>${detailHtml}</div>`,
-    );
+    const marker = L.marker([pin.lat, pin.lng], { icon, title: pin.label }).addTo(map);
+    if (onSelect) {
+      marker.on('click', () => onSelect(pin));
+    } else {
+      marker.bindPopup(mapsPinPopupHtml(pin));
+    }
     markers.push(marker);
     bounds.push({ lat: pin.lat, lng: pin.lng });
   }
   return bounds;
+}
+
+export type MapsCamera = {
+  lat: number;
+  lng: number;
+  zoom: number;
+};
+
+export function captureMapsCamera(map: LeafletMap): MapsCamera {
+  const center = map.getCenter();
+  return { lat: center.lat, lng: center.lng, zoom: map.getZoom() };
+}
+
+export function restoreMapsCamera(map: LeafletMap, camera: MapsCamera): void {
+  if (typeof map.flyTo === 'function') {
+    map.flyTo([camera.lat, camera.lng], camera.zoom, { duration: 0.55 });
+    return;
+  }
+  map.setView([camera.lat, camera.lng], camera.zoom);
 }
 
 export function fitMapsBounds(
