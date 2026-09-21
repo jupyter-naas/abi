@@ -164,6 +164,15 @@ async def explorer_instances(
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except GraphQuerySpecError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        from naas_abi_core.services.triple_store.TripleStorePorts import Exceptions
+
+        if isinstance(exc, Exceptions.RequestError):
+            raise HTTPException(
+                status_code=503,
+                detail="Graph data is temporarily unavailable. Try narrowing the graph selection.",
+            ) from exc
+        raise
 
 
 @router.post("/explorer/network")

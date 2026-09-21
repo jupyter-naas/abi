@@ -360,7 +360,7 @@ def _instance_pairs_one_graph(
     batch = rows(
         store,
         f"""
-      SELECT ?s WHERE {{
+      SELECT DISTINCT ?s WHERE {{
         GRAPH {sparql_iri(graph_uri)} {{
           {INSTANCE} {class_filter} {search_filter}
         }}
@@ -384,12 +384,13 @@ def _instance_page_pairs(
             store, graphs[0], class_uris, search, limit=need, offset=offset
         )
         return pairs[:limit], len(pairs) > limit
+    fetch_cap = offset + need
     merged: list[tuple[str, str]] = []
     for graph_uri in graphs:
         try:
             merged.extend(
                 _instance_pairs_one_graph(
-                    store, graph_uri, class_uris, search, limit=need, offset=0
+                    store, graph_uri, class_uris, search, limit=fetch_cap, offset=0
                 )
             )
         except Exception:
