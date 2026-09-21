@@ -680,6 +680,11 @@ class ABIModule(BaseModule):
     # You can see it as the constructor of the module.
     def on_load(self):
         super().on_load()
+        # Dagster jobs/schedules are registered once from the marketplace module
+        # when both ``signals.x`` and ``naas_abi_marketplace.applications.x`` are
+        # enabled (same pattern as ``register_x_count_app_routes``).
+        if self.__class__.__module__ == "signals.x":
+            self._BaseModule__orchestrations = []
 
     # Optional FastAPI integration hook.
     # This mirrors how `naas_abi` wires API settings and services into app.state.

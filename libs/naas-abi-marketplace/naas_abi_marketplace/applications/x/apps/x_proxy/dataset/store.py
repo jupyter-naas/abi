@@ -15,6 +15,7 @@ from naas_abi_core.services.dataset.DatasetPort import (
 X_DATASET_NAMESPACE = "x"
 
 POSTS_V1 = "posts_v1"
+MATCHED_TWEET_IDS_V1 = "matched_tweet_ids_v1"
 AUTHORS_V1 = "authors_v1"
 AUTHOR_STATS_V1 = "author_stats_v1"
 ENVELOPES_V1 = "envelopes_v1"
@@ -72,6 +73,12 @@ def ensure_x_datasets(dataset: IDatasetPort) -> None:
             ),
             partitions=(PartitionSpec(column="created_month", transform="identity"),),
             primary_key=("tweet_id", "kind", "query_slug"),
+        ),
+        DatasetSpec(
+            name=MATCHED_TWEET_IDS_V1,
+            namespace=X_DATASET_NAMESPACE,
+            columns=(ColumnSpec(name="tweet_id", type="string"),),
+            primary_key=("tweet_id",),
         ),
         DatasetSpec(
             name=AUTHORS_V1,
@@ -183,10 +190,16 @@ def ensure_x_datasets(dataset: IDatasetPort) -> None:
             dataset.create(spec)
         except DatasetAlreadyExistsError:
             pass
+    from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.matched_tweets import (
+        ensure_matched_tweet_ids_ready,
+    )
+
+    ensure_matched_tweet_ids_ready(dataset)
 
 
 TABLE_PRIMARY_KEYS: dict[str, tuple[str, ...]] = {
     POSTS_V1: ("tweet_id", "kind", "query_slug"),
+    MATCHED_TWEET_IDS_V1: ("tweet_id",),
     AUTHORS_V1: ("author_id",),
     AUTHOR_STATS_V1: ("author_id",),
     ENVELOPES_V1: ("envelope_path",),

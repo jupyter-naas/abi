@@ -13,6 +13,9 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.canonical import (
     canonical_cte,
     canonical_posts_cte,
 )
+from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.matched_tweets import (
+    matched_index_ready,
+)
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
     AUTHOR_STATS_V1,
     AUTHORS_V1,
@@ -57,7 +60,7 @@ def _user_needle_filter(needle: str) -> str:
 def graph_totals(dataset) -> dict[str, int]:
     """Distinct ingested tweets (matched + referenced), same as ``globals/graph.json``."""
     ensure_x_datasets(dataset)
-    cte = canonical_cte()
+    cte = canonical_cte(use_matched_index=matched_index_ready(dataset))
     result = dataset.query(
         f"WITH {cte} "
         f"SELECT COUNT(*) AS posts, "
@@ -84,7 +87,7 @@ def search_users(
 ) -> tuple[int, list[dict[str, Any]]]:
     """Authors with at least one canonical ingested post."""
     ensure_x_datasets(dataset)
-    cte = canonical_cte()
+    cte = canonical_cte(use_matched_index=matched_index_ready(dataset))
     where = _user_needle_filter(query)
     if where:
         where = where.replace(" WHERE ", " AND ", 1)
@@ -220,7 +223,10 @@ def user_posts(
         stats = profile_stats(dataset, author_id_raw)
     profile = merge_profile_with_stats(author_row, stats)
     author_id = _escape(author_id_raw)
-    cte = canonical_posts_cte(author_id=author_id_raw)
+    cte = canonical_posts_cte(
+        author_id=author_id_raw,
+        use_matched_index=matched_index_ready(dataset),
+    )
     kind_filter = ""
     if kind in ("matched", "referenced"):
         kind_filter = f" AND kind = '{kind}'"
@@ -276,7 +282,7 @@ def search_tweets(
     limit: int = 100,
 ) -> tuple[int, list[dict[str, Any]]]:
     ensure_x_datasets(dataset)
-    cte = canonical_cte()
+    cte = canonical_cte(use_matched_index=matched_index_ready(dataset))
     where = _tweet_needle_filter(query)
     count = dataset.query(
         f"WITH {cte} SELECT COUNT(*) AS n FROM canonical_enriched{where}",
@@ -297,7 +303,7 @@ def post_by_id(dataset, tweet_id: str) -> dict[str, Any] | None:
     if not tweet_id.isdigit():
         return None
     escaped = _escape(tweet_id)
-    cte = canonical_cte()
+    cte = canonical_cte(use_matched_index=matched_index_ready(dataset))
     result = dataset.query(
         f"WITH {cte} SELECT * FROM canonical_enriched "
         f"WHERE tweet_id = '{escaped}' LIMIT 1",

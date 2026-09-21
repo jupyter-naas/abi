@@ -21,6 +21,9 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.cache.storage import split
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.author_stats import (
     recompute_author_stats,
 )
+from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.matched_tweets import (
+    upsert_matched_tweet_ids_from_posts,
+)
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
     AUTHORS_V1,
     COUNT_BUCKETS_V1,
@@ -276,6 +279,7 @@ def sync_envelope_paths(
         ingested += 1
 
     posts_written = upsert_table(dataset, POSTS_V1, batch_posts)
+    upsert_matched_tweet_ids_from_posts(dataset, batch_posts)
     authors_written = upsert_table(dataset, AUTHORS_V1, batch_authors)
     touched_author_ids = sorted(
         {

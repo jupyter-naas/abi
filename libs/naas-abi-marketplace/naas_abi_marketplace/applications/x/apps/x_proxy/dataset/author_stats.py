@@ -8,6 +8,9 @@ from typing import Any
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.canonical import (
     canonical_cte,
 )
+from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.matched_tweets import (
+    matched_index_ready,
+)
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
     AUTHOR_STATS_V1,
     X_DATASET_NAMESPACE,
@@ -41,7 +44,7 @@ def aggregate_author_stats(
     if not ids:
         return []
     ensure_x_datasets(dataset)
-    cte = canonical_cte()
+    cte = canonical_cte(use_matched_index=matched_index_ready(dataset))
     id_filter = _author_id_filter(ids)
     result = dataset.query(
         f"WITH {cte} "

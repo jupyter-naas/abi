@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
     AUTHORS_V1,
+    MATCHED_TWEET_IDS_V1,
     POSTS_V1,
 )
 
@@ -16,8 +17,7 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
 CANONICAL_POSTS_CTE = """
 canonical_posts AS (
   WITH matched_ids AS (
-    SELECT DISTINCT tweet_id FROM {posts}
-    WHERE kind = 'matched' AND tweet_id <> ''
+    {matched_ids_query}
   ),
   filtered AS (
     SELECT p.*
@@ -71,6 +71,18 @@ canonical_enriched AS (
 )
 
 
+def _matched_ids_query(*, posts: str = POSTS_V1, use_index: bool) -> str:
+    if use_index:
+        return (
+            f"SELECT tweet_id FROM {MATCHED_TWEET_IDS_V1} "
+            f"WHERE tweet_id <> ''"
+        )
+    return (
+        f"SELECT DISTINCT tweet_id FROM {posts} "
+        f"WHERE kind = 'matched' AND tweet_id <> ''"
+    )
+
+
 def _author_filter_sql(author_id: str | None) -> str:
     if not author_id:
         return ""
@@ -82,17 +94,25 @@ def canonical_posts_cte(
     *,
     posts: str = POSTS_V1,
     author_id: str | None = None,
+    use_matched_index: bool = False,
 ) -> str:
     """Canonical posts CTE; optional ``author_id`` shrinks the filtered scan."""
     return CANONICAL_POSTS_CTE.format(
         posts=posts,
+        matched_ids_query=_matched_ids_query(posts=posts, use_index=use_matched_index),
         author_filter=_author_filter_sql(author_id),
     )
 
 
-def canonical_cte(*, posts: str = POSTS_V1, authors: str = AUTHORS_V1) -> str:
+def canonical_cte(
+    *,
+    posts: str = POSTS_V1,
+    authors: str = AUTHORS_V1,
+    use_matched_index: bool = False,
+) -> str:
     return CANONICAL_WITH_AUTHORS_CTE.format(
         posts=posts,
         authors=authors,
+        matched_ids_query=_matched_ids_query(posts=posts, use_index=use_matched_index),
         author_filter="",
     )
