@@ -5,7 +5,9 @@
     "first_name": "David",
     "last_name": "Leroy",
     "full_name": "David Leroy",
-    "linkedin_profile_url": "https://demo.example/profiles/david_leroy"
+    "linkedin_profile_url": "https://demo.example/profiles/david_leroy",
+    "email": "david.leroy@demo.example",
+    "phone": "+33 1 99 00 00 04"
   },
   "records": [
     {

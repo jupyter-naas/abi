@@ -5,7 +5,10 @@
     "first_name": "Alice",
     "last_name": "Dupont",
     "full_name": "Alice Dupont",
-    "linkedin_profile_url": "https://demo.example/profiles/alice_dupont"
+    "linkedin_profile_url": "https://demo.example/profiles/alice_dupont",
+    "email": "alice.dupont@demo.example",
+    "phone": "+33 1 99 00 00 01",
+    "linkedin_url": "https://www.linkedin.com/in/alice-dupont-demo"
   },
   "records": [
     {

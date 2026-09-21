@@ -170,6 +170,25 @@ class PersonnelGraphContext:
         )
         return slug_value
 
+    def set_contact_details(
+        self,
+        person: Person,
+        *,
+        email: str | None = None,
+        phone: str | None = None,
+        linkedin_url: str | None = None,
+    ) -> None:
+        """State how the person can be reached. Absent values are left unstated."""
+        for predicate, value, datatype in (
+            (PERSONNEL.email_address, email, XSD.string),
+            (PERSONNEL.telephone_number, phone, XSD.string),
+            (PERSONNEL.linkedin_url, linkedin_url, XSD.anyURI),
+        ):
+            if value:
+                self.graph.add(
+                    (URIRef(person._uri), predicate, Literal(value, datatype=datatype))
+                )
+
     def describe_site(
         self,
         site: Site,

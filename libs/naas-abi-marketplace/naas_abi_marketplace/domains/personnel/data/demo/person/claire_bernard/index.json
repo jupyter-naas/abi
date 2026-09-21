@@ -5,7 +5,10 @@
     "first_name": "Claire",
     "last_name": "Bernard",
     "full_name": "Claire Bernard",
-    "linkedin_profile_url": "https://demo.example/profiles/claire_bernard"
+    "linkedin_profile_url": "https://demo.example/profiles/claire_bernard",
+    "email": "claire.bernard@demo.example",
+    "phone": "+33 1 99 00 00 03",
+    "linkedin_url": "https://www.linkedin.com/in/claire-bernard-demo"
   },
   "records": [
     {

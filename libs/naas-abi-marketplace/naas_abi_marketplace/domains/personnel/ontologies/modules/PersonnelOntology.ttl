@@ -490,6 +490,30 @@ personnel:profile_slug a owl:DatatypeProperty ;
     rdfs:domain abi:Person ;
     rdfs:range  xsd:string .
 
+# Contact details. Stated on the person, like the profile slug, because they
+# address the person rather than any one role, document or job. A directory
+# publishes them only when its instance opts in (privacy.publish_contact_details).
+personnel:email_address a owl:DatatypeProperty ;
+    rdfs:label "email address"@en ;
+    skos:definition "Address at which the person can be reached by email, as published for them by the directory that lists them."@en ;
+    skos:example "'alice.dupont@demo.example'."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range  xsd:string .
+
+personnel:telephone_number a owl:DatatypeProperty ;
+    rdfs:label "telephone number"@en ;
+    skos:definition "Number at which the person can be reached by telephone, written in international form with its country code."@en ;
+    skos:example "'+33 1 99 00 00 01'."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range  xsd:string .
+
+personnel:linkedin_url a owl:DatatypeProperty ;
+    rdfs:label "linkedin url"@en ;
+    skos:definition "Address of the person's own LinkedIn profile page. Distinct from the source a profile was read from, which may be any published page."@en ;
+    skos:example "'https://www.linkedin.com/in/alice-dupont-demo'."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range  xsd:anyURI .
+
 personnel:certification_name a owl:DatatypeProperty ;
     rdfs:label "certification name"@en ;
     skos:definition "Name of the certification as published by the issuing organization."@en ;

@@ -5,7 +5,8 @@
     "first_name": "Emma",
     "last_name": "Petit",
     "full_name": "Emma Petit",
-    "linkedin_profile_url": "https://demo.example/profiles/emma_petit"
+    "linkedin_profile_url": "https://demo.example/profiles/emma_petit",
+    "linkedin_url": "https://www.linkedin.com/in/emma-petit-demo"
   },
   "records": [
     {

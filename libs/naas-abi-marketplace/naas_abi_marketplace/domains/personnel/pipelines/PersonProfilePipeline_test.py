@@ -26,6 +26,9 @@ from rdflib.namespace import RDF
 
 ABI_HAS_MEMBER_PART = URIRef("http://ontology.naas.ai/abi/hasMemberPart")
 ABI_PERSON = URIRef("http://ontology.naas.ai/abi/Person")
+PERSONNEL_EMAIL = URIRef("http://ontology.naas.ai/personnel/email_address")
+PERSONNEL_PHONE = URIRef("http://ontology.naas.ai/personnel/telephone_number")
+PERSONNEL_LINKEDIN = URIRef("http://ontology.naas.ai/personnel/linkedin_url")
 PERSONNEL_COUNTRY_CODE = URIRef("http://ontology.naas.ai/personnel/country_code")
 PERSONNEL_PROFILE_SLUG = URIRef("http://ontology.naas.ai/personnel/profile_slug")
 PERSONNEL_SITE = URIRef(Site._class_uri)
@@ -187,6 +190,48 @@ def test_no_portrait_without_a_url_or_path() -> None:
     graph = _pipeline().run(_profile_params(photo_url=None, photo_path=None))
 
     assert URIRef(Portrait._class_uri) not in _types(graph)
+
+
+def test_contact_details_are_data_properties_of_the_person() -> None:
+    graph = _pipeline().run(
+        _profile_params(
+            email="alice.dupont@demo.example",
+            phone="+33 1 99 00 00 01",
+            linkedin_url="https://www.linkedin.com/in/alice-dupont-demo",
+        )
+    )
+    person = next(graph.subjects(RDF.type, ABI_PERSON))
+    assert str(graph.value(person, PERSONNEL_EMAIL)) == "alice.dupont@demo.example"
+    assert str(graph.value(person, PERSONNEL_PHONE)) == "+33 1 99 00 00 01"
+    assert (
+        str(graph.value(person, PERSONNEL_LINKEDIN))
+        == "https://www.linkedin.com/in/alice-dupont-demo"
+    )
+
+
+def test_contact_details_are_declared_as_data_properties_of_person() -> None:
+    from pathlib import Path
+
+    from rdflib import Graph
+    from rdflib.namespace import OWL, RDFS
+
+    ttl = (
+        Path(__file__).resolve().parent.parent
+        / "ontologies"
+        / "modules"
+        / "PersonnelOntology.ttl"
+    )
+    ontology = Graph().parse(ttl, format="turtle")
+    for prop in (PERSONNEL_EMAIL, PERSONNEL_PHONE, PERSONNEL_LINKEDIN):
+        assert (prop, RDF.type, OWL.DatatypeProperty) in ontology, prop
+        assert (prop, RDFS.domain, ABI_PERSON) in ontology, prop
+
+
+def test_absent_contact_details_are_left_unstated() -> None:
+    graph = _pipeline().run(_profile_params(phone="+33 1 99 00 00 01"))
+    assert list(graph.triples((None, PERSONNEL_EMAIL, None))) == []
+    assert list(graph.triples((None, PERSONNEL_LINKEDIN, None))) == []
+    assert len(list(graph.triples((None, PERSONNEL_PHONE, None)))) == 1
 
 
 def test_run_persists_delta_to_triple_store() -> None:

@@ -42,6 +42,9 @@ def person_row(**overrides: Any) -> dict[str, Any]:
         "grade": "Partner",
         "years_of_experience": 12,
         "public_profile_url": "https://demo.example/alice",
+        "email": "alice.dupont@demo.example",
+        "phone": "+33 1 99 00 00 01",
+        "linkedin_url": "https://www.linkedin.com/in/alice-dupont-demo",
         "search_text": "",
     }
     row.update(overrides)
@@ -101,6 +104,9 @@ def seeded(tmp_path_factory) -> DatasetService:
         office="Lyon",
         city="Lyon",
         years_of_experience=None,
+        email=None,
+        phone=None,
+        linkedin_url=None,
     )
     cedric["search_text"] = search_text(
         {
@@ -203,6 +209,27 @@ class TestWriting:
         rows = warehouse.query("SELECT slug FROM people", namespace=NAMESPACE).rows
         assert [row["slug"] for row in rows] == ["bob_martin"]
         assert warehouse.list_snapshots()
+
+    def test_a_table_built_to_an_older_schema_is_recreated(
+        self, warehouse: DatasetService, config: dict[str, Any]
+    ) -> None:
+        """The port cannot add a column, so a spec change must not fail the write."""
+        spec = ds.dataset_spec("people", table="people", namespace=NAMESPACE)
+        older = spec.model_copy(
+            update={
+                "columns": tuple(
+                    column
+                    for column in spec.columns
+                    if column.name not in ("email", "phone", "linkedin_url")
+                )
+            }
+        )
+        warehouse.create(older)
+
+        ds.replace_rows(warehouse, spec, [person_row()])
+
+        rows = warehouse.query("SELECT email FROM people", namespace=NAMESPACE).rows
+        assert rows == [{"email": "alice.dupont@demo.example"}]
 
     def test_missing_table_says_how_to_build_it(
         self, warehouse: DatasetService, config: dict[str, Any]
@@ -360,6 +387,37 @@ class TestProfile:
         labels = [fact["label"] for fact in payload["facts"]]
         assert "Experience" not in labels
         assert "Grade" in labels
+
+    def test_the_header_offers_every_way_to_reach_the_person(
+        self, seeded: DatasetService, config: dict[str, Any]
+    ) -> None:
+        payload = profile_payload.profile(seeded, config, slug="alice_dupont")
+        assert payload["contact"] == [
+            {
+                "field": "email",
+                "label": "Email",
+                "value": "alice.dupont@demo.example",
+                "href": "mailto:alice.dupont@demo.example",
+            },
+            {
+                "field": "phone",
+                "label": "Phone",
+                "value": "+33 1 99 00 00 01",
+                "href": "tel:+33199000001",
+            },
+            {
+                "field": "linkedin_url",
+                "label": "LinkedIn",
+                "value": "https://www.linkedin.com/in/alice-dupont-demo",
+                "href": "https://www.linkedin.com/in/alice-dupont-demo",
+            },
+        ]
+
+    def test_a_person_with_no_contact_details_gets_no_contact_row(
+        self, seeded: DatasetService, config: dict[str, Any]
+    ) -> None:
+        payload = profile_payload.profile(seeded, config, slug="cedric_laumont")
+        assert payload["contact"] == []
 
     def test_unknown_slug_is_not_found(
         self, seeded: DatasetService, config: dict[str, Any]

@@ -76,6 +76,57 @@ class TestPrivacyGate:
             export.check_privacy("a@b.com", where="x", config=config)
 
 
+class TestContactColumns:
+    """Contact details have one way out: their own columns, well-formed, opted in."""
+
+    OPTED_IN = {"privacy": {"publish_contact_details": True}}
+
+    @pytest.mark.parametrize(
+        ("column", "value"),
+        [
+            ("email", "alice.dupont@demo.example"),
+            ("phone", "+33 1 99 00 00 01"),
+            ("linkedin_url", "https://www.linkedin.com/in/alice-dupont-demo"),
+        ],
+    )
+    def test_a_well_formed_detail_is_published(self, column: str, value: str) -> None:
+        assert (
+            export.check_contact(column, value, where="w", config=self.OPTED_IN)
+            == value
+        )
+
+    @pytest.mark.parametrize(
+        ("column", "value"),
+        [
+            ("email", "call me on +33 1 99 00 00 01"),
+            ("phone", "alice.dupont@demo.example"),
+            ("linkedin_url", "https://demo.example/profiles/alice_dupont"),
+            ("linkedin_url", "http://www.linkedin.com/in/alice"),
+        ],
+    )
+    def test_anything_else_in_a_contact_column_stops_the_export(
+        self, column: str, value: str
+    ) -> None:
+        with pytest.raises(export.PrivacyError, match=f"not a well-formed {column}"):
+            export.check_contact(column, value, where="w", config=self.OPTED_IN)
+
+    def test_without_the_opt_in_the_column_is_exported_empty(self) -> None:
+        assert (
+            export.check_contact(
+                "email", "alice.dupont@demo.example", where="w", config={}
+            )
+            is None
+        )
+
+    def test_the_gate_still_refuses_an_email_anywhere_else(self) -> None:
+        with pytest.raises(export.PrivacyError):
+            export.check_privacy(
+                "Reach me at alice.dupont@demo.example",
+                where="people[0].headline",
+                config=self.OPTED_IN,
+            )
+
+
 class TestQueries:
     def test_every_query_the_exporter_needs_exists(self) -> None:
         queries = export.load_queries()
@@ -145,10 +196,39 @@ class TestBuildRowsFromTheDemoGraph:
         ]
         assert david_rows == []
 
+    def test_contact_details_reach_the_people_row(self, tables) -> None:
+        people = {row["slug"]: row for row in tables["people"]}
+        alice = people["alice_dupont"]
+        assert alice["email"] == "alice.dupont@demo.example"
+        assert alice["phone"] == "+33 1 99 00 00 01"
+        assert alice["linkedin_url"] == "https://www.linkedin.com/in/alice-dupont-demo"
+
+    def test_a_missing_contact_detail_stays_missing(self, tables) -> None:
+        people = {row["slug"]: row for row in tables["people"]}
+        assert people["grace_lambert"]["phone"] is None
+        assert people["emma_petit"]["email"] is None
+        hugo = people["hugo_girard"]
+        assert (hugo["email"], hugo["phone"], hugo["linkedin_url"]) == (None,) * 3
+
+    def test_contact_details_are_not_searchable(self, tables) -> None:
+        alice = next(row for row in tables["people"] if row["slug"] == "alice_dupont")
+        assert "demo.example" not in alice["search_text"]
+        assert "99 00 00" not in alice["search_text"]
+
+    def test_an_instance_that_does_not_opt_in_publishes_no_contact(self) -> None:
+        graph = Graph().parse(DEMO_GRAPH_FILE, format="turtle")
+        config = {**CONFIG, "privacy": {**CONFIG["privacy"]}}
+        config["privacy"]["publish_contact_details"] = False
+        people = export.build_rows(graph, config)["people"]
+        for row in people:
+            assert (row["email"], row["phone"], row["linkedin_url"]) == (None,) * 3
+
     def test_the_whole_export_passes_the_privacy_gate(self, tables) -> None:
         for table_name, rows in tables.items():
             for index, row in enumerate(rows):
                 for column, value in row.items():
+                    if table_name == "people" and column in export.CONTACT_COLUMNS:
+                        continue
                     export.check_privacy(
                         value, where=f"{table_name}[{index}].{column}", config=CONFIG
                     )

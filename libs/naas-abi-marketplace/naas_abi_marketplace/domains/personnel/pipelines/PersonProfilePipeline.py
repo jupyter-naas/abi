@@ -69,6 +69,11 @@ class PersonProfilePipelineParameters(PipelineParameters):
     first_name: Annotated[str, Field(min_length=1)]
     last_name: Annotated[str, Field(min_length=1)]
     slug: str | None = None
+    # Contact details, stated on the person. Whether a directory publishes them
+    # is the directory's call (privacy.publish_contact_details), not the graph's.
+    email: str | None = None
+    phone: str | None = None
+    linkedin_url: str | None = None
     headline: str | None = None
     about: str | None = None
     quote: str | None = None
@@ -118,6 +123,12 @@ class PersonProfilePipeline(Pipeline):
         person = context.ensure_person(parameters.first_name, parameters.last_name)
         if parameters.slug:
             context.set_profile_slug(person, parameters.slug)
+        context.set_contact_details(
+            person,
+            email=parameters.email,
+            phone=parameters.phone,
+            linkedin_url=parameters.linkedin_url,
+        )
 
         profile = None
         if parameters.source_url:
@@ -251,8 +262,8 @@ class PersonProfilePipeline(Pipeline):
                 func=_run,
                 name="register_person_profile",
                 description=(
-                    "Register the person-level facts of a profile: headline, summary, "
-                    "quote, portrait, work location, service line, grade, "
+                    "Register the person-level facts of a profile: contact details "
+                    "(email, phone, LinkedIn URL), headline, summary, quote, portrait, work location, service line, grade, "
                     "certifications, languages, interests and recommendations. "
                     "Jobs are registered with register_act_of_working and studies "
                     "with register_act_of_studying."

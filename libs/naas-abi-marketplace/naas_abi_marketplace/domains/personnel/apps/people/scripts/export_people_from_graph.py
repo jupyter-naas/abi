@@ -4,8 +4,10 @@
     graph (ontology-backed)  ->  SPARQL  ->  dataset service  ->  app
 
 Reads ``graphs/demo/personnel.ttl`` by default. Every value passes the privacy
-gate before it is written: this is a directory, not a place to publish contact
-details.
+gate before it is written, so an email address or a phone number cannot slip
+out through a headline or a mission. Contact details go in the three contact
+columns of ``people`` only, are checked for shape there, and are left empty
+unless the instance sets ``privacy.publish_contact_details``.
 
 ``--config`` exports into another instance's namespace and tables, from
 whichever graph that instance is built from:
@@ -37,6 +39,17 @@ ROW_LIMIT = sq.DEFAULT_ROW_LIMIT
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 DIGIT_RUN_RE = re.compile(r"[\d][\d\s().-]{7,}")
 URL_RE = re.compile(r"^https?://", re.IGNORECASE)
+# The columns of the people table that exist to carry contact details. They are
+# exempt from the gate below, which would refuse them by design, and are held
+# to their own shape instead.
+CONTACT_COLUMNS = ("email", "phone", "linkedin_url")
+CONTACT_SHAPES = {
+    "email": re.compile(r"^[\w.+-]+@[\w-]+(?:\.[\w-]+)+$"),
+    "phone": re.compile(r"^\+?[\d][\d\s().-]{5,}$"),
+    "linkedin_url": re.compile(
+        r"^https://(?:[a-z]{2,3}\.)?linkedin\.com/\S+$", re.IGNORECASE
+    ),
+}
 
 # A portrait path is stated relative to the domain root. The page is served out
 # of web/, so that prefix comes off and what is left is what the browser asks
@@ -74,6 +87,23 @@ def check_privacy(value: Any, *, where: str, config: dict[str, Any]) -> Any:
             f"{where} contains what looks like a phone number: {value!r}"
         )
     return value
+
+
+def check_contact(column: str, value: Any, *, where: str, config: dict[str, Any]) -> Any:
+    """Publish a contact detail only when the instance opts in, and only if it is one.
+
+    An instance that has not set ``privacy.publish_contact_details`` gets the
+    column empty rather than an error: the graph may well hold the detail, and
+    whether to show it is a decision about the directory, not about the data.
+    """
+    if not isinstance(value, str) or not value:
+        return None
+    privacy = config.get("privacy") or {}
+    if not privacy.get("publish_contact_details", False):
+        return None
+    if not CONTACT_SHAPES[column].match(value.strip()):
+        raise PrivacyError(f"{where} is not a well-formed {column}: {value!r}")
+    return value.strip()
 
 
 def load_queries() -> dict[str, str]:
@@ -357,6 +387,9 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
                 "grade": row.get("gradeValue"),
                 "years_of_experience": _int(row.get("yearsOfExperience")),
                 "public_profile_url": row.get("profileUrl"),
+                "email": row.get("emailAddress"),
+                "phone": row.get("telephoneNumber"),
+                "linkedin_url": row.get("linkedinUrl"),
                 "search_text": search_text(searchable),
             }
         )
@@ -364,9 +397,13 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
     for table_name, rows in tables.items():
         for index, table_row in enumerate(rows):
             for column, value in table_row.items():
-                check_privacy(
-                    value, where=f"{table_name}[{index}].{column}", config=config
-                )
+                where = f"{table_name}[{index}].{column}"
+                if table_name == "people" and column in CONTACT_COLUMNS:
+                    table_row[column] = check_contact(
+                        column, value, where=where, config=config
+                    )
+                else:
+                    check_privacy(value, where=where, config=config)
     return tables
 
 

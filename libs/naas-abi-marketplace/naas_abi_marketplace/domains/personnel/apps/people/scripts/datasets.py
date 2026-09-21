@@ -43,6 +43,11 @@ TABLES: dict[str, tuple[tuple[str, ...], tuple[tuple[str, str], ...]]] = {
             ("grade", "string"),
             ("years_of_experience", "integer"),
             ("public_profile_url", "string"),
+            # Contact details. Empty unless the instance publishes them
+            # (privacy.publish_contact_details), and never in search_text.
+            ("email", "string"),
+            ("phone", "string"),
+            ("linkedin_url", "string"),
             # Accent-folded, lowercased concatenation of the searchable fields,
             # built at export time so matching is a SQL LIKE instead of shipping
             # the whole directory to the browser.
@@ -190,12 +195,18 @@ def ensure_dataset(service: DatasetService, spec: DatasetSpec) -> None:
     """Create the table if it is not there; leave it alone if it is.
 
     A rebuild replaces rows rather than the table, so the catalog keeps the
-    snapshot history that makes a bad export recoverable.
+    snapshot history that makes a bad export recoverable. The exception is a
+    table whose columns no longer match the spec: the port cannot alter a
+    table, so it is dropped and recreated, and its history goes with it.
     """
     try:
         service.create(spec)
     except DatasetAlreadyExistsError:
-        return
+        existing = service.describe(spec.name, namespace=spec.namespace)
+        if [c.name for c in existing.columns] == [c.name for c in spec.columns]:
+            return
+        service.drop(spec.name, namespace=spec.namespace)
+        service.create(spec)
 
 
 def replace_rows(

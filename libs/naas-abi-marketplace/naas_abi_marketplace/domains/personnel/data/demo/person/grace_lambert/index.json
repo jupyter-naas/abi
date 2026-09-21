@@ -5,7 +5,9 @@
     "first_name": "Grace",
     "last_name": "Lambert",
     "full_name": "Grace Lambert",
-    "linkedin_profile_url": "https://demo.example/profiles/grace_lambert"
+    "linkedin_profile_url": "https://demo.example/profiles/grace_lambert",
+    "email": "grace.lambert@demo.example",
+    "linkedin_url": "https://www.linkedin.com/in/grace-lambert-demo"
   },
   "records": [
     {

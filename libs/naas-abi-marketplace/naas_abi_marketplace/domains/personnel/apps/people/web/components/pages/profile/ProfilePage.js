@@ -232,6 +232,25 @@ function wireSparqlModal(view, competencyQueries, slug) {
   });
 }
 
+/** Email, phone and LinkedIn under the place line, each only when the person has it. */
+function contactHtml(contact) {
+  if (!contact?.length) return "";
+  const items = contact
+    .map((item) => {
+      const external = item.field === "linkedin_url";
+      const text = external ? item.label : item.value;
+      return `<li class="contact-item">
+        <a class="contact-link" href="${escapeHtml(item.href)}"
+           ${external ? 'target="_blank" rel="noopener noreferrer"' : ""}
+           aria-label="${escapeHtml(`${item.label}: ${item.value}`)}">
+          ${ICONS[item.field] || ICONS.link}<span>${escapeHtml(text)}</span>
+        </a>
+      </li>`;
+    })
+    .join("");
+  return `<ul class="intro-contact" aria-label="Contact">${items}</ul>`;
+}
+
 function notFoundHtml(config, slug) {
   return `
     <div class="results">
@@ -288,6 +307,7 @@ export async function mountProfile(view, { config, params, slug }) {
             <p class="intro-headline">${highlight(person.headline || "", tokens)}</p>
             <p class="intro-place">${flagHtml(person.country_code)}${ICONS.place}
               <span>${escapeHtml(place.join(" · "))}</span></p>
+            ${contactHtml(person.contact)}
             ${person.quote ? `<p class="intro-quote">${highlight(person.quote, tokens)}</p>` : ""}
             ${
               person.facts?.length

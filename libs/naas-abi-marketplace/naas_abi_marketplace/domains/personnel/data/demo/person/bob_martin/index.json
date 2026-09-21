@@ -5,7 +5,10 @@
     "first_name": "Bob",
     "last_name": "Martin",
     "full_name": "Bob Martin",
-    "linkedin_profile_url": "https://demo.example/profiles/bob_martin"
+    "linkedin_profile_url": "https://demo.example/profiles/bob_martin",
+    "email": "bob.martin@demo.example",
+    "phone": "+33 1 99 00 00 02",
+    "linkedin_url": "https://www.linkedin.com/in/bob-martin-demo"
   },
   "records": [
     {

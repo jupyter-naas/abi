@@ -176,6 +176,35 @@ def _facts(person: dict[str, Any], facts: list[dict[str, Any]]) -> list[dict[str
     return out
 
 
+def _contact_href(field: str, value: str) -> str:
+    if field == "email":
+        return f"mailto:{value}"
+    if field == "phone":
+        # tel: takes the digits and a leading +; spaces and dots are for people.
+        return "tel:" + re.sub(r"[^\d+]", "", value)
+    return value
+
+
+def _contact(
+    person: dict[str, Any], contact: list[dict[str, Any]]
+) -> list[dict[str, str]]:
+    """The ways to reach this person, in configured order, skipping what is absent."""
+    out: list[dict[str, str]] = []
+    for item in contact:
+        value = person.get(item["field"])
+        if value in (None, ""):
+            continue
+        out.append(
+            {
+                "field": item["field"],
+                "label": item["label"],
+                "value": str(value),
+                "href": _contact_href(item["field"], str(value)),
+            }
+        )
+    return out
+
+
 def profile(
     service: DatasetService, config: dict[str, Any], *, slug: str
 ) -> dict[str, Any]:
@@ -242,6 +271,7 @@ def profile(
         "place": [value for value in place if value],
         "public_profile_url": person.get("public_profile_url"),
         "facts": _facts(person, config["profile"]["facts"]),
+        "contact": _contact(person, config["profile"].get("contact") or []),
         "sections": sections,
         "knowledge_graph": _knowledge_graph(config),
         "competency_queries": competency_queries_for_profile(slug),

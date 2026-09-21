@@ -44,6 +44,9 @@ class SourcePersonInput(BaseModel):
     first_name: Annotated[str, Field(min_length=1)]
     last_name: Annotated[str, Field(min_length=1)]
     linkedin_profile_url: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    linkedin_url: str | None = None
 
 
 class WorkingRecordInput(BaseModel):
@@ -176,11 +179,18 @@ def apply_profile_source_payload(
         )
 
     block = parameters.profile
+    has_contact = bool(person.email or person.phone or person.linkedin_url)
+    if block is None and has_contact:
+        # Contact details are person-level facts: they do not wait for a profile.
+        block = ProfileBlockInput()
     if block is not None:
         profile_pipeline.run(
             PersonProfilePipelineParameters(
                 first_name=person.first_name,
                 last_name=person.last_name,
+                email=person.email,
+                phone=person.phone,
+                linkedin_url=person.linkedin_url,
                 slug=block.slug,
                 headline=block.headline,
                 about=block.about,

@@ -76,6 +76,10 @@ PERSON_FIELDS = (
     "years_of_experience",
     "public_profile_url",
 )
+# Columns of the people table the header may offer as a way to reach someone.
+# Kept apart from PERSON_FIELDS so a contact detail can never become a facet,
+# a search field or a plain fact.
+CONTACT_FIELDS = ("email", "phone", "linkedin_url")
 # Fields a search weight may be given for: people columns plus the child tables
 # folded into the searchable text.
 SEARCH_FIELDS = frozenset(PERSON_FIELDS) | {
@@ -238,6 +242,39 @@ def _validate_sections(profile: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return sorted(validated, key=lambda section: section["order"])
+
+
+def _validate_contact(profile: dict[str, Any]) -> list[dict[str, Any]]:
+    contact = profile.get("contact") or []
+    if not isinstance(contact, list):
+        raise ConfigError("profile.contact must be a list")
+    validated: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index, value in enumerate(contact):
+        item = _mapping(value, f"profile.contact[{index}]")
+        field = _text(item.get("field"), f"profile.contact[{index}].field")
+        if field not in CONTACT_FIELDS:
+            raise ConfigError(
+                f"profile.contact[{index}].field is not a contact column: {field}. "
+                f"Columns: {', '.join(CONTACT_FIELDS)}"
+            )
+        if field in seen:
+            raise ConfigError(f"profile.contact lists {field} twice")
+        seen.add(field)
+        validated.append(
+            {
+                "field": field,
+                "label": _text(item.get("label"), f"profile.contact[{index}].label"),
+            }
+        )
+    return validated
+
+
+def _validate_privacy(privacy: dict[str, Any]) -> dict[str, Any]:
+    for key in ("reject_emails", "reject_long_digit_runs", "publish_contact_details"):
+        if key in privacy and not isinstance(privacy[key], bool):
+            raise ConfigError(f"privacy.{key} must be true or false")
+    return privacy
 
 
 def _validate_facts(profile: dict[str, Any]) -> list[dict[str, Any]]:
@@ -404,10 +441,13 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
         "search": _validate_search(_mapping(config.get("search"), "search")),
         "profile": {
             "facts": _validate_facts(profile),
+            "contact": _validate_contact(profile),
             "sections": _validate_sections(profile),
         },
         "data": _validate_data(_mapping(config.get("data"), "data"), app_root),
-        "privacy": config.get("privacy") or {},
+        "privacy": _validate_privacy(
+            _mapping(config.get("privacy") or {}, "privacy")
+        ),
     }
 
 

@@ -138,6 +138,48 @@ class TestSections:
         assert "recommendations" not in {s["id"] for s in config["profile"]["sections"]}
 
 
+class TestContact:
+    def test_the_shipped_config_offers_all_three(self) -> None:
+        fields = [item["field"] for item in load_config()["profile"]["contact"]]
+        assert fields == ["email", "phone", "linkedin_url"]
+
+    def test_contact_must_name_a_contact_column(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["profile"]["contact"][0]["field"] = "headline"
+
+        fails(tmp_path, mutate, "is not a contact column: headline")
+
+    def test_a_contact_field_is_listed_once(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["profile"]["contact"].append({"field": "email", "label": "Mail"})
+
+        fails(tmp_path, mutate, "profile.contact lists email twice")
+
+    def test_a_contact_detail_cannot_be_a_fact(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["profile"]["facts"][0]["field"] = "phone"
+
+        fails(tmp_path, mutate, "is not a people column: phone")
+
+    def test_a_contact_detail_cannot_be_searched(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["search"]["fields"][0]["name"] = "email"
+
+        fails(tmp_path, mutate, "is not searchable: email")
+
+    def test_the_opt_in_is_a_boolean(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["privacy"]["publish_contact_details"] = "yes"
+
+        fails(tmp_path, mutate, "privacy.publish_contact_details must be true or false")
+
+    def test_no_contact_block_means_no_contact_row(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["profile"].pop("contact")
+
+        assert load_config(write_config(tmp_path, mutate))["profile"]["contact"] == []
+
+
 class TestFactsAndSearch:
     def test_fact_must_name_a_people_column(self, tmp_path: Path) -> None:
         def mutate(raw: dict[str, Any]) -> None:

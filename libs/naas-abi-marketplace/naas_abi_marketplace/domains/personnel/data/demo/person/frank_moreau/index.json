@@ -5,7 +5,10 @@
     "first_name": "Frank",
     "last_name": "Moreau",
     "full_name": "Frank Moreau",
-    "linkedin_profile_url": "https://demo.example/profiles/frank_moreau"
+    "linkedin_profile_url": "https://demo.example/profiles/frank_moreau",
+    "email": "frank.moreau@demo.example",
+    "phone": "+33 1 99 00 00 06",
+    "linkedin_url": "https://www.linkedin.com/in/frank-moreau-demo"
   },
   "records": [
     {

@@ -77,6 +77,13 @@ personnel:duration_label a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     skos:definition "Human-readable span of a temporal region as stated on the source profile, e.g. '3 yrs 5 mos'."@en .
 
+personnel:email_address a owl:DatatypeProperty ;
+    rdfs:label "email address"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:string ;
+    skos:definition "Address at which the person can be reached by email, as published for them by the directory that lists them."@en ;
+    skos:example "'alice.dupont@demo.example'."@en .
+
 personnel:employee_id a owl:DatatypeProperty ;
     rdfs:label "employee id"@en ;
     rdfs:domain personnel:EmploymentRecord ;
@@ -180,6 +187,13 @@ personnel:language_name a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     skos:definition "Name of the language a capability is held for, as displayed."@en ;
     skos:example "'French'; 'Mandarin'."@en .
+
+personnel:linkedin_url a owl:DatatypeProperty ;
+    rdfs:label "linkedin url"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:anyURI ;
+    skos:definition "Address of the person's own LinkedIn profile page. Distinct from the source a profile was read from, which may be any published page."@en ;
+    skos:example "'https://www.linkedin.com/in/alice-dupont-demo'."@en .
 
 personnel:mission_content a owl:DatatypeProperty ;
     rdfs:label "mission content"@en ;
@@ -286,6 +300,13 @@ personnel:summary_content a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     skos:definition "Full text of the profile summary: the paragraph a person or their organization publishes about them."@en .
 
+personnel:telephone_number a owl:DatatypeProperty ;
+    rdfs:label "telephone number"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:string ;
+    skos:definition "Number at which the person can be reached by telephone, written in international form with its country code."@en ;
+    skos:example "'+33 1 99 00 00 01'."@en .
+
 personnel:termination_date a owl:DatatypeProperty ;
     rdfs:label "termination date"@en ;
     rdfs:domain personnel:EmploymentRecord ;
@@ -301,382 +322,382 @@ personnel:years_of_experience a owl:DatatypeProperty ;
 <http://ontology.naas.ai/abi/Organization/acme-consulting> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "Acme Consulting" ;
-    dcterms:created "2026-09-18T13:38:49.343230"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.418099"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Organization/bay-area-business-school> a abi:Organization,
         owl:NamedIndividual,
         cco:ont00000564 ;
     rdfs:label "Bay Area Business School" ;
-    dcterms:created "2026-09-18T13:38:49.625765"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.651674"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Organization/cloud-native-computing-foundation> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "Cloud Native Computing Foundation" ;
-    dcterms:created "2026-09-18T13:38:49.357527"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.438996"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Organization/cloud-partners> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "Cloud Partners" ;
-    dcterms:created "2026-09-18T13:38:49.395146"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.481122"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Organization/deviceworks> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "DeviceWorks" ;
-    dcterms:created "2026-09-18T13:38:49.618245"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.642739"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Organization/global-advisors> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "Global Advisors" ;
-    dcterms:created "2026-09-18T13:38:49.367766"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.457762"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Organization/launchpad> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "LaunchPad" ;
-    dcterms:created "2026-09-18T13:38:49.450885"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.511691"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Organization/leadership-co> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "Leadership Co" ;
-    dcterms:created "2026-09-18T13:38:49.654482"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.667487"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Organization/legaltech-co> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "LegalTech Co" ;
-    dcterms:created "2026-09-18T13:38:49.425994"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.499136"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Organization/lyon-institute-of-technology> a abi:Organization,
         owl:NamedIndividual,
         cco:ont00000564 ;
     rdfs:label "Lyon Institute of Technology" ;
-    dcterms:created "2026-09-18T13:38:49.400328"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.486184"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Organization/salesplatform> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "SalesPlatform" ;
-    dcterms:created "2026-09-18T13:38:49.571123"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.611088"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Organization/streamcorp> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "StreamCorp" ;
-    dcterms:created "2026-09-18T13:38:49.607881"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.635068"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Organization/translation-corp> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "Translation Corp" ;
-    dcterms:created "2026-09-18T13:38:49.580161"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.617023"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-acme-consulting-data-ai-engineer-working-start-2019-10-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/10/2019" ;
     personnel:instant_date "2019-10-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.344217"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.419224"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-demo-coo-working-start-2023-04-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/04/2023" ;
     personnel:instant_date "2023-04-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.339776"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.415419"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-demo-university-master-s-degree-computer-science-studying-end-2013-06-30> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "30/06/2013" ;
     personnel:instant_date "2013-06-30"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.351954"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.432841"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-demo-university-master-s-degree-computer-science-studying-start-2010-09-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/09/2010" ;
     personnel:instant_date "2010-09-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.351595"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.432282"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-nexus-labs-co-founder-working-end-2022-12-31> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "31/12/2022" ;
     personnel:instant_date "2022-12-31"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.347978"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.424091"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-nexus-labs-co-founder-working-start-2018-10-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/10/2018" ;
     personnel:instant_date "2018-10-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.347617"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.423762"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/bob-martin-demo-ceo-working-start-2023-04-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/04/2023" ;
     personnel:instant_date "2023-04-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.364536"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.452461"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/bob-martin-global-advisors-senior-advisor-data-ai-working-start-2024-11-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/11/2024" ;
     personnel:instant_date "2024-11-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.368576"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.458901"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/bob-martin-nexus-labs-founder-working-end-2023-04-30> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "30/04/2023" ;
     personnel:instant_date "2023-04-30"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.374916"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.464932"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/bob-martin-nexus-labs-founder-working-start-2016-11-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/11/2016" ;
     personnel:instant_date "2016-11-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.373086"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.464500"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-cloud-partners-cloud-engineer-working-end-2021-06-30> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "30/06/2021" ;
     personnel:instant_date "2021-06-30"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.396090"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.482107"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-cloud-partners-cloud-engineer-working-start-2020-02-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/02/2020" ;
     personnel:instant_date "2020-02-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.395773"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.481844"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-demo-cto-working-start-2023-04-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/04/2023" ;
     personnel:instant_date "2023-04-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.386573"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.474454"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems-studying-end-2018-06-30> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "30/06/2018" ;
     personnel:instant_date "2018-06-30"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.401656"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.487068"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems-studying-start-2013-09-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/09/2013" ;
     personnel:instant_date "2013-09-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.401432"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.486728"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-nexus-labs-cto-working-end-2023-04-30> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "30/04/2023" ;
     personnel:instant_date "2023-04-30"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.392258"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.478008"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-nexus-labs-cto-working-start-2021-06-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/06/2021" ;
     personnel:instant_date "2021-06-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.391894"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.477728"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/david-leroy-demo-lead-developer-frontend-working-end-2026-03-31> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "31/03/2026" ;
     personnel:instant_date "2026-03-31"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.416853"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.495919"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/david-leroy-demo-lead-developer-frontend-working-start-2024-02-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/02/2024" ;
     personnel:instant_date "2024-02-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.416064"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.495631"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/david-leroy-legaltech-co-fullstack-developer-working-end-2023-11-30> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "30/11/2023" ;
     personnel:instant_date "2023-11-30"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.428123"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.499849"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/david-leroy-legaltech-co-fullstack-developer-working-start-2017-07-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/07/2017" ;
     personnel:instant_date "2017-07-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.427426"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.499643"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-demo-cto-working-end-2024-12-31> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "31/12/2024" ;
     personnel:instant_date "2024-12-31"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.443355"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.508304"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-demo-cto-working-start-2020-12-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/12/2020" ;
     personnel:instant_date "2020-12-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.442709"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.508086"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-demo-university-bachelor-s-degree-software-engineering-studying-end-2014-06-30> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "30/06/2014" ;
     personnel:instant_date "2014-06-30"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.458776"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.516816"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-demo-university-bachelor-s-degree-software-engineering-studying-start-2011-09-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/09/2011" ;
     personnel:instant_date "2011-09-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.458448"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.516595"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-launchpad-solo-maker-working-start-2021-12-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/12/2021" ;
     personnel:instant_date "2021-12-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.451862"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.512507"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-demo-head-of-growth-working-end-2022-12-31> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "31/12/2022" ;
     personnel:instant_date "2022-12-31"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.479256"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.527006"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-demo-head-of-growth-working-start-2020-01-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/01/2020" ;
     personnel:instant_date "2020-01-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.478609"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.526742"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-salesplatform-account-executive-working-end-2024-12-31> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "31/12/2024" ;
     personnel:instant_date "2024-12-31"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.574176"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.612255"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-salesplatform-account-executive-working-start-2023-01-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/01/2023" ;
     personnel:instant_date "2023-01-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.572642"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.611896"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-translation-corp-account-manager-working-end-2019-12-31> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "31/12/2019" ;
     personnel:instant_date "2019-12-31"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.581619"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.618376"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-translation-corp-account-manager-working-start-2017-02-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/02/2017" ;
     personnel:instant_date "2017-02-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.581197"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.618034"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-bay-area-business-school-mba-studying-end-2010-06-30> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "30/06/2010" ;
     personnel:instant_date "2010-06-30"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.627765"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.652472"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-bay-area-business-school-mba-studying-start-2008-09-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/09/2008" ;
     personnel:instant_date "2008-09-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.626850"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.652224"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-demo-board-advisor-working-start-2022-01-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/01/2022" ;
     personnel:instant_date "2022-01-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.599431"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.628311"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-deviceworks-cto-working-end-2015-01-31> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "31/01/2015" ;
     personnel:instant_date "2015-01-31"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.620399"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.644847"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-deviceworks-cto-working-start-2011-10-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/10/2011" ;
     personnel:instant_date "2011-10-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.619993"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.644488"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-streamcorp-head-of-partner-experiences-working-end-2023-09-30> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "30/09/2023" ;
     personnel:instant_date "2023-09-30"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.611799"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.636878"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-streamcorp-head-of-partner-experiences-working-start-2015-02-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/02/2015" ;
     personnel:instant_date "2015-02-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.611281"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.636375"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/hugo-girard-agile-partners-chief-agility-officer-working-end-2015-02-28> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "28/02/2015" ;
     personnel:instant_date "2015-02-28"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.661269"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.673769"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/hugo-girard-agile-partners-chief-agility-officer-working-start-2013-09-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/09/2013" ;
     personnel:instant_date "2013-09-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.660840"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.673376"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/hugo-girard-demo-advisor-working-start-2022-01-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/01/2022" ;
     personnel:instant_date "2022-01-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.649636"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.663480"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalInstant/hugo-girard-leadership-co-co-founder-working-start-2023-11-01> a abi:TemporalInstant,
         owl:NamedIndividual ;
     rdfs:label "01/11/2023" ;
     personnel:instant_date "2023-11-01"^^xsd:date ;
-    dcterms:created "2026-09-18T13:38:49.655463"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.668035"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-acme-consulting-data-ai-engineer-working> a abi:TemporalRegion,
@@ -684,7 +705,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     rdfs:label "Oct 2019 – Present" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-acme-consulting-data-ai-engineer-working-start-2019-10-01> ;
     personnel:duration_label "6 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.344507"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.419563"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-demo-coo-working> a abi:TemporalRegion,
@@ -692,7 +713,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     rdfs:label "Apr 2023 – Present" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-demo-coo-working-start-2023-04-01> ;
     personnel:duration_label "3 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.340145"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.415728"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-demo-university-master-s-degree-computer-science-studying> a abi:TemporalRegion,
@@ -701,7 +722,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-demo-university-master-s-degree-computer-science-studying-start-2010-09-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-demo-university-master-s-degree-computer-science-studying-end-2013-06-30> ;
     personnel:duration_label "2010 – 2013"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.352295"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.433121"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/alice-dupont-nexus-labs-co-founder-working> a abi:TemporalRegion,
@@ -710,7 +731,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-nexus-labs-co-founder-working-start-2018-10-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/alice-dupont-nexus-labs-co-founder-working-end-2022-12-31> ;
     personnel:duration_label "4 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.348296"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.424393"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/bob-martin-demo-ceo-working> a abi:TemporalRegion,
@@ -718,7 +739,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     rdfs:label "Apr 2023 – Present" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/bob-martin-demo-ceo-working-start-2023-04-01> ;
     personnel:duration_label "3 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.364875"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.453235"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/bob-martin-global-advisors-senior-advisor-data-ai-working> a abi:TemporalRegion,
@@ -726,7 +747,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     rdfs:label "Nov 2024 – Present" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/bob-martin-global-advisors-senior-advisor-data-ai-working-start-2024-11-01> ;
     personnel:duration_label "1 yr"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.368798"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.459244"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/bob-martin-nexus-labs-founder-working> a abi:TemporalRegion,
@@ -735,7 +756,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/bob-martin-nexus-labs-founder-working-start-2016-11-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/bob-martin-nexus-labs-founder-working-end-2023-04-30> ;
     personnel:duration_label "6 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.375314"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.465226"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/claire-bernard-cloud-partners-cloud-engineer-working> a abi:TemporalRegion,
@@ -744,7 +765,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-cloud-partners-cloud-engineer-working-start-2020-02-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-cloud-partners-cloud-engineer-working-end-2021-06-30> ;
     personnel:duration_label "1 yr"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.396438"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.482332"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/claire-bernard-demo-cto-working> a abi:TemporalRegion,
@@ -752,7 +773,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     rdfs:label "Apr 2023 – Present" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-demo-cto-working-start-2023-04-01> ;
     personnel:duration_label "3 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.387018"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.474696"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems-studying> a abi:TemporalRegion,
@@ -761,7 +782,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems-studying-start-2013-09-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems-studying-end-2018-06-30> ;
     personnel:duration_label "2013 – 2018"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.401865"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.487309"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/claire-bernard-nexus-labs-cto-working> a abi:TemporalRegion,
@@ -770,7 +791,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-nexus-labs-cto-working-start-2021-06-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/claire-bernard-nexus-labs-cto-working-end-2023-04-30> ;
     personnel:duration_label "2 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.392507"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.478374"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/david-leroy-demo-lead-developer-frontend-working> a abi:TemporalRegion,
@@ -779,7 +800,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/david-leroy-demo-lead-developer-frontend-working-start-2024-02-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/david-leroy-demo-lead-developer-frontend-working-end-2026-03-31> ;
     personnel:duration_label "2 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.417509"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.496157"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/david-leroy-legaltech-co-fullstack-developer-working> a abi:TemporalRegion,
@@ -788,7 +809,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/david-leroy-legaltech-co-fullstack-developer-working-start-2017-07-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/david-leroy-legaltech-co-fullstack-developer-working-end-2023-11-30> ;
     personnel:duration_label "6 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.428728"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.500045"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/emma-petit-demo-cto-working> a abi:TemporalRegion,
@@ -797,7 +818,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-demo-cto-working-start-2020-12-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-demo-cto-working-end-2024-12-31> ;
     personnel:duration_label "4 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.444310"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.508503"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/emma-petit-demo-university-bachelor-s-degree-software-engineering-studying> a abi:TemporalRegion,
@@ -806,7 +827,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-demo-university-bachelor-s-degree-software-engineering-studying-start-2011-09-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-demo-university-bachelor-s-degree-software-engineering-studying-end-2014-06-30> ;
     personnel:duration_label "2011 – 2014"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.459316"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.517063"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/emma-petit-launchpad-solo-maker-working> a abi:TemporalRegion,
@@ -814,7 +835,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     rdfs:label "Dec 2021 – Present" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/emma-petit-launchpad-solo-maker-working-start-2021-12-01> ;
     personnel:duration_label "4 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.452256"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.512743"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/frank-moreau-demo-head-of-growth-working> a abi:TemporalRegion,
@@ -823,7 +844,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-demo-head-of-growth-working-start-2020-01-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-demo-head-of-growth-working-end-2022-12-31> ;
     personnel:duration_label "3 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.479905"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.527215"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/frank-moreau-salesplatform-account-executive-working> a abi:TemporalRegion,
@@ -832,7 +853,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-salesplatform-account-executive-working-start-2023-01-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-salesplatform-account-executive-working-end-2024-12-31> ;
     personnel:duration_label "2 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.574732"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.612562"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/frank-moreau-translation-corp-account-manager-working> a abi:TemporalRegion,
@@ -841,7 +862,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-translation-corp-account-manager-working-start-2017-02-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/frank-moreau-translation-corp-account-manager-working-end-2019-12-31> ;
     personnel:duration_label "3 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.582076"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.618678"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-bay-area-business-school-mba-studying> a abi:TemporalRegion,
@@ -850,7 +871,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-bay-area-business-school-mba-studying-start-2008-09-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-bay-area-business-school-mba-studying-end-2010-06-30> ;
     personnel:duration_label "2008 – 2010"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.629587"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.652752"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-demo-board-advisor-working> a abi:TemporalRegion,
@@ -858,7 +879,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     rdfs:label "Jan 2022 – Present" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-demo-board-advisor-working-start-2022-01-01> ;
     personnel:duration_label "4 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.599880"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.628738"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-deviceworks-cto-working> a abi:TemporalRegion,
@@ -867,7 +888,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-deviceworks-cto-working-start-2011-10-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-deviceworks-cto-working-end-2015-01-31> ;
     personnel:duration_label "3 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.620718"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.645363"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/grace-lambert-streamcorp-head-of-partner-experiences-working> a abi:TemporalRegion,
@@ -876,7 +897,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-streamcorp-head-of-partner-experiences-working-start-2015-02-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/grace-lambert-streamcorp-head-of-partner-experiences-working-end-2023-09-30> ;
     personnel:duration_label "8 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.612176"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.637276"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/hugo-girard-agile-partners-chief-agility-officer-working> a abi:TemporalRegion,
@@ -885,7 +906,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/hugo-girard-agile-partners-chief-agility-officer-working-start-2013-09-01> ;
     abi:hasLastInstant <http://ontology.naas.ai/abi/TemporalInstant/hugo-girard-agile-partners-chief-agility-officer-working-end-2015-02-28> ;
     personnel:duration_label "1 yr"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.661542"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.674028"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/hugo-girard-demo-advisor-working> a abi:TemporalRegion,
@@ -893,7 +914,7 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     rdfs:label "Jan 2022 – Present" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/hugo-girard-demo-advisor-working-start-2022-01-01> ;
     personnel:duration_label "4 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.649927"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.663744"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/TemporalRegion/hugo-girard-leadership-co-co-founder-working> a abi:TemporalRegion,
@@ -901,35 +922,35 @@ personnel:years_of_experience a owl:DatatypeProperty ;
     rdfs:label "Nov 2023 – Present" ;
     abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/hugo-girard-leadership-co-co-founder-working-start-2023-11-01> ;
     personnel:duration_label "2 yrs"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.655847"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.668316"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/AcademicDegree/alice-dupont-demo-university-master-s-degree-computer-science> a personnel:AcademicDegree,
         owl:NamedIndividual ;
     rdfs:label "Master's Degree, Computer Science" ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/alice-dupont-linkedin-education> ;
-    dcterms:created "2026-09-18T13:38:49.353635"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.434443"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/AcademicDegree/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems> a personnel:AcademicDegree,
         owl:NamedIndividual ;
     rdfs:label "Engineering Degree, Distributed Systems" ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/claire-bernard-linkedin-education> ;
-    dcterms:created "2026-09-18T13:38:49.402735"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.488099"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/AcademicDegree/emma-petit-demo-university-bachelor-s-degree-software-engineering> a personnel:AcademicDegree,
         owl:NamedIndividual ;
     rdfs:label "Bachelor's Degree, Software Engineering" ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/emma-petit-linkedin-education> ;
-    dcterms:created "2026-09-18T13:38:49.460493"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.517996"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/AcademicDegree/grace-lambert-bay-area-business-school-mba> a personnel:AcademicDegree,
         owl:NamedIndividual ;
     rdfs:label "MBA" ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/grace-lambert-linkedin-education> ;
-    dcterms:created "2026-09-18T13:38:49.631730"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.653945"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:ActOfStudyingProcess a owl:Ontology ;
@@ -979,7 +1000,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:isCertificationOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:issue_date "2021-03-15"^^xsd:date ;
     personnel:issuedByOrganization <http://ontology.naas.ai/abi/Organization/cloud-native-computing-foundation> ;
-    dcterms:created "2026-09-18T13:38:49.357746"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.439235"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Certification/alice-dupont-demo-platform-architect> a personnel:Certification,
@@ -990,7 +1011,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:isCertificationOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:issue_date "2023-09-01"^^xsd:date ;
     personnel:issuedByOrganization <http://ontology.naas.ai/abi/Organization/demo-institute> ;
-    dcterms:created "2026-09-18T13:38:49.358457"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.440012"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Certification/bob-martin-demo-data-strategy-practitioner> a personnel:Certification,
@@ -1001,7 +1022,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:isCertificationOf <http://ontology.naas.ai/abi/Person/bob-martin> ;
     personnel:issue_date "2020-01-20"^^xsd:date ;
     personnel:issuedByOrganization <http://ontology.naas.ai/abi/Organization/demo-institute> ;
-    dcterms:created "2026-09-18T13:38:49.381877"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.470725"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Certification/frank-moreau-demo-crm-specialist> a personnel:Certification,
@@ -1013,7 +1034,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:isCertificationOf <http://ontology.naas.ai/abi/Person/frank-moreau> ;
     personnel:issue_date "2022-05-10"^^xsd:date ;
     personnel:issuedByOrganization <http://ontology.naas.ai/abi/Organization/demo-institute> ;
-    dcterms:created "2026-09-18T13:38:49.591508"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.624614"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Certification/hugo-girard-certified-agile-coach> a personnel:Certification,
@@ -1024,84 +1045,84 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:isCertificationOf <http://ontology.naas.ai/abi/Person/hugo-girard> ;
     personnel:issue_date "2014-11-01"^^xsd:date ;
     personnel:issuedByOrganization <http://ontology.naas.ai/abi/Organization/agile-partners> ;
-    dcterms:created "2026-09-18T13:38:49.673212"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.679229"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont-acme-consulting-data-ai-engineer> a personnel:EmploymentContract,
         owl:NamedIndividual ;
     rdfs:label "Freelance - Alice Dupont / Acme Consulting" ;
     personnel:contract_type "Freelance"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.345785"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.421300"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont-demo-coo> a personnel:EmploymentContract,
         owl:NamedIndividual ;
     rdfs:label "Self-employed - Alice Dupont / Demo" ;
     personnel:contract_type "Self-employed"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.341892"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.416944"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont-nexus-labs-co-founder> a personnel:EmploymentContract,
         owl:NamedIndividual ;
     rdfs:label "Self-employed - Alice Dupont / Nexus Labs" ;
     personnel:contract_type "Self-employed"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.349441"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.427229"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmploymentContract/bob-martin-demo-ceo> a personnel:EmploymentContract,
         owl:NamedIndividual ;
     rdfs:label "Permanent - Bob Martin / Demo" ;
     personnel:contract_type "Permanent"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.366247"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.455712"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmploymentContract/bob-martin-global-advisors-senior-advisor-data-ai> a personnel:EmploymentContract,
         owl:NamedIndividual ;
     rdfs:label "Part-time - Bob Martin / Global Advisors" ;
     personnel:contract_type "Part-time"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.370361"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.460739"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmploymentContract/claire-bernard-cloud-partners-cloud-engineer> a personnel:EmploymentContract,
         owl:NamedIndividual ;
     rdfs:label "Freelance - Claire Bernard / Cloud Partners" ;
     personnel:contract_type "Freelance"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.397732"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.483554"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmploymentContract/david-leroy-demo-lead-developer-frontend> a personnel:EmploymentContract,
         owl:NamedIndividual ;
     rdfs:label "Freelance - David Leroy / Demo" ;
     personnel:contract_type "Freelance"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.421170"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.497218"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmploymentContract/david-leroy-legaltech-co-fullstack-developer> a personnel:EmploymentContract,
         owl:NamedIndividual ;
     rdfs:label "Permanent - David Leroy / LegalTech Co" ;
     personnel:contract_type "Permanent"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.431292"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.501706"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmploymentContract/emma-petit-demo-cto> a personnel:EmploymentContract,
         owl:NamedIndividual ;
     rdfs:label "Permanent - Emma Petit / Demo" ;
     personnel:contract_type "Permanent"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.447285"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.509700"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmploymentContract/emma-petit-launchpad-solo-maker> a personnel:EmploymentContract,
         owl:NamedIndividual ;
     rdfs:label "Self-employed - Emma Petit / LaunchPad" ;
     personnel:contract_type "Self-employed"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.453657"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.513922"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmploymentContract/frank-moreau-demo-head-of-growth> a personnel:EmploymentContract,
         owl:NamedIndividual ;
     rdfs:label "Permanent - Frank Moreau / Demo" ;
     personnel:contract_type "Permanent"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.482968"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.608364"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Grade/alice-dupont-partner> a personnel:Grade,
@@ -1109,7 +1130,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Partner" ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:grade_value "Partner" ;
-    dcterms:created "2026-09-18T13:38:49.356803"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.438120"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Grade/bob-martin-partner> a personnel:Grade,
@@ -1117,7 +1138,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Partner" ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/bob-martin> ;
     personnel:grade_value "Partner" ;
-    dcterms:created "2026-09-18T13:38:49.380891"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.469898"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Grade/claire-bernard-director> a personnel:Grade,
@@ -1125,7 +1146,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Director" ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/claire-bernard> ;
     personnel:grade_value "Director" ;
-    dcterms:created "2026-09-18T13:38:49.405729"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.490966"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Grade/david-leroy-senior-manager> a personnel:Grade,
@@ -1133,7 +1154,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Senior Manager" ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/david-leroy> ;
     personnel:grade_value "Senior Manager" ;
-    dcterms:created "2026-09-18T13:38:49.436206"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.505251"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Grade/emma-petit-director> a personnel:Grade,
@@ -1141,7 +1162,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Director" ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/emma-petit> ;
     personnel:grade_value "Director" ;
-    dcterms:created "2026-09-18T13:38:49.469125"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.521111"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Grade/frank-moreau-manager> a personnel:Grade,
@@ -1149,7 +1170,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Manager" ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/frank-moreau> ;
     personnel:grade_value "Manager" ;
-    dcterms:created "2026-09-18T13:38:49.589406"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.624086"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Grade/grace-lambert-partner> a personnel:Grade,
@@ -1157,7 +1178,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Partner" ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/grace-lambert> ;
     personnel:grade_value "Partner" ;
-    dcterms:created "2026-09-18T13:38:49.638644"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.657917"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Grade/hugo-girard-senior-manager> a personnel:Grade,
@@ -1165,7 +1186,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Senior Manager" ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/hugo-girard> ;
     personnel:grade_value "Senior Manager" ;
-    dcterms:created "2026-09-18T13:38:49.672194"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.678632"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Interest/alice-dupont-ocean-conservation> a personnel:Interest,
@@ -1174,7 +1195,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:interest_kind "topic" ;
     personnel:interest_name "Ocean conservation" ;
-    dcterms:created "2026-09-18T13:38:49.360120"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.442576"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Interest/alice-dupont-open-source-infrastructure> a personnel:Interest,
@@ -1184,7 +1205,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:interest_description "Maintains two small operator projects." ;
     personnel:interest_kind "topic" ;
     personnel:interest_name "Open source infrastructure" ;
-    dcterms:created "2026-09-18T13:38:49.359814"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.442058"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Interest/claire-bernard-mountain-rescue-volunteering> a personnel:Interest,
@@ -1194,7 +1215,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:interest_description "Weekend volunteer with a local team." ;
     personnel:interest_kind "topic" ;
     personnel:interest_name "Mountain rescue volunteering" ;
-    dcterms:created "2026-09-18T13:38:49.408624"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.492554"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Interest/emma-petit-indie-software> a personnel:Interest,
@@ -1204,7 +1225,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:interest_description "Writes about running a one-person product company." ;
     personnel:interest_kind "topic" ;
     personnel:interest_name "Indie software" ;
-    dcterms:created "2026-09-18T13:38:49.470437"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.521925"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Interest/emma-petit-long-distance-cycling> a personnel:Interest,
@@ -1213,7 +1234,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/emma-petit> ;
     personnel:interest_kind "topic" ;
     personnel:interest_name "Long-distance cycling" ;
-    dcterms:created "2026-09-18T13:38:49.470778"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.522264"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Interest/hugo-girard-organizational-design> a personnel:Interest,
@@ -1223,7 +1244,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     personnel:interest_description "Writes a newsletter on team topologies." ;
     personnel:interest_kind "topic" ;
     personnel:interest_name "Organizational design" ;
-    dcterms:created "2026-09-18T13:38:49.673786"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.679546"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-acme-consulting-data-ai-engineer> a personnel:JobPosition,
@@ -1231,7 +1252,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Data & AI Engineer" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-acme-consulting-data-ai-engineer> ;
     personnel:job_title "Data & AI Engineer" ;
-    dcterms:created "2026-09-18T13:38:49.345081"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.420443"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-demo-coo> a personnel:JobPosition,
@@ -1239,7 +1260,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "COO" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-demo-coo> ;
     personnel:job_title "COO" ;
-    dcterms:created "2026-09-18T13:38:49.341065"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.416367"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/alice-dupont-nexus-labs-co-founder> a personnel:JobPosition,
@@ -1247,7 +1268,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Co-Founder" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-nexus-labs-co-founder> ;
     personnel:job_title "Co-Founder" ;
-    dcterms:created "2026-09-18T13:38:49.348886"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.425266"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/bob-martin-demo-ceo> a personnel:JobPosition,
@@ -1255,7 +1276,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "CEO" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-demo-ceo> ;
     personnel:job_title "CEO" ;
-    dcterms:created "2026-09-18T13:38:49.365568"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.454518"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/bob-martin-global-advisors-senior-advisor-data-ai> a personnel:JobPosition,
@@ -1263,7 +1284,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Senior Advisor, Data & AI" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-global-advisors-senior-advisor-data-ai> ;
     personnel:job_title "Senior Advisor, Data & AI" ;
-    dcterms:created "2026-09-18T13:38:49.369435"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.460052"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/bob-martin-nexus-labs-founder> a personnel:JobPosition,
@@ -1271,7 +1292,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Founder" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-nexus-labs-founder> ;
     personnel:job_title "Founder" ;
-    dcterms:created "2026-09-18T13:38:49.376242"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.466076"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/claire-bernard-cloud-partners-cloud-engineer> a personnel:JobPosition,
@@ -1279,7 +1300,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Cloud Engineer" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-cloud-partners-cloud-engineer> ;
     personnel:job_title "Cloud Engineer" ;
-    dcterms:created "2026-09-18T13:38:49.397202"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.482953"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/claire-bernard-demo-cto> a personnel:JobPosition,
@@ -1287,7 +1308,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "CTO" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-demo-cto> ;
     personnel:job_title "CTO" ;
-    dcterms:created "2026-09-18T13:38:49.387880"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.475245"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/claire-bernard-nexus-labs-cto> a personnel:JobPosition,
@@ -1295,7 +1316,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "CTO" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-nexus-labs-cto> ;
     personnel:job_title "CTO" ;
-    dcterms:created "2026-09-18T13:38:49.393079"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.479100"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/david-leroy-demo-lead-developer-frontend> a personnel:JobPosition,
@@ -1303,7 +1324,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Lead Developer Frontend" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/david-leroy-demo-lead-developer-frontend> ;
     personnel:job_title "Lead Developer Frontend" ;
-    dcterms:created "2026-09-18T13:38:49.419462"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.496735"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/david-leroy-legaltech-co-fullstack-developer> a personnel:JobPosition,
@@ -1311,7 +1332,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Fullstack Developer" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/david-leroy-legaltech-co-fullstack-developer> ;
     personnel:job_title "Fullstack Developer" ;
-    dcterms:created "2026-09-18T13:38:49.429957"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.500864"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/emma-petit-demo-cto> a personnel:JobPosition,
@@ -1319,7 +1340,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "CTO" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/emma-petit-demo-cto> ;
     personnel:job_title "CTO" ;
-    dcterms:created "2026-09-18T13:38:49.445585"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.509088"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/emma-petit-launchpad-solo-maker> a personnel:JobPosition,
@@ -1327,7 +1348,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Solo Maker" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/emma-petit-launchpad-solo-maker> ;
     personnel:job_title "Solo Maker" ;
-    dcterms:created "2026-09-18T13:38:49.452994"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.513277"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/frank-moreau-demo-head-of-growth> a personnel:JobPosition,
@@ -1335,7 +1356,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Head of Growth" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-demo-head-of-growth> ;
     personnel:job_title "Head of Growth" ;
-    dcterms:created "2026-09-18T13:38:49.482112"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.527858"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/frank-moreau-salesplatform-account-executive> a personnel:JobPosition,
@@ -1343,7 +1364,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Account Executive" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-salesplatform-account-executive> ;
     personnel:job_title "Account Executive" ;
-    dcterms:created "2026-09-18T13:38:49.575528"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.613431"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/frank-moreau-translation-corp-account-manager> a personnel:JobPosition,
@@ -1351,7 +1372,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Account Manager" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-translation-corp-account-manager> ;
     personnel:job_title "Account Manager" ;
-    dcterms:created "2026-09-18T13:38:49.583057"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.619523"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/grace-lambert-demo-board-advisor> a personnel:JobPosition,
@@ -1359,7 +1380,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Board Advisor" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-demo-board-advisor> ;
     personnel:job_title "Board Advisor" ;
-    dcterms:created "2026-09-18T13:38:49.600860"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.630300"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/grace-lambert-deviceworks-cto> a personnel:JobPosition,
@@ -1367,7 +1388,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "CTO" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-deviceworks-cto> ;
     personnel:job_title "CTO" ;
-    dcterms:created "2026-09-18T13:38:49.621327"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.646413"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/grace-lambert-streamcorp-head-of-partner-experiences> a personnel:JobPosition,
@@ -1375,7 +1396,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Head of Partner Experiences" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-streamcorp-head-of-partner-experiences> ;
     personnel:job_title "Head of Partner Experiences" ;
-    dcterms:created "2026-09-18T13:38:49.613407"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.638154"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/hugo-girard-agile-partners-chief-agility-officer> a personnel:JobPosition,
@@ -1383,7 +1404,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Chief Agility Officer" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-agile-partners-chief-agility-officer> ;
     personnel:job_title "Chief Agility Officer" ;
-    dcterms:created "2026-09-18T13:38:49.662520"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.674628"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/hugo-girard-demo-advisor> a personnel:JobPosition,
@@ -1391,7 +1412,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Advisor" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-demo-advisor> ;
     personnel:job_title "Advisor" ;
-    dcterms:created "2026-09-18T13:38:49.650572"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.664384"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/JobPosition/hugo-girard-leadership-co-co-founder> a personnel:JobPosition,
@@ -1399,7 +1420,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     rdfs:label "Co-Founder" ;
     personnel:isJobPositionOf <http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-leadership-co-co-founder> ;
     personnel:job_title "Co-Founder" ;
-    dcterms:created "2026-09-18T13:38:49.656675"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.669914"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/LanguageCapability/alice-dupont-english> a personnel:LanguageCapability,
@@ -1408,7 +1429,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:language_name "English" ;
     personnel:proficiency_level "Full professional" ;
-    dcterms:created "2026-09-18T13:38:49.359216"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.441104"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/LanguageCapability/alice-dupont-french> a personnel:LanguageCapability,
@@ -1417,7 +1438,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:language_name "French" ;
     personnel:proficiency_level "Native or bilingual" ;
-    dcterms:created "2026-09-18T13:38:49.358876"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.440370"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/LanguageCapability/alice-dupont-spanish> a personnel:LanguageCapability,
@@ -1426,7 +1447,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:language_name "Spanish" ;
     personnel:proficiency_level "Limited working" ;
-    dcterms:created "2026-09-18T13:38:49.359543"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.441627"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/LanguageCapability/bob-martin-english> a personnel:LanguageCapability,
@@ -1435,7 +1456,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/bob-martin> ;
     personnel:language_name "English" ;
     personnel:proficiency_level "Full professional" ;
-    dcterms:created "2026-09-18T13:38:49.383294"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.471394"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/LanguageCapability/bob-martin-french> a personnel:LanguageCapability,
@@ -1444,7 +1465,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/bob-martin> ;
     personnel:language_name "French" ;
     personnel:proficiency_level "Native or bilingual" ;
-    dcterms:created "2026-09-18T13:38:49.382792"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.471086"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/LanguageCapability/claire-bernard-english> a personnel:LanguageCapability,
@@ -1453,7 +1474,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/claire-bernard> ;
     personnel:language_name "English" ;
     personnel:proficiency_level "Professional working" ;
-    dcterms:created "2026-09-18T13:38:49.407051"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.491936"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/LanguageCapability/claire-bernard-french> a personnel:LanguageCapability,
@@ -1462,7 +1483,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/claire-bernard> ;
     personnel:language_name "French" ;
     personnel:proficiency_level "Native or bilingual" ;
-    dcterms:created "2026-09-18T13:38:49.406562"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.491565"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/LanguageCapability/claire-bernard-german> a personnel:LanguageCapability,
@@ -1471,7 +1492,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/claire-bernard> ;
     personnel:language_name "German" ;
     personnel:proficiency_level "Limited working" ;
-    dcterms:created "2026-09-18T13:38:49.407657"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.492293"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/LanguageCapability/emma-petit-french> a personnel:LanguageCapability,
@@ -1480,7 +1501,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/emma-petit> ;
     personnel:language_name "French" ;
     personnel:proficiency_level "Native or bilingual" ;
-    dcterms:created "2026-09-18T13:38:49.469952"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.521606"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/LanguageCapability/grace-lambert-english> a personnel:LanguageCapability,
@@ -1489,7 +1510,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/grace-lambert> ;
     personnel:language_name "English" ;
     personnel:proficiency_level "Native or bilingual" ;
-    dcterms:created "2026-09-18T13:38:49.639303"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.658430"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/LanguageCapability/grace-lambert-french> a personnel:LanguageCapability,
@@ -1498,7 +1519,7 @@ personnel:ActOfWorkingProcess a owl:Ontology ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/grace-lambert> ;
     personnel:language_name "French" ;
     personnel:proficiency_level "Professional working" ;
-    dcterms:created "2026-09-18T13:38:49.639737"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.658786"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:PersonnelProfilingProcess a owl:Ontology ;
@@ -1523,7 +1544,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     rdfs:label "Portrait - Alice Dupont" ;
     personnel:isPortraitOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:portrait_path "apps/people/web/assets/portraits/alice_dupont.svg" ;
-    dcterms:created "2026-09-18T13:38:49.356035"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.437262"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Portrait/bob-martin> a personnel:Portrait,
@@ -1531,7 +1552,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     rdfs:label "Portrait - Bob Martin" ;
     personnel:isPortraitOf <http://ontology.naas.ai/abi/Person/bob-martin> ;
     personnel:portrait_path "apps/people/web/assets/portraits/bob_martin.svg" ;
-    dcterms:created "2026-09-18T13:38:49.379881"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.469034"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Portrait/claire-bernard> a personnel:Portrait,
@@ -1539,7 +1560,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     rdfs:label "Portrait - Claire Bernard" ;
     personnel:isPortraitOf <http://ontology.naas.ai/abi/Person/claire-bernard> ;
     personnel:portrait_path "apps/people/web/assets/portraits/claire_bernard.svg" ;
-    dcterms:created "2026-09-18T13:38:49.404957"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.490372"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Portrait/david-leroy> a personnel:Portrait,
@@ -1547,7 +1568,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     rdfs:label "Portrait - David Leroy" ;
     personnel:isPortraitOf <http://ontology.naas.ai/abi/Person/david-leroy> ;
     personnel:portrait_path "apps/people/web/assets/portraits/david_leroy.svg" ;
-    dcterms:created "2026-09-18T13:38:49.435799"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.504321"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Portrait/emma-petit> a personnel:Portrait,
@@ -1555,7 +1576,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     rdfs:label "Portrait - Emma Petit" ;
     personnel:isPortraitOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
     personnel:portrait_path "apps/people/web/assets/portraits/emma_petit.svg" ;
-    dcterms:created "2026-09-18T13:38:49.468245"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.520808"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Portrait/frank-moreau> a personnel:Portrait,
@@ -1563,7 +1584,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     rdfs:label "Portrait - Frank Moreau" ;
     personnel:isPortraitOf <http://ontology.naas.ai/abi/Person/frank-moreau> ;
     personnel:portrait_path "apps/people/web/assets/portraits/frank_moreau.svg" ;
-    dcterms:created "2026-09-18T13:38:49.588280"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.623384"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Portrait/grace-lambert> a personnel:Portrait,
@@ -1571,7 +1592,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     rdfs:label "Portrait - Grace Lambert" ;
     personnel:isPortraitOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
     personnel:portrait_path "apps/people/web/assets/portraits/grace_lambert.svg" ;
-    dcterms:created "2026-09-18T13:38:49.637953"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.657441"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Portrait/hugo-girard> a personnel:Portrait,
@@ -1579,7 +1600,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     rdfs:label "Portrait - Hugo Girard" ;
     personnel:isPortraitOf <http://ontology.naas.ai/abi/Person/hugo-girard> ;
     personnel:portrait_path "apps/people/web/assets/portraits/hugo_girard.svg" ;
-    dcterms:created "2026-09-18T13:38:49.671689"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.678291"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileSummary/alice-dupont> a personnel:ProfileSummary,
@@ -1591,7 +1612,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     personnel:quote_content "An operating model is only real once someone is on call for it." ;
     personnel:summary_content "Runs platform operations at Demo, where she is responsible for how agents are deployed, monitored and retired. Came to operations from data engineering, and still writes the tooling her team runs on." ;
     personnel:years_of_experience 12 ;
-    dcterms:created "2026-09-18T13:38:49.355660"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.436687"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileSummary/bob-martin> a personnel:ProfileSummary,
@@ -1602,7 +1623,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/bob-martin-linkedin> ;
     personnel:summary_content "Founded Nexus Labs and now leads Demo. Spends most of his time with customers and the rest arguing about data models." ;
     personnel:years_of_experience 18 ;
-    dcterms:created "2026-09-18T13:38:49.379252"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.468611"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileSummary/claire-bernard> a personnel:ProfileSummary,
@@ -1613,7 +1634,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/claire-bernard-linkedin> ;
     personnel:summary_content "Builds the platform Demo runs on. Kubernetes since it was hard, Python since before that." ;
     personnel:years_of_experience 9 ;
-    dcterms:created "2026-09-18T13:38:49.404559"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.489902"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileSummary/david-leroy> a personnel:ProfileSummary,
@@ -1623,7 +1644,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     personnel:isProfileSummaryOf <http://ontology.naas.ai/abi/Person/david-leroy> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/david-leroy-linkedin> ;
     personnel:summary_content "Front-end lead. TypeScript and React, with a long detour through legal tech." ;
-    dcterms:created "2026-09-18T13:38:49.435356"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.503986"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileSummary/emma-petit> a personnel:ProfileSummary,
@@ -1635,7 +1656,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     personnel:quote_content "Small enough to rewrite in a weekend is a design constraint, not a limitation." ;
     personnel:summary_content "Was CTO at Demo for four years. Now builds and ships her own products, alone, on purpose." ;
     personnel:years_of_experience 11 ;
-    dcterms:created "2026-09-18T13:38:49.466035"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.520392"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileSummary/frank-moreau> a personnel:ProfileSummary,
@@ -1646,7 +1667,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/frank-moreau-linkedin> ;
     personnel:summary_content "Sells, and builds the automation that makes selling repeatable." ;
     personnel:years_of_experience 8 ;
-    dcterms:created "2026-09-18T13:38:49.587791"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.622993"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileSummary/grace-lambert> a personnel:ProfileSummary,
@@ -1657,7 +1678,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/grace-lambert-linkedin> ;
     personnel:summary_content "Twenty years of partner and product work across hardware and streaming, now advising boards on how the two fit together." ;
     personnel:years_of_experience 20 ;
-    dcterms:created "2026-09-18T13:38:49.637137"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.657011"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileSummary/hugo-girard> a personnel:ProfileSummary,
@@ -1668,7 +1689,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/hugo-girard-linkedin> ;
     personnel:summary_content "Helps engineering organizations change shape without losing the people in them." ;
     personnel:years_of_experience 16 ;
-    dcterms:created "2026-09-18T13:38:49.671018"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.677919"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Recommendation/alice-dupont-bob-martin-2024-11-02> a personnel:Recommendation,
@@ -1679,7 +1700,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     personnel:recommendation_content "Alice took an operations function that existed on a whiteboard and made it something the whole company could rely on. She is the person I want holding the pager on a launch night." ;
     personnel:recommendation_date "2024-11-02"^^xsd:date ;
     personnel:relationship_label "Managed Alice directly" ;
-    dcterms:created "2026-09-18T13:38:49.360779"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.443745"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Recommendation/alice-dupont-claire-bernard-2025-02-18> a personnel:Recommendation,
@@ -1690,7 +1711,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     personnel:recommendation_content "We rebuilt the deployment path together. Alice argued for the boring option every time, and every time she was right." ;
     personnel:recommendation_date "2025-02-18"^^xsd:date ;
     personnel:relationship_label "Worked with Alice on the same team" ;
-    dcterms:created "2026-09-18T13:38:49.361762"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.445861"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Recommendation/emma-petit-claire-bernard-2025-01-09> a personnel:Recommendation,
@@ -1701,7 +1722,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     personnel:recommendation_content "Emma hired me and then got out of the way, which is harder than it sounds. The architecture decisions she made in 2021 are still holding." ;
     personnel:recommendation_date "2025-01-09"^^xsd:date ;
     personnel:relationship_label "Reported to Emma" ;
-    dcterms:created "2026-09-18T13:38:49.471542"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.522605"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Recommendation/grace-lambert-hugo-girard-2024-06-21> a personnel:Recommendation,
@@ -1712,7 +1733,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     personnel:recommendation_content "Grace asks the question everyone else has been avoiding, in the first ten minutes, and somehow nobody minds." ;
     personnel:recommendation_date "2024-06-21"^^xsd:date ;
     personnel:relationship_label "Worked with Grace on the same board" ;
-    dcterms:created "2026-09-18T13:38:49.640732"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.659476"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Site/brussels> a abi:Site,
@@ -1722,7 +1743,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     personnel:country_code "BE"^^xsd:string ;
     personnel:country_name "Belgium"^^xsd:string ;
     personnel:office_label "Brussels"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.672703"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.678951"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Site/paris-la-d-fense> a abi:Site,
@@ -1732,7 +1753,7 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
     personnel:country_code "FR"^^xsd:string ;
     personnel:country_name "France"^^xsd:string ;
     personnel:office_label "Paris La Défense"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.357195"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.438535"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:employs a owl:ObjectProperty ;
@@ -2141,14 +2162,14 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
 <http://ontology.naas.ai/abi/Organization/agile-partners> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "Agile Partners" ;
-    dcterms:created "2026-09-18T13:38:49.660418"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.673096"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Organization/demo-university> a abi:Organization,
         owl:NamedIndividual,
         cco:ont00000564 ;
     rdfs:label "Demo University" ;
-    dcterms:created "2026-09-18T13:38:49.350986"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.431364"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfStudying/alice-dupont-demo-university-master-s-degree-computer-science> a personnel:ActOfStudying,
@@ -2163,7 +2184,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:hasDegree <http://ontology.naas.ai/personnel/AcademicDegree/alice-dupont-demo-university-master-s-degree-computer-science> ;
     personnel:hasEnrollment <http://ontology.naas.ai/personnel/EnrollmentRecord/alice-dupont-demo-university-master-s-degree-computer-science> ;
     personnel:isActOfStudyingOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-09-18T13:38:49.353900"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.435462"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfStudying/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems> a personnel:ActOfStudying,
@@ -2178,7 +2199,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:hasDegree <http://ontology.naas.ai/personnel/AcademicDegree/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems> ;
     personnel:hasEnrollment <http://ontology.naas.ai/personnel/EnrollmentRecord/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems> ;
     personnel:isActOfStudyingOf <http://ontology.naas.ai/abi/Person/claire-bernard> ;
-    dcterms:created "2026-09-18T13:38:49.403025"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.488392"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfStudying/emma-petit-demo-university-bachelor-s-degree-software-engineering> a personnel:ActOfStudying,
@@ -2193,7 +2214,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:hasDegree <http://ontology.naas.ai/personnel/AcademicDegree/emma-petit-demo-university-bachelor-s-degree-software-engineering> ;
     personnel:hasEnrollment <http://ontology.naas.ai/personnel/EnrollmentRecord/emma-petit-demo-university-bachelor-s-degree-software-engineering> ;
     personnel:isActOfStudyingOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
-    dcterms:created "2026-09-18T13:38:49.460737"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.518336"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfStudying/grace-lambert-bay-area-business-school-mba> a personnel:ActOfStudying,
@@ -2208,7 +2229,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:hasDegree <http://ontology.naas.ai/personnel/AcademicDegree/grace-lambert-bay-area-business-school-mba> ;
     personnel:hasEnrollment <http://ontology.naas.ai/personnel/EnrollmentRecord/grace-lambert-bay-area-business-school-mba> ;
     personnel:isActOfStudyingOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
-    dcterms:created "2026-09-18T13:38:49.632339"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.654242"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-translation-corp-account-manager> a personnel:ActOfWorking,
@@ -2221,7 +2242,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:developsSkill <http://ontology.naas.ai/personnel/Skill/frank-moreau-account-management> ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/translation-corp> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/frank-moreau> ;
-    dcterms:created "2026-09-18T13:38:49.583892"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.620476"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-demo-board-advisor> a personnel:ActOfWorking,
@@ -2234,7 +2255,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:developsSkill <http://ontology.naas.ai/personnel/Skill/grace-lambert-partnerships> ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/demo> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
-    dcterms:created "2026-09-18T13:38:49.603772"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.631260"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-leadership-co-co-founder> a personnel:ActOfWorking,
@@ -2247,7 +2268,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:developsSkill <http://ontology.naas.ai/personnel/Skill/hugo-girard-organizational-design> ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/leadership-co> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/hugo-girard> ;
-    dcterms:created "2026-09-18T13:38:49.657271"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.670474"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EnrollmentRecord/alice-dupont-demo-university-master-s-degree-computer-science> a personnel:EnrollmentRecord,
@@ -2259,7 +2280,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isEnrollmentRecordOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/alice-dupont-linkedin-education> ;
     personnel:program_name "Master's Degree, Computer Science" ;
-    dcterms:created "2026-09-18T13:38:49.353261"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.433980"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EnrollmentRecord/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems> a personnel:EnrollmentRecord,
@@ -2270,7 +2291,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isEnrollmentRecordOf <http://ontology.naas.ai/abi/Person/claire-bernard> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/claire-bernard-linkedin-education> ;
     personnel:program_name "Engineering Degree, Distributed Systems" ;
-    dcterms:created "2026-09-18T13:38:49.402436"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.487804"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EnrollmentRecord/emma-petit-demo-university-bachelor-s-degree-software-engineering> a personnel:EnrollmentRecord,
@@ -2281,7 +2302,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isEnrollmentRecordOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/emma-petit-linkedin-education> ;
     personnel:program_name "Bachelor's Degree, Software Engineering" ;
-    dcterms:created "2026-09-18T13:38:49.460077"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.517562"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EnrollmentRecord/grace-lambert-bay-area-business-school-mba> a personnel:EnrollmentRecord,
@@ -2292,7 +2313,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isEnrollmentRecordOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/grace-lambert-linkedin-education> ;
     personnel:program_name "MBA" ;
-    dcterms:created "2026-09-18T13:38:49.631184"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.653538"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/alice-dupont-acme-consulting-data-ai-engineer> a personnel:Mission,
@@ -2302,7 +2323,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-acme-consulting-data-ai-engineer> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/alice-dupont-linkedin> ;
     personnel:mission_content "Deliver data pipelines and automation projects for enterprise clients." ;
-    dcterms:created "2026-09-18T13:38:49.344763"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.419895"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/alice-dupont-demo-coo> a personnel:Mission,
@@ -2312,7 +2333,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-demo-coo> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/alice-dupont-linkedin> ;
     personnel:mission_content "Lead platform operations and agent orchestration for the Demo organization." ;
-    dcterms:created "2026-09-18T13:38:49.340716"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.415970"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/alice-dupont-nexus-labs-co-founder> a personnel:Mission,
@@ -2322,7 +2343,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-nexus-labs-co-founder> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/alice-dupont-linkedin> ;
     personnel:mission_content "Built a boutique data consulting practice for finance teams." ;
-    dcterms:created "2026-09-18T13:38:49.348545"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.424758"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/bob-martin-demo-ceo> a personnel:Mission,
@@ -2332,7 +2353,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-demo-ceo> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/bob-martin-linkedin> ;
     personnel:mission_content "Set product strategy and partnerships for the Demo data platform." ;
-    dcterms:created "2026-09-18T13:38:49.365276"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.453926"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/bob-martin-global-advisors-senior-advisor-data-ai> a personnel:Mission,
@@ -2342,7 +2363,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-global-advisors-senior-advisor-data-ai> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/bob-martin-linkedin> ;
     personnel:mission_content "Advise enterprise clients on trustworthy AI adoption." ;
-    dcterms:created "2026-09-18T13:38:49.369084"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.459681"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/bob-martin-nexus-labs-founder> a personnel:Mission,
@@ -2352,7 +2373,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-nexus-labs-founder> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/bob-martin-linkedin> ;
     personnel:mission_content "Founded an automation services company for business teams." ;
-    dcterms:created "2026-09-18T13:38:49.375787"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.465600"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/claire-bernard-cloud-partners-cloud-engineer> a personnel:Mission,
@@ -2362,7 +2383,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-cloud-partners-cloud-engineer> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/claire-bernard-linkedin> ;
     personnel:mission_content "Consulted on Kubernetes and CI/CD implementations." ;
-    dcterms:created "2026-09-18T13:38:49.396805"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.482644"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/claire-bernard-demo-cto> a personnel:Mission,
@@ -2372,7 +2393,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-demo-cto> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/claire-bernard-linkedin> ;
     personnel:mission_content "Own platform architecture and engineering for Demo." ;
-    dcterms:created "2026-09-18T13:38:49.387373"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.474958"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/claire-bernard-nexus-labs-cto> a personnel:Mission,
@@ -2382,7 +2403,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-nexus-labs-cto> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/claire-bernard-linkedin> ;
     personnel:mission_content "Led engineering for an automation services startup." ;
-    dcterms:created "2026-09-18T13:38:49.392786"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.478752"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/david-leroy-demo-lead-developer-frontend> a personnel:Mission,
@@ -2392,7 +2413,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/david-leroy-demo-lead-developer-frontend> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/david-leroy-linkedin> ;
     personnel:mission_content "Ship ontology-driven UI components for the Demo platform." ;
-    dcterms:created "2026-09-18T13:38:49.418880"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.496470"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/david-leroy-legaltech-co-fullstack-developer> a personnel:Mission,
@@ -2402,7 +2423,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/david-leroy-legaltech-co-fullstack-developer> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/david-leroy-linkedin> ;
     personnel:mission_content "Migrated a legal workflow product from legacy stack to React." ;
-    dcterms:created "2026-09-18T13:38:49.429478"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.500348"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/emma-petit-demo-cto> a personnel:Mission,
@@ -2412,7 +2433,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/emma-petit-demo-cto> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/emma-petit-linkedin> ;
     personnel:mission_content "Led core engineering for the Demo open-source platform." ;
-    dcterms:created "2026-09-18T13:38:49.444935"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.508794"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/emma-petit-launchpad-solo-maker> a personnel:Mission,
@@ -2422,7 +2443,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/emma-petit-launchpad-solo-maker> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/emma-petit-linkedin> ;
     personnel:mission_content "Build and operate a mobile delivery tooling product." ;
-    dcterms:created "2026-09-18T13:38:49.452555"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.513010"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/frank-moreau-demo-head-of-growth> a personnel:Mission,
@@ -2432,7 +2453,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-demo-head-of-growth> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/frank-moreau-linkedin> ;
     personnel:mission_content "Drove outbound and inbound growth for Demo." ;
-    dcterms:created "2026-09-18T13:38:49.481611"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.527462"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/frank-moreau-salesplatform-account-executive> a personnel:Mission,
@@ -2442,7 +2463,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-salesplatform-account-executive> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/frank-moreau-linkedin> ;
     personnel:mission_content "Closed SMB SaaS deals across European markets." ;
-    dcterms:created "2026-09-18T13:38:49.575160"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.613012"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/frank-moreau-translation-corp-account-manager> a personnel:Mission,
@@ -2452,7 +2473,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-translation-corp-account-manager> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/frank-moreau-linkedin> ;
     personnel:mission_content "Managed enterprise localization accounts." ;
-    dcterms:created "2026-09-18T13:38:49.582563"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.619034"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/grace-lambert-demo-board-advisor> a personnel:Mission,
@@ -2462,7 +2483,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-demo-board-advisor> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/grace-lambert-linkedin> ;
     personnel:mission_content "Advise Demo leadership on product partnerships." ;
-    dcterms:created "2026-09-18T13:38:49.600372"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.629123"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/grace-lambert-deviceworks-cto> a personnel:Mission,
@@ -2472,7 +2493,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-deviceworks-cto> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/grace-lambert-linkedin> ;
     personnel:mission_content "Built smart-TV software partnerships and joint ventures." ;
-    dcterms:created "2026-09-18T13:38:49.621030"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.645889"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/grace-lambert-streamcorp-head-of-partner-experiences> a personnel:Mission,
@@ -2482,7 +2503,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-streamcorp-head-of-partner-experiences> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/grace-lambert-linkedin> ;
     personnel:mission_content "Led partner enablement for a global streaming platform." ;
-    dcterms:created "2026-09-18T13:38:49.612668"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.637730"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/hugo-girard-agile-partners-chief-agility-officer> a personnel:Mission,
@@ -2492,7 +2513,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-agile-partners-chief-agility-officer> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/hugo-girard-linkedin> ;
     personnel:mission_content "Introduced agile transformation programs for enterprises." ;
-    dcterms:created "2026-09-18T13:38:49.661940"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.674352"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/hugo-girard-demo-advisor> a personnel:Mission,
@@ -2502,7 +2523,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-demo-advisor> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/hugo-girard-linkedin> ;
     personnel:mission_content "Coach Demo leaders on organizational design." ;
-    dcterms:created "2026-09-18T13:38:49.650191"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.664032"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Mission/hugo-girard-leadership-co-co-founder> a personnel:Mission,
@@ -2512,7 +2533,7 @@ personnel:issuedByOrganization a owl:ObjectProperty ;
     personnel:isMissionOf <http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-leadership-co-co-founder> ;
     personnel:isSourcedFrom <http://ontology.naas.ai/personnel/ProfileDocument/hugo-girard-linkedin> ;
     personnel:mission_content "Help tech leaders scale teams without losing culture." ;
-    dcterms:created "2026-09-18T13:38:49.656305"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.669539"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:Remuneration a owl:Class ;
@@ -2530,25 +2551,25 @@ personnel:Remuneration a owl:Class ;
 <http://ontology.naas.ai/personnel/Site/california> a abi:Site,
         owl:NamedIndividual ;
     rdfs:label "California" ;
-    dcterms:created "2026-09-18T13:38:49.608451"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.635431"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Site/france-remote> a abi:Site,
         owl:NamedIndividual ;
     rdfs:label "France · Remote" ;
-    dcterms:created "2026-09-18T13:38:49.343580"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.418379"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Site/lyon> a abi:Site,
         owl:NamedIndividual ;
     rdfs:label "Lyon" ;
-    dcterms:created "2026-09-18T13:38:49.401164"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.486473"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Site/lyon-france> a abi:Site,
         owl:NamedIndividual ;
     rdfs:label "Lyon, France" ;
-    dcterms:created "2026-09-18T13:38:49.426776"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.499421"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Site/lyon-part-dieu> a abi:Site,
@@ -2558,7 +2579,7 @@ personnel:Remuneration a owl:Class ;
     personnel:country_code "FR"^^xsd:string ;
     personnel:country_name "France"^^xsd:string ;
     personnel:office_label "Lyon Part-Dieu"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.406145"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.491225"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Site/paris-op-ra> a abi:Site,
@@ -2568,13 +2589,13 @@ personnel:Remuneration a owl:Class ;
     personnel:country_code "FR"^^xsd:string ;
     personnel:country_name "France"^^xsd:string ;
     personnel:office_label "Paris Opéra"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.381339"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.470373"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Site/toronto> a abi:Site,
         owl:NamedIndividual ;
     rdfs:label "Toronto" ;
-    dcterms:created "2026-09-18T13:38:49.618734"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.643205"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/alice-dupont-fastapi> a personnel:Skill,
@@ -2583,7 +2604,7 @@ personnel:Remuneration a owl:Class ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-demo-coo> ;
     personnel:skill_name "FastAPI" ;
-    dcterms:created "2026-09-18T13:38:49.339256"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.415133"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/bob-martin-ai-strategy> a personnel:Skill,
@@ -2592,7 +2613,7 @@ personnel:Remuneration a owl:Class ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/bob-martin> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-global-advisors-senior-advisor-data-ai> ;
     personnel:skill_name "AI Strategy" ;
-    dcterms:created "2026-09-18T13:38:49.368033"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.458088"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/bob-martin-business-intelligence> a personnel:Skill,
@@ -2601,7 +2622,7 @@ personnel:Remuneration a owl:Class ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/bob-martin> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-global-advisors-senior-advisor-data-ai> ;
     personnel:skill_name "Business Intelligence" ;
-    dcterms:created "2026-09-18T13:38:49.368307"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.458420"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/claire-bernard-devops> a personnel:Skill,
@@ -2610,7 +2631,7 @@ personnel:Remuneration a owl:Class ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/claire-bernard> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-nexus-labs-cto> ;
     personnel:skill_name "DevOps" ;
-    dcterms:created "2026-09-18T13:38:49.391468"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.477333"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/claire-bernard-terraform> a personnel:Skill,
@@ -2619,7 +2640,7 @@ personnel:Remuneration a owl:Class ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/claire-bernard> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-cloud-partners-cloud-engineer> ;
     personnel:skill_name "Terraform" ;
-    dcterms:created "2026-09-18T13:38:49.395408"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.481394"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/emma-petit-devops> a personnel:Skill,
@@ -2628,7 +2649,7 @@ personnel:Remuneration a owl:Class ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/emma-petit> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-demo-cto> ;
     personnel:skill_name "DevOps" ;
-    dcterms:created "2026-09-18T13:38:49.442218"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.507830"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/emma-petit-product> a personnel:Skill,
@@ -2637,7 +2658,7 @@ personnel:Remuneration a owl:Class ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/emma-petit> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-launchpad-solo-maker> ;
     personnel:skill_name "Product" ;
-    dcterms:created "2026-09-18T13:38:49.451240"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.511940"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/emma-petit-vue-js> a personnel:Skill,
@@ -2646,7 +2667,7 @@ personnel:Remuneration a owl:Class ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/emma-petit> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-launchpad-solo-maker> ;
     personnel:skill_name "Vue.js" ;
-    dcterms:created "2026-09-18T13:38:49.451555"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.512257"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/frank-moreau-account-management> a personnel:Skill,
@@ -2655,7 +2676,7 @@ personnel:Remuneration a owl:Class ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/frank-moreau> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-translation-corp-account-manager> ;
     personnel:skill_name "Account Management" ;
-    dcterms:created "2026-09-18T13:38:49.580650"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.617433"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/frank-moreau-automation> a personnel:Skill,
@@ -2664,7 +2685,7 @@ personnel:Remuneration a owl:Class ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/frank-moreau> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-demo-head-of-growth> ;
     personnel:skill_name "Automation" ;
-    dcterms:created "2026-09-18T13:38:49.477868"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.525828"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/frank-moreau-crm> a personnel:Skill,
@@ -2673,7 +2694,7 @@ personnel:Remuneration a owl:Class ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/frank-moreau> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-salesplatform-account-executive> ;
     personnel:skill_name "CRM" ;
-    dcterms:created "2026-09-18T13:38:49.571719"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.611479"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/grace-lambert-engineering> a personnel:Skill,
@@ -2682,7 +2703,7 @@ personnel:Remuneration a owl:Class ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/grace-lambert> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-deviceworks-cto> ;
     personnel:skill_name "Engineering" ;
-    dcterms:created "2026-09-18T13:38:49.619023"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.643539"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/grace-lambert-product> a personnel:Skill,
@@ -2691,7 +2712,7 @@ personnel:Remuneration a owl:Class ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/grace-lambert> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-streamcorp-head-of-partner-experiences> ;
     personnel:skill_name "Product" ;
-    dcterms:created "2026-09-18T13:38:49.610530"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.635832"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/hugo-girard-organizational-design> a personnel:Skill,
@@ -2700,35 +2721,35 @@ personnel:Remuneration a owl:Class ;
     abi:inheresIn <http://ontology.naas.ai/abi/Person/hugo-girard> ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-leadership-co-co-founder> ;
     personnel:skill_name "Organizational Design" ;
-    dcterms:created "2026-09-18T13:38:49.654876"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.667753"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/StudentRole/alice-dupont-demo-university-master-s-degree-computer-science> a personnel:StudentRole,
         owl:NamedIndividual ;
     rdfs:label "Student - Master's Degree, Computer Science" ;
     personnel:isStudentRoleOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-09-18T13:38:49.352831"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.433434"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/StudentRole/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems> a personnel:StudentRole,
         owl:NamedIndividual ;
     rdfs:label "Student - Engineering Degree, Distributed Systems" ;
     personnel:isStudentRoleOf <http://ontology.naas.ai/abi/Person/claire-bernard> ;
-    dcterms:created "2026-09-18T13:38:49.402109"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.487558"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/StudentRole/emma-petit-demo-university-bachelor-s-degree-software-engineering> a personnel:StudentRole,
         owl:NamedIndividual ;
     rdfs:label "Student - Bachelor's Degree, Software Engineering" ;
     personnel:isStudentRoleOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
-    dcterms:created "2026-09-18T13:38:49.459627"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.517284"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/StudentRole/grace-lambert-bay-area-business-school-mba> a personnel:StudentRole,
         owl:NamedIndividual ;
     rdfs:label "Student - MBA" ;
     personnel:isStudentRoleOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
-    dcterms:created "2026-09-18T13:38:49.630509"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.653143"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:forEducationalOrganization a owl:ObjectProperty ;
@@ -2915,13 +2936,13 @@ personnel:ofLanguage a owl:ObjectProperty ;
 <http://ontology.naas.ai/abi/Organization/demo-institute> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "Demo Institute" ;
-    dcterms:created "2026-09-18T13:38:49.358203"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.439717"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Organization/nexus-labs> a abi:Organization,
         owl:NamedIndividual ;
     rdfs:label "Nexus Labs" ;
-    dcterms:created "2026-09-18T13:38:49.346955"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.422918"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-acme-consulting-data-ai-engineer> a personnel:ActOfWorking,
@@ -2936,7 +2957,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/acme-consulting> ;
     personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont-acme-consulting-data-ai-engineer> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-09-18T13:38:49.346029"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.421732"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-demo-coo> a personnel:ActOfWorking,
@@ -2951,7 +2972,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/demo> ;
     personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont-demo-coo> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-09-18T13:38:49.342262"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.417252"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-nexus-labs-co-founder> a personnel:ActOfWorking,
@@ -2966,7 +2987,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/nexus-labs> ;
     personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/alice-dupont-nexus-labs-co-founder> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-09-18T13:38:49.349745"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.428168"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-demo-ceo> a personnel:ActOfWorking,
@@ -2981,7 +3002,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/demo> ;
     personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/bob-martin-demo-ceo> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/bob-martin> ;
-    dcterms:created "2026-09-18T13:38:49.366587"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.456069"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-global-advisors-senior-advisor-data-ai> a personnel:ActOfWorking,
@@ -2996,7 +3017,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/global-advisors> ;
     personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/bob-martin-global-advisors-senior-advisor-data-ai> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/bob-martin> ;
-    dcterms:created "2026-09-18T13:38:49.370822"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.461017"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-nexus-labs-founder> a personnel:ActOfWorking,
@@ -3010,7 +3031,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
         <http://ontology.naas.ai/personnel/Skill/bob-martin-strategy> ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/nexus-labs> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/bob-martin> ;
-    dcterms:created "2026-09-18T13:38:49.377317"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.467076"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-cloud-partners-cloud-engineer> a personnel:ActOfWorking,
@@ -3025,7 +3046,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/cloud-partners> ;
     personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/claire-bernard-cloud-partners-cloud-engineer> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/claire-bernard> ;
-    dcterms:created "2026-09-18T13:38:49.398199"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.483793"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-demo-cto> a personnel:ActOfWorking,
@@ -3039,7 +3060,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
         <http://ontology.naas.ai/personnel/Skill/claire-bernard-python> ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/demo> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/claire-bernard> ;
-    dcterms:created "2026-09-18T13:38:49.388972"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.475852"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-nexus-labs-cto> a personnel:ActOfWorking,
@@ -3053,7 +3074,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
         <http://ontology.naas.ai/personnel/Skill/claire-bernard-python> ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/nexus-labs> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/claire-bernard> ;
-    dcterms:created "2026-09-18T13:38:49.393674"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.479698"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-demo-lead-developer-frontend> a personnel:ActOfWorking,
@@ -3068,7 +3089,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/demo> ;
     personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/david-leroy-demo-lead-developer-frontend> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/david-leroy> ;
-    dcterms:created "2026-09-18T13:38:49.421835"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.497452"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-legaltech-co-fullstack-developer> a personnel:ActOfWorking,
@@ -3083,7 +3104,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/legaltech-co> ;
     personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/david-leroy-legaltech-co-fullstack-developer> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/david-leroy> ;
-    dcterms:created "2026-09-18T13:38:49.431922"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.502143"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-demo-cto> a personnel:ActOfWorking,
@@ -3098,7 +3119,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/demo> ;
     personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/emma-petit-demo-cto> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
-    dcterms:created "2026-09-18T13:38:49.447614"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.509967"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-launchpad-solo-maker> a personnel:ActOfWorking,
@@ -3113,7 +3134,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/launchpad> ;
     personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/emma-petit-launchpad-solo-maker> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
-    dcterms:created "2026-09-18T13:38:49.454081"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.514152"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-demo-head-of-growth> a personnel:ActOfWorking,
@@ -3128,7 +3149,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/demo> ;
     personnel:hasContract <http://ontology.naas.ai/personnel/EmploymentContract/frank-moreau-demo-head-of-growth> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/frank-moreau> ;
-    dcterms:created "2026-09-18T13:38:49.483245"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.608676"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-salesplatform-account-executive> a personnel:ActOfWorking,
@@ -3142,7 +3163,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
         <http://ontology.naas.ai/personnel/Skill/frank-moreau-sales> ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/salesplatform> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/frank-moreau> ;
-    dcterms:created "2026-09-18T13:38:49.576481"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.614154"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-deviceworks-cto> a personnel:ActOfWorking,
@@ -3156,7 +3177,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
         <http://ontology.naas.ai/personnel/Skill/grace-lambert-strategy> ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/deviceworks> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
-    dcterms:created "2026-09-18T13:38:49.622036"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.647322"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-streamcorp-head-of-partner-experiences> a personnel:ActOfWorking,
@@ -3170,7 +3191,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
         <http://ontology.naas.ai/personnel/Skill/grace-lambert-product> ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/streamcorp> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
-    dcterms:created "2026-09-18T13:38:49.614532"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.639136"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-agile-partners-chief-agility-officer> a personnel:ActOfWorking,
@@ -3184,7 +3205,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
         <http://ontology.naas.ai/personnel/Skill/hugo-girard-coaching> ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/agile-partners> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/hugo-girard> ;
-    dcterms:created "2026-09-18T13:38:49.663819"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.675243"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-demo-advisor> a personnel:ActOfWorking,
@@ -3198,7 +3219,7 @@ personnel:ofLanguage a owl:ObjectProperty ;
         <http://ontology.naas.ai/personnel/Skill/hugo-girard-coaching> ;
     personnel:forOrganization <http://ontology.naas.ai/abi/Organization/demo> ;
     personnel:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/hugo-girard> ;
-    dcterms:created "2026-09-18T13:38:49.651350"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.664903"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:EmploymentStatus a owl:Class ;
@@ -3237,7 +3258,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     rdfs:label "LinkedIn education - Alice Dupont" ;
     personnel:isProfileDocumentOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:source_url "https://demo.example/profiles/alice_dupont" ;
-    dcterms:created "2026-09-18T13:38:49.350616"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.430718"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileDocument/claire-bernard-linkedin-education> a personnel:ProfileDocument,
@@ -3245,7 +3266,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     rdfs:label "LinkedIn education - Claire Bernard" ;
     personnel:isProfileDocumentOf <http://ontology.naas.ai/abi/Person/claire-bernard> ;
     personnel:source_url "https://demo.example/profiles/claire_bernard" ;
-    dcterms:created "2026-09-18T13:38:49.399976"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.485875"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileDocument/emma-petit-linkedin-education> a personnel:ProfileDocument,
@@ -3253,7 +3274,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     rdfs:label "LinkedIn education - Emma Petit" ;
     personnel:isProfileDocumentOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
     personnel:source_url "https://demo.example/profiles/emma_petit" ;
-    dcterms:created "2026-09-18T13:38:49.457375"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.516068"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileDocument/grace-lambert-linkedin-education> a personnel:ProfileDocument,
@@ -3261,7 +3282,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     rdfs:label "LinkedIn education - Grace Lambert" ;
     personnel:isProfileDocumentOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
     personnel:source_url "https://demo.example/profiles/grace_lambert" ;
-    dcterms:created "2026-09-18T13:38:49.625369"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.651111"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Site/nantes> a abi:Site,
@@ -3271,7 +3292,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:country_code "FR"^^xsd:string ;
     personnel:country_name "France"^^xsd:string ;
     personnel:office_label "Nantes"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.457959"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.516365"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Site/san-francisco> a abi:Site,
@@ -3281,7 +3302,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:country_code "US"^^xsd:string ;
     personnel:country_name "United States"^^xsd:string ;
     personnel:office_label "San Francisco"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.626009"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.651960"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/alice-dupont-business-analysis> a personnel:Skill,
@@ -3291,7 +3312,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-acme-consulting-data-ai-engineer>,
         <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-nexus-labs-co-founder> ;
     personnel:skill_name "Business Analysis" ;
-    dcterms:created "2026-09-18T13:38:49.343890"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.418756"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/bob-martin-data-engineering> a personnel:Skill,
@@ -3301,7 +3322,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-demo-ceo>,
         <http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-nexus-labs-founder> ;
     personnel:skill_name "Data Engineering" ;
-    dcterms:created "2026-09-18T13:38:49.364256"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.451726"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/bob-martin-strategy> a personnel:Skill,
@@ -3311,7 +3332,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-demo-ceo>,
         <http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-nexus-labs-founder> ;
     personnel:skill_name "Strategy" ;
-    dcterms:created "2026-09-18T13:38:49.363977"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.451054"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/claire-bernard-python> a personnel:Skill,
@@ -3321,7 +3342,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-demo-cto>,
         <http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-nexus-labs-cto> ;
     personnel:skill_name "Python" ;
-    dcterms:created "2026-09-18T13:38:49.386003"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.474156"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/david-leroy-react> a personnel:Skill,
@@ -3331,7 +3352,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-demo-lead-developer-frontend>,
         <http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-legaltech-co-fullstack-developer> ;
     personnel:skill_name "React" ;
-    dcterms:created "2026-09-18T13:38:49.415100"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.495307"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/david-leroy-typescript> a personnel:Skill,
@@ -3341,7 +3362,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-demo-lead-developer-frontend>,
         <http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-legaltech-co-fullstack-developer> ;
     personnel:skill_name "TypeScript" ;
-    dcterms:created "2026-09-18T13:38:49.414645"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.494974"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/emma-petit-typescript> a personnel:Skill,
@@ -3351,7 +3372,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfStudying/emma-petit-demo-university-bachelor-s-degree-software-engineering>,
         <http://ontology.naas.ai/personnel/ActOfWorking/emma-petit-demo-cto> ;
     personnel:skill_name "TypeScript" ;
-    dcterms:created "2026-09-18T13:38:49.441749"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.507572"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/frank-moreau-sales> a personnel:Skill,
@@ -3361,7 +3382,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-demo-head-of-growth>,
         <http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-salesplatform-account-executive> ;
     personnel:skill_name "Sales" ;
-    dcterms:created "2026-09-18T13:38:49.476948"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.525481"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/grace-lambert-partnerships> a personnel:Skill,
@@ -3371,7 +3392,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-demo-board-advisor>,
         <http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-streamcorp-head-of-partner-experiences> ;
     personnel:skill_name "Partnerships" ;
-    dcterms:created "2026-09-18T13:38:49.598741"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.627817"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/grace-lambert-strategy> a personnel:Skill,
@@ -3381,7 +3402,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfStudying/grace-lambert-bay-area-business-school-mba>,
         <http://ontology.naas.ai/personnel/ActOfWorking/grace-lambert-deviceworks-cto> ;
     personnel:skill_name "Strategy" ;
-    dcterms:created "2026-09-18T13:38:49.619450"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.644022"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/hugo-girard-agile> a personnel:Skill,
@@ -3391,7 +3412,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-agile-partners-chief-agility-officer>,
         <http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-demo-advisor> ;
     personnel:skill_name "Agile" ;
-    dcterms:created "2026-09-18T13:38:49.649134"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.663214"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/hugo-girard-coaching> a personnel:Skill,
@@ -3401,7 +3422,7 @@ personnel:PersonnelOntology a owl:Ontology ;
     personnel:isSkillDevelopedIn <http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-agile-partners-chief-agility-officer>,
         <http://ontology.naas.ai/personnel/ActOfWorking/hugo-girard-demo-advisor> ;
     personnel:skill_name "Coaching" ;
-    dcterms:created "2026-09-18T13:38:49.647039"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.662938"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:developsSkill a owl:ObjectProperty ;
@@ -3432,7 +3453,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/alice-dupont-acme-consulting-data-ai-engineer> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-operations> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-09-18T13:38:49.345473"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.420836"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-demo-coo> a personnel:EmployeeRole,
@@ -3442,7 +3463,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/alice-dupont-demo-coo> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-operations> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-09-18T13:38:49.341434"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.416647"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/alice-dupont-nexus-labs-co-founder> a personnel:EmployeeRole,
@@ -3452,7 +3473,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/alice-dupont-nexus-labs-co-founder> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-operations> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
-    dcterms:created "2026-09-18T13:38:49.349157"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.426348"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-demo-ceo> a personnel:EmployeeRole,
@@ -3462,7 +3483,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/bob-martin-demo-ceo> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-strategy> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/bob-martin> ;
-    dcterms:created "2026-09-18T13:38:49.365805"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.455005"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-global-advisors-senior-advisor-data-ai> a personnel:EmployeeRole,
@@ -3472,7 +3493,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/bob-martin-global-advisors-senior-advisor-data-ai> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-strategy> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/bob-martin> ;
-    dcterms:created "2026-09-18T13:38:49.369850"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.460343"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/bob-martin-nexus-labs-founder> a personnel:EmployeeRole,
@@ -3482,7 +3503,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/bob-martin-nexus-labs-founder> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-strategy> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/bob-martin> ;
-    dcterms:created "2026-09-18T13:38:49.376713"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.466455"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-cloud-partners-cloud-engineer> a personnel:EmployeeRole,
@@ -3492,7 +3513,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/claire-bernard-cloud-partners-cloud-engineer> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-technology> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/claire-bernard> ;
-    dcterms:created "2026-09-18T13:38:49.397451"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.483282"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-demo-cto> a personnel:EmployeeRole,
@@ -3502,7 +3523,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/claire-bernard-demo-cto> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-technology> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/claire-bernard> ;
-    dcterms:created "2026-09-18T13:38:49.388356"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.475555"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/claire-bernard-nexus-labs-cto> a personnel:EmployeeRole,
@@ -3512,7 +3533,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/claire-bernard-nexus-labs-cto> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-technology> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/claire-bernard> ;
-    dcterms:created "2026-09-18T13:38:49.393322"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.479392"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/david-leroy-demo-lead-developer-frontend> a personnel:EmployeeRole,
@@ -3522,7 +3543,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/david-leroy-demo-lead-developer-frontend> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-technology> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/david-leroy> ;
-    dcterms:created "2026-09-18T13:38:49.420123"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.496956"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/david-leroy-legaltech-co-fullstack-developer> a personnel:EmployeeRole,
@@ -3532,7 +3553,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/david-leroy-legaltech-co-fullstack-developer> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-technology> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/david-leroy> ;
-    dcterms:created "2026-09-18T13:38:49.430531"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.501252"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/emma-petit-demo-cto> a personnel:EmployeeRole,
@@ -3542,7 +3563,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/emma-petit-demo-cto> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-technology> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
-    dcterms:created "2026-09-18T13:38:49.446671"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.509349"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/emma-petit-launchpad-solo-maker> a personnel:EmployeeRole,
@@ -3552,7 +3573,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/emma-petit-launchpad-solo-maker> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-technology> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
-    dcterms:created "2026-09-18T13:38:49.453269"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.513631"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-demo-head-of-growth> a personnel:EmployeeRole,
@@ -3562,7 +3583,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/frank-moreau-demo-head-of-growth> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-growth> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/frank-moreau> ;
-    dcterms:created "2026-09-18T13:38:49.482598"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.607946"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-salesplatform-account-executive> a personnel:EmployeeRole,
@@ -3572,7 +3593,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/frank-moreau-salesplatform-account-executive> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-growth> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/frank-moreau> ;
-    dcterms:created "2026-09-18T13:38:49.575804"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.613775"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/frank-moreau-translation-corp-account-manager> a personnel:EmployeeRole,
@@ -3582,7 +3603,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/frank-moreau-translation-corp-account-manager> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-growth> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/frank-moreau> ;
-    dcterms:created "2026-09-18T13:38:49.583475"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.620033"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-demo-board-advisor> a personnel:EmployeeRole,
@@ -3592,7 +3613,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/grace-lambert-demo-board-advisor> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-strategy> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
-    dcterms:created "2026-09-18T13:38:49.601350"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.630772"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-deviceworks-cto> a personnel:EmployeeRole,
@@ -3602,7 +3623,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/grace-lambert-deviceworks-cto> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-strategy> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
-    dcterms:created "2026-09-18T13:38:49.621634"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.646811"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/grace-lambert-streamcorp-head-of-partner-experiences> a personnel:EmployeeRole,
@@ -3612,7 +3633,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/grace-lambert-streamcorp-head-of-partner-experiences> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-strategy> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
-    dcterms:created "2026-09-18T13:38:49.613837"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.638572"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-agile-partners-chief-agility-officer> a personnel:EmployeeRole,
@@ -3622,7 +3643,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/hugo-girard-agile-partners-chief-agility-officer> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-operations> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/hugo-girard> ;
-    dcterms:created "2026-09-18T13:38:49.662820"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.674922"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-demo-advisor> a personnel:EmployeeRole,
@@ -3632,7 +3653,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/hugo-girard-demo-advisor> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-operations> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/hugo-girard> ;
-    dcterms:created "2026-09-18T13:38:49.650945"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.664620"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/EmployeeRole/hugo-girard-leadership-co-co-founder> a personnel:EmployeeRole,
@@ -3642,7 +3663,7 @@ personnel:ActOfPersonnelProfiling a owl:Class ;
     personnel:hasMission <http://ontology.naas.ai/personnel/Mission/hugo-girard-leadership-co-co-founder> ;
     personnel:inServiceLine <http://ontology.naas.ai/personnel/ServiceLine/demo-operations> ;
     personnel:isEmployeeRoleOf <http://ontology.naas.ai/abi/Person/hugo-girard> ;
-    dcterms:created "2026-09-18T13:38:49.656955"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.670172"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:JobDescription a owl:Class ;
@@ -3659,7 +3680,7 @@ personnel:JobDescription a owl:Class ;
     rdfs:label "LinkedIn experience - David Leroy" ;
     personnel:isProfileDocumentOf <http://ontology.naas.ai/abi/Person/david-leroy> ;
     personnel:source_url "https://demo.example/profiles/david_leroy" ;
-    dcterms:created "2026-09-18T13:38:49.413971"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.494637"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileDocument/emma-petit-linkedin> a personnel:ProfileDocument,
@@ -3667,7 +3688,7 @@ personnel:JobDescription a owl:Class ;
     rdfs:label "LinkedIn experience - Emma Petit" ;
     personnel:isProfileDocumentOf <http://ontology.naas.ai/abi/Person/emma-petit> ;
     personnel:source_url "https://demo.example/profiles/emma_petit" ;
-    dcterms:created "2026-09-18T13:38:49.440822"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.507237"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ServiceLine/demo-growth> a personnel:ServiceLine,
@@ -3675,13 +3696,13 @@ personnel:JobDescription a owl:Class ;
     rdfs:label "Growth" ;
     abi:hasMemberPart <http://ontology.naas.ai/abi/Person/frank-moreau> ;
     personnel:isServiceLineOf <http://ontology.naas.ai/abi/Organization/demo> ;
-    dcterms:created "2026-09-18T13:38:49.588832"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.623690"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Site/world> a abi:Site,
         owl:NamedIndividual ;
     rdfs:label "World" ;
-    dcterms:created "2026-09-18T13:38:49.338213"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.414639"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/claire-bernard-kubernetes> a personnel:Skill,
@@ -3692,7 +3713,7 @@ personnel:JobDescription a owl:Class ;
         <http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-cloud-partners-cloud-engineer>,
         <http://ontology.naas.ai/personnel/ActOfWorking/claire-bernard-demo-cto> ;
     personnel:skill_name "Kubernetes" ;
-    dcterms:created "2026-09-18T13:38:49.385575"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.473728"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileDocument/alice-dupont-linkedin> a personnel:ProfileDocument,
@@ -3700,7 +3721,7 @@ personnel:JobDescription a owl:Class ;
     rdfs:label "LinkedIn experience - Alice Dupont" ;
     personnel:isProfileDocumentOf <http://ontology.naas.ai/abi/Person/alice-dupont> ;
     personnel:source_url "https://demo.example/profiles/alice_dupont" ;
-    dcterms:created "2026-09-18T13:38:49.336690"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.413895"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileDocument/bob-martin-linkedin> a personnel:ProfileDocument,
@@ -3708,7 +3729,7 @@ personnel:JobDescription a owl:Class ;
     rdfs:label "LinkedIn experience - Bob Martin" ;
     personnel:isProfileDocumentOf <http://ontology.naas.ai/abi/Person/bob-martin> ;
     personnel:source_url "https://demo.example/profiles/bob_martin" ;
-    dcterms:created "2026-09-18T13:38:49.363631"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.450186"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileDocument/claire-bernard-linkedin> a personnel:ProfileDocument,
@@ -3716,7 +3737,7 @@ personnel:JobDescription a owl:Class ;
     rdfs:label "LinkedIn experience - Claire Bernard" ;
     personnel:isProfileDocumentOf <http://ontology.naas.ai/abi/Person/claire-bernard> ;
     personnel:source_url "https://demo.example/profiles/claire_bernard" ;
-    dcterms:created "2026-09-18T13:38:49.384796"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.472979"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileDocument/frank-moreau-linkedin> a personnel:ProfileDocument,
@@ -3724,7 +3745,7 @@ personnel:JobDescription a owl:Class ;
     rdfs:label "LinkedIn experience - Frank Moreau" ;
     personnel:isProfileDocumentOf <http://ontology.naas.ai/abi/Person/frank-moreau> ;
     personnel:source_url "https://demo.example/profiles/frank_moreau" ;
-    dcterms:created "2026-09-18T13:38:49.476185"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.525173"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileDocument/grace-lambert-linkedin> a personnel:ProfileDocument,
@@ -3732,7 +3753,7 @@ personnel:JobDescription a owl:Class ;
     rdfs:label "LinkedIn experience - Grace Lambert" ;
     personnel:isProfileDocumentOf <http://ontology.naas.ai/abi/Person/grace-lambert> ;
     personnel:source_url "https://demo.example/profiles/grace_lambert" ;
-    dcterms:created "2026-09-18T13:38:49.598001"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.627366"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ProfileDocument/hugo-girard-linkedin> a personnel:ProfileDocument,
@@ -3740,13 +3761,13 @@ personnel:JobDescription a owl:Class ;
     rdfs:label "LinkedIn experience - Hugo Girard" ;
     personnel:isProfileDocumentOf <http://ontology.naas.ai/abi/Person/hugo-girard> ;
     personnel:source_url "https://demo.example/profiles/hugo_girard" ;
-    dcterms:created "2026-09-18T13:38:49.645997"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.662083"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Site/france> a abi:Site,
         owl:NamedIndividual ;
     rdfs:label "France" ;
-    dcterms:created "2026-09-18T13:38:49.385188"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.473313"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/Skill/alice-dupont-python> a personnel:Skill,
@@ -3758,7 +3779,7 @@ personnel:JobDescription a owl:Class ;
         <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-demo-coo>,
         <http://ontology.naas.ai/personnel/ActOfWorking/alice-dupont-nexus-labs-co-founder> ;
     personnel:skill_name "Python" ;
-    dcterms:created "2026-09-18T13:38:49.338760"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.414859"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:isSourcedFrom a owl:ObjectProperty ;
@@ -3785,11 +3806,11 @@ personnel:EmploymentRecord a owl:Class ;
 personnel:AcademicDegree a owl:Class ;
     rdfs:label "Academic Degree"@en ;
     rdfs:subClassOf [ a owl:Restriction ;
-            owl:onProperty abi:genericallyDependsOn ;
-            owl:someValuesFrom abi:Person ],
-        [ a owl:Restriction ;
             owl:onProperty personnel:isSourcedFrom ;
             owl:someValuesFrom personnel:ProfileDocument ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:genericallyDependsOn ;
+            owl:someValuesFrom abi:Person ],
         abi:GenericallyDependentContinuant ;
     owl:equivalentClass cco:ont00002003 ;
     skos:definition "A certificate issued by an educational organization to a person to indicate that the person has satisfactorily completed a course of study. Equivalent to CCO Academic Degree."@en ;
@@ -3801,7 +3822,7 @@ personnel:AcademicDegree a owl:Class ;
     abi:hasMemberPart <http://ontology.naas.ai/abi/Person/alice-dupont>,
         <http://ontology.naas.ai/abi/Person/hugo-girard> ;
     personnel:isServiceLineOf <http://ontology.naas.ai/abi/Organization/demo> ;
-    dcterms:created "2026-09-18T13:38:49.356456"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.437717"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/personnel/ServiceLine/demo-strategy> a personnel:ServiceLine,
@@ -3810,7 +3831,7 @@ personnel:AcademicDegree a owl:Class ;
     abi:hasMemberPart <http://ontology.naas.ai/abi/Person/bob-martin>,
         <http://ontology.naas.ai/abi/Person/grace-lambert> ;
     personnel:isServiceLineOf <http://ontology.naas.ai/abi/Organization/demo> ;
-    dcterms:created "2026-09-18T13:38:49.380360"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.469422"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:StudentRole a owl:Class ;
@@ -3843,7 +3864,7 @@ personnel:ServiceLine a owl:Class ;
         <http://ontology.naas.ai/abi/Person/david-leroy>,
         <http://ontology.naas.ai/abi/Person/emma-petit> ;
     personnel:isServiceLineOf <http://ontology.naas.ai/abi/Organization/demo> ;
-    dcterms:created "2026-09-18T13:38:49.405346"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.490673"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:Grade a owl:Class ;
@@ -3883,12 +3904,15 @@ personnel:Portrait a owl:Class ;
 <http://ontology.naas.ai/personnel/Site/paris> a abi:Site,
         owl:NamedIndividual ;
     rdfs:label "Paris" ;
-    dcterms:created "2026-09-18T13:38:49.351241"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.431849"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:EnrollmentRecord a owl:Class ;
     rdfs:label "Enrollment Record"@en ;
     rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty personnel:isSourcedFrom ;
+            owl:someValuesFrom personnel:ProfileDocument ],
+        [ a owl:Restriction ;
             owl:onProperty abi:isConcretizedBy ;
             owl:someValuesFrom personnel:ActOfStudying ],
         [ a owl:Restriction ;
@@ -3897,9 +3921,6 @@ personnel:EnrollmentRecord a owl:Class ;
         [ a owl:Restriction ;
             owl:onProperty abi:genericallyDependsOn ;
             owl:someValuesFrom cco:ont00000564 ],
-        [ a owl:Restriction ;
-            owl:onProperty personnel:isSourcedFrom ;
-            owl:someValuesFrom personnel:ProfileDocument ],
         abi:GenericallyDependentContinuant ;
     skos:definition "An information content entity that documents a person's enrollment in a curriculum at an educational organization, including the programme name and its start and end dates."@en ;
     skos:example "Enrollment in the Computer Science licence at Université de Rennes 1, 2009-09-01 to 2014-06-30."@en .
@@ -3930,7 +3951,7 @@ personnel:ProfileSummary a owl:Class ;
 <http://ontology.naas.ai/personnel/Site/remote> a abi:Site,
         owl:NamedIndividual ;
     rdfs:label "Remote" ;
-    dcterms:created "2026-09-18T13:38:49.347246"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.423311"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Person/david-leroy> a abi:Person,
@@ -3940,6 +3961,7 @@ personnel:ProfileSummary a owl:Class ;
     abi:first_name "David" ;
     abi:full_name "David Leroy" ;
     abi:last_name "Leroy" ;
+    personnel:email_address "david.leroy@demo.example"^^xsd:string ;
     personnel:family_name "Leroy"^^xsd:string ;
     personnel:given_name "David"^^xsd:string ;
     personnel:hasActOfWorking <http://ontology.naas.ai/personnel/ActOfWorking/david-leroy-demo-lead-developer-frontend>,
@@ -3959,7 +3981,8 @@ personnel:ProfileSummary a owl:Class ;
         <http://ontology.naas.ai/personnel/Site/remote> ;
     personnel:isEmployedBy <http://ontology.naas.ai/abi/Organization/demo> ;
     personnel:profile_slug "david_leroy"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.412997"^^xsd:dateTime ;
+    personnel:telephone_number "+33 1 99 00 00 04"^^xsd:string ;
+    dcterms:created "2026-09-21T08:31:08.494301"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:Certification a owl:Class ;
@@ -4036,7 +4059,7 @@ personnel:LanguageCapability a owl:Class ;
         <http://ontology.naas.ai/personnel/ServiceLine/demo-operations>,
         <http://ontology.naas.ai/personnel/ServiceLine/demo-strategy>,
         <http://ontology.naas.ai/personnel/ServiceLine/demo-technology> ;
-    dcterms:created "2026-09-18T13:38:49.337711"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.414390"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Person/frank-moreau> a abi:Person,
@@ -4046,6 +4069,7 @@ personnel:LanguageCapability a owl:Class ;
     abi:first_name "Frank" ;
     abi:full_name "Frank Moreau" ;
     abi:last_name "Moreau" ;
+    personnel:email_address "frank.moreau@demo.example"^^xsd:string ;
     personnel:family_name "Moreau"^^xsd:string ;
     personnel:given_name "Frank"^^xsd:string ;
     personnel:hasActOfWorking <http://ontology.naas.ai/personnel/ActOfWorking/frank-moreau-demo-head-of-growth>,
@@ -4071,8 +4095,10 @@ personnel:LanguageCapability a owl:Class ;
         <http://ontology.naas.ai/personnel/Site/paris-op-ra>,
         <http://ontology.naas.ai/personnel/Site/remote> ;
     personnel:isEmployedBy <http://ontology.naas.ai/abi/Organization/demo> ;
+    personnel:linkedin_url "https://www.linkedin.com/in/frank-moreau-demo"^^xsd:anyURI ;
     personnel:profile_slug "frank_moreau"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.475534"^^xsd:dateTime ;
+    personnel:telephone_number "+33 1 99 00 00 06"^^xsd:string ;
+    dcterms:created "2026-09-21T08:31:08.524692"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Person/hugo-girard> a abi:Person,
@@ -4107,7 +4133,7 @@ personnel:LanguageCapability a owl:Class ;
         <http://ontology.naas.ai/personnel/Site/remote> ;
     personnel:isEmployedBy <http://ontology.naas.ai/abi/Organization/demo> ;
     personnel:profile_slug "hugo_girard"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.640204"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.659073"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:ProfileDocument a owl:Class ;
@@ -4127,6 +4153,7 @@ personnel:ProfileDocument a owl:Class ;
     abi:first_name "Bob" ;
     abi:full_name "Bob Martin" ;
     abi:last_name "Martin" ;
+    personnel:email_address "bob.martin@demo.example"^^xsd:string ;
     personnel:family_name "Martin"^^xsd:string ;
     personnel:given_name "Bob"^^xsd:string ;
     personnel:hasActOfWorking <http://ontology.naas.ai/personnel/ActOfWorking/bob-martin-demo-ceo>,
@@ -4154,8 +4181,10 @@ personnel:ProfileDocument a owl:Class ;
         <http://ontology.naas.ai/personnel/Site/remote>,
         <http://ontology.naas.ai/personnel/Site/world> ;
     personnel:isEmployedBy <http://ontology.naas.ai/abi/Organization/demo> ;
+    personnel:linkedin_url "https://www.linkedin.com/in/bob-martin-demo"^^xsd:anyURI ;
     personnel:profile_slug "bob_martin"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.360381"^^xsd:dateTime ;
+    personnel:telephone_number "+33 1 99 00 00 02"^^xsd:string ;
+    dcterms:created "2026-09-21T08:31:08.443244"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 <http://ontology.naas.ai/abi/Person/emma-petit> a abi:Person,
@@ -4193,8 +4222,9 @@ personnel:ProfileDocument a owl:Class ;
     personnel:hasWorkLocation <http://ontology.naas.ai/personnel/Site/nantes>,
         <http://ontology.naas.ai/personnel/Site/remote> ;
     personnel:isEmployedBy <http://ontology.naas.ai/abi/Organization/demo> ;
+    personnel:linkedin_url "https://www.linkedin.com/in/emma-petit-demo"^^xsd:anyURI ;
     personnel:profile_slug "emma_petit"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.439566"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.506906"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:Mission a owl:Class ;
@@ -4220,6 +4250,7 @@ personnel:Mission a owl:Class ;
     abi:first_name "Grace" ;
     abi:full_name "Grace Lambert" ;
     abi:last_name "Lambert" ;
+    personnel:email_address "grace.lambert@demo.example"^^xsd:string ;
     personnel:family_name "Lambert"^^xsd:string ;
     personnel:given_name "Grace"^^xsd:string ;
     personnel:hasActOfStudying <http://ontology.naas.ai/personnel/ActOfStudying/grace-lambert-bay-area-business-school-mba> ;
@@ -4252,8 +4283,9 @@ personnel:Mission a owl:Class ;
         <http://ontology.naas.ai/personnel/Site/san-francisco>,
         <http://ontology.naas.ai/personnel/Site/toronto> ;
     personnel:isEmployedBy <http://ontology.naas.ai/abi/Organization/demo> ;
+    personnel:linkedin_url "https://www.linkedin.com/in/grace-lambert-demo"^^xsd:anyURI ;
     personnel:profile_slug "grace_lambert"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.597170"^^xsd:dateTime ;
+    dcterms:created "2026-09-21T08:31:08.626841"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:JobPosition a owl:Class ;
@@ -4276,6 +4308,7 @@ personnel:JobPosition a owl:Class ;
     abi:first_name "Claire" ;
     abi:full_name "Claire Bernard" ;
     abi:last_name "Bernard" ;
+    personnel:email_address "claire.bernard@demo.example"^^xsd:string ;
     personnel:family_name "Bernard"^^xsd:string ;
     personnel:given_name "Claire"^^xsd:string ;
     personnel:hasActOfStudying <http://ontology.naas.ai/personnel/ActOfStudying/claire-bernard-lyon-institute-of-technology-engineering-degree-distributed-systems> ;
@@ -4308,8 +4341,10 @@ personnel:JobPosition a owl:Class ;
         <http://ontology.naas.ai/personnel/Site/lyon-part-dieu>,
         <http://ontology.naas.ai/personnel/Site/paris> ;
     personnel:isEmployedBy <http://ontology.naas.ai/abi/Organization/demo> ;
+    personnel:linkedin_url "https://www.linkedin.com/in/claire-bernard-demo"^^xsd:anyURI ;
     personnel:profile_slug "claire_bernard"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.361347"^^xsd:dateTime ;
+    personnel:telephone_number "+33 1 99 00 00 03"^^xsd:string ;
+    dcterms:created "2026-09-21T08:31:08.444250"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:EmployeeRole a owl:Class ;
@@ -4336,6 +4371,7 @@ personnel:EmployeeRole a owl:Class ;
     abi:first_name "Alice" ;
     abi:full_name "Alice Dupont" ;
     abi:last_name "Dupont" ;
+    personnel:email_address "alice.dupont@demo.example"^^xsd:string ;
     personnel:family_name "Dupont"^^xsd:string ;
     personnel:given_name "Alice"^^xsd:string ;
     personnel:hasActOfStudying <http://ontology.naas.ai/personnel/ActOfStudying/alice-dupont-demo-university-master-s-degree-computer-science> ;
@@ -4373,8 +4409,10 @@ personnel:EmployeeRole a owl:Class ;
         <http://ontology.naas.ai/personnel/Site/remote>,
         <http://ontology.naas.ai/personnel/Site/world> ;
     personnel:isEmployedBy <http://ontology.naas.ai/abi/Organization/demo> ;
+    personnel:linkedin_url "https://www.linkedin.com/in/alice-dupont-demo"^^xsd:anyURI ;
     personnel:profile_slug "alice_dupont"^^xsd:string ;
-    dcterms:created "2026-09-18T13:38:49.334599"^^xsd:dateTime ;
+    personnel:telephone_number "+33 1 99 00 00 01"^^xsd:string ;
+    dcterms:created "2026-09-21T08:31:08.413211"^^xsd:dateTime ;
     dcterms:creator "DemoPersonGraphWorkflow" .
 
 personnel:ActOfWorking a owl:Class ;

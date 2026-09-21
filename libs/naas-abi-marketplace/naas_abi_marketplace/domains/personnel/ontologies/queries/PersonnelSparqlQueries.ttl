@@ -475,7 +475,7 @@ intentMapping:findActsOfStudyingQuery a intentMapping:TemplatableSparqlQuery ;
 
 intentMapping:findPeopleDirectoryQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_people_directory"@en ;
-    intentMapping:intentDescription "Return one row per person for a people directory: slug, name, headline, summary, quote, portrait, employer, office and country, service line, grade and years of experience. Useful to answer 'who is in the directory?' or to build a searchable index of people. Every field beyond the person and their label is optional, so someone with only a name is still returned." ;
+    intentMapping:intentDescription "Return one row per person for a people directory: slug, name, contact details (email, telephone, LinkedIn URL), headline, summary, quote, portrait, employer, office and country, service line, grade and years of experience. Useful to answer 'who is in the directory?' or to build a searchable index of people. Every field beyond the person and their label is optional, so someone with only a name is still returned." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -486,7 +486,7 @@ intentMapping:findPeopleDirectoryQuery a intentMapping:TemplatableSparqlQuery ;
                         ?portraitUrl ?portraitPath
                         ?organizationLabel ?serviceLineLabel ?gradeValue
                         ?officeLabel ?cityName ?countryName ?countryCode
-                        ?profileUrl
+                        ?profileUrl ?emailAddress ?telephoneNumber ?linkedinUrl
         WHERE {
           GRAPH <http://ontology.naas.ai/graph/personnel> {
             ?person rdf:type abi:Person ;
@@ -505,6 +505,9 @@ intentMapping:findPeopleDirectoryQuery a intentMapping:TemplatableSparqlQuery ;
               OPTIONAL { ?portrait personnel:portrait_url ?portraitUrl . }
               OPTIONAL { ?portrait personnel:portrait_path ?portraitPath . }
             }
+            OPTIONAL { ?person personnel:email_address ?emailAddress . }
+            OPTIONAL { ?person personnel:telephone_number ?telephoneNumber . }
+            OPTIONAL { ?person personnel:linkedin_url ?linkedinUrl . }
             OPTIONAL { ?person personnel:isEmployedBy ?org . ?org rdfs:label ?organizationLabel . }
             # Read the service line from membership, not from an employee role:
             # a person in the directory may have no recorded job yet.
@@ -539,7 +542,7 @@ intentMapping:findPeopleDirectoryQuery a intentMapping:TemplatableSparqlQuery ;
 
 intentMapping:findProfileHeaderQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_profile_header"@en ;
-    intentMapping:intentDescription "Return the header of one person's profile, identified by their profile slug: name, headline, summary, quote, portrait, employer, office and country, service line, grade and years of experience. Useful to answer 'who is alice_dupont?' before asking for their experience or skills." ;
+    intentMapping:intentDescription "Return the header of one person's profile, identified by their profile slug: name, contact details (email, telephone, LinkedIn URL), headline, summary, quote, portrait, employer, office and country, service line, grade and years of experience. Useful to answer 'who is alice_dupont?' before asking for their experience or skills." ;
     intentMapping:sparqlTemplate """
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -550,7 +553,7 @@ intentMapping:findProfileHeaderQuery a intentMapping:TemplatableSparqlQuery ;
                         ?portraitUrl ?portraitPath
                         ?organizationLabel ?serviceLineLabel ?gradeValue
                         ?officeLabel ?cityName ?countryName ?countryCode
-                        ?profileUrl
+                        ?profileUrl ?emailAddress ?telephoneNumber ?linkedinUrl
         WHERE {
           GRAPH <http://ontology.naas.ai/graph/personnel> {
             ?person rdf:type abi:Person ;
@@ -570,6 +573,9 @@ intentMapping:findProfileHeaderQuery a intentMapping:TemplatableSparqlQuery ;
               OPTIONAL { ?portrait personnel:portrait_url ?portraitUrl . }
               OPTIONAL { ?portrait personnel:portrait_path ?portraitPath . }
             }
+            OPTIONAL { ?person personnel:email_address ?emailAddress . }
+            OPTIONAL { ?person personnel:telephone_number ?telephoneNumber . }
+            OPTIONAL { ?person personnel:linkedin_url ?linkedinUrl . }
             OPTIONAL { ?person personnel:isEmployedBy ?org . ?org rdfs:label ?organizationLabel . }
             # Read the service line from membership, not from an employee role:
             # a person in the directory may have no recorded job yet.
