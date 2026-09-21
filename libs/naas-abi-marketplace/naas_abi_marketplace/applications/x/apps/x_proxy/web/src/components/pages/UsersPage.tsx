@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { UserDetail } from "@/components/UserDetail";
 import { UserResults } from "@/components/UserResults";
-import { loadUserSearchPage, loadUserSummary } from "@/lib/userSearch";
+import { loadUserSearchPage } from "@/lib/userSearch";
 import type { UserRow } from "@/lib/types";
 
 type Props = {
@@ -32,10 +32,11 @@ export function UsersPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [resultsPage, setResultsPage] = useState(0);
-  const [known, setKnown] = useState<UserRow | null>(null);
-  const [knownLoading, setKnownLoading] = useState(false);
+  /** Row from the results list when opening a profile (avoids a second search.json). */
+  const [knownFromList, setKnownFromList] = useState<UserRow | null>(null);
 
   useEffect(() => {
+    if (selected) return;
     let live = true;
     setLoading(true);
     setError("");
@@ -57,25 +58,12 @@ export function UsersPage({
     return () => {
       live = false;
     };
-  }, [needle, resultsPage]);
+  }, [needle, resultsPage, selected]);
 
   useEffect(() => {
     if (!selected) {
-      setKnown(null);
-      return;
+      setKnownFromList(null);
     }
-    let live = true;
-    setKnownLoading(true);
-    loadUserSummary(selected)
-      .then((row) => {
-        if (live) setKnown(row);
-      })
-      .finally(() => {
-        if (live) setKnownLoading(false);
-      });
-    return () => {
-      live = false;
-    };
   }, [selected]);
 
   const handleNeedleChange = (value: string) => {
@@ -83,12 +71,20 @@ export function UsersPage({
     setResultsPage(0);
   };
 
+  const handleOpenUser = (username: string) => {
+    const row =
+      users.find(
+        (user) => user.username.toLowerCase() === username.toLowerCase(),
+      ) ?? null;
+    setKnownFromList(row);
+    onSelectUser(username);
+  };
+
   if (selected) {
     return (
       <UserDetail
         username={selected}
-        known={known}
-        indexLoading={knownLoading}
+        known={knownFromList}
         timezone={timezone}
         needle={needle}
         selectedPost={selectedPost}
@@ -107,7 +103,7 @@ export function UsersPage({
       onNeedleChange={handleNeedleChange}
       page={resultsPage}
       onPageChange={setResultsPage}
-      onOpenUser={onSelectUser}
+      onOpenUser={handleOpenUser}
       loading={loading}
       error={error}
       timezone={timezone}

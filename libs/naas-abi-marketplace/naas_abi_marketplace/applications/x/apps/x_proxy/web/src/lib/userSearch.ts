@@ -104,17 +104,25 @@ export async function loadUserSearchPage(
   };
 }
 
-/** Summary row for one author (deep links). */
-export async function loadUserSummary(
-  username: string,
-): Promise<UserRow | null> {
-  const handle = username.trim().replace(/^@/, "");
-  if (!handle) return null;
-  const doc = await loadUserSearchPage(handle, 0);
-  return (
-    doc.users.find((u) => u.username.toLowerCase() === handle.toLowerCase()) ||
-    null
-  );
+function mapDatasetProfile(row: Record<string, unknown>): UserProfile {
+  const username = String(row.username || "");
+  const matched = Number(row.matched_count || 0);
+  const referenced = Number(row.referenced_count || 0);
+  return {
+    username,
+    posts: Number(row.posts || 0) || matched + referenced,
+    matched_count: matched,
+    referenced_count: referenced,
+    last_post_at: String(row.last_post_at || ""),
+    first_post_at: String(row.first_post_at || ""),
+    location: String(row.location || ""),
+    verified_type: String(row.verified_type || ""),
+    description: String(row.description || ""),
+    display_name: String(row.display_name || ""),
+    author_id: String(row.author_id || ""),
+    profile_image_url: String(row.profile_image_url || ""),
+    profile_banner_url: String(row.profile_banner_url || ""),
+  };
 }
 
 export function loadPostArtifact(tweetId: string): Promise<TweetRow | null> {
@@ -132,23 +140,41 @@ export function loadPostArtifact(tweetId: string): Promise<TweetRow | null> {
   return pending;
 }
 
-export async function loadUserBundle(
+/** One page of an author's feed (newest first). */
+export async function loadUserFeedPage(
   username: string,
+  page: number,
+  perPage: number = USER_FEED_BATCH,
 ): Promise<UserBundle | null> {
   const key = username.toLowerCase().replace(/^@/, "");
+  const params = new URLSearchParams({
+    page: String(page),
+    per_page: String(perPage),
+  });
   const doc = await getJson<{
     profile?: Record<string, unknown>;
     posts?: Record<string, unknown>[];
     count?: number;
-  }>(
-    `dataset/users/${encodeURIComponent(key)}/posts.json?page=0&per_page=5000`,
-  ).catch(() => null);
+  }>(`dataset/users/${encodeURIComponent(key)}/posts.json?${params}`).catch(
+    () => null,
+  );
   if (!doc?.profile) return null;
-  const profile = doc.profile as UserProfile;
+  const profile = mapDatasetProfile(doc.profile as Record<string, unknown>);
   const posts = (doc.posts || []).map((row) =>
     mapDatasetPost(row as Record<string, unknown>),
   );
-  return { profile, posts };
+  return {
+    profile,
+    posts,
+    postTotal: Number(doc.count) || profile.posts || posts.length,
+  };
+}
+
+/** @deprecated Prefer {@link loadUserFeedPage} — loads one batch only. */
+export async function loadUserBundle(
+  username: string,
+): Promise<UserBundle | null> {
+  return loadUserFeedPage(username, 0, USER_FEED_BATCH);
 }
 
 export function tweetIdOf(post: { url?: string }): string | null {
@@ -176,23 +202,48 @@ export function findPost(
   return (bundle?.posts || []).find((post) => tweetIdOf(post) === tweetId) || null;
 }
 
+function tabGraphTotal(
+  profile: UserProfile | null | undefined,
+  tab: FeedTab,
+  loaded: TweetRow[],
+): number {
+  if (tab === "matched") {
+    return profile?.matched_count ?? loaded.filter((p) => !p.referenced).length;
+  }
+  if (tab === "referenced") {
+    return (
+      profile?.referenced_count ?? loaded.filter((p) => p.referenced).length
+    );
+  }
+  return profile?.posts ?? loaded.length;
+}
+
 export function feedOf(
   bundle: UserBundle | null,
   tab: FeedTab,
   shown: number,
 ): UserFeed {
   const posts = bundle?.posts || [];
+  const profile = bundle?.profile || null;
   const inTab = postsInTab(posts, tab);
-  const matched = posts.filter((post) => !post.referenced).length;
+  const tabTotal = tabGraphTotal(profile, tab, posts);
+  const matched =
+    profile?.matched_count ??
+    posts.filter((post) => !post.referenced).length;
+  const referenced =
+    profile?.referenced_count ?? posts.length - matched;
+  const canRevealLoaded = shown < inTab.length;
+  const canFetchMore =
+    Boolean(bundle) && posts.length < (bundle?.postTotal ?? posts.length);
   return {
     rows: inTab.slice(0, Math.max(0, shown)),
-    total: inTab.length,
-    remaining: Math.max(0, inTab.length - Math.max(0, shown)),
-    profile: bundle?.profile || null,
+    total: tabTotal,
+    remaining: canRevealLoaded || canFetchMore ? 1 : 0,
+    profile,
     counts: {
-      all: posts.length,
+      all: profile?.posts ?? bundle?.postTotal ?? posts.length,
       matched,
-      referenced: posts.length - matched,
+      referenced,
     },
   };
 }

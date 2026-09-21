@@ -24,6 +24,7 @@ canonical_posts AS (
     FROM {posts} p
     WHERE p.tweet_id <> ''
       AND regexp_full_match(p.tweet_id, '^[0-9]+$')
+      {author_filter}
       AND (
         p.kind = 'matched'
         OR p.tweet_id NOT IN (SELECT tweet_id FROM matched_ids)
@@ -70,5 +71,28 @@ canonical_enriched AS (
 )
 
 
+def _author_filter_sql(author_id: str | None) -> str:
+    if not author_id:
+        return ""
+    escaped = author_id.replace("'", "''")
+    return f"AND p.author_id = '{escaped}'"
+
+
+def canonical_posts_cte(
+    *,
+    posts: str = POSTS_V1,
+    author_id: str | None = None,
+) -> str:
+    """Canonical posts CTE; optional ``author_id`` shrinks the filtered scan."""
+    return CANONICAL_POSTS_CTE.format(
+        posts=posts,
+        author_filter=_author_filter_sql(author_id),
+    )
+
+
 def canonical_cte(*, posts: str = POSTS_V1, authors: str = AUTHORS_V1) -> str:
-    return CANONICAL_WITH_AUTHORS_CTE.format(posts=posts, authors=authors)
+    return CANONICAL_WITH_AUTHORS_CTE.format(
+        posts=posts,
+        authors=authors,
+        author_filter="",
+    )

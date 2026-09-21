@@ -168,11 +168,15 @@ export type UserProfile = Partial<UserRow> &
   UserAccount & {
     username: string;
     first_post_at?: string;
+    matched_count?: number;
+    referenced_count?: number;
   };
 
 export type UserBundle = {
   profile: UserProfile;
   posts: TweetRow[];
+  /** Total ingested posts for this author (dataset API ``count``). */
+  postTotal: number;
 };
 
 /** Distinct values of one faceted column, published per query + scenario. */

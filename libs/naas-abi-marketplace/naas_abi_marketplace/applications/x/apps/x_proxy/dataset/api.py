@@ -11,13 +11,16 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.author_stats impor
 )
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.canonical import (
     canonical_cte,
+    canonical_posts_cte,
 )
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
+    AUTHOR_STATS_V1,
     AUTHORS_V1,
-    POSTS_V1,
     X_DATASET_NAMESPACE,
     ensure_x_datasets,
 )
+
+_RESULT_TOTAL_COLUMN = "_result_total"
 
 _HANDLE = re.compile(r"^[A-Za-z0-9_]{1,64}$")
 
@@ -118,6 +121,72 @@ def search_users(
     return total, list(result.rows)
 
 
+def _total_from_stats(
+    stats: dict[str, Any] | None,
+    kind: str | None,
+) -> int | None:
+    if not stats:
+        return None
+    matched = int(stats.get("matched_count") or 0)
+    referenced = int(stats.get("referenced_count") or 0)
+    if kind == "matched":
+        return matched
+    if kind == "referenced":
+        return referenced
+    return matched + referenced
+
+
+def _stats_from_joined_author(row: dict[str, Any]) -> dict[str, Any] | None:
+    if row.get("stat_matched_count") is None and row.get("stat_referenced_count") is None:
+        return None
+    stats: dict[str, Any] = {
+        "matched_count": int(row.get("stat_matched_count") or 0),
+        "referenced_count": int(row.get("stat_referenced_count") or 0),
+        "last_post_at": row.get("stat_last_post_at"),
+    }
+    if row.get("stat_first_post_at") is not None:
+        stats["first_post_at"] = row.get("stat_first_post_at")
+    return stats
+
+
+def _clean_author_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in row.items()
+        if not key.startswith("stat_")
+    }
+
+
+def _posts_with_profile_fields(
+    rows: list[dict[str, Any]],
+    profile: dict[str, Any],
+) -> list[dict[str, Any]]:
+    username = str(profile.get("username") or "")
+    location = str(profile.get("location") or "")
+    verified_type = str(profile.get("verified_type") or "")
+    display_name = str(profile.get("display_name") or "")
+    description = str(profile.get("description") or "")
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        item.setdefault("username", username)
+        item.setdefault("location", location)
+        item.setdefault("verified_type", verified_type)
+        item.setdefault("display_name", display_name)
+        item.setdefault("description", description)
+        out.append(item)
+    return out
+
+
+def _post_rows_without_internal(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    cleaned: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        item.pop(_RESULT_TOTAL_COLUMN, None)
+        cleaned.append(item)
+    return cleaned
+
+
 def user_posts(
     dataset,
     username: str,
@@ -132,35 +201,50 @@ def user_posts(
         return None, 0, []
     escaped = _escape(handle.lower())
     author = dataset.query(
-        f"SELECT * FROM {AUTHORS_V1} WHERE lower(username) = '{escaped}' LIMIT 1",  # nosec B608
+        f"SELECT a.*, "
+        f"s.matched_count AS stat_matched_count, "
+        f"s.referenced_count AS stat_referenced_count, "
+        f"s.last_post_at AS stat_last_post_at "
+        f"FROM {AUTHORS_V1} a "
+        f"LEFT JOIN {AUTHOR_STATS_V1} s ON a.author_id = s.author_id "
+        f"WHERE lower(a.username) = '{escaped}' LIMIT 1",  # nosec B608
         namespace=X_DATASET_NAMESPACE,
     )
     if not author.rows:
         return None, 0, []
-    author_row = dict(author.rows[0])
+    joined = dict(author.rows[0])
+    author_row = _clean_author_row(joined)
     author_id_raw = str(author_row.get("author_id") or "")
-    stats = profile_stats(dataset, author_id_raw)
+    stats = _stats_from_joined_author(joined)
+    if stats is None:
+        stats = profile_stats(dataset, author_id_raw)
     profile = merge_profile_with_stats(author_row, stats)
     author_id = _escape(author_id_raw)
-    cte = canonical_cte()
+    cte = canonical_posts_cte(author_id=author_id_raw)
     kind_filter = ""
     if kind in ("matched", "referenced"):
         kind_filter = f" AND kind = '{kind}'"
-    count = dataset.query(
-        f"WITH {cte} "
-        f"SELECT COUNT(*) AS n FROM canonical_posts "
-        f"WHERE author_id = '{author_id}'{kind_filter}",
-        namespace=X_DATASET_NAMESPACE,
-    )
-    total = int(count.rows[0]["n"]) if count.rows else 0
+    cached_total = _total_from_stats(stats, kind)
     posts = dataset.query(
-        f"WITH {cte} "
-        f"SELECT * FROM canonical_posts "
-        f"WHERE author_id = '{author_id}'{kind_filter} "
-        f"ORDER BY created_at DESC LIMIT {int(limit)} OFFSET {int(offset)}",
+        f"WITH {cte}, filtered AS ("
+        f"  SELECT p.*, COUNT(*) OVER () AS {_RESULT_TOTAL_COLUMN} "
+        f"  FROM canonical_posts p "
+        f"  WHERE 1=1{kind_filter}"
+        f") "
+        f"SELECT * FROM filtered "
+        f"ORDER BY created_at DESC "
+        f"LIMIT {int(limit)} OFFSET {int(offset)}",
         namespace=X_DATASET_NAMESPACE,
     )
-    return profile, total, list(posts.rows)
+    rows = list(posts.rows)
+    if rows:
+        total = int(rows[0].get(_RESULT_TOTAL_COLUMN) or 0)
+    elif cached_total is not None:
+        total = cached_total
+    else:
+        total = 0
+    cleaned = _post_rows_without_internal(rows)
+    return profile, total, _posts_with_profile_fields(cleaned, profile)
 
 
 def serialize_search_posts(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
