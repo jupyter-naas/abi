@@ -30,7 +30,11 @@ method. Domain exceptions are `CollectionNotFound`, `DocumentNotFound`,
 `VersionConflict`, and `UniqueViolation`. Driver, locking, and pool failures
 surface as `DocumentStorageError`, with the original exception as its cause.
 A failed write may have an unknown outcome; this exception does not authorize
-automatic replay. Invalid values/declarations raise `ValueError`.
+automatic replay. A backend rejecting adapter-generated SQL as malformed
+(syntax/undefined-object errors) instead surfaces as `DocumentAdapterError`:
+unlike `DocumentStorageError` this is deterministic and indicates a code
+defect, so it is not meant to be retried or caught for recovery. Invalid
+values/declarations raise `ValueError`.
 
 The runtime protocol check validates method presence, not signatures or semantic
 conformance. Custom adapters must also pass static signature checks and the full
@@ -39,7 +43,9 @@ shared adapter contract. Boot does not issue probe writes to certify an adapter.
 `CollectionSpec` declares optional typed fields and `unique_together`. Undeclared
 fields remain storable and queryable. Declared fields can be absent/null; other
 values must match their declared type (float fields also accept integers).
-Adding declarations validates existing documents. Type changes are rejected.
+Adding or changing a field's declared type validates existing documents
+against it; declaring only `indexed`/`unique` for an already-typed field
+does not rescan. Type changes are rejected.
 Declarations merge additively: omitting an existing field, index, or uniqueness
 constraint does not remove it. Adding a violated unique constraint rolls back
 and raises `UniqueViolation`. Index removal requires explicit maintenance.

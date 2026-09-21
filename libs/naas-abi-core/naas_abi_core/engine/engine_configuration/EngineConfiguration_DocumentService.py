@@ -62,21 +62,21 @@ class DocumentAdapterConfiguration(GenericLoader):
 
     def load(self) -> IDocumentAdapter:
         if self.adapter == "sqlite":
-            from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterSQLite import (
-                DocumentSecondaryAdapterSQLite,
+            from naas_abi_core.services.document.DocumentFactory import (
+                DocumentFactory,
             )
 
-            return DocumentSecondaryAdapterSQLite(
+            return DocumentFactory.DocumentAdapterSQLite(
                 **DocumentAdapterSQLiteConfiguration.model_validate(
                     self.config
                 ).model_dump()
             )
         if self.adapter == "postgresql":
-            from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterPostgreSQL import (
-                DocumentSecondaryAdapterPostgreSQL,
+            from naas_abi_core.services.document.DocumentFactory import (
+                DocumentFactory,
             )
 
-            return DocumentSecondaryAdapterPostgreSQL(
+            return DocumentFactory.DocumentAdapterPostgreSQL(
                 **DocumentAdapterPostgreSQLConfiguration.model_validate(
                     self.config
                 ).model_dump(by_alias=True)

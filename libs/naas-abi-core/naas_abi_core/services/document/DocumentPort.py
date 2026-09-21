@@ -53,6 +53,13 @@ class DocumentStorageError(RuntimeError):
     """
 
 
+class DocumentAdapterError(RuntimeError):
+    """The adapter sent the backend a malformed query: a code defect, not a
+    transient condition. Unlike DocumentStorageError, retrying will fail
+    identically; this is not meant to be caught for recovery.
+    """
+
+
 def validate_name(value: str) -> str:
     if not isinstance(value, str) or not value or "\x00" in value:
         raise ValueError("Names must be nonempty strings without NUL characters")

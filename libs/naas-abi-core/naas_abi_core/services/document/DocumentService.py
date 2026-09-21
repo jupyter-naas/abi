@@ -23,6 +23,15 @@ class DocumentService(ServiceBase):
     put replaces the complete document. if_version=None is unconditional,
     zero is create-only, and a positive version is compare-and-swap. Bulk
     helpers can commit a prefix before an error; they are not transactions.
+
+    Two adapter-specific caveats do not change results but can change timing
+    or query plans across backends: the PostgreSQL adapter takes a catalog
+    row lock on every operation (reads included) to coordinate with
+    concurrent declaration/drop changes, while the SQLite adapter does not;
+    and an `indexed=True` string/bytes field is fully index-backed for
+    ORDER BY on PostgreSQL only up to a 256-character prefix (SQLite indexes
+    the full value), so PostgreSQL can fall back to an in-memory sort for
+    fields that commonly share a long prefix.
     """
 
     def __init__(self, adapter: IDocumentAdapter, namespace: str):

@@ -8,6 +8,7 @@ from typing import Any
 import psycopg
 from naas_abi_core.services.document.adapters.secondary.document_sql import DocumentSQL
 from naas_abi_core.services.document.DocumentPort import (
+    DocumentAdapterError,
     DocumentStorageError,
     UniqueViolation,
 )
@@ -79,8 +80,10 @@ class DocumentSecondaryAdapterPostgreSQL(DocumentSQL):
             connection.execute(
                 f'CREATE TABLE IF NOT EXISTS {self.documents_table} (namespace TEXT COLLATE "C" NOT NULL, collection TEXT COLLATE "C" NOT NULL, id TEXT COLLATE "C" NOT NULL, data JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL, version BIGINT NOT NULL, PRIMARY KEY (namespace, collection, id))'
             )
-            connection.execute(
-                f"CREATE INDEX IF NOT EXISTS abi_documents_data_gin ON {self.documents_table} USING gin (data jsonb_path_ops)"
+            self.ensure_index(
+                connection,
+                "abi_documents_data_gin",
+                f"CREATE INDEX IF NOT EXISTS abi_documents_data_gin ON {self.documents_table} USING gin (data jsonb_path_ops)",
             )
 
     @contextmanager
@@ -101,6 +104,12 @@ class DocumentSecondaryAdapterPostgreSQL(DocumentSQL):
                 yield connection
         except psycopg.errors.UniqueViolation as exc:
             raise UniqueViolation("Document violates a unique constraint") from exc
+        except psycopg.errors.ProgrammingError as exc:
+            # Syntax/undefined-object errors indicate a defect in the
+            # generated SQL, not a transient condition; never retry these.
+            raise DocumentAdapterError(
+                "PostgreSQL rejected a malformed document store query"
+            ) from exc
         except (psycopg.Error, PoolTimeout, PoolClosed) as exc:
             raise DocumentStorageError(
                 "PostgreSQL document storage operation failed"
@@ -109,7 +118,7 @@ class DocumentSecondaryAdapterPostgreSQL(DocumentSQL):
     def ensure_index(
         self, connection: psycopg.Connection[Any], name: str, statement: str
     ) -> None:
-        qualified = self.documents_table.rsplit(".", 1)[0] + "." + name
+        qualified = self.qualified_index_name(name)
         fingerprint = (
             "abi-document-index:" + hashlib.sha256(statement.encode()).hexdigest()
         )

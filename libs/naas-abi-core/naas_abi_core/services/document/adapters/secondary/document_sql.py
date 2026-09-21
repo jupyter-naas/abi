@@ -138,6 +138,9 @@ class DocumentSQL(ABC):
         return SortParts(f"({rank})", f"({numeric})", text)
 
     def equal(self, expression: str, value: Value, params: list[Any]) -> str:
+        # Appends to `params` in the exact left-to-right order its
+        # placeholders appear in the returned fragment; callers append their
+        # own params in that same relative order around it (see predicates).
         raw = dumps(encode(value))
         if self.pg:
             params.append(raw)
@@ -161,6 +164,15 @@ class DocumentSQL(ABC):
         return "(" + " OR ".join(clauses) + ")"
 
     def predicates(self, where: Sequence[Predicate], params: list[Any]) -> str:
+        """Compile predicates and append their bound values to `params`.
+
+        Each clause below must append to `params` in the same left-to-right
+        order its own placeholders appear in the SQL it returns, since the
+        clauses are later joined in this same iteration order: reordering how
+        clause text is concatenated without correspondingly reordering the
+        matching append/extend would silently bind values to the wrong
+        placeholder.
+        """
         clauses = []
         for field, operator, value in where:
             expression = self.field(field)
@@ -325,6 +337,10 @@ class DocumentSQL(ABC):
     def ensure_index(self, connection: Any, name: str, statement: str) -> None:
         connection.execute(statement, ())
 
+    def qualified_index_name(self, name: str) -> str:
+        """PostgreSQL index names live in the table's schema; SQLite's do not."""
+        return self.documents_table.rsplit(".", 1)[0] + "." + name if self.pg else name
+
     def ensure_collection(self, namespace: str, spec: CollectionSpec) -> None:
         validate_name(namespace)
         with self.transaction(write=True) as connection:
@@ -342,7 +358,12 @@ class DocumentSQL(ABC):
             merged = self.merge_spec(old, spec)
             # Type declarations also apply to existing records. Stream validation
             # before DDL so incompatible declarations never partly take effect.
-            if merged.fields != old.fields:
+            # Only declared types constrain existing data; an indexed/unique
+            # flag change never does, so compare types alone to skip the scan
+            # for pure index additions.
+            old_types = {field.name: field.type for field in old.fields}
+            merged_types = {field.name: field.type for field in merged.fields}
+            if merged_types != old_types:
                 rows = connection.execute(
                     f"SELECT id, data FROM {self.documents_table} WHERE namespace = {self.p} AND collection = {self.p}",  # nosec B608
                     (namespace, spec.name),
@@ -373,9 +394,9 @@ class DocumentSQL(ABC):
                 (namespace, collection),
             )
             for name, _ in self.index_statements(namespace, spec):
-                # PostgreSQL index names live in the table's schema.
-                prefix = self.documents_table.rsplit(".", 1)[0] + "." if self.pg else ""
-                connection.execute(f"DROP INDEX IF EXISTS {prefix}{name}", ())
+                connection.execute(
+                    f"DROP INDEX IF EXISTS {self.qualified_index_name(name)}", ()
+                )
             connection.execute(
                 f"DELETE FROM {self.collections_table} WHERE namespace = {self.p} AND name = {self.p}",  # nosec B608
                 (namespace, collection),
@@ -421,9 +442,11 @@ class DocumentSQL(ABC):
     ) -> Document:
         validate_name(id)
         validate_version(if_version)
-        validate_data(data)
         with self.transaction(write=True) as connection:
             spec = self.require_collection(connection, namespace, collection)
+            # validate_data(data, spec) also performs the spec-independent
+            # shape check, so a separate spec-less pass here would just
+            # repeat that walk of the same document.
             validate_data(data, spec)
             raw = dumps(encode(data))
             now = datetime.now(UTC).isoformat(timespec="microseconds")

@@ -15,6 +15,7 @@ from naas_abi_core.services.document.adapters.secondary.document_codec import (
 )
 from naas_abi_core.services.document.adapters.secondary.document_sql import DocumentSQL
 from naas_abi_core.services.document.DocumentPort import (
+    DocumentAdapterError,
     DocumentStorageError,
     UniqueViolation,
 )
@@ -159,6 +160,13 @@ class DocumentSecondaryAdapterSQLite(DocumentSQL):
                 "SQLite document storage constraint failed"
             ) from exc
         except sqlite3.Error as exc:
+            if exc.sqlite_errorcode == sqlite3.SQLITE_ERROR:
+                # The generic "SQL logic error" code covers syntax errors and
+                # undefined columns: a defect in the generated SQL, not a
+                # transient condition; never retry these.
+                raise DocumentAdapterError(
+                    "SQLite rejected a malformed document store query"
+                ) from exc
             raise DocumentStorageError(
                 "SQLite document storage operation failed"
             ) from exc

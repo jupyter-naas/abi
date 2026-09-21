@@ -564,7 +564,7 @@ test-integration-core: deps check-docker
 
 # Run document unit tests and the optional PostgreSQL adapter contract
 test-document-core:
-	@ uv run --project libs/naas-abi-core --all-extras python -m pytest -c libs/naas-abi-core/pyproject.toml libs/naas-abi-core/naas_abi_core/services/document libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_DocumentService_test.py -q
+	@ uv run --project libs/naas-abi-core --all-extras python -m pytest -c libs/naas-abi-core/pyproject.toml libs/naas-abi-core/naas_abi_core/services/document libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_DocumentService_test.py libs/naas-abi-core/naas_abi_core/engine/EngineProxy_test.py -q
 
 .PHONY: test-document-core
 
