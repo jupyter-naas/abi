@@ -62,7 +62,21 @@ function Dashboard({
     ['Relationships', k.relations, 'Triples with an IRI object, excluding rdf:type.'],
     ['Literal values', k.literal_values, 'Triples with a literal object.'],
   ] as const;
-  const roles = [...new Set(data.graph_metrics.map((g) => g.role_label))].sort();
+  const graphTiles =
+    data.graph_metrics.length > 0
+      ? data.graph_metrics
+      : data.graphs.map((g) => ({
+          ...g,
+          triples: 0,
+          instances: 0,
+          named_individuals: 0,
+          labeled_instances: 0,
+          classes: 0,
+          predicates: 0,
+          relations: 0,
+          literal_values: 0,
+        }));
+  const roles = [...new Set(graphTiles.map((g) => g.role_label))].sort();
   return (
     <div className="ontology-dashboard">
       <main className="ontology-dashboard-main">
@@ -127,7 +141,7 @@ function Dashboard({
           <h2>Named graphs</h2>
           <span>Select a graph to explore its classes and instances</span>
         </div>
-        {data.graph_metrics.length === 0 ? (
+        {graphTiles.length === 0 ? (
           <p className="ontology-dashboard-empty">
             No named graphs are available. Use File → Create New Graph to get started.
           </p>
@@ -136,10 +150,10 @@ function Dashboard({
             <section className="ontology-dashboard-group" key={role}>
               <h3>
                 {role || 'Graphs'}
-                <span>{data.graph_metrics.filter((g) => g.role_label === role).length}</span>
+                <span>{graphTiles.filter((g) => g.role_label === role).length}</span>
               </h3>
               <div className="ontology-dashboard-grid">
-                {data.graph_metrics
+                {graphTiles
                   .filter((g) => g.role_label === role)
                   .map((graph, index) => (
                     <button

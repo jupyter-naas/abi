@@ -26,6 +26,17 @@ _TERMS = re.compile(
     r"'''(?:\\.|(?!''')[\s\S])*'''|"
     r""""(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|<[^<>"{}|^`\\\x00-\x20]*>|\#[^\r\n]*)"""
 )
+_VALUES_GRAPH_PATTERN = re.compile(r"VALUES\s+\?g\s*\{([^}]*)\}", re.IGNORECASE | re.DOTALL)
+_IRI_IN_ANGLE = re.compile(r"<([^>]+)>")
+
+
+def _graphs_from_values_clause(query: str) -> set[str] | None:
+    """When a query pins ?g via VALUES, scope the dataset to those graphs only."""
+    match = _VALUES_GRAPH_PATTERN.search(query)
+    if not match:
+        return None
+    uris = {m.group(1) for m in _IRI_IN_ANGLE.finditer(match.group(1))}
+    return uris if uris else None
 
 
 # RDFLib/pyparsing initializes parse-action arities lazily. Concurrent first
@@ -97,8 +108,20 @@ class WorkspaceGraphStore:
             result.askAnswer = False
             result.graph = Graph()
             return result
+        named = _graphs_from_values_clause(query)
+        if named is not None:
+            active = sorted(self._graphs.intersection(named))
+            if not active:
+                result = Result("SELECT")
+                result.vars = []
+                result.bindings = []
+                result.askAnswer = False
+                result.graph = Graph()
+                return result
+        else:
+            active = sorted(self._graphs)
         dataset = "\n".join(
-            "FROM " + sparql_iri(g) + "\nFROM NAMED " + sparql_iri(g) for g in sorted(self._graphs)
+            "FROM " + sparql_iri(g) + "\nFROM NAMED " + sparql_iri(g) for g in active
         )
         return cast(
             Result | Graph,

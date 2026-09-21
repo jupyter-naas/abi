@@ -73,3 +73,51 @@ for query, expected in [
         check=False,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+def test_workspace_store_limits_dataset_to_values_graph_clause():
+    from naas_abi.apps.nexus.apps.api.app.services.graph.access import GraphAccessScope
+    from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.scoped_store import (
+        WorkspaceGraphStore,
+    )
+
+    g1 = "http://ontology.example/graph/a"
+    g2 = "http://ontology.example/graph/b"
+    scope = GraphAccessScope.resolve(
+        "ws-1",
+        __import__(
+            "naas_abi.apps.nexus.graph_policy_config",
+            fromlist=["WorkspaceGraphPolicyConfig"],
+        ).WorkspaceGraphPolicyConfig(read_all=True),
+        owned=set(),
+        role="owner",
+        catalog={g1, g2},
+    )
+
+    class CaptureStore:
+        def __init__(self):
+            self.queries: list[str] = []
+
+        def list_graphs(self):
+            return [g1, g2]
+
+        def query(self, query: str):
+            self.queries.append(query)
+            from rdflib.query import Result
+
+            result = Result("SELECT")
+            result.vars = []
+            result.bindings = []
+            return result
+
+    inner = CaptureStore()
+    store = WorkspaceGraphStore(inner, scope)
+    store.query(
+        "PREFIX x: <http://example/> SELECT ?c WHERE { "
+        f"VALUES ?g {{ <{g1}> }} GRAPH ?g {{ ?s ?p ?o }} }}"
+    )
+    assert len(inner.queries) == 1
+    sent = inner.queries[0]
+    assert f"FROM <{g1}>" in sent
+    assert f"FROM NAMED <{g1}>" in sent
+    assert g2 not in sent

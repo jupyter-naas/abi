@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from typing import Any, Protocol
+
+logger = logging.getLogger(__name__)
+
+# Fuseki rejects very large VALUES blocks (HTTP 400); hierarchy is best-effort only.
+_CATALOG_ENRICH_CLASS_LIMIT = 250
+_CATALOG_LABEL_BATCH = 80
 
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphAccessError,
@@ -41,6 +48,14 @@ def rows(store: QueryStore, query: str) -> list[dict[str, Any]]:
     return [row.asdict() for row in store.query(PREFIXES + query)]
 
 
+def _try_rows(store: QueryStore, query: str) -> list[dict[str, Any]]:
+    try:
+        return rows(store, query)
+    except Exception as exc:
+        logger.debug("Explorer optional SPARQL skipped: %s", exc)
+        return []
+
+
 def resolve_graphs(packs: list[GraphPackData], requested: list[str]) -> list[str]:
     allowed = {g.uri for pack in packs for g in pack.graphs}
     for uri in requested:
@@ -56,6 +71,123 @@ def values(graphs: list[str]) -> str:
 
 def local_name(uri: str) -> str:
     return uri.rsplit("#", 1)[-1].rsplit("/", 1)[-1] or uri
+
+
+def _catalog_class_counts_combined(
+    store: QueryStore, graphs: list[str]
+) -> dict[str, dict[str, Any]]:
+    scope = values(graphs)
+    return {
+        str(row["cls"]): {
+            "uri": str(row["cls"]),
+            "label": local_name(str(row["cls"])),
+            "count": int(row["total"]),
+            "parents": [],
+        }
+        for row in rows(
+            store,
+            f"""
+          SELECT ?cls (COUNT(DISTINCT ?s) AS ?total) WHERE {{
+            {scope} GRAPH ?g {{ {INSTANCE} BIND(?instanceType AS ?cls)
+              FILTER(?cls != owl:NamedIndividual) }}
+          }} GROUP BY ?cls
+        """,
+        )
+    }
+
+
+def _catalog_class_counts_per_graph(
+    store: QueryStore, graphs: list[str]
+) -> dict[str, dict[str, Any]]:
+    """One COUNT query per graph; sums may over-count instances present in multiple graphs."""
+    classes: dict[str, dict[str, Any]] = {}
+    for graph_uri in graphs:
+        try:
+            batch = rows(
+                store,
+                f"""
+          SELECT ?cls (COUNT(DISTINCT ?s) AS ?total) WHERE {{
+            GRAPH {sparql_iri(graph_uri)} {{ {INSTANCE} BIND(?instanceType AS ?cls)
+              FILTER(?cls != owl:NamedIndividual) }}
+          }} GROUP BY ?cls
+        """,
+            )
+        except Exception:
+            continue
+        for row in batch:
+            uri = str(row["cls"])
+            total = int(row["total"])
+            if uri in classes:
+                classes[uri]["count"] += total
+            else:
+                classes[uri] = {
+                    "uri": uri,
+                    "label": local_name(uri),
+                    "count": total,
+                    "parents": [],
+                }
+    return classes
+
+
+def _catalog_class_counts(store: QueryStore, graphs: list[str]) -> dict[str, dict[str, Any]]:
+    if len(graphs) == 1:
+        try:
+            return _catalog_class_counts_combined(store, graphs)
+        except Exception:
+            pass
+    if len(graphs) > 1:
+        return _catalog_class_counts_per_graph(store, graphs)
+    return _catalog_class_counts_per_graph(store, graphs)
+
+
+def _enrich_catalog_classes(
+    store: QueryStore,
+    classes: dict[str, dict[str, Any]],
+    graphs: list[str],
+    schema_uri: str,
+) -> None:
+    ranked = sorted(
+        classes.values(),
+        key=lambda c: (-int(c["count"]), c["label"].lower(), c["uri"]),
+    )[:_CATALOG_ENRICH_CLASS_LIMIT]
+    if not ranked:
+        return
+    class_values = " ".join(map(sparql_iri, (c["uri"] for c in ranked)))
+    schema_scope = values([schema_uri])
+    for row in _try_rows(
+        store,
+        f"""
+          SELECT DISTINCT ?child ?parent WHERE {{
+            VALUES ?cls {{ {class_values} }} {schema_scope}
+            GRAPH ?g {{ ?cls rdfs:subClassOf* ?child .
+              ?child rdfs:subClassOf ?parent .
+              FILTER(isIRI(?child) && isIRI(?parent)) }}
+          }}
+        """,
+    ):
+        child, parent = str(row["child"]), str(row["parent"])
+        for uri in (child, parent):
+            classes.setdefault(
+                uri,
+                {"uri": uri, "label": local_name(uri), "count": 0, "parents": []},
+            )
+        if parent not in classes[child]["parents"]:
+            classes[child]["parents"].append(parent)
+    label_scope = values(sorted(set(graphs + [schema_uri])))
+    uris = [c["uri"] for c in classes.values()]
+    for offset in range(0, len(uris), _CATALOG_LABEL_BATCH):
+        batch = uris[offset : offset + _CATALOG_LABEL_BATCH]
+        label_values = " ".join(map(sparql_iri, batch))
+        for row in _try_rows(
+            store,
+            f"""
+          SELECT ?cls (MIN(STR(?label)) AS ?label) WHERE {{
+            VALUES ?cls {{ {label_values} }} {label_scope}
+            GRAPH ?g {{ ?cls rdfs:label ?label . FILTER(isLiteral(?label)) }}
+          }} GROUP BY ?cls
+        """,
+        ):
+            classes[str(row["cls"])]["label"] = str(row["label"])
 
 
 def catalog(
@@ -79,59 +211,9 @@ def catalog(
             "selected_graphs": [],
             "classes": [],
         }
-    scope = values(graphs)
-    classes: dict[str, dict[str, Any]] = {
-        str(row["cls"]): {
-            "uri": str(row["cls"]),
-            "label": local_name(str(row["cls"])),
-            "count": int(row["total"]),
-            "parents": [],
-        }
-        for row in rows(
-            store,
-            f"""
-          SELECT ?cls (COUNT(DISTINCT ?s) AS ?total) WHERE {{
-            {scope} GRAPH ?g {{ {INSTANCE} BIND(?instanceType AS ?cls)
-              FILTER(?cls != owl:NamedIndividual) }}
-          }} GROUP BY ?cls
-        """,
-        )
-    }
-    # Only ancestors of classes in this scope. No full schema download or N+1 label lookups.
+    classes = _catalog_class_counts(store, graphs)
     if classes:
-        class_values = " ".join(map(sparql_iri, classes))
-        metadata_scope = values(sorted(set(graphs + [schema_uri])))
-        hierarchy = rows(
-            store,
-            f"""
-          SELECT DISTINCT ?child ?parent WHERE {{
-            VALUES ?cls {{ {class_values} }} {metadata_scope}
-            GRAPH ?g {{ ?cls rdfs:subClassOf* ?child .
-              ?child rdfs:subClassOf ?parent .
-              FILTER(isIRI(?child) && isIRI(?parent)) }}
-          }}
-        """,
-        )
-        for row in hierarchy:
-            child, parent = str(row["child"]), str(row["parent"])
-            for uri in (child, parent):
-                classes.setdefault(
-                    uri,
-                    {"uri": uri, "label": local_name(uri), "count": 0, "parents": []},
-                )
-            if parent not in classes[child]["parents"]:
-                classes[child]["parents"].append(parent)
-        label_values = " ".join(map(sparql_iri, classes))
-        for row in rows(
-            store,
-            f"""
-          SELECT ?cls (MIN(STR(?label)) AS ?label) WHERE {{
-            VALUES ?cls {{ {label_values} }} {metadata_scope}
-            GRAPH ?g {{ ?cls rdfs:label ?label . FILTER(isLiteral(?label)) }}
-          }} GROUP BY ?cls
-        """,
-        ):
-            classes[str(row["cls"])]["label"] = str(row["label"])
+        _enrich_catalog_classes(store, classes, graphs, schema_uri)
     return {
         "graphs": list(graph_catalog.values()),
         "selected_graphs": graphs,
@@ -165,12 +247,13 @@ def overview(
         "literal_values": 0,
     }
     if not graphs:
+        # Dashboard tiles read graph_metrics; list readable graphs without aggregate SPARQL.
         return {
             "graphs": list(graph_catalog.values()),
             "selected_graphs": [],
             "kpis": zero,
             "classes": [],
-            "graph_metrics": [],
+            "graph_metrics": [{**meta, **zero} for meta in graph_catalog.values()],
         }
     scope = values(graphs)
     triple_rows = rows(
@@ -248,6 +331,74 @@ def overview(
     }
 
 
+def _instance_class_filter(class_uris: list[str]) -> str:
+    if not class_uris:
+        return ""
+    return "VALUES ?instanceType { " + " ".join(map(sparql_iri, class_uris)) + " }"
+
+
+def _instance_search_filter(search: str) -> str:
+    if not search.strip():
+        return ""
+    needle = sparql_string_literal(search.strip().lower())
+    return f"""FILTER(CONTAINS(LCASE(STR(?s)), {needle}) ||
+      EXISTS {{ ?s rdfs:label ?searchLabel .
+                FILTER(CONTAINS(LCASE(STR(?searchLabel)), {needle})) }})"""
+
+
+def _instance_pairs_one_graph(
+    store: QueryStore,
+    graph_uri: str,
+    class_uris: list[str],
+    search: str,
+    *,
+    limit: int,
+    offset: int,
+) -> list[tuple[str, str]]:
+    class_filter = _instance_class_filter(class_uris)
+    search_filter = _instance_search_filter(search)
+    batch = rows(
+        store,
+        f"""
+      SELECT ?s WHERE {{
+        GRAPH {sparql_iri(graph_uri)} {{
+          {INSTANCE} {class_filter} {search_filter}
+        }}
+      }} ORDER BY ?s LIMIT {limit} OFFSET {offset}
+    """,
+    )
+    return [(graph_uri, str(row["s"])) for row in batch]
+
+
+def _instance_page_pairs(
+    store: QueryStore,
+    graphs: list[str],
+    class_uris: list[str],
+    search: str,
+    offset: int,
+    limit: int,
+) -> tuple[list[tuple[str, str]], bool]:
+    need = limit + 1
+    if len(graphs) == 1:
+        pairs = _instance_pairs_one_graph(
+            store, graphs[0], class_uris, search, limit=need, offset=offset
+        )
+        return pairs[:limit], len(pairs) > limit
+    merged: list[tuple[str, str]] = []
+    for graph_uri in graphs:
+        try:
+            merged.extend(
+                _instance_pairs_one_graph(
+                    store, graph_uri, class_uris, search, limit=need, offset=0
+                )
+            )
+        except Exception:
+            continue
+    merged.sort(key=lambda pair: (pair[1], pair[0]))
+    window = merged[offset : offset + need]
+    return window[:limit], len(window) > limit
+
+
 def instances(
     store: QueryStore,
     graphs: list[str],
@@ -261,30 +412,12 @@ def instances(
 ) -> dict[str, Any]:
     if not graphs:
         return {"items": [], "has_more": False}
-    class_filter = (
-        ("VALUES ?instanceType { " + " ".join(map(sparql_iri, class_uris)) + " }")
-        if class_uris
-        else ""
+    page_pairs, has_more = _instance_page_pairs(
+        store, graphs, class_uris, search, offset, limit
     )
-    search_filter = ""
-    if search.strip():
-        needle = sparql_string_literal(search.strip().lower())
-        search_filter = f"""FILTER(CONTAINS(LCASE(STR(?s)), {needle}) ||
-          EXISTS {{ ?s rdfs:label ?searchLabel .
-                    FILTER(CONTAINS(LCASE(STR(?searchLabel)), {needle})) }})"""
-    # Paginate graph/subject pairs before joining labels, properties or multiple rdf:types.
-    page = rows(
-        store,
-        f"""
-      SELECT DISTINCT ?g ?s WHERE {{ {values(graphs)} GRAPH ?g {{
-        {INSTANCE} {class_filter} {search_filter}
-      }} }} ORDER BY ?s ?g LIMIT {limit + 1} OFFSET {offset}
-    """,
-    )
-    has_more = len(page) > limit
-    page = page[:limit]
-    if not page:
+    if not page_pairs:
         return {"items": [], "has_more": has_more}
+    page = [{"g": g, "s": s} for g, s in page_pairs]
     pairs = (
         "VALUES (?g ?s) { "
         + " ".join(
@@ -335,12 +468,12 @@ def instances(
     class_values = " ".join(
         map(sparql_iri, sorted({i["class_uri"] for i in items.values()}))
     )
-    for row in rows(
+    for row in _try_rows(
         store,
         f"""
       SELECT ?cls (MIN(STR(?label)) AS ?label) WHERE {{
-        VALUES ?cls {{ {class_values} }} {values(sorted(set(graphs + [schema_uri])))}
-        GRAPH ?g {{ ?cls rdfs:label ?label }}
+        VALUES ?cls {{ {class_values} }}
+        GRAPH {sparql_iri(schema_uri)} {{ ?cls rdfs:label ?label . FILTER(isLiteral(?label)) }}
       }} GROUP BY ?cls
     """,
     ):

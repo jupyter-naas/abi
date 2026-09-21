@@ -43,6 +43,16 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
   const [openClasses, setOpenClasses] = useState<Set<string>>(new Set());
   const list = useWorkspaceGraphList(workspaceId);
   const request = useGraphExplorer(workspaceId, scope.graphs);
+  const workspaceGraphs = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: typeof list.graphs = [];
+    for (const graph of [...list.graphs, ...(request.data?.graphs || [])]) {
+      if (seen.has(graph.uri)) continue;
+      seen.add(graph.uri);
+      merged.push(graph);
+    }
+    return merged;
+  }, [list.graphs, request.data?.graphs]);
   const loadIcons = useOntologyIconsStore((s) => s.load);
   useEffect(() => {
     void loadIcons(workspaceId);
@@ -104,10 +114,8 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
   };
   const select = (uri: string) => navigate({ class: uri, view: scope.dashboard ? 'instances' : scope.view, page: null });
   const selectedUri = new URLSearchParams(query).get('selected');
-  const graphLabels = Object.fromEntries(
-    [...list.graphs, ...(request.data?.graphs || [])].map((g) => [g.uri, g.label]),
-  );
-  const workspaceGraphCount = Math.max(list.graphs.length, request.data?.graphs.length || 0);
+  const graphLabels = Object.fromEntries(workspaceGraphs.map((g) => [g.uri, g.label]));
+  const workspaceGraphCount = workspaceGraphs.length;
   const openInstance = (instance: { uri: string; graph_uri: string; class_uri: string }) => {
     router.push(
       `${individualHref(workspaceId, instance.graph_uri, instance.class_uri, instance.uri)}${
@@ -160,7 +168,7 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
     });
   }, [searching, hits.loading, searchGroups]);
   const graphPickerProps = {
-    loading: list.loading && list.graphs.length === 0,
+    loading: list.loading && workspaceGraphs.length === 0,
     error: list.error,
   };
   const classPickerProps = { loading: request.loading, error: request.error };
@@ -168,9 +176,7 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
     scope.graphs.length === 0
       ? 'All Graphs'
       : scope.graphs.length === 1
-        ? list.graphs.find((g) => g.uri === scope.graphs[0])?.label ||
-          request.data?.graphs.find((g) => g.uri === scope.graphs[0])?.label ||
-          '1 graph'
+        ? workspaceGraphs.find((g) => g.uri === scope.graphs[0])?.label || '1 graph'
         : `${scope.graphs.length} graphs`;
   const classLabel = !scope.classes.length
     ? 'All Classes'
@@ -267,7 +273,7 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
         </button>
         <OntologyMultiPicker
           {...graphPickerProps}
-          items={list.graphs.map((g) => ({
+          items={workspaceGraphs.map((g) => ({
             value: g.uri,
             label: g.label,
             title: g.uri,

@@ -69,6 +69,11 @@ class ExplorerProjectionTest(unittest.TestCase):
             self.store, graphs or [G1, G2], classes or [], search, offset, limit, SCHEMA
         )
 
+    def test_overview_lists_graph_tiles_when_no_graphs_selected(self) -> None:
+        data = overview(self.store, self.packs, [], SCHEMA)
+        self.assertEqual({g["uri"] for g in data["graph_metrics"]}, {G1, G2, EMPTY})
+        self.assertTrue(all(g["triples"] == 0 for g in data["graph_metrics"]))
+
     def test_catalog_matches_overview_without_dashboard_scans(self) -> None:
         queries: list[str] = []
         dataset = self.store
@@ -79,7 +84,7 @@ class ExplorerProjectionTest(unittest.TestCase):
                 return dataset.query(query)
 
         data = catalog(RecordingStore(), self.packs, [G1, G2, EMPTY], SCHEMA)
-        self.assertEqual(len(queries), 3)
+        self.assertGreaterEqual(len(queries), 3)
         self.assertNotIn("kpis", data)
         self.assertEqual(data["classes"], self.summary()["classes"])
         self.assertEqual(len(data["graphs"]), 3)

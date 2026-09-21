@@ -1786,10 +1786,21 @@ class GraphService:
         from naas_abi.apps.nexus.apps.api.app.services.graph.explorer import catalog, resolve_graphs
 
         packs = await self.list_graphs(workspace_id)
-        selected = resolve_graphs(packs, graph_uris)
-        result = await asyncio.to_thread(
-            lambda: catalog(self._get_triple_store(), packs, selected, str(SCHEMA_GRAPH_URI))
+        pack_uris = sorted({g.uri for pack in packs for g in pack.graphs})
+        # Empty client selection = all readable graphs for class counts (queried per graph).
+        graphs_for_catalog = (
+            resolve_graphs(packs, graph_uris) if graph_uris else pack_uris
         )
+        # Catalog counts use the raw store + explicit GRAPH IRIs (already pack-scoped).
+        # WorkspaceGraphStore injects all readable graphs when VALUES ?g is absent and
+        # multi-graph VALUES still trip Fuseki 500 on this dataset.
+        result = await asyncio.to_thread(
+            lambda: catalog(
+                self._get_catalog_store(), packs, graphs_for_catalog, str(SCHEMA_GRAPH_URI)
+            )
+        )
+        if not graph_uris:
+            result["selected_graphs"] = []
         result["permissions"] = {"can_create_graph": bool(self.access_scope and self.access_scope.allow_create)}
         return result
 
@@ -1801,7 +1812,7 @@ class GraphService:
         )
 
         packs = await self.list_graphs(workspace_id)
-        selected = resolve_graphs(packs, graph_uris)
+        selected = resolve_graphs(packs, graph_uris) if graph_uris else []
         result = await asyncio.to_thread(
             lambda: overview(self._get_triple_store(), packs, selected, str(SCHEMA_GRAPH_URI))
         )
@@ -1818,10 +1829,24 @@ class GraphService:
             resolve_graphs,
         )
 
-        selected = resolve_graphs(await self.list_graphs(workspace_id), graph_uris)
+        packs = await self.list_graphs(workspace_id)
+        pack_uris = sorted({g.uri for pack in packs for g in pack.graphs})
+        if graph_uris:
+            selected = resolve_graphs(packs, graph_uris)
+        elif class_uris or search.strip():
+            selected = pack_uris
+        else:
+            selected = []
         return await asyncio.to_thread(
-            lambda: instances(self._get_triple_store(), selected, class_uris,
-                           search, offset, limit, str(SCHEMA_GRAPH_URI)),
+            lambda: instances(
+                self._get_catalog_store(),
+                selected,
+                class_uris,
+                search,
+                offset,
+                limit,
+                str(SCHEMA_GRAPH_URI),
+            ),
         )
 
     @workspace_graph_operation()
@@ -1834,7 +1859,8 @@ class GraphService:
             resolve_graphs,
         )
 
-        selected = resolve_graphs(await self.list_graphs(workspace_id), graph_uris)
+        packs = await self.list_graphs(workspace_id)
+        selected = resolve_graphs(packs, graph_uris) if graph_uris else []
         return await asyncio.to_thread(
             lambda: network(self._get_triple_store(), selected, class_uris,
                            search, offset, limit, str(SCHEMA_GRAPH_URI)),
