@@ -170,7 +170,7 @@ def _count_bucket_rows(doc: dict[str, Any], envelope_path: str) -> list[dict[str
 def _serialize_post_row(row: dict[str, Any]) -> dict[str, Any]:
     created = row["created_at"]
     if isinstance(created, str):
-        created = datetime.fromisoformat(created.replace("Z", "+00:00"))
+        created = datetime.fromisoformat(created)
     if created.tzinfo is None:
         created = created.replace(tzinfo=UTC)
     return {

@@ -223,7 +223,6 @@ def user_posts(
     if stats is None:
         stats = profile_stats(dataset, author_id_raw)
     profile = merge_profile_with_stats(author_row, stats)
-    author_id = _escape(author_id_raw)
     cte = canonical_posts_cte(
         author_id=author_id_raw,
         use_matched_index=matched_index_ready(dataset),

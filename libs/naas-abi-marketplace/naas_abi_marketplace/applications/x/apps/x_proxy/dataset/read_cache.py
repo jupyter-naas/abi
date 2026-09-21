@@ -29,9 +29,8 @@ def _cache_key(scope: SearchScope, query: str, page: int, per_page: int) -> tupl
 
 
 def _etag(generation: str, key: tuple[str, ...]) -> str:
-    digest = hashlib.sha256(
-        f"{generation}\0{'\0'.join(key)}".encode()
-    ).hexdigest()[:32]
+    payload = generation + "\0" + "\0".join(key)
+    digest = hashlib.sha256(payload.encode()).hexdigest()[:32]
     return f'W/"{generation}-{digest}"'
 
 

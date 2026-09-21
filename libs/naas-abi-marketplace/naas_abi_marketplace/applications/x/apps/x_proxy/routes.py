@@ -665,8 +665,8 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                     return await call_next(request)
                 raise
 
-        if self._dataset_read_enabled() and (
-            rel.startswith("search_users/") or rel.startswith("search_tweets/")
+        if self._dataset_read_enabled() and rel.startswith(
+            ("search_users/", "search_tweets/")
         ):
             raise HTTPException(
                 status_code=410,
