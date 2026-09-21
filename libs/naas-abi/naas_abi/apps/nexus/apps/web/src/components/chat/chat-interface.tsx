@@ -4368,7 +4368,7 @@ const MessageBubble = React.memo(function MessageBubble({
           )}
           
           {isUser ? (
-            <p className="whitespace-pre-wrap text-right">
+            <p className="whitespace-pre-wrap text-left">
               {(response as string).match(URL_REGEX) ? linkifyText(response as string, true) : response}
             </p>
           ) : isStillProcessing ? (

@@ -47,6 +47,9 @@ from naas_abi.apps.nexus.apps.api.app.services.analytics.service import (
     DEFAULT_SCENARIO_ID,
     AnalyticsService,
 )
+from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
+    require_superadmin,
+)
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__export import (
     export_conversation_as_response,
 )
@@ -58,7 +61,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_superadmin)])
 
 
 def _parse_message_metadata(raw: str | None) -> dict | None:

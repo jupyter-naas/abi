@@ -6,6 +6,9 @@ from typing import Any
 from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.models import GraphViewModel
+from naas_abi.apps.nexus.apps.api.app.services.graph.access import GraphAccessScope
+from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import GraphAccessError
+from naas_abi.apps.nexus.apps.api.app.services.graph.query.sparql_safe import sparql_iri
 from naas_abi.apps.nexus.apps.api.app.services.graph.service import _list_individuals
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from rdflib import OWL, RDF, RDFS, URIRef
@@ -55,7 +58,7 @@ def _resolve_graph_uri(graph_name: str) -> str:
     candidate = graph_name.strip()
     if not candidate:
         return ""
-    if candidate.startswith("http://") or candidate.startswith("https://"):
+    if candidate.startswith(("http://", "https://", "urn:")):
         return candidate
     return f"{GRAPH_BASE_URI}{candidate}"
 
@@ -118,9 +121,13 @@ class ViewService:
         self,
         triple_store_getter: Callable[[], TripleStoreService] | None = None,
         db: AsyncSession | None = None,
+        access_scope: GraphAccessScope | None = None,
+        catalog_store_getter: Callable[[], TripleStoreService] | None = None,
     ) -> None:
         self._triple_store_getter = triple_store_getter
+        self._catalog_store_getter = catalog_store_getter
         self._db = db
+        self._access_scope = access_scope
 
     def _get_triple_store(self) -> TripleStoreService:
         if self._triple_store_getter is not None:
@@ -134,13 +141,23 @@ class ViewService:
                 "Triple store is not initialized. Load API through naas_abi.ABIModule."
             ) from exc
 
+    def _get_catalog_store(self) -> TripleStoreService:
+        """Nexus application metadata (GraphFilter defs) lives outside data scopes."""
+        if self._catalog_store_getter is not None:
+            return self._catalog_store_getter()
+        return self._get_triple_store()
+
     def get_graph_filters(self, uris: list[str]) -> list[dict[str, Any]]:
         if not uris:
             return []
-
-        values = " ".join(f"<{uri}>" for uri in uris if uri and uri.strip())
+        # Filter definitions are catalog metadata. Data access is enforced on the
+        # view's graph_names before this runs; do not require the scoped store here.
+        safe_uris = [uri for uri in uris if uri and uri.strip()]
+        for uri in safe_uris:
+            sparql_iri(uri)
+        values = " ".join(sparql_iri(uri) for uri in safe_uris)
         values_clause = f"VALUES ?filter_uri {{ {values} }}" if values else ""
-        store = self._get_triple_store()
+        store = self._get_catalog_store()
 
         def _query(values_block: str = "") -> list[dict[str, Any]]:
             query = f"""
@@ -208,9 +225,12 @@ class ViewService:
     ) -> dict[str, list[dict[str, str]]]:
         store = self._get_triple_store()
         graph_uris = [_resolve_graph_uri(name) for name in (graph_names or []) if name.strip()]
+        if self._access_scope is None:
+            raise GraphAccessError("A workspace graph scope is required")
         if not graph_uris:
-            graph_uris = [f"{GRAPH_BASE_URI}default"]
-        graph_values = " ".join(f"<{uri}>" for uri in graph_uris)
+            graph_uris = sorted(self._access_scope.readable)
+        self._access_scope.require(self._access_scope.workspace_id, graph_uris)
+        graph_values = " ".join(sparql_iri(uri) for uri in graph_uris)
 
         subject_iri = _sparql_iri(subject_uri)
         predicate_iri = _sparql_iri(predicate_uri)
@@ -337,9 +357,12 @@ class ViewService:
         store = self._get_triple_store()
 
         graph_uris = [_resolve_graph_uri(name) for name in graph_names if name.strip()]
+        if self._access_scope is None:
+            raise GraphAccessError("A workspace graph scope is required")
         if not graph_uris:
-            graph_uris = [f"{GRAPH_BASE_URI}default"]
-        graph_values = " ".join(f"<{uri}>" for uri in graph_uris)
+            graph_uris = sorted(self._access_scope.readable)
+        self._access_scope.require(self._access_scope.workspace_id, graph_uris)
+        graph_values = " ".join(sparql_iri(uri) for uri in graph_uris)
 
         normalized_filters = filters or [{}]
 
@@ -711,6 +734,11 @@ class ViewService:
         view_info = await self.get_view(view_id=view_id, workspace_id=workspace_id)
         if view_info.get("kind") == "network":
             raise ValueError("Network views do not support legacy network endpoint")
+        if self._access_scope is None:
+            raise GraphAccessError("A workspace graph scope is required")
+        self._access_scope.require(workspace_id, [
+            _resolve_graph_uri(g) for g in view_info.get("graph_names", [])
+        ])
         graph_filters_resolved = self.get_graph_filters(view_info.get("graph_filters", []))
         return _list_individuals(
             triple_store=self._get_triple_store(),

@@ -1,0 +1,173 @@
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:S8P4Ontology a owl:Ontology ;
+    rdfs:label "S8-P4 · Payments and expenses"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceSHA256 "0d2c2c1e42dc3dfcfb1a8661ddba31057e88de911af1bb8f21868ba3096c0763"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    dct:title "S8-P4 · Payments and expenses"@en ;
+    rdfs:comment "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    owl:imports abi:ABIProcessLedgerOntology .
+
+abi:S8P4Condition1 a owl:Class ;
+    rdfs:label "Payments and expenses timing condition"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "On invoice; per run"@en ;
+    rdfs:comment "Ledger trigger/cadence/target: On invoice; per run. No occurrence or achieved timing is asserted."@en ;
+    rdfs:subClassOf abi:ExecutionCondition ;
+    skos:definition "Ledger trigger/cadence/target: On invoice; per run. No occurrence or achieved timing is asserted."@en .
+
+abi:S8P4ExecutionRole a owl:Class ;
+    rdfs:label "Payments and expenses execution role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "A proposed role realised in Payments and expenses and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom [ a owl:Class ;
+                    owl:unionOf ( abi:AINFinanceAgentHost abi:FinanceOfficerParticipant abi:OracleERPHost ) ] ],
+        abi:ExecutionRole ;
+    skos:definition "A proposed role realised in Payments and expenses and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en .
+
+abi:S8P4Interval a owl:Class ;
+    rdfs:label "Payments and expenses execution interval"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The temporal region occupied by an execution of Payments and expenses; actual dates are unspecified."@en ;
+    rdfs:subClassOf abi:ExecutionInterval ;
+    skos:definition "The temporal region occupied by an execution of Payments and expenses; actual dates are unspecified."@en .
+
+abi:S8P4Objective1 a owl:Class ;
+    rdfs:label "Payments and expenses objective"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Timely, correct disbursement"@en ;
+    rdfs:comment "Intended outcome: Timely, correct disbursement. This is an objective specification, not a role or a guaranteed result."@en ;
+    rdfs:subClassOf abi:ObjectiveSpecification ;
+    skos:definition "Intended outcome: Timely, correct disbursement. This is an objective specification, not a role or a guaranteed result."@en .
+
+abi:S8P4Specification a owl:Class ;
+    rdfs:label "Payments and expenses specification"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The simulated ledger specification for S8-P4. It describes a possible process, not an executed run."@en ;
+    rdfs:subClassOf abi:ProcessSpecification ;
+    skos:definition "The simulated ledger specification for S8-P4. It describes a possible process, not an executed run."@en .
+
+abi:S8P4Step1 a owl:Class ;
+    rdfs:label "Payments and expenses · Capture"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 1 ;
+    rdfs:comment "Suggested step 1 of Payments and expenses: Capture. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S8P4 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 1 of Payments and expenses: Capture. Its ordering is a specification, not observed timing."@en .
+
+abi:S8P4Step2 a owl:Class ;
+    rdfs:label "Payments and expenses · Validate"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 2 ;
+    rdfs:comment "Suggested step 2 of Payments and expenses: Validate. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S8P4 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 2 of Payments and expenses: Validate. Its ordering is a specification, not observed timing."@en .
+
+abi:S8P4Step3 a owl:Class ;
+    rdfs:label "Payments and expenses · Pay"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 3 ;
+    rdfs:comment "Suggested step 3 of Payments and expenses: Pay. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S8P4 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 3 of Payments and expenses: Pay. Its ordering is a specification, not observed timing."@en .
+
+abi:S8P4 a owl:Class ;
+    rdfs:label "Payments and expenses"@en ;
+    abi:ledgerCode "S8-P4"@en ;
+    abi:ledgerHOWITIS "Exception rate"@en,
+        "Payment status"@en ;
+    abi:ledgerHOWWEKNOW "Audit trail"@en,
+        "Payment record"@en ;
+    abi:ledgerWHEN "On invoice; per run"@en ;
+    abi:ledgerWHERE "On-premises data centre"@en ;
+    abi:ledgerWHO "AIN finance agent"@en,
+        "Finance officer"@en,
+        "Oracle ERP"@en ;
+    abi:ledgerWHY "Timely, correct disbursement"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:qualityMappingStatus "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed ABI payments and expenses process. Suggested steps: Capture → Validate → Pay. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en,
+        "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000055 ;
+            owl:someValuesFrom abi:S8P4ExecutionRole ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000199 ;
+            owl:someValuesFrom abi:S8P4Interval ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S8P4Step2 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:AuditTrailRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:ExceptionRateIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:FinanceOfficerParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:usesInformation ;
+            owl:someValuesFrom abi:AINFinanceAgentSoftware ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:OnPremisesDataCentreSite ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S8P4Step1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasExecutionCondition ;
+            owl:someValuesFrom abi:S8P4Condition1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:PaymentRecordRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S8P4Step3 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:AINFinanceAgentHost ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:OracleERPHost ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000059 ;
+            owl:someValuesFrom abi:S8P4Specification ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:PaymentStatusIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:pursuesObjective ;
+            owl:someValuesFrom abi:S8P4Objective1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:usesInformation ;
+            owl:someValuesFrom abi:OracleERPSoftware ],
+        abi:LedgerProcess,
+        abi:S8Process,
+        bfo:BFO_0000015 ;
+    skos:altLabel "S8-P4"@en ;
+    skos:definition "A proposed ABI payments and expenses process. Suggested steps: Capture → Validate → Pay. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en .
+

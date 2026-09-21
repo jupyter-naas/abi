@@ -6,6 +6,7 @@ import sys
 from functools import lru_cache
 from typing import Any, Literal
 
+from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -356,10 +357,13 @@ class WorkspaceSeedConfig(BaseModel):
     default_agent: str | None = None
     agents: list[str] | None = None
     apps: list[str] | None = None
+    # Initial assignments only; saved workspace resource policies take precedence.
     # Ontology catalog ids (``module:filename.ttl``). Exclusive when a list
-    # is set: listed on, others off. ``None`` keeps the full engine listing.
-    # An empty list shows none. owl:imports are not implied; name every file.
-    ontologies: list[str] | None = None
+    # is set: listed on, others off. Missing, null and empty lists show none.
+    # owl:imports are not implied; explicitly list shared dependency files too.
+    ontologies: list[str] | None = Field(default_factory=list)
+    # Exact data graph grants. Missing policy exposes owned graphs only.
+    graphs: WorkspaceGraphPolicyConfig = Field(default_factory=WorkspaceGraphPolicyConfig)
 
 
 class OrganizationSeedConfig(BaseModel):
