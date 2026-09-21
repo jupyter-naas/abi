@@ -294,7 +294,9 @@ class PersonnelGraphContext:
         from the acts of working in this graph: the graph holds only the
         history that has been recorded.
         """
-        if not any((headline, about, quote, years_of_experience)):
+        # A page that states nothing but a name is still where the person was
+        # published: keep the summary so the source stays traceable.
+        if not any((headline, about, quote, years_of_experience)) and profile is None:
             return None
         key = person.label or ""
         if key in self.profile_summaries:

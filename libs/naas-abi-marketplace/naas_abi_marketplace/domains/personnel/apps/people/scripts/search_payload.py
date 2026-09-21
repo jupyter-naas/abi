@@ -247,6 +247,34 @@ def _result(person: dict[str, Any], snippet_value: dict[str, str]) -> dict[str, 
     }
 
 
+def facet_value(person: dict[str, Any], facet_field: str, unspecified: str) -> str:
+    """The tab a person falls under. Someone the source does not place still counts."""
+    value = person.get(facet_field)
+    return str(value) if value else unspecified
+
+
+def facet_counts(
+    hits: list[dict[str, Any]], facet_field: str, unspecified: str
+) -> list[dict[str, Any]]:
+    """One tab per value, plus ``unspecified`` for everyone without one.
+
+    Every hit lands in exactly one tab, so the counts add up to the matched set:
+    the "All" tab is their sum. Counting only people who have a value would make
+    "All" the size of the best-described subset, not of the directory.
+    """
+    counts: dict[str, int] = {}
+    for hit in hits:
+        value = facet_value(hit["person"], facet_field, unspecified)
+        counts[value] = counts.get(value, 0) + 1
+    # Ranked by size, but the catch-all goes last: it is not a category.
+    return [
+        {"value": value, "count": count}
+        for value, count in sorted(
+            counts.items(), key=lambda item: (item[0] == unspecified, -item[1], item[0])
+        )
+    ]
+
+
 def search(
     service: DatasetService,
     config: dict[str, Any],
@@ -338,15 +366,14 @@ def search(
         )
     )
 
-    facet_counts: dict[str, int] = {}
-    for hit in hits:
-        value = hit["person"].get(facet_field)
-        if value:
-            facet_counts[str(value)] = facet_counts.get(str(value), 0) + 1
+    unspecified = search_config["unspecified_facet_label"]
+    facets = facet_counts(hits, facet_field, unspecified)
 
     if facet:
         hits = [
-            hit for hit in hits if str(hit["person"].get(facet_field) or "") == facet
+            hit
+            for hit in hits
+            if facet_value(hit["person"], facet_field, unspecified) == facet
         ]
 
     total_hits = len(hits)
@@ -360,12 +387,7 @@ def search(
         "mode": mode,
         "facet": facet,
         "facet_field": facet_field,
-        "facets": [
-            {"value": value, "count": count}
-            for value, count in sorted(
-                facet_counts.items(), key=lambda item: (-item[1], item[0])
-            )
-        ],
+        "facets": facets,
         "total": total_hits,
         "page": page,
         "page_size": page_size,

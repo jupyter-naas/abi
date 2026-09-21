@@ -161,6 +161,35 @@ def test_empty_sections_emit_nothing() -> None:
     assert URIRef(Recommendation._class_uri) not in types
 
 
+def test_a_source_with_nothing_to_summarise_is_still_recorded() -> None:
+    """A page that states only a name is where the person was published.
+
+    Without a summary the source URL is unreachable from the person, so a
+    profile built from it would claim no source at all.
+    """
+    graph = _pipeline().run(
+        _profile_params(headline=None, about=None, years_of_experience=None)
+    )
+
+    assert URIRef(ProfileSummary._class_uri) in _types(graph)
+    assert any(
+        str(o) == "https://demo.example/profiles/alice_dupont"
+        for _, _, o in graph.triples(
+            (None, URIRef("http://ontology.naas.ai/personnel/source_url"), None)
+        )
+    )
+
+
+def test_no_summary_without_content_or_a_source() -> None:
+    graph = _pipeline().run(
+        _profile_params(
+            headline=None, about=None, years_of_experience=None, source_url=None
+        )
+    )
+
+    assert URIRef(ProfileSummary._class_uri) not in _types(graph)
+
+
 def test_recommendation_carries_its_author() -> None:
     graph = _pipeline().run(
         _profile_params(

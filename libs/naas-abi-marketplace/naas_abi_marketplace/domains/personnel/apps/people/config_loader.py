@@ -330,6 +330,7 @@ def _validate_search(search: dict[str, Any]) -> dict[str, Any]:
     out["facet_field"] = facet_field
     out["facet_label"] = _text(search.get("facet_label"), "search.facet_label")
     out["all_facet_label"] = search.get("all_facet_label") or "All"
+    out["unspecified_facet_label"] = search.get("unspecified_facet_label") or "Not specified"
     out["and_semantics"] = bool(search.get("and_semantics", True))
     for key, default in (
         ("snippet_length", 220),
