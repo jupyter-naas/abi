@@ -6,6 +6,7 @@ import sys
 from functools import lru_cache
 from typing import Any, Literal
 
+from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -356,10 +357,13 @@ class WorkspaceSeedConfig(BaseModel):
     default_agent: str | None = None
     agents: list[str] | None = None
     apps: list[str] | None = None
+    # Initial assignments only; saved workspace resource policies take precedence.
     # Ontology catalog ids (``module:filename.ttl``). Exclusive when a list
-    # is set: listed on, others off. ``None`` keeps the full engine listing.
-    # An empty list shows none. owl:imports are not implied; name every file.
-    ontologies: list[str] | None = None
+    # is set: listed on, others off. Missing, null and empty lists show none.
+    # owl:imports are not implied; explicitly list shared dependency files too.
+    ontologies: list[str] | None = Field(default_factory=list)
+    # Exact data graph grants. Missing policy exposes owned graphs only.
+    graphs: WorkspaceGraphPolicyConfig = Field(default_factory=WorkspaceGraphPolicyConfig)
 
 
 class OrganizationSeedConfig(BaseModel):
@@ -488,6 +492,17 @@ class Settings(BaseSettings):
     # HMAC secret for opening Cloudflare Pages portals from Nexus (empty = off).
     pages_sso_secret: str = ""
     pages_sso_expire_seconds: int = Field(default=300, ge=30, le=15 * 60)
+    # Apps builder: "Submit" sends an app project to its source repository
+    # (GitHub owner/name) as a review branch. Off unless both the repo and
+    # APPS_SUBMIT_TOKEN (env only, never in config files) are set.
+    apps_submit_repo: str = ""
+    apps_submit_base_branch: str = "main"
+    apps_submit_token: str = ""
+    apps_submit_open_pull_request: bool = True
+    apps_submit_api_base: str = "https://api.github.com"
+    apps_submit_web_base: str = "https://github.com"
+    # Lifetime of an /app-preview/ token (the editor re-mints on reload).
+    app_preview_token_expire_minutes: int = Field(default=60, ge=1, le=24 * 60)
     magic_link_expire_minutes: int = 15
     magic_link_max_active: int = 5
     magic_link_path: str = "/auth/magic-link"

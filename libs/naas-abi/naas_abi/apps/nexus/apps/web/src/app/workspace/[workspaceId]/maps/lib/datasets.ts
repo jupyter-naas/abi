@@ -70,7 +70,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
   {
     id: 'openstreetmap',
     title: 'OpenStreetMap',
-    description: 'Public OSM / CARTO basemap tiles for Maps canvases.',
+    description: 'Standard OpenStreetMap basemap tiles for Maps canvases.',
     category: 'public',
     icon: 'Globe',
     order: 0,
@@ -165,7 +165,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     id: 'flights',
     title: 'Flights',
     description:
-      'Live aircraft sample via airplanes.live (Maps-owned /api/maps/flights proxy).',
+      'Live aircraft: viewport query via adsb.lol, global sample via airplanes.live.',
     category: 'public',
     icon: 'Plane',
     order: 11,
@@ -201,7 +201,7 @@ const MAPS_BUILTIN_DATASETS: MapsDataset[] = [
     id: 'ais',
     title: 'AIS Vessels',
     description:
-      'Reserved AIS layer. No free keyless feed configured; honest empty state until licensed.',
+      'Live ships via AISStream when AISSTREAM_API_KEY is set on nexus-web. Honest empty state without a key.',
     category: 'public',
     icon: 'Ship',
     order: 15,

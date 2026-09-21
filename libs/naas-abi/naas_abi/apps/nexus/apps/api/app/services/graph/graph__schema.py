@@ -45,6 +45,7 @@ class GraphInfoData:
     uri: str
     label: str
     role_label: str = "unknown"
+    can_write: bool = False
 
 
 @dataclass(frozen=True)

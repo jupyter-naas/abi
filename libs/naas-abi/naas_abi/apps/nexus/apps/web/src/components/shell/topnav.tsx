@@ -49,7 +49,8 @@ export function TopNav() {
       ? lastActivePanelSection
       : 'chat';
 
-  const sectionTitleOpen = mounted && activePanelSection !== null;
+  // Workspaces sits left of the dock, so its title does not occupy TopNav.
+  const sectionTitleOpen = mounted && activePanelSection !== null && activePanelSection !== 'workspaces';
   // Title follows the open column, so Workspaces opened over Events reads Workspaces.
   const panelTitle = activePanelSection ? SECTION_LABELS[activePanelSection] : '';
   const panelHref =

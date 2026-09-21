@@ -23,6 +23,8 @@ from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreSe
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
+
 
 def _initialize_nexus_service_registry() -> None:
     try:
@@ -333,9 +335,11 @@ class WorkspaceSeedConfig(BaseModel):
     # ``None`` means no seed; missing app-config rows default to off.
     apps: list[str] | None = None
     # Ontology catalog ids (``module:filename.ttl``). Exclusive when a list
-    # is set: listed on, others off. ``None`` keeps the full engine listing.
-    # An empty list shows none. owl:imports are not implied; name every file.
-    ontologies: list[str] | None = None
+    # is set: listed on, others off. Missing, null and empty lists show none.
+    # owl:imports are not implied; explicitly list shared dependency files too.
+    ontologies: list[str] | None = Field(default_factory=list)
+    # Exact data graph grants. Missing policy exposes owned graphs only.
+    graphs: WorkspaceGraphPolicyConfig = Field(default_factory=WorkspaceGraphPolicyConfig)
 
 
 class OrganizationSeedConfig(BaseModel):
@@ -616,8 +620,25 @@ class ABIModule(BaseModule):
                           slug: "ops-workspace"
                           owner_email: "owner@example.com"
                           default_agent: "naas_abi AbiAgent"
+                          # The right chat pane binds each section's office
+                          # agent (Apps on /apps, ...). Home, Chat, and unlisted
+                          # sections use default_agent (Abi when none is set).
+                          # Full list: naas_abi/agents/feature/registry.py.
                           agents:
                             - "naas_abi AbiAgent"
+                            - "naas_abi SlidesAgent"
+                            - "naas_abi AppsAgent"
+                            - "naas_abi MarketplaceAgent"
+                            - "naas_abi OntologyAgent"
+                            - "naas_abi KnowledgeGraphAgent"
+                            - "naas_abi FilesAgent"
+                            - "naas_abi DatasetsAgent"
+                            - "naas_abi SearchAgent"
+                            - "naas_abi MapsAgent"
+                            - "naas_abi CodeAgent"
+                            - "naas_abi SettingsAgent"
+                            - "naas_abi AgentCatalogAgent"
+                            - "naas_abi SkillsAgent"
                           apps:
                             - example.module:dashboard
                           members:

@@ -303,9 +303,11 @@ def nexus_admin_tools() -> list[BaseTool]:
 
     @tool
     def list_workspace_members(workspace_id: str = "") -> Any:
-        """List members of a workspace (email, name, role, user_id).
+        """List members of a workspace (email, name, role, user_id, is_you).
 
         Defaults to the current chat workspace when workspace_id is omitted.
+        is_you marks the signed-in user asking, so "what is my role?" is
+        answered from the row, not guessed.
         """
         user_id = _require_user_id()
         if isinstance(user_id, dict):
@@ -325,7 +327,10 @@ def nexus_admin_tools() -> list[BaseTool]:
             except WorkspacePermissionError:
                 return {"error": "No access to this workspace", "workspace_id": workspace_id}
             rows = await ws.list_workspace_members(workspace_id=workspace_id)
-            return [_record_to_dict(row) for row in rows]
+            return [
+                {**_record_to_dict(row), "is_you": row.user_id == user_id}
+                for row in rows
+            ]
 
         try:
             return _run_async(_with_db(_run))

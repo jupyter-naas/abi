@@ -723,6 +723,29 @@ class NexusPlatformPipeline(Pipeline):
         )
         return graph
 
+    def _remove_generated_catalog(self) -> None:
+        """Rebuild agents without deleting server-owned graph metadata.
+
+        Workspace graph ownership, labels and roles are durable records. A
+        module/agent signature change must not revoke graph access on restart.
+        Remove only the other catalog triples, leaving durable records in place
+        throughout the rebuild, including if a later initialization fails.
+        """
+        obsolete = Graph()
+        query = f"""SELECT ?s ?p ?o WHERE {{ GRAPH <{self.__nexus_graph_uri}> {{
+            ?s ?p ?o.
+            FILTER NOT EXISTS {{ ?s a <{KnowledgeGraph._class_uri}> }}
+            FILTER NOT EXISTS {{ ?s <{self.__nexus_namespace}graphWorkspaceId> ?workspace }}
+            FILTER NOT EXISTS {{
+                ?graph a <{KnowledgeGraph._class_uri}>;
+                       <{self.__nexus_namespace}hasKnowledgeGraphRole> ?s.
+            }}
+        }} }}"""
+        for row in self.__triple_store.query(query):
+            obsolete.add((row[0], row[1], row[2]))
+        if len(obsolete):
+            self.__triple_store.remove(obsolete, graph_name=self.__nexus_graph_uri)
+
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, NexusPlatformPipelineParameters):
             raise TypeError(
@@ -742,15 +765,13 @@ class NexusPlatformPipeline(Pipeline):
                 logger.debug("Nexus platform signature unchanged; skipping rebuild.")
                 return Graph()
 
-        # Ensure the nexus graph exists, then clear it so removed agents
-        # don't linger. Clearing only happens on the rebuild path — pure
-        # construction of the pipeline is now non-destructive.
+        # Remove generated agent records so removed agents do not linger.
+        # Graph ownership and user-authored catalog metadata must survive.
         if self.__nexus_graph_uri not in self.__triple_store.list_graphs():
             self.__triple_store.create_graph(self.__nexus_graph_uri)
             logger.debug(f"Nexus graph created at {self.__nexus_graph_uri}")
         else:
-            logger.debug(f"Nexus graph cleared at {self.__nexus_graph_uri}")
-            self.__triple_store.clear_graph(self.__nexus_graph_uri)
+            self._remove_generated_catalog()
 
         graph = Graph()
         graph.bind("rdf", RDF)

@@ -1,0 +1,17 @@
+.ontology-detail {
+  container-type: inline-size;
+  font-size: var(--font-size-sm, 14px);
+}
+
+.ontology-detail-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4, 16px);
+  align-items: start;
+}
+
+@container (min-width: 880px) {
+  .ontology-detail-columns {
+    grid-template-columns: minmax(0, 1fr) 224px;
+  }
+}

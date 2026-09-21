@@ -1,0 +1,54 @@
+.instance-network-canvas {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--background-hex);
+}
+.instance-network-status {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: var(--muted-foreground-hex);
+  font-size: 13px;
+}
+.instance-network-toolbar {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: calc(100% - 48px);
+}
+.instance-network-search,
+.instance-network-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-hex);
+  background: var(--card-hex, var(--background-hex));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+  font-size: 12px;
+}
+.instance-network-search {
+  min-height: 30px;
+  padding: 0 10px;
+}
+.instance-network-search input {
+  width: 13rem;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--foreground-hex);
+}
+.instance-network-count {
+  padding: 0 10px;
+  color: var(--muted-foreground-hex);
+}

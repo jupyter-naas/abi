@@ -416,7 +416,7 @@ class ForgejoAdapter(ISourceControlAdapter):
         writes = [item for item in files if item.path]
         if not writes:
             raise ValidationError("upsert_files requires at least one path")
-        if len(writes) == 1:
+        if len(writes) == 1 and not writes[0].delete:
             return self.upsert_file(
                 repo_id=repo_id,
                 path=writes[0].path,
@@ -459,6 +459,25 @@ class ForgejoAdapter(ISourceControlAdapter):
         ops: list[dict[str, Any]] = []
         for item in files:
             clean_path = item.path.lstrip("/")
+            if item.delete:
+                # Forgejo needs the blob sha to delete; a missing file is a no-op.
+                try:
+                    existing = self._request(
+                        "GET",
+                        f"/repos/{repo_id}/contents/{clean_path}"
+                        f"?ref={quote(branch, safe='')}",
+                    )
+                except RepoNotFoundError:
+                    continue
+                if isinstance(existing, dict) and existing.get("sha"):
+                    ops.append(
+                        {
+                            "path": clean_path,
+                            "operation": "delete",
+                            "sha": existing["sha"],
+                        }
+                    )
+                continue
             raw = (
                 item.content
                 if isinstance(item.content, bytes)
@@ -481,6 +500,8 @@ class ForgejoAdapter(ISourceControlAdapter):
             except RepoNotFoundError:
                 pass
             ops.append(op)
+        if not ops:
+            raise ValidationError("upsert_files: nothing to change")
 
         payload: dict[str, Any] = {
             "files": ops,
@@ -501,7 +522,23 @@ class ForgejoAdapter(ISourceControlAdapter):
             if getattr(exc, "status", None) not in (404, 405):
                 raise
             last: Commit | None = None
+            delete_shas = {
+                op["path"]: op["sha"] for op in ops if op["operation"] == "delete"
+            }
             for item in files:
+                if item.delete:
+                    clean_path = item.path.lstrip("/")
+                    if clean_path in delete_shas:
+                        self._request(
+                            "DELETE",
+                            f"/repos/{repo_id}/contents/{clean_path}",
+                            json={
+                                "sha": delete_shas[clean_path],
+                                "message": message,
+                                "branch": branch,
+                            },
+                        )
+                    continue
                 last = self._upsert_file_once(
                     repo_id=repo_id,
                     path=item.path,
@@ -511,7 +548,8 @@ class ForgejoAdapter(ISourceControlAdapter):
                     author_name=author_name,
                     author_email=author_email,
                 )
-            assert last is not None
+            if last is None:  # deletes only: the DELETE route returns no commit
+                return Commit(sha="", message=message, author=author_name or "")
             return last
 
         commit_blob = result.get("commit") if isinstance(result, dict) else None

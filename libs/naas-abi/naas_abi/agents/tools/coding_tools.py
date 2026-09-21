@@ -15,6 +15,9 @@ from naas_abi_core.services.agent.context import (
     coding_active_repo,
     coding_harness_base,
 )
+from naas_abi_core.services.agent.tools.workspace_tools import (
+    REQUIRES_WORKSPACE_KEY,
+)
 from naas_abi_core.services.agent.tools.workspace_tools import _call as _sidecar_call
 from naas_abi_core.services.coding_environment.adapters.secondary.OpencodeHarnessClient import (
     run_task as run_harness_task,
@@ -103,10 +106,18 @@ def coding_tools() -> list[BaseTool]:
         result["coding_context"] = _coding_context()
         return result
 
-    return [
+    sidecar_tools = [
         read_coding_file,
         write_coding_file,
         list_coding_dir,
         run_in_coding_sandbox,
-        run_coding_harness_task,
     ]
+    # Like the default workspace tools, these need the sidecar: the model only
+    # sees them when one is bound, else Abi lists "the workspace drive" with
+    # list_coding_dir instead of handing off to Files.
+    for sidecar_tool in sidecar_tools:
+        sidecar_tool.metadata = {
+            **(sidecar_tool.metadata or {}),
+            REQUIRES_WORKSPACE_KEY: True,
+        }
+    return [*sidecar_tools, run_coding_harness_task]

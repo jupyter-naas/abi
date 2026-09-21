@@ -6,8 +6,11 @@ import re
 from typing import Any
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, Response
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
+    get_current_user_required,
+)
 from pydantic import BaseModel, Field
 
 OPENAI_SPEECH_URL = "https://api.openai.com/v1/audio/speech"
@@ -102,7 +105,7 @@ _EN_WORDS = frozenset(
     {"the", "and", "you", "are", "is", "hello", "thanks", "with", "that", "this", "have", "what"}
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
 
 class SpeechRequest(BaseModel):

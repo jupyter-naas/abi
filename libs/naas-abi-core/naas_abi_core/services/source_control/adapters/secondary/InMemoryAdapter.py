@@ -186,7 +186,10 @@ class InMemoryAdapter(ISourceControlAdapter):
             raise BranchNotFoundError(f"{repo_id}@{branch}")
         store = repo.setdefault("files", {})
         for item in writes:
-            store[item.path] = item.content
+            if item.delete:
+                store.pop(item.path, None)
+            else:
+                store[item.path] = item.content
         repo["empty"] = False
         sha = self._next_id("sha")
         if branch in repo["branches"]:

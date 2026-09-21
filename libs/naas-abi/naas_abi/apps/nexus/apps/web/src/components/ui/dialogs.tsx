@@ -161,7 +161,7 @@ export function PromptDialog({
 
   return (
     <ModalBackdrop open={open} onClose={onCancel}>
-      <div className="rounded-xl border border-border bg-background p-6 shadow-2xl">
+      <div className="border border-border bg-background p-6 shadow-2xl">
         <h3 className="text-base font-semibold text-foreground">{title}</h3>
         {description && (
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
@@ -179,7 +179,7 @@ export function PromptDialog({
           }}
           placeholder={placeholder}
           className={cn(
-            'mt-4 w-full rounded-lg border bg-muted/50 px-3 py-2 text-sm text-foreground',
+            'mt-4 w-full border bg-muted/50 px-3 py-2 text-sm text-foreground',
             'outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-workspace-accent focus-visible:ring-offset-2',
             error ? 'border-red-500' : 'border-border'
           )}
@@ -191,13 +191,13 @@ export function PromptDialog({
         <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onCancel}
-            className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             {cancelLabel}
           </button>
           <button
             onClick={handleSubmit}
-            className="rounded-lg bg-workspace-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-workspace-accent/90"
+            className="bg-workspace-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-workspace-accent/90"
           >
             {confirmLabel}
           </button>

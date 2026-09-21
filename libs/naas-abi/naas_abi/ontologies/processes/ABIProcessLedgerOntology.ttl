@@ -1,0 +1,3018 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+abi:systemViewKind a owl:AnnotationProperty ;
+    rdfs:label "system view kind"@en ;
+    rdfs:comment "Marks a class as a system or subsystem in the process navigation view; not a BFO type."@en ;
+    skos:definition "Marks a class as a system or subsystem in the process navigation view; not a BFO type."@en .
+
+abi:systemViewParent a owl:AnnotationProperty ;
+    rdfs:label "system view parent"@en ;
+    rdfs:comment "Names the containing system for a subsystem navigation grouping; not an assertion about physical parthood."@en ;
+    skos:definition "Names the containing system for a subsystem navigation grouping; not an assertion about physical parthood."@en .
+
+abi:AINAgentsHost a owl:Class ;
+    rdfs:label "AIN agents physical host"@en ;
+    abi:modelingNote "Physical host inferred from software use; confirm deployment with ABI."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Physical computing equipment carrying 'AIN agents'. Proposed bearer mapping; no particular machine or deployment is asserted."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000101 ;
+            owl:someValuesFrom abi:AINAgentsSoftware ],
+        abi:ComputingSystem ;
+    skos:definition "Physical computing equipment carrying 'AIN agents'. Proposed bearer mapping; no particular machine or deployment is asserted."@en .
+
+abi:AINFinanceAgentHost a owl:Class ;
+    rdfs:label "AIN finance agent physical host"@en ;
+    abi:modelingNote "Physical host inferred from software use; confirm deployment with ABI."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Physical computing equipment carrying 'AIN finance agent'. Proposed bearer mapping; no particular machine or deployment is asserted."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000101 ;
+            owl:someValuesFrom abi:AINFinanceAgentSoftware ],
+        abi:ComputingSystem ;
+    skos:definition "Physical computing equipment carrying 'AIN finance agent'. Proposed bearer mapping; no particular machine or deployment is asserted."@en .
+
+abi:AINGapDetectionAgentHost a owl:Class ;
+    rdfs:label "AIN gap-detection agent physical host"@en ;
+    abi:modelingNote "Physical host inferred from software use; confirm deployment with ABI."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Physical computing equipment carrying 'AIN gap-detection agent'. Proposed bearer mapping; no particular machine or deployment is asserted."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000101 ;
+            owl:someValuesFrom abi:AINGapDetectionAgentSoftware ],
+        abi:ComputingSystem ;
+    skos:definition "Physical computing equipment carrying 'AIN gap-detection agent'. Proposed bearer mapping; no particular machine or deployment is asserted."@en .
+
+abi:AINHost a owl:Class ;
+    rdfs:label "AIN physical host"@en ;
+    abi:modelingNote "Physical host inferred from software use; confirm deployment with ABI."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Physical computing equipment carrying 'AIN'. Proposed bearer mapping; no particular machine or deployment is asserted."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000101 ;
+            owl:someValuesFrom abi:AINSoftware ],
+        abi:ComputingSystem ;
+    skos:definition "Physical computing equipment carrying 'AIN'. Proposed bearer mapping; no particular machine or deployment is asserted."@en .
+
+abi:AINIntelligenceAgentHost a owl:Class ;
+    rdfs:label "AIN intelligence agent physical host"@en ;
+    abi:modelingNote "Physical host inferred from software use; confirm deployment with ABI."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Physical computing equipment carrying 'AIN intelligence agent'. Proposed bearer mapping; no particular machine or deployment is asserted."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000101 ;
+            owl:someValuesFrom abi:AINIntelligenceAgentSoftware ],
+        abi:ComputingSystem ;
+    skos:definition "Physical computing equipment carrying 'AIN intelligence agent'. Proposed bearer mapping; no particular machine or deployment is asserted."@en .
+
+abi:AINPredictiveAgentHost a owl:Class ;
+    rdfs:label "AIN predictive agent physical host"@en ;
+    abi:modelingNote "Physical host inferred from software use; confirm deployment with ABI."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Physical computing equipment carrying 'AIN predictive agent'. Proposed bearer mapping; no particular machine or deployment is asserted."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000101 ;
+            owl:someValuesFrom abi:AINPredictiveAgentSoftware ],
+        abi:ComputingSystem ;
+    skos:definition "Physical computing equipment carrying 'AIN predictive agent'. Proposed bearer mapping; no particular machine or deployment is asserted."@en .
+
+abi:AINProcurementAgentHost a owl:Class ;
+    rdfs:label "AIN procurement agent physical host"@en ;
+    abi:modelingNote "Physical host inferred from software use; confirm deployment with ABI."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Physical computing equipment carrying 'AIN procurement agent'. Proposed bearer mapping; no particular machine or deployment is asserted."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000101 ;
+            owl:someValuesFrom abi:AINProcurementAgentSoftware ],
+        abi:ComputingSystem ;
+    skos:definition "Physical computing equipment carrying 'AIN procurement agent'. Proposed bearer mapping; no particular machine or deployment is asserted."@en .
+
+abi:AccessLevelIndicator a owl:Class ;
+    rdfs:label "Access level record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Access level"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Access level' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Access level' under HOWITIS in the simulated ledger."@en .
+
+abi:AccessRegisterRecord a owl:Class ;
+    rdfs:label "Access register"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Access register"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Access register' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Access register' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:AccessRequestRecordRecord a owl:Class ;
+    rdfs:label "Access request record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Access request record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Access request record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Access request record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:AccessRevocationLogRecord a owl:Class ;
+    rdfs:label "Access revocation log"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Access revocation log"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Access revocation log' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Access revocation log' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:AccessRevokedStatusIndicator a owl:Class ;
+    rdfs:label "Access-revoked status record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Access-revoked status"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Access-revoked status' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Access-revoked status' under HOWITIS in the simulated ledger."@en .
+
+abi:AccessStatusIndicator a owl:Class ;
+    rdfs:label "Access status record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Access status"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Access status' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Access status' under HOWITIS in the simulated ledger."@en .
+
+abi:AccuracyIndicator a owl:Class ;
+    rdfs:label "Accuracy record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Accuracy"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Accuracy' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Accuracy' under HOWITIS in the simulated ledger."@en .
+
+abi:AfterActionNoteRecord a owl:Class ;
+    rdfs:label "After-action note"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "After-action note"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'After-action note' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'After-action note' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:AirGapComplianceIndicator a owl:Class ;
+    rdfs:label "Air-gap compliance record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Air-gap compliance"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Air-gap compliance' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Air-gap compliance' under HOWITIS in the simulated ledger."@en .
+
+abi:AirGappedZoneSite a owl:Class ;
+    rdfs:label "Air-gapped zone"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A physical site described as 'Air-gapped zone' in the ledger; no concrete location is identified."@en ;
+    rdfs:subClassOf abi:ExecutionSite ;
+    skos:definition "A physical site described as 'Air-gapped zone' in the ledger; no concrete location is identified."@en .
+
+abi:AlertFeedRecord a owl:Class ;
+    rdfs:label "Alert feed"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Alert feed"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Alert feed' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Alert feed' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:AlertLatencyIndicator a owl:Class ;
+    rdfs:label "Alert latency record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Alert latency"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Alert latency' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Alert latency' under HOWITIS in the simulated ledger."@en .
+
+abi:AlignmentStatusIndicator a owl:Class ;
+    rdfs:label "Alignment status record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Alignment status"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Alignment status' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Alignment status' under HOWITIS in the simulated ledger."@en .
+
+abi:ApprovalLogRecord a owl:Class ;
+    rdfs:label "Approval log"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Approval log"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Approval log' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Approval log' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:ApprovalRecordRecord a owl:Class ;
+    rdfs:label "Approval record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Approval record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Approval record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Approval record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:ApprovalStatusIndicator a owl:Class ;
+    rdfs:label "Approval status record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Approval status"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Approval status' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Approval status' under HOWITIS in the simulated ledger."@en .
+
+abi:AssessmentCompletenessIndicator a owl:Class ;
+    rdfs:label "Assessment completeness record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Assessment completeness"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Assessment completeness' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Assessment completeness' under HOWITIS in the simulated ledger."@en .
+
+abi:AssessmentRecordRecord a owl:Class ;
+    rdfs:label "Assessment record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Assessment record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Assessment record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Assessment record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:AssessmentReportRecord a owl:Class ;
+    rdfs:label "Assessment report"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Assessment report"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Assessment report' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Assessment report' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:AssessmentResultRecord a owl:Class ;
+    rdfs:label "Assessment result"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Assessment result"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Assessment result' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Assessment result' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:AssetConditionIndicator a owl:Class ;
+    rdfs:label "Asset condition record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Asset condition"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Asset condition' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Asset condition' under HOWITIS in the simulated ledger."@en .
+
+abi:AssetRegistryRecord a owl:Class ;
+    rdfs:label "Asset registry"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Asset registry"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Asset registry' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Asset registry' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:AssetRegistryUpdateRecord a owl:Class ;
+    rdfs:label "Asset registry update"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Asset registry update"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Asset registry update' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Asset registry update' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:AttendanceLogRecord a owl:Class ;
+    rdfs:label "Attendance log"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Attendance log"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Attendance log' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Attendance log' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:AttendanceRecordRecord a owl:Class ;
+    rdfs:label "Attendance record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Attendance record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Attendance record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Attendance record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:AttendanceStatusIndicator a owl:Class ;
+    rdfs:label "Attendance status record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Attendance status"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Attendance status' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Attendance status' under HOWITIS in the simulated ledger."@en .
+
+abi:AuditTrailRecord a owl:Class ;
+    rdfs:label "Audit trail"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Audit trail"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Audit trail' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Audit trail' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:BriefingNoteRecord a owl:Class ;
+    rdfs:label "Briefing note"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Briefing note"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Briefing note' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Briefing note' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:BudgetRecordRecord a owl:Class ;
+    rdfs:label "Budget record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Budget record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Budget record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Budget record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:BudgetStatusIndicator a owl:Class ;
+    rdfs:label "Budget status record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Budget status"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Budget status' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Budget status' under HOWITIS in the simulated ledger."@en .
+
+abi:CalendarRecordRecord a owl:Class ;
+    rdfs:label "Calendar record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Calendar record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Calendar record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Calendar record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:ClearanceStatusIndicator a owl:Class ;
+    rdfs:label "Clearance status record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Clearance status"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Clearance status' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Clearance status' under HOWITIS in the simulated ledger."@en .
+
+abi:CommsRecordRecord a owl:Class ;
+    rdfs:label "Comms record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Comms record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Comms record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Comms record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:CompetencyLevelIndicator a owl:Class ;
+    rdfs:label "Competency level record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Competency level"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Competency level' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Competency level' under HOWITIS in the simulated ledger."@en .
+
+abi:CompetencyRecordRecord a owl:Class ;
+    rdfs:label "Competency record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Competency record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Competency record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Competency record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:CompletionRateIndicator a owl:Class ;
+    rdfs:label "Completion rate record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Completion rate"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Completion rate' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Completion rate' under HOWITIS in the simulated ledger."@en .
+
+abi:ComplianceStatusIndicator a owl:Class ;
+    rdfs:label "Compliance status record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Compliance status"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Compliance status' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Compliance status' under HOWITIS in the simulated ledger."@en .
+
+abi:ConfidenceScoreIndicator a owl:Class ;
+    rdfs:label "Confidence score record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Confidence score"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Confidence score' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Confidence score' under HOWITIS in the simulated ledger."@en .
+
+abi:ConfigurationLogRecord a owl:Class ;
+    rdfs:label "Configuration log"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Configuration log"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Configuration log' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Configuration log' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:ContactRecordRecord a owl:Class ;
+    rdfs:label "Contact record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Contact record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Contact record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Contact record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:ContractStatusIndicator a owl:Class ;
+    rdfs:label "Contract status record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Contract status"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Contract status' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Contract status' under HOWITIS in the simulated ledger."@en .
+
+abi:CoverageIndicator a owl:Class ;
+    rdfs:label "Coverage record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Coverage"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Coverage' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Coverage' under HOWITIS in the simulated ledger."@en .
+
+abi:CoverageRatioIndicator a owl:Class ;
+    rdfs:label "Coverage ratio record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Coverage ratio"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Coverage ratio' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Coverage ratio' under HOWITIS in the simulated ledger."@en .
+
+abi:CycleTimeIndicator a owl:Class ;
+    rdfs:label "Cycle time record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Cycle time"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Cycle time' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Cycle time' under HOWITIS in the simulated ledger."@en .
+
+abi:DecisionLogRecord a owl:Class ;
+    rdfs:label "Decision log"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Decision log"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Decision log' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Decision log' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:DeliveryStatusIndicator a owl:Class ;
+    rdfs:label "Delivery status record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Delivery status"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Delivery status' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Delivery status' under HOWITIS in the simulated ledger."@en .
+
+abi:DispatchRecordRecord a owl:Class ;
+    rdfs:label "Dispatch record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Dispatch record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Dispatch record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Dispatch record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:DowntimeIndicator a owl:Class ;
+    rdfs:label "Downtime record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Downtime"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Downtime' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Downtime' under HOWITIS in the simulated ledger."@en .
+
+abi:EngagementLogRecord a owl:Class ;
+    rdfs:label "Engagement log"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Engagement log"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Engagement log' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Engagement log' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:EngagementStatusIndicator a owl:Class ;
+    rdfs:label "Engagement status record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Engagement status"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Engagement status' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Engagement status' under HOWITIS in the simulated ledger."@en .
+
+abi:EvaluationRecordRecord a owl:Class ;
+    rdfs:label "Evaluation record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Evaluation record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Evaluation record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Evaluation record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:EvidenceRegisterRecord a owl:Class ;
+    rdfs:label "Evidence register"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Evidence register"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Evidence register' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Evidence register' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:ExceptionRateIndicator a owl:Class ;
+    rdfs:label "Exception rate record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Exception rate"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Exception rate' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Exception rate' under HOWITIS in the simulated ledger."@en .
+
+abi:ExecutionInterval a owl:Class ;
+    rdfs:label "ABI execution interval"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A one-dimensional temporal region occupied by an execution, distinct from its trigger or schedule description."@en ;
+    rdfs:subClassOf bfo:BFO_0000008,
+        bfo:BFO_0000038 ;
+    skos:definition "A one-dimensional temporal region occupied by an execution, distinct from its trigger or schedule description."@en .
+
+abi:ExecutionRole a owl:Class ;
+    rdfs:label "ABI execution role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A role borne by a material participant and realised in carrying out a ledger process."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:MaterialParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "A role borne by a material participant and realised in carrying out a ledger process."@en .
+
+abi:FalsePositiveRateIndicator a owl:Class ;
+    rdfs:label "False-positive rate record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "False-positive rate"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'False-positive rate' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'False-positive rate' under HOWITIS in the simulated ledger."@en .
+
+abi:FindingsSeverityIndicator a owl:Class ;
+    rdfs:label "Findings severity record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Findings severity"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Findings severity' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Findings severity' under HOWITIS in the simulated ledger."@en .
+
+abi:FleetSystemHost a owl:Class ;
+    rdfs:label "Fleet system physical host"@en ;
+    abi:modelingNote "Physical host inferred from software use; confirm deployment with ABI."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Physical computing equipment carrying 'Fleet system'. Proposed bearer mapping; no particular machine or deployment is asserted."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000101 ;
+            owl:someValuesFrom abi:FleetSystemSoftware ],
+        abi:ComputingSystem ;
+    skos:definition "Physical computing equipment carrying 'Fleet system'. Proposed bearer mapping; no particular machine or deployment is asserted."@en .
+
+abi:ForecastConfidenceIndicator a owl:Class ;
+    rdfs:label "Forecast confidence record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Forecast confidence"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Forecast confidence' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Forecast confidence' under HOWITIS in the simulated ledger."@en .
+
+abi:ForecastRecordRecord a owl:Class ;
+    rdfs:label "Forecast record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Forecast record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Forecast record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Forecast record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:GapCoverageIndicator a owl:Class ;
+    rdfs:label "Gap coverage record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Gap coverage"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Gap coverage' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Gap coverage' under HOWITIS in the simulated ledger."@en .
+
+abi:GapRegisterRecord a owl:Class ;
+    rdfs:label "Gap register"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Gap register"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Gap register' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Gap register' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:HRRecordRecord a owl:Class ;
+    rdfs:label "HR record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "HR record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'HR record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'HR record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:HRSystemHost a owl:Class ;
+    rdfs:label "HR system physical host"@en ;
+    abi:modelingNote "Physical host inferred from software use; confirm deployment with ABI."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Physical computing equipment carrying 'HR system'. Proposed bearer mapping; no particular machine or deployment is asserted."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000101 ;
+            owl:someValuesFrom abi:HRSystemSoftware ],
+        abi:ComputingSystem ;
+    skos:definition "Physical computing equipment carrying 'HR system'. Proposed bearer mapping; no particular machine or deployment is asserted."@en .
+
+abi:IdentitySystemHost a owl:Class ;
+    rdfs:label "Identity system physical host"@en ;
+    abi:modelingNote "Physical host inferred from software use; confirm deployment with ABI."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Physical computing equipment carrying 'Identity system'. Proposed bearer mapping; no particular machine or deployment is asserted."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000101 ;
+            owl:someValuesFrom abi:IdentitySystemSoftware ],
+        abi:ComputingSystem ;
+    skos:definition "Physical computing equipment carrying 'Identity system'. Proposed bearer mapping; no particular machine or deployment is asserted."@en .
+
+abi:IncidentRecordRecord a owl:Class ;
+    rdfs:label "Incident record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Incident record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Incident record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Incident record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:Infrastructure a owl:Class ;
+    rdfs:label "Physical IT infrastructure"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Material IT infrastructure participating in provisioning and cyber activities."@en ;
+    rdfs:subClassOf abi:MaterialParticipant ;
+    skos:definition "Material IT infrastructure participating in provisioning and cyber activities."@en .
+
+abi:InventoryRecordRecord a owl:Class ;
+    rdfs:label "Inventory record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Inventory record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Inventory record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Inventory record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:LearningSystemHost a owl:Class ;
+    rdfs:label "Learning system physical host"@en ;
+    abi:modelingNote "Physical host inferred from software use; confirm deployment with ABI."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Physical computing equipment carrying 'Learning system'. Proposed bearer mapping; no particular machine or deployment is asserted."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000101 ;
+            owl:someValuesFrom abi:LearningSystemSoftware ],
+        abi:ComputingSystem ;
+    skos:definition "Physical computing equipment carrying 'Learning system'. Proposed bearer mapping; no particular machine or deployment is asserted."@en .
+
+abi:LeastPrivilegeComplianceIndicator a owl:Class ;
+    rdfs:label "Least-privilege compliance record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Least-privilege compliance"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Least-privilege compliance' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Least-privilege compliance' under HOWITIS in the simulated ledger."@en .
+
+abi:LeaveRecordRecord a owl:Class ;
+    rdfs:label "Leave record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Leave record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Leave record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Leave record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:MaintenanceRecordRecord a owl:Class ;
+    rdfs:label "Maintenance record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Maintenance record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Maintenance record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Maintenance record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:MessageLogRecord a owl:Class ;
+    rdfs:label "Message log"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Message log"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Message log' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Message log' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:MessagingSystemHost a owl:Class ;
+    rdfs:label "Messaging system physical host"@en ;
+    abi:modelingNote "Physical host inferred from software use; confirm deployment with ABI."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Physical computing equipment carrying 'Messaging system'. Proposed bearer mapping; no particular machine or deployment is asserted."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000101 ;
+            owl:someValuesFrom abi:MessagingSystemSoftware ],
+        abi:ComputingSystem ;
+    skos:definition "Physical computing equipment carrying 'Messaging system'. Proposed bearer mapping; no particular machine or deployment is asserted."@en .
+
+abi:OSINTSourceInformation a owl:Class ;
+    rdfs:label "OSINT sources"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Open-source intelligence information listed as WHO in the ledger; treated as information used, not a material actor."@en ;
+    rdfs:subClassOf abi:InformationArtifact ;
+    skos:definition "Open-source intelligence information listed as WHO in the ledger; treated as information used, not a material actor."@en .
+
+abi:OffboardingChecklistRecord a owl:Class ;
+    rdfs:label "Offboarding checklist"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Offboarding checklist"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Offboarding checklist' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Offboarding checklist' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:OnPremisesDataCentreSite a owl:Class ;
+    rdfs:label "On-premises data centre"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A physical site described as 'On-premises data centre' in the ledger; no concrete location is identified."@en ;
+    rdfs:subClassOf abi:ExecutionSite ;
+    skos:definition "A physical site described as 'On-premises data centre' in the ledger; no concrete location is identified."@en .
+
+abi:OnTimeRateIndicator a owl:Class ;
+    rdfs:label "On-time rate record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "On-time rate"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'On-time rate' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'On-time rate' under HOWITIS in the simulated ledger."@en .
+
+abi:OnboardingStatusIndicator a owl:Class ;
+    rdfs:label "Onboarding status record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Onboarding status"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Onboarding status' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Onboarding status' under HOWITIS in the simulated ledger."@en .
+
+abi:OperationsCentreSite a owl:Class ;
+    rdfs:label "Operations centre"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A physical site described as 'Operations centre' in the ledger; no concrete location is identified."@en ;
+    rdfs:subClassOf abi:ExecutionSite ;
+    skos:definition "A physical site described as 'Operations centre' in the ledger; no concrete location is identified."@en .
+
+abi:OracleERPHost a owl:Class ;
+    rdfs:label "Oracle ERP physical host"@en ;
+    abi:modelingNote "Physical host inferred from software use; confirm deployment with ABI."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Physical computing equipment carrying 'Oracle ERP'. Proposed bearer mapping; no particular machine or deployment is asserted."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000101 ;
+            owl:someValuesFrom abi:OracleERPSoftware ],
+        abi:ComputingSystem ;
+    skos:definition "Physical computing equipment carrying 'Oracle ERP'. Proposed bearer mapping; no particular machine or deployment is asserted."@en .
+
+abi:OrderStatusIndicator a owl:Class ;
+    rdfs:label "Order status record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Order status"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Order status' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Order status' under HOWITIS in the simulated ledger."@en .
+
+abi:PartnerRecordRecord a owl:Class ;
+    rdfs:label "Partner record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Partner record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Partner record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Partner record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:PassRateIndicator a owl:Class ;
+    rdfs:label "Pass rate record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Pass rate"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Pass rate' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Pass rate' under HOWITIS in the simulated ledger."@en .
+
+abi:PaymentRecordRecord a owl:Class ;
+    rdfs:label "Payment record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Payment record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Payment record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Payment record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:PaymentStatusIndicator a owl:Class ;
+    rdfs:label "Payment status record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Payment status"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Payment status' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Payment status' under HOWITIS in the simulated ledger."@en .
+
+abi:PenetrationReportRecord a owl:Class ;
+    rdfs:label "Penetration report"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Penetration report"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Penetration report' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Penetration report' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:PlanMaturityIndicator a owl:Class ;
+    rdfs:label "Plan maturity record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Plan maturity"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Plan maturity' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Plan maturity' under HOWITIS in the simulated ledger."@en .
+
+abi:PlanningSystemHost a owl:Class ;
+    rdfs:label "Planning system physical host"@en ;
+    abi:modelingNote "Physical host inferred from software use; confirm deployment with ABI."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Physical computing equipment carrying 'Planning system'. Proposed bearer mapping; no particular machine or deployment is asserted."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000101 ;
+            owl:someValuesFrom abi:PlanningSystemSoftware ],
+        abi:ComputingSystem ;
+    skos:definition "Physical computing equipment carrying 'Planning system'. Proposed bearer mapping; no particular machine or deployment is asserted."@en .
+
+abi:PolicyComplianceIndicator a owl:Class ;
+    rdfs:label "Policy compliance record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Policy compliance"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Policy compliance' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Policy compliance' under HOWITIS in the simulated ledger."@en .
+
+abi:ProcessSpecification a owl:Class ;
+    rdfs:label "ABI process specification"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The simulated specification describing a proposed process and its steps."@en ;
+    rdfs:subClassOf abi:InformationArtifact ;
+    skos:definition "The simulated specification describing a proposed process and its steps."@en .
+
+abi:ProcessStep a owl:Class ;
+    rdfs:label "ABI process step"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed temporal part of a ledger process; no execution occurrence is asserted."@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A proposed temporal part of a ledger process; no execution occurrence is asserted."@en .
+
+abi:ProcurementRecordRecord a owl:Class ;
+    rdfs:label "Procurement record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Procurement record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Procurement record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Procurement record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:ProgrammePlanRecord a owl:Class ;
+    rdfs:label "Programme plan"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Programme plan"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Programme plan' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Programme plan' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:ProvisioningRecordRecord a owl:Class ;
+    rdfs:label "Provisioning record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Provisioning record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Provisioning record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Provisioning record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:ProvisioningStatusIndicator a owl:Class ;
+    rdfs:label "Provisioning status record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Provisioning status"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Provisioning status' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Provisioning status' under HOWITIS in the simulated ledger."@en .
+
+abi:ReasoningChainRecord a owl:Class ;
+    rdfs:label "Reasoning chain"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Reasoning chain"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Reasoning chain' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Reasoning chain' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:RegistryCompletenessIndicator a owl:Class ;
+    rdfs:label "Registry completeness record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Registry completeness"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Registry completeness' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Registry completeness' under HOWITIS in the simulated ledger."@en .
+
+abi:RemediationLogRecord a owl:Class ;
+    rdfs:label "Remediation log"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Remediation log"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Remediation log' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Remediation log' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:ResolutionTimeIndicator a owl:Class ;
+    rdfs:label "Resolution time record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Resolution time"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Resolution time' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Resolution time' under HOWITIS in the simulated ledger."@en .
+
+abi:RightToAuditInPlaceIndicator a owl:Class ;
+    rdfs:label "Right-to-audit in place record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Right-to-audit in place"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Right-to-audit in place' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Right-to-audit in place' under HOWITIS in the simulated ledger."@en .
+
+abi:RightToAuditIndicator a owl:Class ;
+    rdfs:label "Right-to-audit record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Right-to-audit"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Right-to-audit' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Right-to-audit' under HOWITIS in the simulated ledger."@en .
+
+abi:RiskScoreIndicator a owl:Class ;
+    rdfs:label "Risk score record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Risk score"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Risk score' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Risk score' under HOWITIS in the simulated ledger."@en .
+
+abi:RoadmapDocumentRecord a owl:Class ;
+    rdfs:label "Roadmap document"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Roadmap document"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Roadmap document' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Roadmap document' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:RotationPlanRecord a owl:Class ;
+    rdfs:label "Rotation plan"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Rotation plan"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Rotation plan' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Rotation plan' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:S1Process a owl:Class ;
+    rdfs:label "S1 · Personnel processes"@en ;
+    abi:systemViewKind "subsystem"@en ;
+    abi:systemViewParent abi:LedgerProcess ;
+    abi:ledgerCode "S1"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed process in the Personnel subsystem."@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A proposed process in the Personnel subsystem."@en .
+
+abi:S2Process a owl:Class ;
+    rdfs:label "S2 · Intelligence processes"@en ;
+    abi:systemViewKind "subsystem"@en ;
+    abi:systemViewParent abi:LedgerProcess ;
+    abi:ledgerCode "S2"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed process in the Intelligence subsystem."@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A proposed process in the Intelligence subsystem."@en .
+
+abi:S3Process a owl:Class ;
+    rdfs:label "S3 · Operations processes"@en ;
+    abi:systemViewKind "subsystem"@en ;
+    abi:systemViewParent abi:LedgerProcess ;
+    abi:ledgerCode "S3"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed process in the Operations subsystem."@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A proposed process in the Operations subsystem."@en .
+
+abi:S4Process a owl:Class ;
+    rdfs:label "S4 · Logistics processes"@en ;
+    abi:systemViewKind "subsystem"@en ;
+    abi:systemViewParent abi:LedgerProcess ;
+    abi:ledgerCode "S4"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed process in the Logistics subsystem."@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A proposed process in the Logistics subsystem."@en .
+
+abi:S5Process a owl:Class ;
+    rdfs:label "S5 · Plans processes"@en ;
+    abi:systemViewKind "subsystem"@en ;
+    abi:systemViewParent abi:LedgerProcess ;
+    abi:ledgerCode "S5"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed process in the Plans subsystem."@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A proposed process in the Plans subsystem."@en .
+
+abi:S6Process a owl:Class ;
+    rdfs:label "S6 · Signal processes"@en ;
+    abi:systemViewKind "subsystem"@en ;
+    abi:systemViewParent abi:LedgerProcess ;
+    abi:ledgerCode "S6"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed process in the Signal subsystem."@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A proposed process in the Signal subsystem."@en .
+
+abi:S7Process a owl:Class ;
+    rdfs:label "S7 · Training processes"@en ;
+    abi:systemViewKind "subsystem"@en ;
+    abi:systemViewParent abi:LedgerProcess ;
+    abi:ledgerCode "S7"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed process in the Training subsystem."@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A proposed process in the Training subsystem."@en .
+
+abi:S8Process a owl:Class ;
+    rdfs:label "S8 · Finance processes"@en ;
+    abi:systemViewKind "subsystem"@en ;
+    abi:systemViewParent abi:LedgerProcess ;
+    abi:ledgerCode "S8"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed process in the Finance subsystem."@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A proposed process in the Finance subsystem."@en .
+
+abi:S9Process a owl:Class ;
+    rdfs:label "S9 · External Affairs processes"@en ;
+    abi:systemViewKind "subsystem"@en ;
+    abi:systemViewParent abi:LedgerProcess ;
+    abi:ledgerCode "S9"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed process in the External Affairs subsystem."@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A proposed process in the External Affairs subsystem."@en .
+
+abi:SLAAdherenceIndicator a owl:Class ;
+    rdfs:label "SLA adherence record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "SLA adherence"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'SLA adherence' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'SLA adherence' under HOWITIS in the simulated ledger."@en .
+
+abi:SLAOnApprovalIndicator a owl:Class ;
+    rdfs:label "SLA on approval record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "SLA on approval"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'SLA on approval' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'SLA on approval' under HOWITIS in the simulated ledger."@en .
+
+abi:ScheduleFillRateIndicator a owl:Class ;
+    rdfs:label "Schedule fill rate record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Schedule fill rate"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Schedule fill rate' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Schedule fill rate' under HOWITIS in the simulated ledger."@en .
+
+abi:ScheduleRecordRecord a owl:Class ;
+    rdfs:label "Schedule record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Schedule record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Schedule record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Schedule record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:SchedulingSystemHost a owl:Class ;
+    rdfs:label "Scheduling system physical host"@en ;
+    abi:modelingNote "Physical host inferred from software use; confirm deployment with ABI."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Physical computing equipment carrying 'Scheduling system'. Proposed bearer mapping; no particular machine or deployment is asserted."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000101 ;
+            owl:someValuesFrom abi:SchedulingSystemSoftware ],
+        abi:ComputingSystem ;
+    skos:definition "Physical computing equipment carrying 'Scheduling system'. Proposed bearer mapping; no particular machine or deployment is asserted."@en .
+
+abi:ScoreIndicator a owl:Class ;
+    rdfs:label "Score record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Score"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Score' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Score' under HOWITIS in the simulated ledger."@en .
+
+abi:ScreeningRecordRecord a owl:Class ;
+    rdfs:label "Screening record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Screening record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Screening record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Screening record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:ScreeningSystemHost a owl:Class ;
+    rdfs:label "Screening system physical host"@en ;
+    abi:modelingNote "Physical host inferred from software use; confirm deployment with ABI."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Physical computing equipment carrying 'Screening system'. Proposed bearer mapping; no particular machine or deployment is asserted."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000101 ;
+            owl:someValuesFrom abi:ScreeningSystemSoftware ],
+        abi:ComputingSystem ;
+    skos:definition "Physical computing equipment carrying 'Screening system'. Proposed bearer mapping; no particular machine or deployment is asserted."@en .
+
+abi:SeverityIndicator a owl:Class ;
+    rdfs:label "Severity record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Severity"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Severity' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Severity' under HOWITIS in the simulated ledger."@en .
+
+abi:SignalRecordRecord a owl:Class ;
+    rdfs:label "Signal record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Signal record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Signal record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Signal record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:SitesAcrossTheEstateSite a owl:Class ;
+    rdfs:label "Sites across the estate"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A physical site described as 'Sites across the estate' in the ledger; no concrete location is identified."@en ;
+    rdfs:subClassOf abi:ExecutionSite ;
+    skos:definition "A physical site described as 'Sites across the estate' in the ledger; no concrete location is identified."@en .
+
+abi:SitesSite a owl:Class ;
+    rdfs:label "Sites"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A physical site described as 'Sites' in the ledger; no concrete location is identified."@en ;
+    rdfs:subClassOf abi:ExecutionSite ;
+    skos:definition "A physical site described as 'Sites' in the ledger; no concrete location is identified."@en .
+
+abi:SourceChainRecord a owl:Class ;
+    rdfs:label "Source chain"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Source chain"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Source chain' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Source chain' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:StockLevelIndicator a owl:Class ;
+    rdfs:label "Stock level record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Stock level"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Stock level' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Stock level' under HOWITIS in the simulated ledger."@en .
+
+abi:StoresSite a owl:Class ;
+    rdfs:label "Stores"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A physical site described as 'Stores' in the ledger; no concrete location is identified."@en ;
+    rdfs:subClassOf abi:ExecutionSite ;
+    skos:definition "A physical site described as 'Stores' in the ledger; no concrete location is identified."@en .
+
+abi:ABIProcessLedgerOntology a owl:Ontology ;
+    rdfs:label "ABI process ledger — shared vocabulary"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceSHA256 "0d2c2c1e42dc3dfcfb1a8661ddba31057e88de911af1bb8f21868ba3096c0763"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    dct:title "ABI process ledger — shared vocabulary"@en ;
+    rdfs:comment "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl>,
+        cco:AgentOntology .
+
+abi:TimelinessIndicator a owl:Class ;
+    rdfs:label "Timeliness record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Timeliness"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Timeliness' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Timeliness' under HOWITIS in the simulated ledger."@en .
+
+abi:TrailCompletenessIndicator a owl:Class ;
+    rdfs:label "Trail completeness record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Trail completeness"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Trail completeness' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Trail completeness' under HOWITIS in the simulated ledger."@en .
+
+abi:TrainingRecordRecord a owl:Class ;
+    rdfs:label "Training record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Training record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Training record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Training record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:TripLogRecord a owl:Class ;
+    rdfs:label "Trip log"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Trip log"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Trip log' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Trip log' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:UptimeIndicator a owl:Class ;
+    rdfs:label "Uptime record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Uptime"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Uptime' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Uptime' under HOWITIS in the simulated ledger."@en .
+
+abi:VarianceIndicator a owl:Class ;
+    rdfs:label "Variance record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Variance"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Variance' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Variance' under HOWITIS in the simulated ledger."@en .
+
+abi:VehicleStatusIndicator a owl:Class ;
+    rdfs:label "Vehicle status record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Vehicle status"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Vehicle status' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Vehicle status' under HOWITIS in the simulated ledger."@en .
+
+abi:VendorCatalogueRecord a owl:Class ;
+    rdfs:label "Vendor catalogue"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Vendor catalogue"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Vendor catalogue' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Vendor catalogue' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:VendorContractRecord a owl:Class ;
+    rdfs:label "Vendor contract"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Vendor contract"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Vendor contract' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Vendor contract' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:VendorPerformanceScoreIndicator a owl:Class ;
+    rdfs:label "Vendor performance score record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWITIS"@en ;
+    abi:sourceValue "Vendor performance score"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Vendor performance score' under HOWITIS in the simulated ledger."@en ;
+    rdfs:subClassOf abi:IndicatorRecord ;
+    skos:definition "Information described as 'Vendor performance score' under HOWITIS in the simulated ledger."@en .
+
+abi:WorkOrderRecordRecord a owl:Class ;
+    rdfs:label "Work-order record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceBucket "HOWWEKNOW"@en ;
+    abi:sourceValue "Work-order record"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Information described as 'Work-order record' under HOWWEKNOW in the simulated ledger."@en ;
+    rdfs:subClassOf abi:EvidenceRecord ;
+    skos:definition "Information described as 'Work-order record' under HOWWEKNOW in the simulated ledger."@en .
+
+abi:documentedBy a owl:ObjectProperty ;
+    rdfs:label "documented by"@en ;
+    rdfs:comment "Relates a process to a record documenting it; does not assert whether that record is an input or output."@en ;
+    rdfs:range abi:EvidenceRecord ;
+    skos:definition "Relates a process to a record documenting it; does not assert whether that record is an input or output."@en .
+
+abi:hasAssessedQuality a owl:ObjectProperty ;
+    rdfs:label "has assessed quality"@en ;
+    rdfs:comment "Relates a process to a quality being assessed. The quality inheres in a material bearer, not in the process."@en ;
+    rdfs:range bfo:BFO_0000019 ;
+    skos:definition "Relates a process to a quality being assessed. The quality inheres in a material bearer, not in the process."@en .
+
+abi:hasExecutionCondition a owl:ObjectProperty ;
+    rdfs:label "has execution condition"@en ;
+    rdfs:comment "Relates a process to its described trigger, schedule or timing target."@en ;
+    rdfs:range abi:ExecutionCondition ;
+    skos:definition "Relates a process to its described trigger, schedule or timing target."@en .
+
+abi:hasIndicatorRecord a owl:ObjectProperty ;
+    rdfs:label "has indicator record"@en ;
+    rdfs:comment "Relates a process to recorded measures or statuses associated with it; no quality bearer is implied."@en ;
+    rdfs:range abi:IndicatorRecord ;
+    skos:definition "Relates a process to recorded measures or statuses associated with it; no quality bearer is implied."@en .
+
+abi:ledgerCode a owl:AnnotationProperty ;
+    rdfs:label "ledger code"@en ;
+    rdfs:comment "Stable process or subsystem identifier in the ABI ledger."@en ;
+    skos:definition "Stable process or subsystem identifier in the ABI ledger."@en .
+
+abi:ledgerHOWITIS a owl:AnnotationProperty ;
+    rdfs:label "ledger HOWITIS"@en ;
+    rdfs:comment "Original HOWITIS values, retained without imposing a BFO type."@en ;
+    skos:definition "Original HOWITIS values, retained without imposing a BFO type."@en .
+
+abi:ledgerHOWWEKNOW a owl:AnnotationProperty ;
+    rdfs:label "ledger HOWWEKNOW"@en ;
+    rdfs:comment "Original HOWWEKNOW values, retained without imposing a BFO type."@en ;
+    skos:definition "Original HOWWEKNOW values, retained without imposing a BFO type."@en .
+
+abi:ledgerWHEN a owl:AnnotationProperty ;
+    rdfs:label "ledger WHEN"@en ;
+    rdfs:comment "Original WHEN values, retained without imposing a BFO type."@en ;
+    skos:definition "Original WHEN values, retained without imposing a BFO type."@en .
+
+abi:ledgerWHERE a owl:AnnotationProperty ;
+    rdfs:label "ledger WHERE"@en ;
+    rdfs:comment "Original WHERE values, retained without imposing a BFO type."@en ;
+    skos:definition "Original WHERE values, retained without imposing a BFO type."@en .
+
+abi:ledgerWHO a owl:AnnotationProperty ;
+    rdfs:label "ledger WHO"@en ;
+    rdfs:comment "Original WHO values, retained without imposing a BFO type."@en ;
+    skos:definition "Original WHO values, retained without imposing a BFO type."@en .
+
+abi:ledgerWHY a owl:AnnotationProperty ;
+    rdfs:label "ledger WHY"@en ;
+    rdfs:comment "Original WHY values, retained without imposing a BFO type."@en ;
+    skos:definition "Original WHY values, retained without imposing a BFO type."@en .
+
+abi:modelingNote a owl:AnnotationProperty ;
+    rdfs:label "modeling note"@en ;
+    rdfs:comment "An explicit modeling interpretation or unresolved issue."@en ;
+    skos:definition "An explicit modeling interpretation or unresolved issue."@en .
+
+abi:modelingStatus a owl:AnnotationProperty ;
+    rdfs:label "modeling status"@en ;
+    rdfs:comment "Whether the schema has been validated with the process owner."@en ;
+    skos:definition "Whether the schema has been validated with the process owner."@en .
+
+abi:pursuesObjective a owl:ObjectProperty ;
+    rdfs:label "pursues objective"@en ;
+    rdfs:comment "Relates a process to its intended outcome specification, without asserting that the outcome is achieved."@en ;
+    rdfs:range abi:ObjectiveSpecification ;
+    skos:definition "Relates a process to its intended outcome specification, without asserting that the outcome is achieved."@en .
+
+abi:qualityMappingStatus a owl:AnnotationProperty ;
+    rdfs:label "quality mapping status"@en ;
+    rdfs:comment "Whether qualities and their bearers have been explicitly mapped."@en ;
+    skos:definition "Whether qualities and their bearers have been explicitly mapped."@en .
+
+abi:sourceBucket a owl:AnnotationProperty ;
+    rdfs:label "source bucket"@en ;
+    rdfs:comment "Original ledger bucket; provenance, not a BFO classification."@en ;
+    skos:definition "Original ledger bucket; provenance, not a BFO classification."@en .
+
+abi:sourceSHA256 a owl:AnnotationProperty ;
+    rdfs:label "source checksum"@en ;
+    rdfs:comment "SHA-256 of the source ledger at generation time."@en ;
+    skos:definition "SHA-256 of the source ledger at generation time."@en .
+
+abi:sourceValue a owl:AnnotationProperty ;
+    rdfs:label "source value"@en ;
+    rdfs:comment "Unmodified wording from the source ledger."@en ;
+    skos:definition "Unmodified wording from the source ledger."@en .
+
+abi:stepNumber a owl:AnnotationProperty ;
+    rdfs:label "step number"@en ;
+    rdfs:comment "Position in the ledger's suggested step list; not an observed temporal assertion."@en ;
+    skos:definition "Position in the ledger's suggested step list; not an observed temporal assertion."@en .
+
+abi:usesInformation a owl:ObjectProperty ;
+    rdfs:label "uses information"@en ;
+    rdfs:comment "Relates a process to information used during it, including software or source material."@en ;
+    rdfs:range abi:InformationArtifact ;
+    skos:definition "Relates a process to information used during it, including software or source material."@en .
+
+abi:AINAgentsSoftware a owl:Class ;
+    rdfs:label "AIN agents software"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Software referred to as 'AIN agents' in the ledger. Its material deployment is unspecified."@en ;
+    rdfs:subClassOf abi:Software ;
+    skos:definition "Software referred to as 'AIN agents' in the ledger. Its material deployment is unspecified."@en .
+
+abi:AINFinanceAgentSoftware a owl:Class ;
+    rdfs:label "AIN finance agent software"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Software referred to as 'AIN finance agent' in the ledger. Its material deployment is unspecified."@en ;
+    rdfs:subClassOf abi:Software ;
+    skos:definition "Software referred to as 'AIN finance agent' in the ledger. Its material deployment is unspecified."@en .
+
+abi:AINGapDetectionAgentSoftware a owl:Class ;
+    rdfs:label "AIN gap-detection agent software"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Software referred to as 'AIN gap-detection agent' in the ledger. Its material deployment is unspecified."@en ;
+    rdfs:subClassOf abi:Software ;
+    skos:definition "Software referred to as 'AIN gap-detection agent' in the ledger. Its material deployment is unspecified."@en .
+
+abi:AINIntelligenceAgentSoftware a owl:Class ;
+    rdfs:label "AIN intelligence agent software"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Software referred to as 'AIN intelligence agent' in the ledger. Its material deployment is unspecified."@en ;
+    rdfs:subClassOf abi:Software ;
+    skos:definition "Software referred to as 'AIN intelligence agent' in the ledger. Its material deployment is unspecified."@en .
+
+abi:AINPredictiveAgentSoftware a owl:Class ;
+    rdfs:label "AIN predictive agent software"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Software referred to as 'AIN predictive agent' in the ledger. Its material deployment is unspecified."@en ;
+    rdfs:subClassOf abi:Software ;
+    skos:definition "Software referred to as 'AIN predictive agent' in the ledger. Its material deployment is unspecified."@en .
+
+abi:AINProcurementAgentSoftware a owl:Class ;
+    rdfs:label "AIN procurement agent software"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Software referred to as 'AIN procurement agent' in the ledger. Its material deployment is unspecified."@en ;
+    rdfs:subClassOf abi:Software ;
+    skos:definition "Software referred to as 'AIN procurement agent' in the ledger. Its material deployment is unspecified."@en .
+
+abi:AINSoftware a owl:Class ;
+    rdfs:label "AIN software"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Software referred to as 'AIN' in the ledger. Its material deployment is unspecified."@en ;
+    rdfs:subClassOf abi:Software ;
+    skos:definition "Software referred to as 'AIN' in the ledger. Its material deployment is unspecified."@en .
+
+abi:AnalystParticipant a owl:Class ;
+    rdfs:label "Analyst participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Analyst' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:AnalystRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Analyst' in the ledger. Its actual identity is not specified."@en .
+
+abi:AnalystRole a owl:Class ;
+    rdfs:label "Analyst role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Analyst'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:AnalystParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Analyst'."@en .
+
+abi:ApproverParticipant a owl:Class ;
+    rdfs:label "Approver participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Approver' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:ApproverRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Approver' in the ledger. Its actual identity is not specified."@en .
+
+abi:ApproverRole a owl:Class ;
+    rdfs:label "Approver role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Approver'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:ApproverParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Approver'."@en .
+
+abi:AssessorParticipant a owl:Class ;
+    rdfs:label "Assessor participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Assessor' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:AssessorRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Assessor' in the ledger. Its actual identity is not specified."@en .
+
+abi:AssessorRole a owl:Class ;
+    rdfs:label "Assessor role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Assessor'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:AssessorParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Assessor'."@en .
+
+abi:AssetOwnerParticipant a owl:Class ;
+    rdfs:label "Asset owner participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Asset owner' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:AssetOwnerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Asset owner' in the ledger. Its actual identity is not specified."@en .
+
+abi:AssetOwnerRole a owl:Class ;
+    rdfs:label "Asset owner role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Asset owner'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:AssetOwnerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Asset owner'."@en .
+
+abi:AuditorParticipant a owl:Class ;
+    rdfs:label "Auditor participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Auditor' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:AuditorRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Auditor' in the ledger. Its actual identity is not specified."@en .
+
+abi:AuditorRole a owl:Class ;
+    rdfs:label "Auditor role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Auditor'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:AuditorParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Auditor'."@en .
+
+abi:BudgetOwnerParticipant a owl:Class ;
+    rdfs:label "Budget owner participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Budget owner' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:BudgetOwnerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Budget owner' in the ledger. Its actual identity is not specified."@en .
+
+abi:BudgetOwnerRole a owl:Class ;
+    rdfs:label "Budget owner role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Budget owner'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:BudgetOwnerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Budget owner'."@en .
+
+abi:CommsOfficerParticipant a owl:Class ;
+    rdfs:label "Comms officer participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Comms officer' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:CommsOfficerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Comms officer' in the ledger. Its actual identity is not specified."@en .
+
+abi:CommsOfficerRole a owl:Class ;
+    rdfs:label "Comms officer role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Comms officer'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:CommsOfficerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Comms officer'."@en .
+
+abi:ContractManagerParticipant a owl:Class ;
+    rdfs:label "Contract manager participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Contract manager' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:ContractManagerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Contract manager' in the ledger. Its actual identity is not specified."@en .
+
+abi:ContractManagerRole a owl:Class ;
+    rdfs:label "Contract manager role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Contract manager'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:ContractManagerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Contract manager'."@en .
+
+abi:CyberTeamParticipant a owl:Class ;
+    rdfs:label "Cyber team participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Cyber team' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:CyberTeamRole ],
+        abi:PhysicalTeam ;
+    skos:definition "The material participant referred to as 'Cyber team' in the ledger. Its actual identity is not specified."@en .
+
+abi:CyberTeamRole a owl:Class ;
+    rdfs:label "Cyber team role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Cyber team'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:CyberTeamParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Cyber team'."@en .
+
+abi:DispatcherParticipant a owl:Class ;
+    rdfs:label "Dispatcher participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Dispatcher' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:DispatcherRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Dispatcher' in the ledger. Its actual identity is not specified."@en .
+
+abi:DispatcherRole a owl:Class ;
+    rdfs:label "Dispatcher role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Dispatcher'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:DispatcherParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Dispatcher'."@en .
+
+abi:DriverParticipant a owl:Class ;
+    rdfs:label "Driver participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Driver' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:DriverRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Driver' in the ledger. Its actual identity is not specified."@en .
+
+abi:DriverRole a owl:Class ;
+    rdfs:label "Driver role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Driver'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:DriverParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Driver'."@en .
+
+abi:ExecutionCondition a owl:Class ;
+    rdfs:label "ABI execution condition"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A trigger, cadence or timing target stated in WHEN; it is not an actual time interval or an achieved service level."@en ;
+    rdfs:subClassOf abi:InformationArtifact ;
+    skos:definition "A trigger, cadence or timing target stated in WHEN; it is not an actual time interval or an achieved service level."@en .
+
+abi:ExecutivePrincipalParticipant a owl:Class ;
+    rdfs:label "Executive principal participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Executive principal' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:ExecutivePrincipalRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Executive principal' in the ledger. Its actual identity is not specified."@en .
+
+abi:ExecutivePrincipalRole a owl:Class ;
+    rdfs:label "Executive principal role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Executive principal'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:ExecutivePrincipalParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Executive principal'."@en .
+
+abi:FieldTeamParticipant a owl:Class ;
+    rdfs:label "Field team participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Field team' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:FieldTeamRole ],
+        abi:PhysicalTeam ;
+    skos:definition "The material participant referred to as 'Field team' in the ledger. Its actual identity is not specified."@en .
+
+abi:FieldTeamRole a owl:Class ;
+    rdfs:label "Field team role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Field team'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:FieldTeamParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Field team'."@en .
+
+abi:FinanceOfficerParticipant a owl:Class ;
+    rdfs:label "Finance officer participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Finance officer' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:FinanceOfficerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Finance officer' in the ledger. Its actual identity is not specified."@en .
+
+abi:FinanceOfficerRole a owl:Class ;
+    rdfs:label "Finance officer role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Finance officer'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:FinanceOfficerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Finance officer'."@en .
+
+abi:FleetSystemSoftware a owl:Class ;
+    rdfs:label "Fleet system software"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Software referred to as 'Fleet system' in the ledger. Its material deployment is unspecified."@en ;
+    rdfs:subClassOf abi:Software ;
+    skos:definition "Software referred to as 'Fleet system' in the ledger. Its material deployment is unspecified."@en .
+
+abi:FunctionLeadsParticipant a owl:Class ;
+    rdfs:label "Function leads participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Function leads' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:FunctionLeadsRole ],
+        abi:PhysicalTeam ;
+    skos:definition "The material participant referred to as 'Function leads' in the ledger. Its actual identity is not specified."@en .
+
+abi:FunctionLeadsRole a owl:Class ;
+    rdfs:label "Function leads role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Function leads'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:FunctionLeadsParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Function leads'."@en .
+
+abi:HROfficerParticipant a owl:Class ;
+    rdfs:label "HR officer participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'HR officer' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:HROfficerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'HR officer' in the ledger. Its actual identity is not specified."@en .
+
+abi:HROfficerRole a owl:Class ;
+    rdfs:label "HR officer role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'HR officer'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:HROfficerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'HR officer'."@en .
+
+abi:HRSystemSoftware a owl:Class ;
+    rdfs:label "HR system software"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Software referred to as 'HR system' in the ledger. Its material deployment is unspecified."@en ;
+    rdfs:subClassOf abi:Software ;
+    skos:definition "Software referred to as 'HR system' in the ledger. Its material deployment is unspecified."@en .
+
+abi:ITAdminParticipant a owl:Class ;
+    rdfs:label "IT admin participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'IT admin' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:ITAdminRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'IT admin' in the ledger. Its actual identity is not specified."@en .
+
+abi:ITAdminRole a owl:Class ;
+    rdfs:label "IT admin role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'IT admin'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:ITAdminParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'IT admin'."@en .
+
+abi:ITEngineerParticipant a owl:Class ;
+    rdfs:label "IT engineer participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'IT engineer' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:ITEngineerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'IT engineer' in the ledger. Its actual identity is not specified."@en .
+
+abi:ITEngineerRole a owl:Class ;
+    rdfs:label "IT engineer role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'IT engineer'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:ITEngineerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'IT engineer'."@en .
+
+abi:IdentitySystemSoftware a owl:Class ;
+    rdfs:label "Identity system software"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Software referred to as 'Identity system' in the ledger. Its material deployment is unspecified."@en ;
+    rdfs:subClassOf abi:Software ;
+    skos:definition "Software referred to as 'Identity system' in the ledger. Its material deployment is unspecified."@en .
+
+abi:LearningSystemSoftware a owl:Class ;
+    rdfs:label "Learning system software"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Software referred to as 'Learning system' in the ledger. Its material deployment is unspecified."@en ;
+    rdfs:subClassOf abi:Software ;
+    skos:definition "Software referred to as 'Learning system' in the ledger. Its material deployment is unspecified."@en .
+
+abi:LineManagerParticipant a owl:Class ;
+    rdfs:label "Line manager participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Line manager' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:LineManagerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Line manager' in the ledger. Its actual identity is not specified."@en .
+
+abi:LineManagerRole a owl:Class ;
+    rdfs:label "Line manager role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Line manager'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:LineManagerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Line manager'."@en .
+
+abi:LineManagersParticipant a owl:Class ;
+    rdfs:label "Line managers participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Line managers' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:LineManagersRole ],
+        abi:PhysicalTeam ;
+    skos:definition "The material participant referred to as 'Line managers' in the ledger. Its actual identity is not specified."@en .
+
+abi:LineManagersRole a owl:Class ;
+    rdfs:label "Line managers role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Line managers'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:LineManagersParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Line managers'."@en .
+
+abi:MaintenanceTeamParticipant a owl:Class ;
+    rdfs:label "Maintenance team participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Maintenance team' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:MaintenanceTeamRole ],
+        abi:PhysicalTeam ;
+    skos:definition "The material participant referred to as 'Maintenance team' in the ledger. Its actual identity is not specified."@en .
+
+abi:MaintenanceTeamRole a owl:Class ;
+    rdfs:label "Maintenance team role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Maintenance team'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:MaintenanceTeamParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Maintenance team'."@en .
+
+abi:MessagingSystemSoftware a owl:Class ;
+    rdfs:label "Messaging system software"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Software referred to as 'Messaging system' in the ledger. Its material deployment is unspecified."@en ;
+    rdfs:subClassOf abi:Software ;
+    skos:definition "Software referred to as 'Messaging system' in the ledger. Its material deployment is unspecified."@en .
+
+abi:NewJoinerParticipant a owl:Class ;
+    rdfs:label "New joiner participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'New joiner' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:NewJoinerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'New joiner' in the ledger. Its actual identity is not specified."@en .
+
+abi:NewJoinerRole a owl:Class ;
+    rdfs:label "New joiner role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'New joiner'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:NewJoinerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'New joiner'."@en .
+
+abi:ObjectiveSpecification a owl:Class ;
+    rdfs:label "ABI objective specification"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "An intended outcome stated in WHY. An objective is information, distinct from the role realised in pursuing it."@en ;
+    rdfs:subClassOf abi:InformationArtifact ;
+    skos:definition "An intended outcome stated in WHY. An objective is information, distinct from the role realised in pursuing it."@en .
+
+abi:OperationsLeadParticipant a owl:Class ;
+    rdfs:label "Operations lead participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Operations lead' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:OperationsLeadRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Operations lead' in the ledger. Its actual identity is not specified."@en .
+
+abi:OperationsLeadRole a owl:Class ;
+    rdfs:label "Operations lead role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Operations lead'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:OperationsLeadParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Operations lead'."@en .
+
+abi:OracleERPSoftware a owl:Class ;
+    rdfs:label "Oracle ERP software"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Software referred to as 'Oracle ERP' in the ledger. Its material deployment is unspecified."@en ;
+    rdfs:subClassOf abi:Software ;
+    skos:definition "Software referred to as 'Oracle ERP' in the ledger. Its material deployment is unspecified."@en .
+
+abi:PartnerOrganisationParticipant a owl:Class ;
+    rdfs:label "Partner organisation personnel"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Partner organisation' in the ledger. For organisations this denotes the people acting on its behalf, not its legal identity."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:PartnerOrganisationRole ],
+        abi:PhysicalTeam ;
+    skos:definition "The material participant referred to as 'Partner organisation' in the ledger. For organisations this denotes the people acting on its behalf, not its legal identity."@en .
+
+abi:PartnerOrganisationRole a owl:Class ;
+    rdfs:label "Partner organisation role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Partner organisation'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:PartnerOrganisationParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Partner organisation'."@en .
+
+abi:PlannerParticipant a owl:Class ;
+    rdfs:label "Planner participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Planner' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:PlannerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Planner' in the ledger. Its actual identity is not specified."@en .
+
+abi:PlannerRole a owl:Class ;
+    rdfs:label "Planner role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Planner'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:PlannerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Planner'."@en .
+
+abi:PlanningSystemSoftware a owl:Class ;
+    rdfs:label "Planning system software"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Software referred to as 'Planning system' in the ledger. Its material deployment is unspecified."@en ;
+    rdfs:subClassOf abi:Software ;
+    skos:definition "Software referred to as 'Planning system' in the ledger. Its material deployment is unspecified."@en .
+
+abi:ProcurementOfficerParticipant a owl:Class ;
+    rdfs:label "Procurement officer participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Procurement officer' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:ProcurementOfficerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Procurement officer' in the ledger. Its actual identity is not specified."@en .
+
+abi:ProcurementOfficerRole a owl:Class ;
+    rdfs:label "Procurement officer role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Procurement officer'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:ProcurementOfficerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Procurement officer'."@en .
+
+abi:ProgrammeOwnerParticipant a owl:Class ;
+    rdfs:label "Programme owner participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Programme owner' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:ProgrammeOwnerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Programme owner' in the ledger. Its actual identity is not specified."@en .
+
+abi:ProgrammeOwnerRole a owl:Class ;
+    rdfs:label "Programme owner role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Programme owner'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:ProgrammeOwnerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Programme owner'."@en .
+
+abi:RequesterParticipant a owl:Class ;
+    rdfs:label "Requester participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Requester' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:RequesterRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Requester' in the ledger. Its actual identity is not specified."@en .
+
+abi:RequesterRole a owl:Class ;
+    rdfs:label "Requester role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Requester'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:RequesterParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Requester'."@en .
+
+abi:ResourceOwnersParticipant a owl:Class ;
+    rdfs:label "Resource owners participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Resource owners' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:ResourceOwnersRole ],
+        abi:PhysicalTeam ;
+    skos:definition "The material participant referred to as 'Resource owners' in the ledger. Its actual identity is not specified."@en .
+
+abi:ResourceOwnersRole a owl:Class ;
+    rdfs:label "Resource owners role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Resource owners'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:ResourceOwnersParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Resource owners'."@en .
+
+abi:ResponseTeamParticipant a owl:Class ;
+    rdfs:label "Response team participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Response team' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:ResponseTeamRole ],
+        abi:PhysicalTeam ;
+    skos:definition "The material participant referred to as 'Response team' in the ledger. Its actual identity is not specified."@en .
+
+abi:ResponseTeamRole a owl:Class ;
+    rdfs:label "Response team role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Response team'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:ResponseTeamParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Response team'."@en .
+
+abi:RiskOwnerParticipant a owl:Class ;
+    rdfs:label "Risk owner participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Risk owner' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:RiskOwnerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Risk owner' in the ledger. Its actual identity is not specified."@en .
+
+abi:RiskOwnerRole a owl:Class ;
+    rdfs:label "Risk owner role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Risk owner'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:RiskOwnerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Risk owner'."@en .
+
+abi:S1LeadParticipant a owl:Class ;
+    rdfs:label "S1 lead participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'S1 lead' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:S1LeadRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'S1 lead' in the ledger. Its actual identity is not specified."@en .
+
+abi:S1LeadRole a owl:Class ;
+    rdfs:label "S1 lead role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'S1 lead'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:S1LeadParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'S1 lead'."@en .
+
+abi:S2OfficerParticipant a owl:Class ;
+    rdfs:label "S2 officer participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'S2 officer' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:S2OfficerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'S2 officer' in the ledger. Its actual identity is not specified."@en .
+
+abi:S2OfficerRole a owl:Class ;
+    rdfs:label "S2 officer role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'S2 officer'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:S2OfficerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'S2 officer'."@en .
+
+abi:S3SchedulerParticipant a owl:Class ;
+    rdfs:label "S3 scheduler participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'S3 scheduler' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:S3SchedulerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'S3 scheduler' in the ledger. Its actual identity is not specified."@en .
+
+abi:S3SchedulerRole a owl:Class ;
+    rdfs:label "S3 scheduler role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'S3 scheduler'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:S3SchedulerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'S3 scheduler'."@en .
+
+abi:S4ControllerParticipant a owl:Class ;
+    rdfs:label "S4 controller participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'S4 controller' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:S4ControllerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'S4 controller' in the ledger. Its actual identity is not specified."@en .
+
+abi:S4ControllerRole a owl:Class ;
+    rdfs:label "S4 controller role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'S4 controller'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:S4ControllerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'S4 controller'."@en .
+
+abi:S5LeadParticipant a owl:Class ;
+    rdfs:label "S5 lead participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'S5 lead' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:S5LeadRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'S5 lead' in the ledger. Its actual identity is not specified."@en .
+
+abi:S5LeadRole a owl:Class ;
+    rdfs:label "S5 lead role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'S5 lead'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:S5LeadParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'S5 lead'."@en .
+
+abi:S5PlannerParticipant a owl:Class ;
+    rdfs:label "S5 planner participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'S5 planner' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:S5PlannerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'S5 planner' in the ledger. Its actual identity is not specified."@en .
+
+abi:S5PlannerRole a owl:Class ;
+    rdfs:label "S5 planner role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'S5 planner'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:S5PlannerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'S5 planner'."@en .
+
+abi:S7LeadParticipant a owl:Class ;
+    rdfs:label "S7 lead participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'S7 lead' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:S7LeadRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'S7 lead' in the ledger. Its actual identity is not specified."@en .
+
+abi:S7LeadRole a owl:Class ;
+    rdfs:label "S7 lead role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'S7 lead'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:S7LeadParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'S7 lead'."@en .
+
+abi:S8ApproverParticipant a owl:Class ;
+    rdfs:label "S8 approver participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'S8 approver' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:S8ApproverRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'S8 approver' in the ledger. Its actual identity is not specified."@en .
+
+abi:S8ApproverRole a owl:Class ;
+    rdfs:label "S8 approver role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'S8 approver'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:S8ApproverParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'S8 approver'."@en .
+
+abi:S9LeadParticipant a owl:Class ;
+    rdfs:label "S9 lead participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'S9 lead' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:S9LeadRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'S9 lead' in the ledger. Its actual identity is not specified."@en .
+
+abi:S9LeadRole a owl:Class ;
+    rdfs:label "S9 lead role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'S9 lead'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:S9LeadParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'S9 lead'."@en .
+
+abi:S9OfficerParticipant a owl:Class ;
+    rdfs:label "S9 officer participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'S9 officer' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:S9OfficerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'S9 officer' in the ledger. Its actual identity is not specified."@en .
+
+abi:S9OfficerRole a owl:Class ;
+    rdfs:label "S9 officer role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'S9 officer'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:S9OfficerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'S9 officer'."@en .
+
+abi:SchedulingSystemSoftware a owl:Class ;
+    rdfs:label "Scheduling system software"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Software referred to as 'Scheduling system' in the ledger. Its material deployment is unspecified."@en ;
+    rdfs:subClassOf abi:Software ;
+    skos:definition "Software referred to as 'Scheduling system' in the ledger. Its material deployment is unspecified."@en .
+
+abi:ScreeningSystemSoftware a owl:Class ;
+    rdfs:label "Screening system software"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Software referred to as 'Screening system' in the ledger. Its material deployment is unspecified."@en ;
+    rdfs:subClassOf abi:Software ;
+    skos:definition "Software referred to as 'Screening system' in the ledger. Its material deployment is unspecified."@en .
+
+abi:SecurityOfficerParticipant a owl:Class ;
+    rdfs:label "Security officer participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Security officer' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:SecurityOfficerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Security officer' in the ledger. Its actual identity is not specified."@en .
+
+abi:SecurityOfficerRole a owl:Class ;
+    rdfs:label "Security officer role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Security officer'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:SecurityOfficerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Security officer'."@en .
+
+abi:SecurityParticipant a owl:Class ;
+    rdfs:label "Security participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Security' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:SecurityRole ],
+        abi:PhysicalTeam ;
+    skos:definition "The material participant referred to as 'Security' in the ledger. Its actual identity is not specified."@en .
+
+abi:SecurityRole a owl:Class ;
+    rdfs:label "Security role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Security'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:SecurityParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Security'."@en .
+
+abi:StaffMemberParticipant a owl:Class ;
+    rdfs:label "Staff member participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Staff member' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:StaffMemberRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Staff member' in the ledger. Its actual identity is not specified."@en .
+
+abi:StaffMemberRole a owl:Class ;
+    rdfs:label "Staff member role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Staff member'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:StaffMemberParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Staff member'."@en .
+
+abi:StaffParticipant a owl:Class ;
+    rdfs:label "Staff participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Staff' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:StaffRole ],
+        abi:PhysicalTeam ;
+    skos:definition "The material participant referred to as 'Staff' in the ledger. Its actual identity is not specified."@en .
+
+abi:StaffRole a owl:Class ;
+    rdfs:label "Staff role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Staff'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:StaffParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Staff'."@en .
+
+abi:StakeholderParticipant a owl:Class ;
+    rdfs:label "Stakeholder participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Stakeholder' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:StakeholderRole ],
+        abi:MaterialParticipant ;
+    skos:definition "The material participant referred to as 'Stakeholder' in the ledger. Its actual identity is not specified."@en .
+
+abi:StakeholderRole a owl:Class ;
+    rdfs:label "Stakeholder role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Stakeholder'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:StakeholderParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Stakeholder'."@en .
+
+abi:StoreKeeperParticipant a owl:Class ;
+    rdfs:label "Store keeper participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Store keeper' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:StoreKeeperRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Store keeper' in the ledger. Its actual identity is not specified."@en .
+
+abi:StoreKeeperRole a owl:Class ;
+    rdfs:label "Store keeper role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Store keeper'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:StoreKeeperParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Store keeper'."@en .
+
+abi:SubjectParticipant a owl:Class ;
+    rdfs:label "Subject participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Subject' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:SubjectRole ],
+        abi:MaterialParticipant ;
+    skos:definition "The material participant referred to as 'Subject' in the ledger. Its actual identity is not specified."@en .
+
+abi:SubjectRole a owl:Class ;
+    rdfs:label "Subject role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Subject'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:SubjectParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Subject'."@en .
+
+abi:SupplierParticipant a owl:Class ;
+    rdfs:label "Supplier personnel"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Supplier' in the ledger. For organisations this denotes the people acting on its behalf, not its legal identity."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:SupplierRole ],
+        abi:PhysicalTeam ;
+    skos:definition "The material participant referred to as 'Supplier' in the ledger. For organisations this denotes the people acting on its behalf, not its legal identity."@en .
+
+abi:SupplierRole a owl:Class ;
+    rdfs:label "Supplier role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Supplier'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:SupplierParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Supplier'."@en .
+
+abi:TraineeParticipant a owl:Class ;
+    rdfs:label "Trainee participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Trainee' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:TraineeRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Trainee' in the ledger. Its actual identity is not specified."@en .
+
+abi:TraineeRole a owl:Class ;
+    rdfs:label "Trainee role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Trainee'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:TraineeParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Trainee'."@en .
+
+abi:TrainerParticipant a owl:Class ;
+    rdfs:label "Trainer participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Trainer' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:TrainerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Trainer' in the ledger. Its actual identity is not specified."@en .
+
+abi:TrainerRole a owl:Class ;
+    rdfs:label "Trainer role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Trainer'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:TrainerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Trainer'."@en .
+
+abi:VendorParticipant a owl:Class ;
+    rdfs:label "Vendor personnel"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Vendor' in the ledger. For organisations this denotes the people acting on its behalf, not its legal identity."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:VendorRole ],
+        abi:PhysicalTeam ;
+    skos:definition "The material participant referred to as 'Vendor' in the ledger. For organisations this denotes the people acting on its behalf, not its legal identity."@en .
+
+abi:VendorRole a owl:Class ;
+    rdfs:label "Vendor role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Vendor'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:VendorParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Vendor'."@en .
+
+abi:WatchOfficerParticipant a owl:Class ;
+    rdfs:label "Watch officer participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The material participant referred to as 'Watch officer' in the ledger. Its actual identity is not specified."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000196 ;
+            owl:someValuesFrom abi:WatchOfficerRole ],
+        abi:HumanParticipant ;
+    skos:definition "The material participant referred to as 'Watch officer' in the ledger. Its actual identity is not specified."@en .
+
+abi:WatchOfficerRole a owl:Class ;
+    rdfs:label "Watch officer role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The role borne by the material participant described as 'Watch officer'."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom abi:WatchOfficerParticipant ],
+        bfo:BFO_0000023 ;
+    skos:definition "The role borne by the material participant described as 'Watch officer'."@en .
+
+abi:ExecutionSite a owl:Class ;
+    rdfs:label "ABI execution site"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A physical site at which a proposed ledger process occurs."@en ;
+    rdfs:subClassOf bfo:BFO_0000029 ;
+    skos:definition "A physical site at which a proposed ledger process occurs."@en .
+
+abi:MaterialParticipant a owl:Class ;
+    rdfs:label "ABI material participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A person, physical group or physical system participating in a proposed ABI process."@en ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    skos:definition "A person, physical group or physical system participating in a proposed ABI process."@en .
+
+abi:InformationArtifact a owl:Class ;
+    rdfs:label "ABI information artifact"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Recorded information associated with a ledger process, distinct from the physical medium carrying it."@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    skos:definition "Recorded information associated with a ledger process, distinct from the physical medium carrying it."@en .
+
+abi:LedgerProcess a owl:Class ;
+    rdfs:label "ABI AI System"@en ;
+    abi:systemViewKind "system"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A process type proposed in the simulated ABI ledger. Select a child process to inspect its participants, steps, places, timing, roles and evidence. Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A process type proposed in the simulated ABI ledger. Select a child process to inspect its participants, steps, places, timing, roles and evidence. Draft — simulated ledger hypothesis; not validated with ABI."@en .
+
+abi:PhysicalTeam a owl:Class ;
+    rdfs:label "ABI physical team"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "The aggregate of people performing a team activity, distinct from an organisation's legal identity."@en ;
+    rdfs:subClassOf abi:MaterialParticipant,
+        bfo:BFO_0000027 ;
+    skos:definition "The aggregate of people performing a team activity, distinct from an organisation's legal identity."@en .
+
+abi:ComputingSystem a owl:Class ;
+    rdfs:label "ABI physical computing system"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Physical computing equipment carrying the software used in a ledger process. The ledger names software, not particular machines."@en ;
+    rdfs:subClassOf abi:MaterialParticipant ;
+    skos:definition "Physical computing equipment carrying the software used in a ledger process. The ledger names software, not particular machines."@en .
+
+abi:Software a owl:Class ;
+    rdfs:label "ABI software"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Software content, distinct from the material computer on which it executes."@en ;
+    rdfs:subClassOf abi:InformationArtifact ;
+    skos:definition "Software content, distinct from the material computer on which it executes."@en .
+
+abi:HumanParticipant a owl:Class ;
+    rdfs:label "ABI human participant"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A person participating in a proposed ABI process."@en ;
+    rdfs:subClassOf abi:MaterialParticipant,
+        cco:ont00001262 ;
+    skos:definition "A person participating in a proposed ABI process."@en .
+
+abi:EvidenceRecord a owl:Class ;
+    rdfs:label "ABI evidence record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A kind of record listed in HOW WE KNOW; its existence, production direction and factual accuracy have not been validated."@en ;
+    rdfs:subClassOf abi:InformationArtifact ;
+    skos:definition "A kind of record listed in HOW WE KNOW; its existence, production direction and factual accuracy have not been validated."@en .
+
+abi:IndicatorRecord a owl:Class ;
+    rdfs:label "ABI indicator record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "Recorded status, score or measure listed under HOW IT IS. This record is not itself a BFO quality."@en ;
+    rdfs:subClassOf abi:InformationArtifact ;
+    skos:definition "Recorded status, score or measure listed under HOW IT IS. This record is not itself a BFO quality."@en .
+

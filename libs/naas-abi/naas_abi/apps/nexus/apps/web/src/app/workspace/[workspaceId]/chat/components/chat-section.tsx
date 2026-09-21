@@ -17,6 +17,7 @@ import { AgentAvatar } from '@/components/chat/agent-selector';
 import { useFeature } from '@/hooks/use-feature';
 import { ConversationItem } from './conversation-item';
 import { ProjectGroup } from './project-group';
+import { chatRosterSections } from './chat-section-agents';
 import './chat-components.css';
 
 export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
@@ -100,9 +101,10 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
       });
   }, [safeAgents, allConversations]);
 
-  const AGENTS_PREVIEW_COUNT = 5;
-  const visibleAgents = showAllAgents ? sortedAgents : sortedAgents.slice(0, AGENTS_PREVIEW_COUNT);
-  const hiddenAgentCount = sortedAgents.length - AGENTS_PREVIEW_COUNT;
+  const { visible: visibleAgents, hiddenCount: hiddenAgentCount } = useMemo(
+    () => chatRosterSections(sortedAgents, showAllAgents),
+    [sortedAgents, showAllAgents]
+  );
 
   const sortedSkills = useMemo(() => {
     const workspaceSkills = currentWorkspaceId
@@ -318,7 +320,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
             Skills
           </Link>
           {sortedSkills.length === 0 && (
-            <p className="chat-section-hint">Type /create-skill in the chat to add one</p>
+            <p className="chat-section-hint">Type /create-skill in the chat and the Skills agent adds one</p>
           )}
           {visibleSkills.map((skill) => (
             <div key={skill.id} className="chat-list-row-wrap">

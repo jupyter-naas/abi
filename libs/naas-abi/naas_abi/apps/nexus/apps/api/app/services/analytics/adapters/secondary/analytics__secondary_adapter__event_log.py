@@ -9,6 +9,12 @@ Migration is read-through, not a cutover: ``list_events`` returns the union of
 the event log and the legacy ``events/<sha256>.pkl`` objects, deduplicated by
 payload content. Existing history therefore stays visible with nothing to
 backfill, and the pickle store simply stops growing.
+
+The log is append-only, so it never holds an email: ``save_event`` keeps the
+user id and drops ``user_email`` from both the column and the stored payload.
+``list_events`` puts it back from the service's user directory
+(``ref-users.json``, mutable, so an address can be changed or erased there).
+Legacy pickles keep the email they were written with.
 """
 
 from __future__ import annotations
@@ -25,6 +31,7 @@ from naas_abi.apps.nexus.apps.api.app.services.analytics.ontologies.AnalyticsEve
     AnalyticsEventRecorded,
 )
 from naas_abi.apps.nexus.apps.api.app.services.analytics.port import AnalyticsStoragePort
+from naas_abi.apps.nexus.apps.api.app.services.analytics.service import REF_USERS_FILE
 from naas_abi_core import logger
 
 # The legacy pickles are frozen the moment this adapter is in use: nothing
@@ -49,9 +56,9 @@ def _content_key(event: dict[str, Any]) -> str:
     the same rule is applied on read instead — which also collapses an event
     that exists both in the log and as a legacy pickle.
     """
-    return hashlib.sha256(
-        json.dumps(event, sort_keys=True, default=str).encode("utf-8")
-    ).hexdigest()
+    # Without the email: the log copy of a legacy pickle no longer carries it.
+    content = {k: v for k, v in event.items() if k != "user_email"}
+    return hashlib.sha256(json.dumps(content, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
 
 class AnalyticsSecondaryAdapterEventLog(AnalyticsStoragePort):
@@ -66,12 +73,12 @@ class AnalyticsSecondaryAdapterEventLog(AnalyticsStoragePort):
     # --- raw events ---------------------------------------------------------
 
     def save_event(self, event: dict[str, Any]) -> str:
+        event = {k: v for k, v in event.items() if k != "user_email"}
         record = AnalyticsEventRecorded(
             event_id=event.get("event_id"),
             timestamp=event.get("timestamp"),
             event_name=event.get("event_name"),
             user_id=event.get("user_id"),
-            user_email=event.get("user_email"),
             workspace_id=event.get("workspace_id"),
             session_id=event.get("session_id"),
             page_path=event.get("page_path"),
@@ -110,8 +117,29 @@ class AnalyticsSecondaryAdapterEventLog(AnalyticsStoragePort):
                 logger.debug(f"[analytics] skip unreadable event payload: {exc}")
                 continue
             if isinstance(payload, dict):
-                merged[_content_key(payload)] = payload
-        return list(merged.values())
+                # A legacy pickle of the same event carries its email; keep it.
+                merged.setdefault(_content_key(payload), payload)
+        emails = self._user_emails()
+        out: list[dict[str, Any]] = []
+        for payload in merged.values():
+            if "user_email" not in payload and payload.get("user_id") in emails:
+                payload = {**payload, "user_email": emails[payload["user_id"]]}
+            out.append(payload)
+        return out
+
+    def _user_emails(self) -> dict[str, str]:
+        try:
+            users = self._json.load_json(REF_USERS_FILE, fallback=[])
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"[analytics] user directory unavailable: {exc}")
+            return {}
+        if not isinstance(users, list):
+            return {}
+        return {
+            str(u["user_id"]): str(u["user_email"])
+            for u in users
+            if isinstance(u, dict) and u.get("user_id") and u.get("user_email")
+        }
 
     # --- JSON aggregates ----------------------------------------------------
 

@@ -9,11 +9,20 @@ import unicodedata
 import uuid
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 from naas_abi import ABIModule
+from naas_abi.apps.nexus.apps.api.app.services.graph.access import (
+    OWNER_PREDICATE,
+    GraphAccessScope,
+    workspace_graph_operation,
+)
+from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.scoped_store import (
+    WorkspaceGraphStore,
+)
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     DiscoveryClassData,
     DiscoveryClassMetaData,
@@ -27,6 +36,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     DiscoveryRelationRowData,
     DiscoveryRelationTargetData,
     DiscoveryRelationTypeData,
+    GraphAccessError,
     GraphAnalysisData,
     GraphDetailData,
     GraphEdgeData,
@@ -76,6 +86,15 @@ _TYPE_PRIORITY: dict[str, int] = {
     "unknown": 0,
 }
 
+
+
+def _scope_cache_key(triple_store: Any, key: str) -> str:
+    namespace = getattr(triple_store, "cache_namespace", "internal")
+    return f"{namespace}_{_GRAPH_CACHE_GENERATION}_{_GRAPH_SCOPE_GENERATIONS.get(namespace, 0)}_{key}"
+
+
+_GRAPH_CACHE_GENERATION = 0
+_GRAPH_SCOPE_GENERATIONS: dict[str, int] = {}
 
 def _detect_rdf_format(filename: str) -> str:
     fname = filename.lower()
@@ -141,7 +160,7 @@ def _slugify(value: str) -> str:
 
 
 @_cache(
-    lambda triple_store, uri: f"ontology_label_{uri}",
+    lambda triple_store, uri: _scope_cache_key(triple_store, f"ontology_label_{uri}"),
     DataType.JSON,
     ttl=timedelta(days=1),
 )
@@ -162,7 +181,7 @@ def _get_ontology_label(triple_store: TripleStoreService, uri: str) -> str:
 
 
 @_cache(
-    lambda triple_store, class_uri: f"bfo_parent_{class_uri}",
+    lambda triple_store, class_uri: _scope_cache_key(triple_store, f"bfo_parent_{class_uri}"),
     DataType.JSON,
     ttl=timedelta(days=1),
 )
@@ -309,7 +328,7 @@ def _batch_ontology_labels(triple_store: TripleStoreService, uris: Iterable[str]
     for uri in dict.fromkeys(uris):  # de-dupe, preserve order
         if not uri:
             continue
-        hit, value = _cache_lookup(f"ontology_label_{uri}", _ONTOLOGY_LABEL_TTL)
+        hit, value = _cache_lookup(_scope_cache_key(triple_store, f"ontology_label_{uri}"), _ONTOLOGY_LABEL_TTL)
         if hit and isinstance(value, str):
             labels[uri] = value
         else:
@@ -344,7 +363,7 @@ def _batch_ontology_labels(triple_store: TripleStoreService, uris: Iterable[str]
             label = labels.get(uri) or _uri_fragment(uri)
             labels[uri] = label
             try:
-                _cache.set_json(f"ontology_label_{uri}", label)
+                _cache.set_json(_scope_cache_key(triple_store, f"ontology_label_{uri}"), label)
             except Exception:
                 pass
 
@@ -364,7 +383,7 @@ def _batch_bfo_parents(
     for class_uri in dict.fromkeys(class_uris):
         if not class_uri:
             continue
-        hit, cached = _cache_lookup(f"bfo_parent_{class_uri}", _BFO_PARENT_TTL)
+        hit, cached = _cache_lookup(_scope_cache_key(triple_store, f"bfo_parent_{class_uri}"), _BFO_PARENT_TTL)
         if not hit:
             missing.append(class_uri)
             continue
@@ -403,7 +422,7 @@ def _batch_bfo_parents(
             parent = parents.get(class_uri, "")
             parents[class_uri] = parent
             try:
-                _cache.set_json(f"bfo_parent_{class_uri}", parent or None)
+                _cache.set_json(_scope_cache_key(triple_store, f"bfo_parent_{class_uri}"), parent or None)
             except Exception:
                 pass
 
@@ -411,25 +430,27 @@ def _batch_bfo_parents(
 
 
 def _invalidate_graph_cache(graph_uri: str) -> None:
-    for key in (
-        f"graph_kpis_{graph_uri}",
-        f"network_schema_{graph_uri}",
-        f"discover_classes_{graph_uri}",
-    ):
-        try:
-            _cache.delete(key)
-        except Exception:
-            pass
+    """Bump the shared generation so every scoped cache key misses.
+
+    Keys are namespaced as ``{scope}_{global}_{scope_gen}_{logical}``. A graph may
+    be readable in many workspaces, so writes advance the global generation rather
+    than deleting stale unscoped keys that are no longer written.
+    """
+    global _GRAPH_CACHE_GENERATION
+    _ = graph_uri
+    _GRAPH_CACHE_GENERATION += 1
 
 
 def clear_graph_service_caches() -> None:
     """Wipe every filesystem graph cache (KPIs, network schema, BFO buckets, …).
 
-    Per-graph invalidation only clears a fixed set of keys; the schema-derived
-    caches (``bfo_parent_*``, ``property_kind_*``, ``ontology_label_*``) are keyed
-    by class/property URI with a 1-day TTL, so they outlive ontology changes.
-    The sidebar Refresh button calls this to force a full rebuild on next request.
+    Generation bumps cover normal writes. This full wipe remains for operator
+    refresh: schema-derived caches (``bfo_parent_*``, ``property_kind_*``,
+    ``ontology_label_*``) keep a 1-day TTL and can outlive ontology edits.
     """
+    global _GRAPH_CACHE_GENERATION
+    _GRAPH_CACHE_GENERATION += 1
+    _GRAPH_SCOPE_GENERATIONS.clear()
     for _, adapter in _cache._adapters:
         cache_dir = getattr(adapter, "cache_dir", None)
         if cache_dir and Path(cache_dir).exists():
@@ -438,7 +459,7 @@ def clear_graph_service_caches() -> None:
 
 
 @_cache(
-    lambda triple_store, uri: f"property_kind_{uri}",
+    lambda triple_store, uri: _scope_cache_key(triple_store, f"property_kind_{uri}"),
     DataType.JSON,
     ttl=timedelta(days=1),
 )
@@ -1393,7 +1414,7 @@ def _build_graph_overview(
 
 
 @_cache(
-    lambda triple_store, graph_uri: f"graph_kpis_{graph_uri}",
+    lambda triple_store, graph_uri: _scope_cache_key(triple_store, f"graph_kpis_{graph_uri}"),
     DataType.JSON,
     ttl=_GRAPH_DERIVED_TTL,
 )
@@ -1462,7 +1483,7 @@ def _get_graph_kpis(triple_store: TripleStoreService, graph_uri: str) -> dict[st
 
 
 @_cache(
-    lambda triple_store, graph_uri: f"network_schema_{graph_uri}",
+    lambda triple_store, graph_uri: _scope_cache_key(triple_store, f"network_schema_{graph_uri}"),
     DataType.JSON,
     ttl=_GRAPH_DERIVED_TTL,
 )
@@ -1607,7 +1628,7 @@ def _build_network_schema(
 
 
 @_cache(
-    lambda triple_store, graph_uri: f"discover_classes_{graph_uri}",
+    lambda triple_store, graph_uri: _scope_cache_key(triple_store, f"discover_classes_{graph_uri}"),
     DataType.JSON,
     ttl=_GRAPH_DERIVED_TTL,
 )
@@ -1731,12 +1752,22 @@ class GraphService:
     def __init__(
         self,
         triple_store_getter: Callable[[], TripleStoreService] | None = None,
+        access_scope: GraphAccessScope | None = None,
     ) -> None:
         self._triple_store_getter = triple_store_getter
+        self.access_scope = access_scope
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
-    def _get_triple_store(self) -> TripleStoreService:
+    def for_scope(self, scope: GraphAccessScope) -> GraphService:
+        return GraphService(self._get_catalog_store, access_scope=scope)
+
+    def _get_triple_store(self) -> Any:
+        if self.access_scope is None:
+            raise GraphAccessError("A workspace graph scope is required")
+        return WorkspaceGraphStore(self._get_catalog_store(), self.access_scope)
+
+    def _get_catalog_store(self) -> TripleStoreService:
         if self._triple_store_getter is not None:
             return self._triple_store_getter()
         try:
@@ -1750,19 +1781,88 @@ class GraphService:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    async def clear_cache(self) -> None:
-        """Clear all filesystem graph caches (KPIs, network schema, BFO buckets, …)."""
-        clear_graph_service_caches()
+    @workspace_graph_operation()
+    async def explorer_catalog(self, workspace_id: str, graph_uris: list[str]) -> dict[str, Any]:
+        from naas_abi.apps.nexus.apps.api.app.services.graph.explorer import catalog, resolve_graphs
 
+        packs = await self.list_graphs(workspace_id)
+        selected = resolve_graphs(packs, graph_uris)
+        result = await asyncio.to_thread(
+            lambda: catalog(self._get_triple_store(), packs, selected, str(SCHEMA_GRAPH_URI))
+        )
+        result["permissions"] = {"can_create_graph": bool(self.access_scope and self.access_scope.allow_create)}
+        return result
+
+    @workspace_graph_operation()
+    async def explorer_overview(self, workspace_id: str, graph_uris: list[str]) -> dict[str, Any]:
+        from naas_abi.apps.nexus.apps.api.app.services.graph.explorer import (
+            overview,
+            resolve_graphs,
+        )
+
+        packs = await self.list_graphs(workspace_id)
+        selected = resolve_graphs(packs, graph_uris)
+        result = await asyncio.to_thread(
+            lambda: overview(self._get_triple_store(), packs, selected, str(SCHEMA_GRAPH_URI))
+        )
+        result["permissions"] = {"can_create_graph": bool(self.access_scope and self.access_scope.allow_create)}
+        return result
+
+    @workspace_graph_operation()
+    async def explorer_instances(
+        self, workspace_id: str, graph_uris: list[str], class_uris: list[str],
+        search: str, offset: int, limit: int,
+    ) -> dict[str, Any]:
+        from naas_abi.apps.nexus.apps.api.app.services.graph.explorer import (
+            instances,
+            resolve_graphs,
+        )
+
+        selected = resolve_graphs(await self.list_graphs(workspace_id), graph_uris)
+        return await asyncio.to_thread(
+            lambda: instances(self._get_triple_store(), selected, class_uris,
+                           search, offset, limit, str(SCHEMA_GRAPH_URI)),
+        )
+
+    @workspace_graph_operation()
+    async def explorer_network(
+        self, workspace_id: str, graph_uris: list[str], class_uris: list[str],
+        search: str, offset: int, limit: int,
+    ) -> dict[str, Any]:
+        from naas_abi.apps.nexus.apps.api.app.services.graph.explorer import (
+            network,
+            resolve_graphs,
+        )
+
+        selected = resolve_graphs(await self.list_graphs(workspace_id), graph_uris)
+        return await asyncio.to_thread(
+            lambda: network(self._get_triple_store(), selected, class_uris,
+                           search, offset, limit, str(SCHEMA_GRAPH_URI)),
+        )
+
+    @workspace_graph_operation()
+    async def clear_cache(self, workspace_id: str) -> None:
+        """Invalidate this workspace's caches without flushing other workspaces."""
+        namespace = self._get_triple_store().cache_namespace
+        _GRAPH_SCOPE_GENERATIONS[namespace] = _GRAPH_SCOPE_GENERATIONS.get(namespace, 0) + 1
+
+    @workspace_graph_operation()
     async def list_graphs(self, workspace_id: str) -> list[GraphPackData]:
         # Every triple-store call below is blocking I/O. Running it directly in
         # this coroutine froze the whole event loop — and because the sidebar and
         # the graph page both request /api/graph/list on load, that stall was
         # serialising every other request the browser had in flight.
-        return await asyncio.to_thread(self._list_graphs_sync)
+        packs = await asyncio.to_thread(self._list_graphs_sync)
+        assert self.access_scope is not None
+        return [
+            GraphPackData(role_label=pack.role_label, graphs=visible)
+            for pack in packs
+            if (visible := [replace(g, can_write=g.uri in self.access_scope.writable)
+                           for g in pack.graphs if g.uri in self.access_scope.readable])
+        ]
 
     def _list_graphs_sync(self) -> list[GraphPackData]:
-        store = self._get_triple_store()
+        store = self._get_catalog_store()
         query = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -1799,13 +1899,15 @@ class GraphService:
                 )
             )
 
-        # Some triple-store adapters do not register graphs in the Nexus graph.
-        # Include any graph present in the triple store but missing from the Nexus graph.
-        for raw_uri in store.list_graphs():
-            graph_uri = str(raw_uri)
-            if graph_uri in seen_uris or raw_uri in _PROTECTED_URIS:
+        # Policy grants (and owned graphs) that are not yet in the Nexus catalog.
+        # Do not call store.list_graphs(): that enumerates every named graph and
+        # stalls the dropdown behind store I/O.
+        extra_uris = self.access_scope.readable if self.access_scope is not None else set()
+        for graph_uri in extra_uris:
+            if graph_uri in seen_uris or URIRef(graph_uri) in _PROTECTED_URIS:
                 continue
-            graph_id = graph_uri.split("/")[-1]
+            graph_id = graph_uri.rstrip("/").split("/")[-1] or graph_uri
+            seen_uris.add(graph_uri)
             role_graphs.setdefault("unknown", []).append(
                 GraphInfoData(
                     id=graph_id,
@@ -1821,6 +1923,7 @@ class GraphService:
             packed_graphs.append(GraphPackData(role_label=role_label, graphs=graphs))
         return packed_graphs
 
+    @workspace_graph_operation()
     async def list_graph_roles(self, workspace_id: str) -> list[str]:
         packs = await self.list_graphs(workspace_id)
         roles = sorted({pack.role_label for pack in packs if pack.role_label})
@@ -1828,6 +1931,7 @@ class GraphService:
             roles.append("unknown")
         return roles
 
+    @workspace_graph_operation(create=True)
     async def create_graph(
         self,
         workspace_id: str,
@@ -1837,19 +1941,20 @@ class GraphService:
         role_label: str | None = None,
     ) -> GraphInfoData:
         return await asyncio.to_thread(
-            self._create_graph_sync, label, description, user_id, role_label
+            self._create_graph_sync, workspace_id, label, description, user_id, role_label
         )
 
     def _create_graph_sync(
         self,
+        workspace_id: str,
         label: str,
         description: str | None,
         user_id: str,
         role_label: str | None = None,
     ) -> GraphInfoData:
-        store = self._get_triple_store()
+        store = self._get_catalog_store()
         graph_label = label.strip()
-        graph_id = _slugify(graph_label)
+        graph_id = f"{_slugify(graph_label) or 'graph'}-{uuid.uuid4().hex}"
         new_graph_uri = GRAPH_BASE_URI + graph_id
         store.create_graph(new_graph_uri)
         normalized_role = _normalize_role_label(role_label)
@@ -1862,12 +1967,15 @@ class GraphService:
         )
         if description:
             new_graph.description = _slugify(description)
-        store.insert(new_graph.rdf(), graph_name=NEXUS_GRAPH_URI)
+        metadata = new_graph.rdf()
+        metadata.add((URIRef(new_graph_uri), URIRef(OWNER_PREDICATE), Literal(workspace_id)))
+        store.insert(metadata, graph_name=NEXUS_GRAPH_URI)
         return GraphInfoData(
             id=graph_id,
             uri=str(new_graph_uri),
             label=graph_label,
             role_label=normalized_role,
+            can_write=True,
         )
 
     def _graph_exists(self, store: TripleStoreService, graph_uri: str) -> bool:
@@ -1886,17 +1994,18 @@ class GraphService:
         """
         return any(True for _ in store.query(meta_query))
 
+    @workspace_graph_operation()
     async def get_graph(self, workspace_id: str, graph_uri: str) -> GraphDetailData:
         """Fetch metadata (label, description, role) for a single graph to pre-fill edits.
 
-        Lenient like :meth:`list_graphs`: any graph the sidebar can show is editable, even
+        Metadata is readable for any graph authorized by :meth:`list_graphs`, even
         one not registered as a ``KnowledgeGraph`` in the Nexus graph (defaults are used for
         missing fields). Raises ``ValueError`` only when the graph does not exist at all.
         """
         return await asyncio.to_thread(self._get_graph_sync, graph_uri)
 
     def _get_graph_sync(self, graph_uri: str) -> GraphDetailData:
-        store = self._get_triple_store()
+        store = self._get_catalog_store()
         query = f"""
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX nexus: <http://ontology.naas.ai/nexus/>
@@ -1937,6 +2046,7 @@ class GraphService:
             role_label=role_label or "unknown",
         )
 
+    @workspace_graph_operation(write=True)
     async def update_graph(
         self,
         workspace_id: str,
@@ -1966,7 +2076,7 @@ class GraphService:
         uri = URIRef(graph_uri)
         if uri in _PROTECTED_URIS:
             raise GraphProtectedError("Schema or Nexus graph cannot be edited.")
-        store = self._get_triple_store()
+        store = self._get_catalog_store()
 
         description_uri = URIRef("http://ontology.naas.ai/nexus/description")
         role_link_uri = URIRef("http://ontology.naas.ai/nexus/hasKnowledgeGraphRole")
@@ -2018,6 +2128,7 @@ class GraphService:
             role_label=normalized_role,
         )
 
+    @workspace_graph_operation(write=True)
     async def clear_graph(self, workspace_id: str, graph_uri: str) -> None:
         uri = URIRef(graph_uri)
         if uri in _PROTECTED_URIS:
@@ -2058,15 +2169,17 @@ class GraphService:
         if len(triples) > 0:
             store.remove(triples, graph_name=named_graph)
 
+    @workspace_graph_operation(write=True)
     async def delete_graph(self, workspace_id: str, graph_uri: str) -> None:
         uri = URIRef(graph_uri)
         if uri in _PROTECTED_URIS:
             raise GraphProtectedError("Schema or Nexus graph cannot be deleted.")
-        store = self._get_triple_store()
+        store = self._get_catalog_store()
         store.drop_graph(uri)
         self._remove_subject_and_object_triples(store, uri, NEXUS_GRAPH_URI)
         _invalidate_graph_cache(graph_uri)
 
+    @workspace_graph_operation(write=True)
     async def create_individual(
         self,
         workspace_id: str,
@@ -2118,6 +2231,7 @@ class GraphService:
             properties=inserted_properties,
         )
 
+    @workspace_graph_operation(write=True)
     async def delete_individual(
         self,
         workspace_id: str,
@@ -2137,6 +2251,7 @@ class GraphService:
         )
         _invalidate_graph_cache(graph_uri)
 
+    @workspace_graph_operation(write=True)
     async def add_data_property(
         self,
         workspace_id: str,
@@ -2157,6 +2272,7 @@ class GraphService:
         store.insert(triples, graph_name=target_graph)
         _invalidate_graph_cache(graph_uri)
 
+    @workspace_graph_operation(write=True)
     async def delete_data_property(
         self,
         workspace_id: str,
@@ -2175,6 +2291,7 @@ class GraphService:
         triples.add((URIRef(individual_uri), URIRef(predicate_uri), Literal(value)))
         store.remove(triples, graph_name=target_graph)
 
+    @workspace_graph_operation(write=True)
     async def update_data_property(
         self,
         workspace_id: str,
@@ -2197,6 +2314,7 @@ class GraphService:
         new_triples.add((subj, pred, Literal(new_value)))
         store.insert(new_triples, graph_name=target_graph)
 
+    @workspace_graph_operation(write=True)
     async def add_object_property(
         self,
         workspace_id: str,
@@ -2217,6 +2335,7 @@ class GraphService:
         store.insert(triples, graph_name=target_graph)
         _invalidate_graph_cache(graph_uri)
 
+    @workspace_graph_operation(write=True)
     async def delete_object_property(
         self,
         workspace_id: str,
@@ -2236,6 +2355,7 @@ class GraphService:
         store.remove(triples, graph_name=target_graph)
         _invalidate_graph_cache(graph_uri)
 
+    @workspace_graph_operation(write=True)
     async def update_object_property(
         self,
         workspace_id: str,
@@ -2262,11 +2382,12 @@ class GraphService:
         store.insert(new_triples, graph_name=target_graph)
         _invalidate_graph_cache(graph_uri)
 
+    @workspace_graph_operation()
     async def get_graph_kpis(self, workspace_id: str, graph_uri: str) -> GraphKpisData:
         store = self._get_triple_store()
         result, stale = await asyncio.to_thread(
             _read_stale_while_revalidate,
-            f"graph_kpis_{graph_uri}",
+            _scope_cache_key(store, f"graph_kpis_{graph_uri}"),
             _get_graph_kpis,
             triple_store=store,
             graph_uri=graph_uri,
@@ -2279,11 +2400,12 @@ class GraphService:
             stale=stale,
         )
 
+    @workspace_graph_operation()
     async def get_network_schema(self, workspace_id: str, graph_uri: str) -> NetworkSchemaData:
         store = self._get_triple_store()
         result, stale = await asyncio.to_thread(
             _read_stale_while_revalidate,
-            f"network_schema_{graph_uri}",
+            _scope_cache_key(store, f"network_schema_{graph_uri}"),
             _build_network_schema,
             triple_store=store,
             graph_uri=graph_uri,
@@ -2311,6 +2433,7 @@ class GraphService:
             ],
         )
 
+    @workspace_graph_operation()
     async def get_graph_overview(
         self, workspace_id: str, graph_uri: str, limit: int = 500
     ) -> GraphOverviewData:
@@ -2319,6 +2442,7 @@ class GraphService:
             _build_graph_overview, triple_store=store, graph_uri=URIRef(graph_uri), limit=limit
         )
 
+    @workspace_graph_operation()
     async def get_graph_network(
         self, workspace_id: str, graph_uri: str, limit: int = 200
     ) -> GraphNetworkData:
@@ -2333,6 +2457,7 @@ class GraphService:
             depth=2,
         )
 
+    @workspace_graph_operation()
     async def list_individuals(
         self,
         workspace_id: str,
@@ -2351,6 +2476,7 @@ class GraphService:
             depth=depth,
         )
 
+    @workspace_graph_operation()
     async def search_network(
         self,
         workspace_id: str,
@@ -2368,6 +2494,7 @@ class GraphService:
             depth=2,
         )
 
+    @workspace_graph_operation()
     async def export_graph_as_ttl(
         self,
         workspace_id: str,
@@ -2497,6 +2624,7 @@ class GraphService:
             unknown_triples=triple_counts["unknown"],
         )
 
+    @workspace_graph_operation(write=True)
     async def import_individuals_to_graph(
         self,
         workspace_id: str,
@@ -2526,6 +2654,7 @@ class GraphService:
         _invalidate_graph_cache(graph_uri)
         return len(individual_graph)
 
+    @workspace_graph_operation()
     async def get_network_parents(
         self,
         workspace_id: str,
@@ -2658,6 +2787,7 @@ class GraphService:
 
     # ── Discovery ─────────────────────────────────────────────────────────────
 
+    @workspace_graph_operation()
     async def discover_classes(self, workspace_id: str, graph_uri: str) -> list[DiscoveryClassData]:
         store = self._get_triple_store()
         rows = await asyncio.to_thread(
@@ -2672,6 +2802,7 @@ class GraphService:
             for row in rows
         ]
 
+    @workspace_graph_operation()
     async def discover_all_classes(self, workspace_id: str) -> list[DiscoveryClassData]:
         store = self._get_triple_store()
         packs = await self.list_graphs(workspace_id)
@@ -2701,6 +2832,7 @@ class GraphService:
             for item in sorted(merged.values(), key=lambda row: str(row["label"]).lower())
         ]
 
+    @workspace_graph_operation()
     async def discover_class_meta(
         self, workspace_id: str, class_uri: str
     ) -> DiscoveryClassMetaData:
@@ -2722,6 +2854,7 @@ class GraphService:
             bfo_parent_label=bfo_parent_label,
         )
 
+    @workspace_graph_operation()
     async def discover_class_datatype_properties(
         self, workspace_id: str, class_uri: str
     ) -> list[DiscoveryPropertyData]:
@@ -2730,6 +2863,7 @@ class GraphService:
             _discover_class_datatype_properties_sync, triple_store=store, class_uri=class_uri
         )
 
+    @workspace_graph_operation()
     async def discover_class_object_properties(
         self, workspace_id: str, class_uri: str
     ) -> list[DiscoveryClassObjectPropertyData]:
@@ -2738,6 +2872,7 @@ class GraphService:
             _discover_class_object_properties_sync, triple_store=store, class_uri=class_uri
         )
 
+    @workspace_graph_operation()
     async def discover_relation_targets(
         self,
         workspace_id: str,
@@ -2758,6 +2893,7 @@ class GraphService:
             limit=limit,
         )
 
+    @workspace_graph_operation()
     async def discover_properties(
         self,
         workspace_id: str,
@@ -2827,6 +2963,7 @@ class GraphService:
         results.sort(key=lambda d: d.label.lower())
         return results
 
+    @workspace_graph_operation()
     async def discover_instances(
         self,
         workspace_id: str,
@@ -2995,6 +3132,7 @@ class GraphService:
         results.sort(key=lambda item: item.label.lower())
         return results
 
+    @workspace_graph_operation()
     async def discover_instance_detail(
         self,
         workspace_id: str,
@@ -3189,6 +3327,7 @@ class GraphService:
             relations=inspector_relations,
         )
 
+    @workspace_graph_operation()
     async def discover_relation_types(
         self,
         workspace_id: str,
@@ -3398,6 +3537,7 @@ class GraphService:
         results.sort(key=lambda d: (-d.count, d.label.lower()))
         return results
 
+    @workspace_graph_operation()
     async def discover_relations(
         self,
         workspace_id: str,
