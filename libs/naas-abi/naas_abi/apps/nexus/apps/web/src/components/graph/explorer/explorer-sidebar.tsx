@@ -467,7 +467,9 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
       </div>
       <p className="graph-explorer-list-count">
         {request.loading
-          ? 'Loading classes…'
+          ? request.error
+            ? 'Could not load classes'
+            : 'Loading classes…'
           : `${classes.filter((c) => c.count > 0).length.toLocaleString()} classes`}
       </p>
       {request.error ? (

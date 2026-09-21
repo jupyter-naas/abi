@@ -14,8 +14,12 @@ interface State {
   error: string | null;
   revision: number;
   fetchedAt: number;
+  loadStartedAt: number;
   load: (workspaceId: string, graphs: string[], force?: boolean) => Promise<void>;
 }
+const CATALOG_CACHE_MS = 30_000;
+/** In-flight catalog can take minutes on large graphs; allow retry after this. */
+const CATALOG_STALE_LOAD_MS = 90_000;
 let pending: AbortController | undefined;
 export const useGraphExplorerStore = create<State>((set, get) => ({
   key: '',
@@ -24,35 +28,47 @@ export const useGraphExplorerStore = create<State>((set, get) => ({
   error: null,
   revision: 0,
   fetchedAt: 0,
+  loadStartedAt: 0,
   load: async (workspaceId, graphs, force = false) => {
     const key = JSON.stringify([workspaceId, graphs]);
     const current = get();
-    if (
-      !workspaceId ||
-      (!force && current.key === key && (current.loading || Date.now() - current.fetchedAt < 30000))
-    )
+    if (!workspaceId) return;
+    if (!force && current.key === key && !current.loading && Date.now() - current.fetchedAt < CATALOG_CACHE_MS) {
       return;
+    }
+    if (
+      !force &&
+      current.loading &&
+      current.key === key &&
+      Date.now() - current.loadStartedAt < CATALOG_STALE_LOAD_MS
+    ) {
+      return;
+    }
     pending?.abort();
     const controller = new AbortController();
     pending = controller;
+    const startedAt = Date.now();
     set({
       key,
-      data: null,
+      data: force ? null : current.key === key ? current.data : null,
       loading: true,
       error: null,
       fetchedAt: 0,
+      loadStartedAt: startedAt,
       revision: current.revision + 1,
     });
     try {
       const data = await readGraph<ExplorerCatalog>('explorer/catalog',
         JSON.stringify({ workspace_id: workspaceId, graph_uris: graphs }), controller.signal, force);
       if (!controller.signal.aborted && get().key === key)
-        set({ data, loading: false, fetchedAt: Date.now() });
+        set({ data, loading: false, fetchedAt: Date.now(), loadStartedAt: 0 });
     } catch (error) {
-      if (!controller.signal.aborted && get().key === key)
+      if (controller.signal.aborted) return;
+      if (get().key === key)
         set({
           data: null,
           loading: false,
+          loadStartedAt: 0,
           error: error instanceof Error ? error.message : 'Could not load Explorer.',
         });
     }
@@ -61,7 +77,14 @@ export const useGraphExplorerStore = create<State>((set, get) => ({
 
 export function invalidateGraphExplorer() {
   pending?.abort();
-  useGraphExplorerStore.setState({ key: '', data: null, loading: false, error: null, fetchedAt: 0 });
+  useGraphExplorerStore.setState({
+    key: '',
+    data: null,
+    loading: false,
+    error: null,
+    fetchedAt: 0,
+    loadStartedAt: 0,
+  });
 }
 
 type GraphPack = { role_label: string; graphs: ExplorerGraph[] };
