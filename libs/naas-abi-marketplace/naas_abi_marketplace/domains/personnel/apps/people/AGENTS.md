@@ -99,9 +99,8 @@ Python package `people` · catalog id `personnel-people` · API prefix
 `/api/personnel-people` · dataset namespace `personnel` · Nexus app id
 `naas_abi_marketplace.domains.personnel:people`.
 
-An instance picks its own prefix and namespace and keeps everything else.
-`src/personnel/apps/people` in the bob repo is `/api/personnel-people-fmz` and
-`personnel_fmz`.
+An instance picks its own prefix and namespace and keeps everything else, for
+example `/api/personnel-people-acme` and `personnel_acme`.
 
 ## Tests
 

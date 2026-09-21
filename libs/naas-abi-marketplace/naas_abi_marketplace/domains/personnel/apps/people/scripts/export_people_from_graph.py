@@ -12,8 +12,8 @@ whichever graph that instance is built from:
 
     python -m …apps.people.scripts.export_people_from_graph
     python -m …apps.people.scripts.export_people_from_graph \
-        --config src/personnel/apps/people/config.yaml \
-        --graph  src/personnel/apps/people/graphs/personnel.ttl
+        --config path/to/instance/config.yaml \
+        --graph  path/to/instance/graphs/personnel.ttl
 """
 
 from __future__ import annotations

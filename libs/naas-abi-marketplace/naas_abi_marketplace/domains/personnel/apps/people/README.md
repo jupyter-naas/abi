@@ -122,8 +122,7 @@ PEOPLE_APP_CONFIG=/path/to/their/config.yaml PEOPLE_API_PREFIX=/api/their-people
   python -m naas_abi_marketplace.domains.personnel.apps.people.api.dev_server
 ```
 
-and export into it with `--config`. `src/personnel/apps/people` in the bob
-repo is a worked example.
+and export into it with `--config`.
 
 What configuration **cannot** do is invent a page or a profile section. Those are
 renderers, registered in `web/lib/registry.js` and `config_loader.py`. Adding one
