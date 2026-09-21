@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.72.1 (2026-09-21)
+
+### Bug Fixes
+
+- **auth**: Halve login wordmark height
+  ([`7034343`](https://github.com/jupyter-naas/abi/commit/70343431062eb186ab529b87e4ff4227be6bc48d))
+
+
 ## v2.72.0 (2026-09-21)
 
 ### Bug Fixes

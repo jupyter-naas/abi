@@ -187,7 +187,7 @@ export default function LoginForm() {
               <img
                 src={tenant.logo_rectangle_url}
                 alt={tenant.tab_title}
-                className="h-24 max-w-full object-contain"
+                className="h-12 max-w-full object-contain"
               />
             ) : tenant.logo_url ? (
               // eslint-disable-next-line @next/next/no-img-element
