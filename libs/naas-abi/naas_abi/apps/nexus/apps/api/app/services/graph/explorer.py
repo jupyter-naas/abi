@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
@@ -123,26 +122,18 @@ def _catalog_class_counts_one_graph(
 def _catalog_class_counts_per_graph(
     store: QueryStore, graphs: list[str]
 ) -> dict[str, dict[str, Any]]:
-    """One COUNT query per graph (parallel); sums may over-count cross-graph instances."""
+    """One COUNT query per graph; sums may over-count cross-graph instances."""
     classes: dict[str, dict[str, Any]] = {}
-    if not graphs:
-        return classes
-    workers = min(len(graphs), 6)
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {
-            pool.submit(_catalog_class_counts_one_graph, store, graph_uri): graph_uri
-            for graph_uri in graphs
-        }
-        for future in as_completed(futures):
-            try:
-                batch = future.result()
-            except Exception:
-                continue
-            for uri, row in batch.items():
-                if uri in classes:
-                    classes[uri]["count"] += row["count"]
-                else:
-                    classes[uri] = dict(row)
+    for graph_uri in graphs:
+        try:
+            batch = _catalog_class_counts_one_graph(store, graph_uri)
+        except Exception:
+            continue
+        for uri, row in batch.items():
+            if uri in classes:
+                classes[uri]["count"] += row["count"]
+            else:
+                classes[uri] = dict(row)
     return classes
 
 

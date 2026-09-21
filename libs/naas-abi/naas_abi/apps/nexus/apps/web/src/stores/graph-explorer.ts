@@ -204,6 +204,16 @@ export function useGraphExplorer(workspaceId: string, graphs: string[]) {
   useEffect(() => {
     void load(workspaceId, JSON.parse(graphKey) as string[]);
   }, [load, workspaceId, graphKey, userId]);
+  useEffect(() => {
+    if (state.key !== key || !state.loading) return;
+    const timer = window.setTimeout(() => {
+      const current = useGraphExplorerStore.getState();
+      if (current.key === key && current.loading) {
+        void load(workspaceId, JSON.parse(graphKey) as string[], true);
+      }
+    }, CATALOG_STALE_LOAD_MS);
+    return () => window.clearTimeout(timer);
+  }, [key, state.key, state.loading, load, workspaceId, graphKey]);
   return {
     data: state.key === key ? state.data : null,
     error: state.key === key ? state.error : null,
