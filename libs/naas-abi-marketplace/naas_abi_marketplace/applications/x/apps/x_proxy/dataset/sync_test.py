@@ -11,6 +11,7 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.cache.schema import (
     ENVELOPE_PREFIX,
 )
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
+    AUTHOR_STATS_V1,
     ENVELOPES_V1,
     POSTS_V1,
     X_DATASET_NAMESPACE,
@@ -126,6 +127,13 @@ def test_sync_envelope_paths_idempotent(dataset):
         namespace=X_DATASET_NAMESPACE,
     )
     assert int(env_rows.rows[0]["n"]) == 1
+    stats = dataset.query(
+        f"SELECT first_post_at, last_post_at, matched_count FROM {AUTHOR_STATS_V1}",
+        namespace=X_DATASET_NAMESPACE,
+    )
+    assert len(stats.rows) == 1
+    assert int(stats.rows[0]["matched_count"]) == 1
+    assert stats.rows[0]["first_post_at"] is not None
 
 
 def test_sync_dedupes_duplicate_posts_in_one_batch(dataset):

@@ -78,6 +78,7 @@ function profileFromKnown(known: UserRow | null): UserProfile | null {
     username: known.username,
     posts: known.posts,
     last_post_at: known.last_post_at,
+    first_post_at: known.first_post_at,
     location: known.location,
     verified_type: known.verified_type,
     description: known.description,
@@ -149,7 +150,8 @@ export function UserDetail({
   const ingestedTotal = ingestedPostCount(known, feed.profile, feed.counts);
   const lastPostAt =
     profile?.last_post_at || feed.profile?.last_post_at || rows[0]?.created_at || "";
-  const firstPostAt = feed.profile?.first_post_at || "";
+  const firstPostAt =
+    feed.profile?.first_post_at || profile?.first_post_at || known?.first_post_at || "";
   const pinned = pinnedIds.users.includes(pin.id);
   const unknown =
     !indexLoading &&

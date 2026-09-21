@@ -1,11 +1,12 @@
 /**
- * Dataset-backed Users search and author feeds (`dataset/users/…` APIs).
+ * Users search and author feeds — Dataset Service only (`dataset/users/…`).
  */
 import { FEED, RESULTS } from "@/lib/appConfig";
 import type { TweetRow, UserBundle, UserProfile, UserRow } from "@/lib/types";
 import { withAccessToken } from "@/lib/routes";
 
-const BASE = "/app-html/x/apps/x_proxy";
+const APP_BASE = "/app-html/x/apps/x_proxy";
+const DATASET_USERS_SEARCH = `${APP_BASE}/dataset/users/search.json`;
 
 export const USER_FEED_BATCH = FEED.batch;
 export const USER_RESULTS_PAGE_SIZE = RESULTS.perPage;
@@ -33,17 +34,13 @@ const directPostPromises = new Map<string, Promise<TweetRow | null>>();
 function mapDatasetPost(row: Record<string, unknown>): TweetRow {
   const tweetId = String(row.tweet_id || "");
   const username = String(row.username || "");
-  const handle = username ? `@${username}` : "";
   return {
     url: tweetId ? `https://x.com/i/status/${tweetId}` : "",
     created_at: String(row.created_at || ""),
     text: String(row.full_text || row.text || ""),
-    author: handle,
     username,
-    lang: String(row.lang || ""),
-    like_count: Number(row.like_count || 0),
-    retweet_count: Number(row.retweet_count || 0),
-    reply_count: Number(row.reply_count || 0),
+    location: String(row.location || ""),
+    verified_type: String(row.verified_type || ""),
     referenced: row.kind === "referenced",
     media_url: String(row.media_urls || ""),
     queries: row.query_slug ? [String(row.query_slug)] : [],
@@ -57,6 +54,7 @@ function mapDatasetUser(row: Record<string, unknown>): UserRow {
     posts:
       Number(row.matched_count || 0) + Number(row.referenced_count || 0),
     last_post_at: String(row.last_post_at || ""),
+    first_post_at: String(row.first_post_at || ""),
     location: String(row.location || ""),
     verified_type: String(row.verified_type || ""),
     description: String(row.description || ""),
@@ -65,7 +63,7 @@ function mapDatasetUser(row: Record<string, unknown>): UserRow {
 }
 
 async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(withAccessToken(`${BASE}/${path}`));
+  const res = await fetch(withAccessToken(`${APP_BASE}/${path}`));
   if (!res.ok) {
     throw new Error(`${path} HTTP ${res.status}`);
   }
@@ -74,7 +72,7 @@ async function getJson<T>(path: string): Promise<T> {
 
 export function artifactUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) return path;
-  return withAccessToken(`${BASE}/${path.replace(/^\/+/, "")}`);
+  return withAccessToken(`${APP_BASE}/${path.replace(/^\/+/, "")}`);
 }
 
 export async function loadUserSearchPage(
@@ -86,12 +84,16 @@ export async function loadUserSearchPage(
     page: String(page),
     per_page: String(USER_RESULTS_PAGE_SIZE),
   });
-  const doc = await getJson<{
+  const res = await fetch(withAccessToken(`${DATASET_USERS_SEARCH}?${params}`));
+  if (!res.ok) {
+    throw new Error(`dataset/users/search.json HTTP ${res.status}`);
+  }
+  const doc = (await res.json()) as {
     count?: number;
     page?: number;
     per_page?: number;
     users?: Record<string, unknown>[];
-  }>(`dataset/users/search.json?${params}`);
+  };
   return {
     count: Number(doc.count) || 0,
     page: Number(doc.page) || 0,

@@ -10,7 +10,7 @@ type Props = {
   onNeedleChange: (needle: string) => void;
 };
 
-/** Search Tweets — whole graph via dataset `search_tweets/query.json`. */
+/** Search Tweets — whole graph via `dataset/posts/search.json`. */
 export function TweetsPage({ timezone, needle, onNeedleChange }: Props) {
   const [page, setPage] = useState(0);
   const [remote, setRemote] = useState<TweetSearchPage | null>(null);

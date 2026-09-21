@@ -147,6 +147,8 @@ export type UserRow = {
   username: string;
   posts: number;
   last_post_at: string;
+  /** Earliest canonical ingested post (from author stats). */
+  first_post_at?: string;
   location: string;
   verified_type: string;
   /** Account bio, truncated by the publisher. Empty for the many stubs. */

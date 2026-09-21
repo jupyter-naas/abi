@@ -651,6 +651,12 @@ a {
   font-size: 0.88rem;
 }
 
+.search-needle-hit {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+
 .result-snippet {
   margin: 4px 0 0;
   color: var(--label);

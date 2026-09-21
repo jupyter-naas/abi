@@ -5,6 +5,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.author_stats import (
+    merge_profile_with_stats,
+    profile_stats,
+)
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.canonical import (
     canonical_cte,
 )
@@ -42,7 +46,8 @@ def _user_needle_filter(needle: str) -> str:
     return (
         f" WHERE lower(username) LIKE '%{n}%' "
         f"OR lower(display_name) LIKE '%{n}%' "
-        f"OR lower(description) LIKE '%{n}%'"
+        f"OR lower(description) LIKE '%{n}%' "
+        f"OR lower(location) LIKE '%{n}%'"
     )
 
 
@@ -82,7 +87,8 @@ def search_users(
         where = where.replace(" WHERE ", " AND ", 1)
     count = dataset.query(
         f"WITH {cte}, authors_with_posts AS ("
-        f"  SELECT author_id, COUNT(*) AS post_rows, MAX(created_at) AS last_post_at "
+        f"  SELECT author_id, COUNT(*) AS post_rows, "
+        f"  MIN(created_at) AS first_post_at, MAX(created_at) AS last_post_at "
         f"  FROM canonical_enriched GROUP BY author_id"
         f") "
         f"SELECT COUNT(*) AS n FROM {AUTHORS_V1} a "
@@ -96,10 +102,12 @@ def search_users(
         f"  SELECT author_id, "
         f"  SUM(CASE WHEN kind = 'matched' THEN 1 ELSE 0 END) AS matched_count, "
         f"  SUM(CASE WHEN kind = 'referenced' THEN 1 ELSE 0 END) AS referenced_count, "
+        f"  MIN(created_at) AS first_post_at, "
         f"  MAX(created_at) AS last_post_at "
         f"  FROM canonical_enriched GROUP BY author_id"
         f") "
-        f"SELECT a.*, awp.matched_count, awp.referenced_count, awp.last_post_at "
+        f"SELECT a.*, awp.matched_count, awp.referenced_count, "
+        f"awp.first_post_at, awp.last_post_at "
         f"FROM {AUTHORS_V1} a "
         f"INNER JOIN authors_with_posts awp ON a.author_id = awp.author_id "
         f"WHERE 1=1{where} "
@@ -129,8 +137,11 @@ def user_posts(
     )
     if not author.rows:
         return None, 0, []
-    profile = dict(author.rows[0])
-    author_id = _escape(str(profile.get("author_id") or ""))
+    author_row = dict(author.rows[0])
+    author_id_raw = str(author_row.get("author_id") or "")
+    stats = profile_stats(dataset, author_id_raw)
+    profile = merge_profile_with_stats(author_row, stats)
+    author_id = _escape(author_id_raw)
     cte = canonical_cte()
     kind_filter = ""
     if kind in ("matched", "referenced"):

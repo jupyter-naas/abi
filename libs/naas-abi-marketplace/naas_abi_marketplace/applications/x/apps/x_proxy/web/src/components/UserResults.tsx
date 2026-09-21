@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { highlightSearchNeedle } from "@/lib/highlightSearchNeedle";
 import { searchFor } from "@/lib/routes";
 import { USER_RESULTS_PAGE_SIZE } from "@/lib/userSearch";
 import type { UserRow } from "@/lib/types";
@@ -137,20 +138,25 @@ export function UserResults({
 
       <ol className="result-list" start={start + 1}>
         {listed.map((user) => {
-          const facts = [
+          const factNodes: ReactNode[] = [
             `${user.posts.toLocaleString()} post${user.posts === 1 ? "" : "s"} ingested`,
-            user.location,
+            user.location
+              ? highlightSearchNeedle(user.location, submitted)
+              : "",
             user.verified_type && user.verified_type !== "none"
               ? user.verified_type
               : "",
             user.last_post_at
               ? `last post ${formatDate(user.last_post_at, timezone)}`
               : "",
-          ].filter(Boolean);
+          ].filter((part) => part !== "" && part != null);
           return (
             <li className="result" key={user.username}>
               <div className="result-main">
-                <span className="result-url">x.com › {user.username}</span>
+                <span className="result-url">
+                  x.com ›{" "}
+                  {highlightSearchNeedle(user.username, submitted)}
+                </span>
                 <a
                   className="result-title"
                   // Query-only, so it resolves against /users/search as it
@@ -174,16 +180,31 @@ export function UserResults({
                     onOpenUser(user.username);
                   }}
                 >
-                  {user.display_name || user.username}
+                  {highlightSearchNeedle(
+                    user.display_name || user.username,
+                    submitted,
+                  )}
                 </a>
-                <span className="result-handle">@{user.username}</span>
+                <span className="result-handle">
+                  @
+                  {highlightSearchNeedle(user.username, submitted)}
+                </span>
                 {/* The bio is the snippet when the account has one; the facts
                     drop to their own line under it. Most authors are ingested
                     as tweet-author stubs and carry no bio at all. */}
                 {user.description ? (
-                  <p className="result-snippet">{user.description}</p>
+                  <p className="result-snippet">
+                    {highlightSearchNeedle(user.description, submitted)}
+                  </p>
                 ) : null}
-                <p className="result-facts">{facts.join(" · ")}</p>
+                <p className="result-facts">
+                  {factNodes.map((part, i) => (
+                    <span key={i}>
+                      {i > 0 ? " · " : null}
+                      {part}
+                    </span>
+                  ))}
+                </p>
               </div>
             </li>
           );

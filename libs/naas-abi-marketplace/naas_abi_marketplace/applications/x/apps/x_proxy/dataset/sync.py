@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any
 
@@ -17,14 +16,12 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.cache.envelopes import (
     parse_envelope,
     slugify,
 )
-from naas_abi_marketplace.applications.x.apps.x_proxy.cache.schema import (
-    ENVELOPE_PREFIX,
-    KIND_MATCHED,
-    KIND_REFERENCED,
-)
+from naas_abi_marketplace.applications.x.apps.x_proxy.cache.schema import ENVELOPE_PREFIX
 from naas_abi_marketplace.applications.x.apps.x_proxy.cache.storage import split_key
+from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.author_stats import (
+    recompute_author_stats,
+)
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
-    AUTHOR_STATS_V1,
     AUTHORS_V1,
     COUNT_BUCKETS_V1,
     ENVELOPES_V1,
@@ -166,44 +163,6 @@ def _count_bucket_rows(doc: dict[str, Any], envelope_path: str) -> list[dict[str
     return rows
 
 
-def _author_stats_from_posts(post_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    stats: dict[str, dict[str, Any]] = defaultdict(
-        lambda: {
-            "matched_count": 0,
-            "referenced_count": 0,
-            "last_post_at": None,
-        }
-    )
-    for row in post_rows:
-        author_id = str(row.get("author_id") or "").strip()
-        if not author_id:
-            continue
-        bucket = stats[author_id]
-        kind = row.get("kind")
-        if kind == KIND_MATCHED:
-            bucket["matched_count"] += 1
-        elif kind == KIND_REFERENCED:
-            bucket["referenced_count"] += 1
-        created = row.get("created_at")
-        if isinstance(created, datetime):
-            prev = bucket["last_post_at"]
-            if prev is None or created > prev:
-                bucket["last_post_at"] = created
-    now = _utc_now()
-    out: list[dict[str, Any]] = []
-    for author_id, bucket in stats.items():
-        out.append(
-            {
-                "author_id": author_id,
-                "matched_count": int(bucket["matched_count"]),
-                "referenced_count": int(bucket["referenced_count"]),
-                "last_post_at": bucket["last_post_at"] or now,
-                "updated_at": now,
-            }
-        )
-    return out
-
-
 def _serialize_post_row(row: dict[str, Any]) -> dict[str, Any]:
     created = row["created_at"]
     if isinstance(created, str):
@@ -281,8 +240,6 @@ def sync_envelope_paths(
     batch_post_media: list[dict[str, Any]] = []
     batch_counts: list[dict[str, Any]] = []
     batch_envelopes: list[dict[str, Any]] = []
-    batch_author_stats: list[dict[str, Any]] = []
-
     now = _utc_now()
 
     for envelope_path in envelope_paths:
@@ -300,8 +257,6 @@ def sync_envelope_paths(
         post_rows, author_rows = parse_envelope(doc)
         batch_posts.extend(_serialize_post_row(row) for row in post_rows)
         batch_authors.extend(_serialize_author_row(row) for row in author_rows)
-        batch_author_stats.extend(_author_stats_from_posts(post_rows))
-
         media_rows, post_media_rows = _media_rows(doc)
         batch_media.extend(media_rows)
         batch_post_media.extend(post_media_rows)
@@ -322,7 +277,15 @@ def sync_envelope_paths(
 
     posts_written = upsert_table(dataset, POSTS_V1, batch_posts)
     authors_written = upsert_table(dataset, AUTHORS_V1, batch_authors)
-    upsert_table(dataset, AUTHOR_STATS_V1, batch_author_stats)
+    touched_author_ids = sorted(
+        {
+            str(row.get("author_id") or "").strip()
+            for row in batch_posts
+            if str(row.get("author_id") or "").strip()
+        }
+    )
+    if touched_author_ids:
+        recompute_author_stats(dataset, touched_author_ids)
     upsert_table(dataset, MEDIA_V1, batch_media)
     upsert_table(dataset, POST_MEDIA_V1, batch_post_media)
     upsert_table(dataset, COUNT_BUCKETS_V1, batch_counts)
@@ -356,4 +319,10 @@ def sync_envelope_paths(
         "commit_id": commit_id,
     }
     logger.info(f"sync_envelope_paths: {summary}")
+    if ingested > 0 or posts_written > 0 or authors_written > 0:
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.read_cache import (
+            publish_read_cache_generation,
+        )
+
+        publish_read_cache_generation(module, commit_id)
     return summary

@@ -108,6 +108,7 @@ def ensure_x_datasets(dataset: IDatasetPort) -> None:
                 ColumnSpec(name="author_id", type="string"),
                 ColumnSpec(name="matched_count", type="integer"),
                 ColumnSpec(name="referenced_count", type="integer"),
+                ColumnSpec(name="first_post_at", type="timestamp"),
                 ColumnSpec(name="last_post_at", type="timestamp"),
                 ColumnSpec(name="updated_at", type="timestamp"),
             ),
