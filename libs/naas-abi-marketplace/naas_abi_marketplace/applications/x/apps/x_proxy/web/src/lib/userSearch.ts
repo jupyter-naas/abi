@@ -79,9 +79,39 @@ export type UserFeed = {
 };
 
 let indexPromise: Promise<UserIndex> | null = null;
+let datasetApiPromise: Promise<boolean> | null = null;
 const shardPromises = new Map<string, Promise<ShardDoc | null>>();
 const directUserPromises = new Map<string, Promise<UserBundle | null>>();
 const directPostPromises = new Map<string, Promise<TweetRow | null>>();
+
+async function datasetApiEnabled(): Promise<boolean> {
+  if (!datasetApiPromise) {
+    datasetApiPromise = getJson<{ users?: unknown[] }>(
+      `dataset/users/search.json?q=&page=0&per_page=1`,
+    ).then((doc) => doc !== null && Array.isArray(doc.users));
+  }
+  return datasetApiPromise;
+}
+
+function mapDatasetPost(row: Record<string, unknown>): TweetRow {
+  const tweetId = String(row.tweet_id || "");
+  const username = String(row.username || "");
+  const handle = username ? `@${username}` : "";
+  return {
+    url: tweetId ? `https://x.com/i/status/${tweetId}` : "",
+    created_at: String(row.created_at || ""),
+    text: String(row.full_text || row.text || ""),
+    author: handle,
+    username,
+    lang: String(row.lang || ""),
+    like_count: Number(row.like_count || 0),
+    retweet_count: Number(row.retweet_count || 0),
+    reply_count: Number(row.reply_count || 0),
+    referenced: row.kind === "referenced",
+    media_url: String(row.media_urls || ""),
+    queries: row.query_slug ? [String(row.query_slug)] : [],
+  };
+}
 
 async function getJson<T>(path: string): Promise<T | null> {
   let res: Response;
@@ -129,7 +159,37 @@ function loadDirectUser(username: string): Promise<UserBundle | null> {
 /** Every author in the tweet graph, busiest first. Memoised per session. */
 export function loadUserIndex(): Promise<UserIndex> {
   if (!indexPromise) {
-    indexPromise = getJson<IndexDoc>("search_users/users.json").then((doc) => {
+    indexPromise = (async () => {
+      if (await datasetApiEnabled()) {
+        const doc = await getJson<{
+          users?: Record<string, unknown>[];
+        }>(
+          `dataset/users/search.json?q=&page=0&per_page=5000`,
+        );
+        if (doc?.users) {
+          const users: UserRow[] = [];
+          const shardOf = new Map<string, string>();
+          for (const row of doc.users) {
+            const username = String(row.username || "");
+            if (!username) continue;
+            users.push({
+              username,
+              posts:
+                Number(row.matched_count || 0) +
+                Number(row.referenced_count || 0),
+              last_post_at: String(row.last_post_at || ""),
+              location: String(row.location || ""),
+              verified_type: String(row.verified_type || ""),
+              description: String(row.description || ""),
+              display_name: String(row.display_name || ""),
+            });
+            shardOf.set(username, "dataset");
+          }
+          return { users, shardOf };
+        }
+      }
+      return getJson<IndexDoc>("search_users/users.json").then((legacy) => {
+      const doc = legacy;
       const users: UserRow[] = [];
       const shardOf = new Map<string, string>();
       for (const row of doc?.users || []) {
@@ -155,7 +215,8 @@ export function loadUserIndex(): Promise<UserIndex> {
         shardOf.set(username, shard);
       }
       return { users, shardOf };
-    });
+      });
+    })();
   }
   return indexPromise;
 }
@@ -180,6 +241,22 @@ export async function loadUserBundle(
 ): Promise<UserBundle | null> {
   const direct = await loadDirectUser(username);
   if (direct) return direct;
+  if (await datasetApiEnabled()) {
+    const key = username.toLowerCase().replace(/^@/, "");
+    const doc = await getJson<{
+      profile?: Record<string, unknown>;
+      posts?: Record<string, unknown>[];
+    }>(
+      `dataset/users/${encodeURIComponent(key)}/posts.json?page=0&per_page=5000`,
+    );
+    if (doc?.profile) {
+      const profile = doc.profile as UserProfile;
+      const posts = (doc.posts || []).map((row) =>
+        mapDatasetPost(row as Record<string, unknown>),
+      );
+      return { profile, posts };
+    }
+  }
   const { shardOf } = await loadUserIndex();
   const shard = shardOf.get(username);
   if (!shard) return null;

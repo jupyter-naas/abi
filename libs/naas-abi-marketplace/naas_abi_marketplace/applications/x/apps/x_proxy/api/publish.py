@@ -86,6 +86,7 @@ def publish_app(
     full_users: bool = False,
     use_cache: bool = True,
     direct_user_limit: int = 100,
+    skip_user_shards: bool = False,
 ) -> dict[str, Any]:
     """Run every page/element script and publish the web static export.
 
@@ -135,9 +136,12 @@ def publish_app(
             )
     globals_doc = publish_globals(ctx)
     tweets_doc = publish_tweets_page(ctx)
-    users_doc = publish_users_page(
-        ctx, full=full_users, direct_user_limit=direct_user_limit
-    )
+    if skip_user_shards:
+        users_doc = {"skipped": True, "reason": "dataset_read_enabled"}
+    else:
+        users_doc = publish_users_page(
+            ctx, full=full_users, direct_user_limit=direct_user_limit
+        )
 
     web = upload_web_export(object_storage, ctx.app_prefix, required=require_web)
 

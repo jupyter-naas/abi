@@ -7,9 +7,9 @@ written under that entry's ``prefix`` (the JSON files
 :class:`XSearchRecentTweetsPipeline` in ``file_path`` mode to map the full
 SearchQuery / SearchResultSet / SearchRecentTweets structure into the graph.
 This is the event-system pay-off: the search workflow only fetches and saves;
-the put event then drives all graph mapping here, with no polling. Set
-``app_publish: true`` on an entry to also republish the Recent Tweets app
-(``x/apps/x_proxy/``) after each successful map; it is off by default and the hourly
+the put event then drives graph mapping, DuckLake dataset sync, and (when
+``app_publish: true``) republish of the Recent Tweets app (``x/apps/x_proxy/``)
+here — with no polling. App republish is off by default; the hourly
 ``x_build_app_x_proxy`` schedule keeps the dashboard fresh instead.
 
 Each entry's sensor, watched prefix and ingestion knobs (persist, events drained
@@ -126,26 +126,11 @@ def _envelope_query(module, file_path: str) -> str | None:
     return None
 
 
-def _map_search_envelope(
+def _graph_ingest_search_envelope(
     op_cfg: dict, event_cfg: XSearchRecentTweetsEventConfiguration
 ) -> dict:
-    """Map one persisted search envelope into the graph via the search pipeline.
-
-    Counts are followed **after** the map, so the count window is resolved from
-    a graph that already contains this envelope's tweets — the newest
-    ``tweet_created_at`` is what decides which clock hours are countable. The
-    workflow throttles its own partial refresh, so this runs per envelope
-    without hitting the counts endpoint per envelope.
-
-    A pipeline run rebuilds the app dataset only when ``app_publish`` is turned
-    on (per entry, or per run from the launchpad) — off by default, since a
-    rebuild reads the whole graph and every envelope would pay for it. The web
-    app serves that dataset straight from object storage and runs no queries of
-    its own, so with ``app_publish`` off the dashboard follows the hourly
-    ``x_build_app_x_proxy`` schedule instead of each envelope.
-    """
+    """Map one envelope into the graph (ObjectPut primary ingestion path)."""
     from naas_abi_marketplace.applications.x.orchestrations.utils import (
-        republish_x_app_after_pipeline,
         run_count_for_query,
     )
 
@@ -181,6 +166,35 @@ def _map_search_envelope(
                 f"tweets were still mapped"
             )
 
+    return {"file_path": file_path, "op_cfg": op_cfg}
+
+
+def _dataset_sync_search_envelope(
+    module,
+    ingested: dict,
+    *,
+    context=None,
+) -> dict:
+    from naas_abi_marketplace.applications.x.orchestrations.utils._common import (
+        sync_x_dataset_paths,
+    )
+
+    file_path = ingested["file_path"]
+    dataset_sync = sync_x_dataset_paths(module, [file_path], context=context)
+    return {**ingested, "dataset": dataset_sync}
+
+
+def _app_publish_search_envelope(
+    module,
+    event_cfg: XSearchRecentTweetsEventConfiguration,
+    ingested: dict,
+) -> dict:
+    from naas_abi_marketplace.applications.x.orchestrations.utils import (
+        republish_x_app_after_pipeline,
+    )
+
+    file_path = ingested["file_path"]
+    op_cfg = ingested.get("op_cfg") or {}
     app = republish_x_app_after_pipeline(
         module,
         source=(
@@ -188,8 +202,9 @@ def _map_search_envelope(
             f"after mapping {file_path}"
         ),
         app_publish=launchpad_override(op_cfg, "app_publish", event_cfg.app_publish),
+        ran=True,
     )
-    return {"file_path": file_path, "app": app}
+    return {**ingested, "app": app}
 
 
 def _build_search_recent_tweets_event_sensor(
@@ -221,15 +236,29 @@ def _build_search_recent_tweets_event_sensor(
     safe = safe_name(event_cfg.name)
     job_name = f"x_ingest_recent_tweets_events_{safe}"
     pipeline_op_name = f"x_pipeline_recent_tweets_op_{safe}"
+    dataset_op_name = f"x_dataset_sync_recent_tweets_op_{safe}"
+    app_op_name = f"x_app_publish_recent_tweets_op_{safe}"
     sensor_name = f"x_sensor_recent_tweets_put_{safe}"
 
     @dg.op(name=pipeline_op_name, config_schema=_PIPELINE_CONFIG_SCHEMA)
     def search_pipeline_op(context) -> dict:
-        return _map_search_envelope(context.op_config or {}, event_cfg)
+        return _graph_ingest_search_envelope(context.op_config or {}, event_cfg)
+
+    @dg.op(name=dataset_op_name, tags={"x_dataset_sync": "1"})
+    def dataset_sync_op(context, ingested: dict) -> dict:
+        module = ABIModule.get_instance()
+        return _dataset_sync_search_envelope(module, ingested, context=context)
+
+    @dg.op(name=app_op_name)
+    def app_publish_op(_context, ingested: dict) -> dict:
+        module = ABIModule.get_instance()
+        return _app_publish_search_envelope(module, event_cfg, ingested)
 
     @dg.job(name=job_name, executor_def=dg.in_process_executor)
     def search_ingestion_job():
-        search_pipeline_op()
+        mapped = search_pipeline_op()
+        synced = dataset_sync_op(mapped)
+        app_publish_op(synced)
 
     @dg.sensor(
         name=sensor_name,

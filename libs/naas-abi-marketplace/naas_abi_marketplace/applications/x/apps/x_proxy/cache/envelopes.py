@@ -23,6 +23,9 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.cache.schema import (
     KIND_MATCHED,
     KIND_REFERENCED,
 )
+from naas_abi_marketplace.applications.x.pipelines.utils.build_media import (
+    best_media_url,
+)
 
 # Envelope object keys start with the tick's ISO timestamp, but the archive holds
 # two spellings: early files replaced every ``:`` with ``_``
@@ -85,7 +88,7 @@ def _media_by_key(includes: dict) -> dict[str, str]:
     for media in includes.get("media") or []:
         key = media.get("media_key")
         if key:
-            out[key] = media.get("url") or media.get("preview_image_url") or ""
+            out[key] = best_media_url(media) or media.get("preview_image_url") or ""
     return out
 
 
