@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MediaCarousel } from "@/components/MediaCarousel";
+import {
+  MediaCarousel,
+  MediaProcessingPlaceholder,
+} from "@/components/MediaCarousel";
 import { withAccessToken } from "@/lib/routes";
 
 const APP_BASE = "/app-html/x/apps/x_proxy";
@@ -21,33 +24,67 @@ type Props = {
  * Fetches and stores tweet media on first view when catalog rows are still pending.
  */
 export function PostMediaCarousel({ tweetId, value }: Props) {
+  const mustEnsure = Boolean(tweetId && value.trim() && needsRuntimeEnsure(value));
   const [resolved, setResolved] = useState(value);
+  const [processing, setProcessing] = useState(mustEnsure);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     setResolved(value);
-  }, [value]);
+    setFailed(false);
+    setProcessing(Boolean(tweetId && value.trim() && needsRuntimeEnsure(value)));
+  }, [tweetId, value]);
 
   useEffect(() => {
-    if (!tweetId || !value.trim()) return;
-    if (!needsRuntimeEnsure(value)) return;
+    if (!mustEnsure) return;
 
     let live = true;
+    setProcessing(true);
+    setFailed(false);
+
     fetch(
       withAccessToken(
-        `${APP_BASE}/dataset/posts/${encodeURIComponent(tweetId)}/media.json`,
+        `${APP_BASE}/dataset/posts/${encodeURIComponent(tweetId!)}/media.json`,
       ),
     )
-      .then((res) => (res.ok ? res.json() : null))
-      .then((doc) => {
-        if (!live || !doc?.media_urls) return;
-        setResolved(String(doc.media_urls));
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json() as Promise<{ media_urls?: string }>;
       })
-      .catch(() => undefined);
+      .then((doc) => {
+        if (!live) return;
+        const urls = String(doc?.media_urls || "").trim();
+        if (urls) {
+          setResolved(urls);
+        } else {
+          setFailed(true);
+        }
+      })
+      .catch(() => {
+        if (live) setFailed(true);
+      })
+      .finally(() => {
+        if (live) setProcessing(false);
+      });
 
     return () => {
       live = false;
     };
-  }, [tweetId, value]);
+  }, [tweetId, mustEnsure]);
+
+  if (processing) {
+    return <MediaProcessingPlaceholder label="Processing media…" />;
+  }
+
+  if (failed && needsRuntimeEnsure(resolved)) {
+    return (
+      <div className="media-carousel">
+        <div className="media-frame media-frame-loading">
+          <span className="media-loader-label">Media could not be processed</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!resolved.trim()) return null;
   return <MediaCarousel value={resolved} />;
