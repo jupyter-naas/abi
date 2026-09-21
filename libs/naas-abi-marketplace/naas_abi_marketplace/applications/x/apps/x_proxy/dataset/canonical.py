@@ -48,6 +48,20 @@ canonical_posts AS (
 CANONICAL_WITH_AUTHORS_CTE = (
     CANONICAL_POSTS_CTE
     + """,
+authors_deduped AS (
+  SELECT * EXCLUDE (_author_rn)
+  FROM (
+    SELECT
+      a.*,
+      ROW_NUMBER() OVER (
+        PARTITION BY a.author_id
+        ORDER BY a.seen_at DESC NULLS LAST, a.username
+      ) AS _author_rn
+    FROM {authors} a
+    WHERE a.author_id <> ''
+  ) ranked_authors
+  WHERE _author_rn = 1
+),
 canonical_enriched AS (
   SELECT
     p.tweet_id,
@@ -65,7 +79,7 @@ canonical_enriched AS (
     COALESCE(a.display_name, '') AS display_name,
     COALESCE(a.description, '') AS description
   FROM canonical_posts p
-  LEFT JOIN {authors} a ON p.author_id = a.author_id
+  LEFT JOIN authors_deduped a ON p.author_id = a.author_id
 )
 """
 )
