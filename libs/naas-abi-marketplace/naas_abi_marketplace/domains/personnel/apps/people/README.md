@@ -37,8 +37,20 @@ python -m naas_abi_marketplace.domains.personnel.apps.people.scripts.export_peop
 
 The exporter runs the competency queries in
 `ontologies/queries/PersonnelSparqlQueries.ttl` and writes nine tables. It
-refuses to publish an email address or a phone number: a directory is not a
-place for contact details.
+refuses to publish an email address or a phone number anywhere in the text.
+
+Contact details have one way through. A source states them on the person
+(`person.email`, `person.phone`, `person.linkedin_url`). The pipeline writes them
+as the `personnel:email_address`, `personnel:telephone_number` and
+`personnel:linkedin_url` data properties of `abi:Person`. The exporter puts them
+in the `email`, `phone` and `linkedin_url` columns of `people`, checked for
+shape, and only when `privacy.publish_contact_details` is true; otherwise those
+columns are left empty. The profile header shows each one that a person has,
+under `profile.contact`. They are never searchable, never a facet and never a
+fact.
+
+`linkedin_url` is the person's own LinkedIn page. `linkedin_profile_url` is the
+page their profile was *read from*, shown under Sources, and can be any site.
 
 | Table | One row per |
 |---|---|
@@ -63,9 +75,10 @@ Everything below is `config.yaml`. Nothing here needs a code change.
 | `app.pages` | Which of the three pages exist, their labels, URL segments and order |
 | `search` | Which fields are searchable and how heavily they weight, the facet field and its label, snippet length, autocomplete threshold, page size, the example queries on the home page |
 | `profile.facts` | The row under the name on a profile |
+| `profile.contact` | Email, phone and LinkedIn links under the place line, in this order |
 | `profile.sections` | Which sections appear, in what order, under what title, and what each says when it is empty |
 | `data` | The dataset namespace and the table names to read |
-| `privacy` | What the exporter refuses to publish |
+| `privacy` | What the exporter refuses to publish, and `publish_contact_details` |
 
 **Your own logo and favicon:** drop the files in `web/assets/`, then name them:
 

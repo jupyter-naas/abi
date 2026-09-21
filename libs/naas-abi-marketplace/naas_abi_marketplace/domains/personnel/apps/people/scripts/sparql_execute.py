@@ -37,12 +37,19 @@ def personnel_graph(graph_file: str | None = None) -> Graph:
     return graph
 
 
+# Query variables that carry a person's contact details. An instance that does
+# not publish them (privacy.publish_contact_details) must not leak them through
+# the query modal either, so the route hides these columns.
+CONTACT_VARIABLES = ("emailAddress", "telephoneNumber", "linkedinUrl")
+
+
 def execute_profile_query(
     query_name: str,
     slug: str,
     *,
     max_rows: int = DEFAULT_MAX_ROWS,
     graph_file: str | None = None,
+    hidden_columns: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Run one allowed competency query and return tabular results."""
     if query_name not in PROFILE_QUERY_NAMES:
@@ -63,7 +70,7 @@ def execute_profile_query(
                 break
             values = row.asdict()
             if not columns:
-                columns = list(values.keys())
+                columns = [key for key in values if key not in hidden_columns]
             rows.append(
                 [
                     None if values.get(column) is None else str(values[column])

@@ -33,6 +33,7 @@ from naas_abi_marketplace.domains.personnel.apps.people.scripts.ontology_payload
     build_ontology_payload,
 )
 from naas_abi_marketplace.domains.personnel.apps.people.scripts.sparql_execute import (
+    CONTACT_VARIABLES,
     SparqlExecutionError,
     execute_profile_query,
 )
@@ -114,6 +115,9 @@ def build_router(config_path: Path | None = None) -> APIRouter:
                 slug,
                 max_rows=max_rows,
                 graph_file=settings["data"]["graph"]["file"],
+                hidden_columns=()
+                if settings["privacy"].get("publish_contact_details")
+                else CONTACT_VARIABLES,
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc

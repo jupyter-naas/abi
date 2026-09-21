@@ -89,7 +89,9 @@ def check_privacy(value: Any, *, where: str, config: dict[str, Any]) -> Any:
     return value
 
 
-def check_contact(column: str, value: Any, *, where: str, config: dict[str, Any]) -> Any:
+def check_contact(
+    column: str, value: Any, *, where: str, config: dict[str, Any]
+) -> Any:
     """Publish a contact detail only when the instance opts in, and only if it is one.
 
     An instance that has not set ``privacy.publish_contact_details`` gets the

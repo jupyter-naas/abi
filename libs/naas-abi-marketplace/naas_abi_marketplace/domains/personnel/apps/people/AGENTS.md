@@ -81,9 +81,13 @@ Which sections are **process-shaped** (ActOfWorking / ActOfStudying) vs **person
 - **Nothing is computed that a source did not state.** `years_of_experience` is
   a claim carried by the profile summary, not a sum over acts of working. A
   period shows the dates and the source's own duration label.
-- **No contact details.** The exporter refuses an email address or a run of nine
-  or more digits, and the test suite pins both. Eight digits pass so that
-  `2018-2021` is not mistaken for a phone number.
+- **Contact details go in their own columns only.** The exporter refuses an
+  email address or a run of nine or more digits in any other column, and the
+  test suite pins both. Eight digits pass so that `2018-2021` is not mistaken
+  for a phone number. `people.email`, `people.phone` and `people.linkedin_url`
+  are the exception: shape-checked, and empty unless
+  `privacy.publish_contact_details` is true. Do not add them to
+  `PERSON_FIELDS`. That would make them searchable and usable as facets.
 - **Portraits are addresses, not bytes.** `people.photo_url` points at object
   storage or a published page. The demo ships abstract marks, not invented faces.
 - **No branding in code.** The logo and the favicon come from `web/assets/` by way
