@@ -70,19 +70,39 @@ export function buildOntologyGraph(payload) {
   return { nodes, edges: mergeReciprocal([...edges.values()]) };
 }
 
-/** The relations on, then only the terms in the chosen buckets and not hidden by hand. */
-export function filterGraph(graph, { hierarchy, restrictions, properties }, buckets = new Set(), hidden = new Set(), keep = null) {
-  const wanted = (edge) =>
-    edge.relation === "hierarchy" ? hierarchy : edge.relation === "restriction" ? restrictions : properties;
-  const nodes = graph.nodes.filter(
-    (node) =>
-      (!keep || keep.has(node.id)) && (!buckets.size || buckets.has(node.bucket)) && !hidden.has(node.id),
-  );
-  const visible = new Set(nodes.map((node) => node.id));
-  return {
-    nodes,
-    edges: graph.edges.filter((edge) => wanted(edge) && visible.has(edge.source) && visible.has(edge.target)),
-  };
+const isWanted = ({ hierarchy, restrictions, properties }) => (edge) =>
+  edge.relation === "hierarchy" ? hierarchy : edge.relation === "restriction" ? restrictions : properties;
+
+/**
+ * The terms a connection in the families that are on reaches, within ``keep``
+ * (the terms of one file, or every term when null). A class a file names is not
+ * one of them when the only thing linking it to the others is a family that is
+ * off: ``Role`` is in a process slice as ``subClassOf abi:Role``, so with the
+ * hierarchy off it has nothing to be drawn with. The bucket and hand filters
+ * do not change this, so the bucket panel can list the same terms.
+ */
+export function connectedNodes(graph, families, keep = null) {
+  const wanted = isWanted(families);
+  const inFile = (id) => !keep || keep.has(id);
+  const linked = new Set();
+  for (const edge of graph.edges) {
+    if (wanted(edge) && inFile(edge.source) && inFile(edge.target)) {
+      linked.add(edge.source);
+      linked.add(edge.target);
+    }
+  }
+  return graph.nodes.filter((node) => linked.has(node.id));
+}
+
+/**
+ * What is drawn: the connected terms, only those in the chosen buckets and not
+ * hidden by hand, and the connections among them.
+ */
+export function filterGraph(graph, families, buckets = new Set(), hidden = new Set(), keep = null) {
+  const wanted = isWanted(families);
+  const nodes = connectedNodes(graph, families, keep).filter((node) => (!buckets.size || buckets.has(node.bucket)) && !hidden.has(node.id));
+  const shown = new Set(nodes.map((node) => node.id));
+  return { nodes, edges: graph.edges.filter((edge) => wanted(edge) && shown.has(edge.source) && shown.has(edge.target)) };
 }
 
 /** The terms of one bucket, by name, for the bucket panel's checklist. */

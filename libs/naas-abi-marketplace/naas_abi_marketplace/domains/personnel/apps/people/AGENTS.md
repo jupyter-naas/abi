@@ -131,6 +131,21 @@ Which sections are **process-shaped** (ActOfWorking / ActOfStudying / ActOfCerti
 - **The ontology is one merged document.** The first file entry is the module and
   every process slice read as one graph, so a class the slices restate is one
   block (`merged_turtle`); the individual files stay listed under it.
+- **The canvas draws only classes a visible connection reaches.** A file that
+  says `subClassOf abi:Role` names `Role`, but with the hierarchy off nothing
+  links it, so it is not drawn (`filterGraph` drops every class left without an
+  edge, after the family, bucket and hidden-by-hand filters). The bucket panel
+  still lists such a class, dimmed, so it can be found. Pinned in
+  `web/lib/ontology-graph.test.js`.
+- **The Turtle panel is resizable.** A handle on its right edge (drag, arrow keys,
+  Home or double-click to reset) sets its width, kept between 240px and what
+  leaves the network 320px, and remembered in `localStorage`. Stacked under 900px
+  wide it keeps its fixed height and the handle is hidden.
+- **Zones can be switched off, in two levels.** "Zone Top Level" (the OCCURRENTS /
+  CONTINUANTS bands) and "Zone BFO 7 Buckets" (a zone per bucket) are separate
+  checkboxes, BFO zones layout only, both on by default; each hides its zones
+  with their titles (`setZonesVisible`). It is drawing only: the cards, the side
+  rules and the routing do not change, so nothing is re-laid out.
 - **Nothing is computed that a source did not state.** `years_of_experience` is
   a claim carried by the profile summary, not a sum over acts of working. A
   period shows the dates and the source's own duration label.

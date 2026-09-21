@@ -57,6 +57,8 @@ export function mountNetwork(host, { onSelectNode, onSelectEdge, onOpenNode } = 
   let geometryKey = "";
   let zones = [];
   let bands = [];
+  let showBands = true; // the OCCURRENTS / CONTINUANTS bands and their titles
+  let showBuckets = true; // the bucket zones and their titles
   let room = {}; // what the layout left outside the outermost cards
   let sidesOf = null; // which sides connectors use, in the BFO zone layout only
   let view = { scale: 1, x: 0, y: 0 }; // screen = world * scale + (x, y)
@@ -163,7 +165,7 @@ export function mountNetwork(host, { onSelectNode, onSelectEdge, onOpenNode } = 
   /** The realm bands and the bucket zones, under everything else. */
   function drawZones() {
     ctx.save();
-    bands.forEach((band, i) => {
+    (showBands ? bands : []).forEach((band, i) => {
       if (i === 0 && bands.length > 1) {
         ctx.fillStyle = "rgba(16, 18, 27, 0.03)";
         ctx.fillRect(band.x, band.y, band.width, band.height);
@@ -184,7 +186,7 @@ export function mountNetwork(host, { onSelectNode, onSelectEdge, onOpenNode } = 
       ctx.fillText(band.label, band.x + 20, band.y + 14);
       if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
     });
-    for (const zone of zones) {
+    for (const zone of showBuckets ? zones : []) {
       ctx.fillStyle = withAlpha(zone.color, 0.07);
       ctx.fillRect(zone.x, zone.y, zone.width, zone.height);
       ctx.strokeStyle = withAlpha(zone.color, 0.55);
@@ -503,6 +505,15 @@ export function mountNetwork(host, { onSelectNode, onSelectEdge, onOpenNode } = 
       colors = readColors();
       if (refit) fit({ minScale: layout === "network" ? 0.5 : 0.35, maxScale: AUTO_FIT_MAX });
       else draw();
+    },
+    /**
+     * Which zones are drawn, each with its title: the top level (Occurrents,
+     * Continuants) and the seven buckets. The cards do not move.
+     */
+    setZonesVisible({ topLevel = showBands, buckets = showBuckets } = {}) {
+      showBands = Boolean(topLevel);
+      showBuckets = Boolean(buckets);
+      draw();
     },
     setSelection({ nodeId = null, edgeId = null } = {}) {
       selectedNode = nodeId;

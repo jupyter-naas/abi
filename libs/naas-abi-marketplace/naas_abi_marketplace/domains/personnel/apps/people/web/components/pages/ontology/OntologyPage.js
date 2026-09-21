@@ -9,7 +9,7 @@ import { fetchOntology } from "../../../lib/api.js";
 import { BFO_BUCKETS, bfoColor, configureBfoBuckets } from "../../../lib/bfo-buckets.js";
 import { escapeHtml, ICONS } from "../../../lib/dom.js";
 import { mountNetwork } from "../../../lib/network-canvas.js";
-import { buildOntologyGraph, connectionsOf, filterGraph, nodesPerBucket, termsInSource } from "../../../lib/ontology-graph.js";
+import { buildOntologyGraph, connectedNodes, connectionsOf, filterGraph, nodesPerBucket, termsInSource } from "../../../lib/ontology-graph.js";
 import { classSearchEntry, searchClasses } from "../../../lib/ontology-search.js";
 import { searchHref } from "../../../lib/routes.js";
 import { highlightTurtle } from "./ttl-highlight.js";
@@ -61,6 +61,7 @@ export async function mountOntology(view, { config }) {
     restrictions: true,
     properties: false,
     layout: "network",
+    zones: { topLevel: true, buckets: true }, // drawn in the BFO zones layout: Occurrents/Continuants, and the 7 buckets
     file: ALL_FILES,
     buckets: new Set(),
     hidden: new Set(),
@@ -85,6 +86,8 @@ export async function mountOntology(view, { config }) {
             <label title="Show the class hierarchy"><input type="checkbox" data-relation="hierarchy" />Hierarchy</label>
             <label title="Show restrictions declared on the classes"><input type="checkbox" data-relation="restrictions" checked />Restrictions</label>
             <label title="Show object property relationships"><input type="checkbox" data-relation="properties" />Properties</label>
+            <label class="ontology-zones-toggle ontology-zones-first" title="Show the top-level zones and their titles: Occurrents and Continuants"><input type="checkbox" data-zone="topLevel" checked />Zone Top Level</label>
+            <label class="ontology-zones-toggle" title="Show a zone and its title for each BFO bucket: Who, What, When, Where, Why, How it is, How we know"><input type="checkbox" data-zone="buckets" checked />Zone BFO 7 Buckets</label>
           </div>
           <label class="ontology-select">Layout
             <select class="ontology-layout-select">
@@ -109,6 +112,8 @@ export async function mountOntology(view, { config }) {
         <div class="ontology-body">
           <aside class="ontology-source" aria-label="Ontology source" hidden>
             <pre class="ontology-code" tabindex="0"><code></code></pre>
+            <div class="ontology-resizer" role="separator" aria-orientation="vertical" tabindex="0"
+              aria-label="Resize the Turtle source" title="Drag to resize · double-click to reset"></div>
           </aside>
           <div class="ontology-canvas">
             <div class="ontology-viewport"></div>
@@ -126,6 +131,7 @@ export async function mountOntology(view, { config }) {
   const resultsEl = $(".ontology-class-results");
   const codeEl = $(".ontology-code code");
   const sourceEl = $(".ontology-source");
+  const zoneToggleEls = [...view.querySelectorAll(".ontology-zones-toggle")];
   const inspectorEl = $(".ontology-inspector");
   const bucketsEl = $(".ontology-buckets");
   const statusEl = $(".ontology-status");
@@ -144,11 +150,11 @@ export async function mountOntology(view, { config }) {
 
   const keepForFile = () => (state.file === ALL_FILES ? null : sourceTerms[Number(state.file)]);
 
-  /** Terms in the chosen file, before the bucket filters: what the bucket panel lists. */
-  function filedNodes() {
-    const keep = keepForFile();
-    return keep ? graph.nodes.filter((node) => keep.has(node.id)) : graph.nodes;
-  }
+  /**
+   * The terms the relations that are on connect, in the chosen file and before the
+   * bucket filters: what the bucket panel lists. The count it shows is what is drawn.
+   */
+  const filedNodes = () => connectedNodes(graph, state, keepForFile());
 
   function nodeStyle(node) {
     const palette = bfoColor(node.bucket);
@@ -186,6 +192,8 @@ export async function mountOntology(view, { config }) {
 
   function renderBuckets() {
     const perBucket = nodesPerBucket(filedNodes());
+    const drawn = new Set(visible.nodes.map((node) => node.id));
+    const drawnIn = (entries) => entries.filter((entry) => drawn.has(entry.id)).length;
     const anyActive = state.buckets.size > 0;
     bucketsEl.innerHTML = `
       <h2>BFO 7 Buckets</h2>
@@ -200,7 +208,7 @@ export async function mountOntology(view, { config }) {
             <button type="button" class="bucket-toggle" data-bucket="${escapeHtml(bucket.type)}" aria-pressed="${active}"
               title="${escapeHtml(bucket.label)} (${escapeHtml(bucket.type)}) — ${escapeHtml(BUCKET_DESCRIPTIONS[bucket.type] || "")}">
               <i style="background:${bucket.color}"></i><strong>${escapeHtml(bucket.label)}</strong>
-              ${entries.length ? `<span>${entries.length}</span>` : ""}
+              ${entries.length ? `<span title="${drawnIn(entries)} on the canvas">${drawnIn(entries)}</span>` : ""}
             </button>
             ${
               entries.length
@@ -213,8 +221,8 @@ export async function mountOntology(view, { config }) {
             expanded && entries.length
               ? `<div class="bucket-nodes">${entries
                   .map(
-                    (entry) => `<label><input type="checkbox" data-node="${escapeHtml(entry.id)}"
-                      ${state.hidden.has(entry.id) ? "" : "checked"} /><span>${escapeHtml(entry.label)}</span></label>`,
+                    (entry) => `<label${anyActive && !active ? ` title="Not in the chosen buckets"` : ""}><input type="checkbox" data-node="${escapeHtml(entry.id)}"
+                      ${drawn.has(entry.id) ? "checked" : ""} ${anyActive && !active ? "disabled" : ""} /><span>${escapeHtml(entry.label)}</span></label>`,
                   )
                   .join("")}</div>`
               : ""
@@ -370,8 +378,75 @@ export async function mountOntology(view, { config }) {
     network.resize();
   }
 
+  // ── Turtle panel width: drag the handle on its right edge (or use the arrow keys) ──
+  const SOURCE_WIDTH_KEY = "people.ontology.sourceWidth";
+  const SOURCE_MIN = 240;
+  const SOURCE_CANVAS_MIN = 320; // what the network keeps
+  const resizerEl = $(".ontology-resizer");
+
+  function setSourceWidth(px, { save = true } = {}) {
+    if (px === null) {
+      sourceEl.style.removeProperty("flex-basis");
+      resizerEl.removeAttribute("aria-valuenow");
+    } else {
+      const most = Math.max(SOURCE_MIN, $(".ontology-body").clientWidth - SOURCE_CANVAS_MIN);
+      const width = Math.round(Math.min(most, Math.max(SOURCE_MIN, px)));
+      sourceEl.style.flexBasis = `${width}px`;
+      resizerEl.setAttribute("aria-valuenow", String(width));
+      px = width;
+    }
+    if (!save) return;
+    try {
+      if (px === null) localStorage.removeItem(SOURCE_WIDTH_KEY);
+      else localStorage.setItem(SOURCE_WIDTH_KEY, String(px));
+    } catch {
+      /* private window or blocked storage: the width just is not remembered */
+    }
+  }
+
+  try {
+    const saved = Number(localStorage.getItem(SOURCE_WIDTH_KEY));
+    if (saved > 0) setSourceWidth(saved, { save: false });
+  } catch {
+    /* no stored width */
+  }
+
+  resizerEl.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    resizerEl.setPointerCapture(event.pointerId);
+    resizerEl.classList.add("is-dragging");
+  });
+  resizerEl.addEventListener("pointermove", (event) => {
+    if (!resizerEl.hasPointerCapture(event.pointerId)) return;
+    setSourceWidth(event.clientX - sourceEl.getBoundingClientRect().left, { save: false });
+  });
+  const endDrag = (event) => {
+    if (!resizerEl.hasPointerCapture(event.pointerId)) return;
+    resizerEl.releasePointerCapture(event.pointerId);
+    resizerEl.classList.remove("is-dragging");
+    setSourceWidth(sourceEl.getBoundingClientRect().width);
+  };
+  resizerEl.addEventListener("pointerup", endDrag);
+  resizerEl.addEventListener("pointercancel", endDrag);
+  resizerEl.addEventListener("dblclick", () => setSourceWidth(null));
+  resizerEl.addEventListener("keydown", (event) => {
+    const step = event.shiftKey ? 96 : 24;
+    const width = sourceEl.getBoundingClientRect().width;
+    if (event.key === "ArrowLeft") setSourceWidth(width - step);
+    else if (event.key === "ArrowRight") setSourceWidth(width + step);
+    else if (event.key === "Home") setSourceWidth(null);
+    else return;
+    event.preventDefault();
+  });
+
   // ── controls ──
   view.querySelector(".ontology-controls").addEventListener("change", (event) => {
+    const zone = event.target.dataset.zone;
+    if (zone) {
+      state.zones[zone] = event.target.checked;
+      network.setZonesVisible(state.zones);
+      return;
+    }
     const relation = event.target.dataset.relation;
     if (!relation) return;
     state[relation] = event.target.checked;
@@ -379,6 +454,7 @@ export async function mountOntology(view, { config }) {
   });
   $(".ontology-layout-select").addEventListener("change", (event) => {
     state.layout = event.target.value;
+    for (const el of zoneToggleEls) el.hidden = state.layout !== "network";
     render();
   });
   $(".ontology-file-select").addEventListener("change", (event) => {
@@ -409,7 +485,8 @@ export async function mountOntology(view, { config }) {
   bucketsEl.addEventListener("change", (event) => {
     const id = event.target.dataset.node;
     if (!id) return;
-    if (!state.hidden.delete(id)) state.hidden.add(id);
+    if (event.target.checked) state.hidden.delete(id);
+    else state.hidden.add(id);
     render({ refit: false });
   });
 

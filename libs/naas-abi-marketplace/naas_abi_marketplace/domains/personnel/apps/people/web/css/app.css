@@ -1409,6 +1409,16 @@ body.is-ontology-view main > .ontology-page {
   cursor: pointer;
 }
 
+.ontology-controls label[hidden] {
+  display: none;
+}
+
+/* Not a relationship: set apart from the three that are. */
+.ontology-controls .ontology-zones-first {
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+
 .ontology-controls input {
   width: 13px;
   height: 13px;
@@ -1476,6 +1486,7 @@ body.is-ontology-view main > .ontology-page {
 }
 
 .ontology-source {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 0 0 min(440px, 38%);
@@ -1487,6 +1498,39 @@ body.is-ontology-view main > .ontology-page {
 
 .ontology-source[hidden] {
   display: none;
+}
+
+/* The handle on the panel's right edge: 10px to grab, a 2px line when in use. */
+.ontology-resizer {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  bottom: 0;
+  z-index: 3;
+  width: 10px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.ontology-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 2px;
+  background: transparent;
+  transition: background 0.12s;
+}
+
+.ontology-resizer:hover::after,
+.ontology-resizer:focus-visible::after,
+.ontology-resizer.is-dragging::after {
+  background: var(--accent, #2563eb);
+}
+
+.ontology-resizer:focus-visible {
+  outline: none;
 }
 
 .ontology-code {
@@ -2069,9 +2113,13 @@ body.is-ontology-view main > .ontology-page {
   }
 
   .ontology-source {
-    flex: 0 0 34%;
+    flex: 0 0 34% !important; /* stacked: the width the handle sets does not apply */
     border-right: 0;
     border-bottom: 1px solid var(--line);
+  }
+
+  .ontology-resizer {
+    display: none;
   }
 
   .ontology-title {
