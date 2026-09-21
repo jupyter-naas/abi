@@ -1,10 +1,12 @@
-"""Explorer projections use an in-memory RDF dataset; no engine or live data."""
+"""Explorer projections use RDFLib, with optional Fuseki compatibility checks."""
 
+import os
 import unittest
 from types import SimpleNamespace
 from typing import Any, Never, cast
 from unittest.mock import AsyncMock, patch
 
+import requests
 from naas_abi.apps.nexus.apps.api.app.services.graph.explorer import (
     catalog,
     instances,
@@ -239,6 +241,42 @@ class ExplorerProjectionTest(unittest.TestCase):
         self.assertEqual(empty["relations"], [])
         self.assertEqual(empty["neighbors"], [])
         self.assertFalse(empty["relations_truncated"])
+
+    @unittest.skipUnless(
+        os.environ.get("FUSEKI_TEST_QUERY_URL"),
+        "Set FUSEKI_TEST_QUERY_URL to an isolated Fuseki query endpoint",
+    )
+    def test_generated_queries_execute_on_fuseki(self) -> None:
+        """Exercise every projection query on Jena as well as RDFLib.
+
+        The fixture supplies rows to generate dependent queries. Fuseki only
+        receives SELECT queries, so this test does not change its dataset.
+        """
+        queries: list[str] = []
+        dataset = self.store
+
+        class RecordingStore:
+            def query(self, query: str) -> Any:
+                queries.append(query)
+                return dataset.query(query)
+
+        store = RecordingStore()
+        catalog(store, self.packs, [G1, G2], SCHEMA)
+        overview(store, self.packs, [G1, G2], SCHEMA)
+        instances(store, [G1, G2], [str(PERSON)], "Alice", 0, 50, SCHEMA)
+        network(store, [G1], [str(EMPLOYEE)], "", 0, 50, SCHEMA)
+        for query in dict.fromkeys(queries):
+            with self.subTest(query=query):
+                response = requests.post(
+                    os.environ["FUSEKI_TEST_QUERY_URL"],
+                    data=query.encode(),
+                    headers={
+                        "Content-Type": "application/sparql-query",
+                        "Accept": "application/sparql-results+json",
+                    },
+                    timeout=10,
+                )
+                self.assertEqual(response.status_code, 200, response.text)
 
     def test_query_failure_is_not_zero(self) -> None:
         class FailStore:
