@@ -21,9 +21,9 @@ export function OntologyMenuBar() {
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const root = `/workspace/${workspaceId}/ontology`;
-  const row = 'flex cursor-default select-none items-center gap-2 rounded-sm px-3 py-1.5 text-xs outline-none data-[highlighted]:bg-muted data-[disabled]:opacity-50';
-  const surface = 'z-[300] min-w-[190px] rounded-md border border-border bg-card p-1 text-foreground shadow-lg';
-  const trigger = 'flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-muted data-[state=open]:bg-muted';
+  const row = 'flex cursor-default select-none items-center gap-2 px-3 py-1.5 text-xs outline-none ![border-radius:0] data-[highlighted]:bg-transparent data-[disabled]:opacity-50';
+  const surface = 'z-[300] min-w-[190px] border-0 bg-card p-1 text-foreground !shadow-none outline-none !ring-0 focus:!ring-0 focus-visible:!ring-0 ![border-radius:0]';
+  const trigger = 'flex items-center gap-1 border-0 bg-transparent px-2 py-1 text-xs shadow-none outline-none ring-0 ![border-radius:0] hover:bg-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 active:bg-transparent data-[state=open]:bg-transparent data-[state=open]:shadow-none';
   function navigate(view: string) {
     const query = searchParams?.toString() || '';
     router.push(`${root}?${view === 'overview' ? dashboardRoute(query) : viewRoute(query, view)}`, { scroll: false });

@@ -89,7 +89,6 @@ const MapsDatasetItem = React.memo(function MapsDatasetItem({
       title={dataset.description}
       className={cn(
         'maps-section-row group',
-        shellTokens.sidebar.listRow,
         active && 'maps-section-row--active',
         dense && 'maps-section-row--dense',
       )}

@@ -407,10 +407,11 @@
   display: flex;
   width: 100%;
   align-items: center;
-  gap: 0.5rem;
+  gap: 4px;
   padding: 0.4rem 0.5rem;
   min-height: 2rem;
-  font-size: 0.8125rem;
+  font-size: 12px;
+  line-height: 18px;
   text-align: left;
   border: 0;
   border-radius: var(--org-border-radius, 0px);
