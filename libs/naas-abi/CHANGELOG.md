@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v2.72.4 (2026-09-21)
+
+### Bug Fixes
+
+- **nexus**: Align sidebar rows to 12px and drop app menu hover rings.
+  ([`2304325`](https://github.com/jupyter-naas/abi/commit/23043258e933ad57416bf9181aae057dbbd7b85f))
+
+- **nexus**: Open Files on comfortable spacing by default.
+  ([`5ad72ab`](https://github.com/jupyter-naas/abi/commit/5ad72ab8a52fa4a4d3ffa43e475bd56023709e9e))
+
+- **nexus**: Restore orthogonal ontology connectors and turn Files into a real explorer.
+  ([`1a68145`](https://github.com/jupyter-naas/abi/commit/1a68145f9d252ebdb900b2a50755f60c50d6fbea))
+
+
 ## v2.72.3 (2026-09-21)
 
 ### Bug Fixes
