@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Stream local envelope archive into X Dataset Service (mirror / prod import prep)."""
 
 from __future__ import annotations

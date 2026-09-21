@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Local prod-mirror gate: full backfill, idempotency, row counts, cache compare."""
 
 from __future__ import annotations

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Compare dataset post counts vs Parquet cache for local mirror validation."""
 
 from __future__ import annotations
