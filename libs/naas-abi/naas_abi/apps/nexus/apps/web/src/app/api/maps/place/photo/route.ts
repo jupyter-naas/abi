@@ -2,24 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { resolveGoogleMapsApiKey } from '../../_google';
 import { MAPS_USER_AGENT, mapsJson } from '../../_lib';
+import { parsePlacePhotoRef, placePhotoUpstreamUrl } from './photo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-export function parsePlacePhotoRef(raw: string | null): string | null {
-  const ref = (raw ?? '').trim();
-  if (!ref || ref.length > 512) return null;
-  if (!/^[A-Za-z0-9_\-=.]+$/.test(ref)) return null;
-  return ref;
-}
-
-export function placePhotoUpstreamUrl(ref: string, key: string, maxwidth = 800): string {
-  const url = new URL('https://maps.googleapis.com/maps/api/place/photo');
-  url.searchParams.set('photo_reference', ref);
-  url.searchParams.set('maxwidth', String(maxwidth));
-  url.searchParams.set('key', key);
-  return url.toString();
-}
 
 export async function GET(req: NextRequest) {
   const resolved = resolveGoogleMapsApiKey();

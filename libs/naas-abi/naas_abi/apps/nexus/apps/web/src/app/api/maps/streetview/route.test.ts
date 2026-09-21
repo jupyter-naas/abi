@@ -1,14 +1,14 @@
 import { NextRequest } from 'next/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { resolveGoogleMapsApiKey } from '../_google';
+import { GET } from './route';
 import {
-  GET,
   googleStreetViewStaticUrl,
   lonLatToTile,
   osmTileUrl,
   parseStreetViewQuery,
   placeholderPreviewSvg,
-  resolveGoogleMapsApiKey,
-} from './route';
+} from './streetview';
 
 afterEach(() => {
   vi.unstubAllGlobals();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parsePlacePhotoRef, placePhotoUpstreamUrl } from './route';
+import { parsePlacePhotoRef, placePhotoUpstreamUrl } from './photo';
 
 describe('place photo proxy', () => {
   it('accepts a photo reference and keeps the key on the server URL', () => {

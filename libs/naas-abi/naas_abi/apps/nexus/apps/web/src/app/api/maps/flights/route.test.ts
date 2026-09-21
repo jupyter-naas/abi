@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aircraftToPin, collectFlightPins, parseFlightsQuery } from './route';
+import { aircraftToPin, collectFlightPins, parseFlightsQuery } from './flights';
 
 describe('flights query', () => {
   it('uses a viewport query at zoom 4+ and a global sample when zoomed out', () => {

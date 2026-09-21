@@ -5,7 +5,7 @@ import {
   lookupPlaceCard,
   parsePlaceQuery,
   placePhotoProxyUrl,
-} from './route';
+} from './place';
 
 describe('place card', () => {
   it('requires coordinates and keeps a cited photo in the keyless fallback', () => {
