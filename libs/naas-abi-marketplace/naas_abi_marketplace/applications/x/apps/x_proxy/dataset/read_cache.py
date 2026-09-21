@@ -70,12 +70,22 @@ class DatasetSearchResponseCache:
 SEARCH_RESPONSE_CACHE = DatasetSearchResponseCache()
 
 
+def optional_module_kv(module: Any | None) -> Any | None:
+    """KV when the hosting module is allowed to use it (else SQL generation fallback)."""
+    if module is None:
+        return None
+    try:
+        return module.engine.services.kv
+    except ValueError:
+        return None
+
+
 def publish_read_cache_generation(module, commit_id: str) -> None:
     """Call after a dataset sync batch that changed projection tables."""
     commit_id = str(commit_id or "").strip()
     if not commit_id:
         return
-    kv = getattr(module.engine.services, "kv", None)
+    kv = optional_module_kv(module)
     if kv is None:
         return
     try:

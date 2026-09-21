@@ -6,7 +6,7 @@ export function searchHighlightNeedle(raw: string): string {
 }
 
 /**
- * Underline every case-insensitive occurrence of `needle` in `text`.
+ * Highlight every case-insensitive occurrence of `needle` in `text`.
  * Returns plain text when there is nothing to highlight.
  */
 export function highlightSearchNeedle(text: string, needle: string): ReactNode {

@@ -5,7 +5,21 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.read_cache import 
     DatasetSearchResponseCache,
     _etag,
     cached_search_response,
+    optional_module_kv,
 )
+
+
+class _KvDenied:
+    class _Services:
+        @property
+        def kv(self):
+            raise ValueError("no kv access")
+
+    engine = type("Engine", (), {"services": _Services()})()
+
+
+def test_optional_module_kv_returns_none_when_access_denied() -> None:
+    assert optional_module_kv(_KvDenied()) is None
 
 
 def test_cache_clears_when_generation_changes() -> None:

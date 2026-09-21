@@ -652,9 +652,11 @@ a {
 }
 
 .search-needle-hit {
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 2px;
+  background: #ffe566;
+  color: inherit;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 .result-snippet {

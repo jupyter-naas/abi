@@ -311,14 +311,11 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
         from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.read_cache import (
             SearchScope,
             cached_search_response,
+            optional_module_kv,
             read_cache_generation,
         )
 
-        kv = (
-            getattr(self._module.engine.services, "kv", None)
-            if self._module is not None
-            else None
-        )
+        kv = optional_module_kv(self._module)
         generation = read_cache_generation(self._dataset, kv=kv)
         typed_scope: SearchScope = "posts" if scope == "posts" else "users"
 
