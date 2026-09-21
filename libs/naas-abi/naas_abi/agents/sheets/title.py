@@ -21,8 +21,9 @@ MAX_TITLE_WORDS = 8
 MAX_TITLE_CHARS = 64
 
 _DECK_NOUN_RE = re.compile(
-    r"\b(?:pr[ée]sentations?|diaporamas?|slide\s*sheets?|sheetshows?|sheets?"
-    r"|sheets?|pitchs?|expos[ée]s?)\b",
+    r"\b(?:pr[ée]sentations?|diaporamas?|workbooks?|tableurs?"
+    r"|slide\s*sheets?|sheetshows?|spreadsheets?|sheets?"
+    r"|feuilles?(?:\s+de\s+calcul)?|pitchs?|expos[ée]s?)\b",
     re.IGNORECASE,
 )
 
@@ -84,18 +85,20 @@ _PLACEHOLDER_TITLES = frozenset(
         "workbook",
         "my workbook",
         "new workbook",
-        "new workbook",
         "nouveau workbook",
         "nouvelle workbook",
-        "workbook",
+        "nouvelle presentation",
+        "nouveau diaporama",
         "workbook title",
+        "presentation title",
         "sans titre",
         "sheets",
         "titre de la workbook",
+        "titre de la presentation",
         "untitled",
         "untitled workbook",
-        "untitled workbook",
         "untitled sheets",
+        "untitled presentation",
     }
 )
 
