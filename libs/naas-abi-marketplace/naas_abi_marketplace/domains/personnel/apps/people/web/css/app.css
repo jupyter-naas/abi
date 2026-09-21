@@ -1427,6 +1427,10 @@ body.is-ontology-split-drag {
   color: var(--muted);
 }
 
+.ontology-code .ttl-iri {
+  color: var(--result-link);
+}
+
 .ontology-code .ttl-comment {
   color: var(--muted);
 }
@@ -1435,22 +1439,96 @@ body.is-ontology-split-drag {
   gap: 8px 12px;
 }
 
-.ontology-class-label {
-  display: inline-flex;
+.ontology-class-search {
+  position: relative;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  color: var(--muted);
   min-width: 0;
-  flex: 1 1 auto;
-}
-
-.ontology-class-select {
-  font: inherit;
+  flex: 0 1 320px;
+  height: 28px;
   border: 1px solid var(--line);
   background: var(--paper);
-  height: 28px;
+  color: var(--muted);
+}
+
+.ontology-class-search:focus-within {
+  border-color: var(--focus-ring);
+}
+
+.ontology-class-search > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-left: 8px;
+}
+
+.ontology-class-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
   padding: 0 8px;
-  max-width: min(280px, 38vw);
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+}
+
+.ontology-class-input:focus-visible {
+  outline: none;
+}
+
+.ontology-class-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: -1px;
+  width: max(100%, 300px);
+  max-width: calc(100vw - 32px);
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 30;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 28px rgba(16, 18, 27, 0.14);
+  white-space: normal;
+}
+
+.ontology-class-results[hidden] {
+  display: none;
+}
+
+.ontology-class-result {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.ontology-class-result[aria-selected="true"],
+.ontology-class-result:hover {
+  background: var(--accent-soft);
+}
+
+.ontology-class-result-label {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ontology-class-result-id {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ontology-class-noresult {
+  padding: 8px;
+  color: var(--muted);
 }
 
 .ontology-graph-actions {

@@ -142,6 +142,87 @@ function drawerHtml(detail) {
     </section>`;
 }
 
+const MAX_CLASS_RESULTS = 8;
+
+function fold(text) {
+  return String(text ?? "")
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+}
+
+/** ``personnel:hasEmployeeRole`` → ``has employee role``; the prefix is dropped. */
+function localWords(qname) {
+  const local = String(qname ?? "").split(":").pop();
+  return fold(local.replace(/_/g, " ").replace(/([a-z0-9])([A-Z])/g, "$1 $2"));
+}
+
+/** One searchable entry per class node: what it is called, and what it carries. */
+function classSearchEntry(node, detail) {
+  const properties = [
+    ...(detail?.datatype_properties || []),
+    ...(detail?.object_properties_domain || []),
+    ...(detail?.object_properties_range || []),
+  ].map((item) => ({
+    label: item.label || localWords(item.property),
+    folded: `${fold(item.label)} ${localWords(item.property)}`,
+  }));
+  return {
+    node,
+    label: fold(node.label),
+    // The prefix says which vocabulary a class is from. It is matched only when
+    // typed in full, or "pers" would return every personnel: class.
+    prefix: node.id.includes(":") ? fold(node.id.split(":")[0]) : "",
+    local: localWords(node.id),
+    definition: fold(detail?.definition || ""),
+    properties,
+  };
+}
+
+/**
+ * Rank classes against a query. Every word must match somewhere; the name counts
+ * most, then the local id, then a property, then the definition. A word that
+ * is exactly a namespace prefix (``personnel``, ``abi``) keeps that namespace.
+ */
+function searchClasses(entries, query) {
+  const words = fold(query).split(/[^a-z0-9]+/).filter(Boolean);
+  if (!words.length) return [];
+  const results = [];
+  for (const entry of entries) {
+    let score = 0;
+    let via = "";
+    let matchedAll = true;
+    for (const word of words) {
+      let best = 0;
+      if (entry.label.startsWith(word)) best = 8;
+      else if (entry.prefix && entry.prefix === word) best = 7;
+      else if (entry.label.split(/\s+/).some((part) => part.startsWith(word))) best = 6;
+      else if (entry.label.includes(word)) best = 5;
+      else if (entry.local.includes(word)) best = 4;
+      else {
+        const property = entry.properties.find((item) => item.folded.includes(word));
+        if (property) {
+          best = 2;
+          via = via || property.label;
+        } else if (entry.definition.includes(word)) best = 1;
+      }
+      if (!best) {
+        matchedAll = false;
+        break;
+      }
+      score += best;
+    }
+    if (matchedAll) results.push({ node: entry.node, score, via });
+  }
+  return results
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        a.node.label.localeCompare(b.node.label, undefined, { sensitivity: "base" }),
+    )
+    .slice(0, MAX_CLASS_RESULTS);
+}
+
 export async function mountOntology(view, { config }) {
   view.innerHTML = `<div class="ontology-page"><p class="stats">Loading ontology…</p></div>`;
 
@@ -154,13 +235,6 @@ export async function mountOntology(view, { config }) {
       <p><a class="home-ontology-link" href="${searchHref(config, {})}">Back to search</a></p></div></div>`;
     return { showTopbarSearch: false, title: "Personnel Ontology" };
   }
-
-  const classNodes = [...payload.graph.nodes].sort((a, b) =>
-    a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
-  );
-  const classOptions = `<option value="">Select a class…</option>${classNodes
-    .map((node) => `<option value="${escapeHtml(node.iri)}">${escapeHtml(node.label)} (${escapeHtml(node.id)})</option>`)
-    .join("")}`;
 
   const sourceOptions = payload.sources
     .map(
@@ -198,9 +272,22 @@ export async function mountOntology(view, { config }) {
         ></div>
         <section class="ontology-pane ontology-pane--graph" aria-label="Class graph">
           <div class="ontology-pane-toolbar ontology-graph-toolbar">
-            <label class="ontology-class-label">Class
-              <select class="ontology-class-select">${classOptions}</select>
-            </label>
+            <div class="ontology-class-search">
+              ${ICONS.search}
+              <input
+                class="ontology-class-input"
+                type="search"
+                placeholder="Search the graph…"
+                aria-label="Search classes and properties in the graph"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                aria-controls="ontology-class-results"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <ul class="ontology-class-results" id="ontology-class-results" role="listbox" hidden></ul>
+            </div>
             <div class="ontology-graph-actions">
               <button type="button" class="ontology-expand-btn" aria-label="Expand graph to full page" aria-pressed="false">${ICONS.expand}</button>
             </div>
@@ -219,7 +306,9 @@ export async function mountOntology(view, { config }) {
   const splitResizerEl = view.querySelector(".ontology-split-resizer");
   const codeEl = view.querySelector(".ontology-code code");
   const fileSelectEl = view.querySelector(".ontology-file-select");
-  const classSelectEl = view.querySelector(".ontology-class-select");
+  const classSearchEl = view.querySelector(".ontology-class-search");
+  const classInputEl = view.querySelector(".ontology-class-input");
+  const classResultsEl = view.querySelector(".ontology-class-results");
   const expandBtn = view.querySelector(".ontology-expand-btn");
   const drawer = view.querySelector("#ontology-drawer");
   const drawerBody = view.querySelector(".ontology-drawer-body");
@@ -229,6 +318,53 @@ export async function mountOntology(view, { config }) {
   let graphController = null;
   let activeGraph = payload.graph;
   let teardownSplitResizer = null;
+  let searchEntries = [];
+  let searchResults = [];
+  let activeResult = -1;
+
+  function indexGraph(graph) {
+    searchEntries = graph.nodes.map((node) => classSearchEntry(node, classesByIri[node.iri]));
+  }
+
+  function closeResults() {
+    classResultsEl.hidden = true;
+    classResultsEl.innerHTML = "";
+    classInputEl.setAttribute("aria-expanded", "false");
+    classInputEl.removeAttribute("aria-activedescendant");
+    searchResults = [];
+    activeResult = -1;
+  }
+
+  function renderResults() {
+    if (!classInputEl.value.trim()) return closeResults();
+    classResultsEl.innerHTML = searchResults.length
+      ? searchResults
+          .map(
+            ({ node, via }, index) => `
+          <li class="ontology-class-result" role="option" id="ontology-class-result-${index}"
+              data-iri="${escapeHtml(node.iri)}" aria-selected="${index === activeResult}">
+            <span class="ontology-class-result-label">${escapeHtml(node.label)}</span>
+            <span class="ontology-class-result-id">${escapeHtml(node.id)}${
+              via ? ` · property: ${escapeHtml(via)}` : ""
+            }</span>
+          </li>`,
+          )
+          .join("")
+      : `<li class="ontology-class-noresult" role="presentation">No class in this graph matches.</li>`;
+    classResultsEl.hidden = false;
+    classInputEl.setAttribute("aria-expanded", "true");
+    if (activeResult >= 0) {
+      classInputEl.setAttribute("aria-activedescendant", `ontology-class-result-${activeResult}`);
+    } else {
+      classInputEl.removeAttribute("aria-activedescendant");
+    }
+  }
+
+  function clearSelection() {
+    selectedIri = "";
+    graphController?.setSelected("");
+    closeDrawer();
+  }
 
   function refitGraph() {
     requestAnimationFrame(() => graphController?.resize({ refit: true }));
@@ -259,7 +395,9 @@ export async function mountOntology(view, { config }) {
 
   function selectClass(iri, { openPanel = true } = {}) {
     selectedIri = iri || "";
-    classSelectEl.value = selectedIri;
+    const node = activeGraph.nodes.find((item) => item.iri === selectedIri);
+    classInputEl.value = node ? node.label : "";
+    closeResults();
     graphController?.setSelected(selectedIri);
     if (selectedIri) graphController?.centreOn(selectedIri);
     if (openPanel && selectedIri) openDrawer(selectedIri);
@@ -281,6 +419,7 @@ export async function mountOntology(view, { config }) {
 
   function mountGraph(graph = activeGraph) {
     activeGraph = graph;
+    indexGraph(graph);
     graphController?.destroy();
     graphController = mountCockpitStyleGraph(graphHost, graph, {
       selectedIri,
@@ -297,7 +436,8 @@ export async function mountOntology(view, { config }) {
     const stillVisible = nextGraph.nodes.some((node) => node.iri === selectedIri);
     if (!stillVisible) {
       selectedIri = "";
-      classSelectEl.value = "";
+      classInputEl.value = "";
+      closeResults();
       closeDrawer();
     } else if (selectedIri) {
       graphController?.setSelected(selectedIri);
@@ -311,12 +451,63 @@ export async function mountOntology(view, { config }) {
     teardownSplitResizer = mountSplitResizer(splitEl, splitResizerEl, refitGraph);
   }
   refreshGraphForFile(0);
-  classSelectEl.addEventListener("change", () => {
-    if (classSelectEl.value) selectClass(classSelectEl.value);
-    else {
-      selectedIri = "";
-      graphController?.setSelected("");
+  classInputEl.addEventListener("input", () => {
+    const query = classInputEl.value.trim();
+    if (!query) {
+      closeResults();
+      // Emptying the field (typing it away or the native clear button) lets go
+      // of the selection, the way choosing the empty option used to.
+      if (selectedIri) clearSelection();
+      return;
     }
+    searchResults = searchClasses(searchEntries, query);
+    activeResult = searchResults.length ? 0 : -1;
+    renderResults();
+  });
+
+  classInputEl.addEventListener("focus", () => {
+    if (classInputEl.value.trim() && !selectedIri) {
+      searchResults = searchClasses(searchEntries, classInputEl.value);
+      activeResult = searchResults.length ? 0 : -1;
+      renderResults();
+    }
+  });
+
+  classInputEl.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      if (!classResultsEl.hidden) closeResults();
+      else if (classInputEl.value) {
+        classInputEl.value = "";
+        clearSelection();
+      }
+      event.preventDefault();
+      return;
+    }
+    if (!searchResults.length) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      activeResult = (activeResult + step + searchResults.length) % searchResults.length;
+      renderResults();
+    } else if (event.key === "Enter" && activeResult >= 0) {
+      event.preventDefault();
+      selectClass(searchResults[activeResult].node.iri);
+    }
+  });
+
+  classResultsEl.addEventListener("mousedown", (event) => {
+    const option = event.target.closest(".ontology-class-result");
+    if (!option) return;
+    // mousedown, not click: the input would blur and close the list first.
+    event.preventDefault();
+    selectClass(option.dataset.iri);
+  });
+
+  // focusout, not a document-wide click listener: it goes away with the page.
+  classSearchEl.addEventListener("focusout", () => {
+    window.setTimeout(() => {
+      if (!classSearchEl.contains(document.activeElement)) closeResults();
+    }, 0);
   });
   view.querySelector(".ontology-drawer-close").addEventListener("click", closeDrawer);
 
