@@ -7,14 +7,12 @@ from datetime import date
 from naas_abi.ontologies.modules.ABIOntology import Site
 from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
     Certification,
+    ProfileDocument,
+    Skill,
 )
 from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfCertificationProcess import (
     ActOfCertification,
     CertificationCandidateRole,
-)
-from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfWorkingProcess import (
-    ProfileDocument,
-    Skill,
 )
 from naas_abi_marketplace.domains.personnel.pipelines.ActOfCertificationPipeline import (
     ActOfCertificationPipeline,

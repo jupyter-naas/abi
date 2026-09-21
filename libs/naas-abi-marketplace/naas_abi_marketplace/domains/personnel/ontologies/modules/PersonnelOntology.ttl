@@ -19,14 +19,14 @@ personnel:PersonnelOntology a owl:Ontology ;
   owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
   owl:imports <http://ontology.naas.ai/personnel/ActOfWorkingProcess> ;
   owl:imports <http://ontology.naas.ai/personnel/ActOfStudyingProcess> ;
-  owl:imports <http://ontology.naas.ai/personnel/PersonnelProfilingProcess> ;
+  owl:imports <http://ontology.naas.ai/personnel/ActOfPersonnelProfilingProcess> ;
   owl:imports <http://ontology.naas.ai/personnel/ActOfCertificationProcess> ;
   rdfs:seeAlso <https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel/ontologies/modules/PersonnelOntology.ttl> ;
   abi:pythonPackage "naas_abi_marketplace.domains.personnel" ;
   abi:ontologyResource "ontologies/modules/PersonnelOntology.ttl" ;
   abi:pythonResource "ontologies/modules/PersonnelOntology.py" ;
   dc:title "Personnel Ontology"@en ;
-  dc:description "Shared vocabulary for the personnel (S1) domain: the person, the employee and student roles they bear, the job position an employee role concretizes, and the records, contracts and qualities that outlive any one process. It also holds what a person is presented as: the profile summary and portrait published for them, the certifications they hold, the languages they speak, the interests they bear, the recommendations others write about them, and the grade and service line their employment places them in. Process slices (ActOfWorkingProcess, ActOfStudyingProcess, ActOfCertificationProcess, PersonnelProfilingProcess) import nothing from this file; this ontology imports them and they restrict these classes in context."@en ;
+  dc:description "Shared vocabulary for the personnel (S1) domain: the person, the employee and student roles they bear, the job position an employee role concretizes, and the records, contracts and qualities that outlive any one process. It also holds what a person is presented as: the profile summary and portrait published for them, the certifications they hold, the languages they speak, the interests they bear, the recommendations others write about them, and the grade and service line their employment places them in. Process slices (ActOfWorkingProcess, ActOfStudyingProcess, ActOfCertificationProcess, ActOfPersonnelProfilingProcess) import nothing from this file; this ontology imports them and they restrict these classes in context."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Shared personnel classes. Process restrictions live in ontologies/processes/."@en ;
   dc11:contributor "Alice Dupont" ;
@@ -393,6 +393,71 @@ personnel:isProfileSummaryOf a owl:ObjectProperty ;
     rdfs:domain personnel:ProfileSummary ;
     rdfs:range abi:Person .
 
+# WHAT ↔ HOW IT IS - a planned act develops the skills the person bears
+personnel:developsSkill a owl:ObjectProperty ;
+  owl:inverseOf personnel:isSkillDevelopedIn ;
+  rdfs:label "develops skill"@en ;
+  skos:definition "Relates a planned act (an act of working or of studying, for one) to a skill exercised and developed in the course of it."@en ;
+  rdfs:domain cco:ont00000228 ;
+  rdfs:range  personnel:Skill .
+
+personnel:isSkillDevelopedIn a owl:ObjectProperty ;
+  owl:inverseOf personnel:developsSkill ;
+  rdfs:label "is skill developed in"@en ;
+  skos:definition "Relates a skill to a planned act in which it is exercised and developed."@en ;
+  rdfs:domain personnel:Skill ;
+  rdfs:range  cco:ont00000228 .
+
+# WHO ↔ HOW IT IS - the person bears the skill
+personnel:hasSkill a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:bearerOf ;
+  owl:inverseOf personnel:isSkillOf ;
+  rdfs:label "has skill"@en ;
+  skos:definition "Relates a person to a skill quality that inheres in them."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  personnel:Skill .
+
+personnel:isSkillOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:inheresIn ;
+  owl:inverseOf personnel:hasSkill ;
+  rdfs:label "is skill of"@en ;
+  skos:definition "Relates a skill to the person in whom it inheres."@en ;
+  rdfs:domain personnel:Skill ;
+  rdfs:range  abi:Person .
+
+# WHO ↔ HOW WE KNOW - the person carries the profile document
+personnel:hasProfileDocument a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:isCarrierOf ;
+  owl:inverseOf personnel:isProfileDocumentOf ;
+  rdfs:label "has profile document"@en ;
+  skos:definition "Relates a person to a profile document that generically depends on them."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  personnel:ProfileDocument .
+
+personnel:isProfileDocumentOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:genericallyDependsOn ;
+  owl:inverseOf personnel:hasProfileDocument ;
+  rdfs:label "is profile document of"@en ;
+  skos:definition "Relates a profile document to the person it is about and on which it generically depends."@en ;
+  rdfs:domain personnel:ProfileDocument ;
+  rdfs:range  abi:Person .
+
+# HOW WE KNOW ↔ HOW WE KNOW - provenance of an asserted entity
+personnel:isSourcedFrom a owl:ObjectProperty ;
+  rdfs:subPropertyOf cco:ont00001808 ;
+  owl:inverseOf personnel:isSourceOf ;
+  rdfs:label "is sourced from"@en ;
+  skos:definition "Relates an information content entity to the profile document it was read from."@en ;
+  rdfs:domain abi:GenericallyDependentContinuant ;
+  rdfs:range  personnel:ProfileDocument .
+
+personnel:isSourceOf a owl:ObjectProperty ;
+  owl:inverseOf personnel:isSourcedFrom ;
+  rdfs:label "is source of"@en ;
+  skos:definition "Relates a profile document to an information content entity read from it."@en ;
+  rdfs:domain personnel:ProfileDocument ;
+  rdfs:range  abi:GenericallyDependentContinuant .
+
 #################################################################
 #    Data Properties
 #################################################################
@@ -674,6 +739,24 @@ personnel:country_code a owl:DatatypeProperty ;
     rdfs:domain abi:Site ;
     rdfs:range  xsd:string .
 
+personnel:skill_name a owl:DatatypeProperty ;
+  rdfs:label "skill name"@en ;
+  skos:definition "Name of a skill as stated on the source profile."@en ;
+  rdfs:domain personnel:Skill ;
+  rdfs:range  xsd:string .
+
+personnel:source_url a owl:DatatypeProperty ;
+  rdfs:label "source url"@en ;
+  skos:definition "Address at which a profile document can be retrieved."@en ;
+  rdfs:domain personnel:ProfileDocument ;
+  rdfs:range  xsd:anyURI .
+
+personnel:duration_label a owl:DatatypeProperty ;
+  rdfs:label "duration label"@en ;
+  skos:definition "Human-readable span of a temporal region as stated on the source profile, e.g. '3 yrs 5 mos'."@en ;
+  rdfs:domain abi:TemporalRegion ;
+  rdfs:range  xsd:string .
+
 #################################################################
 #    Classes - HOW WE KNOW
 #################################################################
@@ -764,6 +847,14 @@ personnel:ProfileSummary a owl:Class ;
     skos:example "The headline and 'About' paragraph on a person's published directory page."@en ;
     rdfs:comment "Person-level, where personnel:Mission is job-level: the summary spans a career, a mission describes one act of working. Sourced from a ProfileDocument so every claim it carries stays traceable to where it was published."@en .
 
+personnel:ProfileDocument a owl:Class ;
+  rdfs:subClassOf abi:DocumentContentEntity ,
+    [ a owl:Restriction ; owl:onProperty abi:genericallyDependsOn ; owl:someValuesFrom abi:Person ] ;
+  rdfs:label "Profile Document"@en ;
+  skos:definition "A document content entity, published at a retrievable address, from which statements about a person's history are taken: what they did, where they studied, what they hold. Carried by the person the profile is about."@en ;
+  skos:example "https://demo.example/profiles/demo"@en ;
+  rdfs:comment "The provenance anchor of the demo graph: everything asserted from a profile page: missions, roles, skills, enrollments, degrees, certifications points back to the ProfileDocument it was read from."@en .
+
 #################################################################
 #    Classes - WHY
 #################################################################
@@ -832,6 +923,15 @@ personnel:Grade a owl:Class ;
     skos:definition "A quality that inheres in a person and holds the seniority level the employing organization recognises for them."@en ;
     skos:example "'Partner' for a person admitted to the partnership."@en ;
     rdfs:comment "Kept apart from personnel:job_title, which names a position, and from personnel:EmployeeRole, which is what the person bears. Two people with the same grade can hold different positions, and the same position can be held at different grades."@en .
+
+personnel:Skill a owl:Class ;
+  rdfs:subClassOf abi:Quality ,
+    [ a owl:Restriction ; owl:onProperty abi:inheresIn ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:isSkillDevelopedIn ; owl:someValuesFrom cco:ont00000228 ] ;
+  rdfs:label "Skill"@en ;
+  skos:definition "A quality that inheres in a person, consisting in a learned capacity to perform a kind of task, developed and exercised in the acts the person carries out: working, studying, being certified."@en ;
+  skos:example "Python (Programming Language); Business Analysis; SAP BFC."@en ;
+  rdfs:comment "Borne by the person, not by the process: the skill outlives any one act of working. personnel:developsSkill links a planned act, of whatever kind, to the skills exercised and grown in it."@en .
 
 #################################################################
 #    Classes - WHO

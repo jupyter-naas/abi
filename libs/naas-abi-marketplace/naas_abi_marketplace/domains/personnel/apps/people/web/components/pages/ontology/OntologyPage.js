@@ -1,226 +1,35 @@
+/**
+ * The ontology page, laid out like the Nexus ontology network: a toolbar with
+ * the relations to show and the layout, the network with its BFO bucket panel,
+ * an inspector for the selected class, and a status bar. The Turtle a class was
+ * written in stays one click away.
+ */
+
 import { fetchOntology } from "../../../lib/api.js";
+import { BFO_BUCKETS, bfoColor, configureBfoBuckets } from "../../../lib/bfo-buckets.js";
 import { escapeHtml, ICONS } from "../../../lib/dom.js";
+import { mountNetwork } from "../../../lib/network-canvas.js";
+import { buildOntologyGraph, connectionsOf, filterGraph, nodesPerBucket, termsInSource } from "../../../lib/ontology-graph.js";
+import { classSearchEntry, searchClasses } from "../../../lib/ontology-search.js";
 import { searchHref } from "../../../lib/routes.js";
 import { highlightTurtle } from "./ttl-highlight.js";
-import { mountCockpitStyleGraph } from "../../../lib/graph-canvas.js";
+
+const BUCKET_DESCRIPTIONS = {
+  "Material Entity": "Objects, people, organizations",
+  Process: "Events, activities, changes",
+  "Temporal Region": "Time periods, instants",
+  Site: "Locations, places",
+  Quality: "Properties, attributes",
+  Realizable: "Roles & dispositions",
+  GDC: "Documents, data, plans",
+  Entity: "Entity",
+  Unknown: "Unclassified or unresolved bucket",
+};
+
+const ALL_FILES = "all";
 
 function listHtml(items, render) {
-  if (!items?.length) return `<p class="ontology-empty">None</p>`;
-  return `<ul class="ontology-list">${items.map(render).join("")}</ul>`;
-}
-
-const ONTOLOGY_SPLIT_RATIO_KEY = "people-ontology-split-ratio";
-
-function mountSplitResizer(splitEl, resizerEl, onResize) {
-  let ratio = 0.5;
-  try {
-    const stored = Number(sessionStorage.getItem(ONTOLOGY_SPLIT_RATIO_KEY));
-    if (Number.isFinite(stored)) ratio = stored;
-  } catch {
-    /* ignore */
-  }
-  ratio = Math.min(0.78, Math.max(0.22, ratio));
-  splitEl.style.setProperty("--ontology-split-ratio", String(ratio));
-
-  let dragging = false;
-
-  const onPointerMove = (ev) => {
-    if (!dragging) return;
-    const rect = splitEl.getBoundingClientRect();
-    const stacked = getComputedStyle(splitEl).flexDirection === "column";
-    const next = stacked
-      ? (ev.clientY - rect.top) / rect.height
-      : (ev.clientX - rect.left) / rect.width;
-    ratio = Math.min(0.78, Math.max(0.22, next));
-    splitEl.style.setProperty("--ontology-split-ratio", String(ratio));
-    onResize?.();
-  };
-
-  const onPointerUp = () => {
-    if (!dragging) return;
-    dragging = false;
-    try {
-      sessionStorage.setItem(ONTOLOGY_SPLIT_RATIO_KEY, String(ratio));
-    } catch {
-      /* ignore */
-    }
-    document.body.classList.remove("is-ontology-split-drag");
-    window.removeEventListener("pointermove", onPointerMove);
-    window.removeEventListener("pointerup", onPointerUp);
-    onResize?.();
-  };
-
-  resizerEl.addEventListener("pointerdown", (ev) => {
-    ev.preventDefault();
-    dragging = true;
-    document.body.classList.add("is-ontology-split-drag");
-    resizerEl.setPointerCapture(ev.pointerId);
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-  });
-
-  return () => {
-    window.removeEventListener("pointermove", onPointerMove);
-    window.removeEventListener("pointerup", onPointerUp);
-  };
-}
-
-function statsHtml(stats) {
-  const rows = [
-    ["Classes", stats?.classes],
-    ["Restrictions", stats?.restrictions],
-    ["Object properties", stats?.object_properties],
-    ["Datatype properties", stats?.datatype_properties],
-    ["Annotation properties", stats?.annotation_properties],
-  ];
-  return `<dl class="ontology-stats">${rows
-    .map(
-      ([label, value]) =>
-        `<div class="ontology-stat"><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(String(value ?? "—"))}</dd></div>`,
-    )
-    .join("")}</dl>`;
-}
-
-function drawerHtml(detail) {
-  if (!detail) {
-    return `<p class="ontology-empty">Select a class in the graph to inspect its axioms.</p>`;
-  }
-  const restrictions = listHtml(
-    detail.restrictions,
-    (row) =>
-      `<li><code>${escapeHtml(row.property)}</code> · ${escapeHtml(row.quantifier)}${
-        row.filler ? ` → <code>${escapeHtml(row.filler)}</code>` : ""
-      }</li>`,
-  );
-  const domainProps = listHtml(
-    detail.object_properties_domain,
-    (row) => `<li><code>${escapeHtml(row.property)}</code> — ${escapeHtml(row.label)}</li>`,
-  );
-  const rangeProps = listHtml(
-    detail.object_properties_range,
-    (row) => `<li><code>${escapeHtml(row.property)}</code> — ${escapeHtml(row.label)}</li>`,
-  );
-  const dataProps = listHtml(
-    detail.datatype_properties,
-    (row) =>
-      `<li><code>${escapeHtml(row.property)}</code>${
-        row.range ? ` → ${escapeHtml(row.range)}` : ""
-      }</li>`,
-  );
-  const supers = detail.superclasses?.length
-    ? detail.superclasses.map((item) => `<code>${escapeHtml(item)}</code>`).join(", ")
-    : "—";
-  const subs = detail.subclasses?.length
-    ? detail.subclasses.map((item) => `<code>${escapeHtml(item)}</code>`).join(", ")
-    : "—";
-
-  return `
-    <header class="ontology-drawer-head">
-      <h2>${escapeHtml(detail.label)}</h2>
-      <p class="ontology-drawer-id"><code>${escapeHtml(detail.id)}</code></p>
-      ${detail.bfo_bucket ? `<p class="ontology-drawer-bucket">BFO bucket: <strong>${escapeHtml(detail.bfo_bucket)}</strong></p>` : ""}
-    </header>
-    ${detail.definition ? `<p class="ontology-drawer-def">${escapeHtml(detail.definition)}</p>` : ""}
-    ${detail.comment ? `<p class="ontology-drawer-comment">${escapeHtml(detail.comment)}</p>` : ""}
-    <section class="ontology-drawer-section">
-      <h3>Superclasses</h3><p>${supers}</p>
-    </section>
-    <section class="ontology-drawer-section">
-      <h3>Subclasses</h3><p>${subs}</p>
-    </section>
-    <section class="ontology-drawer-section">
-      <h3>Restrictions</h3>${restrictions}
-    </section>
-    <section class="ontology-drawer-section">
-      <h3>Object properties (domain)</h3>${domainProps}
-    </section>
-    <section class="ontology-drawer-section">
-      <h3>Object properties (range)</h3>${rangeProps}
-    </section>
-    <section class="ontology-drawer-section">
-      <h3>Datatype properties</h3>${dataProps}
-    </section>`;
-}
-
-const MAX_CLASS_RESULTS = 8;
-
-function fold(text) {
-  return String(text ?? "")
-    .normalize("NFKD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase();
-}
-
-/** ``personnel:hasEmployeeRole`` → ``has employee role``; the prefix is dropped. */
-function localWords(qname) {
-  const local = String(qname ?? "").split(":").pop();
-  return fold(local.replace(/_/g, " ").replace(/([a-z0-9])([A-Z])/g, "$1 $2"));
-}
-
-/** One searchable entry per class node: what it is called, and what it carries. */
-function classSearchEntry(node, detail) {
-  const properties = [
-    ...(detail?.datatype_properties || []),
-    ...(detail?.object_properties_domain || []),
-    ...(detail?.object_properties_range || []),
-  ].map((item) => ({
-    label: item.label || localWords(item.property),
-    folded: `${fold(item.label)} ${localWords(item.property)}`,
-  }));
-  return {
-    node,
-    label: fold(node.label),
-    // The prefix says which vocabulary a class is from. It is matched only when
-    // typed in full, or "pers" would return every personnel: class.
-    prefix: node.id.includes(":") ? fold(node.id.split(":")[0]) : "",
-    local: localWords(node.id),
-    definition: fold(detail?.definition || ""),
-    properties,
-  };
-}
-
-/**
- * Rank classes against a query. Every word must match somewhere; the name counts
- * most, then the local id, then a property, then the definition. A word that
- * is exactly a namespace prefix (``personnel``, ``abi``) keeps that namespace.
- */
-function searchClasses(entries, query) {
-  const words = fold(query).split(/[^a-z0-9]+/).filter(Boolean);
-  if (!words.length) return [];
-  const results = [];
-  for (const entry of entries) {
-    let score = 0;
-    let via = "";
-    let matchedAll = true;
-    for (const word of words) {
-      let best = 0;
-      if (entry.label.startsWith(word)) best = 8;
-      else if (entry.prefix && entry.prefix === word) best = 7;
-      else if (entry.label.split(/\s+/).some((part) => part.startsWith(word))) best = 6;
-      else if (entry.label.includes(word)) best = 5;
-      else if (entry.local.includes(word)) best = 4;
-      else {
-        const property = entry.properties.find((item) => item.folded.includes(word));
-        if (property) {
-          best = 2;
-          via = via || property.label;
-        } else if (entry.definition.includes(word)) best = 1;
-      }
-      if (!best) {
-        matchedAll = false;
-        break;
-      }
-      score += best;
-    }
-    if (matchedAll) results.push({ node: entry.node, score, via });
-  }
-  return results
-    .sort(
-      (a, b) =>
-        b.score - a.score ||
-        a.node.label.localeCompare(b.node.label, undefined, { sensitivity: "base" }),
-    )
-    .slice(0, MAX_CLASS_RESULTS);
+  return items?.length ? `<ul class="inspector-list">${items.map(render).join("")}</ul>` : "";
 }
 
 export async function mountOntology(view, { config }) {
@@ -236,249 +45,441 @@ export async function mountOntology(view, { config }) {
     return { showTopbarSearch: false, title: "Personnel Ontology" };
   }
 
-  const sourceOptions = payload.sources
-    .map(
-      (source, index) =>
-        `<option value="${index}"${index === 0 ? " selected" : ""}>${escapeHtml(source.name)}</option>`,
-    )
-    .join("");
+  configureBfoBuckets(config.theme?.bfo_buckets);
+  const title = payload.title || "Personnel Ontology";
+  const graph = buildOntologyGraph(payload);
+  const classes = payload.classes;
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const sourceTerms = payload.sources.map((source) => termsInSource(source.text || "", graph.nodes));
+  const bucketDefs = BFO_BUCKETS.filter(
+    (bucket) => !["Entity", "Unknown"].includes(bucket.type) || graph.nodes.some((node) => node.bucket === bucket.type),
+  );
+
+  const state = {
+    // Restrictions say what each class is made of; the other two relations are one click away.
+    hierarchy: false,
+    restrictions: true,
+    properties: false,
+    layout: "network",
+    file: ALL_FILES,
+    buckets: new Set(),
+    hidden: new Set(),
+    expanded: new Set(),
+    selectedNode: null,
+    selectedEdge: null,
+    turtle: false,
+  };
+
+  const fileOptions = [
+    // The ontology is the module and every process slice, merged and deduplicated.
+    `<option value="${ALL_FILES}">${escapeHtml(title)}</option>`,
+    ...payload.sources.map((source, index) => `<option value="${index}">${escapeHtml(source.name)}</option>`),
+  ].join("");
 
   view.innerHTML = `
     <div class="ontology-page">
-      <header class="ontology-head">
-        <div>
-          <h1 class="ontology-title">${escapeHtml(payload.title || "Personnel Ontology")}</h1>
-          <p class="ontology-lead">Shared S1 vocabulary: the module, then one file per process slice.</p>
-          ${statsHtml(payload.stats)}
+      <section class="ontology-network" aria-label="Ontology network">
+        <div class="ontology-toolbar">
+          <h1 class="ontology-title">${escapeHtml(title)}</h1>
+          <div class="ontology-controls" role="group" aria-label="Show relationships">
+            <label title="Show the class hierarchy"><input type="checkbox" data-relation="hierarchy" />Hierarchy</label>
+            <label title="Show restrictions declared on the classes"><input type="checkbox" data-relation="restrictions" checked />Restrictions</label>
+            <label title="Show object property relationships"><input type="checkbox" data-relation="properties" />Properties</label>
+          </div>
+          <label class="ontology-select">Layout
+            <select class="ontology-layout-select">
+              <option value="network">BFO zones</option>
+              <option value="TD">Top to bottom</option>
+              <option value="LR">Left to right</option>
+            </select>
+          </label>
+          <label class="ontology-select">File
+            <select class="ontology-file-select">${fileOptions}</select>
+          </label>
+          <div class="ontology-class-search">
+            ${ICONS.search}
+            <input class="ontology-class-input" type="search" placeholder="Search the graph…"
+              aria-label="Search classes and properties in the graph" role="combobox" aria-autocomplete="list"
+              aria-expanded="false" aria-controls="ontology-class-results" autocomplete="off" spellcheck="false" />
+            <ul class="ontology-class-results" id="ontology-class-results" role="listbox" hidden></ul>
+          </div>
+          <button type="button" class="ontology-turtle-btn" aria-pressed="false" title="Show the Turtle source">Turtle</button>
+          <a class="home-ontology-link" href="${searchHref(config, {})}">Back to search</a>
         </div>
-        <a class="home-ontology-link" href="${searchHref(config, {})}">Back to search</a>
-      </header>
-      <div class="ontology-split">
-        <section class="ontology-pane ontology-pane--ttl" aria-label="Ontology source">
-          <div class="ontology-pane-toolbar">
-            <label class="ontology-file-label">File
-              <select class="ontology-file-select">${sourceOptions}</select>
-            </label>
-            <span class="ontology-pane-hint">Turtle</span>
+        <div class="ontology-body">
+          <aside class="ontology-source" aria-label="Ontology source" hidden>
+            <pre class="ontology-code" tabindex="0"><code></code></pre>
+          </aside>
+          <div class="ontology-canvas">
+            <div class="ontology-viewport"></div>
+            <div class="ontology-buckets" aria-label="BFO buckets"></div>
           </div>
-          <pre class="ontology-code" tabindex="0"><code></code></pre>
-        </section>
-        <div
-          class="ontology-split-resizer"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize Turtle and graph panels"
-          tabindex="0"
-        ></div>
-        <section class="ontology-pane ontology-pane--graph" aria-label="Class graph">
-          <div class="ontology-pane-toolbar ontology-graph-toolbar">
-            <div class="ontology-class-search">
-              ${ICONS.search}
-              <input
-                class="ontology-class-input"
-                type="search"
-                placeholder="Search the graph…"
-                aria-label="Search classes and properties in the graph"
-                role="combobox"
-                aria-autocomplete="list"
-                aria-expanded="false"
-                aria-controls="ontology-class-results"
-                autocomplete="off"
-                spellcheck="false"
-              />
-              <ul class="ontology-class-results" id="ontology-class-results" role="listbox" hidden></ul>
-            </div>
-            <div class="ontology-graph-actions">
-              <button type="button" class="ontology-expand-btn" aria-label="Expand graph to full page" aria-pressed="false">${ICONS.expand}</button>
-            </div>
-          </div>
-          <div class="ontology-graph-host"></div>
-        </section>
-      </div>
-      <aside class="ontology-drawer" id="ontology-drawer" aria-label="Class details" hidden>
-        <button type="button" class="ontology-drawer-close" aria-label="Close details">×</button>
-        <div class="ontology-drawer-body"></div>
-      </aside>
+          <aside class="ontology-inspector" aria-label="Class inspector" hidden></aside>
+        </div>
+        <div class="ontology-status" aria-live="polite"></div>
+      </section>
     </div>`;
 
-  const pageEl = view.querySelector(".ontology-page");
-  const splitEl = view.querySelector(".ontology-split");
-  const splitResizerEl = view.querySelector(".ontology-split-resizer");
-  const codeEl = view.querySelector(".ontology-code code");
-  const fileSelectEl = view.querySelector(".ontology-file-select");
-  const classSearchEl = view.querySelector(".ontology-class-search");
-  const classInputEl = view.querySelector(".ontology-class-input");
-  const classResultsEl = view.querySelector(".ontology-class-results");
-  const expandBtn = view.querySelector(".ontology-expand-btn");
-  const drawer = view.querySelector("#ontology-drawer");
-  const drawerBody = view.querySelector(".ontology-drawer-body");
-  const graphHost = view.querySelector(".ontology-graph-host");
-  const classesByIri = payload.classes;
-  let selectedIri = "";
-  let graphController = null;
-  let activeGraph = payload.graph;
-  let teardownSplitResizer = null;
+  const $ = (selector) => view.querySelector(selector);
+  const searchEl = $(".ontology-class-search");
+  const inputEl = $(".ontology-class-input");
+  const resultsEl = $(".ontology-class-results");
+  const codeEl = $(".ontology-code code");
+  const sourceEl = $(".ontology-source");
+  const inspectorEl = $(".ontology-inspector");
+  const bucketsEl = $(".ontology-buckets");
+  const statusEl = $(".ontology-status");
+  const turtleBtn = $(".ontology-turtle-btn");
+
+  let visible = { nodes: [], edges: [] };
   let searchEntries = [];
   let searchResults = [];
   let activeResult = -1;
 
-  function indexGraph(graph) {
-    searchEntries = graph.nodes.map((node) => classSearchEntry(node, classesByIri[node.iri]));
+  const network = mountNetwork($(".ontology-viewport"), {
+    onSelectNode: (id) => selectNode(id),
+    onSelectEdge: (id) => selectEdge(id),
+    onOpenNode: (id) => selectNode(id),
+  });
+
+  const keepForFile = () => (state.file === ALL_FILES ? null : sourceTerms[Number(state.file)]);
+
+  /** Terms in the chosen file, before the bucket filters: what the bucket panel lists. */
+  function filedNodes() {
+    const keep = keepForFile();
+    return keep ? graph.nodes.filter((node) => keep.has(node.id)) : graph.nodes;
+  }
+
+  function nodeStyle(node) {
+    const palette = bfoColor(node.bucket);
+    return { ...node, color: palette.color, border: palette.border, bucketLabel: palette.label };
   }
 
   function closeResults() {
-    classResultsEl.hidden = true;
-    classResultsEl.innerHTML = "";
-    classInputEl.setAttribute("aria-expanded", "false");
-    classInputEl.removeAttribute("aria-activedescendant");
+    resultsEl.hidden = true;
+    resultsEl.innerHTML = "";
+    inputEl.setAttribute("aria-expanded", "false");
+    inputEl.removeAttribute("aria-activedescendant");
     searchResults = [];
     activeResult = -1;
   }
 
   function renderResults() {
-    if (!classInputEl.value.trim()) return closeResults();
-    classResultsEl.innerHTML = searchResults.length
+    if (!inputEl.value.trim()) return closeResults();
+    resultsEl.innerHTML = searchResults.length
       ? searchResults
           .map(
             ({ node, via }, index) => `
           <li class="ontology-class-result" role="option" id="ontology-class-result-${index}"
-              data-iri="${escapeHtml(node.iri)}" aria-selected="${index === activeResult}">
+              data-id="${escapeHtml(node.id)}" aria-selected="${index === activeResult}">
             <span class="ontology-class-result-label">${escapeHtml(node.label)}</span>
-            <span class="ontology-class-result-id">${escapeHtml(node.id)}${
-              via ? ` · property: ${escapeHtml(via)}` : ""
-            }</span>
+            <span class="ontology-class-result-id">${escapeHtml(node.id)}${via ? ` · property: ${escapeHtml(via)}` : ""}</span>
           </li>`,
           )
           .join("")
       : `<li class="ontology-class-noresult" role="presentation">No class in this graph matches.</li>`;
-    classResultsEl.hidden = false;
-    classInputEl.setAttribute("aria-expanded", "true");
-    if (activeResult >= 0) {
-      classInputEl.setAttribute("aria-activedescendant", `ontology-class-result-${activeResult}`);
+    resultsEl.hidden = false;
+    inputEl.setAttribute("aria-expanded", "true");
+    if (activeResult >= 0) inputEl.setAttribute("aria-activedescendant", `ontology-class-result-${activeResult}`);
+    else inputEl.removeAttribute("aria-activedescendant");
+  }
+
+  function renderBuckets() {
+    const perBucket = nodesPerBucket(filedNodes());
+    const anyActive = state.buckets.size > 0;
+    bucketsEl.innerHTML = `
+      <h2>BFO 7 Buckets</h2>
+      ${bucketDefs
+        .map((bucket) => {
+          const entries = perBucket.get(bucket.type) || [];
+          const active = state.buckets.has(bucket.type);
+          const expanded = state.expanded.has(bucket.type);
+          return `
+        <div class="bucket${anyActive && !active ? " is-dimmed" : ""}">
+          <div class="bucket-row">
+            <button type="button" class="bucket-toggle" data-bucket="${escapeHtml(bucket.type)}" aria-pressed="${active}"
+              title="${escapeHtml(bucket.label)} (${escapeHtml(bucket.type)}) — ${escapeHtml(BUCKET_DESCRIPTIONS[bucket.type] || "")}">
+              <i style="background:${bucket.color}"></i><strong>${escapeHtml(bucket.label)}</strong>
+              ${entries.length ? `<span>${entries.length}</span>` : ""}
+            </button>
+            ${
+              entries.length
+                ? `<button type="button" class="bucket-expand${expanded ? " is-open" : ""}" data-expand="${escapeHtml(bucket.type)}"
+                    aria-expanded="${expanded}" aria-label="Classes in ${escapeHtml(bucket.label)}">›</button>`
+                : ""
+            }
+          </div>
+          ${
+            expanded && entries.length
+              ? `<div class="bucket-nodes">${entries
+                  .map(
+                    (entry) => `<label><input type="checkbox" data-node="${escapeHtml(entry.id)}"
+                      ${state.hidden.has(entry.id) ? "" : "checked"} /><span>${escapeHtml(entry.label)}</span></label>`,
+                  )
+                  .join("")}</div>`
+              : ""
+          }
+        </div>`;
+        })
+        .join("")}`;
+  }
+
+  function renderStatus() {
+    const stats = payload.stats || {};
+    const edge = state.selectedEdge ? visible.edges.find((item) => item.id === state.selectedEdge) : null;
+    let text;
+    if (edge) {
+      text = `<span>${escapeHtml(nodeById.get(edge.source)?.label)} ${edge.both ? "↔" : "→"} ${escapeHtml(edge.label || "subclass of")} ${edge.both ? "↔" : "→"} ${escapeHtml(nodeById.get(edge.target)?.label)}</span>
+        <button type="button" data-action="clear" aria-label="Clear selection">×</button>`;
     } else {
-      classInputEl.removeAttribute("aria-activedescendant");
+      text = `<span>${visible.nodes.length} classes · ${visible.edges.length} connections</span>
+        <span class="ontology-status-stats">${stats.restrictions ?? 0} restrictions · ${stats.object_properties ?? 0} object properties · ${stats.datatype_properties ?? 0} datatype properties</span>`;
     }
+    const filtered = state.buckets.size > 0 || state.hidden.size > 0;
+    statusEl.innerHTML = `${text}
+      ${!state.selectedNode && !edge ? `<span class="ontology-status-hint">Select a class to inspect</span>` : ""}
+      ${filtered ? `<button type="button" data-action="reset">Reset filters</button>` : ""}`;
   }
 
-  function clearSelection() {
-    selectedIri = "";
-    graphController?.setSelected("");
-    closeDrawer();
+  function inspectorHtml(node) {
+    const detail = classes[node.iri] || {};
+    const palette = bfoColor(node.bucket);
+    const connections = connectionsOf(node.id, visible.nodes, visible.edges);
+    const declaredIn = payload.sources.filter((_, index) => sourceTerms[index].has(node.id));
+    const definition = [detail.definition, detail.comment].filter(Boolean).join("\n\n");
+    return `
+      <header class="inspector-head">
+        <div>
+          <p class="inspector-kind"><span style="background:${palette.color}"></span>${escapeHtml(palette.label || node.bucket)} · Class</p>
+          <h2 tabindex="-1">${escapeHtml(node.label)}</h2>
+          <p class="inspector-uri">${escapeHtml(node.iri)}</p>
+        </div>
+        <button type="button" class="inspector-close" data-action="close" aria-label="Close inspector">×</button>
+      </header>
+      <div class="inspector-content">
+        ${definition ? `<section><h3>Definition</h3><p>${escapeHtml(definition)}</p></section>` : ""}
+        ${
+          connections.length
+            ? `<section><h3>Connections in this view <span>${connections.length}</span></h3>
+              <ul class="inspector-connections">${connections
+                .map(
+                  ({ edge, other, incoming }) => `<li><button type="button" data-select="${escapeHtml(other.id)}" title="Inspect ${escapeHtml(other.label)}">
+                    <span>${escapeHtml(
+                      edge.both
+                        ? `${node.label} ↔ ${edge.label} ↔ ${other.label}`
+                        : incoming
+                          ? `${other.label} → ${edge.label || "subclass of"} → ${node.label}`
+                          : `${node.label} → ${edge.label || "subclass of"} → ${other.label}`,
+                    )}</span>›</button></li>`,
+                )
+                .join("")}</ul></section>`
+            : ""
+        }
+        ${
+          detail.datatype_properties?.length
+            ? `<section><h3>Data properties <span>${detail.datatype_properties.length}</span></h3>${listHtml(
+                detail.datatype_properties,
+                (row) => `<li><code>${escapeHtml(row.property)}</code>${row.range ? ` → ${escapeHtml(String(row.range).split("#").pop())}` : ""}</li>`,
+              )}</section>`
+            : ""
+        }
+        ${
+          declaredIn.length
+            ? `<section><h3>${declaredIn.length === 1 ? "Source" : "Sources"}</h3><ul class="inspector-sources">${declaredIn
+                .map((source) => `<li>${escapeHtml(source.name)}</li>`)
+                .join("")}</ul></section>`
+            : ""
+        }
+      </div>
+      <footer class="inspector-actions">
+        <button type="button" data-action="focus">Focus node</button>
+        ${declaredIn.length ? `<button type="button" data-action="turtle">View in Turtle</button>` : ""}
+      </footer>`;
   }
 
-  function refitGraph() {
-    requestAnimationFrame(() => graphController?.resize({ refit: true }));
+  function renderInspector() {
+    const node = state.selectedNode ? nodeById.get(state.selectedNode) : null;
+    if (!node || !visible.nodes.some((item) => item.id === node.id)) {
+      inspectorEl.hidden = true;
+      inspectorEl.innerHTML = "";
+      return;
+    }
+    const wasOpen = !inspectorEl.hidden;
+    inspectorEl.innerHTML = inspectorHtml(node);
+    inspectorEl.hidden = false;
+    inspectorEl.querySelector(".inspector-content").scrollTop = 0;
+    if (!wasOpen) inspectorEl.querySelector("h2").focus({ preventScroll: true });
   }
 
-  function graphForSource(index) {
-    const source = payload.sources[Number(index)] || payload.sources[0];
-    const text = source?.text || "";
-    const nodes = payload.graph.nodes.filter((node) => {
-      const local = node.id.includes(":") ? node.id.split(":").pop() : node.id;
-      return (
-        text.includes(node.id) ||
-        text.includes(`${local} a `) ||
-        text.includes(`${local};`) ||
-        text.includes(`${local} `)
-      );
-    });
-    if (!nodes.length) return payload.graph;
-    const ids = new Set(nodes.map((node) => node.id));
-    const edges = payload.graph.edges.filter((edge) => ids.has(edge.from) && ids.has(edge.to));
-    return { nodes, edges };
-  }
-
-  function showTtl(index) {
-    const source = payload.sources[Number(index)] || payload.sources[0];
+  function showTurtle() {
+    const source = state.file === ALL_FILES ? null : payload.sources[Number(state.file)];
     codeEl.innerHTML = highlightTurtle(source?.text || payload.display_ttl);
+    sourceEl.hidden = !state.turtle;
+    turtleBtn.setAttribute("aria-pressed", String(state.turtle));
   }
 
-  function selectClass(iri, { openPanel = true } = {}) {
-    selectedIri = iri || "";
-    const node = activeGraph.nodes.find((item) => item.iri === selectedIri);
-    classInputEl.value = node ? node.label : "";
+  /** Scroll the Turtle to where the class is declared. */
+  function scrollTurtleTo(node) {
+    const text = state.file === ALL_FILES ? payload.display_ttl : payload.sources[Number(state.file)]?.text || "";
+    const local = node.id.includes(":") ? node.id.split(":").pop() : node.id;
+    const at = [`${node.id} a `, `${local} a `].map((needle) => text.indexOf(needle)).find((index) => index >= 0);
+    if (at === undefined) return;
+    const line = text.slice(0, at).split("\n").length - 1;
+    const pre = $(".ontology-code");
+    pre.scrollTop = Math.max(0, line * (parseFloat(getComputedStyle(pre).lineHeight) || 16) - 24);
+  }
+
+  /** Rebuild what is drawn. ``refit`` when the network itself changed, not just a selection. */
+  function render({ refit = true } = {}) {
+    const keep = keepForFile();
+    visible = filterGraph(graph, state, state.buckets, state.hidden, keep);
+    searchEntries = visible.nodes.map((node) => classSearchEntry({ ...node, iri: node.iri }, classes[node.iri]));
+    if (state.selectedNode && !visible.nodes.some((node) => node.id === state.selectedNode)) state.selectedNode = null;
+    if (state.selectedEdge && !visible.edges.some((edge) => edge.id === state.selectedEdge)) state.selectedEdge = null;
+    // The bucket panel (176px + margins) and the hint sit over the canvas.
+    network.setData(
+      { layout: state.layout, nodes: visible.nodes.map(nodeStyle), edges: visible.edges, insets: { right: 208, bottom: 28 } },
+      { refit },
+    );
+    network.setSelection({ nodeId: state.selectedNode, edgeId: state.selectedEdge });
+    renderBuckets();
+    renderInspector();
+    renderStatus();
+  }
+
+  function selectNode(id, { focus = true } = {}) {
+    state.selectedNode = id || null;
+    state.selectedEdge = null;
+    network.setSelection({ nodeId: state.selectedNode });
+    renderInspector();
+    renderStatus();
+    if (id && focus) network.focus(id);
+    // The canvas narrows when the inspector opens or closes.
+    network.resize();
+    const node = id ? nodeById.get(id) : null;
+    inputEl.value = node ? node.label : "";
     closeResults();
-    graphController?.setSelected(selectedIri);
-    if (selectedIri) graphController?.centreOn(selectedIri);
-    if (openPanel && selectedIri) openDrawer(selectedIri);
   }
 
-  function openDrawer(iri) {
-    const detail = classesByIri[iri];
-    drawerBody.innerHTML = drawerHtml(detail);
-    drawer.hidden = false;
-    pageEl.classList.add("is-drawer-open");
-    refitGraph();
+  function selectEdge(id) {
+    state.selectedEdge = id || null;
+    if (id) state.selectedNode = null;
+    network.setSelection({ nodeId: state.selectedNode, edgeId: state.selectedEdge });
+    renderInspector();
+    renderStatus();
+    network.resize();
   }
 
-  function closeDrawer() {
-    drawer.hidden = true;
-    pageEl.classList.remove("is-drawer-open");
-    refitGraph();
-  }
+  // ── controls ──
+  view.querySelector(".ontology-controls").addEventListener("change", (event) => {
+    const relation = event.target.dataset.relation;
+    if (!relation) return;
+    state[relation] = event.target.checked;
+    render();
+  });
+  $(".ontology-layout-select").addEventListener("change", (event) => {
+    state.layout = event.target.value;
+    render();
+  });
+  $(".ontology-file-select").addEventListener("change", (event) => {
+    state.file = event.target.value;
+    state.hidden.clear();
+    showTurtle();
+    render();
+  });
+  turtleBtn.addEventListener("click", () => {
+    state.turtle = !state.turtle;
+    showTurtle();
+    network.resize();
+  });
 
-  function mountGraph(graph = activeGraph) {
-    activeGraph = graph;
-    indexGraph(graph);
-    graphController?.destroy();
-    graphController = mountCockpitStyleGraph(graphHost, graph, {
-      selectedIri,
-      onSelect: (node) => selectClass(node.iri),
-      theme: config.theme,
-      appConfig: config,
-    });
-  }
-
-  function refreshGraphForFile(index) {
-    showTtl(index);
-    const nextGraph = graphForSource(index);
-    mountGraph(nextGraph);
-    const stillVisible = nextGraph.nodes.some((node) => node.iri === selectedIri);
-    if (!stillVisible) {
-      selectedIri = "";
-      classInputEl.value = "";
-      closeResults();
-      closeDrawer();
-    } else if (selectedIri) {
-      graphController?.setSelected(selectedIri);
-      graphController?.centreOn(selectedIri);
+  bucketsEl.addEventListener("click", (event) => {
+    const toggle = event.target.closest("[data-bucket]");
+    const expand = event.target.closest("[data-expand]");
+    if (toggle) {
+      const type = toggle.dataset.bucket;
+      if (!state.buckets.delete(type)) state.buckets.add(type);
+      render({ refit: false });
+    } else if (expand) {
+      const type = expand.dataset.expand;
+      if (!state.expanded.delete(type)) state.expanded.add(type);
+      renderBuckets();
     }
-  }
+  });
+  bucketsEl.addEventListener("change", (event) => {
+    const id = event.target.dataset.node;
+    if (!id) return;
+    if (!state.hidden.delete(id)) state.hidden.add(id);
+    render({ refit: false });
+  });
 
-  document.body.classList.add("is-ontology-view");
-  window.scrollTo(0, 0);
-  if (splitEl && splitResizerEl) {
-    teardownSplitResizer = mountSplitResizer(splitEl, splitResizerEl, refitGraph);
-  }
-  refreshGraphForFile(0);
-  classInputEl.addEventListener("input", () => {
-    const query = classInputEl.value.trim();
+  statusEl.addEventListener("click", (event) => {
+    const action = event.target.closest("[data-action]")?.dataset.action;
+    if (action === "reset") {
+      state.buckets.clear();
+      state.hidden.clear();
+      render();
+    } else if (action === "clear") {
+      state.selectedEdge = null;
+      state.selectedNode = null;
+      network.setSelection({});
+      renderInspector();
+      renderStatus();
+    }
+  });
+
+  inspectorEl.addEventListener("click", (event) => {
+    const select = event.target.closest("[data-select]")?.dataset.select;
+    if (select) return selectNode(select);
+    const action = event.target.closest("[data-action]")?.dataset.action;
+    if (action === "close") selectNode(null);
+    else if (action === "focus" && state.selectedNode) network.focus(state.selectedNode);
+    else if (action === "turtle" && state.selectedNode) {
+      const node = nodeById.get(state.selectedNode);
+      if (state.file !== ALL_FILES && !sourceTerms[Number(state.file)].has(node.id)) {
+        state.file = ALL_FILES;
+        $(".ontology-file-select").value = ALL_FILES;
+        render();
+      }
+      state.turtle = true;
+      showTurtle();
+      network.resize();
+      requestAnimationFrame(() => scrollTurtleTo(node));
+    }
+  });
+  inspectorEl.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      selectNode(null);
+    }
+  });
+
+  // ── class search ──
+  inputEl.addEventListener("input", () => {
+    const query = inputEl.value.trim();
     if (!query) {
       closeResults();
-      // Emptying the field (typing it away or the native clear button) lets go
-      // of the selection, the way choosing the empty option used to.
-      if (selectedIri) clearSelection();
+      // Emptying the field lets go of the selection.
+      if (state.selectedNode) selectNode(null);
       return;
     }
     searchResults = searchClasses(searchEntries, query);
     activeResult = searchResults.length ? 0 : -1;
     renderResults();
   });
-
-  classInputEl.addEventListener("focus", () => {
-    if (classInputEl.value.trim() && !selectedIri) {
-      searchResults = searchClasses(searchEntries, classInputEl.value);
+  inputEl.addEventListener("focus", () => {
+    if (inputEl.value.trim() && !state.selectedNode) {
+      searchResults = searchClasses(searchEntries, inputEl.value);
       activeResult = searchResults.length ? 0 : -1;
       renderResults();
     }
   });
-
-  classInputEl.addEventListener("keydown", (event) => {
+  inputEl.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
-      if (!classResultsEl.hidden) closeResults();
-      else if (classInputEl.value) {
-        classInputEl.value = "";
-        clearSelection();
+      if (!resultsEl.hidden) closeResults();
+      else if (inputEl.value) {
+        inputEl.value = "";
+        selectNode(null);
       }
       event.preventDefault();
       return;
@@ -486,59 +487,47 @@ export async function mountOntology(view, { config }) {
     if (!searchResults.length) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
-      const step = event.key === "ArrowDown" ? 1 : -1;
-      activeResult = (activeResult + step + searchResults.length) % searchResults.length;
+      activeResult = (activeResult + (event.key === "ArrowDown" ? 1 : -1) + searchResults.length) % searchResults.length;
       renderResults();
     } else if (event.key === "Enter" && activeResult >= 0) {
       event.preventDefault();
-      selectClass(searchResults[activeResult].node.iri);
+      selectNode(searchResults[activeResult].node.id);
     }
   });
-
-  classResultsEl.addEventListener("mousedown", (event) => {
+  resultsEl.addEventListener("mousedown", (event) => {
     const option = event.target.closest(".ontology-class-result");
     if (!option) return;
     // mousedown, not click: the input would blur and close the list first.
     event.preventDefault();
-    selectClass(option.dataset.iri);
+    selectNode(option.dataset.id);
   });
-
   // focusout, not a document-wide click listener: it goes away with the page.
-  classSearchEl.addEventListener("focusout", () => {
+  searchEl.addEventListener("focusout", () => {
     window.setTimeout(() => {
-      if (!classSearchEl.contains(document.activeElement)) closeResults();
+      if (!searchEl.contains(document.activeElement)) closeResults();
     }, 0);
   });
-  view.querySelector(".ontology-drawer-close").addEventListener("click", closeDrawer);
 
-  fileSelectEl.addEventListener("change", () => refreshGraphForFile(fileSelectEl.value));
-
-  expandBtn.addEventListener("click", () => {
-    const expanded = pageEl.classList.toggle("is-graph-expanded");
-    expandBtn.innerHTML = expanded ? ICONS.collapse : ICONS.expand;
-    expandBtn.setAttribute("aria-label", expanded ? "Exit full page graph" : "Expand graph to full page");
-    expandBtn.setAttribute("aria-pressed", expanded ? "true" : "false");
-    document.body.classList.toggle("ontology-graph-fullscreen", expanded);
-    refitGraph();
-  });
-
-  let resizeTimer = 0;
-  const onResize = () => {
-    window.clearTimeout(resizeTimer);
-    resizeTimer = window.setTimeout(() => refitGraph(), 120);
+  const onKeydown = (event) => {
+    if (event.key === "Escape" && state.selectedNode && !event.defaultPrevented && document.activeElement === document.body) {
+      selectNode(null);
+    }
   };
-  window.addEventListener("resize", onResize);
+  document.addEventListener("keydown", onKeydown);
+
+  document.body.classList.add("is-ontology-view");
+  window.scrollTo(0, 0);
+  showTurtle();
+  render();
 
   return {
     showTopbarSearch: false,
     lockViewport: true,
-    title: `${payload.title || "Personnel Ontology"} · People`,
+    title: `${title} · People`,
     teardown: () => {
-      window.removeEventListener("resize", onResize);
-      window.clearTimeout(resizeTimer);
-      document.body.classList.remove("ontology-graph-fullscreen", "is-ontology-view");
-      teardownSplitResizer?.();
-      graphController?.destroy();
+      document.removeEventListener("keydown", onKeydown);
+      document.body.classList.remove("is-ontology-view");
+      network.destroy();
     },
   };
 }

@@ -12,8 +12,8 @@
 
 personnel:ActOfWorkingProcess a owl:Ontology ;
   # Slice: process class + process-only properties. Shared classes
-  # (EmploymentContract, Remuneration, EmployeeRole, JobPosition) live in
-  # PersonnelOntology. Does NOT import PersonnelOntology (the module imports this file).
+  # (EmploymentContract, Remuneration, EmployeeRole, JobPosition, Skill,
+  # ProfileDocument) live in PersonnelOntology. Does NOT import PersonnelOntology (the module imports this file).
   #
   # Seven-bucket mapping for one working experience:
   #   WHO          Person (the worker), Organization (the employer)
@@ -71,26 +71,9 @@ personnel:Mission a owl:Class ;
   skos:example "'Leading the development of an open Universal Data & AI Platform to help organizations create powerful ecosystems of AI Agents.'"@en ;
   rdfs:comment "Deliberately a GDC and NOT a BFO function. A mission is stated, copied between systems and survives the person leaving the post, which a disposition inhering in the person could not. The WHY that inheres in the person is personnel:EmployeeRole; the mission is what that role concretizes, mirroring the JobPosition ← EmployeeRole pattern in PersonnelOntology. rdfs:label carries the opening sentence; personnel:mission_content carries the full text."@en .
 
-personnel:ProfileDocument a owl:Class ;
-  rdfs:subClassOf abi:DocumentContentEntity ,
-    [ a owl:Restriction ; owl:onProperty abi:genericallyDependsOn ; owl:someValuesFrom abi:Person ] ;
-  rdfs:label "Profile Document"@en ;
-  skos:definition "A document content entity, published at a retrievable address, from which statements about a person's working and studying history are taken. Carried by the person the profile is about."@en ;
-  skos:example "https://demo.example/profiles/demo"@en ;
-  rdfs:comment "The provenance anchor of the demo graph: every Mission, EmployeeRole and Skill asserted from a profile page points back to the ProfileDocument it was read from."@en .
-
 #################################################################
 #    Classes - HOW IT IS
 #################################################################
-
-personnel:Skill a owl:Class ;
-  rdfs:subClassOf abi:Quality ,
-    [ a owl:Restriction ; owl:onProperty abi:inheresIn ; owl:someValuesFrom abi:Person ] ,
-    [ a owl:Restriction ; owl:onProperty personnel:isSkillDevelopedIn ; owl:someValuesFrom [ a owl:Class ; owl:unionOf ( personnel:ActOfWorking personnel:ActOfStudying ) ] ] ;
-  rdfs:label "Skill"@en ;
-  skos:definition "A quality that inheres in a person, consisting in a learned capacity to perform a kind of task, developed and exercised in the acts of working the person carries out."@en ;
-  skos:example "Python (Programming Language); Business Analysis; SAP BFC."@en ;
-  rdfs:comment "Borne by the person, not by the process: the skill outlives any one act of working. personnel:developsSkill links the act to the skills exercised and grown in it."@en .
 
 #################################################################
 #    Object properties - process-only
@@ -144,38 +127,6 @@ personnel:isContractOf a owl:ObjectProperty ;
   rdfs:domain personnel:EmploymentContract ;
   rdfs:range  personnel:ActOfWorking .
 
-# WHAT ↔ HOW IT IS - the act develops the skills the worker bears
-personnel:developsSkill a owl:ObjectProperty ;
-  owl:inverseOf personnel:isSkillDevelopedIn ;
-  rdfs:label "develops skill"@en ;
-  skos:definition "Relates an act of working or studying to a skill exercised and developed in the course of it."@en ;
-  rdfs:domain [ a owl:Class ; owl:unionOf ( personnel:ActOfWorking personnel:ActOfStudying ) ] ;
-  rdfs:range  personnel:Skill .
-
-personnel:isSkillDevelopedIn a owl:ObjectProperty ;
-  owl:inverseOf personnel:developsSkill ;
-  rdfs:label "is skill developed in"@en ;
-  skos:definition "Relates a skill to an act of working or studying in which it is exercised and developed."@en ;
-  rdfs:domain personnel:Skill ;
-  rdfs:range  [ a owl:Class ; owl:unionOf ( personnel:ActOfWorking personnel:ActOfStudying ) ] .
-
-# WHO ↔ HOW IT IS - the person bears the skill
-personnel:hasSkill a owl:ObjectProperty ;
-  rdfs:subPropertyOf abi:bearerOf ;
-  owl:inverseOf personnel:isSkillOf ;
-  rdfs:label "has skill"@en ;
-  skos:definition "Relates a person to a skill quality that inheres in them."@en ;
-  rdfs:domain abi:Person ;
-  rdfs:range  personnel:Skill .
-
-personnel:isSkillOf a owl:ObjectProperty ;
-  rdfs:subPropertyOf abi:inheresIn ;
-  owl:inverseOf personnel:hasSkill ;
-  rdfs:label "is skill of"@en ;
-  skos:definition "Relates a skill to the person in whom it inheres."@en ;
-  rdfs:domain personnel:Skill ;
-  rdfs:range  abi:Person .
-
 # WHY ↔ HOW WE KNOW - the employee role concretizes the mission
 personnel:hasMission a owl:ObjectProperty ;
   rdfs:subPropertyOf abi:concretizes ;
@@ -210,39 +161,6 @@ personnel:isMissionCarriedBy a owl:ObjectProperty ;
   rdfs:domain personnel:Mission ;
   rdfs:range  abi:Person .
 
-# WHO ↔ HOW WE KNOW - the person carries the profile document
-personnel:hasProfileDocument a owl:ObjectProperty ;
-  rdfs:subPropertyOf abi:isCarrierOf ;
-  owl:inverseOf personnel:isProfileDocumentOf ;
-  rdfs:label "has profile document"@en ;
-  skos:definition "Relates a person to a profile document that generically depends on them."@en ;
-  rdfs:domain abi:Person ;
-  rdfs:range  personnel:ProfileDocument .
-
-personnel:isProfileDocumentOf a owl:ObjectProperty ;
-  rdfs:subPropertyOf abi:genericallyDependsOn ;
-  owl:inverseOf personnel:hasProfileDocument ;
-  rdfs:label "is profile document of"@en ;
-  skos:definition "Relates a profile document to the person it is about and on which it generically depends."@en ;
-  rdfs:domain personnel:ProfileDocument ;
-  rdfs:range  abi:Person .
-
-# HOW WE KNOW ↔ HOW WE KNOW - provenance of an asserted entity
-personnel:isSourcedFrom a owl:ObjectProperty ;
-  rdfs:subPropertyOf cco:ont00001808 ;
-  owl:inverseOf personnel:isSourceOf ;
-  rdfs:label "is sourced from"@en ;
-  skos:definition "Relates an information content entity to the profile document it was read from."@en ;
-  rdfs:domain abi:GenericallyDependentContinuant ;
-  rdfs:range  personnel:ProfileDocument .
-
-personnel:isSourceOf a owl:ObjectProperty ;
-  owl:inverseOf personnel:isSourcedFrom ;
-  rdfs:label "is source of"@en ;
-  skos:definition "Relates a profile document to an information content entity read from it."@en ;
-  rdfs:domain personnel:ProfileDocument ;
-  rdfs:range  abi:GenericallyDependentContinuant .
-
 # WHO ↔ WHERE - convenience shortcut from the worker to the site of execution.
 # The backbone remains ActOfWorking abi:occursIn Site; this collapses the hop so
 # a person can be shown against the places they work without traversing the act.
@@ -270,26 +188,8 @@ personnel:mission_content a owl:DatatypeProperty ;
   rdfs:domain personnel:Mission ;
   rdfs:range  xsd:string .
 
-personnel:skill_name a owl:DatatypeProperty ;
-  rdfs:label "skill name"@en ;
-  skos:definition "Name of a skill as stated on the source profile."@en ;
-  rdfs:domain personnel:Skill ;
-  rdfs:range  xsd:string .
-
 personnel:contract_type a owl:DatatypeProperty ;
   rdfs:label "contract type"@en ;
   skos:definition "Engagement type of an employment contract, e.g. 'Permanent', 'Freelance', 'Self-employed'."@en ;
   rdfs:domain personnel:EmploymentContract ;
-  rdfs:range  xsd:string .
-
-personnel:source_url a owl:DatatypeProperty ;
-  rdfs:label "source url"@en ;
-  skos:definition "Address at which a profile document can be retrieved."@en ;
-  rdfs:domain personnel:ProfileDocument ;
-  rdfs:range  xsd:anyURI .
-
-personnel:duration_label a owl:DatatypeProperty ;
-  rdfs:label "duration label"@en ;
-  skos:definition "Human-readable span of a temporal region as stated on the source profile, e.g. '3 yrs 5 mos'."@en ;
-  rdfs:domain abi:TemporalRegion ;
   rdfs:range  xsd:string .

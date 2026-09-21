@@ -79,8 +79,58 @@ Which sections are **process-shaped** (ActOfWorking / ActOfStudying / ActOfCerti
   the configured `empty_text`. Never hide the section, and never fill it with a
   placeholder: "nothing recorded" and "we failed to load it" must not look alike.
 - **The ontology page reads `ontologies/processes/*.ttl`.** A new process slice
-  shows up there, and in the bucket colours, by being filed in that directory.
-  Do not list slices by name in the app.
+  shows up there, and in the bucket colours, by being filed in that directory
+  (the file list is read when the server starts: restart it after adding or
+  renaming one). Do not list slices by name in the app.
+- **The ontology page follows the Nexus ontology network** (`naas_abi` nexus web,
+  `components/ontology` and `components/graph`): toolbar with the relations to
+  show and the layout, BFO-coloured square cards, square-corner connectors, a
+  bucket panel, an inspector and a status bar. Keep it in step with Nexus rather
+  than restyling it here. The pieces are `web/lib/network-canvas.js` (one 2D
+  canvas, no dependency), `network-layout.js`, `orthogonal-route.js` and
+  `ontology-graph.js` (the payload as terms and relations).
+- **The default layout places the classes in BFO zones**, as in
+  `naas_abi/ontologies/docs/BFO_7B.html`: Process (top left) and Temporal Region
+  (top right) in the occurrents band, Process taking 70% of it; Material Entity,
+  Site, GDC, Quality, Realizable in the continuants band. A zone is as wide as
+  the cards it holds, cards are centred in it, and rows line up across a band.
+  Do not hard-code zone sizes: they follow the number of classes shown.
+- **Connectors are routed together, not one by one** (`orthogonal-route.js`): on
+  a grid of corridors, each connector its own track, ports spread along a card's
+  side. Two relations that are each other's inverse are drawn as one two-way
+  connector. Do not route a connector on its own: that is how they end up
+  drawn on top of one another. Restrictions are the only relation on by default.
+- **In the BFO zone layout the sides of a connector are fixed by the buckets it
+  joins** (`web/lib/bfo-edge-rules.js`, the only place the table is written; the
+  layout and the router read what `sidesFor` says, not the table). N/S/W/E are
+  the top, bottom, left and right of a card; a rule holds both ways, for every
+  family (subClassOf, restriction, object property):
+
+  | Pair | Sides | Shape |
+  |---|---|---|
+  | Process / Temporal Region | N / N | U over the top |
+  | Process / Quality, Process / Realizable | E / W | east out of Process, down between the zones |
+  | Process / GDC | S / W | south out of Process, west into GDC |
+  | Process / Site | W / N | west out of Process, top of Site |
+  | Process / Material Entity | W / W | C down the left margin |
+  | Material Entity, Site or GDC / GDC, Quality or Realizable (the pairs listed in the file) | S / S | U under the bottom band |
+  | same bucket; Material Entity / Site; GDC / Quality; Quality / Realizable; Temporal Region with anything but Process; Entity, Unknown, Other | free | shortest route, any side |
+
+  The layout sizes what the rules force, from what `sidesFor` returns: a margin
+  under the bottom band at a track per S/S connector, a left margin at a track
+  per connector leaving Process by the west, the corridors for what passes
+  through them, and cards wide enough that the ports on one side stay a track
+  apart. It also puts the cards a side is used most on where that side is open.
+  A rule that has no way through falls back to a free route and is reported;
+  a fixed connector needing more than three bends is reported too. Both go to
+  `console.warn`, never hidden. **Exempt: the tree layouts (top to bottom, left
+  to right), which have no rules, and the plain elbows drawn while a card is
+  dragged.** A card with another card in front of the side a rule gives it cannot
+  be left by that side in a straight line, so its connectors need more than three
+  bends: that is the layout, not the router, and it is why the count is reported.
+- **The ontology is one merged document.** The first file entry is the module and
+  every process slice read as one graph, so a class the slices restate is one
+  block (`merged_turtle`); the individual files stay listed under it.
 - **Nothing is computed that a source did not state.** `years_of_experience` is
   a claim carried by the profile summary, not a sum over acts of working. A
   period shows the dates and the source's own duration label.
@@ -113,7 +163,15 @@ example `/api/personnel-people-acme` and `personnel_acme`.
 
 ```bash
 uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/domains/personnel -q
+
+# the ontology page's layout and router (Node 20, no install), from apps/people
+node --test web/lib/
 ```
+
+`node --test` is not part of the pytest run: run it whenever `web/lib/` changes.
+`bfo-edge-rules.test.js` lays out cards for all seven buckets, routes one
+connector per rule and checks the sides it leaves and enters by, its bends and
+that no two share a track.
 
 `datasets_test.py` runs against a real DuckLake warehouse in a temporary
 directory. It is the only way the SQL, the types and the flush are actually

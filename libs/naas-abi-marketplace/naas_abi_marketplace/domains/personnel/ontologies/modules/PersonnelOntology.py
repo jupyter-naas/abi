@@ -1,4 +1,3 @@
-# onto2py-source-sha256: c1f4c91573eeee2110be380a58e74e41416b44b12d3b789e67c51f11e5b28b37
 from __future__ import annotations
 
 import contextlib
@@ -30,7 +29,6 @@ from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfStudyingPr
 )
 from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfWorkingProcess import (
     ActOfWorking,
-    ProfileDocument,
 )
 from pydantic import BaseModel, Field, ValidationError
 from rdflib import Graph, Literal, Namespace, URIRef
@@ -887,6 +885,49 @@ class Grade(Quality, RDFEntity):
     participates_in: Annotated[list[Process | URIRef | str], Field(description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way")] | None = None
 
 
+class Skill(Quality, RDFEntity):
+    """
+    Borne by the person, not by the process: the skill outlives any one act of working. personnel:developsSkill links a planned act, of whatever kind, to the skills exercised and grown in it.
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/Skill"
+    _name: ClassVar[str] = "Skill"
+    _property_uris: ClassVar[dict] = {
+        "concretizes": "http://ontology.naas.ai/abi/concretizes",
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "inheresIn": "http://ontology.naas.ai/abi/inheresIn",
+        "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
+        "is_skill_developed_in": "http://ontology.naas.ai/personnel/isSkillDevelopedIn",
+        "is_skill_of": "http://ontology.naas.ai/personnel/isSkillOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "participates_in": "http://ontology.naas.ai/abi/participatesIn",
+        "skill_name": "http://ontology.naas.ai/personnel/skill_name",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "concretizes",
+        "inheresIn",
+        "inheres_in",
+        "is_skill_developed_in",
+        "is_skill_of",
+        "participates_in",
+    }
+
+    # Data properties
+    skill_name: Annotated[str, Field(description="Name of a skill as stated on the source profile.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+
+    # Object properties
+    concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
+    inheresIn: Annotated[list[Person | URIRef | str], Field()] | None = None
+    inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_skill_developed_in: Annotated[URIRef | str, Field(description="Relates a skill to a planned act in which it is exercised and developed.")] | None = None
+    is_skill_of: Annotated[list[Person | URIRef | str], Field(description="Relates a skill to the person in whom it inheres.")] | None = None
+    participates_in: Annotated[list[Process | URIRef | str], Field(description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way")] | None = None
+
+
 class ServiceLine(Organization, RDFEntity):
     """
     An organization in its own right, not a label on a person: it has its own members, its own leadership and can be reorganized without any person changing. A person reaches their service line through the employee role they bear (personnel:inServiceLine).
@@ -1007,9 +1048,9 @@ class ProfileSummary(DocumentContentEntity, RDFEntity):
         "creator": "http://purl.org/dc/terms/creator",
         "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
         "headline_text": "http://ontology.naas.ai/personnel/headline_text",
-        "isSourcedFrom": "http://ontology.naas.ai/personnel/isSourcedFrom",
         "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
         "is_profile_summary_of": "http://ontology.naas.ai/personnel/isProfileSummaryOf",
+        "is_sourced_from": "http://ontology.naas.ai/personnel/isSourcedFrom",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "quote_content": "http://ontology.naas.ai/personnel/quote_content",
         "summary_content": "http://ontology.naas.ai/personnel/summary_content",
@@ -1017,9 +1058,9 @@ class ProfileSummary(DocumentContentEntity, RDFEntity):
     }
     _object_properties: ClassVar[set[str]] = {
         "generically_depends_on",
-        "isSourcedFrom",
         "is_concretized_by",
         "is_profile_summary_of",
+        "is_sourced_from",
     }
 
     # Data properties
@@ -1033,9 +1074,49 @@ class ProfileSummary(DocumentContentEntity, RDFEntity):
 
     # Object properties
     generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
-    isSourcedFrom: Annotated[list[ProfileDocument | URIRef | str], Field()] | None = None
     is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
     is_profile_summary_of: Annotated[list[Person | URIRef | str], Field(description="Relates a profile summary to the person it is about.")] | None = None
+    is_sourced_from: Annotated[list[ProfileDocument | URIRef | str], Field(description="Relates an information content entity to the profile document it was read from.")] | None = None
+
+
+class ProfileDocument(DocumentContentEntity, RDFEntity):
+    """
+    The provenance anchor of the demo graph: everything asserted from a profile page: missions, roles, skills, enrollments, degrees, certifications points back to the ProfileDocument it was read from.
+    """
+
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/ProfileDocument"
+    _name: ClassVar[str] = "Profile Document"
+    _property_uris: ClassVar[dict] = {
+        "created": "http://purl.org/dc/terms/created",
+        "creator": "http://purl.org/dc/terms/creator",
+        "genericallyDependsOn": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "generically_depends_on": "http://ontology.naas.ai/abi/genericallyDependsOn",
+        "is_concretized_by": "http://ontology.naas.ai/abi/isConcretizedBy",
+        "is_profile_document_of": "http://ontology.naas.ai/personnel/isProfileDocumentOf",
+        "is_source_of": "http://ontology.naas.ai/personnel/isSourceOf",
+        "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "source_url": "http://ontology.naas.ai/personnel/source_url",
+    }
+    _object_properties: ClassVar[set[str]] = {
+        "genericallyDependsOn",
+        "generically_depends_on",
+        "is_concretized_by",
+        "is_profile_document_of",
+        "is_source_of",
+    }
+
+    # Data properties
+    source_url: Annotated[Any, Field(description="Address at which a profile document can be retrieved.")] | None = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
+    created: Annotated[datetime.datetime, Field(description="Date of creation of the resource.")] | None = None
+    creator: Annotated[Any, Field(description="An entity responsible for making the resource.")] | None = None
+
+    # Object properties
+    genericallyDependsOn: Annotated[list[Person | URIRef | str], Field()] | None = None
+    generically_depends_on: Annotated[list[MaterialEntity | URIRef | str], Field(description="b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t")] | None = None
+    is_concretized_by: Annotated[list[Disposition | Process | Quality | Role | URIRef | str], Field(description="c is concretized by b =Def b concretizes c")] | None = None
+    is_profile_document_of: Annotated[list[Person | URIRef | str], Field(description="Relates a profile document to the person it is about and on which it generically depends.")] | None = None
+    is_source_of: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="Relates a profile document to an information content entity read from it.")] | None = None
 
 
 # Rebuild models to resolve forward references
@@ -1053,7 +1134,9 @@ Remuneration.model_rebuild()
 LanguageCapability.model_rebuild()
 Interest.model_rebuild()
 Grade.model_rebuild()
+Skill.model_rebuild()
 ServiceLine.model_rebuild()
 JobDescription.model_rebuild()
 Recommendation.model_rebuild()
 ProfileSummary.model_rebuild()
+ProfileDocument.model_rebuild()

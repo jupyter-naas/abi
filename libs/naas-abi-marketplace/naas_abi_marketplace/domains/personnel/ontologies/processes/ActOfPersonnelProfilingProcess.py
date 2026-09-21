@@ -4,14 +4,11 @@ import contextlib
 import datetime
 import os
 import uuid
+from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
-    Callable,
     ClassVar,
-    Iterable,
-    List,
-    Optional,
     Union,
     get_args,
     get_origin,
@@ -95,7 +92,7 @@ class RDFEntity(BaseModel):
     def _field_expects_list(field_annotation: object) -> bool:
         """Return True when a field annotation contains a list type."""
         origin = get_origin(field_annotation)
-        if origin in (list, List):
+        if origin in (list, list):
             return True
         if origin is Annotated:
             args = get_args(field_annotation)
@@ -332,36 +329,22 @@ class ActOfPersonnelProfiling(RDFEntity):
     }
 
     # Data properties
-    label: Optional[Annotated[str, Field(description="Label of the resource.")]] = None
+    label: Annotated[str, Field(description="Label of the resource.")] | None = None
     created: Annotated[
-        Optional[datetime.datetime],
+        datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now(datetime.timezone.utc)
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
-        Optional[Any],
+        Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
-    from_profile_document: Optional[
-        Annotated[
-            Union[URIRef, str],
-            Field(
-                description="Relates an act of personnel profiling to the profile document that was read as its source."
-            ),
-        ]
-    ] = None
-    hasParticipant: Optional[Annotated[List[Union[Person, URIRef, str]], Field()]] = (
+    from_profile_document: Annotated[URIRef | str, Field(description="Relates an act of personnel profiling to the profile document that was read as its source.")] | None = None
+    hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = (
         None
     )
-    is_act_of_personnel_profiling_of: Optional[
-        Annotated[
-            List[Union[Person, URIRef, str]],
-            Field(
-                description="Relates an act of personnel profiling to the person who is its subject."
-            ),
-        ]
-    ] = None
+    is_act_of_personnel_profiling_of: Annotated[list[Person | URIRef | str], Field(description="Relates an act of personnel profiling to the person who is its subject.")] | None = None
 
 
 # Rebuild models to resolve forward references

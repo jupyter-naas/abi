@@ -12,8 +12,8 @@
 
 personnel:ActOfCertificationProcess a owl:Ontology ;
   # Slice: process class + process-only properties. Shared classes
-  # (Certification) live in PersonnelOntology, and Skill and ProfileDocument in
-  # ActOfWorkingProcess. The one class minted here is the role the person bears.
+  # (Certification, Skill, ProfileDocument) live in PersonnelOntology. The one
+  # class minted here is the role the person bears.
   # Does NOT import PersonnelOntology (the module imports this file).
   #
   # Seven-bucket mapping for one certification:
@@ -40,7 +40,7 @@ personnel:ActOfCertificationProcess a owl:Ontology ;
   dc:title "Act of Certification Process Ontology"@en ;
   dc:description "Process slice for the act of certification - a CCO Planned Act in which a certifying organization attests that a person has demonstrated a competence, met a professional standard or may practise, realizing a certification candidate role, demonstrating skills, and concretizing the certification it awards."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
-  rdfs:comment "Process slice for Act of Certification. Reuses Certification from PersonnelOntology and Skill and ProfileDocument from ActOfWorkingProcess. The Certification stays the credential a person carries; this slice adds the act that produced it."@en ;
+  rdfs:comment "Process slice for Act of Certification. Reuses Certification, Skill and ProfileDocument from PersonnelOntology. The Certification stays the credential a person carries; this slice adds the act that produced it."@en ;
   dc11:contributor "FlorentRvl" ;
   dc11:date "2026-09-21"^^xsd:date .
 

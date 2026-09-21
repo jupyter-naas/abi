@@ -23,21 +23,19 @@ PROCESS_SPECS: tuple[dict[str, str | Path | tuple[Path, ...]], ...] = (
         "process_label": "Act of Studying",
         "process_class": f"{PERSONNEL_NS}ActOfStudying",
         "process_ontology": ONTOLOGIES_DIR / "processes" / "ActOfStudyingProcess.ttl",
-        # ProfileDocument and Skill are declared in the working slice.
-        "support_ontologies": (ONTOLOGIES_DIR / "processes" / "ActOfWorkingProcess.ttl",),
+        "support_ontologies": (),
     },
     {
         "process_label": "Act of Certification",
         "process_class": f"{PERSONNEL_NS}ActOfCertification",
         "process_ontology": ONTOLOGIES_DIR / "processes" / "ActOfCertificationProcess.ttl",
-        # Skill and ProfileDocument are declared in the working slice.
-        "support_ontologies": (ONTOLOGIES_DIR / "processes" / "ActOfWorkingProcess.ttl",),
+        "support_ontologies": (),
     },
     {
         "process_label": "Act of Personnel Profiling",
         "process_class": f"{PERSONNEL_NS}ActOfPersonnelProfiling",
-        "process_ontology": ONTOLOGIES_DIR / "processes" / "PersonnelProfilingProcess.ttl",
-        "support_ontologies": (ONTOLOGIES_DIR / "processes" / "ActOfWorkingProcess.ttl",),
+        "process_ontology": ONTOLOGIES_DIR / "processes" / "ActOfPersonnelProfilingProcess.ttl",
+        "support_ontologies": (),
     },
 )
 

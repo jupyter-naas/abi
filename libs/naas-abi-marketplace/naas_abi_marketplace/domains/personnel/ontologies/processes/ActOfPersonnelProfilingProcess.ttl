@@ -10,7 +10,7 @@
 @prefix abi:   <http://ontology.naas.ai/abi/> .
 @prefix personnel: <http://ontology.naas.ai/personnel/> .
 
-personnel:PersonnelProfilingProcess a owl:Ontology ;
+personnel:ActOfPersonnelProfilingProcess a owl:Ontology ;
   # Slice: the profiling act and process-only properties. It does not restate
   # missions, skills, enrollments or profile summaries — those remain the
   # outputs of register_act_of_working, register_act_of_studying and
@@ -31,9 +31,9 @@ personnel:PersonnelProfilingProcess a owl:Ontology ;
   rdfs:seeAlso <http://ontology.naas.ai/personnel/PersonnelOntology> ;
   rdfs:member "bpl-processes/personnel" ;
   abi:pythonPackage "naas_abi_marketplace.domains.personnel" ;
-  abi:ontologyResource "ontologies/processes/PersonnelProfilingProcess.ttl" ;
-  abi:pythonResource "ontologies/processes/PersonnelProfilingProcess.py" ;
-  dc:title "Personnel Profiling Process Ontology"@en ;
+  abi:ontologyResource "ontologies/processes/ActOfPersonnelProfilingProcess.ttl" ;
+  abi:pythonResource "ontologies/processes/ActOfPersonnelProfilingProcess.py" ;
+  dc:title "Act of Personnel Profiling Process Ontology"@en ;
   dc:description "Process slice for personnel profiling: a planned act in which statements from a published profile document are registered as acts of working, acts of studying and person-level directory facts without duplicating episode data in a second store."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Runtime: register_profile_from_source. NCOR ledger entry personnel-profiling.ttl (upstream)."@en ;

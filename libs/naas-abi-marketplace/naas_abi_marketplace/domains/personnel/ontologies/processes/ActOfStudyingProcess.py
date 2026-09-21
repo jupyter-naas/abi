@@ -1,6 +1,6 @@
-# onto2py-source-sha256: 95738b3d0a6129fadbc254b2d8c12b47078d84020d5842c534f0a2d5d5bc6acc
 from __future__ import annotations
 
+import contextlib
 import datetime
 import os
 import uuid
@@ -65,17 +65,13 @@ class RDFEntity(BaseModel):
         """Extract a SPARQL binding value from a ResultRow-like object."""
         if hasattr(row, key):
             return getattr(row, key)
-        try:
+        with contextlib.suppress(LookupError, TypeError):
             return row[key]  # type: ignore[index]
-        except Exception:
-            pass
 
         labels = getattr(row, "labels", None)
         if labels and key in labels:
-            try:
+            with contextlib.suppress(LookupError, TypeError):
                 return row[key]  # type: ignore[index]
-            except Exception:
-                pass
 
         if isinstance(row, (list, tuple)):
             idx = 0 if key == "p" else 1
@@ -322,7 +318,7 @@ class ActOfStudying(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
-        "develops_skill": "http://ontology.naas.ai/personnel/developsSkill",
+        "developsSkill": "http://ontology.naas.ai/personnel/developsSkill",
         "for_educational_organization": "http://ontology.naas.ai/personnel/forEducationalOrganization",
         "hasParticipant": "http://ontology.naas.ai/abi/hasParticipant",
         "has_degree": "http://ontology.naas.ai/personnel/hasDegree",
@@ -334,7 +330,7 @@ class ActOfStudying(RDFEntity):
         "realizes": "http://ontology.naas.ai/abi/realizes",
     }
     _object_properties: ClassVar[set[str]] = {
-        "develops_skill",
+        "developsSkill",
         "for_educational_organization",
         "hasParticipant",
         "has_degree",
@@ -350,20 +346,20 @@ class ActOfStudying(RDFEntity):
     created: Annotated[
         datetime.datetime | None,
         Field(description="Date of creation of the resource."),
-    ] = datetime.datetime.now()
+    ] = datetime.datetime.now(datetime.UTC)
     creator: Annotated[
         Any | None,
         Field(description="An entity responsible for making the resource."),
     ] = os.environ.get("USER")
 
     # Object properties
+    developsSkill: Annotated[URIRef | str, Field()] | None = None
     for_educational_organization: Annotated[list[Organization | URIRef | str], Field(description="Relates an act of studying to the educational organization that participates as the training provider.")] | None = None
     hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = (
         None
     )
-    has_enrollment: Annotated[URIRef | str, Field(description="Relates an act of studying to the enrollment record it concretizes.")] | None = None
     has_degree: Annotated[URIRef | str, Field(description="Relates an act of studying to the academic degree it concretizes.")] | None = None
-    develops_skill: Annotated[list[URIRef | str], Field(description="Relates an act of studying to a skill exercised and developed in the course of it.")] | None = None
+    has_enrollment: Annotated[URIRef | str, Field(description="Relates an act of studying to the enrollment record it concretizes.")] | None = None
     is_act_of_studying_of: Annotated[list[Person | URIRef | str], Field(description="Relates an act of studying to the person acquiring the curriculum.")] | None = None
     occupiesTemporalRegion: Annotated[list[TemporalRegion | URIRef | str], Field()] | None = None
     occursIn: Annotated[list[Site | URIRef | str], Field()] | None = None

@@ -6,11 +6,13 @@ from datetime import date
 from unittest.mock import MagicMock
 
 from naas_abi.ontologies.modules.ABIOntology import Site
+from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
+    ProfileDocument,
+    Skill,
+)
 from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfWorkingProcess import (
     ActOfWorking,
     Mission,
-    ProfileDocument,
-    Skill,
 )
 from naas_abi_marketplace.domains.personnel.pipelines.ActOfWorkingPipeline import (
     ActOfWorkingPipeline,

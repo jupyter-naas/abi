@@ -1,20 +1,10 @@
 /** BFO palette populated from config.yaml before the graph mounts. */
 export const BFO_BUCKETS = [];
-export const BFO_SEVEN = [];
 export const BFO_BY_TYPE = {};
 
 export function configureBfoBuckets(configured) {
   if (!Array.isArray(configured) || !configured.length) return;
   BFO_BUCKETS.splice(0, BFO_BUCKETS.length, ...configured);
-  BFO_SEVEN.splice(
-    0,
-    BFO_SEVEN.length,
-    ...BFO_BUCKETS.filter((bucket) =>
-      ["Material Entity", "Process", "Temporal Region", "Site", "Quality", "Realizable", "GDC"].includes(
-        bucket.type,
-      ),
-    ),
-  );
   for (const key of Object.keys(BFO_BY_TYPE)) delete BFO_BY_TYPE[key];
   Object.assign(
     BFO_BY_TYPE,
@@ -40,12 +30,4 @@ function fadeHex(hex, amount) {
   const g = mix((int >> 8) & 255);
   const b = mix(int & 255);
   return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
-}
-
-export function renderBfoLegendHtml() {
-  const items = BFO_SEVEN.map(
-    (b) =>
-      `<span><i class="graph-swatch" style="background:${b.color};border:1px solid ${b.border}"></i> ${b.label}</span>`,
-  ).join("");
-  return `<strong>BFO buckets</strong>${items}`;
 }

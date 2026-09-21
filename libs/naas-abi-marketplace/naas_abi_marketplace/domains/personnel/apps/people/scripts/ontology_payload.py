@@ -59,14 +59,41 @@ def load_personnel_schema_graph() -> Graph:
     return graph
 
 
-def _ttl_bundle() -> tuple[list[dict[str, str]], str]:
+PREFIXES = {
+    "personnel": PERSONNEL_NS,
+    "abi": ABI_NS,
+    "cco": "https://www.commoncoreontologies.org/",
+    "bfo": "http://purl.obolibrary.org/obo/",
+    "owl": "http://www.w3.org/2002/07/owl#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "dc": "http://purl.org/dc/terms/",
+    "dc11": "http://purl.org/dc/elements/1.1/",
+}
+
+
+def merged_turtle(graph: Graph) -> str:
+    """The module and every process slice as one document.
+
+    The slices restate classes of the module to add their own restrictions, so
+    the files taken one after another say some things twice and repeat every
+    prefix. Read as one graph they are said once, and a class is one block.
+    """
+    merged = Graph()
+    for prefix, namespace in PREFIXES.items():
+        merged.bind(prefix, namespace)
+    for triple in graph:
+        merged.add(triple)
+    return merged.serialize(format="turtle")
+
+
+def _ttl_bundle(graph: Graph) -> tuple[list[dict[str, str]], str]:
     sources: list[dict[str, str]] = []
-    parts: list[str] = []
     for name, path in ONTOLOGY_SOURCES:
         text = path.read_text(encoding="utf-8")
         sources.append({"name": name, "path": str(path.relative_to(ONTOLOGIES_DIR.parent)), "text": text})
-        parts.append(f"# ── {name} ──\n{text.strip()}\n")
-    return sources, "\n\n".join(parts)
+    return sources, merged_turtle(graph)
 
 
 def _class_uris(graph: Graph) -> list[URIRef]:
@@ -177,7 +204,7 @@ def _subclasses(graph: Graph, class_uri: URIRef, known: set[URIRef]) -> list[str
 def build_ontology_payload() -> dict:
     graph = load_personnel_schema_graph()
     bucket_graph = load_bucket_inference_graph()
-    sources, display_ttl = _ttl_bundle()
+    sources, display_ttl = _ttl_bundle(graph)
     class_uris = _class_uris(graph)
     known_classes = set(class_uris)
     object_props = _object_properties(graph)

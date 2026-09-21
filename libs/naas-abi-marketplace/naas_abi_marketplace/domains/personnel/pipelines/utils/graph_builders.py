@@ -23,10 +23,12 @@ from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology
     Interest,
     LanguageCapability,
     Portrait,
+    ProfileDocument,
     ProfileSummary,
     Recommendation,
     Remuneration,
     ServiceLine,
+    Skill,
     StudentRole,
 )
 from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfCertificationProcess import (
@@ -39,8 +41,6 @@ from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfStudyingPr
 from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfWorkingProcess import (
     ActOfWorking,
     Mission,
-    ProfileDocument,
-    Skill,
 )
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import RDF, XSD
@@ -313,7 +313,7 @@ class PersonnelGraphContext:
             quote_content=quote,
             years_of_experience=years_of_experience,
             is_profile_summary_of=[person._uri],
-            isSourcedFrom=[profile._uri] if profile else None,
+            is_sourced_from=[profile._uri] if profile else None,
             created=utc_now(),
             creator=self.creator,
         )
@@ -645,7 +645,6 @@ class PersonnelGraphContext:
             label=mission_label,
             mission_content=mission_content,
             is_mission_carried_by=[person._uri],
-            is_sourced_from=[profile._uri] if profile else None,
             created=utc_now(),
             creator=self.creator,
         )
@@ -653,6 +652,10 @@ class PersonnelGraphContext:
         self.graph.add(
             (URIRef(person._uri), PERSONNEL.hasMissionCarried, URIRef(mission._uri))
         )
+        if profile:
+            self.graph.add(
+                (URIRef(mission._uri), PERSONNEL.isSourcedFrom, URIRef(profile._uri))
+            )
 
         from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology import (
             JobPosition,
@@ -728,7 +731,6 @@ class PersonnelGraphContext:
             has_contract=contract_uri,
             is_act_of_working_of=[person._uri],
             realizes=role._uri,
-            develops_skill=[s._uri for s in skills] or None,
             created=utc_now(),
             creator=self.creator,
         )
@@ -739,7 +741,12 @@ class PersonnelGraphContext:
             self.graph.add(
                 (URIRef(person._uri), PERSONNEL.hasWorkLocation, URIRef(site._uri))
             )
+        # developsSkill is declared in the shared module, which a process slice does
+        # not import, so it is not a field of the entity: the relation is stated here.
         for skill in skills:
+            self.graph.add(
+                (URIRef(working_uri), PERSONNEL.developsSkill, URIRef(skill._uri))
+            )
             self.graph.add(
                 (URIRef(skill._uri), PERSONNEL.isSkillDevelopedIn, URIRef(working_uri))
             )
@@ -831,7 +838,6 @@ class PersonnelGraphContext:
             has_degree=degree._uri,
             is_act_of_studying_of=[person._uri],
             realizes=role._uri,
-            develops_skill=[s._uri for s in skills] or None,
             created=utc_now(),
             creator=self.creator,
         )
@@ -842,7 +848,12 @@ class PersonnelGraphContext:
             self.graph.add(
                 (URIRef(person._uri), PERSONNEL.hasStudyLocation, URIRef(site._uri))
             )
+        # developsSkill is declared in the shared module, which a process slice does
+        # not import, so it is not a field of the entity: the relation is stated here.
         for skill in skills:
+            self.graph.add(
+                (URIRef(studying_uri), PERSONNEL.developsSkill, URIRef(skill._uri))
+            )
             self.graph.add(
                 (URIRef(skill._uri), PERSONNEL.isSkillDevelopedIn, URIRef(studying_uri))
             )
