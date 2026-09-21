@@ -45,9 +45,7 @@ canonical_posts AS (
 )
 """
 
-CANONICAL_WITH_AUTHORS_CTE = (
-    CANONICAL_POSTS_CTE
-    + """,
+AUTHORS_DEDUPED_CTE = """
 authors_deduped AS (
   SELECT * EXCLUDE (_author_rn)
   FROM (
@@ -61,7 +59,15 @@ authors_deduped AS (
     WHERE a.author_id <> ''
   ) ranked_authors
   WHERE _author_rn = 1
-),
+)
+"""
+
+CANONICAL_WITH_AUTHORS_CTE = (
+    CANONICAL_POSTS_CTE
+    + """,
+"""
+    + AUTHORS_DEDUPED_CTE
+    + """,
 canonical_enriched AS (
   SELECT
     p.tweet_id,
@@ -130,3 +136,8 @@ def canonical_cte(
         matched_ids_query=_matched_ids_query(posts=posts, use_index=use_matched_index),
         author_filter="",
     )
+
+
+def authors_deduped_cte(*, authors: str = AUTHORS_V1) -> str:
+    """One profile row per ``author_id`` (newest ``seen_at`` wins)."""
+    return AUTHORS_DEDUPED_CTE.format(authors=authors)
