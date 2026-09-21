@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.72.2 (2026-09-21)
+
+### Bug Fixes
+
+- **graph**: Avoid label aggregate alias collisions in Fuseki
+  ([`12e2765`](https://github.com/jupyter-naas/abi/commit/12e27652b1b01040f310bf6e204cb6931c895f31))
+
+
 ## v2.72.1 (2026-09-21)
 
 ### Bug Fixes
