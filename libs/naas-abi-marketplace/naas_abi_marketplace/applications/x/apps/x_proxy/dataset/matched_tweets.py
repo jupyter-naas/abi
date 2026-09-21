@@ -57,25 +57,31 @@ def upsert_matched_tweet_ids_from_posts(
     return written
 
 
-def rebuild_matched_tweet_ids(dataset) -> int:
+def rebuild_matched_tweet_ids(dataset, *, buckets: int = 64) -> int:
     """Full rebuild from ``posts_v1`` (one-time migration / repair)."""
-    result = dataset.query(
-        f"SELECT DISTINCT tweet_id FROM {POSTS_V1} "
+    count = dataset.query(
+        f"SELECT COUNT(DISTINCT tweet_id) AS n FROM {POSTS_V1} "
         f"WHERE kind = 'matched' AND tweet_id <> ''",  # nosec B608
         namespace=X_DATASET_NAMESPACE,
     )
-    rows = [{"tweet_id": str(row["tweet_id"])} for row in result.rows if row.get("tweet_id")]
-    if not rows:
+    expected = int(count.rows[0]["n"]) if count.rows else 0
+    if expected == 0:
         return 0
-    dataset.write(
-        MATCHED_TWEET_IDS_V1,
-        rows,
-        namespace=X_DATASET_NAMESPACE,
-        mode="replace",
-    )
+    dataset.write([], MATCHED_TWEET_IDS_V1, namespace=X_DATASET_NAMESPACE, mode="replace")
+    written = 0
+    for bucket in range(buckets):
+        result = dataset.query(
+            f"SELECT DISTINCT tweet_id FROM {POSTS_V1} "
+            f"WHERE kind = 'matched' AND tweet_id <> '' "
+            f"AND (hash(tweet_id) % {int(buckets)}) = {bucket}",  # nosec B608
+            namespace=X_DATASET_NAMESPACE,
+        )
+        rows = [{"tweet_id": str(row["tweet_id"])} for row in result.rows if row.get("tweet_id")]
+        if rows:
+            written += upsert_table(dataset, MATCHED_TWEET_IDS_V1, rows)
     mark_matched_index_ready()
-    logger.info(f"rebuild_matched_tweet_ids: {len(rows)} tweet_ids")
-    return len(rows)
+    logger.info(f"rebuild_matched_tweet_ids: {written} tweet_ids (expected ~{expected})")
+    return written
 
 
 def _has_matched_posts(dataset) -> bool:
