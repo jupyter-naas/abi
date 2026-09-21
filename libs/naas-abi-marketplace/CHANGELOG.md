@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v3.50.0 (2026-09-21)
+
+### Bug Fixes
+
+- **x-proxy-dataset**: Apply various minor fixes and updates
+  ([`6becfb5`](https://github.com/jupyter-naas/abi/commit/6becfb51527d799a4222f2c5243a690935d19386))
+
+- **x-proxy-dataset-service**: Minor code cleanups and fixes
+  ([`a7528e5`](https://github.com/jupyter-naas/abi/commit/a7528e5b1ec3ecd1356e59ad78cc0730de96c94f))
+
+### Chores
+
+- **scripts**: Remove shebang lines from x dataset scripts
+  ([`82e237c`](https://github.com/jupyter-naas/abi/commit/82e237c5acb848de2d4d7b7a74cf780b2b1cc66e))
+
+
 ## v3.49.1 (2026-09-18)
 
 ### Bug Fixes
