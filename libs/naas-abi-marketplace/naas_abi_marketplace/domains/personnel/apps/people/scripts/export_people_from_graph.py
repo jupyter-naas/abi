@@ -34,7 +34,10 @@ from naas_abi_marketplace.domains.personnel.apps.people.scripts import sparql_qu
 from naas_abi_marketplace.domains.personnel.paths import DEMO_GRAPH_FILE, PERSONNEL_ROOT
 from rdflib import Graph
 
-ROW_LIMIT = sq.DEFAULT_ROW_LIMIT
+# The interactive query runner caps its rows (sq.DEFAULT_ROW_LIMIT) to keep a page
+# fast. An export must not: a cap there drops rows without a word, and the app
+# then shows a directory that is quietly missing people's skills.
+ROW_LIMIT = 1_000_000
 
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 DIGIT_RUN_RE = re.compile(r"[\d][\d\s().-]{7,}")
@@ -43,6 +46,8 @@ URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 # exempt from the gate below, which would refuse them by design, and are held
 # to their own shape instead.
 CONTACT_COLUMNS = ("email", "phone", "linkedin_url")
+# Built from fields that are gated themselves; see ``gate_rows``.
+DERIVED_COLUMNS = {("people", "search_text")}
 CONTACT_SHAPES = {
     "email": re.compile(r"^[\w.+-]+@[\w-]+(?:\.[\w-]+)+$"),
     "phone": re.compile(r"^\+?[\d][\d\s().-]{5,}$"),
@@ -116,8 +121,19 @@ def _strip_named_graph(sparql: str) -> str:
     return sq.strip_named_graph(sparql)
 
 
+class TruncatedExportError(RuntimeError):
+    """A query returned as many rows as its limit allows: some were cut off."""
+
+
 def run_query(graph: Graph, template: str, **arguments: object) -> list[dict[str, Any]]:
-    return sq.run_query(graph, template, **arguments)
+    rows = sq.run_query(graph, template, **arguments)
+    limit = arguments.get("limit")
+    if isinstance(limit, int) and len(rows) >= limit:
+        raise TruncatedExportError(
+            f"a query returned {len(rows)} rows, its limit: the export would be "
+            "missing rows. Raise ROW_LIMIT."
+        )
+    return rows
 
 
 def _photo_url(row: dict[str, Any], prefix: str = APP_PREFIX) -> str | None:
@@ -396,6 +412,18 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
             }
         )
 
+    gate_rows(tables, config)
+    return tables
+
+
+def gate_rows(tables: dict[str, list[dict[str, Any]]], config: dict[str, Any]) -> None:
+    """Hold every value about to be published to the privacy gate.
+
+    ``people.search_text`` is exempt: it is a bag of the unique words of fields
+    that are each gated in their own column. Folding drops the punctuation that
+    kept "2010, 2011, 2015 and 2018" apart, so a biography that merely lists
+    years would read as a phone number. Nothing in it is a new claim.
+    """
     for table_name, rows in tables.items():
         for index, table_row in enumerate(rows):
             for column, value in table_row.items():
@@ -404,9 +432,8 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
                     table_row[column] = check_contact(
                         column, value, where=where, config=config
                     )
-                else:
+                elif (table_name, column) not in DERIVED_COLUMNS:
                     check_privacy(value, where=where, config=config)
-    return tables
 
 
 def publish(

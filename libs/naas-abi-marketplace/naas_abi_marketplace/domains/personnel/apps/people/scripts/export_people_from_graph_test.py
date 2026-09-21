@@ -127,6 +127,51 @@ class TestContactColumns:
             )
 
 
+class TestGateRows:
+    def test_years_folded_into_search_text_are_not_a_phone_number(self) -> None:
+        """A biography that lists years must not stop the export for everyone."""
+        about = "Joined in 2010, moved in 2011, led from 2015 and 2018."
+        tables = {
+            "people": [
+                {
+                    "slug": "a",
+                    "about": about,
+                    # what search_text() makes of it: punctuation gone, words unique
+                    "search_text": "joined in 2010 moved 2011 led from 2015 and 2018",
+                }
+            ]
+        }
+        export.gate_rows(tables, CONFIG)  # does not raise
+
+    def test_the_source_field_is_still_gated(self) -> None:
+        tables = {"people": [{"slug": "a", "about": "Call 0612345678", "search_text": ""}]}
+        with pytest.raises(export.PrivacyError, match=r"people\[0\]\.about"):
+            export.gate_rows(tables, CONFIG)
+
+    def test_search_text_is_the_only_exemption(self) -> None:
+        tables = {"people_skills": [{"slug": "a", "search_text": "0612345678"}]}
+        with pytest.raises(export.PrivacyError):
+            export.gate_rows(tables, CONFIG)
+
+
+class TestNothingIsSilentlyCut:
+    def test_the_export_is_not_capped_at_the_interactive_limit(self) -> None:
+        from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
+            sparql_queries as sq,
+        )
+
+        assert export.ROW_LIMIT > sq.DEFAULT_ROW_LIMIT
+
+    def test_a_query_that_hits_its_limit_stops_the_export(self) -> None:
+        graph = Graph()
+        graph.parse(DEMO_GRAPH_FILE, format="turtle")
+        skills = export.load_queries()["find_person_skills"]
+
+        assert len(export.run_query(graph, skills, limit=export.ROW_LIMIT)) > 1
+        with pytest.raises(export.TruncatedExportError):
+            export.run_query(graph, skills, limit=1)
+
+
 class TestQueries:
     def test_every_query_the_exporter_needs_exists(self) -> None:
         queries = export.load_queries()

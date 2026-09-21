@@ -1,4 +1,5 @@
-import { fetchPerson, fetchQueryResults } from "../../../lib/api.js";
+import { fetchPerson, fetchPersonGraph, fetchQueryResults } from "../../../lib/api.js";
+import { API_BASE } from "../../../lib/config.js";
 import {
   avatarHtml,
   escapeHtml,
@@ -251,6 +252,47 @@ function contactHtml(contact) {
   return `<ul class="intro-contact" aria-label="Contact">${items}</ul>`;
 }
 
+const VIEWS = [
+  { id: "resume", label: "Resume" },
+  { id: "graph", label: "Graph" },
+];
+
+function viewSwitchHtml() {
+  return `<div class="profile-view-switch" role="group" aria-label="Profile view">
+    ${VIEWS.map(
+      (item) => `<button type="button" class="profile-view-option" data-view="${item.id}"
+        aria-pressed="${item.id === "resume"}">${item.label}</button>`,
+    ).join("")}
+  </div>`;
+}
+
+/** The cockpit's stylesheet for its graph page, scoped by the API, loaded once. */
+function ensureGraphStylesheet() {
+  if (document.querySelector("link[data-graph-view-css]")) return;
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = `${API_BASE}/graph-view.css`;
+  link.dataset.graphViewCss = "";
+  document.head.append(link);
+}
+
+/**
+ * Mount the cockpit graph page for one person. The module is the cockpit's own,
+ * served under the API prefix, so this view is that page rather than a copy.
+ * Returns the page's disposer.
+ */
+async function mountGraphView(host, slug) {
+  host.innerHTML = `<p class="stats profile-graph-status">Loading graph…</p>`;
+  ensureGraphStylesheet();
+  const [view, graphModule] = await Promise.all([
+    fetchPersonGraph(slug),
+    import(`${API_BASE}/cockpit-pages/graph/GraphPage.js`),
+  ]);
+  graphModule.configureGraph(view.config);
+  host.innerHTML = "";
+  return graphModule.mountGraphPage(host, view.data, { rootId: view.root, syncUrl: false });
+}
+
 function notFoundHtml(config, slug) {
   return `
     <div class="results">
@@ -297,6 +339,7 @@ export async function mountProfile(view, { config, params, slug }) {
 
   view.innerHTML = `
     <div class="profile">
+      <div class="profile-graph" hidden></div>
       <div class="profile-columns">
         <div class="profile-main">
           <div class="intro">
@@ -336,5 +379,62 @@ export async function mountProfile(view, { config, params, slug }) {
 
   wireSparqlModal(view, competencyQueries, slug);
 
-  return { showTopbarSearch: true, query, title: `${person.full_name} · ${config.brand?.name}` };
+  const profileEl = view.querySelector(".profile");
+  const columnsEl = view.querySelector(".profile-columns");
+  const graphEl = view.querySelector(".profile-graph");
+  let disposeGraph = null;
+  let switchToken = 0;
+
+  async function showView(next) {
+    const token = ++switchToken;
+    for (const button of switchEl.querySelectorAll(".profile-view-option")) {
+      button.setAttribute("aria-pressed", String(button.dataset.view === next));
+    }
+    const graph = next === "graph";
+    profileEl.classList.toggle("is-graph-view", graph);
+    columnsEl.hidden = graph;
+    graphEl.hidden = !graph;
+    if (!graph) {
+      // The canvas sizes itself when it mounts, so it is rebuilt on each visit
+      // rather than kept alive while hidden.
+      disposeGraph?.();
+      disposeGraph = null;
+      graphEl.innerHTML = "";
+      return;
+    }
+    try {
+      const dispose = await mountGraphView(graphEl, slug);
+      if (token !== switchToken) return dispose?.();
+      disposeGraph = dispose;
+    } catch (error) {
+      if (token !== switchToken) return;
+      graphEl.innerHTML =
+        error.detail?.error === "missing_dataset"
+          ? missingDatasetHtml(error.detail)
+          : `<div class="empty-state error-block"><h2>Could not load the graph</h2>
+             <p>${escapeHtml(error.message)}</p></div>`;
+    }
+  }
+
+  // The switch lives in the topbar, which the shell owns; the page builds it and
+  // hands it over as state.topbarEnd.
+  const switchHost = document.createElement("div");
+  switchHost.innerHTML = viewSwitchHtml();
+  const switchEl = switchHost.firstElementChild;
+  switchEl.addEventListener("click", (event) => {
+    const button = event.target.closest(".profile-view-option");
+    if (!button || button.getAttribute("aria-pressed") === "true") return;
+    showView(button.dataset.view);
+  });
+
+  return {
+    showTopbarSearch: true,
+    query,
+    title: `${person.full_name} · ${config.brand?.name}`,
+    topbarEnd: switchEl,
+    teardown: () => {
+      switchToken += 1;
+      disposeGraph?.();
+    },
+  };
 }

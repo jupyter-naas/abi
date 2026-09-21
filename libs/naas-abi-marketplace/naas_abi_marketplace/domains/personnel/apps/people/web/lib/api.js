@@ -31,6 +31,11 @@ export function fetchPerson(slug) {
   return getJson(`/people/${encodeURIComponent(slug)}`);
 }
 
+/** The cockpit graph page's data, built live from the graph, opened on this person. */
+export function fetchPersonGraph(slug) {
+  return getJson(`/people/${encodeURIComponent(slug)}/graph`);
+}
+
 export function fetchQueryResults(slug, queryName, { maxRows = 50 } = {}) {
   const params = new URLSearchParams();
   if (maxRows !== 50) params.set("max_rows", String(maxRows));

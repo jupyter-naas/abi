@@ -110,7 +110,7 @@ let graphState = { view: "2d", byView: { "2d": {}, "3d": {} } };
 // Populated from config in configureGraph(). Do not read session storage before then.
 const graphParams = { view: "2d" };
 
-function configureGraph(config) {
+export function configureGraph(config) {
   const graph = config.graph || {};
   const node = graph.node || {};
   MAX_PROCESSES_PER_CLASS =
@@ -2475,7 +2475,15 @@ function syncGraphFiltersToUrl(rootId, distance, lookup) {
   window.history.replaceState(window.history.state, "", url);
 }
 
-export function mountGraphPage(el, data) {
+/**
+ * @param {HTMLElement} el
+ * @param {object} data ``graph/index.json``
+ * @param {{ rootId?: string | null, syncUrl?: boolean }} [options]
+ *   ``rootId`` opens the graph on that person or process instead of the one in
+ *   the URL. ``syncUrl: false`` leaves the address bar alone, for pages that
+ *   embed this view under a route of their own.
+ */
+export function mountGraphPage(el, data, { rootId = null, syncUrl = true } = {}) {
   const adj = buildGraphIndex(data);
   const processClassCatalog = data.processClassCatalog || {};
   const lookup = {
@@ -2490,6 +2498,10 @@ export function mountGraphPage(el, data) {
     Math.max(1, Number(sessionStorage.getItem(DISTANCE_KEY)) || DEFAULT_DISTANCE)
   );
   const initialFilters = graphFiltersFromUrl(people, lookup, storedDistance);
+  if (rootId && isKnownGraphRoot(rootId, lookup)) {
+    initialFilters.selectedRootId = rootId;
+  }
+  const syncFiltersToUrl = syncUrl ? syncGraphFiltersToUrl : () => {};
   let dateRangeStart = null;
   let dateRangeEnd = null;
   let selectedRootId = initialFilters.selectedRootId;
@@ -2530,7 +2542,7 @@ export function mountGraphPage(el, data) {
   let paramsOpen = false;
   let disposeCanvas = null;
   let disposeDateSlicer = null;
-  syncGraphFiltersToUrl(selectedRootId, distance, lookup);
+  syncFiltersToUrl(selectedRootId, distance, lookup);
 
   function persistParams() {
     // Mirror the live values back into the active view's slot before saving,
@@ -2791,7 +2803,7 @@ export function mountGraphPage(el, data) {
       selectedRootId = li.dataset.person;
       selectedRootLabel = graphRootLabelFromId(selectedRootId, lookup);
       resetGraphStateForFocus(selectedRootId);
-      syncGraphFiltersToUrl(selectedRootId, distance, lookup);
+      syncFiltersToUrl(selectedRootId, distance, lookup);
       paint();
     });
     const paramsToggle = el.querySelector("#graph-params-toggle");
@@ -2830,7 +2842,7 @@ export function mountGraphPage(el, data) {
         if (key === "distance") {
           distance = Number(e.target.value) || 1;
           sessionStorage.setItem(DISTANCE_KEY, String(distance));
-          syncGraphFiltersToUrl(selectedRootId, distance, lookup);
+          syncFiltersToUrl(selectedRootId, distance, lookup);
           const range = temporalRangeForRoot(adj, selectedRootId, distance);
           if (range.min) dateRangeStart = range.min;
           if (range.max) dateRangeEnd = range.max;
@@ -2998,7 +3010,7 @@ export function mountGraphPage(el, data) {
           selectedRootId = rootId;
           selectedRootLabel = label || graphRootLabelFromId(rootId, lookup);
           resetGraphStateForFocus(selectedRootId);
-          syncGraphFiltersToUrl(selectedRootId, distance, lookup);
+          syncFiltersToUrl(selectedRootId, distance, lookup);
           paint();
         },
       });

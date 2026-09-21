@@ -18,9 +18,12 @@ from naas_abi_marketplace.domains.personnel.apps.people.scripts.text import (
     words,
 )
 
-# How many people a query may rank. Beyond this the SQL filter has not narrowed
-# anything and the result list is not a useful answer anyway.
-CANDIDATE_LIMIT = 500
+# How many people a query may rank. This is a guard against a runaway table, not
+# a page size: people are fetched in name order and ranked afterwards, so a cap
+# below the size of the directory silently drops everyone after it (at 500, the
+# 847-person Forvis Mazars directory lost a third of its people from every
+# result, and its facet counts).
+CANDIDATE_LIMIT = 20_000
 # An exact word beats a prefix: searching "audit" should put an auditor above an
 # "audited" mention.
 EXACT_MATCH_BONUS = 2.0
@@ -377,7 +380,9 @@ def search(
         ]
 
     total_hits = len(hits)
-    page = max(1, int(page))
+    pages = max(1, -(-total_hits // page_size))
+    # A page past the end is the last page: a stale link should still show people.
+    page = min(max(1, int(page)), pages)
     start = (page - 1) * page_size
     window = hits[start : start + page_size]
 
@@ -390,6 +395,7 @@ def search(
         "facets": facets,
         "total": total_hits,
         "page": page,
+        "pages": pages,
         "page_size": page_size,
         "results": [
             _result(

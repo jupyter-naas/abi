@@ -13,7 +13,6 @@ The dev server reads from ObjectStorage only. Regenerate with ``make demo-data``
 from __future__ import annotations
 
 import json
-import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -28,6 +27,11 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.data_store import (
 from naas_abi_marketplace.domains.personnel.apps.cockpit.graph_payload import (
     build_graph_page_payload,
 )
+from naas_abi_marketplace.domains.personnel.apps.cockpit.graph_query import (
+    load_query_templates,
+    query_source_rows,
+    roster_and_kpis,
+)
 from naas_abi_marketplace.domains.personnel.apps.cockpit.log_payload import (
     build_ledger_log_rows,
 )
@@ -41,22 +45,11 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.paths import (
 from naas_abi_marketplace.domains.personnel.apps.cockpit.processes_payload import (
     build_processes_page_payload,
 )
-from naas_abi_marketplace.domains.personnel.apps.cockpit.scripts.roster_builder import (
-    build_roster_rows,
-)
-from naas_abi_marketplace.domains.personnel.apps.cockpit.scripts.workforce_metrics import (
-    build_workforce_metrics,
-)
 from naas_abi_marketplace.domains.personnel.paths import PERSONNEL_ROOT
-from rdflib import Graph, Literal
-
-QUERIES_TTL = (
-    PERSONNEL_ROOT / "ontologies" / "queries" / "PersonnelSparqlQueries.ttl"
-)
+from rdflib import Graph
 
 SCHEMA = "1.0"
 ENTITY_ID = DEFAULT_ENTITY_ID
-GRAPH_IRI = "http://ontology.naas.ai/graph/personnel"
 
 
 def _now_version() -> str:
@@ -81,73 +74,6 @@ def _dump(path: Path, payload: dict) -> None:
     print(f"  wrote {path.relative_to(PERSONNEL_ROOT)}")
 
 
-def _strip_graph(sparql: str) -> str:
-    """Remove GRAPH <iri> { ... } wrappers so queries run on the default graph."""
-    return re.sub(rf"GRAPH\s*<{re.escape(GRAPH_IRI)}>\s*\{{", "{", sparql)
-
-
-def _fill_args(template: str, **kwargs: str) -> str:
-    out = template
-    for key, value in kwargs.items():
-        out = out.replace("{{ " + key + " }}", value)
-        out = out.replace("{{" + key + "}}", value)
-    # Defaults for optional args left in templates.
-    out = out.replace("{{ limit }}", "100")
-    out = out.replace("{{limit}}", "100")
-    out = out.replace("{{ job_title }}", "")
-    out = out.replace("{{job_title}}", "")
-    out = out.replace("{{ person_name }}", "")
-    out = out.replace("{{person_name}}", "")
-    out = out.replace("{{ organization_name }}", "")
-    out = out.replace("{{organization_name}}", "")
-    out = out.replace("{{ status_value }}", "active")
-    out = out.replace("{{status_value}}", "active")
-    out = out.replace("{{ employee_id }}", "E-10428")
-    out = out.replace("{{employee_id}}", "E-10428")
-    return out
-
-
-def _parse_query_templates(ttl_text: str) -> dict[str, str]:
-    """Extract rdfs:label → sparqlTemplate pairs from the queries TTL."""
-    # Match each TemplatableSparqlQuery block loosely.
-    queries: dict[str, str] = {}
-    blocks = re.split(r"\nintentMapping:\w+Query\s+a\s+intentMapping:TemplatableSparqlQuery\s*;", ttl_text)
-    for block in blocks[1:]:
-        label_m = re.search(r'rdfs:label\s+"([^"]+)"', block)
-        tmpl_m = re.search(
-            r'intentMapping:sparqlTemplate\s+"""(.*?)"""\s*;',
-            block,
-            flags=re.DOTALL,
-        )
-        if label_m and tmpl_m:
-            queries[label_m.group(1)] = tmpl_m.group(1).strip()
-    return queries
-
-
-def _row_to_dict(row, keys: list[str]) -> dict:
-    out: dict = {}
-    for key in keys:
-        try:
-            val = row[key]
-        except (KeyError, TypeError):
-            val = getattr(row, key, None)
-        if val is None:
-            out[key] = None
-        elif isinstance(val, Literal):
-            out[key] = val.toPython()
-            if hasattr(out[key], "isoformat"):
-                out[key] = out[key].isoformat()
-        else:
-            out[key] = str(val)
-    return out
-
-
-def _run_select(graph: Graph, sparql: str) -> list[dict]:
-    result = graph.query(sparql)
-    keys = [str(v) for v in result.vars] if result.vars else []
-    return [_row_to_dict(row, keys) for row in result]
-
-
 def main() -> None:
     if not GRAPH_FILE.exists():
         raise SystemExit(
@@ -159,110 +85,20 @@ def main() -> None:
     graph.parse(GRAPH_FILE, format="turtle")
     print(f"  {len(graph)} triples")
 
-    templates = _parse_query_templates(QUERIES_TTL.read_text(encoding="utf-8"))
+    templates = load_query_templates()
     print(f"  {len(templates)} SPARQL templates")
 
     # --- SPARQL query rows (in memory → page datasets) --------------------
     print("queries/")
-    source_rows: dict[str, list[dict]] = {}
-    arg_overrides = {
-        "find_employees_by_status": {"status_value": "active"},
-        "find_employees_by_organization": {"organization_name": ""},
-        "find_positions_by_title": {"job_title": ""},
-        "find_employee_by_id": {"employee_id": "E-10428"},
-        "find_employee_roster": {"limit": "500"},
-        "find_working_experiences": {"limit": "500"},
-        "find_skills_developed": {"limit": "500"},
-        "find_educations": {"limit": "500"},
-    }
-    for label, template in templates.items():
-        sparql = _strip_graph(_fill_args(template, **arg_overrides.get(label, {})))
-        rows = _run_select(graph, sparql)
-        # Normalize keys toward cockpit field names.
-        normalized = []
-        for row in rows:
-            item = {}
-            for k, v in row.items():
-                # camelCase / SPARQL var → friendly
-                mapping = {
-                    "personLabel": "personLabel",
-                    "employeeId": "employee_id",
-                    "jobTitle": "job_title",
-                    "jobFamily": "jobFamily",
-                    "hireDate": "hire_date",
-                    "statusValue": "status_value",
-                    "organizationLabel": "organizationLabel",
-                    "descriptionLabel": "descriptionLabel",
-                    "site": "site",
-                    "siteLabel": "siteLabel",
-                    "temporal": "temporal",
-                    "temporalLabel": "temporalLabel",
-                    "temporalStart": "temporalStart",
-                    "temporalEnd": "temporalEnd",
-                    "givenName": "givenName",
-                    "familyName": "familyName",
-                    "headcount": "headcount",
-                    "working": "working",
-                    "org": "org",
-                    "orgLabel": "orgLabel",
-                    "contract": "contract",
-                    "contractLabel": "contractLabel",
-                    "position": "position",
-                    "positionLabel": "positionLabel",
-                    "role": "role",
-                    "roleLabel": "roleLabel",
-                    "remuneration": "remuneration",
-                    "remunerationLabel": "remunerationLabel",
-                    "remunerationAmount": "remunerationAmount",
-                    "remunerationCurrency": "remunerationCurrency",
-                    "jobDescription": "jobDescription",
-                    "jobDescriptionLabel": "jobDescriptionLabel",
-                }
-                item[mapping.get(k, k)] = v
-            # Vacant flag for positions-by-title
-            if label == "find_positions_by_title":
-                item["vacant"] = item.get("personLabel") is None
-            normalized.append(item)
-        source_rows[label] = normalized
+    source_rows = query_source_rows(graph, templates)
 
     # --- page datasets ------------------------------------------------------
     print(f"data/entities/{ENTITY_ID}/")
     org_label = load_default_entity().get("organizationLabel") or "Demo"
-    employment_rows = [
-        {
-            "personLabel": row.get("personLabel"),
-            "employee_id": row.get("employee_id"),
-            "job_title": row.get("job_title"),
-            "job_family": row.get("jobFamily") or row.get("job_family"),
-            "role": row.get("role"),
-            "hire_date": row.get("hire_date"),
-            "status_value": row.get("status_value"),
-            "organizationLabel": row.get("organizationLabel"),
-        }
-        for row in source_rows.get("find_employee_roster", [])
-    ]
-    roster_rows, roster_source = build_roster_rows(
-        employment_rows,
-        source_rows.get("find_working_experiences", []),
-        org_label=org_label,
+    roster_rows, roster_source, kpis = roster_and_kpis(
+        source_rows, org_label=org_label
     )
     print(f"  roster: {len(roster_rows)} rows from {roster_source}")
-
-    family_by_person = {
-        (r.get("personLabel") or ""): r.get("jobFamily") or r.get("job_family")
-        for r in source_rows.get("find_positions_by_title", [])
-        if r.get("personLabel") and not r.get("vacant")
-    }
-    for row in roster_rows:
-        if not row.get("job_family"):
-            row["job_family"] = family_by_person.get(row.get("personLabel") or "")
-
-    kpis, roster_rows = build_workforce_metrics(
-        roster_rows,
-        source_rows.get("find_working_experiences", []),
-        source_rows.get("find_educations", []),
-        org_label=org_label,
-    )
 
     _dump(
         ENTITY_DATA / "dashboard" / "kpis.json",

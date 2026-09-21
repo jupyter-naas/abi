@@ -48,6 +48,62 @@ function tabsHtml(config, payload, query) {
   return `<nav class="tabs" aria-label="${escapeHtml(config.search?.facet_label || "Filter")}">${all}${rest}</nav>`;
 }
 
+/**
+ * The page numbers to show: the first, the last and a window round the current
+ * one, with a gap marked where numbers are skipped. Pure, so it can be reasoned
+ * about without a browser.
+ */
+export function pageWindow(current, pages, radius = 2) {
+  const shown = new Set([1, pages]);
+  for (let n = current - radius; n <= current + radius; n += 1) {
+    if (n >= 1 && n <= pages) shown.add(n);
+  }
+  const sorted = [...shown].sort((a, b) => a - b);
+  const out = [];
+  sorted.forEach((n, index) => {
+    const gap = index ? n - sorted[index - 1] - 1 : 0;
+    // An ellipsis stands for two pages or more; a single skipped page is shown.
+    if (gap === 1) out.push(n - 1);
+    else if (gap > 1) out.push(null);
+    out.push(n);
+  });
+  return out;
+}
+
+function pagerHtml(config, payload, query) {
+  const pages = payload.pages || 1;
+  if (pages < 2) return "";
+  const current = payload.page || 1;
+  const href = (page) => searchHref(config, { query, facet: payload.facet, page });
+  const link = (page, label, { disabled = false, ariaLabel = "" } = {}) =>
+    disabled
+      ? `<span class="page page-disabled" aria-disabled="true">${label}</span>`
+      : `<a class="page" href="${href(page)}"${ariaLabel ? ` aria-label="${ariaLabel}"` : ""}>${label}</a>`;
+  const numbers = pageWindow(current, pages)
+    .map((n) =>
+      n === null
+        ? `<span class="page page-gap" aria-hidden="true">…</span>`
+        : n === current
+          ? `<span class="page page-current" aria-current="page">${n}</span>`
+          : link(n, n, { ariaLabel: `Page ${n}` }),
+    )
+    .join("");
+  return `<nav class="pager" aria-label="Pages">
+    ${link(current - 1, "‹ Previous", { disabled: current <= 1 })}
+    ${numbers}
+    ${link(current + 1, "Next ›", { disabled: current >= pages })}
+  </nav>`;
+}
+
+function statsText(payload) {
+  const noun = payload.total === 1 ? "person" : "people";
+  const shown = (payload.results || []).length;
+  // "101–200 of 847 people" once there is more than one page; otherwise the plain count.
+  if ((payload.pages || 1) < 2 || !shown) return `${payload.total} ${noun}`;
+  const first = (payload.page - 1) * payload.page_size + 1;
+  return `${first}–${first + shown - 1} of ${payload.total} ${noun}`;
+}
+
 function emptyHtml(config, query) {
   return `
     <div class="empty-state">
@@ -71,11 +127,12 @@ export function missingDatasetHtml(detail) {
 export async function mountResults(view, { config, params }) {
   const query = params.get("q") || "";
   const facet = params.get("facet") || "";
+  const requestedPage = Math.max(1, parseInt(params.get("page") || "1", 10) || 1);
   view.innerHTML = `<div class="results"><p class="stats">Searching…</p></div>`;
 
   let payload;
   try {
-    payload = await fetchSearch({ query, facet });
+    payload = await fetchSearch({ query, facet, page: requestedPage });
   } catch (error) {
     view.innerHTML = `<div class="results">${
       error.detail?.error === "missing_dataset"
@@ -95,7 +152,7 @@ export async function mountResults(view, { config, params }) {
   view.innerHTML = `
     <div class="results">
       ${tabsHtml(config, payload, query)}
-      <p class="stats">${payload.total} ${payload.total === 1 ? "person" : "people"}${
+      <p class="stats">${statsText(payload)}${
         query ? ` for “${escapeHtml(query)}”` : ""
       }${payload.facet ? ` in ${escapeHtml(payload.facet)}` : ""}</p>
       ${noticeHtml}
@@ -104,6 +161,7 @@ export async function mountResults(view, { config, params }) {
           ? results.map((hit) => resultHtml(config, hit, tokens, query)).join("")
           : emptyHtml(config, query)
       }
+      ${pagerHtml(config, payload, query)}
     </div>`;
 
   return { showTopbarSearch: true, query };

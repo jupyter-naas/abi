@@ -141,6 +141,28 @@ What configuration **cannot** do is invent a page or a profile section. Those ar
 renderers, registered in `web/lib/registry.js` and `config_loader.py`. Adding one
 means adding it to both, in the same change.
 
+## Resume and graph views
+
+A profile opens as a resume. The switch at its top right turns it into a graph:
+the cockpit's own graph page (`apps/cockpit/web/components/pages/graph/`), not a
+copy of it, opened on that person.
+
+- **Data, live.** `GET <prefix>/people/<slug>/graph` runs the cockpit's graph
+  queries (`apps/cockpit/graph_query.py`) against this instance's graph file
+  (`data.graph.file`) with `?person` bound to the profile's person. The result
+  is complete and takes well under a second, even on a large directory. It is
+  cached until the graph file changes.
+- **Scripts.** The cockpit's page modules are mounted under
+  `<prefix>/cockpit-pages/`, and the profile imports `GraphPage.js` from there
+  with `syncUrl: false`, so the page leaves this app's address bar alone.
+- **Styles.** `GET <prefix>/graph-view.css` holds the cockpit `app.css` rules
+  that name a class the graph page renders, scoped under `.profile-graph`. Change
+  the look in the cockpit stylesheet; this one is derived from it.
+- **Settings.** Graph defaults (2D/3D, distance, parameters, BFO colours) come
+  from the cockpit's `config.yaml`.
+
+The graph shows one person. To look at someone else, open their profile.
+
 ## Files
 
 ```

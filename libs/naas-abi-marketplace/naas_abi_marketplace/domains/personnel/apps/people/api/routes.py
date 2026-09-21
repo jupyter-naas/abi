@@ -15,6 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import Response
 from naas_abi_marketplace.domains.personnel.apps.people.api.service import (
     dataset_service,
 )
@@ -28,6 +29,10 @@ from naas_abi_marketplace.domains.personnel.apps.people.scripts import (
 )
 from naas_abi_marketplace.domains.personnel.apps.people.scripts.datasets import (
     DatasetsMissingError,
+)
+from naas_abi_marketplace.domains.personnel.apps.people.scripts.graph_view import (
+    graph_view,
+    graph_view_css,
 )
 from naas_abi_marketplace.domains.personnel.apps.people.scripts.ontology_payload import (
     build_ontology_payload,
@@ -92,6 +97,22 @@ def build_router(config_path: Path | None = None) -> APIRouter:
             ) from exc
         except DatasetsMissingError as exc:
             raise HTTPException(status_code=404, detail=exc.as_detail()) from exc
+
+    @router.get("/people/{slug}/graph")
+    def get_person_graph(slug: str) -> dict:
+        """The cockpit graph page's data, run live on this instance's graph."""
+        try:
+            return graph_view(dataset_service(), config(), slug=slug)
+        except profile_payload.ProfileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=f"No profile for {slug}"
+            ) from exc
+        except DatasetsMissingError as exc:
+            raise HTTPException(status_code=404, detail=exc.as_detail()) from exc
+
+    @router.get("/graph-view.css")
+    def get_graph_view_css() -> Response:
+        return Response(graph_view_css(), media_type="text/css")
 
     @router.get("/people/{slug}/queries/{query_name}/run")
     def run_person_query(

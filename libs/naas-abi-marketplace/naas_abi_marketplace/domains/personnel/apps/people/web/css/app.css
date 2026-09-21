@@ -27,6 +27,11 @@
   --font-display: var(--font-body);
   --content-width: 760px;
   --profile-width: 1080px;
+  /* Read by the cockpit graph canvas (profile graph view) from :root. */
+  --graph-node-fill: #ffffff;
+  --graph-node-fill-muted: rgba(255, 255, 255, 0.82);
+  --muted-surface: var(--chip-surface);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 * {
@@ -404,6 +409,47 @@ mark,
   margin-left: 4px;
 }
 
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 24px 0 8px;
+}
+
+.page {
+  min-width: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  text-align: center;
+  text-decoration: none;
+  color: var(--result-link, var(--accent));
+  background: var(--paper);
+}
+
+a.page:hover {
+  background: var(--accent-soft);
+}
+
+.page-current {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--mark-text, #fff);
+  font-weight: 600;
+}
+
+.page-disabled {
+  color: var(--muted);
+  background: none;
+}
+
+.page-gap {
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+  min-width: 0;
+}
+
 .stats {
   color: var(--muted);
   font-size: 14px;
@@ -664,6 +710,78 @@ mark,
 .button.secondary {
   background: none;
   color: var(--accent);
+}
+
+.topbar-end {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  flex: none;
+}
+
+.topbar-end:empty {
+  display: none;
+}
+
+.profile-view-switch {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.profile-view-option {
+  min-width: 84px;
+  padding: 6px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.profile-view-option:hover {
+  color: var(--ink);
+}
+
+.profile-view-option[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--mark-text);
+}
+
+.profile-view-option:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* The cockpit graph page fills this box; its own stylesheet (graph-view.css)
+   is scoped under .profile-graph. */
+.profile-graph {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 130px);
+  min-height: 480px;
+  margin-top: 20px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.profile-graph[hidden],
+.profile-columns[hidden] {
+  display: none;
+}
+
+.profile.is-graph-view {
+  padding-bottom: 24px;
+}
+
+.profile-graph-status {
+  margin: auto;
 }
 
 .profile-columns {
@@ -1176,6 +1294,15 @@ body.sparql-modal-open {
 
   .brand-name {
     display: none;
+  }
+
+  .topbar-search {
+    min-width: 0;
+  }
+
+  .profile-view-option {
+    min-width: 0;
+    padding: 6px 10px;
   }
 }
 

@@ -33,7 +33,24 @@ document.addEventListener(
   true,
 );
 
+/**
+ * The topbar's right-hand slot, holding whatever the page hands over as
+ * ``state.topbarEnd`` (the profile's Resume/Graph switch). Created here rather
+ * than in index.html, so instances with their own page shell get it too.
+ */
+function topbarEndSlot() {
+  let slot = document.getElementById("topbar-end");
+  if (!slot) {
+    slot = document.createElement("div");
+    slot.className = "topbar-end";
+    slot.id = "topbar-end";
+    topbar.append(slot);
+  }
+  return slot;
+}
+
 function renderTopbar(state) {
+  topbarEndSlot().replaceChildren(...(state.topbarEnd ? [state.topbarEnd] : []));
   if (!state.showTopbarSearch) {
     topbar.hidden = true;
     return;

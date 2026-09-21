@@ -87,6 +87,18 @@ Committed datasets live under ``data/`` and are served to the UI through
 - ``data/globals/entities.json`` - sidebar entity dropdown (organization perimeters)
 - Build input graph: ``domains/personnel/data/graph/personnel_demo.ttl``
 
+The queries and the shaping of their rows live in ``graph_query.py``. The
+exporter calls them to write the datasets. People Search calls
+``graph_page_payload(graph, org_label=..., person=...)`` live for a profile's
+graph view, with ``?person`` bound so the rows are one person's. Keep both
+callers working when changing either.
+
+``GraphPage.js`` is also loaded by People Search. Its exports
+``configureGraph`` and ``mountGraphPage(el, data, { rootId, syncUrl })`` are a
+contract. ``syncUrl: false`` must keep the page from touching the address bar,
+and new class names it renders must have their rules in ``css/app.css``, where
+People Search reads them from.
+
 Regenerate with ``make demo-data`` (from ``domains/personnel``). Dev server:
 ``make app-personnel-cockpit``. Do not invent manager hierarchies - not in the ontology.
 

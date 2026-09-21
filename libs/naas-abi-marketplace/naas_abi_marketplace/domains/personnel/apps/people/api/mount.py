@@ -20,9 +20,32 @@ from naas_abi_marketplace.domains.personnel.apps.people.api.routes import build_
 from naas_abi_marketplace.domains.personnel.apps.people.config_loader import (
     SHARED_WEB_ROOT,
 )
+from naas_abi_marketplace.domains.personnel.apps.people.scripts.graph_view import (
+    COCKPIT_PAGES,
+)
+from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
+from starlette.types import Scope
 
 SHARED_WEB_URL = "web"
+# The cockpit's page modules, for the profile's graph view. Its scripts are
+# loaded as they are rather than copied, so the view stays the cockpit's.
+COCKPIT_PAGES_URL = "cockpit-pages"
+
+
+class RevalidatedStaticFiles(StaticFiles):
+    """Static files the browser must check before reusing.
+
+    With no Cache-Control, browsers may reuse a cached ES module for a while
+    without asking, so an updated app keeps running old scripts until a hard
+    reload. ``no-cache`` still lets them cache: each load is a conditional
+    request answered by 304 when nothing changed.
+    """
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
 
 def shared_web_url(prefix: str) -> str:
@@ -38,8 +61,14 @@ def mount_people_app(
 ) -> None:
     """Add one instance's API and the renderers its page loads."""
     app.include_router(build_router(config_path), prefix=prefix)
+    name = prefix.strip("/").replace("/", "-")
     app.mount(
         shared_web_url(prefix),
-        StaticFiles(directory=SHARED_WEB_ROOT),
-        name=f"{prefix.strip('/').replace('/', '-')}-shared-web",
+        RevalidatedStaticFiles(directory=SHARED_WEB_ROOT),
+        name=f"{name}-shared-web",
+    )
+    app.mount(
+        f"{prefix.rstrip('/')}/{COCKPIT_PAGES_URL}",
+        RevalidatedStaticFiles(directory=COCKPIT_PAGES),
+        name=f"{name}-cockpit-pages",
     )
