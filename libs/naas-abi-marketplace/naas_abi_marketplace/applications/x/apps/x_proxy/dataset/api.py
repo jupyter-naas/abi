@@ -207,6 +207,7 @@ def user_posts(
         f"SELECT a.*, "
         f"s.matched_count AS stat_matched_count, "
         f"s.referenced_count AS stat_referenced_count, "
+        f"s.first_post_at AS stat_first_post_at, "
         f"s.last_post_at AS stat_last_post_at "
         f"FROM {AUTHORS_V1} a "
         f"LEFT JOIN {AUTHOR_STATS_V1} s ON a.author_id = s.author_id "

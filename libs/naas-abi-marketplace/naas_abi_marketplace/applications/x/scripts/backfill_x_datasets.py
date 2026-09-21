@@ -54,6 +54,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Write JSON batch manifests under staging-prefix after each batch.",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-ingest envelopes even when already recorded in envelopes_v1.",
+    )
     return parser.parse_args(argv)
 
 
@@ -88,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
 
     for offset in range(0, total, args.batch_size):
         batch = paths[offset : offset + args.batch_size]
-        summary = sync_envelope_paths(module, batch)
+        summary = sync_envelope_paths(module, batch, force=args.force)
         summaries.append(summary)
         processed += len(batch)
         if args.write_staging:

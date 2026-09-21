@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from naas_abi_core.services.dataset.DatasetPort import (
@@ -25,6 +26,38 @@ COUNT_BUCKETS_V1 = "count_buckets_v1"
 PROJECTION_COMMITS_V1 = "projection_commits_v1"
 
 MEDIA_OBJECT_PREFIX = "x/media"
+
+_DATASET_SPEC_COMMENT_PREFIX = "abi.dataset-spec:"
+
+
+def _author_stats_v1_spec() -> DatasetSpec:
+    return DatasetSpec(
+        name=AUTHOR_STATS_V1,
+        namespace=X_DATASET_NAMESPACE,
+        columns=(
+            ColumnSpec(name="author_id", type="string"),
+            ColumnSpec(name="matched_count", type="integer"),
+            ColumnSpec(name="referenced_count", type="integer"),
+            ColumnSpec(name="first_post_at", type="timestamp"),
+            ColumnSpec(name="last_post_at", type="timestamp"),
+            ColumnSpec(name="updated_at", type="timestamp"),
+        ),
+        primary_key=("author_id",),
+    )
+
+
+def _refresh_dataset_table_comment(dataset: IDatasetPort, spec: DatasetSpec) -> None:
+    """Keep DuckLake table COMMENT in sync with code (writes validate against it)."""
+    comment = _DATASET_SPEC_COMMENT_PREFIX + json.dumps(
+        spec.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    escaped = comment.replace("'", "''")
+    dataset.query(
+        f"COMMENT ON TABLE {spec.name} IS '{escaped}'",  # nosec B608
+        namespace=spec.namespace,
+    )
 
 
 def x_dataset_sync_enabled(module) -> bool:
@@ -108,19 +141,7 @@ def ensure_x_datasets(dataset: IDatasetPort) -> None:
             ),
             primary_key=("author_id",),
         ),
-        DatasetSpec(
-            name=AUTHOR_STATS_V1,
-            namespace=X_DATASET_NAMESPACE,
-            columns=(
-                ColumnSpec(name="author_id", type="string"),
-                ColumnSpec(name="matched_count", type="integer"),
-                ColumnSpec(name="referenced_count", type="integer"),
-                ColumnSpec(name="first_post_at", type="timestamp"),
-                ColumnSpec(name="last_post_at", type="timestamp"),
-                ColumnSpec(name="updated_at", type="timestamp"),
-            ),
-            primary_key=("author_id",),
-        ),
+        _author_stats_v1_spec(),
         DatasetSpec(
             name=ENVELOPES_V1,
             namespace=X_DATASET_NAMESPACE,
@@ -195,6 +216,25 @@ def ensure_x_datasets(dataset: IDatasetPort) -> None:
     )
 
     ensure_matched_tweet_ids_ready(dataset)
+    _migrate_x_dataset_schema(dataset)
+
+
+def _migrate_x_dataset_schema(dataset: IDatasetPort) -> None:
+    """Apply additive schema fixes on existing DuckLake tables."""
+    described = dataset.query(
+        f"DESCRIBE {AUTHOR_STATS_V1}",  # nosec B608
+        namespace=X_DATASET_NAMESPACE,
+    )
+    columns = {
+        str(row.get("column_name") or row.get("Field") or "").strip().lower()
+        for row in described.rows
+    }
+    if "first_post_at" not in columns:
+        dataset.query(
+            f"ALTER TABLE {AUTHOR_STATS_V1} ADD COLUMN first_post_at TIMESTAMP",  # nosec B608
+            namespace=X_DATASET_NAMESPACE,
+        )
+    _refresh_dataset_table_comment(dataset, _author_stats_v1_spec())
 
 
 TABLE_PRIMARY_KEYS: dict[str, tuple[str, ...]] = {
