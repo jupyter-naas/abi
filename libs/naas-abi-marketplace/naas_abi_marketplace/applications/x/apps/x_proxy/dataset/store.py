@@ -46,8 +46,26 @@ def _author_stats_v1_spec() -> DatasetSpec:
     )
 
 
+def _has_dataset_spec_comment(dataset: IDatasetPort, spec: DatasetSpec) -> bool:
+    """True when DuckLake already stores a valid abi.dataset-spec COMMENT."""
+    escaped_table = spec.name.replace("'", "''")
+    result = dataset.query(
+        "SELECT comment FROM duckdb_tables() "
+        "WHERE database_name = 'abi_datasets' "
+        f"AND schema_name = '{spec.namespace}' "
+        f"AND table_name = '{escaped_table}'",  # nosec B608
+        namespace=spec.namespace,
+    )
+    if not result.rows:
+        return False
+    comment = str(result.rows[0].get("comment") or "")
+    return comment.startswith(_DATASET_SPEC_COMMENT_PREFIX)
+
+
 def _refresh_dataset_table_comment(dataset: IDatasetPort, spec: DatasetSpec) -> None:
     """Keep DuckLake table COMMENT in sync with code (writes validate against it)."""
+    if _has_dataset_spec_comment(dataset, spec):
+        return
     comment = _DATASET_SPEC_COMMENT_PREFIX + json.dumps(
         spec.model_dump(mode="json"),
         sort_keys=True,
@@ -210,7 +228,8 @@ def ensure_x_datasets(dataset: IDatasetPort) -> None:
         try:
             dataset.create(spec)
         except DatasetAlreadyExistsError:
-            # Catalog import / replay can register tables without abi.dataset-spec COMMENT.
+            # Catalog import may register tables without COMMENT; refresh only if missing
+            # (COMMENT ON TABLE commits a catalog snapshot — avoid on every ingest).
             _refresh_dataset_table_comment(dataset, spec)
     from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.matched_tweets import (
         ensure_matched_tweet_ids_ready,
