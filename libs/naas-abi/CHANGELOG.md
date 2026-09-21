@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v2.72.0 (2026-09-21)
+
+### Bug Fixes
+
+- **nexus-web**: Keep Maps helpers out of Next.js route modules
+  ([`f2e5e97`](https://github.com/jupyter-naas/abi/commit/f2e5e97a707326f5e87b4d5a04fd132c0981dc94))
+
+### Features
+
+- **nexus**: Add graph map layers with pin inspector and live AIS/flights
+  ([`35301d7`](https://github.com/jupyter-naas/abi/commit/35301d77fe1d42718cb7dabca8be890de3e4e86e))
+
+- **nexus**: Implement method to remove generated catalog while preserving graph metadata
+  ([`723af9b`](https://github.com/jupyter-naas/abi/commit/723af9b3e249c5a39717d8c65b8223de3be55bf4))
+
+
 ## v2.71.0 (2026-09-19)
 
 ### Features
