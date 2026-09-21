@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, ExternalLink, Loader2, X } from 'lucide-react'
 import { fetchInstanceDetail, type InstanceDetail, type InstanceRelation } from '@/lib/graph-query/client'
+import { sortInstanceProperties } from '@/lib/instance-property-order'
 import { compactUri } from './format'
 
 export interface InstanceDrawerProps {
@@ -221,7 +222,7 @@ export function InstanceDrawer({
               {detail.data_properties.length === 0 ? (
                 <Empty />
               ) : (
-                detail.data_properties.map((dp, i) => (
+                sortInstanceProperties(detail.data_properties).map((dp, i) => (
                   <div key={i} className="flex flex-col border-b py-1 last:border-0">
                     <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                       {dp.predicate_label || compactUri(dp.predicate_uri)}

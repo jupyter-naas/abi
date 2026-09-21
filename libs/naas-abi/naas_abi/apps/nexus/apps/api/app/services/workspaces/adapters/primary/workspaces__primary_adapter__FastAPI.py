@@ -32,6 +32,9 @@ from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
     check_rate_limit,
     get_rate_limit_identifier,
 )
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary.resource_access import (
+    router as resource_access_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.postgres import (
     WorkspaceSecondaryAdapterPostgres,
 )
@@ -54,6 +57,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
+router.include_router(resource_access_router)
 
 
 def get_workspace_service(db: AsyncSession = Depends(get_db)) -> WorkspaceService:

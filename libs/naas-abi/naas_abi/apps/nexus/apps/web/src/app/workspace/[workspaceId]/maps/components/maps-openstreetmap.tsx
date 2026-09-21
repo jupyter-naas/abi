@@ -32,6 +32,7 @@ export function MapsOpenStreetMap() {
         attributionControl: true,
       });
       L.tileLayer(isMapsDarkMode() ? MAPS_TILE_DARK : MAPS_TILE_LIGHT, {
+        className: 'maps-basemap',
         attribution: MAPS_TILE_ATTR,
         maxZoom: 18,
       }).addTo(map);
@@ -53,7 +54,7 @@ export function MapsOpenStreetMap() {
       <div className="maps-canvas__toolbar">
         <span className="maps-canvas__toolbar-title">OpenStreetMap</span>
         <span className="maps-canvas__toolbar-meta">
-          Public basemap · OSM / CARTO
+          Public basemap · OpenStreetMap
         </span>
       </div>
       <div className="maps-canvas__stage">

@@ -2,13 +2,12 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { Header } from '@/components/shell/header';
+import { GraphHeader as Header } from '@/components/graph/graph-header';
 import { AlertCircle, CheckCircle2, Clock, Download, FileText, GitBranch, Loader2, RefreshCw, Tag, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useKnowledgeGraphStore } from '@/stores/knowledge-graph';
-import { GraphDevBanner } from '@/components/graph/graph-dev-banner';
 import { useGraphExportStore } from '@/stores/graph-export';
 import { KpiCard } from '@/app/analytics/components/kpi-card';
 import {
@@ -248,7 +247,6 @@ export default function ExportPage() {
       <Header title="Export Graph" />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
-          <GraphDevBanner />
           <div className="flex-1 overflow-y-auto px-6 py-6">
             {graphsLoading ? (
               <div className="flex h-full items-center justify-center">

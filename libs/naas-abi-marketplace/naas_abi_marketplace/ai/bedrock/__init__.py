@@ -17,6 +17,22 @@ from pydantic import model_validator
 
 logger = logging.getLogger(__name__)
 
+# OpenAI models on Bedrock often require a system inference profile id for Converse.
+_BEDROCK_INFERENCE_PROFILE_BY_MODEL_ID: dict[str, str] = {
+    "gpt-5.6-sol": "us.openai.gpt-5.6-sol",
+    "openai.gpt-5.6-sol": "us.openai.gpt-5.6-sol",
+    "gpt-5.6-luna": "us.openai.gpt-5.6-luna",
+    "openai.gpt-5.6-luna": "us.openai.gpt-5.6-luna",
+    "gpt-5.6-terra": "us.openai.gpt-5.6-terra",
+    "openai.gpt-5.6-terra": "us.openai.gpt-5.6-terra",
+}
+
+
+def resolve_bedrock_converse_model_id(model_id: str) -> str:
+    """Return the Bedrock Converse ``modelId`` (foundation or inference profile)."""
+    key = (model_id or "").strip()
+    return _BEDROCK_INFERENCE_PROFILE_BY_MODEL_ID.get(key, key)
+
 
 class BedrockValidationError(RuntimeError):
     """Raised when the Bedrock module cannot authenticate or reach AWS Bedrock."""
@@ -204,21 +220,41 @@ class ABIModule(BaseModule):
         # exposes CANONICAL_ID + model and registers them.
         super().on_load()
 
+        from naas_abi_core.models.Model import CanonicalModelId
+        from naas_abi_core.services.model_registry.ModelRegistryPort import (
+            ModelNotFoundError,
+        )
+
+        registry = self.engine.services.model_registry
+        for alias in ("openai.gpt-5.6-sol",):
+            try:
+                sol = registry.get_chat_model(
+                    CanonicalModelId.GPT_5_6_SOL,
+                    provider=ModelProvider.BEDROCK,
+                )
+            except ModelNotFoundError:
+                break
+            registry.register(alias, sol)
+
         # Register the bedrock chat factory for off-catalog model ids.
         from langchain_aws import ChatBedrockConverse
 
         cfg = self.configuration
 
         def bedrock_chat_factory(provider_model_id: str) -> ChatBedrockConverse:
-            return ChatBedrockConverse(
-                model=provider_model_id,
-                region_name=cfg.region_name,
-                aws_access_key_id=cfg.aws_access_key_id,
-                aws_secret_access_key=cfg.aws_secret_access_key,
-                aws_session_token=cfg.aws_session_token,
-                temperature=0,
-                max_tokens=None,
-            )
+            converse_id = resolve_bedrock_converse_model_id(provider_model_id)
+            kwargs: dict = {
+                "model": converse_id,
+                "region_name": cfg.region_name,
+                "aws_access_key_id": cfg.aws_access_key_id,
+                "aws_secret_access_key": cfg.aws_secret_access_key,
+                "aws_session_token": cfg.aws_session_token,
+                "max_tokens": None,
+            }
+            # OpenAI GPT-5.6 on Bedrock rejects explicit temperature in Converse.
+            if "gpt-5.6" not in converse_id and "gpt-5.6" not in provider_model_id:
+                kwargs["temperature"] = 0
+            return ChatBedrockConverse(**kwargs)
 
         self.engine.services.model_registry.register_chat_provider(
             ModelProvider.BEDROCK, bedrock_chat_factory

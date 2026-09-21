@@ -1,0 +1,166 @@
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:S6P3Ontology a owl:Ontology ;
+    rdfs:label "S6-P3 · Communications and calendar"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceSHA256 "0d2c2c1e42dc3dfcfb1a8661ddba31057e88de911af1bb8f21868ba3096c0763"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    dct:title "S6-P3 · Communications and calendar"@en ;
+    rdfs:comment "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    owl:imports abi:ABIProcessLedgerOntology .
+
+abi:S6P3Condition1 a owl:Class ;
+    rdfs:label "Communications and calendar timing condition"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Continuous"@en ;
+    rdfs:comment "Ledger trigger/cadence/target: Continuous. No occurrence or achieved timing is asserted."@en ;
+    rdfs:subClassOf abi:ExecutionCondition ;
+    skos:definition "Ledger trigger/cadence/target: Continuous. No occurrence or achieved timing is asserted."@en .
+
+abi:S6P3ExecutionRole a owl:Class ;
+    rdfs:label "Communications and calendar execution role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "A proposed role realised in Communications and calendar and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom [ a owl:Class ;
+                    owl:unionOf ( abi:CommsOfficerParticipant abi:MessagingSystemHost abi:StaffParticipant ) ] ],
+        abi:ExecutionRole ;
+    skos:definition "A proposed role realised in Communications and calendar and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en .
+
+abi:S6P3Interval a owl:Class ;
+    rdfs:label "Communications and calendar execution interval"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The temporal region occupied by an execution of Communications and calendar; actual dates are unspecified."@en ;
+    rdfs:subClassOf abi:ExecutionInterval ;
+    skos:definition "The temporal region occupied by an execution of Communications and calendar; actual dates are unspecified."@en .
+
+abi:S6P3Objective1 a owl:Class ;
+    rdfs:label "Communications and calendar objective"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Coordinated operations"@en ;
+    rdfs:comment "Intended outcome: Coordinated operations. This is an objective specification, not a role or a guaranteed result."@en ;
+    rdfs:subClassOf abi:ObjectiveSpecification ;
+    skos:definition "Intended outcome: Coordinated operations. This is an objective specification, not a role or a guaranteed result."@en .
+
+abi:S6P3Specification a owl:Class ;
+    rdfs:label "Communications and calendar specification"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The simulated ledger specification for S6-P3. It describes a possible process, not an executed run."@en ;
+    rdfs:subClassOf abi:ProcessSpecification ;
+    skos:definition "The simulated ledger specification for S6-P3. It describes a possible process, not an executed run."@en .
+
+abi:S6P3Step1 a owl:Class ;
+    rdfs:label "Communications and calendar · Schedule"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 1 ;
+    rdfs:comment "Suggested step 1 of Communications and calendar: Schedule. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S6P3 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 1 of Communications and calendar: Schedule. Its ordering is a specification, not observed timing."@en .
+
+abi:S6P3Step2 a owl:Class ;
+    rdfs:label "Communications and calendar · Notify"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 2 ;
+    rdfs:comment "Suggested step 2 of Communications and calendar: Notify. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S6P3 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 2 of Communications and calendar: Notify. Its ordering is a specification, not observed timing."@en .
+
+abi:S6P3Step3 a owl:Class ;
+    rdfs:label "Communications and calendar · Record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 3 ;
+    rdfs:comment "Suggested step 3 of Communications and calendar: Record. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S6P3 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 3 of Communications and calendar: Record. Its ordering is a specification, not observed timing."@en .
+
+abi:S6P3 a owl:Class ;
+    rdfs:label "Communications and calendar"@en ;
+    abi:ledgerCode "S6-P3"@en ;
+    abi:ledgerHOWITIS "Delivery status"@en ;
+    abi:ledgerHOWWEKNOW "Calendar record"@en,
+        "Message log"@en ;
+    abi:ledgerWHEN "Continuous"@en ;
+    abi:ledgerWHERE "Operations centre"@en ;
+    abi:ledgerWHO "Comms officer"@en,
+        "Messaging system"@en,
+        "Staff"@en ;
+    abi:ledgerWHY "Coordinated operations"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:qualityMappingStatus "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed ABI communications and calendar process. Suggested steps: Schedule → Notify → Record. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en,
+        "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S6P3Step2 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:StaffParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S6P3Step3 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:DeliveryStatusIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000059 ;
+            owl:someValuesFrom abi:S6P3Specification ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:usesInformation ;
+            owl:someValuesFrom abi:MessagingSystemSoftware ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:OperationsCentreSite ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasExecutionCondition ;
+            owl:someValuesFrom abi:S6P3Condition1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:CommsOfficerParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S6P3Step1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000055 ;
+            owl:someValuesFrom abi:S6P3ExecutionRole ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:MessagingSystemHost ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:pursuesObjective ;
+            owl:someValuesFrom abi:S6P3Objective1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:MessageLogRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000199 ;
+            owl:someValuesFrom abi:S6P3Interval ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:CalendarRecordRecord ],
+        abi:LedgerProcess,
+        abi:S6Process,
+        bfo:BFO_0000015 ;
+    skos:altLabel "S6-P3"@en ;
+    skos:definition "A proposed ABI communications and calendar process. Suggested steps: Schedule → Notify → Record. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en .
+

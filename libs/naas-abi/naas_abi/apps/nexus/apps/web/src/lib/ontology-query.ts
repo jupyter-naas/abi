@@ -5,14 +5,13 @@ export function ontologyApiParams(
 ): URLSearchParams {
   const params = new URLSearchParams();
   const workspaceId = useWorkspaceStore.getState().currentWorkspaceId;
-  if (workspaceId) {
-    params.set('workspace_id', workspaceId);
-  }
+  if (!workspaceId) throw new Error('Select a workspace before loading ontologies.');
   for (const [key, value] of Object.entries(extra)) {
     if (value) {
       params.set(key, value);
     }
   }
+  params.set('workspace_id', workspaceId);
   return params;
 }
 

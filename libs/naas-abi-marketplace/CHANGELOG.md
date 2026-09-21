@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v3.49.1 (2026-09-18)
+
+### Bug Fixes
+
+- **x_proxy**: Update script paths in build.sh
+  ([`8b320e8`](https://github.com/jupyter-naas/abi/commit/8b320e8145003bf230eed2ecd47e5167c58046ef))
+
+
+## v3.49.0 (2026-09-17)
+
+### Features
+
+- **bedrock**: Add GPT-5.6 Sol model support on Amazon Bedrock
+  ([`42a9fdf`](https://github.com/jupyter-naas/abi/commit/42a9fdf21c40f8d7090583932a4ef33ffda1a689))
+
+- **nexus-build-app**: Add role-based visibility for office agents
+  ([`02276d4`](https://github.com/jupyter-naas/abi/commit/02276d49c4f37924f647eb3ca8101dd2155a2f18))
+
+### Testing
+
+- **x-agent**: Add hermetic fixtures and skip routing tests for XAgent
+  ([`15636a1`](https://github.com/jupyter-naas/abi/commit/15636a16952bcc34536e875bc89907c0bcafa6ac))
+
+
 ## v3.48.1 (2026-09-14)
 
 ### Bug Fixes

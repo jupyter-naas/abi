@@ -2,6 +2,8 @@ import {
   AppWindow,
   Boxes,
   Bot,
+  BrainCircuit,
+  Network,
   Brush,
   Cpu,
   Download,
@@ -52,6 +54,8 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     label: 'Components',
     items: [
       { href: '/settings/agents', label: 'Agents', icon: Bot },
+      { href: '/settings/ontologies', label: 'Ontologies', icon: BrainCircuit },
+      { href: '/settings/graphs', label: 'Graphs', icon: Network },
       { href: '/settings/skills', label: 'Skills', icon: Zap },
       { href: '/settings/apps', label: 'Apps', icon: AppWindow },
       { href: '/settings/models', label: 'Models', icon: Cpu },

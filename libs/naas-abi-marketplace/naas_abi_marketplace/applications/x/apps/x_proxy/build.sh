@@ -69,8 +69,8 @@ if [[ "$PHASE" == "web" ]]; then
 fi
 
 cd "$REPO_ROOT"
-"$REPO_ROOT/scripts/ensure_writable_egg_info.sh" "$REPO_ROOT"
-"$REPO_ROOT/scripts/ensure_writable_storage_events.sh" "$REPO_ROOT"
+"$REPO_ROOT/scripts/nexus/ensure_writable_egg_info.sh" "$REPO_ROOT"
+"$REPO_ROOT/scripts/nexus/ensure_writable_storage_events.sh" "$REPO_ROOT"
 
 _publish_host() {
   uv run python -m naas_abi_marketplace.applications.x.apps.x_proxy.build \

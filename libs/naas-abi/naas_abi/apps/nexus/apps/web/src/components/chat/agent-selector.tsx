@@ -9,6 +9,7 @@ import { useIntegrationsStore } from '@/stores/integrations';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useAgentList } from '@/components/ui/dialogs';
 import { getLogoUrl } from '@/lib/logo-url';
+import { pickWorkspaceDefaultAgent } from '@/lib/pick-workspace-default-agent';
 
 const iconComponents = {
   user: User,
@@ -59,8 +60,7 @@ export function AgentSelector({ compact = false }: { compact?: boolean }) {
   const { selectedAgent, setSelectedAgent } = useWorkspaceStore();
   const { defaultAgents, customAgents, filteredAgents, enabledAgents } = useAgentList(searchQuery);
 
-  const defaultAgent =
-    enabledAgents.find((a) => a.isDefault) ?? enabledAgents[0];
+  const defaultAgent = pickWorkspaceDefaultAgent(enabledAgents);
   const selected = enabledAgents.find((a) => a.id === selectedAgent) || defaultAgent;
 
   useEffect(() => {

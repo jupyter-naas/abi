@@ -88,7 +88,10 @@ def _clean_cache():
 
 @pytest.fixture
 def storage() -> FakeObjectStorageAdapter:
-    return FakeObjectStorageAdapter()
+    fake = FakeObjectStorageAdapter()
+    # The service keeps this user directory up to date at ingestion.
+    fake.json["ref-users.json"] = [{"user_id": "u-alice", "user_email": "alice@example.com"}]
+    return fake
 
 
 @pytest.fixture
@@ -115,7 +118,7 @@ class TestSaveEvent:
         record = events.records[0]
         assert record.event_id == "e1"
         assert record.event_name == "page_viewed"
-        assert record.user_email == "alice@example.com"
+        assert record.user_id == "u-alice"
         assert record.workspace_id == "ws-1"
         assert record.session_id == "s1"
         assert record.page_path == "/home"
@@ -124,6 +127,32 @@ class TestSaveEvent:
     def test_a_payload_with_no_known_fields_still_publishes(self, adapter, events):
         adapter.save_event({"anything": 1})
         assert events.records[0].event_id is None
+
+
+class TestNoEmailInTheLog:
+    """The event log is append-only: it keeps the user id, never the email."""
+
+    def test_neither_the_column_nor_the_payload_holds_the_email(self, adapter, events):
+        adapter.save_event(event())
+        record = events.records[0]
+        assert record.user_email is None
+        assert "alice@example.com" not in record.payload_json
+        assert "user_email" not in record.payload_json
+
+    def test_the_email_comes_back_from_the_user_directory(self, adapter, storage):
+        adapter.save_event(event())
+        storage.json["ref-users.json"] = [{"user_id": "u-alice", "user_email": "alice.new@example.com"}]
+        assert adapter.list_events()[0]["user_email"] == "alice.new@example.com"
+
+    def test_an_unknown_user_comes_back_without_an_email(self, adapter, storage):
+        adapter.save_event(event(user_id="u-ghost", user_email="ghost@example.com"))
+        assert "user_email" not in adapter.list_events()[0]
+
+    def test_legacy_events_keep_the_email_they_were_written_with(self, events):
+        legacy = event("old-1", user_id="u-nobody", user_email="old@example.com")
+        storage = FakeObjectStorageAdapter(legacy=[legacy])
+        adapter = AnalyticsSecondaryAdapterEventLog(events=events, object_storage_adapter=storage)
+        assert adapter.list_events() == [legacy]
 
 
 class TestListEvents:

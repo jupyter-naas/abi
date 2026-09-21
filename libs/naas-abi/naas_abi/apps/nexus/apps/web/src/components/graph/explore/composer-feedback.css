@@ -1,0 +1,10 @@
+.composer-discovery-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: var(--space-2, 8px) var(--space-4, 16px);
+  border-bottom: 1px solid hsl(var(--border));
+  color: hsl(var(--destructive));
+  font-size: 12px;
+}
+.composer-discovery-error button { flex-shrink: 0; text-decoration: underline; }

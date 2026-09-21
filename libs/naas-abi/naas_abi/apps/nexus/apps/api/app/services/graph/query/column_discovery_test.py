@@ -12,6 +12,8 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import (
     IGraphQueryStore,
     ResultRow,
 )
+from rdflib import Dataset, Graph, Namespace, URIRef
+from rdflib.query import Result
 
 DOC = "http://ontology.naas.ai/documents#"
 XSD = "http://www.w3.org/2001/XMLSchema#"
@@ -190,3 +192,119 @@ def test_type_graphs_default_to_grain_graphs() -> None:
     )
     discover_columns(store, graph_uris=["http://g/A"], class_uris=[DOC + "Item"])
     assert "VALUES ?tg { <http://g/A> }" in store.seen["tc"]
+
+
+# Execute the generated queries, not just canned rows: optional ontology fields,
+# cross-graph incoming/outgoing relations, and multi-class counts must survive.
+class _DiscoveryMemoryStore:
+    def __init__(self) -> None:
+        self.dataset = Dataset()
+        self.names: set[URIRef] = set()
+
+    def query(self, query: str) -> Result:
+        return self.dataset.query(query)
+
+    def list_graphs(self) -> list[URIRef]:
+        return list(self.names)
+
+    def insert(self, triples: Graph, graph_name: URIRef) -> None:
+        self.names.add(graph_name)
+        for triple in triples:
+            self.dataset.graph(graph_name).add(triple)
+
+
+def _real_discovery_fixture() -> tuple[_DiscoveryMemoryStore, Namespace]:
+    from rdflib import OWL, RDF, RDFS, Graph, Literal, Namespace, URIRef
+    from rdflib.namespace import XSD as XSD_NS
+
+    ex = Namespace("urn:discovery:")
+    store = _DiscoveryMemoryStore()
+    data = Graph()
+    for subject, cls in [(ex.alice, ex.Person), (ex.alice, ex.Employee), (ex.bob, ex.Employee)]:
+        data.add((subject, RDF.type, cls))
+    for subject in [ex.alice, ex.bob]:
+        data.add((subject, RDFS.label, Literal(str(subject))))
+        data.add((subject, ex.age, Literal(42)))
+        data.add((subject, ex.active, Literal(True)))
+        data.add((subject, ex.date, Literal("2026-09-18", datatype=XSD_NS.date)))
+    data.add((ex.unrelated, RDF.type, ex.Other))
+    data.add((ex.unrelated, ex.notSelected, Literal("Excluded")))
+    store.insert(data, URIRef("urn:data"))
+    links = Graph()
+    links.add((ex.alice, ex.employer, ex.company))
+    links.add((ex.case, ex.adviser, ex.alice))
+    store.insert(links, URIRef("urn:links"))
+    types = Graph()
+    types.add((ex.company, RDF.type, ex.Company))
+    types.add((ex.case, RDF.type, ex.Case))
+    store.insert(types, URIRef("urn:types"))
+    schema = Graph()
+    schema.add((ex.Person, RDFS.subClassOf, ex.Agent))
+    schema.add((ex.declaredOnly, RDF.type, OWL.DatatypeProperty))
+    schema.add((ex.declaredOnly, RDFS.domain, ex.Agent))
+    schema.add((ex.declaredOnly, RDFS.range, XSD_NS.string))
+    store.insert(schema, URIRef("http://ontology.naas.ai/graph/schema"))
+    private = Graph()
+    private.add((ex.alice, ex.privateField, Literal("Denied")))
+    private.add((ex.secret, ex.privateRelation, ex.alice))
+    store.insert(private, URIRef("urn:private"))
+    return store, ex
+
+
+def test_generated_discovery_preserves_all_fields_and_workspace_scope() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.graph.access import GraphAccessScope
+    from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.scoped_store import (
+        WorkspaceGraphStore,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.secondary.graph_query__secondary_adapter__triplestore import (
+        GraphQueryTripleStoreAdapter,
+    )
+
+    memory, ex = _real_discovery_fixture()
+    allowed = frozenset(["urn:data", "urn:links", "urn:types", "http://ontology.naas.ai/graph/schema"])
+    store = GraphQueryTripleStoreAdapter(WorkspaceGraphStore(memory, GraphAccessScope("ws", allowed, frozenset())))
+    cols = discover_columns(store, graph_uris=["urn:data"], class_uris=[str(ex.Person), str(ex.Employee)], type_graph_uris=sorted(allowed))
+    by_predicate = {(c.predicate_uri, c.direction): c for c in cols}
+    assert len(cols) == 7
+    assert by_predicate[str(ex.age), "out"].datatype == "number"
+    assert by_predicate[str(ex.age), "out"].instance_count == 2
+    assert by_predicate[str(ex.age), "out"].is_functional  # Alice has two selected types, one age.
+    assert by_predicate[str(ex.active), "out"].datatype == "boolean"
+    assert by_predicate[str(ex.date), "out"].datatype == "date"
+    assert by_predicate[str(ex.declaredOnly), "out"].source == "ontology"
+    assert by_predicate[str(ex.employer), "out"].target_classes[0].uri == str(ex.Company)
+    assert by_predicate[str(ex.adviser), "in"].target_classes[0].uri == str(ex.Case)
+    assert all("private" not in c.predicate_uri and c.predicate_uri != str(ex.notSelected) for c in cols)
+
+
+def test_discovery_executes_on_oxigraph_with_sparse_selected_class() -> None:
+    import pytest
+    ox = pytest.importorskip("pyoxigraph")
+
+    memory, ex = _real_discovery_fixture()
+    database = ox.Store()
+    for graph in memory.list_graphs():
+        database.load(input=memory.dataset.graph(graph).serialize(format="nt"), format=ox.RdfFormat.N_TRIPLES, to_graph=ox.NamedNode(str(graph)))
+    # A selected class is small relative to the graph. These unrelated values must
+    # not produce columns or force joins over all instances' rdf:type bindings.
+    database.bulk_extend(ox.Quad(ox.NamedNode(f"urn:noise:{i}"), ox.NamedNode(str(ex.noise)), ox.Literal(str(i)), ox.NamedNode("urn:data")) for i in range(1500))
+
+    class OxStore(IGraphQueryStore):
+        def select(self, query: str) -> list[ResultRow]:
+            result = database.query(query)
+            names = [v.value for v in result.variables]
+            return [{name: Binding(value=row[name].value, is_uri=isinstance(row[name], ox.NamedNode)) for name in names if row[name] is not None} for row in result]
+
+        def count(self, query: str) -> int:
+            raise NotImplementedError("Discovery does not run standalone counts")
+
+        def supports_fulltext(self) -> bool:
+            return False
+
+    cols = discover_columns(OxStore(), graph_uris=["urn:data"], class_uris=[str(ex.Person)], type_graph_uris=["urn:data", "urn:links", "urn:types"])
+    assert len(cols) == 7
+    assert all(c.instance_count == 1 for c in cols if c.source == "data")
+    assert not any(c.predicate_uri == str(ex.noise) for c in cols)
+    multi = discover_columns(OxStore(), graph_uris=["urn:data"], class_uris=[str(ex.Person), str(ex.Employee)], type_graph_uris=["urn:data", "urn:links", "urn:types"])
+    age = next(c for c in multi if c.predicate_uri == str(ex.age))
+    assert age.instance_count == 2 and age.is_functional

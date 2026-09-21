@@ -38,6 +38,7 @@ export function MapsNaturalEarth() {
           attributionControl: true,
         });
         L.tileLayer(isMapsDarkMode() ? MAPS_TILE_DARK : MAPS_TILE_LIGHT, {
+          className: 'maps-basemap',
           attribution: MAPS_TILE_ATTR,
           maxZoom: 18,
         }).addTo(map);

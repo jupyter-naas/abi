@@ -52,7 +52,8 @@ SLIDES_GUIDELINES = """- When the user asks for a deck, presentation, or slides 
 - The system prompt carries selected_slide_index (0-based) when a deck is open: the slide the user is looking at. "This slide", "here", "the current slide", or a slide edit with no number means that index. Never ask which slide.
 - insert_slide(after_index=-1) appends. Pass selected_slide_index as after_index to insert after the current slide. layout is cover, section-divider, or content: clones a skeleton from the open deck when one exists.
 - delete_slide refuses when only one slide remains.
-- Avoid read_slides_deck with include_assets=true. Default reads return an outline (titles, counts), not the HTML."""
+- Avoid read_slides_deck with include_assets=true. Default reads return an outline (titles, counts), not the HTML.
+- Questions about how Slides is built (PPTX export, templates, sidecar, API): read the code first with read_nexus_source / search_nexus_source, starting from naas_abi/agents/tools/slides_tools.py, naas_abi/apps/nexus/apps/api/app/services/slides/, and naas_abi/apps/nexus/apps/web/src/components/slides/. Cite the paths you read. Never answer from memory."""
 
 
 _HANDOFF_PHRASES = (
@@ -183,6 +184,10 @@ Your step budget is finite ({SLIDES_RECURSION_LIMIT} graph steps). Plan, then wr
             logger = __import__("logging").getLogger(__name__)
             logger.debug("slides research tools unavailable: %s", exc)
 
+        # Read-only source tools so "how is Slides built?" is answered from code.
+        from naas_abi.agents.tools.nexus_source_tools import nexus_source_tools
+
+        tools += nexus_source_tools()
         return tools
 
     @classmethod

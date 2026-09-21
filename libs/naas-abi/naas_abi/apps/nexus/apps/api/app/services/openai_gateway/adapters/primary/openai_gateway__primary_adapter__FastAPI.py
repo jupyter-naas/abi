@@ -91,9 +91,9 @@ def _user_context_preamble(current_user: User, messages: list[ChatMessage]) -> s
     skills catalog is scoped to a workspace and an OpenAI chat-completions
     request names none: the token minted for a coding workspace claims ``sub``,
     ``ws_base`` and ``ws_secret``, and nothing in it identifies a Nexus
-    workspace. The create-skill instructions that ship alongside the catalog
-    would be worse than absent, because they tell the agent to hand the user a
-    draft to save from a Nexus UI that an editor client does not have.
+    workspace. The note that ships alongside the catalog would be worse than
+    absent, because it points at the Skills agent and Settings > Skills, a
+    Nexus UI that an editor client does not have.
 
     The profile is a different matter. ``get_current_user_required`` has
     already turned the bearer token into the full user record before this runs,

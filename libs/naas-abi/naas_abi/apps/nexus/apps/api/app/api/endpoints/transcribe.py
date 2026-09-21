@@ -5,15 +5,18 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import JSONResponse
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
+    get_current_user_required,
+)
 
 OPENAI_TRANSCRIBE_URL = "https://api.openai.com/v1/audio/transcriptions"
 OPENROUTER_TRANSCRIBE_URL = "https://openrouter.ai/api/v1/audio/transcriptions"
 OPENAI_TRANSCRIBE_MODEL = "gpt-4o-transcribe"
 OPENROUTER_TRANSCRIBE_MODEL = "openai/gpt-4o-transcribe"
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
 
 def _secret(name: str) -> str | None:

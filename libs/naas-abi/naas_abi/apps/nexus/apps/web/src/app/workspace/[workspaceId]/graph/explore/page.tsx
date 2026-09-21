@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Header } from '@/components/shell/header';
+import { GraphHeader as Header } from '@/components/graph/graph-header';
 import {
   AlertCircle,
   ArrowRight,
@@ -37,7 +37,6 @@ import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { BFO_BUCKET_DEFS, getBfoBucket } from '@/lib/bfo-buckets';
 import { CheckboxFilter } from '@/components/graph/checkbox-filter';
-import { GraphDevBanner } from '@/components/graph/graph-dev-banner';
 import { InstanceInspector } from '@/components/graph/instance-inspector';
 import {
   appendStep,
@@ -1227,7 +1226,6 @@ export default function DiscoveryPage() {
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <GraphDevBanner />
 
           {/* Body */}
           <div className="flex min-h-0 flex-1 overflow-hidden">

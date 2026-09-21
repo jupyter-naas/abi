@@ -7,6 +7,7 @@ membership.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -190,4 +191,23 @@ async def admin_events_recent(
             out.append(json.loads(json.dumps(payload, default=str)))
         except Exception:
             logger.exception("admin events recent: serialize failed")
+    await _attach_identities(engine, out)
     return out
+
+
+async def _attach_identities(engine: Any, events: list[dict[str, Any]]) -> None:
+    """Add ``_identity`` (person names, workspace, roles) from graph/nexus-identity.
+
+    Payloads only hold ids. Best effort: without a triple store the events
+    are returned as they are.
+    """
+    try:
+        from naas_abi.apps.nexus.apps.api.app.services.identity_graph.resolver import (
+            IdentityResolver,
+            enrich_events,
+        )
+
+        triple_store = engine.services.triple_store
+        await asyncio.to_thread(enrich_events, events, IdentityResolver(query=triple_store.query))
+    except Exception:
+        logger.exception("admin events recent: identity resolution failed")

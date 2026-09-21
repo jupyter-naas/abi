@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle, Check, ChevronDown, Loader2, Network, Plus, Save, X } from 'lucide-react';
-import { Header } from '@/components/shell/header';
+import { GraphHeader as Header } from '@/components/graph/graph-header';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';

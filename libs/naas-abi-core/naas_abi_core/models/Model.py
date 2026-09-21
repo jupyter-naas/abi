@@ -72,6 +72,7 @@ class CanonicalModelId(StrEnum):
     GPT_5_1 = "gpt-5.1"
     GPT_5_1_MINI = "gpt-5.1-mini"
     GPT_5_5 = "gpt-5.5"
+    GPT_5_6_SOL = "gpt-5.6-sol"
     GPT_5_3_CODEX = "gpt-5.3-codex"
     GPT_5_2 = "gpt-5.2"
     GPT_4_1 = "gpt-4.1"

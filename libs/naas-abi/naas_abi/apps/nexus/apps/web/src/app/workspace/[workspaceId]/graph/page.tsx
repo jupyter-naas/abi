@@ -17,5 +17,6 @@ export default function GraphPage({
     redirect(`${base}/create-individual`);
   }
 
-  redirect(`${base}/network`);
+  if (view === 'entities') redirect(`${base}/network`);
+  redirect(`${base}/explorer`);
 }

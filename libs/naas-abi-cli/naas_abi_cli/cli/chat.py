@@ -6,6 +6,15 @@ from naas_abi_core import logger
 @click.argument("module-name", type=str, default="")
 @click.argument("agent-name", type=str, default="")
 def chat(module_name: str = "", agent_name: str = ""):
+    from naas_abi_core.services.event.local_identity import bind_local_identity
+
+    # Events published while chatting (git agents, tool calls) name the
+    # terminal's git author, hashed, and are marked triggered via "cli".
+    with bind_local_identity():
+        _chat(module_name, agent_name)
+
+
+def _chat(module_name: str, agent_name: str) -> None:
     from naas_abi_core.engine.Engine import Engine
 
     engine = Engine()

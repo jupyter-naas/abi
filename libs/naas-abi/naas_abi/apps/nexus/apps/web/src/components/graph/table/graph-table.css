@@ -1,0 +1,95 @@
+.graph-table-scroll {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  isolation: isolate;
+}
+
+.graph-table-scroll > table > thead {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--card-hex);
+  box-shadow: 0 1px 0 var(--border-hex);
+}
+
+.graph-table-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 10;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.graph-table-resize:focus-visible {
+  outline: none;
+}
+
+.graph-table-resize::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  height: 100%;
+  width: 1px;
+  background: var(--border-hex);
+}
+
+.graph-table-resize:hover::after,
+.graph-table-resize:focus-visible::after,
+.graph-table-resize.is-resizing::after {
+  width: 2px;
+  background: var(--workspace-accent);
+}
+
+.graph-table-scroll .graph-table-measure {
+  position: fixed;
+  left: -100000px;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+  table-layout: auto !important;
+  width: max-content !important;
+}
+
+.graph-table-measure th,
+.graph-table-measure td,
+.graph-table-measure th *,
+.graph-table-measure td * {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+}
+
+.graph-table-instance-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-hex);
+  border-right: 1px solid var(--border-hex);
+}
+
+.graph-table-instance-heading {
+  position: relative;
+  padding: 8px 16px 8px 12px;
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted-foreground-hex);
+}
+
+.graph-table-instance-heading > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-table-instance-heading.is-numeric { text-align: right; }

@@ -104,7 +104,7 @@ export default function SkillsSettingsPage() {
           </div>
           <p className="text-sm text-muted-foreground">
             Reusable prompts invocable in the chat with /&lt;slug&gt; — or type /create-skill in
-            the chat to let the agent draft one
+            the chat and the Skills agent writes and saves one for you
           </p>
         </div>
         <button
@@ -241,7 +241,7 @@ export default function SkillsSettingsPage() {
                 <td colSpan={6} className="p-8 text-center text-muted-foreground">
                   {searchQuery
                     ? `No skills match "${searchQuery}"`
-                    : 'No skills yet. Type /create-skill in the chat or add one here.'}
+                    : 'No skills yet. Type /create-skill in the chat, or add one here.'}
                 </td>
               </tr>
             ) : (

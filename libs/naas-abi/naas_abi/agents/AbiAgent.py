@@ -1,4 +1,5 @@
-
+from naas_abi.agents.feature.builder import FEATURE_RECURSION_LIMIT
+from naas_abi.agents.feature.registry import abi_handoff_line
 from naas_abi_core.services.agent.Agent import Agent
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
@@ -8,6 +9,15 @@ from naas_abi_core.services.agent.IntentAgent import (
     IntentScope,
     IntentType,
 )
+
+
+def delegates_to_abi(agent_cls: type) -> bool:
+    """True for a supervisor that has Abi as a sub-agent (``delegates_to_abi``).
+
+    Abi builds every loaded agent as its own sub-agent: without this skip, Abi
+    and such a supervisor (Bob) would each build the other forever.
+    """
+    return bool(getattr(agent_cls, "delegates_to_abi", False))
 
 
 class AbiAgent(IntentAgent):
@@ -22,6 +32,8 @@ class AbiAgent(IntentAgent):
     logo_url: str = (
         "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
     )
+    # A handoff to a feature agent that reads the code shares this budget.
+    recursion_limit: int = FEATURE_RECURSION_LIMIT
     system_prompt: str = """<role>You are Abi, the orchestrator Agent developed by NaasAI.
 </role>
 
@@ -37,9 +49,10 @@ Respond only based on what your available agents and tools can actually deliver.
 <tasks>
 1. Match the user request to the best available agent or tool.
 2. If a match is found, delegate to that agent or tool with full context and report the result back verbatim.
-3. For organization/workspace/user admin requests (list orgs, create workspaces, invite or remove members, update roles or your own profile), use the Nexus admin tools directly. Do not invent success.
+3. For organization/workspace/user admin requests (list orgs, create workspaces, invite or remove members, update roles or your own profile), use the Nexus admin tools directly. Do not invent success. Questions about the user's own role, permissions, or which features they can see go to the Settings agent, which knows who is asking.
         4. For a deck, presentation, or slides request (English or French: slides, présentation, diaporama), hand off to the Slides agent. Do not write or edit deck.html yourself.
-        5. If no match is found, tell the user you do not have the capabilities to handle its request and propose alternatives based on your available agents and tools.
+        5. For a question about, or an action on, a Nexus feature, hand off to that feature's office agent: [FEATURE_AGENTS]. That covers what the feature can do, how it is built (they read the Nexus source code), how to operate it, and its errors. Do not answer those from memory or act on them yourself. The workspace drive and its files belong to the Files agent: the *_coding_* tools only act on an open coding workspace.
+        6. If no match is found, tell the user you do not have the capabilities to handle its request and propose alternatives based on your available agents and tools.
 </tasks>
 
 <tools>
@@ -67,6 +80,7 @@ Respond only based on what your available agents and tools can actually deliver.
 - Keep responses concise and factual.
 </constraints>
 """
+    system_prompt = system_prompt.replace("[FEATURE_AGENTS]", abi_handoff_line())
     suggestions: list[dict] = [
         {
             "label": "What can you do?",
@@ -178,7 +192,7 @@ Respond only based on what your available agents and tools can actually deliver.
         seen_candidate_class_names: set[str] = set()
 
         def _register_candidate(agent_cls: type[Agent]) -> None:
-            if agent_cls is cls:
+            if agent_cls is cls or delegates_to_abi(agent_cls):
                 return
             candidate_name = f"{agent_cls.__module__}.{agent_cls.__name__}"
             if candidate_name in seen_candidate_class_names:

@@ -1,0 +1,11 @@
+Material Symbols Light
+Author: Google
+Copyright Google LLC
+License: Apache License, Version 2.0 (see ontology-topic-icons.LICENSE)
+
+Icon collection: https://icon-sets.iconify.design/material-symbols-light/
+Source: https://github.com/iconify/icon-sets/blob/master/json/material-symbols-light.json
+Upstream: https://github.com/google/material-design-icons
+
+42 icons retrieved 2026-09-16. The original path geometry is unchanged.
+SVG wrappers were replaced with a shared React component using currentColor.

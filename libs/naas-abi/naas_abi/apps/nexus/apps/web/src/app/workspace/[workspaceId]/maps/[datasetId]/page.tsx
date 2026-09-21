@@ -3,7 +3,9 @@
 import { useParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
 import { getMapsCustomDataset } from '@/lib/maps-custom-datasets';
-import { getMapsDataset, isMapsDatasetId } from '../lib/datasets';
+import { useGraphMapLayers } from '../lib/use-graph-map-layers';
+import { MapsGraphFeed } from '../components/maps-graph-feed';
+import { getMapsDataset } from '../lib/datasets';
 import { MapsAis } from '../components/maps-ais';
 import { MapsConflict } from '../components/maps-conflict';
 import { MapsCustomFeed } from '../components/maps-custom-feed';
@@ -28,10 +30,13 @@ import '../components/maps-components.css';
 export default function MapsDatasetPage() {
   const params = useParams();
   const rawId = typeof params?.datasetId === 'string' ? params.datasetId : '';
-  const dataset = getMapsDataset(rawId);
+  const graphLayers = useGraphMapLayers();
+  const graphDataset = graphLayers.layers.find(d => d.id === rawId);
+  const dataset = getMapsDataset(rawId) ?? graphDataset;
   const customDataset = getMapsCustomDataset(rawId);
 
-  if (!dataset || !isMapsDatasetId(rawId)) {
+  if (!dataset && graphLayers.loading) return <div className="maps-empty">Loading map layers…</div>;
+  if (!dataset) {
     return (
       <div className="maps-root">
         <div className="maps-header-gap">
@@ -71,7 +76,8 @@ export default function MapsDatasetPage() {
         {dataset.id === 'ais' ? <MapsAis /> : null}
         {dataset.id === 'iss' ? <MapsIss /> : null}
         {dataset.id === 'presence' ? <MapsPresence /> : null}
-        {customDataset ? <MapsCustomFeed dataset={customDataset} /> : null}
+        {customDataset ? <MapsCustomFeed key={customDataset.id} dataset={customDataset} /> : null}
+        {graphDataset ? <MapsGraphFeed dataset={graphDataset} /> : null}
       </div>
     </div>
   );

@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
     _canonical_agent_sort_key,
     _class_declared_model_ids,
+    _nexus_abi_class_name,
+    _roster_alignment,
     _workspace_agent_roster,
     pick_workspace_chat_agent_id,
     pick_workspace_documents_agent_id,
@@ -85,6 +87,67 @@ def test_workspace_agent_roster_unseeded_is_default_only() -> None:
     assert _workspace_agent_roster(None, "mod/Default") == {"mod/Default"}
 
 
+def test_nexus_abi_class_name_only_matches_our_orchestrator() -> None:
+    """Abi is force-enabled on every roster, so the match must not be loose.
+
+    An ``AbiAgent`` from another module would otherwise be switched on in a
+    workspace that never listed it.
+    """
+    assert (
+        _nexus_abi_class_name(
+            [
+                "naas_abi.agents.AppsAgent/AppsAgent",
+                "naas_abi.agents.AbiAgent/AbiAgent",
+            ]
+        )
+        == "naas_abi.agents.AbiAgent/AbiAgent"
+    )
+    assert _nexus_abi_class_name(["acme.agents.AbiAgent/AbiAgent"]) is None
+    assert _nexus_abi_class_name(["naas_abi.agents.AbiAgentHelper/AbiAgentHelper"]) is None
+    assert _nexus_abi_class_name([]) is None
+
+
+ABI = "naas_abi.agents.AbiAgent/AbiAgent"
+AXI = "axi.agents.AxiAgent/AxiAgent"
+REGISTRY = [AXI, "naas_abi.agents.AppsAgent/AppsAgent", ABI]
+ORCHESTRATORS = {ABI, AXI}
+
+
+def test_roster_alignment_always_enables_the_orchestrator() -> None:
+    """Abi and Axi ride on every roster, whatever the workspace listed."""
+    roster, align = _roster_alignment({AXI}, None, REGISTRY)
+    assert roster == ORCHESTRATORS
+    assert align is True
+
+    roster, align = _roster_alignment(None, AXI, REGISTRY)
+    assert roster == ORCHESTRATORS
+    assert align is True
+
+
+def test_roster_alignment_keeps_the_empty_roster_guard() -> None:
+    """No seed and no resolvable default still means "touch nothing".
+
+    Orchestrators are added after the decision, so they must not turn this
+    case into a forced align that disables every other row.
+    """
+    roster, align = _roster_alignment(None, None, REGISTRY)
+    assert roster == ORCHESTRATORS
+    assert align is False
+
+
+def test_roster_alignment_still_empties_an_explicitly_empty_seed() -> None:
+    """``agents: []`` disables everything but the orchestrators."""
+    roster, align = _roster_alignment(set(), None, REGISTRY)
+    assert roster == ORCHESTRATORS
+    assert align is True
+
+
+def test_roster_alignment_without_abi_in_the_registry() -> None:
+    roster, align = _roster_alignment({AXI}, None, [AXI])
+    assert roster == {AXI}
+    assert align is True
+
+
 def test_pick_workspace_chat_agent_rejects_foreign_and_disabled_ids() -> None:
     default = _agent(agent_id="default", is_default=True, enabled=False)
     local = _agent(agent_id="local", enabled=True)
@@ -94,6 +157,34 @@ def test_pick_workspace_chat_agent_rejects_foreign_and_disabled_ids() -> None:
     assert pick_workspace_chat_agent_id(agents, "stale-from-other-ws") == "default"
     assert pick_workspace_chat_agent_id(agents, None) == "default"
     assert _workspace_agent_roster(None, None) == set()
+
+
+def test_pick_workspace_chat_agent_falls_back_to_abi_without_default() -> None:
+    maps = _agent(
+        agent_id="maps",
+        enabled=True,
+        name="Maps",
+        class_name="naas_abi.agents.MapsAgent/MapsAgent",
+    )
+    abi = _agent(agent_id="abi", enabled=True)
+    lookalike = _agent(
+        agent_id="acme",
+        enabled=True,
+        name="Acme",
+        class_name="acme.agents.AbiAgent/AbiAgent",
+    )
+    default = _agent(
+        agent_id="default",
+        is_default=True,
+        enabled=True,
+        name="Bob",
+        class_name="bob.agents.BobAgent/BobAgent",
+    )
+
+    assert pick_workspace_chat_agent_id([maps, abi], None) == "abi"
+    assert pick_workspace_chat_agent_id([maps, lookalike], None) == "maps"
+    assert pick_workspace_chat_agent_id([maps, _agent(agent_id="off")], None) == "maps"
+    assert pick_workspace_chat_agent_id([maps, abi, default], None) == "default"
 
 
 def test_pick_workspace_slides_agent_prefers_enabled_office_slides() -> None:

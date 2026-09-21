@@ -8,6 +8,22 @@ import type { GraphNode, GraphEdge } from '@/stores/knowledge-graph';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BFO_BUCKET_DEFS } from '@/lib/bfo-buckets';
+import { installOrthogonalEdges } from './orthogonal-network';
+import { compactNetworkPositions } from './compact-network-layout';
+import { fitReadableViewport, spacingViewport } from './network-viewport';
+import {
+  INSTANCE_NODE_FONT,
+  INSTANCE_NODE_SIZE,
+  instanceLabelVAdjust,
+  instanceNodeCtxRenderer,
+  instanceNodeLayoutBox,
+  wrapInstanceLabel,
+} from '@/lib/graph-network-view';
+
+/** vis-network `shape: 'custom'` option; missing from the published Node types. */
+type NetworkNode = Node & {
+  ctxRenderer?: ReturnType<typeof instanceNodeCtxRenderer>;
+};
 
 const BFO_COLORS: Record<string, { background: string; border: string; highlight: string }> = Object.fromEntries(
   BFO_BUCKET_DEFS.map((d) => [d.type, { background: d.color, border: d.border, highlight: d.color }])
@@ -409,6 +425,7 @@ function computeHierarchicalPositions(
   nodes: GraphNode[],
   edges: GraphEdge[],
   direction: 'LR' | 'TD',
+  extraSpacing = 0,
 ): Map<string, { x: number; y: number }> {
   if (nodes.length === 0) return new Map();
 
@@ -418,7 +435,7 @@ function computeHierarchicalPositions(
 
   // Flat case: no is_a edges → sunflower spiral across the full canvas.
   if (isaEdges.length === 0) {
-    return computeSpreadPositions(nodes.map((n) => n.id), 180);
+    return computeSpreadPositions(nodes.map((n) => n.id), 180 + extraSpacing);
   }
 
   // ── 1. Build tree ──────────────────────────────────────────────────────────
@@ -461,8 +478,8 @@ function computeHierarchicalPositions(
     });
 
   // ── 4. DFS placement ───────────────────────────────────────────────────────
-  const SLOT        = direction === 'LR' ? LR_NODE_SLOT  : TD_NODE_SLOT;
-  const LEVEL       = direction === 'LR' ? LR_LEVEL_GAP  : TD_LEVEL_GAP;
+  const SLOT        = (direction === 'LR' ? LR_NODE_SLOT : TD_NODE_SLOT) + extraSpacing;
+  const LEVEL       = (direction === 'LR' ? LR_LEVEL_GAP : TD_LEVEL_GAP) + extraSpacing;
   const BUCKET_XTRA = Math.round(SLOT * 0.55); // extra gap between bucket groups
 
   const positions = new Map<string, { x: number; y: number }>();
@@ -759,9 +776,34 @@ interface VisNetworkProps {
   nodes: GraphNode[];
   edges: GraphEdge[];
   selectedNodeId: string | null;
+  /** Pan to a selected node at the current zoom, and keep that zoom when clearing it. */
+  preserveZoomOnSelection?: boolean;
+  /** Centre selected nodes at a readable zoom, including fixed overview layouts. */
+  focusOnSelection?: boolean;
+  /** Increment to refocus the same node after manual panning or zooming. */
+  focusRequestKey?: number;
+  /** Retain zoom when an inspector changes the canvas width. */
+  preserveZoomOnResize?: boolean;
   /** Edge ids to highlight on the canvas (supports multi-hop chain selection). */
   selectedEdgeIds?: string[];
   onNodeSelect: (nodeId: string | null) => void;
+  onNodeDoubleClick?: (nodeId: string) => void;
+  /** Double-click the canvas to centre and zoom into that point. Node actions take priority. */
+  zoomOnDoubleClick?: boolean;
+  /** Use supplied node coordinates without the initial physics simulation. */
+  fixedLayout?: boolean;
+  /** Draw system navigation levels in the workspace accent, without ontology arrows. */
+  systemOverview?: boolean;
+  /** Compact, readable boxes for a source process overview. */
+  processOverview?: boolean;
+  /** Square-corner connectors; opt in only on ontology canvases. */
+  orthogonalEdges?: boolean;
+  /** Card-edge gap for a compact, stationary network. Hierarchy and supplied layouts keep their positions. */
+  nodeSpacing?: number;
+  /** Re-layout for spacing changes while keeping the current zoom and point of interest. */
+  spacingKey?: string;
+  /** Lower bound for automatic framing only; manual Fit and zoom remain unrestricted. */
+  minimumAutoFitScale?: number;
   onEdgeSelect: (edgeId: string | null) => void;
   stabilizeKey?: number;
   layoutDirection?: 'LR' | 'TD';
@@ -788,6 +830,11 @@ interface VisNetworkProps {
   /** When true, nodes are drawn as circles instead of rectangular cards. */
   circularNodes?: boolean;
   /**
+   * Instance graphs put the label above a native `dot` / `square`.
+   * Ontology class cards keep the default (`inside`) SVG label.
+   */
+  labelPlacement?: 'inside' | 'top';
+  /**
    * Changes when the surrounding panel layout changes (e.g. preview split
    * orientation). Triggers a fit so the graph recenters in the new viewport.
    */
@@ -796,6 +843,8 @@ interface VisNetworkProps {
   fillContainer?: boolean;
   /** Return the tooltip element shown on node hover. Defaults to no tooltip when omitted. */
   getNodeTitle?: (node: GraphNode) => HTMLElement | string | undefined;
+  /** When false, the canvas is a static pin: no zoom, pan, drag, or navigation buttons. */
+  interactive?: boolean;
 }
 
 /** Build a styled HTMLElement tooltip from an array of [key, value] row pairs. */
@@ -817,8 +866,21 @@ export function VisNetwork({
   nodes,
   edges,
   selectedNodeId,
+  preserveZoomOnSelection = false,
+  focusOnSelection = false,
+  focusRequestKey = 0,
+  preserveZoomOnResize = false,
   selectedEdgeIds = [],
   onNodeSelect,
+  onNodeDoubleClick,
+  zoomOnDoubleClick = false,
+  fixedLayout: suppliedFixedLayout = false,
+  systemOverview = false,
+  processOverview = false,
+  orthogonalEdges = false,
+  nodeSpacing,
+  spacingKey,
+  minimumAutoFitScale = 0,
   onEdgeSelect,
   stabilizeKey,
   layoutDirection,
@@ -826,16 +888,27 @@ export function VisNetwork({
   physicsEnabled = false,
   useBucketLayout = false,
   circularNodes = false,
+  labelPlacement = 'inside',
   viewportLayoutKey,
   fillContainer = false,
   getNodeTitle,
+  interactive = true,
 }: VisNetworkProps) {
+  const fixedLayout = suppliedFixedLayout || (nodeSpacing !== undefined && !layoutDirection && !physicsEnabled);
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
+  const orthogonalRendererRef = useRef<ReturnType<typeof installOrthogonalEdges> | null>(null);
+  const resizeBehaviorRef = useRef({ preserveZoomOnResize, selectedNodeId, focusOnSelection });
+  resizeBehaviorRef.current = { preserveZoomOnResize, selectedNodeId, focusOnSelection };
   const lastContainerSizeRef = useRef({ w: 0, h: 0 });
+  const minimumAutoFitScaleRef = useRef(minimumAutoFitScale);
+  minimumAutoFitScaleRef.current = minimumAutoFitScale;
+  const previousSpacingKeyRef = useRef(spacingKey);
   const nodesDataRef = useRef<DataSet<Node>>(new DataSet());
   const edgesDataRef = useRef<DataSet<Edge>>(new DataSet());
   const onNodeSelectRef = useRef(onNodeSelect);
+  const onNodeDoubleClickRef = useRef(onNodeDoubleClick);
+  const zoomOnDoubleClickRef = useRef(zoomOnDoubleClick);
   const onEdgeSelectRef = useRef(onEdgeSelect);
   const getNodeTitleRef = useRef(getNodeTitle);
   useEffect(() => { getNodeTitleRef.current = getNodeTitle; }, [getNodeTitle]);
@@ -850,6 +923,23 @@ export function VisNetwork({
   /** True after filter key changed: next graph update should restore or fit for the new key. */
   const pendingFilterViewportApplyRef = useRef(false);
 
+  const focusSelectedNode = useCallback(() => {
+    const net = networkRef.current;
+    const { focusOnSelection: shouldFocus, selectedNodeId: id } = resizeBehaviorRef.current;
+    if (!shouldFocus || !id || !net || !nodesDataRef.current.get(id)) return false;
+    net.focus(id, {
+      scale: Math.max(net.getScale(), 1.35),
+      offset: { x: 0, y: 0 }, locked: false,
+      animation: { duration: 300, easingFunction: 'easeInOutQuad' },
+    });
+    return true;
+  }, []);
+
+  const fitToCanvas = useCallback((duration = 300) => {
+    const net = networkRef.current;
+    if (net) fitReadableViewport(net, minimumAutoFitScaleRef.current, duration);
+  }, []);
+
   /** Re-fit the graph to the current canvas size (after layout / split changes). */
   const scheduleFitToCanvas = useCallback((opts?: { fitDurationMs?: number }) => {
     const fitDurationMs = opts?.fitDurationMs ?? 300;
@@ -860,15 +950,16 @@ export function VisNetwork({
         if (!net || !el || nodesDataRef.current.length === 0) return;
         if (el.clientWidth < 8 || el.clientHeight < 8) return;
         net.setSize(`${el.clientWidth}px`, `${el.clientHeight}px`);
-        net.fit({ animation: { duration: fitDurationMs, easingFunction: 'easeInOutQuad' } });
+        fitToCanvas(fitDurationMs);
       });
     });
-  }, []);
+  }, [fitToCanvas]);
 
   /** Restore saved zoom/pan for `currentFilterViewKeyRef`, or fit if unseen. */
   const applySavedViewportOrFit = useCallback((opts?: { fitDurationMs?: number }) => {
     const net = networkRef.current;
     if (!net || nodesDataRef.current.length === 0) return;
+    if (focusSelectedNode()) return;
     const key = currentFilterViewKeyRef.current;
     const saved = savedFilterViewsRef.current.get(key);
     const fitDurationMs = opts?.fitDurationMs ?? 300;
@@ -884,8 +975,8 @@ export function VisNetwork({
         // fallthrough to fit
       }
     }
-    net.fit({ animation: { duration: fitDurationMs, easingFunction: 'easeInOutQuad' } });
-  }, []);
+    fitToCanvas(fitDurationMs);
+  }, [focusSelectedNode, fitToCanvas]);
 
   useLayoutEffect(() => {
     const key = viewStateKey ?? '__default';
@@ -908,8 +999,10 @@ export function VisNetwork({
 
   useEffect(() => {
     onNodeSelectRef.current = onNodeSelect;
+    onNodeDoubleClickRef.current = onNodeDoubleClick;
+    zoomOnDoubleClickRef.current = zoomOnDoubleClick;
     onEdgeSelectRef.current = onEdgeSelect;
-  }, [onNodeSelect, onEdgeSelect]);
+  }, [onNodeSelect, onNodeDoubleClick, onEdgeSelect, zoomOnDoubleClick]);
 
   const nodesByIri = useMemo(() => {
     const map = new Map<string, GraphNode>();
@@ -932,8 +1025,8 @@ export function VisNetwork({
   const parallelEdgeSmooth = useMemo(() => computeParallelEdgeSmooth(edges), [edges]);
 
   const hierarchicalPositions = useMemo(
-    () => (layoutDirection ? computeHierarchicalPositions(nodes, edges, layoutDirection) : null),
-    [layoutDirection, nodes, edges],
+    () => (layoutDirection ? computeHierarchicalPositions(nodes, edges, layoutDirection, Math.max(0, (nodeSpacing ?? 40) - 40)) : null),
+    [layoutDirection, nodes, edges, nodeSpacing],
   );
 
   const getNodeLogoUrl = useCallback((node: GraphNode): string | undefined => {
@@ -957,6 +1050,16 @@ export function VisNetwork({
     });
     return typeof found === 'string' ? found.trim() : undefined;
   }, []);
+
+  const compactPositions = useMemo(() => {
+    if (nodeSpacing === undefined || suppliedFixedLayout || layoutDirection || physicsEnabled) return null;
+    return compactNetworkPositions(nodes.map(node => ({
+      id: node.id, label: node.label, group: node.type, primary: node.properties.is_primary === true,
+      ...(labelPlacement === 'top'
+        ? instanceNodeLayoutBox(node.label, node.properties.is_primary === true)
+        : computeNodeCardDimensions(wrapNodeLabelLines(node.label), Boolean(getNodeLogoUrl(node)))),
+    })), edges, nodeSpacing);
+  }, [nodes, edges, nodeSpacing, suppliedFixedLayout, layoutDirection, physicsEnabled, getNodeLogoUrl, labelPlacement]);
 
   // Fetch and cache logo images as data URIs so they can be embedded in SVG.
   useEffect(() => {
@@ -997,8 +1100,65 @@ export function VisNetwork({
     };
   }, [getNodeLogoUrl, logoDataByUrl, nodes]);
 
-  const toVisNode = useCallback((node: GraphNode): Node => {
+  const toVisNode = useCallback((node: GraphNode): NetworkNode => {
     const colors = resolveBFOColor(node, nodesByIri) ?? BFO_COLORS['Entity'];
+    if (processOverview || systemOverview) {
+      const style = containerRef.current ? getComputedStyle(containerRef.current) : null;
+      const accent = style?.getPropertyValue('--workspace-accent').trim() || '';
+      const color = systemOverview ? (hexToRgb(accent) ? accent : colors.border) : node.color || colors.border;
+      const primary = node.properties.is_primary === true;
+      const dark = document.documentElement.classList.contains('dark');
+      const surface = style?.getPropertyValue('--background-hex').trim() || (dark ? '#18181b' : '#ffffff');
+      const background = systemOverview ? primary ? color : dark || node.properties.system_level === 'subsystem' ? surface : fadeHexTowardWhite(color, 0.94)
+        : dark ? surface : String(node.properties.overview_fill || fadeHexTowardWhite(color, 0.92));
+      const textColor = systemOverview && primary ? '#ffffff' : style?.getPropertyValue('--foreground-hex').trim() || '#18181b';
+      return {
+        id: node.id, label: node.label, title: getNodeTitleRef.current?.(node),
+        shape: 'box', x: node.x, y: node.y, margin: { top: 8, right: 10, bottom: 8, left: 10 },
+        widthConstraint: systemOverview ? { minimum: primary ? 160 : 120, maximum: primary ? 200 : 180 } : { maximum: primary ? 190 : 150 },
+        font: { size: primary ? 14 : systemOverview ? 13 : 12, face: 'Inter, system-ui, sans-serif', color: textColor },
+        color: { background, border: color, highlight: { background, border: color }, hover: { background, border: color } },
+        borderWidth: primary ? 1.5 : 1, borderWidthSelected: 2,
+        shapeProperties: { borderRadius: 0 }, shadow: false,
+      };
+    }
+    if (labelPlacement === 'top') {
+      const primary = node.properties?.is_primary === true;
+      const size = primary ? INSTANCE_NODE_SIZE + 4 : INSTANCE_NODE_SIZE;
+      const labelLines = wrapInstanceLabel(node.label);
+      const dimmed = anyNodeSelected && node.properties?.selected !== true;
+      const background = dimmed ? fadeHexTowardWhite(colors.background, 0.82) : colors.background;
+      const border = dimmed ? fadeHexTowardWhite(colors.border, 0.7) : colors.border;
+      const dark = document.documentElement.classList.contains('dark');
+      const textColor = dimmed ? '#94a3b8' : (dark ? '#f4f4f5' : '#18181b');
+      const strokeColor = dark ? '#18181b' : '#ffffff';
+      const hierPos = hierarchicalPositions?.get(node.id) ?? compactPositions?.get(node.id);
+      return {
+        id: node.id,
+        label: labelLines.join('\n'),
+        title: getNodeTitleRef.current?.(node),
+        shape: 'custom',
+        ctxRenderer: instanceNodeCtxRenderer({ circular: circularNodes, textColor, strokeColor }),
+        size,
+        borderWidth: primary ? 2.5 : 2,
+        borderWidthSelected: 3,
+        font: {
+          size: INSTANCE_NODE_FONT,
+          face: 'Inter, system-ui, sans-serif',
+          color: textColor,
+          vadjust: instanceLabelVAdjust(size, labelLines.length),
+        },
+        color: {
+          background,
+          border,
+          highlight: { background: colors.highlight, border: colors.border },
+          hover: { background: colors.highlight, border: colors.border },
+        },
+        shadow: { enabled: true, color: 'rgba(0,0,0,0.18)', size: 4, x: 1, y: 1 },
+        x: hierPos?.x ?? node.x,
+        y: hierPos?.y ?? node.y,
+      };
+    }
     const logoUrl = getNodeLogoUrl(node);
     const labelLines = wrapNodeLabelLines(node.label);
     const logoDataUri = logoUrl ? logoDataByUrl[logoUrl] : undefined;
@@ -1032,7 +1192,7 @@ export function VisNetwork({
     // logical width × height regardless of the supersample factor.
     const displaySize = Math.min(width, height) / 2;
 
-    const hierPos = hierarchicalPositions?.get(node.id);
+    const hierPos = hierarchicalPositions?.get(node.id) ?? compactPositions?.get(node.id);
     return {
       id: node.id,
       label: '',
@@ -1045,16 +1205,31 @@ export function VisNetwork({
       x: hierPos?.x ?? node.x,
       y: hierPos?.y ?? node.y,
     };
-  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri, hierarchicalPositions, anyNodeSelected, circularNodes]);
+  }, [getNodeLogoUrl, logoDataByUrl, nodesByIri, hierarchicalPositions, compactPositions, anyNodeSelected, circularNodes, labelPlacement, systemOverview, processOverview]);
 
   const toVisEdge = useCallback((edge: GraphEdge): Edge => {
+    if (edge.properties?.layout_only) {
+      return { id: edge.id, from: edge.source, to: edge.target, hidden: true, physics: false };
+    }
+    if (processOverview) {
+      const color = String(edge.properties?.color || '#94a3b8');
+      return {
+        id: edge.id, from: edge.source, to: edge.target, label: edge.label, hidden: orthogonalEdges,
+        title: 'Source ledger connection', width: 1, dashes: [5, 5],
+        color: { color, highlight: color, hover: color, opacity: 0.55 },
+        arrows: { to: { enabled: true, scaleFactor: 0.35 } },
+        font: { size: 9, face: 'Inter, system-ui, sans-serif', color: '#8FA0B3', align: 'top', vadjust: -4, strokeWidth: 0 },
+        smooth: { enabled: true, type: 'cubicBezier', forceDirection: 'none', roundness: 0.35 },
+      };
+    }
     const isHierarchical = edge.properties?.relation_kind === 'is_a';
-    const baseColor = isHierarchical ? '#000000' : (EDGE_COLORS[edge.type] || '#94a3b8');
+    const grouping = systemOverview && edge.properties?.relation_kind === 'system_group';
+    const baseColor = grouping ? '#cbd5e1' : isHierarchical ? '#000000' : (EDGE_COLORS[edge.type] || '#94a3b8');
     const isSelected = edge.properties?.selected === true;
     const dimmed = anyEdgeSelected && !isSelected;
     const color = dimmed ? 'rgba(148,163,184,0.25)' : baseColor;
     const fontColor = dimmed ? 'rgba(100,116,139,0.35)' : (isHierarchical ? '#000000' : '#64748b');
-    const labelText = isHierarchical
+    const labelText = isHierarchical || grouping
       ? undefined
       : (
           edge.label
@@ -1066,20 +1241,21 @@ export function VisNetwork({
       ? '#18181b'
       : '#ffffff';
     const smoothCfg = parallelEdgeSmooth.get(edge.id) ?? { enabled: false as const };
-    const baseWidth = edge.weight || (isHierarchical ? 1 : 2);
+    const baseWidth = edge.weight || (grouping ? 1 : isHierarchical ? 1 : 2);
     return {
       id: edge.id,
       from: edge.source,
       to: edge.target,
       label: labelText,
-      title: edge.type,
+      title: grouping ? undefined : edge.type,
+      hidden: orthogonalEdges,
       color: {
         color,
         highlight: baseColor,
         hover: baseColor,
         opacity: dimmed ? 0.35 : 1,
       },
-      arrows: { to: { enabled: true, scaleFactor: isSelected ? 1 : 0.8 } },
+      arrows: { to: { enabled: !grouping, scaleFactor: isSelected ? 1 : 0.8 } },
       font: labelText
         ? {
             size: isSelected ? 10 : 9,
@@ -1103,7 +1279,13 @@ export function VisNetwork({
       selectionWidth: Math.max(baseWidth + 1, 3),
       dashes: isHierarchical,
     };
-  }, [anyEdgeSelected, parallelEdgeSmooth]);
+  }, [anyEdgeSelected, parallelEdgeSmooth, systemOverview, processOverview, orthogonalEdges]);
+
+  const routedEdges = useMemo(() => orthogonalEdges ? edges.map(edge => ({
+    id: edge.id, source: edge.source, target: edge.target, style: toVisEdge(edge),
+  })) : [], [orthogonalEdges, edges, toVisEdge]);
+  const routingStateRef = useRef({ edges: routedEdges, selected: selectedEdgeIds, direction: layoutDirection });
+  routingStateRef.current = { edges: routedEdges, selected: selectedEdgeIds, direction: layoutDirection };
 
   // Network options - simple config, let vis-network handle zoom.
   // autoResize is disabled because its synchronous resize handling triggers the
@@ -1136,7 +1318,7 @@ export function VisNetwork({
       } : {
         gravitationalConstant: -120,
         centralGravity: 0.005,
-        springLength: 250,
+        springLength: nodeSpacing === undefined ? 250 : DEFAULT_NODE_BOX_WIDTH + nodeSpacing,
         springConstant: 0.04,
         damping: 0.5,
         avoidOverlap: 1,
@@ -1145,15 +1327,16 @@ export function VisNetwork({
       minVelocity: 0.75,
     },
     interaction: {
-      hover: true,
+      hover: interactive,
       tooltipDelay: 200,
-      multiselect: true,
+      multiselect: interactive,
       selectConnectedEdges: false,
       hoverConnectedEdges: false,
-      navigationButtons: true,  // Enable built-in navigation buttons
-      keyboard: { enabled: true, bindToWindow: false },
-      zoomView: true,
-      dragView: true,
+      navigationButtons: interactive,
+      keyboard: { enabled: interactive, bindToWindow: false },
+      zoomView: interactive,
+      dragView: interactive,
+      dragNodes: interactive,
     },
     layout: {
       improvedLayout: false,
@@ -1171,14 +1354,35 @@ export function VisNetwork({
     );
 
     networkRef.current.on('click', (params) => {
+      const routedEdge = orthogonalRendererRef.current?.hitTest(params.pointer.canvas);
       if (params.nodes.length > 0) {
         onNodeSelectRef.current(params.nodes[0] as string);
+      } else if (routedEdge) {
+        onEdgeSelectRef.current(routedEdge);
       } else if (params.edges.length > 0) {
         onEdgeSelectRef.current(params.edges[0] as string);
       } else {
         onNodeSelectRef.current(null);
         onEdgeSelectRef.current(null);
       }
+    });
+
+    networkRef.current.on('doubleClick', (params) => {
+      if (params.nodes.length) {
+        onNodeDoubleClickRef.current?.(params.nodes[0] as string);
+        return;
+      }
+      const net = networkRef.current;
+      const position = params.pointer?.canvas;
+      if (!zoomOnDoubleClickRef.current || !net || !position) return;
+      const scale = net.getScale();
+      net.moveTo({
+        position,
+        // Make the first zoom readable from an overview, then double each step.
+        // Keep the native wheel ceiling without zooming an existing view out.
+        scale: Math.max(scale, Math.min(10, Math.max(1, scale * 2))),
+        animation: { duration: 250, easingFunction: 'easeInOutQuad' },
+      });
     });
 
     // Observe the container and redraw inside requestAnimationFrame. Deferring
@@ -1193,11 +1397,17 @@ export function VisNetwork({
         if (!net || !el) return;
         const w = el.clientWidth;
         const h = el.clientHeight;
+        const behavior = resizeBehaviorRef.current;
+        const viewport = behavior.preserveZoomOnResize ? { scale: net.getScale(), position: net.getViewPosition() } : null;
         net.setSize(`${w}px`, `${h}px`);
         net.redraw();
         const { w: lw, h: lh } = lastContainerSizeRef.current;
         if (lw > 0 && lh > 0 && (Math.abs(w - lw) > 24 || Math.abs(h - lh) > 24)) {
-          net.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } });
+          if (viewport && !focusSelectedNode()) {
+            const selectedPosition = behavior.selectedNodeId && nodesDataRef.current.get(behavior.selectedNodeId)
+              ? net.getPositions([behavior.selectedNodeId])[behavior.selectedNodeId] : undefined;
+            net.moveTo({ ...viewport, position: selectedPosition || viewport.position, animation: false });
+          } else if (!viewport) fitToCanvas(300);
         }
         lastContainerSizeRef.current = { w, h };
       });
@@ -1207,6 +1417,8 @@ export function VisNetwork({
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
       resizeObserver.disconnect();
+      orthogonalRendererRef.current?.destroy();
+      orthogonalRendererRef.current = null;
       if (networkRef.current) {
         networkRef.current.destroy();
         networkRef.current = null;
@@ -1240,7 +1452,7 @@ export function VisNetwork({
   useEffect(() => {
     const net = networkRef.current;
     if (!net) return;
-    if (layoutDirection) return;
+    if (layoutDirection || fixedLayout) return;
     if (physicsEnabled) {
       net.setOptions({ physics: { enabled: true } });
       return;
@@ -1251,12 +1463,13 @@ export function VisNetwork({
       nodePositionsRef.current.set(id, pos as { x: number; y: number });
     });
     net.setOptions({ physics: { enabled: false } });
-  }, [physicsEnabled, layoutDirection]);
+  }, [physicsEnabled, layoutDirection, fixedLayout]);
 
   // Update nodes
   useEffect(() => {
     const prevLayoutDir = prevLayoutDirectionRef.current;
     const exitedHierarchicalLayout = prevLayoutDir !== undefined && layoutDirection === undefined;
+    const spacingChanged = spacingKey !== previousSpacingKeyRef.current;
 
     const seenIds = new Set<string>();
     const uniqueNodes = nodes.filter((node) => {
@@ -1266,6 +1479,17 @@ export function VisNetwork({
     });
 
     try {
+    // Capture before replacing coordinates. A spacing change must not trigger another
+    // fit-to-all, which would cancel the visible spacing change and shrink the labels.
+    const spacingNetwork = networkRef.current;
+    if (spacingChanged && spacingNetwork && nodesDataRef.current.length > 0) {
+      const viewport = spacingViewport(
+        { scale: spacingNetwork.getScale(), position: spacingNetwork.getViewPosition() },
+        spacingNetwork.getPositions(), uniqueNodes.map(toVisNode),
+      );
+      savedFilterViewsRef.current.set(currentFilterViewKeyRef.current, viewport);
+      pendingFilterViewportApplyRef.current = true;
+    }
     // Detect a complete node-set replacement (graph switch): no overlap between
     // incoming nodes and the current dataset. Reset to fresh-load state so the
     // next layout path gives a proper initial arrangement instead of an
@@ -1278,6 +1502,19 @@ export function VisNetwork({
         layoutHasIsaEdgesRef.current = false;
         nodePositionsRef.current.clear();
       }
+    }
+
+    if (fixedLayout) {
+      const net = networkRef.current;
+      net?.setOptions({ physics: { enabled: false } });
+      nodesDataRef.current.clear();
+      nodesDataRef.current.add(uniqueNodes.map(toVisNode));
+      isStabilizedRef.current = true;
+      const frame = requestAnimationFrame(() => {
+        pendingFilterViewportApplyRef.current = false;
+        applySavedViewportOrFit({ fitDurationMs: 300 });
+      });
+      return () => cancelAnimationFrame(frame);
     }
 
     if (layoutDirection) {
@@ -1293,7 +1530,7 @@ export function VisNetwork({
         prevLayoutDirectionRef.current !== undefined &&
         prevLayoutDirectionRef.current !== layoutDirection;
 
-      if (!isStabilizedRef.current || directionChanged || firstIsaIntroduction || isaRemoved) {
+      if (!isStabilizedRef.current || directionChanged || firstIsaIntroduction || isaRemoved || spacingChanged) {
         // Full re-layout: initial flower load, LR↔TD switch, first/last parent level.
         layoutHasIsaEdgesRef.current = incomingHasIsa;
         nodesDataRef.current.clear();
@@ -1303,7 +1540,7 @@ export function VisNetwork({
             pendingFilterViewportApplyRef.current = false;
             applySavedViewportOrFit({ fitDurationMs: 500 });
           } else {
-            net.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+            fitToCanvas(500);
           }
         }
         isStabilizedRef.current = true;
@@ -1332,7 +1569,7 @@ export function VisNetwork({
           childrenOf.set(edge.target, list);
         }
 
-        const LEVEL_GAP = layoutDirection === 'LR' ? 260 : 180;
+        const LEVEL_GAP = (layoutDirection === 'LR' ? LR_LEVEL_GAP : TD_LEVEL_GAP) + Math.max(0, (nodeSpacing ?? 40) - 40);
 
         const toUpdate: Node[] = [];
         const toAdd: Node[] = [];
@@ -1373,7 +1610,7 @@ export function VisNetwork({
         if (toUpdate.length > 0) nodesDataRef.current.update(toUpdate);
         if (toAdd.length > 0) {
           nodesDataRef.current.add(toAdd);
-          net.fit({ animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+          fitToCanvas(400);
         }
         if (pendingFilterViewportApplyRef.current) {
           pendingFilterViewportApplyRef.current = false;
@@ -1455,7 +1692,7 @@ export function VisNetwork({
       const unsavedIds = uniqueNodes
         .filter((n) => !nodePositionsRef.current.has(n.id))
         .map((n) => n.id);
-      initPositions = computeSpreadPositions(unsavedIds);
+      initPositions = computeSpreadPositions(unsavedIds, nodeSpacing === undefined ? 300 : DEFAULT_NODE_BOX_WIDTH + nodeSpacing);
     }
 
     const visNodes = uniqueNodes.map((node) => {
@@ -1486,8 +1723,8 @@ export function VisNetwork({
           if (pendingFilterViewportApplyRef.current) {
             pendingFilterViewportApplyRef.current = false;
             applySavedViewportOrFit({ fitDurationMs: 500 });
-          } else {
-            networkRef.current.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+          } else if (!focusSelectedNode()) {
+            fitToCanvas(500);
           }
         }
       });
@@ -1497,8 +1734,9 @@ export function VisNetwork({
     }
     } finally {
       prevLayoutDirectionRef.current = layoutDirection;
+      previousSpacingKeyRef.current = spacingKey;
     }
-  }, [nodes, toVisNode, layoutDirection, applySavedViewportOrFit, useBucketLayout]);
+  }, [nodes, toVisNode, layoutDirection, applySavedViewportOrFit, useBucketLayout, fixedLayout, focusSelectedNode, nodeSpacing, spacingKey, fitToCanvas]);
 
   /**
    * If no code path consumes `pendingFilterViewportApplyRef` this frame (e.g. edges-only refresh),
@@ -1537,6 +1775,17 @@ export function VisNetwork({
     edgesDataRef.current.clear();
     edgesDataRef.current.add(uniqueEdges.map(toVisEdge));
   }, [edges, toVisEdge]);
+
+  useEffect(() => {
+    const net = networkRef.current, container = containerRef.current;
+    if (!orthogonalEdges || !net || !container) return;
+    orthogonalRendererRef.current = installOrthogonalEdges(net, container, () => routingStateRef.current);
+    return () => {
+      orthogonalRendererRef.current?.destroy();
+      orthogonalRendererRef.current = null;
+    };
+  }, [orthogonalEdges]);
+  useEffect(() => { if (orthogonalEdges) networkRef.current?.redraw(); }, [orthogonalEdges, routedEdges, selectedEdgeIds]);
 
   // Bring selected nodes to the foreground. vis-network has no z-index and
   // draws nodes in DataSet insertion order (later = on top), drawing nodes over
@@ -1591,7 +1840,7 @@ export function VisNetwork({
   // Skip when in hierarchical layout — positions are already fixed.
   useEffect(() => {
     if (stabilizeKey === undefined || stabilizeKey === 0) return;
-    if (!networkRef.current || layoutDirection) return;
+    if (!networkRef.current || layoutDirection || fixedLayout) return;
     isStabilizedRef.current = false;
     networkRef.current.setOptions({ physics: { enabled: true } });
     networkRef.current.once('stabilizationIterationsDone', () => {
@@ -1606,38 +1855,46 @@ export function VisNetwork({
       }
     });
     networkRef.current.stabilize(200);
-  }, [stabilizeKey, layoutDirection]);
+  }, [stabilizeKey, layoutDirection, fixedLayout]);
 
   // Compact the graph when a node is selected by reducing spring length by 15%.
   useEffect(() => {
     const net = networkRef.current;
-    if (!net || layoutDirection) return;
-    const baseSpringLength = useBucketLayout ? 200 : 250;
+    if (!net || layoutDirection || fixedLayout) return;
+    const baseSpringLength = useBucketLayout ? 200 : nodeSpacing === undefined ? 250 : DEFAULT_NODE_BOX_WIDTH + nodeSpacing;
     net.setOptions({
       physics: {
         forceAtlas2Based: { springLength: selectedNodeId ? baseSpringLength * 0.85 : baseSpringLength },
       },
     });
-  }, [selectedNodeId, useBucketLayout, layoutDirection]);
+  }, [selectedNodeId, useBucketLayout, layoutDirection, fixedLayout, nodeSpacing]);
 
-  // Handle selected node — select visually and pan to center on it without changing zoom.
-  // Double-RAF delay lets the canvas finish resizing (inspector open/close) before we pan.
+  // Centre after the inspector has resized the canvas. Opted-in views also zoom
+  // to a readable size; closing the inspector can still retain the viewport.
   useEffect(() => {
     if (!networkRef.current) return;
 
     const hadSelected = prevSelectedNodeIdRef.current !== null;
     prevSelectedNodeIdRef.current = selectedNodeId;
 
+    // Preserve the legacy overview interaction unless centring was requested.
+    if (fixedLayout && !focusOnSelection) {
+      if (selectedNodeId && nodesDataRef.current.get(selectedNodeId)) networkRef.current.selectNodes([selectedNodeId]);
+      else networkRef.current.unselectAll();
+      return;
+    }
+
     let cancelled = false;
 
     if (!selectedNodeId) {
+      if (preserveZoomOnSelection) { networkRef.current.unselectAll(); return; }
       // Inspector closing: re-fit the graph into the now-wider canvas.
       if (!hadSelected) return;
       requestAnimationFrame(() => {
         if (cancelled) return;
         requestAnimationFrame(() => {
           if (cancelled || !networkRef.current || nodesDataRef.current.length === 0) return;
-          networkRef.current.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } });
+          fitToCanvas(300);
         });
       });
       return () => { cancelled = true; };
@@ -1651,8 +1908,9 @@ export function VisNetwork({
       if (cancelled) return;
       requestAnimationFrame(() => {
         if (cancelled || !networkRef.current) return;
+        if (focusSelectedNode()) return;
         const currentScale = networkRef.current.getScale();
-        const targetScale = Math.max(currentScale, 1.35);
+        const targetScale = preserveZoomOnSelection ? currentScale : Math.max(currentScale, 1.35);
         networkRef.current.focus(selectedNodeId, {
           scale: targetScale,
           animation: { duration: 300, easingFunction: 'easeInOutQuad' },
@@ -1661,7 +1919,7 @@ export function VisNetwork({
     });
 
     return () => { cancelled = true; };
-  }, [selectedNodeId]);
+  }, [selectedNodeId, fixedLayout, preserveZoomOnSelection, focusOnSelection, focusRequestKey, focusSelectedNode, fitToCanvas]);
 
   // Highlight selected edges on the canvas.
   useEffect(() => {
@@ -1675,6 +1933,11 @@ export function VisNetwork({
   return (
     <>
       <style jsx global>{`
+        /* Canvas focus keeps keyboard navigation without framing the whole graph. */
+        .vis-network:focus, .vis-network.vis-active {
+          outline: none;
+          box-shadow: none;
+        }
         /* Style vis-network navigation buttons to match platform */
         .vis-navigation {
           position: absolute !important;
@@ -1688,7 +1951,7 @@ export function VisNetwork({
           height: 32px !important;
           background-color: hsl(var(--card)) !important;
           border: 1px solid hsl(var(--border)) !important;
-          border-radius: 8px !important;
+          border-radius: 0 !important;
           box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1) !important;
           background-size: 16px 16px !important;
           background-position: center !important;

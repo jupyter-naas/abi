@@ -12,7 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.port import (
     AgentUpdateInput,
     InferenceServerRecord,
 )
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -185,16 +185,21 @@ class AgentSecondaryAdapterPostgres(AgentPersistencePort):
         if updates.is_default is not None:
             new_default = bool(updates.is_default)
             if new_default:
-                # Atomically clear any other default in this workspace before
-                # promoting this one. Guarantees the "at most one default" invariant.
-                await self.db.execute(
-                    update(AgentConfigModel)
+                # Clear any other default in this workspace, in the same
+                # transaction as the promotion: at most one default. Row by row
+                # through the ORM (locked FOR UPDATE) rather than a bulk UPDATE,
+                # so each demotion is a committed change identity events see.
+                others = await self.db.execute(
+                    select(AgentConfigModel)
                     .where(
                         AgentConfigModel.workspace_id == agent_model.workspace_id,
                         AgentConfigModel.id != agent_model.id,
+                        AgentConfigModel.is_default != 0,
                     )
-                    .values(is_default=0)
+                    .with_for_update()
                 )
+                for other in others.scalars():
+                    other.is_default = 0
             agent_model.is_default = 1 if new_default else 0
 
         await self.db.commit()

@@ -105,4 +105,13 @@ def test_workspace_seed_config_accepts_ontologies() -> None:
         ontologies=["example:ExampleOntology.ttl", "bfo:bfo-core.ttl"],
     )
     assert seed.ontologies == ["example:ExampleOntology.ttl", "bfo:bfo-core.ttl"]
-    assert WorkspaceSeedConfig(name="Example", slug="example").ontologies is None
+    assert WorkspaceSeedConfig(name="Example", slug="example").ontologies == []
+
+
+def test_ontology_refs_do_not_match_partial_names_or_paths() -> None:
+    path = "/repo/src/example/ontologies/modules/PrivateExample.ttl"
+    assert not ontology_matches_seed(path, "example", ["Example.ttl"])
+    assert not ontology_matches_seed(path, "example", ["ample/ontologies/modules/PrivateExample.ttl"])
+    assert not ontology_matches_seed(path, "example", ["/modules/PrivateExample.ttl"])
+    assert ontology_matches_seed(path, "example", ["example/ontologies/modules/PrivateExample.ttl"])
+    assert ontology_matches_seed(path, "example", [path])

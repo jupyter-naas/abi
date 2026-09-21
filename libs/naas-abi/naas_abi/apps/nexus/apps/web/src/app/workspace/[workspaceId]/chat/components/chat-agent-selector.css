@@ -519,6 +519,15 @@ button.chat-slides-composer-row:hover {
   font-weight: 600;
 }
 
+/* Suggestions opt out of the row-name emphasis: elsewhere the weight separates
+   an object's name from its hint (a file, a deck, a document), but a suggestion
+   label is the whole prompt, so bolding it just shouts the sentence.
+   Scoped here rather than on .chat-slides-composer-row-name, which four other
+   blocks rely on. */
+.chat-suggestion-row-name {
+  font-weight: 400;
+}
+
 .chat-slides-composer-row-hint {
   overflow: hidden;
   font-size: 10px;
@@ -553,8 +562,9 @@ button.chat-slides-composer-row:hover {
    reads as one seamless card. */
 .chat-composer-header-block {
   overflow: hidden;
-  /* Slightly distinct from the composer input's --card-hex below it. */
-  background: color-mix(in srgb, var(--muted-bg-hex) 55%, var(--card-hex));
+  /* No fill: the strip is defined by its border alone and sits flush with
+     whatever is behind it. The toggle button and its chevron/label are
+     transparent too, so hover is the only background left in here. */
 }
 
 .chat-composer-header-toggle {

@@ -131,7 +131,14 @@ export function SectionPanel() {
         style={isOpen ? { width: sectionPanelWidth } : undefined}
       >
         {isOpen && activePanelSection && (
-          <nav className="flex-1 overflow-y-auto p-2">
+          <nav
+            className={cn(
+              'flex min-h-0 flex-1 flex-col p-2',
+              // Workspaces owns its own list scroll so the search bar can
+              // stay pinned and clip rows. Other sections still scroll here.
+              activePanelSection === 'workspaces' ? 'overflow-hidden' : 'overflow-y-auto',
+            )}
+          >
             <SectionContent section={activePanelSection} />
           </nav>
         )}

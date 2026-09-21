@@ -1,0 +1,1194 @@
+{
+  "status": "Simulated, not validated",
+  "subsystems": [
+    {
+      "code": "S1",
+      "name": "Personnel",
+      "processes": [
+        {
+          "code": "S1-P1",
+          "name": "Onboarding",
+          "steps": [
+            "Create staff record",
+            "Assign role",
+            "Grant access"
+          ],
+          "WHO": [
+            "HR officer",
+            "New joiner",
+            "HR system"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "On hire"
+          ],
+          "HOWITIS": [
+            "Onboarding status",
+            "Access level"
+          ],
+          "WHY": [
+            "A ready, cleared workforce"
+          ],
+          "HOWWEKNOW": [
+            "HR record",
+            "Access register"
+          ]
+        },
+        {
+          "code": "S1-P2",
+          "name": "Access provisioning",
+          "steps": [
+            "Request access",
+            "Approve",
+            "Provision & log"
+          ],
+          "WHO": [
+            "HR officer",
+            "IT admin",
+            "Identity system"
+          ],
+          "WHERE": [
+            "Secure network perimeter"
+          ],
+          "WHEN": [
+            "On role change"
+          ],
+          "HOWITIS": [
+            "Access status",
+            "Least-privilege compliance"
+          ],
+          "WHY": [
+            "Controlled access to systems"
+          ],
+          "HOWWEKNOW": [
+            "Access request record",
+            "Audit trail"
+          ]
+        },
+        {
+          "code": "S1-P3",
+          "name": "Rotation planning",
+          "steps": [
+            "Forecast needs",
+            "Draft rota",
+            "Publish"
+          ],
+          "WHO": [
+            "S1 lead",
+            "Line managers",
+            "Planning system"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "Monthly cycle"
+          ],
+          "HOWITIS": [
+            "Coverage ratio"
+          ],
+          "WHY": [
+            "Continuity of cover for VIP operations"
+          ],
+          "HOWWEKNOW": [
+            "Rotation plan",
+            "Attendance record"
+          ]
+        },
+        {
+          "code": "S1-P4",
+          "name": "Attendance and leave",
+          "steps": [
+            "Record attendance",
+            "Request leave",
+            "Approve"
+          ],
+          "WHO": [
+            "Staff member",
+            "Line manager",
+            "HR system"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "Daily; on request"
+          ],
+          "HOWITIS": [
+            "Attendance status",
+            "SLA on approval"
+          ],
+          "WHY": [
+            "Accurate manpower picture"
+          ],
+          "HOWWEKNOW": [
+            "Attendance log",
+            "Leave record"
+          ]
+        },
+        {
+          "code": "S1-P5",
+          "name": "Offboarding",
+          "steps": [
+            "Revoke access",
+            "Return assets",
+            "Close record"
+          ],
+          "WHO": [
+            "HR officer",
+            "IT admin",
+            "Security"
+          ],
+          "WHERE": [
+            "Secure network perimeter",
+            "On-premises data centre"
+          ],
+          "WHEN": [
+            "On departure"
+          ],
+          "HOWITIS": [
+            "Access-revoked status"
+          ],
+          "WHY": [
+            "No residual access after departure"
+          ],
+          "HOWWEKNOW": [
+            "Offboarding checklist",
+            "Access revocation log"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "S2",
+      "name": "Intelligence",
+      "processes": [
+        {
+          "code": "S2-P1",
+          "name": "Executive briefing",
+          "steps": [
+            "Gather inputs",
+            "Synthesise",
+            "Deliver briefing"
+          ],
+          "WHO": [
+            "S2 officer",
+            "Executive principal",
+            "AIN agents"
+          ],
+          "WHERE": [
+            "Operations centre",
+            "Air-gapped zone"
+          ],
+          "WHEN": [
+            "Daily; before movements"
+          ],
+          "HOWITIS": [
+            "Confidence score",
+            "Timeliness"
+          ],
+          "WHY": [
+            "Informed, timely decisions"
+          ],
+          "HOWWEKNOW": [
+            "Briefing note",
+            "Decision log"
+          ]
+        },
+        {
+          "code": "S2-P2",
+          "name": "Signal synthesis",
+          "steps": [
+            "Ingest sources",
+            "Correlate",
+            "Flag signals"
+          ],
+          "WHO": [
+            "OSINT sources",
+            "AIN intelligence agent",
+            "Analyst"
+          ],
+          "WHERE": [
+            "Air-gapped zone"
+          ],
+          "WHEN": [
+            "Continuous"
+          ],
+          "HOWITIS": [
+            "Confidence score",
+            "Coverage"
+          ],
+          "WHY": [
+            "Early awareness before events"
+          ],
+          "HOWWEKNOW": [
+            "Source chain",
+            "Signal record"
+          ]
+        },
+        {
+          "code": "S2-P3",
+          "name": "Risk and context assessment",
+          "steps": [
+            "Frame question",
+            "Assess",
+            "Score"
+          ],
+          "WHO": [
+            "Analyst",
+            "Risk owner",
+            "AIN predictive agent"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "On request; per cycle"
+          ],
+          "HOWITIS": [
+            "Risk score",
+            "Assessment completeness"
+          ],
+          "WHY": [
+            "Anticipatory risk posture"
+          ],
+          "HOWWEKNOW": [
+            "Assessment report",
+            "Evidence register"
+          ]
+        },
+        {
+          "code": "S2-P4",
+          "name": "Security screening",
+          "steps": [
+            "Receive request",
+            "Screen",
+            "Clear or refer"
+          ],
+          "WHO": [
+            "Security officer",
+            "Subject",
+            "Screening system"
+          ],
+          "WHERE": [
+            "Secure network perimeter"
+          ],
+          "WHEN": [
+            "On access request"
+          ],
+          "HOWITIS": [
+            "Clearance status"
+          ],
+          "WHY": [
+            "Trusted access to sensitive operations"
+          ],
+          "HOWWEKNOW": [
+            "Screening record",
+            "Audit trail"
+          ]
+        },
+        {
+          "code": "S2-P5",
+          "name": "Watch and alerting",
+          "steps": [
+            "Set thresholds",
+            "Monitor",
+            "Raise alert"
+          ],
+          "WHO": [
+            "AIN gap-detection agent",
+            "Watch officer"
+          ],
+          "WHERE": [
+            "Air-gapped zone"
+          ],
+          "WHEN": [
+            "Continuous; < 2 min alert"
+          ],
+          "HOWITIS": [
+            "Alert latency",
+            "False-positive rate"
+          ],
+          "WHY": [
+            "Act inside the decision window"
+          ],
+          "HOWWEKNOW": [
+            "Alert feed",
+            "Reasoning chain"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "S3",
+      "name": "Operations",
+      "processes": [
+        {
+          "code": "S3-P1",
+          "name": "Work-order processing",
+          "steps": [
+            "Raise work order",
+            "Route",
+            "Execute & close"
+          ],
+          "WHO": [
+            "Operations lead",
+            "Field team",
+            "Oracle ERP"
+          ],
+          "WHERE": [
+            "Operations centre",
+            "On-premises data centre"
+          ],
+          "WHEN": [
+            "On request"
+          ],
+          "HOWITIS": [
+            "Order status",
+            "SLA adherence"
+          ],
+          "WHY": [
+            "Facilities kept mission-ready"
+          ],
+          "HOWWEKNOW": [
+            "Work-order record",
+            "Asset registry update"
+          ]
+        },
+        {
+          "code": "S3-P2",
+          "name": "Scheduling",
+          "steps": [
+            "Collect demand",
+            "Optimise",
+            "Publish schedule"
+          ],
+          "WHO": [
+            "S3 scheduler",
+            "Resource owners",
+            "Scheduling system"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "Weekly; on change"
+          ],
+          "HOWITIS": [
+            "Schedule fill rate"
+          ],
+          "WHY": [
+            "Efficient use of people and assets"
+          ],
+          "HOWWEKNOW": [
+            "Schedule record",
+            "Decision log"
+          ]
+        },
+        {
+          "code": "S3-P3",
+          "name": "Fleet dispatch",
+          "steps": [
+            "Receive request",
+            "Assign vehicle",
+            "Dispatch & track"
+          ],
+          "WHO": [
+            "Dispatcher",
+            "Driver",
+            "Fleet system"
+          ],
+          "WHERE": [
+            "Operations centre",
+            "Sites across the estate"
+          ],
+          "WHEN": [
+            "On demand; time-of-day windows"
+          ],
+          "HOWITIS": [
+            "On-time rate",
+            "Vehicle status"
+          ],
+          "WHY": [
+            "Reliable VIP movement"
+          ],
+          "HOWWEKNOW": [
+            "Dispatch record",
+            "Trip log"
+          ]
+        },
+        {
+          "code": "S3-P4",
+          "name": "Maintenance",
+          "steps": [
+            "Detect need",
+            "Plan",
+            "Execute & verify"
+          ],
+          "WHO": [
+            "Maintenance team",
+            "Asset owner",
+            "Oracle ERP"
+          ],
+          "WHERE": [
+            "On-premises data centre",
+            "Sites"
+          ],
+          "WHEN": [
+            "Scheduled; on fault"
+          ],
+          "HOWITIS": [
+            "Asset condition",
+            "Downtime"
+          ],
+          "WHY": [
+            "Assets available when needed"
+          ],
+          "HOWWEKNOW": [
+            "Maintenance record",
+            "Asset registry"
+          ]
+        },
+        {
+          "code": "S3-P5",
+          "name": "Incident response",
+          "steps": [
+            "Detect",
+            "Triage",
+            "Resolve & review"
+          ],
+          "WHO": [
+            "Operations lead",
+            "Response team",
+            "AIN agents"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "On incident; < 1 h"
+          ],
+          "HOWITIS": [
+            "Resolution time",
+            "Severity"
+          ],
+          "WHY": [
+            "Continuity under disruption"
+          ],
+          "HOWWEKNOW": [
+            "Incident record",
+            "After-action note"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "S4",
+      "name": "Logistics",
+      "processes": [
+        {
+          "code": "S4-P1",
+          "name": "Vendor evaluation",
+          "steps": [
+            "Define criteria",
+            "Score vendors",
+            "Recommend"
+          ],
+          "WHO": [
+            "S4 controller",
+            "Procurement officer",
+            "Vendor",
+            "Oracle ERP"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "On new requirement"
+          ],
+          "HOWITIS": [
+            "Vendor performance score",
+            "Compliance status"
+          ],
+          "WHY": [
+            "Best-value, sovereign-fit sourcing"
+          ],
+          "HOWWEKNOW": [
+            "Vendor catalogue",
+            "Evaluation record"
+          ]
+        },
+        {
+          "code": "S4-P2",
+          "name": "Straight-through procurement",
+          "steps": [
+            "Requisition",
+            "Auto-approve within policy",
+            "Order"
+          ],
+          "WHO": [
+            "Procurement officer",
+            "AIN procurement agent",
+            "Oracle ERP"
+          ],
+          "WHERE": [
+            "Operations centre",
+            "On-premises data centre"
+          ],
+          "WHEN": [
+            "On requisition"
+          ],
+          "HOWITIS": [
+            "Cycle time",
+            "Policy compliance"
+          ],
+          "WHY": [
+            "Fast, compliant purchasing"
+          ],
+          "HOWWEKNOW": [
+            "Procurement record",
+            "Audit trail"
+          ]
+        },
+        {
+          "code": "S4-P3",
+          "name": "Stock and inventory",
+          "steps": [
+            "Count",
+            "Reconcile",
+            "Replenish"
+          ],
+          "WHO": [
+            "Store keeper",
+            "Oracle ERP"
+          ],
+          "WHERE": [
+            "On-premises data centre",
+            "Stores"
+          ],
+          "WHEN": [
+            "Periodic; on threshold"
+          ],
+          "HOWITIS": [
+            "Stock level",
+            "Accuracy"
+          ],
+          "WHY": [
+            "No stockouts on critical items"
+          ],
+          "HOWWEKNOW": [
+            "Inventory record",
+            "Asset registry"
+          ]
+        },
+        {
+          "code": "S4-P4",
+          "name": "Asset registry",
+          "steps": [
+            "Register asset",
+            "Tag",
+            "Track lifecycle"
+          ],
+          "WHO": [
+            "Asset owner",
+            "S4 controller",
+            "Oracle ERP"
+          ],
+          "WHERE": [
+            "On-premises data centre"
+          ],
+          "WHEN": [
+            "On acquisition; on change"
+          ],
+          "HOWITIS": [
+            "Registry completeness"
+          ],
+          "WHY": [
+            "Full accountability of assets"
+          ],
+          "HOWWEKNOW": [
+            "Asset registry",
+            "Audit trail"
+          ]
+        },
+        {
+          "code": "S4-P5",
+          "name": "Supplier onboarding",
+          "steps": [
+            "Vet supplier",
+            "Set terms",
+            "Activate"
+          ],
+          "WHO": [
+            "Procurement officer",
+            "Supplier",
+            "Oracle ERP"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "On selection"
+          ],
+          "HOWITIS": [
+            "Onboarding status",
+            "Right-to-audit in place"
+          ],
+          "WHY": [
+            "A governed supplier base"
+          ],
+          "HOWWEKNOW": [
+            "Vendor contract",
+            "Vendor catalogue"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "S5",
+      "name": "Plans",
+      "processes": [
+        {
+          "code": "S5-P1",
+          "name": "Programme planning",
+          "steps": [
+            "Define objectives",
+            "Sequence",
+            "Baseline"
+          ],
+          "WHO": [
+            "S5 planner",
+            "Programme owner",
+            "Planning system"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "Per programme cycle"
+          ],
+          "HOWITIS": [
+            "Plan maturity"
+          ],
+          "WHY": [
+            "Objectives translated into deliverable work"
+          ],
+          "HOWWEKNOW": [
+            "Programme plan",
+            "Decision log"
+          ]
+        },
+        {
+          "code": "S5-P2",
+          "name": "Forecasting",
+          "steps": [
+            "Gather signals",
+            "Model",
+            "Publish forecast"
+          ],
+          "WHO": [
+            "Planner",
+            "AIN predictive agent"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "Rolling; per cycle"
+          ],
+          "HOWITIS": [
+            "Forecast confidence"
+          ],
+          "WHY": [
+            "Anticipation of demand and risk"
+          ],
+          "HOWWEKNOW": [
+            "Forecast record",
+            "Evidence register"
+          ]
+        },
+        {
+          "code": "S5-P3",
+          "name": "Capability roadmap",
+          "steps": [
+            "Assess gaps",
+            "Prioritise",
+            "Roadmap"
+          ],
+          "WHO": [
+            "S5 lead",
+            "Function leads"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "Annual; on review"
+          ],
+          "HOWITIS": [
+            "Gap coverage"
+          ],
+          "WHY": [
+            "Capabilities aligned to the North Stars"
+          ],
+          "HOWWEKNOW": [
+            "Roadmap document",
+            "Gap register"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "S6",
+      "name": "Signal",
+      "processes": [
+        {
+          "code": "S6-P1",
+          "name": "IT provisioning",
+          "steps": [
+            "Request",
+            "Provision",
+            "Verify"
+          ],
+          "WHO": [
+            "IT engineer",
+            "Requester",
+            "Infrastructure"
+          ],
+          "WHERE": [
+            "On-premises data centre",
+            "Secure network perimeter"
+          ],
+          "WHEN": [
+            "On request"
+          ],
+          "HOWITIS": [
+            "Provisioning status",
+            "Uptime"
+          ],
+          "WHY": [
+            "A secured, capable IT estate"
+          ],
+          "HOWWEKNOW": [
+            "Provisioning record",
+            "Configuration log"
+          ]
+        },
+        {
+          "code": "S6-P2",
+          "name": "Cyber posture (blue/red team)",
+          "steps": [
+            "Attack (red)",
+            "Defend (blue)",
+            "Remediate"
+          ],
+          "WHO": [
+            "Cyber team",
+            "AIN agents",
+            "Infrastructure"
+          ],
+          "WHERE": [
+            "Air-gapped zone",
+            "Secure network perimeter"
+          ],
+          "WHEN": [
+            "Continuous; per test cycle"
+          ],
+          "HOWITIS": [
+            "Air-gap compliance",
+            "Findings severity"
+          ],
+          "WHY": [
+            "A defensible fortress"
+          ],
+          "HOWWEKNOW": [
+            "Penetration report",
+            "Remediation log"
+          ]
+        },
+        {
+          "code": "S6-P3",
+          "name": "Communications and calendar",
+          "steps": [
+            "Schedule",
+            "Notify",
+            "Record"
+          ],
+          "WHO": [
+            "Comms officer",
+            "Staff",
+            "Messaging system"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "Continuous"
+          ],
+          "HOWITIS": [
+            "Delivery status"
+          ],
+          "WHY": [
+            "Coordinated operations"
+          ],
+          "HOWWEKNOW": [
+            "Message log",
+            "Calendar record"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "S7",
+      "name": "Training",
+      "processes": [
+        {
+          "code": "S7-P1",
+          "name": "Training delivery",
+          "steps": [
+            "Plan course",
+            "Deliver",
+            "Record"
+          ],
+          "WHO": [
+            "Trainer",
+            "Trainee",
+            "Learning system"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "Per schedule"
+          ],
+          "HOWITIS": [
+            "Completion rate"
+          ],
+          "WHY": [
+            "A capable workforce"
+          ],
+          "HOWWEKNOW": [
+            "Training record",
+            "Attendance log"
+          ]
+        },
+        {
+          "code": "S7-P2",
+          "name": "Capability development",
+          "steps": [
+            "Assess",
+            "Develop",
+            "Certify"
+          ],
+          "WHO": [
+            "S7 lead",
+            "Staff member"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "Per development cycle"
+          ],
+          "HOWITIS": [
+            "Competency level"
+          ],
+          "WHY": [
+            "Rising internal capability"
+          ],
+          "HOWWEKNOW": [
+            "Competency record",
+            "Assessment result"
+          ]
+        },
+        {
+          "code": "S7-P3",
+          "name": "Assessment",
+          "steps": [
+            "Set assessment",
+            "Score",
+            "Feed back"
+          ],
+          "WHO": [
+            "Assessor",
+            "Trainee"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "Post-course"
+          ],
+          "HOWITIS": [
+            "Score",
+            "Pass rate"
+          ],
+          "WHY": [
+            "Verified competence"
+          ],
+          "HOWWEKNOW": [
+            "Assessment record",
+            "Evidence register"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "S8",
+      "name": "Finance",
+      "processes": [
+        {
+          "code": "S8-P1",
+          "name": "Finance approval chain",
+          "steps": [
+            "Submit",
+            "Route for approval",
+            "Authorise"
+          ],
+          "WHO": [
+            "Requester",
+            "S8 approver",
+            "Oracle ERP"
+          ],
+          "WHERE": [
+            "Operations centre",
+            "On-premises data centre"
+          ],
+          "WHEN": [
+            "On submission"
+          ],
+          "HOWITIS": [
+            "Approval status",
+            "SLA adherence"
+          ],
+          "WHY": [
+            "Controlled, authorised spend"
+          ],
+          "HOWWEKNOW": [
+            "Approval record",
+            "Decision log"
+          ]
+        },
+        {
+          "code": "S8-P2",
+          "name": "Budget management",
+          "steps": [
+            "Set budget",
+            "Track",
+            "Reforecast"
+          ],
+          "WHO": [
+            "Finance officer",
+            "Budget owner",
+            "Oracle ERP"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "Per financial cycle"
+          ],
+          "HOWITIS": [
+            "Budget status",
+            "Variance"
+          ],
+          "WHY": [
+            "Spend within mandate"
+          ],
+          "HOWWEKNOW": [
+            "Budget record",
+            "Audit trail"
+          ]
+        },
+        {
+          "code": "S8-P3",
+          "name": "Contract management",
+          "steps": [
+            "Draft",
+            "Sign",
+            "Manage lifecycle"
+          ],
+          "WHO": [
+            "Contract manager",
+            "Vendor",
+            "Oracle ERP"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "On award; per renewal"
+          ],
+          "HOWITIS": [
+            "Contract status",
+            "Right-to-audit"
+          ],
+          "WHY": [
+            "Enforceable, auditable commitments"
+          ],
+          "HOWWEKNOW": [
+            "Vendor contract",
+            "Audit trail"
+          ]
+        },
+        {
+          "code": "S8-P4",
+          "name": "Payments and expenses",
+          "steps": [
+            "Capture",
+            "Validate",
+            "Pay"
+          ],
+          "WHO": [
+            "Finance officer",
+            "AIN finance agent",
+            "Oracle ERP"
+          ],
+          "WHERE": [
+            "On-premises data centre"
+          ],
+          "WHEN": [
+            "On invoice; per run"
+          ],
+          "HOWITIS": [
+            "Payment status",
+            "Exception rate"
+          ],
+          "WHY": [
+            "Timely, correct disbursement"
+          ],
+          "HOWWEKNOW": [
+            "Payment record",
+            "Audit trail"
+          ]
+        },
+        {
+          "code": "S8-P5",
+          "name": "Audit trail maintenance",
+          "steps": [
+            "Log actions",
+            "Retain",
+            "Produce on demand"
+          ],
+          "WHO": [
+            "Finance officer",
+            "Auditor",
+            "AIN"
+          ],
+          "WHERE": [
+            "On-premises data centre",
+            "Air-gapped zone"
+          ],
+          "WHEN": [
+            "Continuous"
+          ],
+          "HOWITIS": [
+            "Trail completeness"
+          ],
+          "WHY": [
+            "Defensible evidence for review"
+          ],
+          "HOWWEKNOW": [
+            "Audit trail",
+            "Decision log"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "S9",
+      "name": "External Affairs",
+      "processes": [
+        {
+          "code": "S9-P1",
+          "name": "Stakeholder engagement",
+          "steps": [
+            "Map stakeholders",
+            "Engage",
+            "Record"
+          ],
+          "WHO": [
+            "S9 officer",
+            "Stakeholder"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "Continuous; per engagement"
+          ],
+          "HOWITIS": [
+            "Engagement status"
+          ],
+          "WHY": [
+            "Trusted external relationships"
+          ],
+          "HOWWEKNOW": [
+            "Contact record",
+            "Engagement log"
+          ]
+        },
+        {
+          "code": "S9-P2",
+          "name": "Partner coordination",
+          "steps": [
+            "Align",
+            "Coordinate",
+            "Review"
+          ],
+          "WHO": [
+            "S9 lead",
+            "Partner organisation"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "Per programme"
+          ],
+          "HOWITIS": [
+            "Alignment status"
+          ],
+          "WHY": [
+            "Effective civil-military cooperation"
+          ],
+          "HOWWEKNOW": [
+            "Partner record",
+            "Decision log"
+          ]
+        },
+        {
+          "code": "S9-P3",
+          "name": "Public and communications",
+          "steps": [
+            "Prepare",
+            "Clear",
+            "Publish"
+          ],
+          "WHO": [
+            "Comms officer",
+            "Approver"
+          ],
+          "WHERE": [
+            "Operations centre"
+          ],
+          "WHEN": [
+            "On event"
+          ],
+          "HOWITIS": [
+            "Approval status"
+          ],
+          "WHY": [
+            "Consistent external messaging"
+          ],
+          "HOWWEKNOW": [
+            "Comms record",
+            "Approval log"
+          ]
+        }
+      ]
+    }
+  ]
+}
