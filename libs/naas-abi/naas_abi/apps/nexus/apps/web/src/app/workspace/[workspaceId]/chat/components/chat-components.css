@@ -42,18 +42,18 @@
   line-height: var(--line-height-xs);
 }
 
-/* List rows (conversations, agents, skills) */
+/* List rows (conversations, agents, skills): match Ontology/KG/Files at 12/18. */
 .chat-list-row {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
   padding: 6px var(--space-2);
   border: none;
   border-radius: var(--org-border-radius, var(--radius-md));
   background: transparent;
-  font-size: var(--font-size-sm);
-  line-height: 19px;
+  font-size: 12px;
+  line-height: 18px;
   color: var(--foreground-hex);
   text-align: left;
   cursor: pointer;
@@ -166,13 +166,13 @@
   display: flex;
   width: 100%;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
   padding: 6px var(--space-2);
   border: none;
   border-radius: var(--org-border-radius, var(--radius-md));
   background: transparent;
-  font-size: var(--font-size-sm);
-  line-height: 19px;
+  font-size: 12px;
+  line-height: 18px;
   color: var(--muted-foreground-hex);
   text-align: left;
   cursor: pointer;
@@ -202,8 +202,8 @@
   margin: 0;
   padding: var(--space-1) var(--space-2);
   color: var(--muted-foreground-hex);
-  font-size: var(--font-size-sm);
-  line-height: 19px;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .chat-section-empty {
@@ -217,7 +217,7 @@
 .chat-rename-row {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
   padding: 6px var(--space-2);
   border-radius: var(--org-border-radius, var(--radius-md));
 }
@@ -227,8 +227,8 @@
   border: none;
   border-bottom: 1px solid var(--workspace-accent, #22c55e);
   background: transparent;
-  font-size: var(--font-size-sm);
-  line-height: 19px;
+  font-size: 12px;
+  line-height: 18px;
   color: var(--foreground-hex);
   outline: none;
 }
@@ -249,8 +249,8 @@
   border: none;
   border-radius: var(--org-border-radius, var(--radius-md));
   background: transparent;
-  font-size: var(--font-size-sm);
-  line-height: 19px;
+  font-size: 12px;
+  line-height: 18px;
   font-weight: var(--font-weight-medium);
   color: var(--muted-foreground-hex);
   text-align: left;
