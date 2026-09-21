@@ -210,7 +210,8 @@ def ensure_x_datasets(dataset: IDatasetPort) -> None:
         try:
             dataset.create(spec)
         except DatasetAlreadyExistsError:
-            pass
+            # Catalog import / replay can register tables without abi.dataset-spec COMMENT.
+            _refresh_dataset_table_comment(dataset, spec)
     from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.matched_tweets import (
         ensure_matched_tweet_ids_ready,
     )

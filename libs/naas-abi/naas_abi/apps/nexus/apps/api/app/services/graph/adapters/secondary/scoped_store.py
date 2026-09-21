@@ -26,16 +26,21 @@ _TERMS = re.compile(
     r"'''(?:\\.|(?!''')[\s\S])*'''|"
     r""""(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|<[^<>"{}|^`\\\x00-\x20]*>|\#[^\r\n]*)"""
 )
-_VALUES_GRAPH_PATTERN = re.compile(r"VALUES\s+\?g\s*\{([^}]*)\}", re.IGNORECASE | re.DOTALL)
+_VALUES_NAMED_GRAPH_PATTERN = re.compile(
+    r"VALUES\s+\?(?:g|rg|tg|sg)\s*\{([^}]*)\}",
+    re.IGNORECASE | re.DOTALL,
+)
 _IRI_IN_ANGLE = re.compile(r"<([^>]+)>")
 
 
 def _graphs_from_values_clause(query: str) -> set[str] | None:
-    """When a query pins ?g via VALUES, scope the dataset to those graphs only."""
-    match = _VALUES_GRAPH_PATTERN.search(query)
-    if not match:
+    """Union graph IRIs pinned by VALUES ?g / ?rg / ?tg / ?sg in the query."""
+    matches = list(_VALUES_NAMED_GRAPH_PATTERN.finditer(query))
+    if not matches:
         return None
-    uris = {m.group(1) for m in _IRI_IN_ANGLE.finditer(match.group(1))}
+    uris: set[str] = set()
+    for match in matches:
+        uris.update(m.group(1) for m in _IRI_IN_ANGLE.finditer(match.group(1)))
     return uris if uris else None
 
 

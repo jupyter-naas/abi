@@ -6,12 +6,6 @@ import logging
 from collections.abc import Iterable
 from typing import Any, Protocol
 
-logger = logging.getLogger(__name__)
-
-# Fuseki rejects very large VALUES blocks (HTTP 400); hierarchy is best-effort only.
-_CATALOG_ENRICH_CLASS_LIMIT = 250
-_CATALOG_LABEL_BATCH = 80
-
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphAccessError,
     GraphPackData,
@@ -20,6 +14,12 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.sparql_safe import (
     sparql_iri,
     sparql_string_literal,
 )
+
+logger = logging.getLogger(__name__)
+
+# Fuseki rejects very large VALUES blocks (HTTP 400); hierarchy is best-effort only.
+_CATALOG_ENRICH_CLASS_LIMIT = 250
+_CATALOG_LABEL_BATCH = 80
 
 PREFIXES = """
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -138,13 +138,11 @@ def _catalog_class_counts_per_graph(
 
 
 def _catalog_class_counts(store: QueryStore, graphs: list[str]) -> dict[str, dict[str, Any]]:
-    if len(graphs) == 1:
+    if graphs:
         try:
             return _catalog_class_counts_combined(store, graphs)
         except Exception:
             pass
-    if len(graphs) > 1:
-        return _catalog_class_counts_per_graph(store, graphs)
     return _catalog_class_counts_per_graph(store, graphs)
 
 
@@ -480,9 +478,9 @@ def instances(
     for row in _try_rows(
         store,
         f"""
-      SELECT ?cls (MIN(STR(?label)) AS ?label) WHERE {{
-        VALUES ?cls {{ {class_values} }}
-        GRAPH {sparql_iri(schema_uri)} {{ ?cls rdfs:label ?label . FILTER(isLiteral(?label)) }}
+      SELECT ?cls (MIN(STR(?rawLabel)) AS ?label) WHERE {{
+        VALUES ?cls {{ {class_values} }} {values(sorted(set(graphs + [schema_uri])))}
+        GRAPH ?g {{ ?cls rdfs:label ?rawLabel . FILTER(isLiteral(?rawLabel)) }}
       }} GROUP BY ?cls
     """,
     ):
@@ -615,10 +613,10 @@ def network(
         for row in rows(
             store,
             f"""
-            SELECT ?p (MIN(STR(?label)) AS ?label) WHERE {{
+            SELECT ?p (MIN(STR(?rawLabel)) AS ?label) WHERE {{
                 VALUES ?p {{ {" ".join(map(sparql_iri, sorted(predicates)))} }}
                 {values(sorted(set(graphs + [schema_uri])))}
-                GRAPH ?g {{ ?p rdfs:label ?label }}
+                GRAPH ?g {{ ?p rdfs:label ?rawLabel }}
             }} GROUP BY ?p
         """,
         ):

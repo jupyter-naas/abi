@@ -121,3 +121,51 @@ def test_workspace_store_limits_dataset_to_values_graph_clause():
     assert f"FROM <{g1}>" in sent
     assert f"FROM NAMED <{g1}>" in sent
     assert g2 not in sent
+
+
+def test_workspace_store_unions_values_graph_clauses_for_cross_graph_queries():
+    from naas_abi.apps.nexus.apps.api.app.services.graph.access import GraphAccessScope
+    from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.scoped_store import (
+        WorkspaceGraphStore,
+    )
+
+    g1 = "http://ontology.example/graph/data"
+    g2 = "http://ontology.example/graph/links"
+    scope = GraphAccessScope.resolve(
+        "ws-1",
+        __import__(
+            "naas_abi.apps.nexus.graph_policy_config",
+            fromlist=["WorkspaceGraphPolicyConfig"],
+        ).WorkspaceGraphPolicyConfig(read_all=True),
+        owned=set(),
+        role="owner",
+        catalog={g1, g2},
+    )
+
+    class CaptureStore:
+        def __init__(self):
+            self.queries: list[str] = []
+
+        def list_graphs(self):
+            return [g1, g2]
+
+        def query(self, query: str):
+            self.queries.append(query)
+            from rdflib.query import Result
+
+            result = Result("SELECT")
+            result.vars = []
+            result.bindings = []
+            return result
+
+    inner = CaptureStore()
+    store = WorkspaceGraphStore(inner, scope)
+    store.query(
+        "SELECT ?p WHERE { "
+        f"VALUES ?g {{ <{g1}> }} VALUES ?rg {{ <{g1}> <{g2}> }} "
+        "GRAPH ?g { ?s a <http://example/Person> } "
+        "GRAPH ?rg { ?s ?p ?o } }"
+    )
+    sent = inner.queries[0]
+    assert f"FROM <{g1}>" in sent
+    assert f"FROM <{g2}>" in sent

@@ -289,7 +289,9 @@ class ServiceIsolationTest(unittest.IsolatedAsyncioTestCase):
     async def test_catalog_overview_and_detail_isolate(self):
         packs = await self.service.list_graphs("alpha")
         self.assertEqual({g.uri for p in packs for g in p.graphs}, {ALPHA, REF})
-        summary = await self.service.explorer_overview("alpha", [])
+        summary_empty = await self.service.explorer_overview("alpha", [])
+        self.assertEqual(summary_empty["kpis"]["instances"], 0)
+        summary = await self.service.explorer_overview("alpha", [ALPHA, REF])
         self.assertEqual(summary["kpis"]["instances"], 2)
         rows = await self.service.explorer_instances("alpha", [ALPHA], [], "", 0, 50)
         self.assertEqual([r["uri"] for r in rows["items"]], [str(ALICE)])
