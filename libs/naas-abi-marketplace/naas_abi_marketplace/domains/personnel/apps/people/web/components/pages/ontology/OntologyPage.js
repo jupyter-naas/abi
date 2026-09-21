@@ -248,7 +248,7 @@ export async function mountOntology(view, { config }) {
       <header class="ontology-head">
         <div>
           <h1 class="ontology-title">${escapeHtml(payload.title || "Personnel Ontology")}</h1>
-          <p class="ontology-lead">Shared S1 vocabulary: module plus working and studying process slices.</p>
+          <p class="ontology-lead">Shared S1 vocabulary: the module, then one file per process slice.</p>
           ${statsHtml(payload.stats)}
         </div>
         <a class="home-ontology-link" href="${searchHref(config, {})}">Back to search</a>

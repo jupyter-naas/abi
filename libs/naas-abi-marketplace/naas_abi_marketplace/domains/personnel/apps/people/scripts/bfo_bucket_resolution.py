@@ -122,8 +122,7 @@ def cockpit_bucket_type(bfo_root_iri: str | None) -> str:
 
 _PERSONNEL_ONTOLOGY_PATHS: tuple[Path, ...] = (
     ONTOLOGIES_DIR / "modules" / "PersonnelOntology.ttl",
-    ONTOLOGIES_DIR / "processes" / "ActOfWorkingProcess.ttl",
-    ONTOLOGIES_DIR / "processes" / "ActOfStudyingProcess.ttl",
+    *sorted((ONTOLOGIES_DIR / "processes").glob("*.ttl")),
 )
 
 

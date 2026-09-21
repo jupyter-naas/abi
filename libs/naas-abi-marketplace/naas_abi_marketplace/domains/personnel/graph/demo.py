@@ -27,6 +27,10 @@ from naas_abi_marketplace.domains.personnel.pipelines.ActOfStudyingPipeline impo
     ActOfStudyingPipeline,
     ActOfStudyingPipelineConfiguration,
 )
+from naas_abi_marketplace.domains.personnel.pipelines.ActOfCertificationPipeline import (
+    ActOfCertificationPipeline,
+    ActOfCertificationPipelineConfiguration,
+)
 from naas_abi_marketplace.domains.personnel.pipelines.ActOfWorkingPipeline import (
     ActOfWorkingPipeline,
     ActOfWorkingPipelineConfiguration,
@@ -193,6 +197,9 @@ def build_instance_graph(
     pipeline_cfg = dict(triple_store=None, persist=False, context=context)
     working = ActOfWorkingPipeline(ActOfWorkingPipelineConfiguration(**pipeline_cfg))
     studying = ActOfStudyingPipeline(ActOfStudyingPipelineConfiguration(**pipeline_cfg))
+    certification = ActOfCertificationPipeline(
+        ActOfCertificationPipelineConfiguration(**pipeline_cfg)
+    )
     profile_pipeline = PersonProfilePipeline(
         PersonProfilePipelineConfiguration(**pipeline_cfg)
     )
@@ -206,6 +213,7 @@ def build_instance_graph(
             working=working,
             studying=studying,
             profile_pipeline=profile_pipeline,
+            certification=certification,
         )
         _track_roster_position(
             params=params,

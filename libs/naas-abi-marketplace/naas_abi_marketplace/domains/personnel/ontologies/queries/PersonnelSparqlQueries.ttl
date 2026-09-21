@@ -662,6 +662,49 @@ intentMapping:findCertificationsQuery a intentMapping:TemplatableSparqlQuery ;
     """ ;
     intentMapping:hasArgument intentMapping:personnelLimitArg .
 
+intentMapping:findActsOfCertificationQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_acts_of_certification"@en ;
+    intentMapping:intentDescription "Return every act of certification: the person certified, the certifying organization, the site, the date the certification was awarded, the certification awarded, the candidate role the person bore and the skills demonstrated. Backed by the ActOfCertificationProcess ontology. Useful to answer 'who was certified by ISACA?' or 'how did this person come to hold this certification?'." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+        PREFIX personnel: <http://ontology.naas.ai/personnel/>
+
+        SELECT DISTINCT ?person ?personLabel ?slug ?certifying ?certifyingLabel ?org ?orgLabel
+                        ?site ?siteLabel ?temporal ?temporalLabel ?awardedOn
+                        ?certification ?certificationName ?role ?roleLabel ?skill ?skillLabel
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/personnel> {
+            ?person rdf:type abi:Person ;
+                    rdfs:label ?personLabel ;
+                    personnel:hasActOfCertification ?certifying .
+            ?certifying rdf:type personnel:ActOfCertification .
+            OPTIONAL { ?person personnel:profile_slug ?slug . }
+            OPTIONAL { ?certifying rdfs:label ?certifyingLabel . }
+            OPTIONAL { ?certifying personnel:forCertifyingOrganization ?org . ?org rdfs:label ?orgLabel . }
+            OPTIONAL { ?certifying abi:occursIn ?site . ?site rdfs:label ?siteLabel . }
+            OPTIONAL {
+              ?certifying abi:occupiesTemporalRegion ?temporal .
+              OPTIONAL { ?temporal rdfs:label ?temporalLabel . }
+              OPTIONAL {
+                ?temporal abi:hasLastInstant ?lastInstant .
+                ?lastInstant personnel:instant_date ?awardedOn .
+              }
+            }
+            OPTIONAL {
+              ?certifying personnel:hasAwardedCertification ?certification .
+              OPTIONAL { ?certification personnel:certification_name ?certificationName . }
+            }
+            OPTIONAL { ?certifying abi:realizes ?role . ?role rdfs:label ?roleLabel . }
+            OPTIONAL { ?certifying personnel:demonstratesSkill ?skill . ?skill rdfs:label ?skillLabel . }
+          }
+        }
+        ORDER BY ?personLabel DESC(?awardedOn) ?certificationName
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:personnelLimitArg .
+
 intentMapping:findLanguagesQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_languages"@en ;
     intentMapping:intentDescription "Return the languages people can work in, with the proficiency each source states. Useful to answer 'who speaks Spanish?' or 'what languages does this person work in?'. Proficiency is free text because sources report it in incompatible scales." ;

@@ -1,7 +1,7 @@
 """Register a person from a profile source payload (demo index.json shape).
 
-Orchestrates ActOfWorking, ActOfStudying and PersonProfile pipelines in the
-order the graph requires. Does not duplicate episode or presentation triples.
+Orchestrates ActOfWorking, ActOfStudying, ActOfCertification and PersonProfile
+pipelines in the order the graph requires. Does not duplicate episode or presentation triples.
 """
 
 from __future__ import annotations
@@ -14,6 +14,11 @@ from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_marketplace.domains.personnel.paths import module_graph_name
+from naas_abi_marketplace.domains.personnel.pipelines.ActOfCertificationPipeline import (
+    ActOfCertificationPipeline,
+    ActOfCertificationPipelineConfiguration,
+    ActOfCertificationPipelineParameters,
+)
 from naas_abi_marketplace.domains.personnel.pipelines.ActOfStudyingPipeline import (
     ActOfStudyingPipeline,
     ActOfStudyingPipelineConfiguration,
@@ -128,8 +133,14 @@ def apply_profile_source_payload(
     working: ActOfWorkingPipeline,
     studying: ActOfStudyingPipeline,
     profile_pipeline: PersonProfilePipeline,
+    certification: ActOfCertificationPipeline | None = None,
 ) -> None:
-    """Write one person payload into a shared graph context."""
+    """Write one person payload into a shared graph context.
+
+    Certifications are registered as acts of certification when ``certification``
+    is given. Without it they go to the person profile pipeline, which records
+    the same act through the shared context.
+    """
     person = parameters.person
     person_key = f"{person.first_name} {person.last_name}"
     default_profile_url = person.linkedin_profile_url
@@ -179,6 +190,24 @@ def apply_profile_source_payload(
         )
 
     block = parameters.profile
+    profile_certifications = block.certifications if block is not None else []
+    if block is not None and certification is not None:
+        for item in block.certifications:
+            certification.run(
+                ActOfCertificationPipelineParameters(
+                    first_name=person.first_name,
+                    last_name=person.last_name,
+                    name=item.name,
+                    issuer=item.issuer,
+                    issue_date=item.issue_date,
+                    expiry_date=item.expiry_date,
+                    status=item.status,
+                    credential_id=item.credential_id,
+                    credential_url=item.credential_url,
+                    source_url=default_profile_url,
+                )
+            )
+        profile_certifications = []
     has_contact = bool(person.email or person.phone or person.linkedin_url)
     if block is None and has_contact:
         # Contact details are person-level facts: they do not wait for a profile.
@@ -207,7 +236,7 @@ def apply_profile_source_payload(
                 photo_path=block.photo_path,
                 source_url=default_profile_url,
                 skills=block.skills,
-                certifications=block.certifications,
+                certifications=profile_certifications,
                 languages=block.languages,
                 interests=block.interests,
                 recommendations=block.recommendations,
@@ -256,6 +285,14 @@ class ProfileFromSourcePipeline(Pipeline):
                 context=context,
             )
         )
+        certification = ActOfCertificationPipeline(
+            ActOfCertificationPipelineConfiguration(
+                triple_store=self.__configuration.triple_store,
+                graph_name=self.__configuration.graph_name,
+                persist=child_persist,
+                context=context,
+            )
+        )
         profile_pipeline = PersonProfilePipeline(
             PersonProfilePipelineConfiguration(
                 triple_store=self.__configuration.triple_store,
@@ -271,6 +308,7 @@ class ProfileFromSourcePipeline(Pipeline):
             working=working,
             studying=studying,
             profile_pipeline=profile_pipeline,
+            certification=certification,
         )
 
         delta = Graph()
@@ -297,7 +335,8 @@ class ProfileFromSourcePipeline(Pipeline):
                 description=(
                     "Register a person from a published profile source: run "
                     "register_act_of_working and register_act_of_studying for each "
-                    "record, then register_person_profile for presentation facts. "
+                    "record, register_act_of_certification for each certification, "
+                    "then register_person_profile for presentation facts. "
                     "Pass person, records (ActOfWorking / ActOfStudying), and an "
                     "optional profile block. Does not duplicate missions or skills."
                 ),

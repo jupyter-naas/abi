@@ -29,6 +29,10 @@ from naas_abi_marketplace.domains.personnel.ontologies.modules.PersonnelOntology
     ServiceLine,
     StudentRole,
 )
+from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfCertificationProcess import (
+    ActOfCertification,
+    CertificationCandidateRole,
+)
 from naas_abi_marketplace.domains.personnel.ontologies.processes.ActOfStudyingProcess import (
     ActOfStudying,
 )
@@ -331,8 +335,17 @@ class PersonnelGraphContext:
         status: str | None = None,
         credential_id: str | None = None,
         credential_url: str | None = None,
+        site: Site | None = None,
+        skills: list[Skill] | None = None,
+        profile: ProfileDocument | None = None,
     ) -> Certification:
-        """A certification or a licence: the distinction is who may withhold it."""
+        """A certification or a licence, and the act of certification that awarded it.
+
+        The distinction between the two is who may withhold it. The Certification
+        is what the person carries; the act is how they came to carry it, so a
+        certification the source names without saying who issued it or when is
+        still an act, just one with no certifying organization or temporal region.
+        """
         key = slug(person.label or "", name)
         certification = Certification(
             _uri=individual_uri(str(PERSONNEL), "Certification", key),
@@ -356,6 +369,64 @@ class PersonnelGraphContext:
                 URIRef(certification._uri),
             )
         )
+        if profile:
+            self.graph.add(
+                (
+                    URIRef(certification._uri),
+                    PERSONNEL.isSourcedFrom,
+                    URIRef(profile._uri),
+                )
+            )
+
+        # The act ends when the certification is awarded: that is the only moment
+        # a source gives, so it bounds the region and the start stays unstated.
+        temporal_uri = self.add_temporal_region(
+            key=f"{key}-certification",
+            label=f"Awarded {issue_date.strftime('%b %Y')}" if issue_date else "",
+            start=None,
+            end=issue_date,
+        )
+
+        role = CertificationCandidateRole(
+            _uri=individual_uri(str(PERSONNEL), "CertificationCandidateRole", key),
+            label=f"Candidate - {name}",
+            is_certification_candidate_role_of=[person._uri],
+            created=utc_now(),
+            creator=self.creator,
+        )
+        self.graph += role.rdf()
+        self.graph.add(
+            (
+                URIRef(person._uri),
+                PERSONNEL.hasCertificationCandidateRole,
+                URIRef(role._uri),
+            )
+        )
+
+        act_uri = individual_uri(str(PERSONNEL), "ActOfCertification", key)
+        act = ActOfCertification(
+            _uri=act_uri,
+            label=f"{name} @ {issuer.label}" if issuer else name,
+            hasParticipant=[person._uri],
+            occursIn=[site._uri] if site else None,
+            occupiesTemporalRegion=[temporal_uri] if temporal_uri else None,
+            for_certifying_organization=[issuer._uri] if issuer else None,
+            has_awarded_certification=certification._uri,
+            is_act_of_certification_of=[person._uri],
+            realizes=[role._uri],
+            created=utc_now(),
+            creator=self.creator,
+        )
+        self.graph += act.rdf()
+        self.graph.add(
+            (URIRef(person._uri), PERSONNEL.hasActOfCertification, URIRef(act_uri))
+        )
+        # demonstratesSkill is multi-valued but generated single-valued, so the
+        # skills are stated directly rather than through the entity.
+        for skill in skills or []:
+            self.graph.add(
+                (URIRef(act_uri), PERSONNEL.demonstratesSkill, URIRef(skill._uri))
+            )
         return certification
 
     def add_language(

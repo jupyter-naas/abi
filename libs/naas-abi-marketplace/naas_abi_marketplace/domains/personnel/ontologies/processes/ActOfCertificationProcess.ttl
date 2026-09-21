@@ -1,0 +1,169 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix personnel: <http://ontology.naas.ai/personnel/> .
+
+personnel:ActOfCertificationProcess a owl:Ontology ;
+  # Slice: process class + process-only properties. Shared classes
+  # (Certification) live in PersonnelOntology, and Skill and ProfileDocument in
+  # ActOfWorkingProcess. The one class minted here is the role the person bears.
+  # Does NOT import PersonnelOntology (the module imports this file).
+  #
+  # Seven-bucket mapping for one certification:
+  #   WHO          Person (the candidate who is certified),
+  #                Organization (the certifying body that issues it)
+  #   WHAT         ActOfCertification (the process itself)
+  #   WHEN         TemporalRegion, bounded by the instant the certification was
+  #                awarded (absent when the source gives no date)
+  #   WHERE        Site (optional - where the assessment took place)
+  #   WHY          CertificationCandidateRole (SDC) - the role borne by the person
+  #                for as long as they seek or hold the certification
+  #   HOW IT IS    Skill (quality) - the competence the person demonstrates
+  #   HOW WE KNOW  Certification (GDC, the credential the act concretizes),
+  #                ProfileDocument (GDC, where the claim was published)
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+  rdfs:seeAlso <http://ontology.naas.ai/personnel/PersonnelOntology> ;
+  rdfs:member "bpl-processes/personnel" ;
+  abi:pythonPackage "naas_abi_marketplace.domains.personnel" ;
+  abi:ontologyResource "ontologies/processes/ActOfCertificationProcess.ttl" ;
+  abi:pythonResource "ontologies/processes/ActOfCertificationProcess.py" ;
+  dc:title "Act of Certification Process Ontology"@en ;
+  dc:description "Process slice for the act of certification - a CCO Planned Act in which a certifying organization attests that a person has demonstrated a competence, met a professional standard or may practise, realizing a certification candidate role, demonstrating skills, and concretizing the certification it awards."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Process slice for Act of Certification. Reuses Certification from PersonnelOntology and Skill and ProfileDocument from ActOfWorkingProcess. The Certification stays the credential a person carries; this slice adds the act that produced it."@en ;
+  dc11:contributor "FlorentRvl" ;
+  dc11:date "2026-09-21"^^xsd:date .
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+personnel:ActOfCertification a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:forCertifyingOrganization ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:Site ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:hasAwardedCertification ; owl:someValuesFrom personnel:Certification ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom personnel:CertificationCandidateRole ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:demonstratesSkill ; owl:someValuesFrom personnel:Skill ] ;
+  rdfs:label "Act of Certification"@en ;
+  skos:definition "A Planned Act in which a certifying organization attests that a person has demonstrated a competence, met a professional standard or holds a licence to practise, realizing a certification candidate role and concretizing the certification it awards."@en ;
+  skos:example "Alice Dupont being certified as a Certified Information Systems Auditor by ISACA in 2019."@en ;
+  rdfs:comment "No CCO act of certification; the process is a direct subclass of CCO Planned Act. The act is not the certificate: it ends when the certification is awarded, whereas the Certification persists and may later expire."@en .
+
+#################################################################
+#    Classes - WHY
+#################################################################
+
+personnel:CertificationCandidateRole a owl:Class ;
+  rdfs:subClassOf abi:Role ,
+    [ a owl:Restriction ; owl:onProperty personnel:isCertificationCandidateRoleOf ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasRealization ; owl:someValuesFrom personnel:ActOfCertification ] ;
+  rdfs:label "Certification Candidate Role"@en ;
+  skos:definition "A role that inheres in a person in virtue of being assessed by a certifying organization for a certification, realized in the Act of Certification."@en ;
+  skos:example "The role Alice Dupont bears as a candidate for the Certified Information Systems Auditor certification."@en ;
+  rdfs:comment "No CCO candidate-role class; minted in the personnel namespace. Kept apart from the employee and student roles: a person is a candidate whether or not they were employed or enrolled at the time."@en .
+
+#################################################################
+#    Classes - HOW WE KNOW (restrictions on shared IRIs)
+#################################################################
+
+personnel:Certification rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:isConcretizedBy ; owl:someValuesFrom personnel:ActOfCertification ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:isSourcedFrom ; owl:someValuesFrom personnel:ProfileDocument ] .
+
+#################################################################
+#    Object properties - process-only
+#################################################################
+
+personnel:hasActOfCertification a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf personnel:isActOfCertificationOf ;
+  rdfs:label "has act of certification"@en ;
+  skos:definition "Relates a person to the act of certification in which they are certified."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  personnel:ActOfCertification .
+
+personnel:isActOfCertificationOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf personnel:hasActOfCertification ;
+  rdfs:label "is act of certification of"@en ;
+  skos:definition "Relates an act of certification to the person being certified."@en ;
+  rdfs:domain personnel:ActOfCertification ;
+  rdfs:range  abi:Person .
+
+personnel:forCertifyingOrganization a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf personnel:isCertifyingOrganizationOfAct ;
+  rdfs:label "for certifying organization"@en ;
+  skos:definition "Relates an act of certification to the organization that participates as the certifying body."@en ;
+  rdfs:domain personnel:ActOfCertification ;
+  rdfs:range  abi:Organization .
+
+personnel:isCertifyingOrganizationOfAct a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf personnel:forCertifyingOrganization ;
+  rdfs:label "is certifying organization of act"@en ;
+  skos:definition "Relates an organization to an act of certification it participates in as the certifying body."@en ;
+  rdfs:domain abi:Organization ;
+  rdfs:range  personnel:ActOfCertification .
+
+# WHAT <-> HOW WE KNOW - the act concretizes the certification it awards
+personnel:hasAwardedCertification a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:concretizes ;
+  owl:inverseOf personnel:isAwardedCertificationOf ;
+  rdfs:label "has awarded certification"@en ;
+  skos:definition "Relates an act of certification to the certification it concretizes."@en ;
+  rdfs:domain personnel:ActOfCertification ;
+  rdfs:range  personnel:Certification .
+
+personnel:isAwardedCertificationOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:isConcretizedBy ;
+  owl:inverseOf personnel:hasAwardedCertification ;
+  rdfs:label "is awarded certification of"@en ;
+  skos:definition "Relates a certification to the act of certification that concretizes it."@en ;
+  rdfs:domain personnel:Certification ;
+  rdfs:range  personnel:ActOfCertification .
+
+# WHAT <-> HOW IT IS - the competence the person demonstrates
+personnel:demonstratesSkill a owl:ObjectProperty ;
+  owl:inverseOf personnel:isSkillDemonstratedIn ;
+  rdfs:label "demonstrates skill"@en ;
+  skos:definition "Relates an act of certification to a skill the person demonstrates in the course of it."@en ;
+  rdfs:domain personnel:ActOfCertification ;
+  rdfs:range  personnel:Skill .
+
+personnel:isSkillDemonstratedIn a owl:ObjectProperty ;
+  owl:inverseOf personnel:demonstratesSkill ;
+  rdfs:label "is skill demonstrated in"@en ;
+  skos:definition "Relates a skill to an act of certification in which it is demonstrated."@en ;
+  rdfs:domain personnel:Skill ;
+  rdfs:range  personnel:ActOfCertification .
+
+# WHO <-> WHY - the person bears the candidate role
+personnel:hasCertificationCandidateRole a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:bearerOf ;
+  owl:inverseOf personnel:isCertificationCandidateRoleOf ;
+  rdfs:label "has certification candidate role"@en ;
+  skos:definition "Relates a person to a certification candidate role that inheres in them while they seek or hold a certification."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  personnel:CertificationCandidateRole .
+
+personnel:isCertificationCandidateRoleOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:inheresIn ;
+  owl:inverseOf personnel:hasCertificationCandidateRole ;
+  rdfs:label "is certification candidate role of"@en ;
+  skos:definition "Relates a certification candidate role to the person in whom it inheres."@en ;
+  rdfs:domain personnel:CertificationCandidateRole ;
+  rdfs:range  abi:Person .

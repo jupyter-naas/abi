@@ -1,5 +1,10 @@
-"""Personnel process pipelines (Act of Working, Act of Studying)."""
+"""Personnel process pipelines (Act of Working, Studying and Certification)."""
 
+from naas_abi_marketplace.domains.personnel.pipelines.ActOfCertificationPipeline import (
+    ActOfCertificationPipeline,
+    ActOfCertificationPipelineConfiguration,
+    ActOfCertificationPipelineParameters,
+)
 from naas_abi_marketplace.domains.personnel.pipelines.ActOfStudyingPipeline import (
     ActOfStudyingPipeline,
     ActOfStudyingPipelineConfiguration,
@@ -12,6 +17,9 @@ from naas_abi_marketplace.domains.personnel.pipelines.ActOfWorkingPipeline impor
 )
 
 __all__ = [
+    "ActOfCertificationPipeline",
+    "ActOfCertificationPipelineConfiguration",
+    "ActOfCertificationPipelineParameters",
     "ActOfStudyingPipeline",
     "ActOfStudyingPipelineConfiguration",
     "ActOfStudyingPipelineParameters",

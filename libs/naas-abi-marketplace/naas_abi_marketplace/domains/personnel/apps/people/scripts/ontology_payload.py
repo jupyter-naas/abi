@@ -16,10 +16,14 @@ from rdflib.namespace import SKOS
 PERSONNEL_NS = "http://ontology.naas.ai/personnel/"
 ABI_NS = "http://ontology.naas.ai/abi/"
 
+# The module first, then every process slice: a new slice is picked up by being
+# filed under ontologies/processes, not by being remembered here.
 ONTOLOGY_SOURCES: tuple[tuple[str, Path], ...] = (
     ("PersonnelOntology.ttl", ONTOLOGIES_DIR / "modules" / "PersonnelOntology.ttl"),
-    ("ActOfWorkingProcess.ttl", ONTOLOGIES_DIR / "processes" / "ActOfWorkingProcess.ttl"),
-    ("ActOfStudyingProcess.ttl", ONTOLOGIES_DIR / "processes" / "ActOfStudyingProcess.ttl"),
+    *(
+        (path.name, path)
+        for path in sorted((ONTOLOGIES_DIR / "processes").glob("*.ttl"))
+    ),
 )
 
 def _in_scope(uri: URIRef) -> bool:

@@ -7,7 +7,7 @@
 
 ```
 data/demo/person/*/index.json          source (fictional, for the demo)
-  -> pipelines/                        ActOfWorking, ActOfStudying, PersonProfile
+  -> pipelines/                        ActOfWorking, ActOfStudying, ActOfCertification, PersonProfile
   -> graphs/demo/personnel.ttl         the graph, ontology-backed
   -> ontologies/queries/*.ttl          competency queries
   -> dataset service (DuckLake)        nine typed tables in the `personnel` namespace
@@ -69,7 +69,7 @@ instance-agnostic ones absolutely under the API prefix.
 If the graph cannot answer step 4, the section has no business existing yet.
 Extend the ontology first.
 
-Which sections are **process-shaped** (ActOfWorking / ActOfStudying) vs **person-level**
+Which sections are **process-shaped** (ActOfWorking / ActOfStudying / ActOfCertification) vs **person-level**
 (PersonProfilePipeline) is documented in
 [`personnel/README.md`](../../README.md) under **Profile sections vs ontology layers**.
 
@@ -78,6 +78,9 @@ Which sections are **process-shaped** (ActOfWorking / ActOfStudying) vs **person
 - **An empty section is an answer.** A person with no recommendations renders
   the configured `empty_text`. Never hide the section, and never fill it with a
   placeholder: "nothing recorded" and "we failed to load it" must not look alike.
+- **The ontology page reads `ontologies/processes/*.ttl`.** A new process slice
+  shows up there, and in the bucket colours, by being filed in that directory.
+  Do not list slices by name in the app.
 - **Nothing is computed that a source did not state.** `years_of_experience` is
   a claim carried by the profile summary, not a sum over acts of working. A
   period shows the dates and the source's own duration label.

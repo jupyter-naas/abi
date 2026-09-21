@@ -5,6 +5,7 @@ from __future__ import annotations
 from naas_abi_marketplace.domains.personnel.apps.people.scripts.ontology_payload import (
     build_ontology_payload,
 )
+from naas_abi_marketplace.domains.personnel.paths import ONTOLOGIES_DIR
 
 
 class TestOntologyPayload:
@@ -14,6 +15,24 @@ class TestOntologyPayload:
         assert "PersonnelOntology.ttl" in names
         assert "ActOfWorkingProcess.ttl" in names
         assert "@prefix" in payload["display_ttl"]
+
+    def test_every_process_slice_is_in_the_bundle(self) -> None:
+        payload = build_ontology_payload()
+        names = {source["name"] for source in payload["sources"]}
+        on_disk = {p.name for p in (ONTOLOGIES_DIR / "processes").glob("*.ttl")}
+        assert on_disk <= names
+
+    def test_the_profiling_act_is_in_the_graph(self) -> None:
+        payload = build_ontology_payload()
+        ids = {node["id"] for node in payload["graph"]["nodes"]}
+        assert "personnel:ActOfPersonnelProfiling" in ids
+        detail = payload["classes"][
+            "http://ontology.naas.ai/personnel/ActOfPersonnelProfiling"
+        ]
+        # its restriction points at the ProfileDocument declared in the working slice
+        assert any(
+            r["filler"] == "personnel:ProfileDocument" for r in detail["restrictions"]
+        )
 
     def test_stats_summarize_vocabulary_shape(self) -> None:
         payload = build_ontology_payload()

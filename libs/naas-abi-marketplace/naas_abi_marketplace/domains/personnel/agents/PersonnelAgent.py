@@ -107,6 +107,7 @@ Help the user accomplish their human resources tasks using the tools available t
             "find_profile_header",
             "find_person_skills",
             "find_certifications",
+            "find_acts_of_certification",
             "find_languages",
             "find_recommendations",
             "find_interests",
@@ -117,6 +118,10 @@ Help the user accomplish their human resources tasks using the tools available t
     def get_pipeline_tools(cls) -> list:
         """Process registration and profile-from-source orchestration tools."""
         from naas_abi_marketplace.domains.personnel import ABIModule
+        from naas_abi_marketplace.domains.personnel.pipelines.ActOfCertificationPipeline import (
+            ActOfCertificationPipeline,
+            ActOfCertificationPipelineConfiguration,
+        )
         from naas_abi_marketplace.domains.personnel.pipelines.ActOfStudyingPipeline import (
             ActOfStudyingPipeline,
             ActOfStudyingPipelineConfiguration,
@@ -143,6 +148,9 @@ Help the user accomplish their human resources tasks using the tools available t
         )
         working = ActOfWorkingPipeline(ActOfWorkingPipelineConfiguration(**pipeline_cfg))
         studying = ActOfStudyingPipeline(ActOfStudyingPipelineConfiguration(**pipeline_cfg))
+        certification = ActOfCertificationPipeline(
+            ActOfCertificationPipelineConfiguration(**pipeline_cfg)
+        )
         profile = PersonProfilePipeline(PersonProfilePipelineConfiguration(**pipeline_cfg))
         from_source = ProfileFromSourcePipeline(
             ProfileFromSourcePipelineConfiguration(**pipeline_cfg)
@@ -151,6 +159,7 @@ Help the user accomplish their human resources tasks using the tools available t
             *from_source.as_tools(),
             *working.as_tools(),
             *studying.as_tools(),
+            *certification.as_tools(),
             *profile.as_tools(),
         ]
 

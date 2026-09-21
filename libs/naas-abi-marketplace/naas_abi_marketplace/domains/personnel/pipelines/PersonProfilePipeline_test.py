@@ -145,6 +145,8 @@ def test_optional_sections_are_written_when_given() -> None:
 
     types = _types(graph)
     assert URIRef(Certification._class_uri) in types
+    # a certification is always the outcome of an act of certification
+    assert URIRef("http://ontology.naas.ai/personnel/ActOfCertification") in types
     assert URIRef(LanguageCapability._class_uri) in types
     assert URIRef(Interest._class_uri) in types
     assert URIRef(Recommendation._class_uri) in types
@@ -156,6 +158,7 @@ def test_empty_sections_emit_nothing() -> None:
 
     types = _types(graph)
     assert URIRef(Certification._class_uri) not in types
+    assert URIRef("http://ontology.naas.ai/personnel/ActOfCertification") not in types
     assert URIRef(LanguageCapability._class_uri) not in types
     assert URIRef(Interest._class_uri) not in types
     assert URIRef(Recommendation._class_uri) not in types
