@@ -583,20 +583,23 @@ def publish_x_app(
 
     from naas_abi_marketplace.applications.x.apps.x_proxy.hub import XAppHubBuilder
 
-    # Bring the columnar projection level with the envelope archive first, so the
-    # snapshots below read a view that includes this tick's ingest.
-    projection = refresh_x_cache(module)
-
     from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
         x_dataset_read_enabled,
     )
+
+    dataset_read = x_dataset_read_enabled(module)
+    projection = None
+    if not dataset_read:
+        # Bring the columnar projection level with the envelope archive first, so the
+        # snapshots below read a view that includes this tick's ingest.
+        projection = refresh_x_cache(module)
 
     app_cfg = getattr(module.configuration, "app", None)
     dataset_cfg = getattr(app_cfg, "dataset", None) if app_cfg else None
     skip_user_shards = bool(
         dataset_cfg
         and getattr(dataset_cfg, "skip_user_shard_publish", False)
-        and x_dataset_read_enabled(module)
+        and dataset_read
     )
 
     hub = XAppHubBuilder(
@@ -609,6 +612,7 @@ def publish_x_app(
         full_users=full_users and not skip_user_shards,
         direct_user_limit=direct_user_limit,
         skip_user_shards=skip_user_shards,
+        use_cache=not dataset_read,
     )
     if projection is not None:
         published = {**published, "projection": projection}

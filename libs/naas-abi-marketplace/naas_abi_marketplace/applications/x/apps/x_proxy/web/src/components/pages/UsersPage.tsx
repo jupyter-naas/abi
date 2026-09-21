@@ -3,30 +3,20 @@
 import { useEffect, useState } from "react";
 import { UserDetail } from "@/components/UserDetail";
 import { UserResults } from "@/components/UserResults";
-import { loadUserIndex } from "@/lib/userSearch";
+import { loadUserSearchPage, loadUserSummary } from "@/lib/userSearch";
 import type { UserRow } from "@/lib/types";
 
 type Props = {
   timezone: string;
-  /** Author deep-linked by `?user=`; `null` shows the search results. */
   selected: string | null;
   onSelectUser: (username: string | null) => void;
-  /** Tweet id the reader came back from, marked in the feed. */
   selectedPost: string | null;
-  /** What the search box is looking for, mirrored in `?q=`. */
   needle: string;
   onNeedleChange: (needle: string) => void;
-  /** `?expand=1` - the author's page with none of the app's chrome around it. */
   expanded: boolean;
   onExpandChange: (expanded: boolean) => void;
 };
 
-/**
- * The Users section: search results, or one author's page.
- *
- * The two are exclusive - opening an author replaces the results, closing it
- * brings them back with the needle intact, because both live in the URL.
- */
 export function UsersPage({
   timezone,
   selected,
@@ -38,25 +28,55 @@ export function UsersPage({
   onExpandChange,
 }: Props) {
   const [users, setUsers] = useState<UserRow[]>([]);
-  const [indexLoading, setIndexLoading] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [resultsPage, setResultsPage] = useState(0);
+  const [known, setKnown] = useState<UserRow | null>(null);
+  const [knownLoading, setKnownLoading] = useState(false);
 
-  // The index is every author in the tweet graph - fetched once per session so
-  // deep-linked author pages can show ingested totals before the shard loads.
   useEffect(() => {
     let live = true;
-    setIndexLoading(true);
-    loadUserIndex()
-      .then((index) => {
-        if (live) setUsers(index.users);
+    setLoading(true);
+    setError("");
+    loadUserSearchPage(needle, resultsPage)
+      .then((page) => {
+        if (!live) return;
+        setUsers(page.users);
+        setTotalCount(page.count);
+      })
+      .catch((reason: unknown) => {
+        if (!live) return;
+        setUsers([]);
+        setTotalCount(0);
+        setError(reason instanceof Error ? reason.message : "Search failed");
       })
       .finally(() => {
-        if (live) setIndexLoading(false);
+        if (live) setLoading(false);
       });
     return () => {
       live = false;
     };
-  }, []);
+  }, [needle, resultsPage]);
+
+  useEffect(() => {
+    if (!selected) {
+      setKnown(null);
+      return;
+    }
+    let live = true;
+    setKnownLoading(true);
+    loadUserSummary(selected)
+      .then((row) => {
+        if (live) setKnown(row);
+      })
+      .finally(() => {
+        if (live) setKnownLoading(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, [selected]);
 
   const handleNeedleChange = (value: string) => {
     onNeedleChange(value);
@@ -67,8 +87,8 @@ export function UsersPage({
     return (
       <UserDetail
         username={selected}
-        known={users.find((u) => u.username === selected) || null}
-        indexLoading={indexLoading}
+        known={known}
+        indexLoading={knownLoading}
         timezone={timezone}
         needle={needle}
         selectedPost={selectedPost}
@@ -82,12 +102,14 @@ export function UsersPage({
   return (
     <UserResults
       users={users}
+      totalCount={totalCount}
       needle={needle}
       onNeedleChange={handleNeedleChange}
       page={resultsPage}
       onPageChange={setResultsPage}
       onOpenUser={onSelectUser}
-      loading={indexLoading}
+      loading={loading}
+      error={error}
       timezone={timezone}
     />
   );

@@ -272,7 +272,12 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
             limit=per_page,
         )
         return json.dumps(
-            {"count": total, "page": page, "per_page": per_page, "posts": posts},
+            {
+                "count": total,
+                "page": page,
+                "per_page": per_page,
+                "posts": ds_api.serialize_search_posts(posts),
+            },
             separators=(",", ":"),
             default=str,
         ).encode()
@@ -407,14 +412,14 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                 raise HTTPException(
                     status_code=400, detail="page and per_page must be integers"
                 ) from exc
-            if self._dataset_read_enabled():
-                content = await run_in_threadpool(
-                    self._dataset_search_tweets, query, page, per_page
+            if not self._dataset_read_enabled():
+                raise HTTPException(
+                    status_code=503,
+                    detail="X Proxy dataset read path is disabled",
                 )
-            else:
-                content = await run_in_threadpool(
-                    self._search_tweets, query, page, per_page
-                )
+            content = await run_in_threadpool(
+                self._dataset_search_tweets, query, page, per_page
+            )
             return Response(
                 content=content,
                 media_type="application/json; charset=utf-8",
@@ -540,6 +545,15 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                 if exc.status_code == 404:
                     return await call_next(request)
                 raise
+
+        if self._dataset_read_enabled() and (
+            rel.startswith("search_users/")
+            or rel.startswith("search_tweets/posts")
+        ):
+            raise HTTPException(
+                status_code=410,
+                detail="Legacy user/tweet shards are disabled; use dataset APIs",
+            )
 
         if _SNAPSHOT_RE.fullmatch(rel) or _LEGACY_DATA_RE.fullmatch(rel):
             return _serve_relative(

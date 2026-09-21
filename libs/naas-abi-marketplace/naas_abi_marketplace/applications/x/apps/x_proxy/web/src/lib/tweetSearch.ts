@@ -224,13 +224,14 @@ function hitFromSearchPost(post: Record<string, unknown>): TweetHit {
   const queries = post.queries;
   return {
     id: tweetId || null,
-    text: cell(post, "text"),
+    text: cell(post, "full_text") || cell(post, "text"),
     url: tweetId && username ? `https://x.com/${username}/status/${tweetId}` : "",
     username,
     createdAt: cell(post, "created_at"),
     location: cell(post, "location"),
     verifiedType: cell(post, "verified_type"),
-    referenced: Boolean(post.referenced),
+    referenced:
+      Boolean(post.referenced) || cell(post, "kind") === "referenced",
     mediaCount: Number(post.media_count) || 0,
     mediaUrl: "",
     queries: Array.isArray(queries)

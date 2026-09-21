@@ -152,6 +152,27 @@ def user_posts(
     return profile, total, list(posts.rows)
 
 
+def serialize_search_posts(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Shape dataset rows for the Search Tweets JSON API."""
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        media = str(row.get("media_urls") or "").split()
+        out.append(
+            {
+                "tweet_id": str(row.get("tweet_id") or ""),
+                "created_at": str(row.get("created_at") or ""),
+                "text": str(row.get("full_text") or row.get("text") or ""),
+                "username": str(row.get("username") or ""),
+                "location": str(row.get("location") or ""),
+                "verified_type": str(row.get("verified_type") or ""),
+                "referenced": row.get("kind") == "referenced",
+                "media_count": len(media),
+                "queries": [str(row.get("query_slug") or "")] if row.get("query_slug") else [],
+            }
+        )
+    return out
+
+
 def search_tweets(
     dataset,
     query: str,

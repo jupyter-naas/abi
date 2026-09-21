@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { searchFor } from "@/lib/routes";
-import { rankUsers, USER_RESULTS_PAGE_SIZE } from "@/lib/userSearch";
+import { USER_RESULTS_PAGE_SIZE } from "@/lib/userSearch";
 import type { UserRow } from "@/lib/types";
 
 type Props = {
   users: UserRow[];
+  totalCount: number;
   needle: string;
   onNeedleChange: (needle: string) => void;
   /** Result page, 0-based. */
@@ -14,6 +15,7 @@ type Props = {
   onPageChange: (page: number) => void;
   onOpenUser: (username: string) => void;
   loading: boolean;
+  error?: string;
   timezone: string;
 };
 
@@ -41,12 +43,14 @@ function formatDate(iso: string, timezone: string): string {
  */
 export function UserResults({
   users,
+  totalCount,
   needle,
   onNeedleChange,
   page,
   onPageChange,
   onOpenUser,
   loading,
+  error = "",
   timezone,
 }: Props) {
   // What is in the box, which only becomes the query on Enter / clear.
@@ -56,17 +60,16 @@ export function UserResults({
   }, [needle]);
 
   const submitted = needle.trim();
-  const matches = useMemo(() => rankUsers(users, submitted), [users, submitted]);
+  const listed = users;
 
   const goToPage = (next: number) => {
     onPageChange(next);
     window.scrollTo({ top: 0 });
   };
 
-  const pages = Math.max(1, Math.ceil(matches.length / USER_RESULTS_PAGE_SIZE));
+  const pages = Math.max(1, Math.ceil(totalCount / USER_RESULTS_PAGE_SIZE));
   const current = Math.min(page, pages - 1);
   const start = current * USER_RESULTS_PAGE_SIZE;
-  const listed = matches.slice(start, start + USER_RESULTS_PAGE_SIZE);
 
   const submit = (value: string) => {
     onNeedleChange(value);
@@ -113,16 +116,20 @@ export function UserResults({
 
       <p className="results-count">
         {loading
-          ? "Loading the author index…"
-          : `${matches.length.toLocaleString()} result${
-              matches.length === 1 ? "" : "s"
+          ? "Loading authors…"
+          : `${totalCount.toLocaleString()} author${
+              totalCount === 1 ? "" : "s"
             }${submitted ? ` for “${submitted}”` : " in the X graph"}`}
         {!loading && pages > 1
           ? ` · page ${current + 1}/${pages.toLocaleString()}`
           : ""}
       </p>
 
-      {!loading && !listed.length ? (
+      {!loading && error ? (
+        <p className="user-empty">Search unavailable: {error}</p>
+      ) : null}
+
+      {!loading && !error && !listed.length ? (
         <p className="user-empty">
           No author matches - try a shorter handle, or a location.
         </p>
@@ -183,7 +190,7 @@ export function UserResults({
         })}
       </ol>
 
-      {matches.length > USER_RESULTS_PAGE_SIZE ? (
+      {totalCount > USER_RESULTS_PAGE_SIZE ? (
         <div className="pager">
           <button
             type="button"
