@@ -70,6 +70,13 @@ class EventService(ServiceBase, IEventService):
         self._explicit_bus = bus
 
     @property
+    def adapter(self) -> IEventAdapter:
+        """The wrapped secondary adapter -- public so callers (e.g.
+        ``EngineNATSLoader``) can check what kind of adapter this service is
+        backed by, mirroring ``ObjectStorageService.adapter``."""
+        return self._adapter
+
+    @property
     def _bus(self) -> BusService | None:
         if self._explicit_bus is not None:
             return self._explicit_bus

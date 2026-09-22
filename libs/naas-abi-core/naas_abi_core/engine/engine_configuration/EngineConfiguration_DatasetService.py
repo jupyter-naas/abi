@@ -76,8 +76,30 @@ class DatasetAdapterDuckLakeConfiguration(BaseModel):
         return self
 
 
+class DatasetAdapterNATSConfiguration(BaseModel):
+    """Dataset adapter NATS RPC client configuration.
+
+    Talks to a remote ``DatasetPrimaryAdapterNATS`` over NATS request/reply --
+    see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md (Stage 1)
+    and naas_abi_core/proto/dataset/v1/dataset.proto.
+
+    dataset_adapter:
+      adapter: "nats_rpc"
+      config:
+        nats_url: "nats://127.0.0.1:4222"
+        jwt_secret: "{{ secret.NATS_SERVICE_JWT_SECRET }}"
+        service_identity: "api"
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    nats_url: str = "nats://127.0.0.1:4222"
+    jwt_secret: str
+    service_identity: str = "api"
+
+
 class DatasetAdapterConfiguration(GenericLoader):
-    adapter: Literal["ducklake", "custom"]
+    adapter: Literal["ducklake", "nats_rpc", "custom"]
     config: dict | None = None
 
     @model_validator(mode="after")
@@ -93,6 +115,12 @@ class DatasetAdapterConfiguration(GenericLoader):
                 self.config,
                 "Invalid configuration for services.dataset.dataset_adapter 'ducklake' adapter",
             )
+        if self.adapter == "nats_rpc":
+            pydantic_model_validator(
+                DatasetAdapterNATSConfiguration,
+                self.config,
+                "Invalid configuration for services.dataset.dataset_adapter 'nats_rpc' adapter",
+            )
 
         return self
 
@@ -107,6 +135,12 @@ class DatasetAdapterConfiguration(GenericLoader):
                 )
 
                 return DatasetSecondaryAdapterDuckLake(**self.config)
+            elif self.adapter == "nats_rpc":
+                from naas_abi_core.services.dataset.adapters.secondary.DatasetSecondaryAdapterNATSClient import (
+                    DatasetSecondaryAdapterNATSClient,
+                )
+
+                return DatasetSecondaryAdapterNATSClient(**self.config)
             raise ValueError(f"Unknown adapter: {self.adapter}")
         return super().load()
 

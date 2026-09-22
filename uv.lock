@@ -46,6 +46,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
     { name = "ruff" },
+    { name = "types-protobuf" },
 ]
 terminal-agent = [
     { name = "langchain-anthropic" },
@@ -121,6 +122,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "pytest-xdist", specifier = ">=3.7.0" },
     { name = "ruff", specifier = ">=0.13.0" },
+    { name = "types-protobuf" },
 ]
 terminal-agent = [
     { name = "langchain-anthropic", specifier = ">=0.3.0,<0.4" },
@@ -3755,8 +3757,11 @@ all = [
     { name = "dagster-webserver" },
     { name = "langchain-openai" },
     { name = "msal" },
+    { name = "nats-py" },
     { name = "paramiko" },
     { name = "pika" },
+    { name = "protobuf" },
+    { name = "pyjwt" },
     { name = "qdrant-client" },
     { name = "redis" },
     { name = "sqlite-vec" },
@@ -3797,21 +3802,25 @@ requires-dist = [
     { name = "naas-abi-core", extras = ["aws"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["dagster"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["microsoft"], marker = "extra == 'all'" },
+    { name = "naas-abi-core", extras = ["nats"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["openrouter"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["qdrant"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["rabbitmq"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["redis"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["sqlite-vec"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["ssh"], marker = "extra == 'all'" },
+    { name = "nats-py", marker = "extra == 'nats'", specifier = ">=2.16.0" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "pandas-stubs", specifier = ">=2.3.2.250926" },
     { name = "paramiko", marker = "extra == 'ssh'", specifier = ">=3.5.1,<4.0.0" },
     { name = "pika", marker = "extra == 'rabbitmq'" },
     { name = "pillow", specifier = ">=12.0.0" },
     { name = "pip", specifier = ">=25.1.1" },
+    { name = "protobuf", marker = "extra == 'nats'", specifier = ">=6.33.5" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.0.0" },
     { name = "pydantic", specifier = ">=2.11.5" },
     { name = "pydash", specifier = ">=8.0.5" },
+    { name = "pyjwt", marker = "extra == 'nats'", specifier = ">=2.11.0" },
     { name = "pyoxigraph", specifier = ">=0.5.5" },
     { name = "pytz", specifier = ">=2025.2" },
     { name = "pyyaml", specifier = ">=6.0.3" },
@@ -3829,7 +3838,7 @@ requires-dist = [
     { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
     { name = "types-tqdm", specifier = ">=4.67.0.20250809" },
 ]
-provides-extras = ["ssh", "aws", "qdrant", "sqlite-vec", "all", "openrouter", "dagster", "redis", "rabbitmq", "microsoft"]
+provides-extras = ["ssh", "aws", "qdrant", "sqlite-vec", "all", "openrouter", "dagster", "redis", "rabbitmq", "nats", "microsoft"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -3838,6 +3847,7 @@ dev = [
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "python-semantic-release", specifier = ">=9.21.0" },
     { name = "testcontainers", specifier = ">=4.13.2" },
+    { name = "types-protobuf" },
 ]
 
 [[package]]
@@ -3982,6 +3992,15 @@ dev = [
     { name = "mypy", specifier = ">=1.19.0" },
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "python-semantic-release", specifier = ">=9.21.0" },
+]
+
+[[package]]
+name = "nats-py"
+version = "2.16.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2c/c8/739b72c9201081e48000884d476231873ac82f7247c43b33823eaf3c0bfb/nats_py-2.16.0.tar.gz", hash = "sha256:1d137ed7afc9b59033b3199324c6237df2016a5091935871344a787eba6b72fc", size = 79731, upload-time = "2026-09-16T07:47:21.843Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/48/a3/16cec37172144d3362d7551bb823a098b2b2903281fc095dfe4480b8c2fd/nats_py-2.16.0-py3-none-any.whl", hash = "sha256:aeb1ff123966c05833d26c7df7e1d54c1c6d32b612428b21677a2e921f1fecae", size = 93578, upload-time = "2026-09-16T07:47:20.799Z" },
 ]
 
 [[package]]
@@ -6949,6 +6968,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b7/b8/c6ff3b10c2f7b9897650af746f0dc6c5cddf054db857bc79d621f53c7d22/types_paramiko-4.0.0.20250822.tar.gz", hash = "sha256:1b56b0cbd3eec3d2fd123c9eb2704e612b777e15a17705a804279ea6525e0c53", size = 28730, upload-time = "2025-08-22T03:03:43.262Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/79/a1/b3774ed924a66ee2c041224d89c36f0c21f4f6cf75036d6ee7698bf8a4b9/types_paramiko-4.0.0.20250822-py3-none-any.whl", hash = "sha256:55bdb14db75ca89039725ec64ae3fa26b8d57b6991cfb476212fa8f83a59753c", size = 38833, upload-time = "2025-08-22T03:03:42.072Z" },
+]
+
+[[package]]
+name = "types-protobuf"
+version = "7.35.1.20260906"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e1/6c/e3e5b3e10bc328126a39637c138f9ebfd734bf14342b9f3540039b4ab995/types_protobuf-7.35.1.20260906.tar.gz", hash = "sha256:efd1a3862d4c967dad5512ef8d56b1530ac84f182c41735b94004756518c4998", size = 69895, upload-time = "2026-09-06T06:35:28.308Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/44/4e/f63e826c68f77ef875506d72f225918800346545ee99847bc28f3394f18d/types_protobuf-7.35.1.20260906-py3-none-any.whl", hash = "sha256:5155e48569e0dabff303fdf578db96cd31ea9a4a63b18018a4ceac6b0ae17462", size = 86419, upload-time = "2026-09-06T06:35:27.247Z" },
 ]
 
 [[package]]

@@ -8,8 +8,10 @@ print(
     flush=True,
 )
 
+import asyncio
 import os
 import subprocess
+from contextlib import asynccontextmanager
 from importlib.resources import files
 from typing import Annotated
 
@@ -77,10 +79,47 @@ class LazyEngine:
 engine = LazyEngine()
 api_runtime_configuration = _load_api_runtime_configuration()
 
+
+async def _shutdown_engine() -> None:
+    # Read the private attribute directly, not through LazyEngine.__getattr__'s
+    # proxy -- going through the proxy would lazily construct and load a whole
+    # new Engine() just to shut down something that, in the common case (app
+    # never actually served a request needing it), was never loaded.
+    runtime_engine = engine._engine
+    if runtime_engine is None:
+        return
+    logger.debug("api: shutting down engine (NATS primary adapters, if any)")
+    # Engine.shutdown() is synchronous (it bridges to async NATS calls via
+    # nats_runtime.run_coro internally, same as every other engine-loading
+    # entry point) -- run it off the event loop so a slow drain can't block
+    # the rest of the shutdown sequence.
+    await asyncio.to_thread(runtime_engine.shutdown)
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    # Modules attach to this app with ``app.add_event_handler("startup"|
+    # "shutdown", ...)`` -- Nexus does, to run its migrations and seeds (see
+    # naas_abi/apps/nexus/apps/api/app/main.py::_register_startup_handlers).
+    # Passing ``lifespan=`` to FastAPI replaces Starlette's ``_DefaultLifespan``,
+    # which is the ONLY thing that would otherwise run those handlers (and it
+    # does so silently: no warning is raised for handlers added after
+    # construction). So drive them explicitly here, and tear the engine down
+    # last: it is the dependency the modules' shutdown hooks may still need.
+    await app.router.startup()
+    try:
+        yield
+    finally:
+        try:
+            await app.router.shutdown()
+        finally:
+            await _shutdown_engine()
+
+
 # Init API
 TITLE = api_runtime_configuration.title
 DESCRIPTION = api_runtime_configuration.description
-app = FastAPI(title=TITLE, docs_url=None, redoc_url=None)
+app = FastAPI(title=TITLE, docs_url=None, redoc_url=None, lifespan=_lifespan)
 
 # Set logo path
 logo_path = api_runtime_configuration.logo_path

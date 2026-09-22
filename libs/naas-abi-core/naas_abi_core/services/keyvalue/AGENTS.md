@@ -90,3 +90,23 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/keyvalue/tests/kv__secon
 1. Implement every method of `IKeyValueAdapter` in `adapters/secondary/<Name>Adapter.py`.
 2. Honour the atomicity contract for `set_if_not_exists` and `delete_if_value_matches` — these are the primitives the rest of the codebase relies on for compare-and-swap.
 3. Run the generic contract tests against the new adapter (see `tests/kv__secondary_adapter__generic_test.py`).
+
+## NATS RPC adapters
+
+`adapters/primary/keyvalue__primary_adapter__NATS.py` exposes the service's
+protobuf endpoints. `adapters/secondary/KeyValueSecondaryAdapterNATSClient.py` implements the outbound
+port. Wire contracts live under `naas_abi_core/proto/keyvalue/v1/`.
+
+Clients inherit connection, JWT renewal, deadlines, and error handling from
+`naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
+mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
+The maximum message size is 8 MiB (or a lower broker limit); oversized replies
+return non-retryable `PAYLOAD_TOO_LARGE`, and micro-service error headers raise
+instead of becoming an empty success. Larger results require streaming or a
+storage reference. No RPC is automatically replayed after transport failure:
+a timeout can hide a completed operation. Reconcile its outcome before retrying.
+`close()` releases only the client's transport, including for vector storage.
+
+Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
+are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
+The latter uses a local `nats-server` executable without Docker.

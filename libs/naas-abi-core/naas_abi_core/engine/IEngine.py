@@ -88,12 +88,18 @@ class IEngine:
             assert self.__kv is not None, "KV service is not initialized"
             return self.__kv
 
+        def kv_available(self) -> bool:
+            return self.__kv is not None
+
         @property
         def object_storage(self) -> ObjectStorageService:
             assert self.__object_storage is not None, (
                 "Object storage service is not initialized"
             )
             return self.__object_storage
+
+        def object_storage_available(self) -> bool:
+            return self.__object_storage is not None
 
         @property
         def dataset(self) -> DatasetService:
@@ -120,10 +126,16 @@ class IEngine:
             )
             return self.__vector_store
 
+        def vector_store_available(self) -> bool:
+            return self.__vector_store is not None
+
         @property
         def secret(self) -> Secret:
             assert self.__secret is not None, "Secret service is not initialized"
             return self.__secret
+
+        def secret_available(self) -> bool:
+            return self.__secret is not None
 
         @property
         def bus(self) -> BusService:
@@ -134,6 +146,9 @@ class IEngine:
         def email(self) -> EmailService:
             assert self.__email is not None, "Email service is not initialized"
             return self.__email
+
+        def email_available(self) -> bool:
+            return self.__email is not None
 
         @property
         def cache(self) -> CacheService:
@@ -178,12 +193,18 @@ class IEngine:
             )
             return self.__coding_environment
 
+        def coding_environment_available(self) -> bool:
+            return self.__coding_environment is not None
+
         @property
         def source_control(self) -> SourceControlService:
             assert self.__source_control is not None, (
                 "Source control service is not initialized"
             )
             return self.__source_control
+
+        def source_control_available(self) -> bool:
+            return self.__source_control is not None
 
         @property
         def all(
