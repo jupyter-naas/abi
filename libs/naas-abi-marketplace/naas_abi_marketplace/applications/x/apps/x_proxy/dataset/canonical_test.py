@@ -119,6 +119,131 @@ def test_graph_totals_dedupes_referenced_when_matched_exists(dataset) -> None:
     assert tweet_total == 2
 
 
+def test_graph_totals_dedupes_duplicate_author_rows(dataset) -> None:
+    """Multiple authors_v1 rows per author_id must not multiply tweet counts."""
+    ensure_x_datasets(dataset)
+    now = datetime.now(UTC)
+    seen_old = datetime(2020, 1, 1, tzinfo=UTC)
+    upsert_table(
+        dataset,
+        POSTS_V1,
+        [
+            {
+                "tweet_id": "99",
+                "kind": "matched",
+                "query_slug": "q",
+                "created_at": now,
+                "created_month": "2026-09",
+                "author_id": "a1",
+                "text": "t",
+                "full_text": "t",
+                "lang": "en",
+                "conversation_id": "",
+                "like_count": 0,
+                "retweet_count": 0,
+                "reply_count": 0,
+                "media_urls": "",
+            }
+        ],
+    )
+    author_row = {
+        "author_id": "a1",
+        "username": "alice",
+        "display_name": "Alice",
+        "description": "",
+        "location": "",
+        "verified_type": "",
+        "verified": False,
+        "protected": False,
+        "is_identity_verified": False,
+        "user_url": "",
+        "profile_image_url": "",
+        "profile_banner_url": "",
+        "user_created_at": "",
+        "most_recent_tweet_id": "",
+        "followers_count": 0,
+        "following_count": 0,
+        "tweet_count": 0,
+        "listed_count": 0,
+        "user_like_count": 0,
+        "media_count": 0,
+    }
+    upsert_table(
+        dataset,
+        AUTHORS_V1,
+        [
+            {**author_row, "seen_at": seen_old},
+            {**author_row, "seen_at": now, "display_name": "Alice Latest"},
+        ],
+    )
+    totals = ds_api.graph_totals(dataset)
+    assert totals["posts"] == 1
+    tweet_total, rows = ds_api.search_tweets(dataset, "", limit=10)
+    assert tweet_total == 1
+    assert rows[0]["display_name"] == "Alice Latest"
+
+
+def test_search_users_counts_one_row_per_author_id(dataset) -> None:
+    ensure_x_datasets(dataset)
+    now = datetime.now(UTC)
+    seen_old = datetime(2020, 1, 1, tzinfo=UTC)
+    upsert_table(
+        dataset,
+        POSTS_V1,
+        [
+            {
+                "tweet_id": "1",
+                "kind": "matched",
+                "query_slug": "q",
+                "created_at": now,
+                "created_month": "2026-09",
+                "author_id": "a1",
+                "text": "m",
+                "full_text": "m",
+                "lang": "en",
+                "conversation_id": "",
+                "like_count": 0,
+                "retweet_count": 0,
+                "reply_count": 0,
+                "media_urls": "",
+            }
+        ],
+    )
+    author_row = {
+        "author_id": "a1",
+        "username": "alice",
+        "display_name": "Alice",
+        "description": "",
+        "location": "",
+        "verified_type": "",
+        "verified": False,
+        "protected": False,
+        "is_identity_verified": False,
+        "user_url": "",
+        "profile_image_url": "",
+        "profile_banner_url": "",
+        "user_created_at": "",
+        "most_recent_tweet_id": "",
+        "followers_count": 0,
+        "following_count": 0,
+        "tweet_count": 0,
+        "listed_count": 0,
+        "user_like_count": 0,
+        "media_count": 0,
+    }
+    upsert_table(
+        dataset,
+        AUTHORS_V1,
+        [
+            {**author_row, "seen_at": seen_old},
+            {**author_row, "seen_at": now},
+        ],
+    )
+    total, users = ds_api.search_users(dataset, "", limit=10)
+    assert total == 1
+    assert len(users) == 1
+
+
 def test_user_posts_uses_cached_author_stats_total(dataset) -> None:
     ensure_x_datasets(dataset)
     now = datetime.now(UTC)

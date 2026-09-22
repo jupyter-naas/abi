@@ -45,8 +45,28 @@ canonical_posts AS (
 )
 """
 
+AUTHORS_DEDUPED_CTE = """
+authors_deduped AS (
+  SELECT * EXCLUDE (_author_rn)
+  FROM (
+    SELECT
+      a.*,
+      ROW_NUMBER() OVER (
+        PARTITION BY a.author_id
+        ORDER BY a.seen_at DESC NULLS LAST, a.username
+      ) AS _author_rn
+    FROM {authors} a
+    WHERE a.author_id <> ''
+  ) ranked_authors
+  WHERE _author_rn = 1
+)
+"""
+
 CANONICAL_WITH_AUTHORS_CTE = (
     CANONICAL_POSTS_CTE
+    + """,
+"""
+    + AUTHORS_DEDUPED_CTE
     + """,
 canonical_enriched AS (
   SELECT
@@ -65,7 +85,7 @@ canonical_enriched AS (
     COALESCE(a.display_name, '') AS display_name,
     COALESCE(a.description, '') AS description
   FROM canonical_posts p
-  LEFT JOIN {authors} a ON p.author_id = a.author_id
+  LEFT JOIN authors_deduped a ON p.author_id = a.author_id
 )
 """
 )
@@ -116,3 +136,8 @@ def canonical_cte(
         matched_ids_query=_matched_ids_query(posts=posts, use_index=use_matched_index),
         author_filter="",
     )
+
+
+def authors_deduped_cte(*, authors: str = AUTHORS_V1) -> str:
+    """One profile row per ``author_id`` (newest ``seen_at`` wins)."""
+    return AUTHORS_DEDUPED_CTE.format(authors=authors)

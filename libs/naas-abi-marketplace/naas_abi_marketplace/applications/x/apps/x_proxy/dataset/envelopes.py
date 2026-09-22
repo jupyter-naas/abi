@@ -19,10 +19,8 @@ import re
 from datetime import datetime
 from typing import Any
 
-from naas_abi_marketplace.applications.x.apps.x_proxy.cache.schema import (
-    KIND_MATCHED,
-    KIND_REFERENCED,
-)
+KIND_MATCHED = "matched"
+KIND_REFERENCED = "referenced"
 from naas_abi_marketplace.applications.x.pipelines.utils.build_media import (
     best_media_url,
 )

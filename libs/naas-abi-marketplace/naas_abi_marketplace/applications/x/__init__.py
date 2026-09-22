@@ -237,15 +237,9 @@ class XDatasetConfiguration(BaseModel):
     read_enabled: bool = Field(
         default=False,
         description=(
-            "Serve paginated user/tweet APIs from datasets (canary). Static JSON "
-            "shards remain available when false or on query failure."
-        ),
-    )
-    skip_user_shard_publish: bool = Field(
-        default=False,
-        description=(
-            "When ``read_enabled``, skip rebuilding ``search_users/posts/*.json`` "
-            "shards on publish (aggregate snapshots only)."
+            "Serve paginated user/tweet APIs from Dataset Service and publish "
+            "dashboard snapshots (globals, count/search charts) from DuckLake. "
+            "Required for ``publish_x_app`` / ``x_build_app_x_proxy``."
         ),
     )
     skip_report_warmup: bool = Field(

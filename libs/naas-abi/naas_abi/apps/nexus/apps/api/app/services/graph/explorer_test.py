@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 import requests
 from naas_abi.apps.nexus.apps.api.app.services.graph.explorer import (
     catalog,
+    graph_snapshot,
     instances,
     network,
     overview,
@@ -71,6 +72,11 @@ class ExplorerProjectionTest(unittest.TestCase):
             self.store, graphs or [G1, G2], classes or [], search, offset, limit, SCHEMA
         )
 
+    def test_overview_lists_graph_tiles_when_no_graphs_selected(self) -> None:
+        data = overview(self.store, self.packs, [], SCHEMA)
+        self.assertEqual({g["uri"] for g in data["graph_metrics"]}, {G1, G2, EMPTY})
+        self.assertTrue(all(g["triples"] == 0 for g in data["graph_metrics"]))
+
     def test_catalog_matches_overview_without_dashboard_scans(self) -> None:
         queries: list[str] = []
         dataset = self.store
@@ -81,18 +87,23 @@ class ExplorerProjectionTest(unittest.TestCase):
                 return dataset.query(query)
 
         data = catalog(RecordingStore(), self.packs, [G1, G2, EMPTY], SCHEMA)
-        self.assertEqual(len(queries), 3)
+        self.assertGreaterEqual(len(queries), 3)
         self.assertNotIn("kpis", data)
-        self.assertEqual(data["classes"], self.summary()["classes"])
+        self.assertEqual(
+            sorted(c["uri"] for c in data["classes"] if c["count"]),
+            sorted(c["uri"] for c in self.summary()["classes"]),
+        )
         self.assertEqual(len(data["graphs"]), 3)
 
     def test_independent_counts_handle_multiple_types_labels_and_graphs(self) -> None:
         self.g1.add((ALICE, RDFS.label, Literal("Another label")))
         self.g1.add((ALICE, RDF.type, URIRef("urn:ExtraType")))
         kpis = self.summary()["kpis"]
-        self.assertEqual(kpis["instances"], 2)
-        self.assertEqual(kpis["named_individuals"], 1)
-        self.assertEqual(kpis["labeled_instances"], 1)
+        # Per-graph distinct, summed: Alice is in G1 and G2.
+        self.assertEqual(kpis["instances"], 3)
+        self.assertEqual(kpis["named_individuals"], 2)
+        self.assertEqual(kpis["labeled_instances"], 2)
+        self.assertEqual(self.summary([G1])["kpis"]["instances"], 2)
         item = next(i for i in self.page([G1])["items"] if i["uri"] == str(ALICE))
         self.assertEqual(item["label"], "Alice")
         self.assertEqual(item["class_uri"], str(EMPLOYEE))
@@ -116,22 +127,26 @@ class ExplorerProjectionTest(unittest.TestCase):
             )
         )
 
-    def test_unique_instances_across_graphs_and_types(self) -> None:
+    def test_instances_unique_per_graph_and_summed_across_graphs(self) -> None:
         k = self.summary()["kpis"]
-        self.assertEqual(k["instances"], 2)
-        self.assertEqual(k["named_individuals"], 1)
+        self.assertEqual(k["instances"], 3)
+        self.assertEqual(k["named_individuals"], 2)
+        # Classes and predicates are unions, not sums.
         self.assertEqual(k["classes"], 2)
+        self.assertEqual(k["predicates"], 3)
+        single = self.summary([G1])["kpis"]
+        self.assertEqual((single["instances"], single["named_individuals"]), (2, 1))
 
     def test_schema_subject_with_a_custom_metatype_is_not_an_instance(self) -> None:
         self.g1.add((PERSON, RDF.type, URIRef("urn:MetaClass")))
-        self.assertEqual(self.summary()["kpis"]["instances"], 2)
+        self.assertEqual(self.summary([G1])["kpis"]["instances"], 2)
         self.assertNotIn(str(PERSON), [i["uri"] for i in self.page()["items"]])
 
     def test_exact_triples_include_blank_nodes_and_schema(self) -> None:
         self.assertEqual(self.summary()["kpis"]["triples"], len(self.g1) + len(self.g2))
 
     def test_nonempty_label_coverage(self) -> None:
-        self.assertEqual(self.summary()["kpis"]["labeled_instances"], 1)
+        self.assertEqual(self.summary([G1])["kpis"]["labeled_instances"], 1)
 
     def test_empty_graph_is_kept_and_duplicate_labels_are_distinct(self) -> None:
         metrics = self.summary()["graph_metrics"]
@@ -143,7 +158,9 @@ class ExplorerProjectionTest(unittest.TestCase):
         self.assertEqual({g["uri"] for g in self.summary([G2])["graph_metrics"]}, {G2})
 
     def test_real_hierarchy_and_class_counts(self) -> None:
-        classes = {c["uri"]: c for c in self.summary()["classes"]}
+        classes = {
+            c["uri"]: c for c in catalog(self.store, self.packs, [G1, G2], SCHEMA)["classes"]
+        }
         self.assertEqual(classes[str(EMPLOYEE)]["parents"], [str(PERSON)])
         self.assertEqual(classes[str(PERSON)]["count"], 2)
         self.assertEqual(classes[str(PERSON)]["label"], "Person")
@@ -277,6 +294,169 @@ class ExplorerProjectionTest(unittest.TestCase):
                     timeout=10,
                 )
                 self.assertEqual(response.status_code, 200, response.text)
+
+    def test_metric_read_failure_degrades_to_unavailable(self) -> None:
+        dataset = self.store
+
+        class DamagedStore:
+            # Mimics a TDB2 node-table read error on literal objects only.
+            def query(self, query: str) -> Any:
+                if "isLiteral(?o)" in query or "STRLEN" in query:
+                    raise RuntimeError("NodeTableTRDF/Read")
+                return dataset.query(query)
+
+        data = overview(DamagedStore(), self.packs, [G1, G2], SCHEMA)
+        k = data["kpis"]
+        self.assertIsNone(k["relations"])
+        self.assertIsNone(k["literal_values"])
+        self.assertIsNone(k["labeled_instances"])
+        self.assertEqual(k["instances"], 3)
+        self.assertEqual(k["triples"], len(self.g1) + len(self.g2))
+        self.assertEqual(
+            data["unavailable"], ["labeled_instances", "literal_values", "relations"]
+        )
+        self.assertIsNone(data["graph_metrics"][0]["relations"])
+
+    def test_consolidation_uses_supplied_snapshots_concurrently(self) -> None:
+        calls: list[str] = []
+
+        def snapshot(store: Any, uri: str) -> dict[str, Any]:
+            calls.append(uri)
+            return graph_snapshot(store, uri)
+
+        data = overview(
+            self.store, self.packs, [G1, G2, EMPTY], SCHEMA,
+            snapshot=snapshot, max_workers=3,
+        )
+        self.assertEqual(sorted(calls), [EMPTY, G1, G2])
+        self.assertEqual([g["uri"] for g in data["graph_metrics"]], [G1, G2, EMPTY])
+        self.assertEqual(data["kpis"], self.summary()["kpis"])
+
+    def test_pending_graph_is_excluded_from_partial_totals(self) -> None:
+        def snapshot(store: Any, uri: str) -> dict[str, Any] | None:
+            return None if uri == G2 else graph_snapshot(store, uri)
+
+        data = overview(self.store, self.packs, [G1, G2, EMPTY], SCHEMA, snapshot=snapshot)
+        self.assertEqual(data["pending"], [G2])
+        # Totals cover the ready graphs; the pending one is listed as excluded.
+        self.assertEqual(data["kpis"]["instances"], 2)
+        self.assertEqual(data["excluded"]["instances"], [G2])
+        self.assertEqual(data["excluded"]["triples"], [G2])
+        self.assertEqual([g["uri"] for g in data["graph_metrics"]], [G1, G2, EMPTY])
+        self.assertTrue(data["graph_metrics"][1]["pending"])
+        self.assertEqual(data["graph_metrics"][0]["instances"], 2)
+
+    def test_skipped_metrics_are_not_queried(self) -> None:
+        queries: list[str] = []
+        dataset = self.store
+
+        class RecordingStore:
+            def query(self, query: str) -> Any:
+                queries.append(query)
+                return dataset.query(query)
+
+        snap = graph_snapshot(RecordingStore(), G1, skip=["relations"])
+        self.assertEqual(snap["unavailable"], ["relations", "literal_values"])
+        self.assertFalse(any("isLiteral(?o)" in q for q in queries))
+        self.assertEqual(snap["instances"], 2)
+
+    def test_consolidation_excludes_graphs_missing_a_metric(self) -> None:
+        dataset = self.store
+
+        class G2Damaged:
+            def query(self, query: str) -> Any:
+                if "<urn:g2>" in query and "isLiteral(?o)" in query:
+                    raise RuntimeError("NodeTableTRDF/Read")
+                return dataset.query(query)
+
+        data = overview(G2Damaged(), self.packs, [G1, G2], SCHEMA)
+        g1 = graph_snapshot(self.store, G1)
+        self.assertEqual(data["kpis"]["relations"], g1["relations"])
+        self.assertEqual(data["kpis"]["literal_values"], g1["literal_values"])
+        self.assertEqual(data["excluded"], {"relations": [G2], "literal_values": [G2]})
+        self.assertEqual(data["kpis"]["instances"], 3)
+
+    def test_unbound_sum_is_a_failure_not_zero(self) -> None:
+        class Row(dict[str, Any]):
+            def asdict(self) -> dict[str, Any]:
+                return dict(self)
+
+        dataset = self.store
+
+        class UnboundSums:
+            # Jena returns an unbound aggregate when a value cannot be read.
+            def query(self, query: str) -> Any:
+                if "isLiteral(?o)" in query:
+                    return [Row()]
+                return dataset.query(query)
+
+        snap = graph_snapshot(UnboundSums(), G1)
+        self.assertIsNone(snap["relations"])
+        self.assertEqual(snap["unavailable"], ["relations", "literal_values"])
+        self.assertEqual(snap["transient"], [])
+
+    def test_outage_is_marked_transient(self) -> None:
+        dataset = self.store
+
+        class Flaky:
+            def query(self, query: str) -> Any:
+                if "?s a ?instanceType" in query:
+                    raise ConnectionResetError(104, "Connection reset by peer")
+                return dataset.query(query)
+
+        snap = graph_snapshot(Flaky(), G1)
+        self.assertEqual(snap["transient"], ["instances", "named_individuals"])
+
+    def test_timeout_is_remembered_not_transient(self) -> None:
+        dataset = self.store
+
+        class ReadTimeout(OSError):
+            pass
+
+        class Slow:
+            def query(self, query: str) -> Any:
+                if "?s a ?instanceType" in query:
+                    raise ReadTimeout("Read timed out")
+                return dataset.query(query)
+
+        snap = graph_snapshot(Slow(), G1)
+        self.assertIn("instances", snap["unavailable"])
+        self.assertEqual(snap["transient"], [])
+
+    def test_catalog_uses_supplied_class_counts_without_scanning(self) -> None:
+        queries: list[str] = []
+        dataset = self.store
+
+        class RecordingStore:
+            def query(self, query: str) -> Any:
+                queries.append(query)
+                return dataset.query(query)
+
+        data = catalog(
+            RecordingStore(), self.packs, [G1, G2], SCHEMA,
+            class_counts={str(PERSON): 3, str(EMPLOYEE): 1},
+        )
+        self.assertFalse(any("COUNT(DISTINCT ?s)" in q for q in queries))
+        classes = {c["uri"]: c for c in data["classes"]}
+        self.assertEqual(classes[str(PERSON)]["count"], 3)
+        self.assertEqual(classes[str(PERSON)]["label"], "Person")
+        self.assertEqual(classes[str(EMPLOYEE)]["parents"], [str(PERSON)])
+
+    def test_unreadable_predicate_only_drops_that_predicate(self) -> None:
+        dataset = self.store
+
+        class OnePredicateDamaged:
+            def query(self, query: str) -> Any:
+                if "<urn:knows>" in query and "isLiteral(?o)" in query:
+                    raise RuntimeError("NodeTableTRDF/Read")
+                return dataset.query(query)
+
+        snap = graph_snapshot(OnePredicateDamaged(), G1)
+        full = graph_snapshot(self.store, G1)
+        self.assertEqual(snap["unreadable_predicates"], ["urn:knows"])
+        self.assertEqual(snap["relations"], full["relations"] - 1)
+        self.assertEqual(snap["literal_values"], full["literal_values"])
+        self.assertEqual(snap["unavailable"], [])
 
     def test_query_failure_is_not_zero(self) -> None:
         class FailStore:

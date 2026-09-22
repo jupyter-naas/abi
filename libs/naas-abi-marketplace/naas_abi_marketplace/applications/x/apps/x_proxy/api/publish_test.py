@@ -1,18 +1,16 @@
 from naas_abi_marketplace.applications.x.apps.x_proxy.api import publish
 
 
-def test_publish_releases_window_frames_before_full_history_pages(monkeypatch):
+def test_publish_app_runs_count_and_search_from_dataset(monkeypatch):
     calls: list[str] = []
 
-    class _Cache:
+    class _Reader:
         def earliest_matched_created_at(self):
             return None
 
-        def release_window_cache(self) -> int:
-            calls.append("release")
-            return 2
-
-    monkeypatch.setattr(publish, "_attach_cache", lambda _storage: _Cache())
+    monkeypatch.setattr(
+        publish, "DatasetSnapshotReader", lambda _dataset: _Reader()
+    )
     monkeypatch.setattr(
         publish, "publish_globals", lambda _ctx: calls.append("globals") or {}
     )
@@ -22,16 +20,15 @@ def test_publish_releases_window_frames_before_full_history_pages(monkeypatch):
     monkeypatch.setattr(
         publish, "publish_search_page", lambda _ctx: calls.append("recent") or {}
     )
-    monkeypatch.setattr(
-        publish, "publish_tweets_page", lambda _ctx: calls.append("tweets") or {}
-    )
-    monkeypatch.setattr(
-        publish,
-        "publish_users_page",
-        lambda _ctx, **_kwargs: calls.append("users") or {},
-    )
     monkeypatch.setattr(publish, "upload_web_export", lambda *_args, **_kwargs: {})
 
-    publish.publish_app(None, None, [], require_web=False)  # type: ignore[arg-type]
+    summary = publish.publish_app(
+        None,  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+        [],
+        require_web=False,
+        dataset=object(),
+    )
 
-    assert calls == ["count", "recent", "release", "globals", "tweets", "users"]
+    assert calls == ["count", "recent", "globals"]
+    assert summary["mode"] == "dataset"

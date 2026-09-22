@@ -6,7 +6,7 @@ import json
 
 import pytest
 from naas_abi_core.services.dataset.DatasetFactory import DatasetFactory
-from naas_abi_marketplace.applications.x.apps.x_proxy.cache.schema import (
+from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.envelope_paths import (
     ENVELOPE_PREFIX,
 )
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
