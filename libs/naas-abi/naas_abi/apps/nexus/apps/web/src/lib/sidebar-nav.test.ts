@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_NAV_ORDER,
   insertIndexFromPoint,
+  layoutDockNav,
   mergeNavOrder,
   moveNavItem,
   shiftForReorder,
@@ -90,5 +91,54 @@ describe('shiftForReorder', () => {
   it('does not slide on a no-op drop', () => {
     expect(shiftForReorder(0, 1, 1)).toBe(0);
     expect(shiftForReorder(2, 1, 2)).toBe(0);
+  });
+});
+
+describe('layoutDockNav', () => {
+  const item = 40;
+  const pad = 24;
+  const count = 13;
+
+  it('keeps the loose gap when every icon fits', () => {
+    expect(layoutDockNav(800, count, item, pad)).toEqual({
+      gap: 4,
+      visibleCount: count,
+      overflow: false,
+      scroll: false,
+    });
+  });
+
+  it('packs the gap before hiding any icon', () => {
+    // Loose needs 592px. Gap 2 needs 568. Packed needs 544.
+    expect(layoutDockNav(570, count, item, pad).gap).toBe(2);
+    expect(layoutDockNav(570, count, item, pad).overflow).toBe(false);
+    expect(layoutDockNav(550, count, item, pad)).toMatchObject({
+      gap: 0,
+      visibleCount: count,
+      overflow: false,
+    });
+  });
+
+  it('moves the icons that do not fit into a More slot', () => {
+    // 500px holds 11 packed slots. One is More, so 10 stay on the rail.
+    expect(layoutDockNav(500, count, item, pad)).toEqual({
+      gap: 0,
+      visibleCount: 10,
+      overflow: true,
+      scroll: false,
+    });
+  });
+
+  it('scrolls full-size icons when the rail is shorter than one button', () => {
+    expect(layoutDockNav(50, count, item, pad)).toMatchObject({
+      visibleCount: count,
+      overflow: false,
+      scroll: true,
+    });
+  });
+
+  it('shows everything before the rail has been measured', () => {
+    expect(layoutDockNav(Number.POSITIVE_INFINITY, count, item, pad).visibleCount).toBe(count);
+    expect(layoutDockNav(0, 0, item, pad).visibleCount).toBe(0);
   });
 });

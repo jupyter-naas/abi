@@ -6,9 +6,18 @@ export const ONTOLOGY_SPACING = [
   { value: 'spacious', label: 'Spacious', gap: 140, scale: 1.7 },
 ] as const;
 
-export function ontologySpacing(query: string) {
+export type OntologySpacingValue = (typeof ONTOLOGY_SPACING)[number]['value'];
+
+export function ontologySpacing(
+  query: string,
+  fallback: OntologySpacingValue = 'compact',
+) {
   const value = new URLSearchParams(query).get('spacing');
-  return ONTOLOGY_SPACING.find(option => option.value === value) || ONTOLOGY_SPACING[0];
+  return (
+    ONTOLOGY_SPACING.find(option => option.value === value) ||
+    ONTOLOGY_SPACING.find(option => option.value === fallback) ||
+    ONTOLOGY_SPACING[0]
+  );
 }
 
 /** Presentation settings preserve selected systems, files, process and inspected term. */
