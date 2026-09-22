@@ -448,6 +448,23 @@ def _trigger_description(config: XSearchRecentTweetsFilesConfiguration) -> str:
     )
 
 
+def _default_files_run_config(
+    entry_config: XSearchRecentTweetsFilesConfiguration,
+) -> dict:
+    """Launchpad defaults for one files-reprocess job (single op, step 1)."""
+    safe = safe_name(entry_config.name)
+    op_name = f"x_reprocess_recent_tweets_files_op_{safe}"
+    body: dict[str, object] = {
+        "prefix": entry_config.prefix,
+        "persist": entry_config.persist,
+        "skip_existing": entry_config.skip_existing,
+        "app_publish": entry_config.app_publish,
+    }
+    if entry_config.max_age_hours is not None:
+        body["max_age_hours"] = entry_config.max_age_hours
+    return {"ops": {op_name: {"config": body}}}
+
+
 def _build_reprocess_files_definitions(
     config: XSearchRecentTweetsFilesConfiguration,
 ) -> tuple[
@@ -485,7 +502,11 @@ def _build_reprocess_files_definitions(
             fn=lambda: _reprocess_files(config, context.op_config or {}),
         )
 
-    @dg.job(name=job_name, executor_def=dg.in_process_executor)
+    @dg.job(
+        name=job_name,
+        executor_def=dg.in_process_executor,
+        config=_default_files_run_config(config),
+    )
     def reprocess_files_job():
         reprocess_files_op()
 

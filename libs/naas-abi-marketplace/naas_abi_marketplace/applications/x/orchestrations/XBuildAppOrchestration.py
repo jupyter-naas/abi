@@ -50,6 +50,16 @@ def _run_build_cycle() -> dict:
     return summary
 
 
+def _default_run_config() -> dict:
+    """Launchpad reference — ops in graph execution order (no op config schema)."""
+    return {
+        "ops": {
+            _OP_NAME: {},
+            _MEDIA_OP_NAME: {},
+        }
+    }
+
+
 def _run_media_batch() -> dict:
     from naas_abi_marketplace.applications.x import ABIModule
     from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.media_worker import (
@@ -82,7 +92,11 @@ class XBuildAppOrchestration(DagsterOrchestration):
         def media_worker_op(_build_summary: dict) -> dict:
             return _run_media_batch()
 
-        @dg.job(name=_JOB_NAME, executor_def=dg.in_process_executor)
+        @dg.job(
+            name=_JOB_NAME,
+            executor_def=dg.in_process_executor,
+            config=_default_run_config(),
+        )
         def build_job():
             media_worker_op(build_op())
 

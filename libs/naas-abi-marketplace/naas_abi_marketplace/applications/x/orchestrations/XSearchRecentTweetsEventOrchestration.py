@@ -96,6 +96,25 @@ _PIPELINE_CONFIG_SCHEMA = {
 }
 
 
+def _default_event_run_config(
+    event_cfg: XSearchRecentTweetsEventConfiguration,
+    pipeline_op_name: str,
+) -> dict:
+    """Launchpad defaults for manual envelope replay (step 1 — graph map op)."""
+    return {
+        "ops": {
+            pipeline_op_name: {
+                "config": {
+                    "prefix": event_cfg.prefix.strip("/"),
+                    "key": "REPLACE_WITH_ENVELOPE_FILENAME.json",
+                    "persist": event_cfg.persist,
+                    "app_publish": event_cfg.app_publish,
+                }
+            }
+        }
+    }
+
+
 def _is_search_recent_tweets_put(
     prefix: str, key: str, size_bytes: int | None, watched_prefix: str
 ) -> bool:
@@ -269,7 +288,11 @@ def _build_search_recent_tweets_event_sensor(
         module = ABIModule.get_instance()
         return _app_publish_search_envelope(module, event_cfg, ingested)
 
-    @dg.job(name=job_name, executor_def=dg.in_process_executor)
+    @dg.job(
+        name=job_name,
+        executor_def=dg.in_process_executor,
+        config=_default_event_run_config(event_cfg, pipeline_op_name),
+    )
     def search_ingestion_job():
         mapped = search_pipeline_op()
         synced = dataset_sync_op(mapped)

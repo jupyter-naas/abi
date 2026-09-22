@@ -10,6 +10,7 @@ from naas_abi_marketplace.applications.x.orchestrations.XBuildAppOrchestration i
     _OP_NAME,
     _SCHEDULE_NAME,
     XBuildAppOrchestration,
+    _default_run_config,
     _run_build_cycle,
     _run_media_batch,
 )
@@ -39,6 +40,18 @@ def test_build_job_chains_media_worker_after_build():
     job = next(j for j in orch.definitions.jobs or [] if j.name == "x_build_app_x_proxy")
     op_names = {node.name for node in job.nodes}
     assert op_names == {_OP_NAME, _MEDIA_OP_NAME}
+
+
+def test_job_launchpad_defaults_list_ops_in_execution_order():
+    assert _default_run_config() == {
+        "ops": {
+            _OP_NAME: {},
+            _MEDIA_OP_NAME: {},
+        }
+    }
+    orch = XBuildAppOrchestration.New()
+    job = next(j for j in orch.definitions.jobs or [] if j.name == "x_build_app_x_proxy")
+    assert list(job.run_config["ops"].keys()) == [_OP_NAME, _MEDIA_OP_NAME]
 
 
 def test_run_build_cycle_resolves_abi_module():
