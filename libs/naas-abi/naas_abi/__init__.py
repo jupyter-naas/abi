@@ -199,6 +199,8 @@ FeatureKey = Literal[
     "slides",
     # Business documents (Forgejo HTML docs + Monaco). On for members by default.
     "documents",
+    # Business sheets (Forgejo HTML workbook + XLSX export).
+    "sheets",
 ]
 
 # Default catalog (excludes opt-in features like "code").
@@ -217,6 +219,7 @@ _ALL_FEATURES: list[FeatureKey] = [
     "settings",
     "slides",
     "documents",
+    "sheets",
 ]
 
 
@@ -228,8 +231,8 @@ def _default_role_baseline() -> dict[str, list[FeatureKey]]:
     return {
         "owner": list(_ALL_FEATURES),
         "admin": list(_ALL_FEATURES),
-        "member": ["maps", "chat", "files", "datasets", "skills", "slides", "documents"],
-        "viewer": ["maps", "chat", "files", "datasets", "skills", "slides", "documents"],
+        "member": ["maps", "chat", "files", "datasets", "skills", "slides", "documents", "sheets"],
+        "viewer": ["maps", "chat", "files", "datasets", "skills", "slides", "documents", "sheets"],
     }
 
 
@@ -266,6 +269,15 @@ class SlidesTemplateSourceConfig(BaseModel):
 
 class DocumentsTemplateSourceConfig(BaseModel):
     """An extra tree of Nexus Documents seed templates, declared by the deploy."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    namespace: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=32)
+    path: str = Field(min_length=1)
+
+
+class SheetsTemplateSourceConfig(BaseModel):
+    """Extra Nexus Sheets seed workbooks declared by the deploy."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -481,6 +493,9 @@ class NexusConfig(BaseModel):
     )
     documents_default_template_id: str | None = None
     documents_hidden_template_ids: list[str] = Field(default_factory=list)
+    sheets_template_sources: list[SheetsTemplateSourceConfig] = Field(
+        default_factory=list
+    )
     users: list[UserSeedConfig] = Field(default_factory=list)
     organizations: list[OrganizationSeedConfig] = Field(default_factory=list)
 
@@ -675,6 +690,7 @@ class ABIModule(BaseModule):
         # slides follow ``abi_agent_model``, which the engine already resolves.
         abi_slides_agent_model: str = ""
         abi_documents_agent_model: str = ""
+        abi_sheets_agent_model: str = ""
 
         # Canonical model id used by OntologyEngineerAgent. Same registry
         # semantics as ``abi_agent_model``.
@@ -715,6 +731,12 @@ class ABIModule(BaseModule):
             validate_configured_documents_model(
                 self._engine.services.model_registry,
                 self.configuration.abi_documents_agent_model,
+            )
+            from naas_abi.agents.sheets import validate_configured_sheets_model
+
+            validate_configured_sheets_model(
+                self._engine.services.model_registry,
+                self.configuration.abi_sheets_agent_model,
             )
 
         super().on_initialized()
