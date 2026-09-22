@@ -160,12 +160,14 @@ export async function applySheetsTemplate(
   if (!openSlug) {
     return startNewWorkbook(workspaceId, navigate, templateId);
   }
+  const revision = useSheetsStore.getState().workbookRevision;
+  if (!revision) throw new Error("Open the workbook before applying a template.");
   const res = await authFetch(
     `/api/sheets/projects/${encodeURIComponent(openSlug)}/apply-template`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workspace_id: workspaceId, template_id: templateId }),
+      body: JSON.stringify({ workspace_id: workspaceId, template_id: templateId, expected_revision: revision }),
     },
   );
   if (!res.ok) {

@@ -49,9 +49,7 @@ class SourceControlService(ServiceBase):
         except Exception as exc:  # noqa: BLE001
             # The forge call is the source of truth; event logging must never
             # break it.
-            logger.warning(
-                f"SourceControlService: failed to publish event: {exc}"
-            )
+            logger.warning(f"SourceControlService: failed to publish event: {exc}")
 
     def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
         return self._adapter.ensure_user(
@@ -84,6 +82,29 @@ class SourceControlService(ServiceBase):
         self, *, repo_id: str, path: str, ref: str | None = None
     ) -> FileContent:
         return self._adapter.get_file(repo_id=repo_id, path=path, ref=ref)
+
+    def compare_and_swap_file(
+        self,
+        *,
+        repo_id: str,
+        path: str,
+        content: str,
+        expected_revision: str,
+        message: str,
+        branch: str,
+        author_name: str | None = None,
+        author_email: str | None = None,
+    ) -> Commit:
+        return self._adapter.compare_and_swap_file(
+            repo_id=repo_id,
+            path=path,
+            content=content,
+            expected_revision=expected_revision,
+            message=message,
+            branch=branch,
+            author_name=author_name,
+            author_email=author_email,
+        )
 
     def upsert_file(
         self,
@@ -244,14 +265,10 @@ class SourceControlService(ServiceBase):
 
     def merge(self, *, repo_id: str, number: int, method: str = "merge") -> MergeResult:
         try:
-            result = self._adapter.merge(
-                repo_id=repo_id, number=number, method=method
-            )
+            result = self._adapter.merge(repo_id=repo_id, number=number, method=method)
         except MergeBlockedError as exc:
             self.__publish_event(
-                ProposalMergeBlocked(
-                    repo_id=repo_id, number=number, reason=str(exc)
-                )
+                ProposalMergeBlocked(repo_id=repo_id, number=number, reason=str(exc))
             )
             raise
         if result.merged:

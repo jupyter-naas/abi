@@ -52,7 +52,16 @@ describe('isSheetsWriteTool', () => {
   });
 });
 
-describe('bounded agent edits', () => {
+describe('workbook save revisions', () => {
+  it('does not reuse a previous workbook revision after switching files', () => {
+    useSheetsStore.getState().setSelectedSlug('first');
+    useSheetsStore.getState().setWorkbookRevision('revision-one');
+    useSheetsStore.getState().setSelectedSlug('first');
+    expect(useSheetsStore.getState().workbookRevision).toBe('revision-one');
+    useSheetsStore.getState().setSelectedSlug('second');
+    expect(useSheetsStore.getState().workbookRevision).toBeNull();
+  });
+
   it('recognizes bounded agent edits so an open workbook can refresh', () => {
     expect(isSheetsWriteTool('update_sheets_cells')).toBe(true);
   });
