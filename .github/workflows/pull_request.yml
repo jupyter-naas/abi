@@ -37,6 +37,20 @@ jobs:
       - name: Run checks
         run: make check
 
+      - name: Run Sheets regression tests
+        env:
+          DEBUG: "false"
+        run: |
+          uv run python -m pytest --import-mode=importlib \
+            libs/naas-abi/naas_abi/apps/nexus/sheets \
+            libs/naas-abi/naas_abi/agents/sheets \
+            libs/naas-abi/naas_abi/agents/SheetsAgent_test.py \
+            libs/naas-abi/naas_abi/agents/sheets_template_resolve_test.py \
+            libs/naas-abi/naas_abi/agents/tools/sheets_workbook_storage_test.py \
+            libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/sheets/adapters/primary/sheets__primary_adapter__FastAPI_test.py
+          cd libs/naas-abi/naas_abi/apps/nexus/apps/web
+          pnpm test -- sheets workbook-grid workbook-model create-documents-project.test.ts workspace-pane-send.test.ts
+
       - name: Run integration tests
         run: make test-integration-core
 
