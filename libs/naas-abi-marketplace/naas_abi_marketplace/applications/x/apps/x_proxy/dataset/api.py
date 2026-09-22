@@ -10,6 +10,7 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.author_stats impor
     profile_stats,
 )
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.canonical import (
+    authors_deduped_cte,
     canonical_cte,
     canonical_posts_cte,
 )
@@ -18,7 +19,6 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.matched_tweets imp
 )
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
     AUTHOR_STATS_V1,
-    AUTHORS_V1,
     X_DATASET_NAMESPACE,
     ensure_x_datasets,
 )
@@ -97,7 +97,7 @@ def search_users(
         f"  MIN(created_at) AS first_post_at, MAX(created_at) AS last_post_at "
         f"  FROM canonical_enriched GROUP BY author_id"
         f") "
-        f"SELECT COUNT(*) AS n FROM {AUTHORS_V1} a "
+        f"SELECT COUNT(*) AS n FROM authors_deduped a "
         f"INNER JOIN authors_with_posts awp ON a.author_id = awp.author_id "
         f"WHERE 1=1{where}",
         namespace=X_DATASET_NAMESPACE,
@@ -114,7 +114,7 @@ def search_users(
         f") "
         f"SELECT a.*, awp.matched_count, awp.referenced_count, "
         f"awp.first_post_at, awp.last_post_at "
-        f"FROM {AUTHORS_V1} a "
+        f"FROM authors_deduped a "
         f"INNER JOIN authors_with_posts awp ON a.author_id = awp.author_id "
         f"WHERE 1=1{where} "
         f"ORDER BY awp.matched_count + awp.referenced_count DESC, a.username "
@@ -203,15 +203,18 @@ def user_posts(
     if not _HANDLE.fullmatch(handle):
         return None, 0, []
     escaped = _escape(handle.lower())
+    author_dedup = authors_deduped_cte()
     author = dataset.query(
+        f"WITH {author_dedup} "
         f"SELECT a.*, "
         f"s.matched_count AS stat_matched_count, "
         f"s.referenced_count AS stat_referenced_count, "
         f"s.first_post_at AS stat_first_post_at, "
         f"s.last_post_at AS stat_last_post_at "
-        f"FROM {AUTHORS_V1} a "
+        f"FROM authors_deduped a "
         f"LEFT JOIN {AUTHOR_STATS_V1} s ON a.author_id = s.author_id "
-        f"WHERE lower(a.username) = '{escaped}' LIMIT 1",  # nosec B608
+        f"WHERE lower(a.username) = '{escaped}' "
+        f"ORDER BY a.seen_at DESC NULLS LAST LIMIT 1",  # nosec B608
         namespace=X_DATASET_NAMESPACE,
     )
     if not author.rows:

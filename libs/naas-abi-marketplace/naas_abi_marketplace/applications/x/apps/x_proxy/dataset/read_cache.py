@@ -74,7 +74,7 @@ def optional_module_kv(module: Any | None) -> Any | None:
         return None
     try:
         return module.engine.services.kv
-    except ValueError:
+    except (ValueError, AttributeError):
         return None
 
 

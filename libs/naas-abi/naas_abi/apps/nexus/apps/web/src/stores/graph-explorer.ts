@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { authFetch, useAuthStore } from './auth';
 import { getApiUrl } from '@/lib/config';
 import { readGraph } from '@/hooks/use-graph-request';
-import type { ExplorerCatalog, ExplorerGraph } from '@/lib/graph-explorer';
+import { pendingPollDelay, type ExplorerCatalog, type ExplorerGraph } from '@/lib/graph-explorer';
 
 interface State {
   key: string;
@@ -14,9 +14,17 @@ interface State {
   error: string | null;
   revision: number;
   fetchedAt: number;
-  load: (workspaceId: string, graphs: string[], force?: boolean) => Promise<void>;
+  loadStartedAt: number;
+  /** `silent` refetches without clearing the current data (used to poll pending graphs). */
+  load: (workspaceId: string, graphs: string[], force?: boolean, silent?: boolean) => Promise<void>;
 }
+const CATALOG_CACHE_MS = 30_000;
+/** In-flight catalog can take minutes on large graphs; allow retry after this. */
+const CATALOG_STALE_LOAD_MS = 90_000;
 let pending: AbortController | undefined;
+let pollTimer: ReturnType<typeof setTimeout> | undefined;
+/** Consecutive polls for the current key, for backoff while counts are pending. */
+let pollAttempt = 0;
 export const useGraphExplorerStore = create<State>((set, get) => ({
   key: '',
   data: null,
@@ -24,35 +32,54 @@ export const useGraphExplorerStore = create<State>((set, get) => ({
   error: null,
   revision: 0,
   fetchedAt: 0,
-  load: async (workspaceId, graphs, force = false) => {
+  loadStartedAt: 0,
+  load: async (workspaceId, graphs, force = false, silent = false) => {
     const key = JSON.stringify([workspaceId, graphs]);
     const current = get();
-    if (
-      !workspaceId ||
-      (!force && current.key === key && (current.loading || Date.now() - current.fetchedAt < 30000))
-    )
+    if (!workspaceId) return;
+    if (!force && current.key === key && !current.loading && Date.now() - current.fetchedAt < CATALOG_CACHE_MS) {
       return;
+    }
+    if (
+      !force &&
+      current.loading &&
+      current.key === key &&
+      Date.now() - current.loadStartedAt < CATALOG_STALE_LOAD_MS
+    ) {
+      return;
+    }
     pending?.abort();
+    clearTimeout(pollTimer);
     const controller = new AbortController();
     pending = controller;
-    set({
+    const startedAt = Date.now();
+    if (!silent) set({
       key,
-      data: null,
+      data: force ? null : current.key === key ? current.data : null,
       loading: true,
       error: null,
       fetchedAt: 0,
+      loadStartedAt: startedAt,
       revision: current.revision + 1,
     });
     try {
       const data = await readGraph<ExplorerCatalog>('explorer/catalog',
         JSON.stringify({ workspace_id: workspaceId, graph_uris: graphs }), controller.signal, force);
-      if (!controller.signal.aborted && get().key === key)
-        set({ data, loading: false, fetchedAt: Date.now() });
+      if (!controller.signal.aborted && get().key === key) {
+        set({ data, loading: false, fetchedAt: Date.now(), loadStartedAt: 0 });
+        if (!silent) pollAttempt = 0;
+        if (data.pending?.length)
+          pollTimer = setTimeout(() => {
+            if (get().key === key) void get().load(workspaceId, graphs, true, true);
+          }, pendingPollDelay(pollAttempt++));
+      }
     } catch (error) {
-      if (!controller.signal.aborted && get().key === key)
+      if (controller.signal.aborted || silent) return;
+      if (get().key === key)
         set({
           data: null,
           loading: false,
+          loadStartedAt: 0,
           error: error instanceof Error ? error.message : 'Could not load Explorer.',
         });
     }
@@ -61,7 +88,15 @@ export const useGraphExplorerStore = create<State>((set, get) => ({
 
 export function invalidateGraphExplorer() {
   pending?.abort();
-  useGraphExplorerStore.setState({ key: '', data: null, loading: false, error: null, fetchedAt: 0 });
+  clearTimeout(pollTimer);
+  useGraphExplorerStore.setState({
+    key: '',
+    data: null,
+    loading: false,
+    error: null,
+    fetchedAt: 0,
+    loadStartedAt: 0,
+  });
 }
 
 type GraphPack = { role_label: string; graphs: ExplorerGraph[] };
@@ -181,6 +216,16 @@ export function useGraphExplorer(workspaceId: string, graphs: string[]) {
   useEffect(() => {
     void load(workspaceId, JSON.parse(graphKey) as string[]);
   }, [load, workspaceId, graphKey, userId]);
+  useEffect(() => {
+    if (state.key !== key || !state.loading) return;
+    const timer = window.setTimeout(() => {
+      const current = useGraphExplorerStore.getState();
+      if (current.key === key && current.loading) {
+        void load(workspaceId, JSON.parse(graphKey) as string[], true);
+      }
+    }, CATALOG_STALE_LOAD_MS);
+    return () => window.clearTimeout(timer);
+  }, [key, state.key, state.loading, load, workspaceId, graphKey]);
   return {
     data: state.key === key ? state.data : null,
     error: state.key === key ? state.error : null,

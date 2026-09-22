@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { authFetch, useAuthStore } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { GraphReadCache } from '@/lib/graph-request-cache';
@@ -45,6 +45,8 @@ export function useGraphRequest<T>(endpoint: string, body: object, enabled = tru
   const payload = JSON.stringify(body);
   const key = JSON.stringify([userId, endpoint, payload]);
   const [attempt, setAttempt] = useState(0);
+  // A silent refresh keeps showing the current data until the new response lands.
+  const silentRef = useRef(false);
   const [result, setResult] = useState<{ key: string; data: T | null; error: string | null; loading: boolean }>({ key, data: null, error: null, loading: true });
   const saved = enabled && cacheable(endpoint) ? cache.get<T>(requestKey(endpoint, payload)) : undefined;
 
@@ -57,11 +59,13 @@ export function useGraphRequest<T>(endpoint: string, body: object, enabled = tru
       setResult({ key, data: cached, error: null, loading: false });
       return;
     }
-    setResult({ key, data: null, error: null, loading: true });
+    const silent = silentRef.current;
+    silentRef.current = false;
+    if (!silent) setResult({ key, data: null, error: null, loading: true });
     void readGraph<T>(endpoint, payload, controller.signal).then(data => {
       if (active) setResult({ key, data, error: null, loading: false });
     }).catch((error: unknown) => {
-      if (active) setResult({ key, data: null, error: error instanceof Error ? error.message : 'Could not load graph data. Please try again.', loading: false });
+      if (active && !silent) setResult({ key, data: null, error: error instanceof Error ? error.message : 'Could not load graph data. Please try again.', loading: false });
     });
     return () => { active = false; controller.abort(); };
   }, [endpoint, payload, key, attempt, enabled]);
@@ -71,6 +75,11 @@ export function useGraphRequest<T>(endpoint: string, body: object, enabled = tru
     setResult({ key, data: null, error: null, loading: true });
     setAttempt(value => value + 1);
   }, [endpoint, payload, key]);
+  const refresh = useCallback(() => {
+    cache.delete(requestKey(endpoint, payload));
+    silentRef.current = true;
+    setAttempt(value => value + 1);
+  }, [endpoint, payload]);
   useEffect(() => {
     if (!enabled || !cacheable(endpoint)) return;
     window.addEventListener('graph-cache-refresh', retry);
@@ -85,5 +94,6 @@ export function useGraphRequest<T>(endpoint: string, body: object, enabled = tru
     error: enabled && saved === undefined && result.key === key ? result.error : null,
     loading: enabled && saved === undefined && (result.key !== key || result.loading),
     retry,
+    refresh,
   };
 }

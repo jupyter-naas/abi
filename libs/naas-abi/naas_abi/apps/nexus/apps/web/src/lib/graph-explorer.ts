@@ -13,25 +13,40 @@ export interface ExplorerClass {
   count: number;
   parents: string[];
 }
+/** `null` = the metric could not be computed (e.g. a store read error), never 0. */
 export interface ExplorerKpis {
-  instances: number;
-  named_individuals: number;
+  instances: number | null;
+  named_individuals: number | null;
   triples: number;
-  classes: number;
-  predicates: number;
-  relations: number;
-  literal_values: number;
-  labeled_instances: number;
+  classes: number | null;
+  predicates: number | null;
+  relations: number | null;
+  literal_values: number | null;
+  labeled_instances: number | null;
+}
+export interface ExplorerGraphMetrics extends ExplorerGraph, ExplorerKpis {
+  unavailable?: string[];
+  computed_at?: string | null;
+  /** Snapshot still being computed server-side; metrics are null meanwhile. */
+  pending?: boolean;
 }
 export interface ExplorerOverview {
   permissions?: { can_create_graph: boolean };
   graphs: ExplorerGraph[];
   selected_graphs: string[];
   kpis: ExplorerKpis;
-  graph_metrics: Array<ExplorerGraph & ExplorerKpis>;
+  graph_metrics: ExplorerGraphMetrics[];
   classes: ExplorerClass[];
+  /** Metrics missing for at least one graph in the selection. */
+  unavailable?: string[];
+  /** KPI key -> graph URIs left out of that consolidated total (metric unreadable there). */
+  excluded?: Partial<Record<keyof ExplorerKpis, string[]>>;
+  /** Graph URI -> predicates whose objects could not be read (left out of relations/literals). */
+  unreadable_predicates?: Record<string, string[]>;
+  /** Graph URIs whose snapshot is still computing; they are excluded from the totals meanwhile. */
+  pending?: string[];
 }
-export type ExplorerCatalog = Pick<ExplorerOverview, 'permissions' | 'graphs' | 'selected_graphs' | 'classes'>;
+export type ExplorerCatalog = Pick<ExplorerOverview, 'permissions' | 'graphs' | 'selected_graphs' | 'classes' | 'pending'>;
 
 export function graphMode(path: string): 'explorer' | 'composer' {
   return /\/graph\/(composer|explore-next|explore)(?:\/|$)/.test(path) ? 'composer' : 'explorer';
@@ -174,4 +189,9 @@ export function groupComposerViews<
       path,
       views: items.sort((a, b) => (a.name || a.label).localeCompare(b.name || b.label)),
     }));
+}
+
+/** Poll delay while server-side snapshots compute: 5 s, doubling, capped at 30 s. */
+export function pendingPollDelay(attempt: number): number {
+  return Math.min(5_000 * 2 ** attempt, 30_000);
 }

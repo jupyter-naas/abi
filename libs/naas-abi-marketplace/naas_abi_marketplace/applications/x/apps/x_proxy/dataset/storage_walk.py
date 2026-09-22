@@ -1,12 +1,4 @@
-"""Object-storage helpers shared by the projection and its reader.
-
-``ObjectStorageService.list_objects`` is a *directory* listing, not a deep one: it
-returns the entries directly under a prefix, with nested prefixes marked by a
-trailing ``/``. Both the envelope archive
-(``x/search_recent_tweets/<query>/<file>.json``) and the partitioned cache
-(``x/cache/posts/ym=YYYY-MM/part-*.parquet``) are nested, so every caller here
-needs the recursive form.
-"""
+"""Recursive object-storage listing for nested envelope trees."""
 
 from __future__ import annotations
 
@@ -34,12 +26,12 @@ def walk(
     raising - an absent partition is a normal state before the first build.
     """
     if _depth > MAX_DEPTH:
-        logger.warning(f"X cache: stopped walking below {prefix} (max depth)")
+        logger.warning(f"X storage walk: stopped below {prefix} (max depth)")
         return []
     try:
         entries = object_storage.list_objects(prefix)
     except Exception as exc:  # noqa: BLE001 - absent prefix, or storage hiccup
-        logger.debug(f"X cache: could not list {prefix} ({exc})")
+        logger.debug(f"X storage walk: could not list {prefix} ({exc})")
         return []
 
     found: list[str] = []

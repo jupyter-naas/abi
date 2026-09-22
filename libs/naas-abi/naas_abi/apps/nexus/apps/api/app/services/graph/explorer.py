@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import logging
+from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Protocol
 
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
@@ -13,6 +15,12 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.sparql_safe import (
     sparql_iri,
     sparql_string_literal,
 )
+
+logger = logging.getLogger(__name__)
+
+# Fuseki rejects very large VALUES blocks (HTTP 400); hierarchy is best-effort only.
+_CATALOG_ENRICH_CLASS_LIMIT = 250
+_CATALOG_LABEL_BATCH = 80
 
 PREFIXES = """
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -41,6 +49,14 @@ def rows(store: QueryStore, query: str) -> list[dict[str, Any]]:
     return [row.asdict() for row in store.query(PREFIXES + query)]
 
 
+def _try_rows(store: QueryStore, query: str) -> list[dict[str, Any]]:
+    try:
+        return rows(store, query)
+    except Exception as exc:
+        logger.debug("Explorer optional SPARQL skipped: %s", exc)
+        return []
+
+
 def resolve_graphs(packs: list[GraphPackData], requested: list[str]) -> list[str]:
     allowed = {g.uri for pack in packs for g in pack.graphs}
     for uri in requested:
@@ -58,10 +74,142 @@ def local_name(uri: str) -> str:
     return uri.rsplit("#", 1)[-1].rsplit("/", 1)[-1] or uri
 
 
+def _catalog_class_counts_combined(
+    store: QueryStore, graphs: list[str]
+) -> dict[str, dict[str, Any]]:
+    scope = values(graphs)
+    return {
+        str(row["cls"]): {
+            "uri": str(row["cls"]),
+            "label": local_name(str(row["cls"])),
+            "count": int(row["total"]),
+            "parents": [],
+        }
+        for row in rows(
+            store,
+            f"""
+          SELECT ?cls (COUNT(DISTINCT ?s) AS ?total) WHERE {{
+            {scope} GRAPH ?g {{ {INSTANCE} BIND(?instanceType AS ?cls)
+              FILTER(?cls != owl:NamedIndividual) }}
+          }} GROUP BY ?cls
+        """,
+        )
+    }
+
+
+def _catalog_class_counts_one_graph(
+    store: QueryStore, graph_uri: str
+) -> dict[str, dict[str, Any]]:
+    batch = rows(
+        store,
+        f"""
+          SELECT ?cls (COUNT(DISTINCT ?s) AS ?total) WHERE {{
+            GRAPH {sparql_iri(graph_uri)} {{ {INSTANCE} BIND(?instanceType AS ?cls)
+              FILTER(?cls != owl:NamedIndividual) }}
+          }} GROUP BY ?cls
+        """,
+    )
+    return {
+        str(row["cls"]): {
+            "uri": str(row["cls"]),
+            "label": local_name(str(row["cls"])),
+            "count": int(row["total"]),
+            "parents": [],
+        }
+        for row in batch
+    }
+
+
+def _catalog_class_counts_per_graph(
+    store: QueryStore, graphs: list[str]
+) -> dict[str, dict[str, Any]]:
+    """One COUNT query per graph; sums may over-count cross-graph instances."""
+    classes: dict[str, dict[str, Any]] = {}
+    for graph_uri in graphs:
+        try:
+            batch = _catalog_class_counts_one_graph(store, graph_uri)
+        except Exception:
+            continue
+        for uri, row in batch.items():
+            if uri in classes:
+                classes[uri]["count"] += row["count"]
+            else:
+                classes[uri] = dict(row)
+    return classes
+
+
+def _catalog_class_counts(store: QueryStore, graphs: list[str]) -> dict[str, dict[str, Any]]:
+    if graphs:
+        try:
+            return _catalog_class_counts_combined(store, graphs)
+        except Exception:
+            pass
+    return _catalog_class_counts_per_graph(store, graphs)
+
+
+def _enrich_catalog_classes(
+    store: QueryStore,
+    classes: dict[str, dict[str, Any]],
+    graphs: list[str],
+    schema_uri: str,
+) -> None:
+    ranked = sorted(
+        classes.values(),
+        key=lambda c: (-int(c["count"]), c["label"].lower(), c["uri"]),
+    )[:_CATALOG_ENRICH_CLASS_LIMIT]
+    if not ranked:
+        return
+    class_values = " ".join(map(sparql_iri, (c["uri"] for c in ranked)))
+    schema_scope = values([schema_uri])
+    for row in _try_rows(
+        store,
+        f"""
+          SELECT DISTINCT ?child ?parent WHERE {{
+            VALUES ?cls {{ {class_values} }} {schema_scope}
+            GRAPH ?g {{ ?cls rdfs:subClassOf* ?child .
+              ?child rdfs:subClassOf ?parent .
+              FILTER(isIRI(?child) && isIRI(?parent)) }}
+          }}
+        """,
+    ):
+        child, parent = str(row["child"]), str(row["parent"])
+        for uri in (child, parent):
+            classes.setdefault(
+                uri,
+                {"uri": uri, "label": local_name(uri), "count": 0, "parents": []},
+            )
+        if parent not in classes[child]["parents"]:
+            classes[child]["parents"].append(parent)
+    label_scope = values(sorted(set(graphs + [schema_uri])))
+    uris = [c["uri"] for c in classes.values()]
+    for offset in range(0, len(uris), _CATALOG_LABEL_BATCH):
+        batch = uris[offset : offset + _CATALOG_LABEL_BATCH]
+        label_values = " ".join(map(sparql_iri, batch))
+        for row in _try_rows(
+            store,
+            f"""
+          SELECT ?cls (MIN(STR(?rawLabel)) AS ?label) WHERE {{
+            VALUES ?cls {{ {label_values} }} {label_scope}
+            GRAPH ?g {{ ?cls rdfs:label ?rawLabel . FILTER(isLiteral(?rawLabel)) }}
+          }} GROUP BY ?cls
+        """,
+        ):
+            classes[str(row["cls"])]["label"] = str(row["label"])
+
+
 def catalog(
-    store: QueryStore, packs: list[GraphPackData], graphs: list[str], schema_uri: str
+    store: QueryStore,
+    packs: list[GraphPackData],
+    graphs: list[str],
+    schema_uri: str,
+    *,
+    class_counts: dict[str, int] | None = None,
 ) -> dict[str, Any]:
-    """Sidebar metadata only; opening an instance view must not require dashboard totals."""
+    """Sidebar metadata only; opening an instance view must not require dashboard totals.
+
+    ``class_counts`` (class URI -> instances) lets the caller supply counts from
+    per-graph snapshots instead of scanning every selected graph again here.
+    """
     graph_catalog = {
         g.uri: {
             "uri": g.uri,
@@ -79,59 +227,15 @@ def catalog(
             "selected_graphs": [],
             "classes": [],
         }
-    scope = values(graphs)
-    classes: dict[str, dict[str, Any]] = {
-        str(row["cls"]): {
-            "uri": str(row["cls"]),
-            "label": local_name(str(row["cls"])),
-            "count": int(row["total"]),
-            "parents": [],
+    if class_counts is None:
+        classes = _catalog_class_counts(store, graphs)
+    else:
+        classes = {
+            uri: {"uri": uri, "label": local_name(uri), "count": count, "parents": []}
+            for uri, count in class_counts.items()
         }
-        for row in rows(
-            store,
-            f"""
-          SELECT ?cls (COUNT(DISTINCT ?s) AS ?total) WHERE {{
-            {scope} GRAPH ?g {{ {INSTANCE} BIND(?instanceType AS ?cls)
-              FILTER(?cls != owl:NamedIndividual) }}
-          }} GROUP BY ?cls
-        """,
-        )
-    }
-    # Only ancestors of classes in this scope. No full schema download or N+1 label lookups.
     if classes:
-        class_values = " ".join(map(sparql_iri, classes))
-        metadata_scope = values(sorted(set(graphs + [schema_uri])))
-        hierarchy = rows(
-            store,
-            f"""
-          SELECT DISTINCT ?child ?parent WHERE {{
-            VALUES ?cls {{ {class_values} }} {metadata_scope}
-            GRAPH ?g {{ ?cls rdfs:subClassOf* ?child .
-              ?child rdfs:subClassOf ?parent .
-              FILTER(isIRI(?child) && isIRI(?parent)) }}
-          }}
-        """,
-        )
-        for row in hierarchy:
-            child, parent = str(row["child"]), str(row["parent"])
-            for uri in (child, parent):
-                classes.setdefault(
-                    uri,
-                    {"uri": uri, "label": local_name(uri), "count": 0, "parents": []},
-                )
-            if parent not in classes[child]["parents"]:
-                classes[child]["parents"].append(parent)
-        label_values = " ".join(map(sparql_iri, classes))
-        for row in rows(
-            store,
-            f"""
-          SELECT ?cls (MIN(STR(?rawLabel)) AS ?label) WHERE {{
-            VALUES ?cls {{ {label_values} }} {metadata_scope}
-            GRAPH ?g {{ ?cls rdfs:label ?rawLabel . FILTER(isLiteral(?rawLabel)) }}
-          }} GROUP BY ?cls
-        """,
-        ):
-            classes[str(row["cls"])]["label"] = str(row["label"])
+        _enrich_catalog_classes(store, classes, graphs, schema_uri)
     return {
         "graphs": list(graph_catalog.values()),
         "selected_graphs": graphs,
@@ -141,9 +245,313 @@ def catalog(
     }
 
 
-def overview(
-    store: QueryStore, packs: list[GraphPackData], graphs: list[str], schema_uri: str
+# Dashboard metrics a snapshot may fail to compute independently of the others.
+SNAPSHOT_METRICS = (
+    "predicates",
+    "relations",
+    "literal_values",
+    "instances",
+    "named_individuals",
+    "labeled_instances",
+    "classes",
+)
+KPI_KEYS = (
+    "triples",
+    "instances",
+    "named_individuals",
+    "labeled_instances",
+    "classes",
+    "predicates",
+    "relations",
+    "literal_values",
+)
+
+
+def _is_transient(exc: Exception) -> bool:
+    """Store outages (connection reset, 502-504) as opposed to data errors.
+
+    A timeout is not transient: the query is too heavy for the store and would
+    time out again on the next refresh, so it is remembered like a data error.
+    """
+    if any("Timeout" in cls.__name__ for cls in type(exc).__mro__):
+        return False
+    if isinstance(exc, OSError):  # requests' transport errors subclass OSError
+        return True
+    return getattr(exc, "status_code", None) in (502, 503, 504)
+
+
+def _snapshot_metric(
+    snapshot: dict[str, Any], metric: str, graph_uri: str, compute: Any
+) -> None:
+    """Store one metric, or record it as unavailable instead of failing the dashboard.
+
+    A store that cannot decode some nodes (e.g. a damaged TDB2 node table) fails
+    every query that materialises them, while cheaper counts still succeed.
+    """
+    try:
+        compute()
+    except Exception as exc:
+        logger.warning(
+            "Explorer metric %r unavailable for %s: %s", metric, graph_uri, exc
+        )
+        snapshot["unavailable"].append(metric)
+        if _is_transient(exc):
+            snapshot["transient"].append(metric)
+
+
+# Types that make a subject a schema construct rather than an instance.
+SCHEMA_TYPES = """VALUES ?schemaType { owl:Class rdfs:Class owl:Ontology
+ owl:ObjectProperty owl:DatatypeProperty owl:AnnotationProperty rdf:Property
+ rdfs:Datatype owl:Restriction owl:Axiom }"""
+_SCHEMA_TYPE_URIS = {
+    "http://www.w3.org/2002/07/owl#" + name
+    for name in (
+        "Class", "Ontology", "ObjectProperty", "DatatypeProperty",
+        "AnnotationProperty", "Restriction", "Axiom",
+    )
+} | {
+    "http://www.w3.org/2000/01/rdf-schema#Class",
+    "http://www.w3.org/2000/01/rdf-schema#Datatype",
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#Property",
+}
+RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+
+
+def graph_snapshot(
+    store: QueryStore, graph_uri: str, skip: Iterable[str] = ()
 ) -> dict[str, Any]:
+    """Dashboard statistics for one named graph, as JSON-serialisable data.
+
+    Queries are shaped for TDB2 on multi-million-triple graphs: each is an index
+    scan with no per-row EXISTS probe. "Instance" keeps the Explorer definition
+    (typed IRI with no schema type), computed as ``typed - schema-typed`` since
+    the schema-typed side is a cheap index lookup and usually empty.
+
+    Object statistics run per predicate: an unreadable value (e.g. a damaged
+    TDB2 node table) then only drops that predicate, listed in
+    ``unreadable_predicates``, instead of the whole metric.
+
+    Metrics in ``skip`` are reported unavailable without querying: the caller
+    uses it to avoid re-running scans that recently failed or timed out.
+
+    The triple count is the reachability probe: if it fails the store is down and
+    the error propagates, so a failed query never masquerades as an empty graph.
+    Every other metric is computed by its own query and becomes ``None`` on failure.
+    """
+    scope = f"GRAPH {sparql_iri(graph_uri)}"
+    snapshot: dict[str, Any] = {
+        "graph_uri": graph_uri,
+        "triples": int(
+            rows(store, f"SELECT (COUNT(*) AS ?n) WHERE {{ {scope} {{ ?s ?p ?o }} }}")[
+                0
+            ]["n"]
+        ),
+        **dict.fromkeys(SNAPSHOT_METRICS),
+        "unreadable_predicates": [],
+        "unavailable": [],
+        # Failed because the store was unreachable, not because of the data.
+        "transient": [],
+    }
+    predicate_counts: dict[str, int] = {}
+
+    def count(pattern: str) -> int:
+        return int(
+            rows(
+                store,
+                f"SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE {{ {scope} {{ {pattern} }} }}",
+            )[0]["n"]
+        )
+
+    def predicates() -> None:
+        for row in rows(
+            store,
+            f"SELECT ?p (COUNT(*) AS ?n) WHERE {{ {scope} {{ ?s ?p ?o }} }} GROUP BY ?p",
+        ):
+            predicate_counts[str(row["p"])] = int(row["n"])
+        snapshot["predicates"] = sorted(predicate_counts)
+
+    def objects() -> None:
+        if snapshot["predicates"] is None:
+            raise ValueError("predicate list unavailable")
+        relations = literal_values = 0
+        readable = 0
+        for predicate in snapshot["predicates"]:
+            if predicate == RDF_TYPE:
+                continue  # never a relation; typed objects are IRIs
+            try:
+                row = rows(
+                    store,
+                    f"""
+          SELECT (SUM(IF(isIRI(?o), 1, 0)) AS ?iris)
+            (SUM(IF(isLiteral(?o), 1, 0)) AS ?literals)
+          WHERE {{ {scope} {{ ?s {sparql_iri(predicate)} ?o }} }}
+        """,
+                )[0]
+                # An unbound SUM means an expression raised: Jena reports
+                # unreadable nodes this way, so it is not a count of zero.
+                if row.get("iris") is None or row.get("literals") is None:
+                    raise ValueError("object aggregate unbound")
+            except Exception as exc:
+                if _is_transient(exc):
+                    raise
+                logger.warning(
+                    "Explorer: unreadable objects for %s in %s: %s",
+                    predicate, graph_uri, exc,
+                )
+                snapshot["unreadable_predicates"].append(predicate)
+                continue
+            readable += 1
+            relations += int(row["iris"])
+            literal_values += int(row["literals"])
+        if not readable and snapshot["unreadable_predicates"]:
+            raise ValueError("no predicate has readable objects")
+        snapshot["relations"] = relations
+        snapshot["literal_values"] = literal_values
+
+    def instance_counts() -> None:
+        schema_typed = f"{SCHEMA_TYPES} ?s a ?schemaType"
+        snapshot["instances"] = count(
+            "?s a ?instanceType . FILTER(isIRI(?s))"
+        ) - count(f"{schema_typed} FILTER(isIRI(?s))")
+        snapshot["named_individuals"] = count(
+            "?s a owl:NamedIndividual . FILTER(isIRI(?s))"
+        ) - count(f"{schema_typed} . ?s a owl:NamedIndividual")
+
+    def labeled() -> None:
+        label = "?s rdfs:label ?label . FILTER(isIRI(?s) && isLiteral(?label) && STRLEN(STR(?label)) > 0)"
+        snapshot["labeled_instances"] = count(
+            f"{label} FILTER EXISTS {{ ?s a ?anyType }}"
+        ) - count(f"{SCHEMA_TYPES} ?s a ?schemaType . {label}")
+
+    def classes() -> None:
+        overlap = {
+            str(row["cls"]): int(row["n"])
+            for row in rows(
+                store,
+                f"""
+          SELECT ?cls (COUNT(DISTINCT ?s) AS ?n) WHERE {{ {scope} {{
+            {SCHEMA_TYPES} ?s a ?schemaType . ?s a ?cls }} }} GROUP BY ?cls
+        """,
+            )
+        }
+        counts: dict[str, int] = {}
+        for row in rows(
+            store,
+            f"""
+          SELECT ?cls (COUNT(DISTINCT ?s) AS ?n) WHERE {{ {scope} {{
+            ?s a ?cls . FILTER(isIRI(?s)) }} }} GROUP BY ?cls
+        """,
+        ):
+            uri = str(row["cls"])
+            if (
+                row["cls"] is None
+                or not uri.startswith(("http://", "https://", "urn:"))
+                or uri in _SCHEMA_TYPE_URIS
+                or uri == NAMED
+            ):
+                continue
+            n = int(row["n"]) - overlap.get(uri, 0)
+            if n > 0:
+                counts[uri] = n
+        snapshot["classes"] = counts
+
+    skipped = set(skip)
+    for metric, compute, companion in (
+        ("predicates", predicates, None),
+        ("relations", objects, "literal_values"),
+        ("instances", instance_counts, "named_individuals"),
+        ("labeled_instances", labeled, None),
+        ("classes", classes, None),
+    ):
+        if metric in skipped:
+            snapshot["unavailable"].append(metric)
+        else:
+            _snapshot_metric(snapshot, metric, graph_uri, compute)
+        if companion and metric in snapshot["unavailable"]:
+            snapshot["unavailable"].append(companion)
+            if metric in snapshot["transient"]:
+                snapshot["transient"].append(companion)
+    return snapshot
+
+
+def _graph_kpis(snapshot: dict[str, Any]) -> dict[str, int | None]:
+    kpis: dict[str, int | None] = {
+        key: snapshot[key]
+        for key in ("triples", "instances", "named_individuals", "labeled_instances")
+    }
+    kpis["relations"] = snapshot["relations"]
+    kpis["literal_values"] = snapshot["literal_values"]
+    kpis["predicates"] = (
+        None if snapshot["predicates"] is None else len(snapshot["predicates"])
+    )
+    kpis["classes"] = (
+        None
+        if snapshot["classes"] is None
+        else sum(count > 0 for count in snapshot["classes"].values())
+    )
+    return kpis
+
+
+def consolidate(
+    snapshots: list[dict[str, Any]],
+) -> tuple[dict[str, int | None], dict[str, list[str]]]:
+    """Combine per-graph snapshots into selection KPIs.
+
+    Predicates and classes are distinct across graphs (set union). Every other
+    count is a per-graph sum, so an instance present in two graphs counts twice.
+    Graphs that could not compute a metric are left out of it and listed in the
+    returned ``excluded`` map; a metric no graph could compute is ``None``.
+    """
+    kpis: dict[str, int | None] = {}
+    excluded: dict[str, list[str]] = {}
+    for key in KPI_KEYS:
+        available = [s for s in snapshots if s[key] is not None]
+        missing = [s["graph_uri"] for s in snapshots if s[key] is None]
+        if missing:
+            excluded[key] = missing
+        if not available and snapshots:
+            kpis[key] = None
+        elif key == "predicates":
+            kpis[key] = len({p for s in available for p in s["predicates"]})
+        elif key == "classes":
+            kpis[key] = len(
+                {uri for s in available for uri, n in s["classes"].items() if n > 0}
+            )
+        else:
+            kpis[key] = sum(s[key] for s in available)
+    return kpis, excluded
+
+
+def snapshot_class_counts(snapshots: list[dict[str, Any]]) -> dict[str, int]:
+    """Per-graph class instance counts, summed across snapshots."""
+    counts: dict[str, int] = {}
+    for item in snapshots:
+        for uri, count in (item["classes"] or {}).items():
+            counts[uri] = counts.get(uri, 0) + count
+    return counts
+
+
+# Returns ``None`` while a graph's snapshot is still being computed elsewhere.
+SnapshotFn = Callable[[QueryStore, str], dict[str, Any] | None]
+
+
+def overview(
+    store: QueryStore,
+    packs: list[GraphPackData],
+    graphs: list[str],
+    schema_uri: str,
+    *,
+    snapshot: SnapshotFn = graph_snapshot,
+    max_workers: int = 1,
+) -> dict[str, Any]:
+    """Dashboard for the selected graphs, consolidated from one snapshot per graph.
+
+    ``snapshot`` lets the service serve cached per-graph snapshots; it may return
+    ``None`` for a graph still being computed, which is listed in ``pending`` and
+    makes every consolidated KPI ``None`` until it lands. ``max_workers`` computes
+    snapshots concurrently. ``schema_uri`` is kept for API symmetry.
+    """
+    _ = schema_uri
     graph_catalog = {
         g.uri: {
             "uri": g.uri,
@@ -154,98 +562,144 @@ def overview(
         for pack in packs
         for g in pack.graphs
     }
-    zero = {
-        "triples": 0,
-        "instances": 0,
-        "named_individuals": 0,
-        "labeled_instances": 0,
-        "classes": 0,
-        "predicates": 0,
-        "relations": 0,
-        "literal_values": 0,
-    }
+    zero = dict.fromkeys(KPI_KEYS, 0)
     if not graphs:
         return {
             "graphs": list(graph_catalog.values()),
             "selected_graphs": [],
             "kpis": zero,
             "classes": [],
-            "graph_metrics": [],
+            "graph_metrics": [{**meta, **zero} for meta in graph_catalog.values()],
+            "unavailable": [],
+            "excluded": {},
+            "unreadable_predicates": {},
+            "pending": [],
         }
-    scope = values(graphs)
-    triple_rows = rows(
-        store,
-        f"""
-      SELECT ?g (COUNT(*) AS ?triples) (COUNT(DISTINCT ?p) AS ?predicates)
-        (SUM(IF(isIRI(?o) && ?p != rdf:type, 1, 0)) AS ?relations)
-        (SUM(IF(isLiteral(?o), 1, 0)) AS ?literal_values)
-      WHERE {{ {scope} GRAPH ?g {{ ?s ?p ?o }} }} GROUP BY ?g
-    """,
-    )
-    per_graph: dict[str, dict[str, Any]] = {
-        uri: {**graph_catalog[uri], **zero} for uri in graphs
-    }
-    for row in triple_rows:
-        per_graph[str(row["g"])].update(
-            {
-                k: int(row[k])
-                for k in ("triples", "predicates", "relations", "literal_values")
-            }
-        )
-    for row in rows(
-        store,
-        f"""
-      SELECT ?g (COUNT(DISTINCT ?s) AS ?instances)
-      WHERE {{ {scope} GRAPH ?g {{ {INSTANCE} }} }} GROUP BY ?g
-    """,
-    ):
-        per_graph[str(row["g"])]["instances"] = int(row["instances"])
-    aggregate = rows(
-        store,
-        f"""
-      SELECT ?instances ?named_individuals ?labeled_instances WHERE {{
-        {{ SELECT (COUNT(DISTINCT ?s) AS ?instances) WHERE {{
-          {scope} GRAPH ?g {{ {INSTANCE} }}
-        }} }}
-        {{ SELECT (COUNT(DISTINCT ?s) AS ?named_individuals) WHERE {{
-          {scope} GRAPH ?g {{ {INSTANCE}
-            FILTER EXISTS {{ ?s a owl:NamedIndividual }} }}
-        }} }}
-        {{ SELECT (COUNT(DISTINCT ?s) AS ?labeled_instances) WHERE {{
-          {scope} GRAPH ?g {{ {INSTANCE}
-            FILTER EXISTS {{ ?s rdfs:label ?label .
-              FILTER(isLiteral(?label) && STRLEN(STR(?label)) > 0) }} }}
-        }} }}
-      }}
-    """,
-    )[0]
-    kpis = {
-        **zero,
-        **{
-            k: int(aggregate[k])
-            for k in ("instances", "named_individuals", "labeled_instances")
-        },
-    }
-    for key in ("triples", "relations", "literal_values"):
-        kpis[key] = sum(int(g[key]) for g in per_graph.values())
-    kpis["predicates"] = int(
-        rows(
-            store,
-            f"""
-      SELECT (COUNT(DISTINCT ?p) AS ?n)
-      WHERE {{ {scope} GRAPH ?g {{ ?s ?p ?o }} }}
-    """,
-        )[0]["n"]
-    )
-    metadata = catalog(store, packs, graphs, schema_uri)
-    kpis["classes"] = sum(c["count"] > 0 for c in metadata["classes"])
+    if max_workers > 1 and len(graphs) > 1:
+        with ThreadPoolExecutor(
+            max_workers=min(max_workers, len(graphs)),
+            thread_name_prefix="explorer-snapshot",
+        ) as pool:
+            results = list(pool.map(lambda uri: snapshot(store, uri), graphs))
+    else:
+        results = [snapshot(store, uri) for uri in graphs]
+    pending = [uri for uri, item in zip(graphs, results, strict=True) if item is None]
+    snapshots = [item for item in results if item is not None]
+    class_counts = snapshot_class_counts(snapshots)
+    kpis, excluded = consolidate(snapshots)
+    # Totals cover the graphs that are ready; pending ones are listed as excluded
+    # until their snapshot lands, so values show up as soon as any graph is done.
+    if pending:
+        excluded = {key: excluded.get(key, []) + pending for key in KPI_KEYS}
     return {
         "graphs": list(graph_catalog.values()),
         "selected_graphs": graphs,
-        "kpis": kpis,
-        "classes": metadata["classes"],
-        "graph_metrics": list(per_graph.values()),
+        "kpis": kpis if snapshots else dict.fromkeys(KPI_KEYS),
+        # Metric -> graph URIs left out of that consolidated KPI.
+        "excluded": excluded,
+        # Graph URI -> predicates whose objects could not be read; relations and
+        # literal values of that graph are counted without them.
+        "unreadable_predicates": {
+            item["graph_uri"]: item["unreadable_predicates"]
+            for item in snapshots
+            if item.get("unreadable_predicates")
+        },
+        "classes": sorted(
+            (
+                {"uri": uri, "label": local_name(uri), "count": count, "parents": []}
+                for uri, count in class_counts.items()
+            ),
+            key=lambda c: (c["label"].lower(), c["uri"]),
+        ),
+        "graph_metrics": [
+            {
+                **graph_catalog[uri],
+                **_graph_kpis(item),
+                "unavailable": item["unavailable"],
+                "computed_at": item.get("computed_at"),
+            }
+            if item is not None
+            else {
+                **graph_catalog[uri],
+                **dict.fromkeys(KPI_KEYS),
+                "unavailable": [],
+                "computed_at": None,
+                "pending": True,
+            }
+            for uri, item in zip(graphs, results, strict=True)
+        ],
+        "unavailable": sorted({m for item in snapshots for m in item["unavailable"]}),
+        "pending": pending,
     }
+
+
+def _instance_class_filter(class_uris: list[str]) -> str:
+    if not class_uris:
+        return ""
+    return "VALUES ?instanceType { " + " ".join(map(sparql_iri, class_uris)) + " }"
+
+
+def _instance_search_filter(search: str) -> str:
+    if not search.strip():
+        return ""
+    needle = sparql_string_literal(search.strip().lower())
+    return f"""FILTER(CONTAINS(LCASE(STR(?s)), {needle}) ||
+      EXISTS {{ ?s rdfs:label ?searchLabel .
+                FILTER(CONTAINS(LCASE(STR(?searchLabel)), {needle})) }})"""
+
+
+def _instance_pairs_one_graph(
+    store: QueryStore,
+    graph_uri: str,
+    class_uris: list[str],
+    search: str,
+    *,
+    limit: int,
+    offset: int,
+) -> list[tuple[str, str]]:
+    class_filter = _instance_class_filter(class_uris)
+    search_filter = _instance_search_filter(search)
+    batch = rows(
+        store,
+        f"""
+      SELECT DISTINCT ?s WHERE {{
+        GRAPH {sparql_iri(graph_uri)} {{
+          {INSTANCE} {class_filter} {search_filter}
+        }}
+      }} ORDER BY ?s LIMIT {limit} OFFSET {offset}
+    """,
+    )
+    return [(graph_uri, str(row["s"])) for row in batch]
+
+
+def _instance_page_pairs(
+    store: QueryStore,
+    graphs: list[str],
+    class_uris: list[str],
+    search: str,
+    offset: int,
+    limit: int,
+) -> tuple[list[tuple[str, str]], bool]:
+    need = limit + 1
+    if len(graphs) == 1:
+        pairs = _instance_pairs_one_graph(
+            store, graphs[0], class_uris, search, limit=need, offset=offset
+        )
+        return pairs[:limit], len(pairs) > limit
+    fetch_cap = offset + need
+    merged: list[tuple[str, str]] = []
+    for graph_uri in graphs:
+        try:
+            merged.extend(
+                _instance_pairs_one_graph(
+                    store, graph_uri, class_uris, search, limit=fetch_cap, offset=0
+                )
+            )
+        except Exception:
+            continue
+    merged.sort(key=lambda pair: (pair[1], pair[0]))
+    window = merged[offset : offset + need]
+    return window[:limit], len(window) > limit
 
 
 def instances(
@@ -261,30 +715,12 @@ def instances(
 ) -> dict[str, Any]:
     if not graphs:
         return {"items": [], "has_more": False}
-    class_filter = (
-        ("VALUES ?instanceType { " + " ".join(map(sparql_iri, class_uris)) + " }")
-        if class_uris
-        else ""
+    page_pairs, has_more = _instance_page_pairs(
+        store, graphs, class_uris, search, offset, limit
     )
-    search_filter = ""
-    if search.strip():
-        needle = sparql_string_literal(search.strip().lower())
-        search_filter = f"""FILTER(CONTAINS(LCASE(STR(?s)), {needle}) ||
-          EXISTS {{ ?s rdfs:label ?searchLabel .
-                    FILTER(CONTAINS(LCASE(STR(?searchLabel)), {needle})) }})"""
-    # Paginate graph/subject pairs before joining labels, properties or multiple rdf:types.
-    page = rows(
-        store,
-        f"""
-      SELECT DISTINCT ?g ?s WHERE {{ {values(graphs)} GRAPH ?g {{
-        {INSTANCE} {class_filter} {search_filter}
-      }} }} ORDER BY ?s ?g LIMIT {limit + 1} OFFSET {offset}
-    """,
-    )
-    has_more = len(page) > limit
-    page = page[:limit]
-    if not page:
+    if not page_pairs:
         return {"items": [], "has_more": has_more}
+    page = [{"g": g, "s": s} for g, s in page_pairs]
     pairs = (
         "VALUES (?g ?s) { "
         + " ".join(
@@ -335,12 +771,12 @@ def instances(
     class_values = " ".join(
         map(sparql_iri, sorted({i["class_uri"] for i in items.values()}))
     )
-    for row in rows(
+    for row in _try_rows(
         store,
         f"""
       SELECT ?cls (MIN(STR(?rawLabel)) AS ?label) WHERE {{
         VALUES ?cls {{ {class_values} }} {values(sorted(set(graphs + [schema_uri])))}
-        GRAPH ?g {{ ?cls rdfs:label ?rawLabel }}
+        GRAPH ?g {{ ?cls rdfs:label ?rawLabel . FILTER(isLiteral(?rawLabel)) }}
       }} GROUP BY ?cls
     """,
     ):

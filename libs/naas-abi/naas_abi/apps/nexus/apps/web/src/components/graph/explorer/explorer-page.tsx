@@ -10,12 +10,12 @@ import { preloadExplorerNetwork, ExplorerNetwork, type ExplorerNetworkData } fro
 import { ExplorerClassDetails } from './explorer-class-details';
 import { useGraphRequest } from '@/hooks/use-graph-request';
 import { useGraphExplorer } from '@/stores/graph-explorer';
-import { explorerQuery, explorerScope, type ExplorerView, type ExplorerOverview } from '@/lib/graph-explorer';
+import { explorerQuery, explorerScope, pendingPollDelay, type ExplorerKpis, type ExplorerView, type ExplorerOverview } from '@/lib/graph-explorer';
 import '@/components/ontology/ontology-dashboard.css';
 import '../instance-browser.css';
 import './graph-explorer.css';
 
-const number = (value: number) => value.toLocaleString();
+const number = (value: number | null | undefined) => (value == null ? '—' : value.toLocaleString());
 const palette = ['#3b82f6', '#0891b2', '#8b5cf6', '#d97706', '#16a34a', '#db2777'];
 
 function Dashboard({
@@ -28,41 +28,91 @@ function Dashboard({
   onInstances: () => void;
 }) {
   const k = data.kpis;
-  const coverage = k.instances ? Math.round((k.labeled_instances / k.instances) * 100) : null;
+  const multi = data.selected_graphs.length > 1;
+  const excluded = data.excluded ?? {};
+  const graphLabel = (uri: string) => data.graphs.find((g) => g.uri === uri)?.label ?? uri;
+  // A consolidated KPI may leave out graphs where that metric could not be read.
+  const pendingSet = new Set(data.pending ?? []);
+  const unreadable = data.unreadable_predicates ?? {};
+  const unreadableCount = Object.values(unreadable).reduce((n, list) => n + list.length, 0);
+  const excludedNote = (key: keyof ExplorerKpis) => {
+    const graphs = excluded[key] ?? [];
+    const counting = graphs.filter((uri) => pendingSet.has(uri)).map(graphLabel);
+    const failed = graphs.filter((uri) => !pendingSet.has(uri)).map(graphLabel);
+    const parts = [
+      counting.length ? `counting ${counting.join(', ')}…` : '',
+      failed.length ? `excl. ${failed.join(', ')}` : '',
+      (key === 'relations' || key === 'literal_values') && unreadableCount
+        ? `excl. ${unreadableCount} unreadable predicate${unreadableCount > 1 ? 's' : ''}`
+        : '',
+    ];
+    return parts.filter(Boolean).join(' · ');
+  };
+  const sameScope =
+    (excluded.instances ?? []).join() === (excluded.labeled_instances ?? []).join();
+  const coverage =
+    k.instances && k.labeled_instances != null && sameScope
+      ? Math.round((k.labeled_instances / k.instances) * 100)
+      : null;
+  const partialGraphs = [...new Set(Object.values(excluded).flat())].filter(
+    (uri) => !pendingSet.has(uri),
+  );
+  const pending = data.pending ?? [];
+  const snapshotTimes = data.graph_metrics
+    .map((g) => g.computed_at)
+    .filter((t): t is string => !!t)
+    .sort();
+  const oldestSnapshot = snapshotTimes[0] ? new Date(snapshotTimes[0]) : null;
   const metrics = [
     [
       'Instances',
       number(k.instances),
-      'Distinct typed IRIs across the selected graphs. Schema declarations and blank nodes are excluded.',
+      multi
+        ? 'Typed IRIs per graph, summed across the selected graphs. Schema declarations and blank nodes are excluded.'
+        : 'Distinct typed IRIs in this graph. Schema declarations and blank nodes are excluded.',
+      'instances',
     ],
     [
       'Triples',
       number(k.triples),
       'Stored triples across the selected named graphs. A triple in two graphs counts twice.',
+      'triples',
     ],
     [
       'Named graphs',
       number(data.selected_graphs.length),
       'Named graphs included in this dashboard, including empty graphs.',
+      null,
     ],
     [
       'Label coverage',
       coverage === null ? '—' : `${coverage}%`,
-      'Instances with a non-empty RDFS label in at least one selected graph.',
+      'Instances with a non-empty RDFS label in their graph.',
+      'labeled_instances',
     ],
-  ];
-  const breakdown = [
-    ['Classes', k.classes, 'Distinct classes used by instances.'],
-    [
-      'Named individuals',
-      k.named_individuals,
-      'Instances explicitly declared owl:NamedIndividual.',
-    ],
-    ['Predicates', k.predicates, 'Distinct predicates used in the selected graphs.'],
-    ['Relationships', k.relations, 'Triples with an IRI object, excluding rdf:type.'],
-    ['Literal values', k.literal_values, 'Triples with a literal object.'],
   ] as const;
-  const roles = [...new Set(data.graph_metrics.map((g) => g.role_label))].sort();
+  const breakdown = [
+    ['Classes', 'classes', 'Distinct classes used by instances (unique across graphs).'],
+    ['Named individuals', 'named_individuals', 'Instances explicitly declared owl:NamedIndividual.'],
+    ['Predicates', 'predicates', 'Distinct predicates used in the selected graphs (unique across graphs).'],
+    ['Relationships', 'relations', 'Triples with an IRI object, excluding rdf:type.'],
+    ['Literal values', 'literal_values', 'Triples with a literal object.'],
+  ] as const;
+  const graphTiles =
+    data.graph_metrics.length > 0
+      ? data.graph_metrics
+      : data.graphs.map((g) => ({
+          ...g,
+          triples: 0,
+          instances: 0,
+          named_individuals: 0,
+          labeled_instances: 0,
+          classes: 0,
+          predicates: 0,
+          relations: 0,
+          literal_values: 0,
+        }));
+  const roles = [...new Set(graphTiles.map((g) => g.role_label))].sort();
   return (
     <div className="ontology-dashboard">
       <main className="ontology-dashboard-main">
@@ -78,13 +128,28 @@ function Dashboard({
         </header>
         <div className="ontology-dashboard-table-heading">
           <h2>Overview</h2>
-          <span>Selected graphs</span>
+          <span>
+            {multi ? `Consolidated from ${data.selected_graphs.length} graph snapshots` : 'Selected graph'}
+            {oldestSnapshot && ` · as of ${oldestSnapshot.toLocaleTimeString()}`}
+          </span>
         </div>
+        {pending.length > 0 && (
+          <p className="ontology-dashboard-empty" role="status">
+            Counting {pending.length} of {data.selected_graphs.length} graphs… Totals below cover the
+            graphs already counted and update automatically.
+          </p>
+        )}
+        {partialGraphs.length > 0 && (
+          <p className="ontology-dashboard-empty" role="status">
+            Some totals leave out {partialGraphs.map(graphLabel).join(', ')}: the triple store could
+            not read that part of the data. Affected metrics are marked “excl.”.
+          </p>
+        )}
         <section
           className="ontology-dashboard-metrics ontology-dashboard-summary"
           aria-label="Overview"
         >
-          {metrics.map(([label, value, title], i) => (
+          {metrics.map(([label, value, title, key], i) => (
             <div className="ontology-dashboard-metric" key={label} title={title}>
               <span>{label}</span>
               <strong>
@@ -97,13 +162,20 @@ function Dashboard({
                 )}
               </strong>
               <span className="ontology-dashboard-metric-note">
-                {i === 3
-                  ? `${number(k.labeled_instances)} labeled · ${number(k.instances - k.labeled_instances)} missing`
-                  : i === 0
-                    ? 'Unique across graphs'
-                    : i === 1
-                      ? 'Across named graphs'
-                      : 'In current selection'}
+                {(key && excludedNote(key)) ||
+                  (i === 3
+                    ? `${number(k.labeled_instances)} labeled · ${number(
+                        k.instances == null || k.labeled_instances == null || !sameScope
+                          ? null
+                          : k.instances - k.labeled_instances,
+                      )} missing`
+                    : i === 0
+                      ? multi
+                        ? 'Summed across graphs'
+                        : 'Unique in this graph'
+                      : i === 1
+                        ? 'Across named graphs'
+                        : 'In current selection')}
               </span>
             </div>
           ))}
@@ -116,10 +188,13 @@ function Dashboard({
           className="ontology-dashboard-metrics graph-explorer-detail-kpis"
           aria-label="Detailed metrics"
         >
-          {breakdown.map(([label, value, title]) => (
+          {breakdown.map(([label, key, title]) => (
             <div className="ontology-dashboard-metric" key={label} title={title}>
               <span>{label}</span>
-              <strong>{number(value)}</strong>
+              <strong>{number(k[key])}</strong>
+              {excludedNote(key) && (
+                <span className="ontology-dashboard-metric-note">{excludedNote(key)}</span>
+              )}
             </div>
           ))}
         </section>
@@ -127,7 +202,7 @@ function Dashboard({
           <h2>Named graphs</h2>
           <span>Select a graph to explore its classes and instances</span>
         </div>
-        {data.graph_metrics.length === 0 ? (
+        {graphTiles.length === 0 ? (
           <p className="ontology-dashboard-empty">
             No named graphs are available. Use File → Create New Graph to get started.
           </p>
@@ -136,10 +211,10 @@ function Dashboard({
             <section className="ontology-dashboard-group" key={role}>
               <h3>
                 {role || 'Graphs'}
-                <span>{data.graph_metrics.filter((g) => g.role_label === role).length}</span>
+                <span>{graphTiles.filter((g) => g.role_label === role).length}</span>
               </h3>
               <div className="ontology-dashboard-grid">
-                {data.graph_metrics
+                {graphTiles
                   .filter((g) => g.role_label === role)
                   .map((graph, index) => (
                     <button
@@ -166,12 +241,28 @@ function Dashboard({
                           .toUpperCase() || 'G'}
                       </span>
                       <strong>{graph.label}</strong>
-                      <span className="ontology-dashboard-tile-meta">
-                        <span>{number(graph.instances)} instances</span>
-                      </span>
-                      <span className="ontology-dashboard-tile-meta">
-                        <span>{number(graph.triples)} triples</span>
-                      </span>
+                      {'pending' in graph && graph.pending ? (
+                        <span className="ontology-dashboard-tile-meta">
+                          <span>Computing…</span>
+                        </span>
+                      ) : (
+                        <>
+                          <span className="ontology-dashboard-tile-meta">
+                            <span>{number(graph.instances)} instances</span>
+                          </span>
+                          <span className="ontology-dashboard-tile-meta">
+                            <span>{number(graph.triples)} triples</span>
+                          </span>
+                        </>
+                      )}
+                      {'unavailable' in graph && graph.unavailable?.length ? (
+                        <span
+                          className="ontology-dashboard-tile-meta"
+                          title={`Unavailable: ${graph.unavailable.join(', ')}`}
+                        >
+                          <span>Incomplete metrics</span>
+                        </span>
+                      ) : null}
                     </button>
                   ))}
               </div>
@@ -179,8 +270,9 @@ function Dashboard({
           ))
         )}
         <p className="ontology-dashboard-footnote">
-          Instance counts are unique by IRI. One instance may belong to several classes or graphs;
-          their individual counts do not add up to the unique total.
+          Instance counts are unique by IRI within each graph. Across several graphs they are summed,
+          so an instance present in two graphs counts twice. Classes and predicates stay unique across
+          graphs. Graph statistics are snapshots refreshed every 5 minutes.
         </p>
       </main>
     </div>
@@ -382,6 +474,18 @@ export default function GraphExplorerPage() {
   const scope = explorerScope(query);
   const request = useGraphExplorer(workspaceId, scope.graphs);
   const overview = useGraphRequest<ExplorerOverview>('explorer/overview', { workspace_id: workspaceId, graph_uris: scope.graphs }, scope.dashboard);
+  // Poll quietly while the server is still computing graph snapshots, backing off.
+  const pollAttempt = useRef(0);
+  const pendingSnapshots = overview.data?.pending?.length ?? 0;
+  const refreshOverview = overview.refresh;
+  useEffect(() => {
+    if (!pendingSnapshots) {
+      pollAttempt.current = 0;
+      return;
+    }
+    const timer = window.setTimeout(refreshOverview, pendingPollDelay(pollAttempt.current++));
+    return () => window.clearTimeout(timer);
+  }, [overview.data, pendingSnapshots, refreshOverview]);
   const navigate = (changes: Record<string, string | string[] | null>) =>
     router.push(`/workspace/${workspaceId}/graph/explorer?${explorerQuery(query, changes)}`, {
       scroll: false,
