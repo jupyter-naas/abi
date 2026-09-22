@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.26.0 (2026-09-22)
+
+### Features
+
+- **nexus**: Native Sheets editor, formulas, resizing, and SheetsAgent
+  ([#1297](https://github.com/jupyter-naas/abi/pull/1297),
+  [`135967f`](https://github.com/jupyter-naas/abi/commit/135967f33be441c7afa9f4d82e7f1f40a4c7c465))
+
+
 ## v2.25.0 (2026-09-22)
 
 ### Bug Fixes
