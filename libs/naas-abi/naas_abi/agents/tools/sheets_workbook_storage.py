@@ -35,7 +35,6 @@ from naas_abi_core.services.agent.tools.workspace_tools import _call as _sidecar
 from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNameConflictError,
     SourceControlError,
-    content_revision,
 )
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -489,7 +488,6 @@ def _commit_workbook_forgejo(
     html: str,
     message: str,
     *,
-    expected_revision: str,
     default_type: str = "chore",
 ) -> dict[str, Any]:
     paths = resolve_paths(slug)
@@ -497,11 +495,10 @@ def _commit_workbook_forgejo(
         return {"error": paths["error"], "source": "forgejo"}
     sc = get_source_control()
     try:
-        commit = sc.compare_and_swap_file(
+        commit = sc.upsert_file(
             repo_id=repo_id(),
             path=paths["workbook_path"],
             content=html,
-            expected_revision=expected_revision,
             message=conventional_message(message, default_type=default_type),
             branch=paths["branch"],
             **agent_author(),
@@ -531,7 +528,6 @@ def persist_workbook(
     html: str,
     message: str,
     *,
-    expected_revision: str,
     default_type: str = "chore",
 ) -> dict[str, Any]:
     denied = require_agent_access(write=True)
@@ -542,12 +538,10 @@ def persist_workbook(
             slug,
             html,
             message,
-            expected_revision=expected_revision,
             default_type=default_type,
         )
         if result.get("error"):
             return result
-        result["revision"] = content_revision(html)
         result["sources"] = ["forgejo"]
         if _sidecar_available():
             mirror = _write_workbook_via_sidecar(slug, html)

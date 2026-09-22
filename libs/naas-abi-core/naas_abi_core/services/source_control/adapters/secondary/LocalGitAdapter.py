@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 from typing import NoReturn
@@ -24,16 +23,12 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Repo,
     RepoNotFoundError,
     Review,
-    RevisionConflictError,
     SourceControlError,
     WorkflowRun,
-    content_revision,
 )
 
 
-def _git_env(
-    author_name: str | None = None, author_email: str | None = None
-) -> dict[str, str]:
+def _git_env(author_name: str | None = None, author_email: str | None = None) -> dict[str, str]:
     env = os.environ.copy()
     if author_name:
         env["GIT_AUTHOR_NAME"] = author_name
@@ -115,9 +110,7 @@ class LocalGitAdapter(ISourceControlAdapter):
         )
 
     def _unsupported(self, feature: str) -> NoReturn:
-        raise NotImplementedError(
-            f"{feature} is not supported by the local_git adapter"
-        )
+        raise NotImplementedError(f"{feature} is not supported by the local_git adapter")
 
     def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
         del email
@@ -225,121 +218,6 @@ class LocalGitAdapter(ISourceControlAdapter):
             data=raw,
         )
 
-    def compare_and_swap_file(
-        self,
-        *,
-        repo_id: str,
-        path: str,
-        content: str,
-        expected_revision: str,
-        message: str,
-        branch: str,
-        author_name: str | None = None,
-        author_email: str | None = None,
-    ) -> Commit:
-        repo_path = self._repo_path(repo_id)
-        ref = f"refs/heads/{branch}"
-        env = _git_env(author_name or "abi", author_email or "abi@local")
-        head = self._run("rev-parse", ref, cwd=repo_path, env=env)
-        current = self.get_file(repo_id=repo_id, path=path, ref=head)
-        if current.text is None or content_revision(current.text) != expected_revision:
-            raise RevisionConflictError("Workbook changed. Reload before saving.")
-        if current.text == content:
-            return Commit(sha=head, message=message, author=author_name or "abi")
-        # Private index and immutable objects: never checkout a shared worktree.
-        with tempfile.TemporaryDirectory(prefix="abi-cas-") as tmp:
-            env["GIT_INDEX_FILE"] = str(Path(tmp) / "index")
-            self._run("read-tree", head, cwd=repo_path, env=env)
-            blob_file = Path(tmp) / "content"
-            blob_file.write_text(content, encoding="utf-8")
-            blob = self._run(
-                "hash-object", "-w", str(blob_file), cwd=repo_path, env=env
-            )
-            self._run(
-                "update-index",
-                "--add",
-                "--cacheinfo",
-                "100644",
-                blob,
-                path,
-                cwd=repo_path,
-                env=env,
-            )
-            tree = self._run("write-tree", cwd=repo_path, env=env)
-            commit = self._run(
-                "commit-tree", tree, "-p", head, "-m", message, cwd=repo_path, env=env
-            )
-            try:
-                self._run("update-ref", ref, commit, head, cwd=repo_path, env=env)
-            except SourceControlError as exc:
-                raise RevisionConflictError(
-                    "Workbook branch changed. Reload before saving."
-                ) from exc
-        return Commit(sha=commit, message=message, author=author_name or "abi")
-
-    def _commit_files(
-        self,
-        *,
-        repo_id: str,
-        files: Sequence[FileWrite],
-        message: str,
-        branch: str,
-        author_name: str | None,
-        author_email: str | None,
-    ) -> Commit:
-        """Build an immutable tree without changing the shared checkout/index."""
-        repo_path = self._repo_path(repo_id)
-        env = _git_env(author_name or "abi", author_email or "abi@local")
-        ref = f"refs/heads/{branch}"
-        head = self._run("rev-parse", ref, cwd=repo_path, env=env)
-        with tempfile.TemporaryDirectory(prefix="abi-tree-") as tmp:
-            env["GIT_INDEX_FILE"] = str(Path(tmp) / "index")
-            self._run("read-tree", head, cwd=repo_path, env=env)
-            for item in files:
-                path = item.path.lstrip("/")
-                if not path or ".." in Path(path).parts:
-                    raise SourceControlError("Invalid file path")
-                if item.delete:
-                    self._run(
-                        "update-index",
-                        "--force-remove",
-                        "--",
-                        path,
-                        cwd=repo_path,
-                        env=env,
-                    )
-                    continue
-                blob_file = Path(tmp) / "content"
-                blob_file.write_bytes(
-                    item.content
-                    if isinstance(item.content, bytes)
-                    else item.content.encode("utf-8")
-                )
-                blob = self._run(
-                    "hash-object", "-w", str(blob_file), cwd=repo_path, env=env
-                )
-                self._run(
-                    "update-index",
-                    "--add",
-                    "--cacheinfo",
-                    "100644",
-                    blob,
-                    path,
-                    cwd=repo_path,
-                    env=env,
-                )
-            tree = self._run("write-tree", cwd=repo_path, env=env)
-            commit = self._run(
-                "commit-tree", tree, "-p", head, "-m", message, cwd=repo_path, env=env
-            )
-            try:
-                self._run("update-ref", ref, commit, head, cwd=repo_path, env=env)
-            except SourceControlError as exc:
-                raise RevisionConflictError(
-                    "Branch changed during write. Reload before saving."
-                ) from exc
-        return Commit(sha=commit, message=message, author=author_name or "abi")
-
     def upsert_file(
         self,
         *,
@@ -351,14 +229,21 @@ class LocalGitAdapter(ISourceControlAdapter):
         author_name: str | None = None,
         author_email: str | None = None,
     ) -> Commit:
-        return self._commit_files(
-            repo_id=repo_id,
-            files=[FileWrite(path=path, content=content)],
-            message=message,
-            branch=branch,
-            author_name=author_name,
-            author_email=author_email,
-        )
+        repo_path = self._repo_path(repo_id)
+        if not self._repo_exists(repo_id):
+            raise RepoNotFoundError(repo_id)
+        env = _git_env(author_name or "abi", author_email or "abi@local")
+        self._run("checkout", branch, cwd=repo_path, env=env)
+        target = repo_path / path.lstrip("/")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(content, bytes):
+            target.write_bytes(content)
+        else:
+            target.write_text(content, encoding="utf-8")
+        self._run("add", path.lstrip("/"), cwd=repo_path, env=env)
+        self._run("commit", "-m", message, cwd=repo_path, env=env)
+        sha = self._run("rev-parse", "HEAD", cwd=repo_path, env=env)
+        return Commit(sha=sha, message=message, author=author_name or "abi")
 
     def upsert_files(
         self,
@@ -370,16 +255,36 @@ class LocalGitAdapter(ISourceControlAdapter):
         author_name: str | None = None,
         author_email: str | None = None,
     ) -> Commit:
-        if not files:
+        writes = [item for item in files if item.path]
+        if not writes:
             raise SourceControlError("upsert_files requires at least one path")
-        return self._commit_files(
-            repo_id=repo_id,
-            files=files,
-            message=message,
-            branch=branch,
-            author_name=author_name,
-            author_email=author_email,
-        )
+        repo_path = self._repo_path(repo_id)
+        if not self._repo_exists(repo_id):
+            raise RepoNotFoundError(repo_id)
+        env = _git_env(author_name or "abi", author_email or "abi@local")
+        self._run("checkout", branch, cwd=repo_path, env=env)
+        added: list[str] = []
+        removed: list[str] = []
+        for item in writes:
+            rel = item.path.lstrip("/")
+            target = repo_path / rel
+            if item.delete:
+                if target.is_file():
+                    removed.append(rel)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if isinstance(item.content, bytes):
+                target.write_bytes(item.content)
+            else:
+                target.write_text(item.content, encoding="utf-8")
+            added.append(rel)
+        if removed:
+            self._run("rm", "-q", "--", *removed, cwd=repo_path, env=env)
+        if added:
+            self._run("add", "--", *added, cwd=repo_path, env=env)
+        self._run("commit", "-m", message, cwd=repo_path, env=env)
+        sha = self._run("rev-parse", "HEAD", cwd=repo_path, env=env)
+        return Commit(sha=sha, message=message, author=author_name or "abi")
 
     def list_commits(
         self, *, repo_id: str, ref: str | None = None, limit: int = 20

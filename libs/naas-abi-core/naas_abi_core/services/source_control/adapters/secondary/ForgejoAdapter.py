@@ -41,11 +41,9 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Repo,
     RepoNotFoundError,
     Review,
-    RevisionConflictError,
     SourceControlError,
     ValidationError,
     WorkflowRun,
-    content_revision,
 )
 
 # Forgejo/Gitea commit-status state -> normalized check state.
@@ -173,9 +171,7 @@ class ForgejoAdapter(ISourceControlAdapter):
             raise AccessDeniedError(detail or "access denied", status=status)
         if status == 404:
             if "/pulls/" in path or path.endswith("/pulls"):
-                raise ProposalNotFoundError(
-                    detail or "proposal not found", status=status
-                )
+                raise ProposalNotFoundError(detail or "proposal not found", status=status)
             if "/branches" in path:
                 raise BranchNotFoundError(detail or "branch not found", status=status)
             raise RepoNotFoundError(detail or "repo not found", status=status)
@@ -295,55 +291,6 @@ class ForgejoAdapter(ISourceControlAdapter):
             text=text,
             is_binary=is_binary,
             data=data,
-        )
-
-    def compare_and_swap_file(
-        self,
-        *,
-        repo_id: str,
-        path: str,
-        content: str,
-        expected_revision: str,
-        message: str,
-        branch: str,
-        author_name: str | None = None,
-        author_email: str | None = None,
-    ) -> Commit:
-        clean_path = path.lstrip("/")
-        existing = self._request(
-            "GET",
-            f"/repos/{repo_id}/contents/{clean_path}?ref={quote(branch, safe='')}",
-        )
-        if not isinstance(existing, dict) or not existing.get("sha"):
-            raise RevisionConflictError(
-                "Workbook no longer exists. Reload before saving."
-            )
-        current = base64.b64decode(existing.get("content", "")).decode("utf-8")
-        if content_revision(current) != expected_revision:
-            raise RevisionConflictError("Workbook changed. Reload before saving.")
-        payload = {
-            "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
-            "message": message,
-            "branch": branch,
-            "sha": existing["sha"],
-        }
-        if author_name and author_email:
-            payload["author"] = {"name": author_name, "email": author_email}
-            payload["committer"] = {"name": author_name, "email": author_email}
-        try:
-            result = self._request(
-                "PUT", f"/repos/{repo_id}/contents/{clean_path}", json=payload
-            )
-        except SourceControlError as exc:
-            if _is_upsert_race(exc):
-                raise RevisionConflictError(
-                    "Workbook changed. Reload before saving."
-                ) from exc
-            raise
-        return Commit(
-            sha=result.get("commit", {}).get("sha", ""),
-            message=message,
-            author=author_name or "abi",
         )
 
     def upsert_file(
@@ -566,7 +513,9 @@ class ForgejoAdapter(ISourceControlAdapter):
             payload["committer"] = {"name": author_name, "email": author_email}
 
         try:
-            result = self._request("POST", f"/repos/{repo_id}/contents", json=payload)
+            result = self._request(
+                "POST", f"/repos/{repo_id}/contents", json=payload
+            )
         except SourceControlError as exc:
             # Older Gitea builds have no change-files route. Leftover: one
             # Contents-API commit per file.
@@ -640,7 +589,9 @@ class ForgejoAdapter(ISourceControlAdapter):
         self._request("DELETE", f"/repos/{repo_id}/branches/{name}")
 
     def get_diff(self, *, repo_id: str, base: str, head: str) -> Diff:
-        compare = self._request("GET", f"/repos/{repo_id}/compare/{base}...{head}")
+        compare = self._request(
+            "GET", f"/repos/{repo_id}/compare/{base}...{head}"
+        )
         files = compare.get("files", []) if isinstance(compare, dict) else []
         return Diff(files=tuple(self._to_diff_file(f) for f in files))
 
@@ -666,7 +617,9 @@ class ForgejoAdapter(ISourceControlAdapter):
         return self._to_proposal(repo_id, pull)
 
     def list_proposals(self, *, repo_id: str, state: str = "open") -> list[Proposal]:
-        pulls = self._request("GET", f"/repos/{repo_id}/pulls?state={state}")
+        pulls = self._request(
+            "GET", f"/repos/{repo_id}/pulls?state={state}"
+        )
         items = pulls if isinstance(pulls, list) else []
         return [self._to_proposal(repo_id, p) for p in items]
 
@@ -687,9 +640,7 @@ class ForgejoAdapter(ISourceControlAdapter):
         # The files endpoint returns metadata only (no `patch` hunks), so fetch
         # the raw unified diff and attach each file's hunks by path.
         try:
-            raw = self._request(
-                "GET", f"/repos/{repo_id}/pulls/{number}.diff", raw=True
-            )
+            raw = self._request("GET", f"/repos/{repo_id}/pulls/{number}.diff", raw=True)
         except SourceControlError:
             raw = ""
         patches = _split_unified_diff(raw if isinstance(raw, str) else "")
@@ -701,12 +652,16 @@ class ForgejoAdapter(ISourceControlAdapter):
         return [self._to_commit(c) for c in items]
 
     def list_comments(self, *, repo_id: str, number: int) -> list[Comment]:
-        comments = self._request("GET", f"/repos/{repo_id}/issues/{number}/comments")
+        comments = self._request(
+            "GET", f"/repos/{repo_id}/issues/{number}/comments"
+        )
         items = comments if isinstance(comments, list) else []
         return [self._to_comment(c) for c in items]
 
     def list_workflow_runs(self, *, repo_id: str, limit: int = 20) -> list[WorkflowRun]:
-        result = self._request("GET", f"/repos/{repo_id}/actions/tasks?limit={limit}")
+        result = self._request(
+            "GET", f"/repos/{repo_id}/actions/tasks?limit={limit}"
+        )
         runs = result.get("workflow_runs", []) if isinstance(result, dict) else []
         return [self._to_workflow_run(r) for r in runs]
 
@@ -737,7 +692,9 @@ class ForgejoAdapter(ISourceControlAdapter):
                 json={
                     "event": "COMMENT",
                     "body": body,
-                    "comments": [{"path": path, "body": body, "new_position": line}],
+                    "comments": [
+                        {"path": path, "body": body, "new_position": line}
+                    ],
                 },
             )
             return Comment(
@@ -866,11 +823,7 @@ class ForgejoAdapter(ISourceControlAdapter):
         patches = patches or {}
         path = file.get("filename", file.get("path", ""))
         old = file.get("previous_filename")
-        patch = (
-            file.get("patch")
-            or patches.get(path)
-            or (patches.get(old) if old else None)
-        )
+        patch = file.get("patch") or patches.get(path) or (patches.get(old) if old else None)
         return DiffFile(
             path=path,
             status=file.get("status", ""),

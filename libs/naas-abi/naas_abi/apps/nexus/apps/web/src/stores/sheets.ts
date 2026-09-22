@@ -61,8 +61,6 @@ interface SheetsState {
   coderUiUrl: string | null;
   /** Local editor buffer differs from last Save. */
   workbookDirty: boolean;
-  workbookRevision: string | null;
-  setWorkbookRevision: (revision: string | null) => void;
   /** Where the last loaded preview came from (sidecar vs Forgejo snapshot). */
   workbookSource: SheetsWorkbookSource;
   /** Monotonic token; editor listens and reloads workbook from server. */
@@ -108,12 +106,10 @@ export const useSheetsStore = create<SheetsState>()(
       coderPhase: null,
       coderUiUrl: null,
       workbookDirty: false,
-      workbookRevision: null,
-      setWorkbookRevision: (revision) => set({ workbookRevision: revision }),
       workbookSource: null,
       refreshToken: 0,
       agentWriting: false,
-      setSelectedSlug: (slug) => set({ selectedSlug: slug, workbookRevision: slug === get().selectedSlug ? get().workbookRevision : null }),
+      setSelectedSlug: (slug) => set({ selectedSlug: slug }),
       setSelectedTitle: (title) => set({ selectedTitle: title }),
       setSidebarView: (view) => set({ sidebarView: view }),
       setSelectedIndex: (index) => set({ selectedIndex: index }),

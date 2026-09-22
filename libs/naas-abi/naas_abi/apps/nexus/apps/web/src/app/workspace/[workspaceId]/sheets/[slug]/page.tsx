@@ -201,8 +201,6 @@ export default function SheetsEditorPage() {
   const loadGenRef = useRef(0);
   const skipTokenEffectRef = useRef(true);
   const saveInFlight = useRef(false);
-  const revisionRef = useRef<string | null>(null);
-  const saveConflict = useRef(false);
   const saveRef = useRef<() => Promise<void>>(async () => {});
   const refreshRef = useRef<() => Promise<void>>(async () => {});
 
@@ -291,12 +289,9 @@ export default function SheetsEditorPage() {
           title: string;
           branch?: string;
         };
-        const workbook = (await workbookRes.json()) as { html: string; source?: string; revision: string };
+        const workbook = (await workbookRes.json()) as { html: string; source?: string };
         if (gen !== loadGenRef.current) return;
         setTitle(proj.title);
-        revisionRef.current = workbook.revision;
-        saveConflict.current = false;
-        useSheetsStore.getState().setWorkbookRevision(workbook.revision);
         setHtml(workbook.html);
         setPreviewHtml(workbook.html);
         setSelectedIndex(
@@ -418,7 +413,7 @@ export default function SheetsEditorPage() {
   const save = useCallback(async () => {
     const workbook = htmlRef.current;
     if (!workspaceId || !slug || !workbook) return;
-    if (saveInFlight.current || saveConflict.current || !revisionRef.current) return;
+    if (saveInFlight.current) return;
     saveInFlight.current = true;
     setSaving(true);
     setError(null);
@@ -430,18 +425,14 @@ export default function SheetsEditorPage() {
         body: JSON.stringify({
           workspace_id: workspaceId,
           html: workbook,
-          expected_revision: revisionRef.current,
           message: `chore(workbook): update ${slug}`,
         }),
       });
       if (!res.ok) {
-        if (res.status === 409) saveConflict.current = true;
         const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
         throw new Error(sheetsApiErrorMessage(body.detail, `Save failed (${res.status})`));
       }
-      const body = (await res.json()) as { commit_sha?: string; revision: string };
-      revisionRef.current = body.revision;
-      useSheetsStore.getState().setWorkbookRevision(body.revision);
+      const body = (await res.json()) as { commit_sha?: string };
       // A save response must not clear edits made while that save was in flight.
       if (htmlRef.current === workbook) {
         dirtyRef.current = false;
@@ -453,7 +444,7 @@ export default function SheetsEditorPage() {
     } finally {
       saveInFlight.current = false;
       setSaving(false);
-      if (!saveConflict.current && htmlRef.current !== workbook) {
+      if (htmlRef.current !== workbook) {
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(() => void saveRef.current(), SHEETS_MANUAL_EDIT_IDLE_MS);
       }

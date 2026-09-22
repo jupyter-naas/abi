@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -276,26 +275,6 @@ class ISourceControlAdapter(ABC):
         """Fetch a single file's content at ``path`` on ``ref``."""
         raise NotImplementedError()
 
-    def compare_and_swap_file(
-        self,
-        *,
-        repo_id: str,
-        path: str,
-        content: str,
-        expected_revision: str,
-        message: str,
-        branch: str,
-        author_name: str | None = None,
-        author_email: str | None = None,
-    ) -> Commit:
-        """Atomically replace existing UTF-8 content matching its SHA-256 revision.
-
-        Fail closed when unsupported. Never retry with a newly fetched revision.
-        """
-        raise SourceControlError(
-            "Conditional file writes are unsupported by this adapter"
-        )
-
     @abstractmethod
     def upsert_file(
         self,
@@ -449,11 +428,3 @@ class ISourceControlAdapter(ABC):
     def mint_git_token(self, *, user_id: str) -> str:
         """Mint a scoped git access token for ``user_id``."""
         raise NotImplementedError()
-
-
-def content_revision(content: str) -> str:
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()
-
-
-class RevisionConflictError(SourceControlError):
-    """The file changed since the caller read it."""
