@@ -26,12 +26,13 @@ from typing import TypeVar
 
 import nats
 import nats.micro
-from google.protobuf.message import Message
+from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
 from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
+from naas_abi_core.engine.nats_rpc import respond_protobuf
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.object_storage.v1 import object_storage_pb2
 from naas_abi_core.services.object_storage.adapters.object_storage_nats_contract import (
@@ -197,7 +198,17 @@ class ObjectStoragePrimaryAdapterNATS:
             return
 
         parsed_request = request_cls()
-        parsed_request.ParseFromString(request.data)
+        try:
+            parsed_request.ParseFromString(request.data)
+        except DecodeError:
+            await self._respond_error(
+                request,
+                response_cls,
+                "INVALID_ARGUMENT",
+                "invalid protobuf request",
+                retryable=False,
+            )
+            return
 
         try:
             # The adapter port is synchronous and may block for seconds (network
@@ -229,7 +240,7 @@ class ObjectStoragePrimaryAdapterNATS:
             )
             return
 
-        await request.respond(response.SerializeToString())
+        await respond_protobuf(request, response, response_cls)
 
     def _is_authenticated(self, request: Request) -> bool:
         headers = request.headers or {}
@@ -254,7 +265,7 @@ class ObjectStoragePrimaryAdapterNATS:
         response = response_cls(
             error=common_pb2.CallError(code=code, message=message, retryable=retryable)
         )
-        await request.respond(response.SerializeToString())
+        await respond_protobuf(request, response, response_cls)
 
     # ------------------------------------------------------------------
     # Endpoint handlers -- one per non-streaming IObjectStorageAdapter method.

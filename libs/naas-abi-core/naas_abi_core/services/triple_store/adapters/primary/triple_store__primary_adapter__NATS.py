@@ -45,12 +45,13 @@ from typing import TypeVar
 import nats
 import nats.micro
 import rdflib
-from google.protobuf.message import Message
+from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
 from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
+from naas_abi_core.engine.nats_rpc import respond_protobuf
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
 from naas_abi_core.services.triple_store.adapters.triple_store_nats_contract import (
@@ -305,7 +306,17 @@ class TripleStorePrimaryAdapterNATS:
             return
 
         parsed_request = request_cls()
-        parsed_request.ParseFromString(request.data)
+        try:
+            parsed_request.ParseFromString(request.data)
+        except DecodeError:
+            await self._respond_error(
+                request,
+                response_cls,
+                "INVALID_ARGUMENT",
+                "invalid protobuf request",
+                retryable=False,
+            )
+            return
 
         try:
             # The adapter port is synchronous and may block for seconds (network
@@ -383,7 +394,7 @@ class TripleStorePrimaryAdapterNATS:
             )
             return
 
-        await request.respond(response.SerializeToString())
+        await respond_protobuf(request, response, response_cls)
 
     def _is_authenticated(self, request: Request) -> bool:
         headers = request.headers or {}
@@ -407,14 +418,16 @@ class TripleStorePrimaryAdapterNATS:
         status: int | None = None,
         detail: triple_store_pb2.TripleStoreRequestErrorDetail | None = None,
     ) -> None:
-        call_error = common_pb2.CallError(code=code, message=message, retryable=retryable)
+        call_error = common_pb2.CallError(
+            code=code, message=message, retryable=retryable
+        )
         if status is not None:
             call_error.status = status
         kwargs: dict[str, Message] = {"error": call_error}
         if detail is not None:
             kwargs["error_detail"] = detail
         response = response_cls(**kwargs)
-        await request.respond(response.SerializeToString())
+        await respond_protobuf(request, response, response_cls)
 
     # ------------------------------------------------------------------
     # Endpoint handlers -- one per ITripleStorePort method.

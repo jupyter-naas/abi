@@ -25,12 +25,13 @@ from typing import Any, TypeVar
 import nats
 import nats.micro
 from google.protobuf import json_format
-from google.protobuf.message import Message
+from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
 from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
+from naas_abi_core.engine.nats_rpc import respond_protobuf
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.dataset.v1 import dataset_pb2
 from naas_abi_core.services.dataset.adapters.dataset_nats_contract import (
@@ -300,12 +301,24 @@ class DatasetPrimaryAdapterNATS:
             await self._respond_error(
                 request,
                 response_cls,
-                self._error("UNAUTHENTICATED", "missing or invalid auth token", retryable=False),
+                self._error(
+                    "UNAUTHENTICATED", "missing or invalid auth token", retryable=False
+                ),
             )
             return
 
         parsed_request = request_cls()
-        parsed_request.ParseFromString(request.data)
+        try:
+            parsed_request.ParseFromString(request.data)
+        except DecodeError:
+            await self._respond_error(
+                request,
+                response_cls,
+                self._error(
+                    "INVALID_ARGUMENT", "invalid protobuf request", retryable=False
+                ),
+            )
+            return
 
         try:
             # The adapter port is synchronous and may block for seconds (network
@@ -389,7 +402,7 @@ class DatasetPrimaryAdapterNATS:
             )
             return
 
-        await request.respond(response.SerializeToString())
+        await respond_protobuf(request, response, response_cls)
 
     def _is_authenticated(self, request: Request) -> bool:
         headers = request.headers or {}
@@ -432,7 +445,7 @@ class DatasetPrimaryAdapterNATS:
         dataset_error: dataset_pb2.DatasetError,
     ) -> None:
         response = response_cls(error=dataset_error)
-        await request.respond(response.SerializeToString())
+        await respond_protobuf(request, response, response_cls)
 
     # ------------------------------------------------------------------
     # Endpoint handlers -- one per IDatasetPort method.

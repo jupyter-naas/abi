@@ -32,7 +32,7 @@ from typing import TypeVar
 import nats
 import nats.micro
 from google.protobuf import struct_pb2
-from google.protobuf.message import Message
+from google.protobuf.message import DecodeError, Message
 from nats.micro.request import Request
 from nats.micro.service import Service
 
@@ -41,6 +41,7 @@ from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
+from naas_abi_core.engine.nats_rpc import respond_protobuf
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.event.v1 import event_pb2
 from naas_abi_core.services.event.adapters.event_nats_contract import (
@@ -84,7 +85,8 @@ def _event_to_pb(event: StoredEvent) -> event_pb2.StoredEvent:
 # `[[tool.mypy.overrides]] module = "naas_abi_core.proto.*"`, just triggered
 # here because this hand-written code names the well-known type directly.
 def _struct_to_json_filter(
-    has_field: bool, struct: struct_pb2.Struct  # type: ignore[name-defined]
+    has_field: bool,
+    struct: struct_pb2.Struct,  # type: ignore[name-defined]
 ) -> dict | None:
     """Decode an optional wire ``Struct`` into the plain ``dict`` (or
     ``None``) ``IEventAdapter`` methods expect.
@@ -203,7 +205,17 @@ class EventPrimaryAdapterNATS:
             return
 
         parsed_request = request_cls()
-        parsed_request.ParseFromString(request.data)
+        try:
+            parsed_request.ParseFromString(request.data)
+        except DecodeError:
+            await self._respond_error(
+                request,
+                response_cls,
+                "INVALID_ARGUMENT",
+                "invalid protobuf request",
+                retryable=False,
+            )
+            return
 
         try:
             # The adapter port is synchronous and may block for seconds (network
@@ -231,7 +243,7 @@ class EventPrimaryAdapterNATS:
             )
             return
 
-        await request.respond(response.SerializeToString())
+        await respond_protobuf(request, response, response_cls)
 
     def _is_authenticated(self, request: Request) -> bool:
         headers = request.headers or {}
@@ -256,7 +268,7 @@ class EventPrimaryAdapterNATS:
         response = response_cls(
             error=common_pb2.CallError(code=code, message=message, retryable=retryable)
         )
-        await request.respond(response.SerializeToString())
+        await respond_protobuf(request, response, response_cls)
 
     # ------------------------------------------------------------------
     # Endpoint handlers -- one per IEventAdapter method.

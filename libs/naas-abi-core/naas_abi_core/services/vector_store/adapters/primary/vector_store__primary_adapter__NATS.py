@@ -39,12 +39,13 @@ from typing import TypeVar
 import nats
 import nats.micro
 import numpy as np
-from google.protobuf.message import Message
+from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
 from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
+from naas_abi_core.engine.nats_rpc import respond_protobuf
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.vector_store.v1 import vector_store_pb2
 from naas_abi_core.services.vector_store.adapters.vector_store_nats_contract import (
@@ -235,7 +236,17 @@ class VectorStorePrimaryAdapterNATS:
             return
 
         parsed_request = request_cls()
-        parsed_request.ParseFromString(request.data)
+        try:
+            parsed_request.ParseFromString(request.data)
+        except DecodeError:
+            await self._respond_error(
+                request,
+                response_cls,
+                "INVALID_ARGUMENT",
+                "invalid protobuf request",
+                retryable=False,
+            )
+            return
 
         try:
             # The adapter port is synchronous and may block for seconds (network
@@ -253,7 +264,7 @@ class VectorStorePrimaryAdapterNATS:
             )
             return
 
-        await request.respond(response.SerializeToString())
+        await respond_protobuf(request, response, response_cls)
 
     def _is_authenticated(self, request: Request) -> bool:
         headers = request.headers or {}
@@ -278,7 +289,7 @@ class VectorStorePrimaryAdapterNATS:
         response = response_cls(
             error=common_pb2.CallError(code=code, message=message, retryable=retryable)
         )
-        await request.respond(response.SerializeToString())
+        await respond_protobuf(request, response, response_cls)
 
     # ------------------------------------------------------------------
     # Endpoint handlers -- one per IVectorStorePort method.
@@ -358,7 +369,9 @@ class VectorStorePrimaryAdapterNATS:
         documents = [
             VectorDocument(
                 id=doc.id,
-                vector=_pb_to_vector(doc.vector) if doc.HasField("vector") else np.array([]),
+                vector=_pb_to_vector(doc.vector)
+                if doc.HasField("vector")
+                else np.array([]),
                 metadata=dict(doc.metadata),
                 payload=dict(doc.payload) if doc.HasField("payload") else None,
             )

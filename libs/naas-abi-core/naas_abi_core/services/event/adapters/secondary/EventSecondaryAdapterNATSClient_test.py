@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock
 import nats
 import pytest
 
-import naas_abi_core.services.event.adapters.secondary.EventSecondaryAdapterNATSClient as _client_module
 from naas_abi_core import logger
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.services.event.adapters.primary.event__primary_adapter__NATS import (
@@ -94,7 +93,7 @@ def test_token_is_issued_once_and_reused(monkeypatch):
         calls.append(identity)
         return f"token-{len(calls)}"
 
-    monkeypatch.setattr(_client_module, "issue_service_token", fake_issue)
+    monkeypatch.setattr("naas_abi_core.engine.nats_rpc.issue_service_token", fake_issue)
 
     client = EventSecondaryAdapterNATSClient("nats://127.0.0.1:4222", JWT_SECRET, "api")
 
@@ -110,7 +109,7 @@ def test_token_is_reissued_when_close_to_expiry(monkeypatch):
         calls.append(identity)
         return f"token-{len(calls)}"
 
-    monkeypatch.setattr(_client_module, "issue_service_token", fake_issue)
+    monkeypatch.setattr("naas_abi_core.engine.nats_rpc.issue_service_token", fake_issue)
 
     client = EventSecondaryAdapterNATSClient("nats://127.0.0.1:4222", JWT_SECRET, "api")
     assert client._current_token() == "token-1"
@@ -205,7 +204,7 @@ def nats_url():
         # ObjectStorageSecondaryAdapterNATSClient_test.py.
         from testcontainers.core.container import DockerContainer
 
-        with (DockerContainer("nats:2-alpine").with_exposed_ports(4222)) as container:
+        with DockerContainer("nats:2-alpine").with_exposed_ports(4222) as container:
             host = container.get_container_host_ip()
             port = container.get_exposed_port(4222)
             url = f"nats://{host}:{port}"
@@ -258,7 +257,9 @@ class TestEventSecondaryAdapterNATSClient:
 
     def test_append_round_trips_stored_event(self, _server_and_client):
         client = _server_and_client
-        stored = client.append("urn:e1", "urn:Type:A", "2026-01-01T00:00:00", b"payload-1")
+        stored = client.append(
+            "urn:e1", "urn:Type:A", "2026-01-01T00:00:00", b"payload-1"
+        )
 
         assert stored.id == "urn:e1"
         assert stored.event_type == "urn:Type:A"
@@ -278,12 +279,14 @@ class TestEventSecondaryAdapterNATSClient:
 
     def test_query_with_json_filter_pushes_down(self, _server_and_client):
         client = _server_and_client
-        client.append("urn:e1", "urn:Type:A", "2026-01-01T00:00:00", b'{"status": "ok"}')
-        client.append("urn:e2", "urn:Type:A", "2026-01-01T00:00:01", b'{"status": "fail"}')
-
-        rows = client.query(
-            event_type="urn:Type:A", json_filter={"status": ["ok"]}
+        client.append(
+            "urn:e1", "urn:Type:A", "2026-01-01T00:00:00", b'{"status": "ok"}'
         )
+        client.append(
+            "urn:e2", "urn:Type:A", "2026-01-01T00:00:01", b'{"status": "fail"}'
+        )
+
+        rows = client.query(event_type="urn:Type:A", json_filter={"status": ["ok"]})
 
         assert [r.id for r in rows] == ["urn:e1"]
 

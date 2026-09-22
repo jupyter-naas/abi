@@ -116,3 +116,23 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/event/adapters/secondary
 1. Define the class in the appropriate `ontologies/classes/.../<EventName>.py` module, inheriting from the canonical `LogProcess` (transitively).
 2. Set `_class_uri` and `_property_uris` on the class.
 3. Publish via `event_service.publish(<EventInstance>())`. **Do not** invent ad-hoc event types — they will be rejected with `InvalidEventError`.
+
+## NATS RPC adapters
+
+`adapters/primary/event__primary_adapter__NATS.py` exposes the service's
+protobuf endpoints. `adapters/secondary/EventSecondaryAdapterNATSClient.py` implements the outbound
+port. Wire contracts live under `naas_abi_core/proto/event/v1/`.
+
+Clients inherit connection, JWT renewal, deadlines, and error handling from
+`naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
+mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
+The maximum message size is 8 MiB (or a lower broker limit); oversized replies
+return non-retryable `PAYLOAD_TOO_LARGE`, and micro-service error headers raise
+instead of becoming an empty success. Larger results require streaming or a
+storage reference. No RPC is automatically replayed after transport failure:
+a timeout can hide a completed operation. Reconcile its outcome before retrying.
+`close()` releases only the client's transport, including for vector storage.
+
+Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
+are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
+The latter uses a local `nats-server` executable without Docker.
