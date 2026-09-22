@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Protocol
 
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
@@ -187,9 +188,9 @@ def _enrich_catalog_classes(
         for row in _try_rows(
             store,
             f"""
-          SELECT ?cls (MIN(STR(?label)) AS ?label) WHERE {{
+          SELECT ?cls (MIN(STR(?rawLabel)) AS ?label) WHERE {{
             VALUES ?cls {{ {label_values} }} {label_scope}
-            GRAPH ?g {{ ?cls rdfs:label ?label . FILTER(isLiteral(?label)) }}
+            GRAPH ?g {{ ?cls rdfs:label ?rawLabel . FILTER(isLiteral(?rawLabel)) }}
           }} GROUP BY ?cls
         """,
         ):
@@ -229,9 +230,225 @@ def catalog(
     }
 
 
-def overview(
-    store: QueryStore, packs: list[GraphPackData], graphs: list[str], schema_uri: str
+# Dashboard metrics a snapshot may fail to compute independently of the others.
+SNAPSHOT_METRICS = (
+    "predicates",
+    "relations",
+    "literal_values",
+    "instances",
+    "named_individuals",
+    "labeled_instances",
+    "classes",
+)
+KPI_KEYS = (
+    "triples",
+    "instances",
+    "named_individuals",
+    "labeled_instances",
+    "classes",
+    "predicates",
+    "relations",
+    "literal_values",
+)
+
+
+def _is_transient(exc: Exception) -> bool:
+    """Store outages (connection reset, timeout, 502-504) as opposed to data errors."""
+    if isinstance(exc, OSError):  # requests' transport errors subclass OSError
+        return True
+    return getattr(exc, "status_code", None) in (502, 503, 504)
+
+
+def _snapshot_metric(
+    snapshot: dict[str, Any], metric: str, graph_uri: str, compute: Any
+) -> None:
+    """Store one metric, or record it as unavailable instead of failing the dashboard.
+
+    A store that cannot decode some nodes (e.g. a damaged TDB2 node table) fails
+    every query that materialises them, while cheaper counts still succeed.
+    """
+    try:
+        compute()
+    except Exception as exc:
+        logger.warning(
+            "Explorer metric %r unavailable for %s: %s", metric, graph_uri, exc
+        )
+        snapshot["unavailable"].append(metric)
+        if _is_transient(exc):
+            snapshot["transient"].append(metric)
+
+
+def graph_snapshot(
+    store: QueryStore, graph_uri: str, skip: Iterable[str] = ()
 ) -> dict[str, Any]:
+    """Dashboard statistics for one named graph, as JSON-serialisable data.
+
+    Metrics in ``skip`` are reported unavailable without querying: the caller
+    uses it to avoid re-running full-graph scans that recently failed.
+
+    The triple count is the reachability probe: if it fails the store is down and
+    the error propagates, so a failed query never masquerades as an empty graph.
+    Every other metric is computed by its own query and becomes ``None`` on failure.
+    """
+    scope = f"GRAPH {sparql_iri(graph_uri)}"
+    snapshot: dict[str, Any] = {
+        "graph_uri": graph_uri,
+        "triples": int(
+            rows(store, f"SELECT (COUNT(*) AS ?n) WHERE {{ {scope} {{ ?s ?p ?o }} }}")[
+                0
+            ]["n"]
+        ),
+        **dict.fromkeys(SNAPSHOT_METRICS),
+        "unavailable": [],
+        # Failed because the store was unreachable, not because of the data.
+        "transient": [],
+    }
+
+    def predicates() -> None:
+        snapshot["predicates"] = sorted(
+            str(row["p"])
+            for row in rows(
+                store, f"SELECT DISTINCT ?p WHERE {{ {scope} {{ ?s ?p ?o }} }}"
+            )
+        )
+
+    def objects() -> None:
+        row = rows(
+            store,
+            f"""
+          SELECT (SUM(IF(isIRI(?o) && ?p != rdf:type, 1, 0)) AS ?relations)
+            (SUM(IF(isLiteral(?o), 1, 0)) AS ?literal_values)
+          WHERE {{ {scope} {{ ?s ?p ?o }} }}
+        """,
+        )[0]
+        # SUM over zero rows is 0; an unbound SUM means an expression raised
+        # (Jena reports unreadable nodes this way), so it is not a count.
+        if row.get("relations") is None or row.get("literal_values") is None:
+            raise ValueError("object aggregate unbound: store failed to read values")
+        snapshot["relations"] = int(row["relations"])
+        snapshot["literal_values"] = int(row["literal_values"])
+
+    def instance_counts() -> None:
+        row = rows(
+            store,
+            f"""
+          SELECT ?instances ?named_individuals WHERE {{
+            {{ SELECT (COUNT(DISTINCT ?s) AS ?instances) WHERE {{
+              {scope} {{ {INSTANCE} }} }} }}
+            {{ SELECT (COUNT(DISTINCT ?s) AS ?named_individuals) WHERE {{
+              {scope} {{ {INSTANCE} FILTER EXISTS {{ ?s a owl:NamedIndividual }} }} }} }}
+          }}
+        """,
+        )[0]
+        snapshot["instances"] = int(row["instances"])
+        snapshot["named_individuals"] = int(row["named_individuals"])
+
+    def labeled() -> None:
+        snapshot["labeled_instances"] = int(
+            rows(
+                store,
+                f"""
+          SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE {{ {scope} {{ {INSTANCE}
+            FILTER EXISTS {{ ?s rdfs:label ?label .
+              FILTER(isLiteral(?label) && STRLEN(STR(?label)) > 0) }} }} }}
+        """,
+            )[0]["n"]
+        )
+
+    def classes() -> None:
+        snapshot["classes"] = {
+            uri: int(row["count"])
+            for uri, row in _catalog_class_counts_one_graph(store, graph_uri).items()
+        }
+
+    skipped = set(skip)
+    for metric, compute, companion in (
+        ("predicates", predicates, None),
+        ("relations", objects, "literal_values"),
+        ("instances", instance_counts, "named_individuals"),
+        ("labeled_instances", labeled, None),
+        ("classes", classes, None),
+    ):
+        if metric in skipped:
+            snapshot["unavailable"].append(metric)
+        else:
+            _snapshot_metric(snapshot, metric, graph_uri, compute)
+        if companion and metric in snapshot["unavailable"]:
+            snapshot["unavailable"].append(companion)
+            if metric in snapshot["transient"]:
+                snapshot["transient"].append(companion)
+    return snapshot
+
+
+def _graph_kpis(snapshot: dict[str, Any]) -> dict[str, int | None]:
+    kpis: dict[str, int | None] = {
+        key: snapshot[key]
+        for key in ("triples", "instances", "named_individuals", "labeled_instances")
+    }
+    kpis["relations"] = snapshot["relations"]
+    kpis["literal_values"] = snapshot["literal_values"]
+    kpis["predicates"] = (
+        None if snapshot["predicates"] is None else len(snapshot["predicates"])
+    )
+    kpis["classes"] = (
+        None
+        if snapshot["classes"] is None
+        else sum(count > 0 for count in snapshot["classes"].values())
+    )
+    return kpis
+
+
+def consolidate(
+    snapshots: list[dict[str, Any]],
+) -> tuple[dict[str, int | None], dict[str, list[str]]]:
+    """Combine per-graph snapshots into selection KPIs.
+
+    Predicates and classes are distinct across graphs (set union). Every other
+    count is a per-graph sum, so an instance present in two graphs counts twice.
+    Graphs that could not compute a metric are left out of it and listed in the
+    returned ``excluded`` map; a metric no graph could compute is ``None``.
+    """
+    kpis: dict[str, int | None] = {}
+    excluded: dict[str, list[str]] = {}
+    for key in KPI_KEYS:
+        available = [s for s in snapshots if s[key] is not None]
+        missing = [s["graph_uri"] for s in snapshots if s[key] is None]
+        if missing:
+            excluded[key] = missing
+        if not available and snapshots:
+            kpis[key] = None
+        elif key == "predicates":
+            kpis[key] = len({p for s in available for p in s["predicates"]})
+        elif key == "classes":
+            kpis[key] = len(
+                {uri for s in available for uri, n in s["classes"].items() if n > 0}
+            )
+        else:
+            kpis[key] = sum(s[key] for s in available)
+    return kpis, excluded
+
+
+# Returns ``None`` while a graph's snapshot is still being computed elsewhere.
+SnapshotFn = Callable[[QueryStore, str], dict[str, Any] | None]
+
+
+def overview(
+    store: QueryStore,
+    packs: list[GraphPackData],
+    graphs: list[str],
+    schema_uri: str,
+    *,
+    snapshot: SnapshotFn = graph_snapshot,
+    max_workers: int = 1,
+) -> dict[str, Any]:
+    """Dashboard for the selected graphs, consolidated from one snapshot per graph.
+
+    ``snapshot`` lets the service serve cached per-graph snapshots; it may return
+    ``None`` for a graph still being computed, which is listed in ``pending`` and
+    makes every consolidated KPI ``None`` until it lands. ``max_workers`` computes
+    snapshots concurrently. ``schema_uri`` is kept for API symmetry.
+    """
+    _ = schema_uri
     graph_catalog = {
         g.uri: {
             "uri": g.uri,
@@ -242,98 +459,65 @@ def overview(
         for pack in packs
         for g in pack.graphs
     }
-    zero = {
-        "triples": 0,
-        "instances": 0,
-        "named_individuals": 0,
-        "labeled_instances": 0,
-        "classes": 0,
-        "predicates": 0,
-        "relations": 0,
-        "literal_values": 0,
-    }
+    zero = dict.fromkeys(KPI_KEYS, 0)
     if not graphs:
-        # Dashboard tiles read graph_metrics; list readable graphs without aggregate SPARQL.
         return {
             "graphs": list(graph_catalog.values()),
             "selected_graphs": [],
             "kpis": zero,
             "classes": [],
             "graph_metrics": [{**meta, **zero} for meta in graph_catalog.values()],
+            "unavailable": [],
+            "excluded": {},
+            "pending": [],
         }
-    scope = values(graphs)
-    triple_rows = rows(
-        store,
-        f"""
-      SELECT ?g (COUNT(*) AS ?triples) (COUNT(DISTINCT ?p) AS ?predicates)
-        (SUM(IF(isIRI(?o) && ?p != rdf:type, 1, 0)) AS ?relations)
-        (SUM(IF(isLiteral(?o), 1, 0)) AS ?literal_values)
-      WHERE {{ {scope} GRAPH ?g {{ ?s ?p ?o }} }} GROUP BY ?g
-    """,
-    )
-    per_graph: dict[str, dict[str, Any]] = {
-        uri: {**graph_catalog[uri], **zero} for uri in graphs
-    }
-    for row in triple_rows:
-        per_graph[str(row["g"])].update(
-            {
-                k: int(row[k])
-                for k in ("triples", "predicates", "relations", "literal_values")
-            }
-        )
-    for row in rows(
-        store,
-        f"""
-      SELECT ?g (COUNT(DISTINCT ?s) AS ?instances)
-      WHERE {{ {scope} GRAPH ?g {{ {INSTANCE} }} }} GROUP BY ?g
-    """,
-    ):
-        per_graph[str(row["g"])]["instances"] = int(row["instances"])
-    aggregate = rows(
-        store,
-        f"""
-      SELECT ?instances ?named_individuals ?labeled_instances WHERE {{
-        {{ SELECT (COUNT(DISTINCT ?s) AS ?instances) WHERE {{
-          {scope} GRAPH ?g {{ {INSTANCE} }}
-        }} }}
-        {{ SELECT (COUNT(DISTINCT ?s) AS ?named_individuals) WHERE {{
-          {scope} GRAPH ?g {{ {INSTANCE}
-            FILTER EXISTS {{ ?s a owl:NamedIndividual }} }}
-        }} }}
-        {{ SELECT (COUNT(DISTINCT ?s) AS ?labeled_instances) WHERE {{
-          {scope} GRAPH ?g {{ {INSTANCE}
-            FILTER EXISTS {{ ?s rdfs:label ?label .
-              FILTER(isLiteral(?label) && STRLEN(STR(?label)) > 0) }} }}
-        }} }}
-      }}
-    """,
-    )[0]
-    kpis = {
-        **zero,
-        **{
-            k: int(aggregate[k])
-            for k in ("instances", "named_individuals", "labeled_instances")
-        },
-    }
-    for key in ("triples", "relations", "literal_values"):
-        kpis[key] = sum(int(g[key]) for g in per_graph.values())
-    kpis["predicates"] = int(
-        rows(
-            store,
-            f"""
-      SELECT (COUNT(DISTINCT ?p) AS ?n)
-      WHERE {{ {scope} GRAPH ?g {{ ?s ?p ?o }} }}
-    """,
-        )[0]["n"]
-    )
-    metadata = catalog(store, packs, graphs, schema_uri)
-    kpis["classes"] = sum(c["count"] > 0 for c in metadata["classes"])
+    if max_workers > 1 and len(graphs) > 1:
+        with ThreadPoolExecutor(
+            max_workers=min(max_workers, len(graphs)),
+            thread_name_prefix="explorer-snapshot",
+        ) as pool:
+            results = list(pool.map(lambda uri: snapshot(store, uri), graphs))
+    else:
+        results = [snapshot(store, uri) for uri in graphs]
+    pending = [uri for uri, item in zip(graphs, results, strict=True) if item is None]
+    snapshots = [item for item in results if item is not None]
+    class_counts: dict[str, int] = {}
+    for item in snapshots:
+        for uri, count in (item["classes"] or {}).items():
+            class_counts[uri] = class_counts.get(uri, 0) + count
+    kpis, excluded = consolidate(snapshots)
     return {
         "graphs": list(graph_catalog.values()),
         "selected_graphs": graphs,
-        "kpis": kpis,
-        "classes": metadata["classes"],
-        "graph_metrics": list(per_graph.values()),
+        "kpis": kpis if not pending else dict.fromkeys(KPI_KEYS),
+        # Metric -> graph URIs left out of that consolidated KPI.
+        "excluded": excluded if not pending else {},
+        "classes": sorted(
+            (
+                {"uri": uri, "label": local_name(uri), "count": count, "parents": []}
+                for uri, count in class_counts.items()
+            ),
+            key=lambda c: (c["label"].lower(), c["uri"]),
+        ),
+        "graph_metrics": [
+            {
+                **graph_catalog[uri],
+                **_graph_kpis(item),
+                "unavailable": item["unavailable"],
+                "computed_at": item.get("computed_at"),
+            }
+            if item is not None
+            else {
+                **graph_catalog[uri],
+                **dict.fromkeys(KPI_KEYS),
+                "unavailable": [],
+                "computed_at": None,
+                "pending": True,
+            }
+            for uri, item in zip(graphs, results, strict=True)
+        ],
+        "unavailable": sorted({m for item in snapshots for m in item["unavailable"]}),
+        "pending": pending,
     }
 
 

@@ -8,7 +8,7 @@ import threading
 import unicodedata
 import uuid
 from collections.abc import Callable, Iterable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
@@ -308,6 +308,106 @@ def _read_stale_while_revalidate(
         return value, True
 
     return builder(**kwargs), False
+
+
+# Explorer dashboard snapshots: one per named graph, consolidated per request.
+# Short TTL because they back live counters; writes also bump the generation.
+_EXPLORER_SNAPSHOT_TTL = timedelta(minutes=5)
+# A metric that failed (e.g. unreadable nodes) is not re-scanned before this.
+# Each attempt is a full-graph scan the Fuseki adapter retries on HTTP 500, and
+# repeated scans of a multi-million-triple graph starve Fuseki's health check.
+_EXPLORER_FAILED_METRIC_TTL = timedelta(hours=1)
+# How long an overview request waits for snapshots before answering with the
+# graphs that are ready and listing the rest as pending (the client polls).
+_EXPLORER_SNAPSHOT_WAIT_SECONDS = 4.0
+# One lane: snapshots are full-graph scans, so they run strictly one at a time
+# across all requests and workspaces rather than competing for Fuseki.
+_EXPLORER_SNAPSHOT_LANE = ThreadPoolExecutor(
+    max_workers=1, thread_name_prefix="explorer-snapshot"
+)
+_EXPLORER_SNAPSHOT_JOBS: dict[str, Future[Any]] = {}
+
+
+def _build_explorer_snapshot(
+    key: str, store: Any, graph_uri: str, previous: dict[str, Any] | None
+) -> dict[str, Any]:
+    from datetime import UTC, datetime
+
+    from naas_abi.apps.nexus.apps.api.app.services.graph.explorer import graph_snapshot
+
+    now = datetime.now(UTC)
+    skip: list[str] = []
+    failed_at = None
+    if previous and previous.get("failed_at"):
+        previous_failure = datetime.fromisoformat(previous["failed_at"])
+        if now - previous_failure < _EXPLORER_FAILED_METRIC_TTL:
+            # Only data failures are remembered; outages are retried next build.
+            transient = set(previous.get("transient") or [])
+            skip = [m for m in previous.get("unavailable") or [] if m not in transient]
+            failed_at = previous["failed_at"]
+    snapshot = graph_snapshot(store, graph_uri, skip=skip)
+    snapshot["computed_at"] = now.isoformat()
+    if set(snapshot["unavailable"]) - set(snapshot["transient"]):
+        snapshot["failed_at"] = failed_at or now.isoformat()
+    try:
+        _cache.set_json(key, snapshot)
+    except Exception as exc:  # noqa: BLE001 - an uncached snapshot is still correct
+        logger.warning(f"Could not cache explorer snapshot {key!r}: {exc}")
+    return snapshot
+
+
+def _schedule_explorer_snapshot(
+    key: str, store: Any, graph_uri: str, previous: dict[str, Any] | None
+) -> Future[Any]:
+    """Queue one snapshot build on the single lane, deduplicated per key."""
+    with _REBUILDS_LOCK:
+        job = _EXPLORER_SNAPSHOT_JOBS.get(key)
+        if job is not None and not job.done():
+            return job
+        job = _EXPLORER_SNAPSHOT_LANE.submit(
+            _build_explorer_snapshot, key, store, graph_uri, previous
+        )
+        _EXPLORER_SNAPSHOT_JOBS[key] = job
+
+    def _forget(done: Future[Any]) -> None:
+        with _REBUILDS_LOCK:
+            if _EXPLORER_SNAPSHOT_JOBS.get(key) is done:
+                del _EXPLORER_SNAPSHOT_JOBS[key]
+        if done.exception() is not None:
+            logger.warning(f"Explorer snapshot {key!r} failed: {done.exception()}")
+
+    job.add_done_callback(_forget)
+    return job
+
+
+def _explorer_snapshots(
+    store: Any, keys: dict[str, str], wait_seconds: float
+) -> dict[str, dict[str, Any] | None]:
+    """Return a snapshot per graph URI, or ``None`` while it is still computing.
+
+    Fresh (< 5 min) snapshots are served as is. Expired ones are served once more
+    while a rebuild is queued. Missing ones are queued and awaited for at most
+    ``wait_seconds`` in total; a failed build surfaces as an error.
+    """
+    result: dict[str, dict[str, Any] | None] = {}
+    waiting: dict[str, Future[Any]] = {}
+    for graph_uri, key in keys.items():
+        hit, value = _cache_lookup(key, _EXPLORER_SNAPSHOT_TTL)
+        if hit:
+            result[graph_uri] = value
+            continue
+        hit, value = _cache_lookup(key, None)
+        job = _schedule_explorer_snapshot(key, store, graph_uri, value if hit else None)
+        if hit:
+            result[graph_uri] = value
+        else:
+            waiting[graph_uri] = job
+    if waiting:
+        wait(list(waiting.values()), timeout=wait_seconds)
+    for graph_uri, job in waiting.items():
+        # .result() re-raises a build failure (e.g. Fuseki unreachable).
+        result[graph_uri] = job.result() if job.done() else None
+    return result
 
 
 def _batch_ontology_labels(triple_store: TripleStoreService, uris: Iterable[str]) -> dict[str, str]:
@@ -1812,9 +1912,24 @@ class GraphService:
         )
 
         packs = await self.list_graphs(workspace_id)
-        selected = resolve_graphs(packs, graph_uris) if graph_uris else []
-        result = await asyncio.to_thread(
-            lambda: overview(self._get_triple_store(), packs, selected, str(SCHEMA_GRAPH_URI))
+        # Empty client selection = every readable graph, consolidated from
+        # per-graph snapshots. Graphs are pack-scoped here, so snapshots query
+        # the raw store with an explicit GRAPH IRI (as the catalog does).
+        selected = resolve_graphs(packs, graph_uris)
+        scoped = self._get_triple_store()
+        store = self._get_catalog_store()
+        keys = {
+            uri: _scope_cache_key(scoped, f"explorer_snapshot_v2_{uri}") for uri in selected
+        }
+        snapshots = await asyncio.to_thread(
+            _explorer_snapshots, store, keys, _EXPLORER_SNAPSHOT_WAIT_SECONDS
+        )
+        result = overview(
+            store,
+            packs,
+            selected,
+            str(SCHEMA_GRAPH_URI),
+            snapshot=lambda _, uri: snapshots[uri],
         )
         result["permissions"] = {"can_create_graph": bool(self.access_scope and self.access_scope.allow_create)}
         return result

@@ -13,23 +13,36 @@ export interface ExplorerClass {
   count: number;
   parents: string[];
 }
+/** `null` = the metric could not be computed (e.g. a store read error), never 0. */
 export interface ExplorerKpis {
-  instances: number;
-  named_individuals: number;
+  instances: number | null;
+  named_individuals: number | null;
   triples: number;
-  classes: number;
-  predicates: number;
-  relations: number;
-  literal_values: number;
-  labeled_instances: number;
+  classes: number | null;
+  predicates: number | null;
+  relations: number | null;
+  literal_values: number | null;
+  labeled_instances: number | null;
+}
+export interface ExplorerGraphMetrics extends ExplorerGraph, ExplorerKpis {
+  unavailable?: string[];
+  computed_at?: string | null;
+  /** Snapshot still being computed server-side; metrics are null meanwhile. */
+  pending?: boolean;
 }
 export interface ExplorerOverview {
   permissions?: { can_create_graph: boolean };
   graphs: ExplorerGraph[];
   selected_graphs: string[];
   kpis: ExplorerKpis;
-  graph_metrics: Array<ExplorerGraph & ExplorerKpis>;
+  graph_metrics: ExplorerGraphMetrics[];
   classes: ExplorerClass[];
+  /** Metrics missing for at least one graph in the selection. */
+  unavailable?: string[];
+  /** KPI key -> graph URIs left out of that consolidated total (metric unreadable there). */
+  excluded?: Partial<Record<keyof ExplorerKpis, string[]>>;
+  /** Graph URIs whose snapshot is still computing; consolidated KPIs are null until empty. */
+  pending?: string[];
 }
 export type ExplorerCatalog = Pick<ExplorerOverview, 'permissions' | 'graphs' | 'selected_graphs' | 'classes'>;
 
