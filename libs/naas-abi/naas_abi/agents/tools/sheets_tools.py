@@ -47,6 +47,7 @@ def _persist_model(
         slug,
         new_html,
         message,
+        expected_revision=store.content_revision(html_template),
         default_type="feat",
     )
 
@@ -130,6 +131,7 @@ def sheets_tools() -> list[BaseTool]:
         return {
             "slug": resolved,
             "source": source,
+            "revision": store.content_revision(_html),
             "title": workbook.title,
             "sheets": [tab.model_dump() for tab in workbook.sheets],
         }
@@ -137,10 +139,11 @@ def sheets_tools() -> list[BaseTool]:
     @tool
     def write_sheets_workbook(
         workbook_json: str,
+        expected_revision: str,
         slug: str = "",
         message: str = "feat(sheets): update workbook model",
     ) -> dict[str, Any]:
-        """Replace the workbook JSON model. Prefer update_sheets_cells for bounded edits."""
+        """Replace workbook JSON using expected_revision from read_sheets_workbook. Reload on conflict."""
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
         resolved = store.resolve_slug(slug)
@@ -154,6 +157,8 @@ def sheets_tools() -> list[BaseTool]:
         html, _src = store.load_workbook_text(resolved)
         if isinstance(html, dict):
             return html
+        if store.content_revision(html) != expected_revision:
+            return {"error": "Workbook changed. Read it again before replacing it."}
         result = _persist_model(resolved, workbook, html, message)
         if "error" not in result:
             note_sheets_write("workbook")

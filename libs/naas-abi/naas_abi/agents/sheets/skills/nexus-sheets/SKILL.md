@@ -46,7 +46,9 @@ See [research.md](references/research.md) for the researched UI, calculation,
 script, and template design decisions and upstream documentation.
 
 
-Prefer bounded `update_sheets_cells` for ordinary edits. Use
-`write_sheets_workbook` when replacing the full workbook model is intended.
+For a full workbook replacement, pass the `revision` from `read_sheets_workbook`
+as `expected_revision` to `write_sheets_workbook`. On a conflict, read again and
+reconcile the user's requested changes; never blindly retry old workbook JSON
+with a new revision. Prefer bounded `update_sheets_cells` for ordinary edits.
 Git storage is authoritative; use the Sheets tools rather than editing a sidecar
 file directly. Viewer sessions may read but cannot write.

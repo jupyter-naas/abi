@@ -655,6 +655,7 @@ and `pnpm typecheck`. Backend: run pytest on `apps/nexus/sheets/`,
 `agents/SheetsAgent_test.py`, and the sheets primary adapter tests. The skill's
 validation script checks HTML workbooks without mutating formulas.
 
-Sheets mutations require writer membership. Saves use the existing source-control
-upsert operations, as Slides does. Git is authoritative; sidecars are mirrors.
-Dev output is `.next-dev`, separate from the production `.next` build directory.
+Sheets mutations require writer membership. Whole-workbook saves and template
+replacements require the revision returned by GET; HTTP 409 preserves the local
+draft and pauses autosave. Git is authoritative; sidecars are mirrors. Dev output
+is `.next-dev`, separate from the production `.next` build directory.

@@ -921,6 +921,7 @@ def test_create_and_apply_template_copies_catalog_assets(tmp_path, monkeypatch) 
         json={
             "workspace_id": "ws-test",
             "template_id": "office/pixel-v1",
+            "expected_revision": deck.json()["revision"],
         },
     )
     assert applied.status_code == 200, applied.text
@@ -1078,6 +1079,7 @@ def test_history_uses_conventional_commits_and_diff_resolves_head(monkeypatch) -
         json={
             "workspace_id": "ws-test",
             "html": deck.json()["html"],
+            "expected_revision": deck.json()["revision"],
             "message": "made a copy tweak",
         },
     )
@@ -1144,6 +1146,7 @@ def test_deck_version_bumps_from_conventional_commit_history(monkeypatch) -> Non
         json={
             "workspace_id": "ws-test",
             "html": deck.json()["html"],
+            "expected_revision": deck.json()["revision"],
             "message": "fix(deck): correct typo",
         },
     )
@@ -1198,6 +1201,7 @@ def test_history_tracks_version_per_commit(monkeypatch) -> None:
         json={
             "workspace_id": "ws-test",
             "html": deck.json()["html"],
+            "expected_revision": deck.json()["revision"],
             "message": "fix(deck): correct typo",
         },
     )
@@ -1307,6 +1311,43 @@ def test_evaluate_local_draft_preserves_formula_and_requires_workspace(monkeypat
     )
 
 
+def test_stale_save_is_rejected_without_changing_storage_or_sidecar(monkeypatch):
+    sc = SourceControlService(InMemoryAdapter())
+    client = _slides_client(monkeypatch, sc)
+    assert (
+        client.post(
+            "/sheets/projects", json={"workspace_id": "ws-test", "title": "Race", "slug": "race"}
+        ).status_code
+        == 200
+    )
+    url = "/sheets/projects/race/workbook"
+    initial = client.get(url, params={"workspace_id": "ws-test"}).json()
+    mirrors = []
+    monkeypatch.setattr(
+        slides_api,
+        "_write_workbook_via_sidecar",
+        lambda *a, **kw: mirrors.append(kw["html"]) or True,
+    )
+    payload = {
+        "workspace_id": "ws-test",
+        "html": initial["html"] + "\n<!-- first -->",
+        "expected_revision": initial["revision"],
+    }
+    first = client.put(url, json=payload)
+    assert first.status_code == 200, first.text
+    payload["html"] = initial["html"] + "\n<!-- stale -->"
+    stale = client.put(url, json=payload)
+    assert stale.status_code == 409, stale.text
+    assert mirrors == [first.json()["html"]]
+    assert (
+        client.get(url, params={"workspace_id": "ws-test"}).json()["html"] == first.json()["html"]
+    )
+    assert (
+        client.put(url, json={"workspace_id": "ws-test", "html": "missing revision"}).status_code
+        == 422
+    )
+
+
 @pytest.mark.parametrize("role", ["viewer", "unknown"])
 def test_viewers_cannot_mutate_sheets(monkeypatch, role):
     sc = SourceControlService(InMemoryAdapter())
@@ -1317,6 +1358,9 @@ def test_viewers_cannot_mutate_sheets(monkeypatch, role):
         ).status_code
         == 200
     )
+    revision = client.get(
+        "/sheets/projects/roles/workbook", params={"workspace_id": "ws-test"}
+    ).json()["revision"]
 
     async def access(*args):
         return role
@@ -1333,13 +1377,13 @@ def test_viewers_cannot_mutate_sheets(monkeypatch, role):
         (
             "put",
             "/sheets/projects/roles/workbook",
-            {"html": "blocked"},
+            {"html": "blocked", "expected_revision": revision},
         ),
         ("post", "/sheets/projects/roles/sheets/delete", {"index": 0}),
         (
             "post",
             "/sheets/projects/roles/apply-template",
-            {"template_id": "grid-light-v1"},
+            {"template_id": "grid-light-v1", "expected_revision": revision},
         ),
     ]
     for method, url, body in writes:

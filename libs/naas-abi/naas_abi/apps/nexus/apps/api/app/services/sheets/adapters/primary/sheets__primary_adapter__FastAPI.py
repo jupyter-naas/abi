@@ -59,13 +59,15 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Commit,
     FileWrite,
     RepoNotFoundError,
+    RevisionConflictError,
     SourceControlError,
     ValidationError,
+    content_revision,
 )
 from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
 )
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, computed_field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -190,6 +192,8 @@ def _is_forgejo_unreachable(exc: BaseException | str) -> bool:
 
 
 def _source_control_http_error(exc: BaseException) -> HTTPException:
+    if isinstance(exc, RevisionConflictError):
+        return HTTPException(status_code=409, detail=str(exc))
     """Map forge failures: missing/down git is 503; transient writes stay 502."""
     text = str(exc or "").strip()
     repo_hint = text.split(":", 1)[0].strip() if text else ""
@@ -1015,8 +1019,14 @@ class WorkbookResponse(BaseModel):
     # Save versioning snapshot when sidecar is down: "forgejo".
     source: str | None = None
 
+    @computed_field
+    @property
+    def revision(self) -> str:
+        return content_revision(self.html)
+
 
 class WorkbookUpdateRequest(BaseModel):
+    expected_revision: str = Field(..., pattern=r"^[a-f0-9]{64}$")
     workspace_id: str = Field(..., min_length=1, max_length=100)
     html: str = Field(..., min_length=1, max_length=2_000_000)
     message: str = Field(default="chore(workbook): update sheets workbook", max_length=200)
@@ -1024,6 +1034,7 @@ class WorkbookUpdateRequest(BaseModel):
 
 
 class ApplyTemplateRequest(BaseModel):
+    expected_revision: str = Field(..., pattern=r"^[a-f0-9]{64}$")
     workspace_id: str = Field(..., min_length=1, max_length=100)
     template_id: str = Field(..., min_length=1, max_length=_TEMPLATE_ID_MAX_LEN)
 
@@ -1878,10 +1889,11 @@ async def put_deck(
             email=author_email,
             username=username,
         )
-        commit = sc.upsert_file(
+        commit = sc.compare_and_swap_file(
             repo_id=repo_id,
             path=paths["workbook_path"],
             content=body.html,
+            expected_revision=body.expected_revision,
             message=_conventional_message(body.message),
             branch=paths["branch"],
             author_name=author_name,
@@ -1952,6 +1964,7 @@ def _save_live_deck_html(
     repo_id: str,
     paths: dict[str, str],
     html: str,
+    expected_revision: str,
     message: str,
     workspace_id: str,
     slug: str,
@@ -1967,10 +1980,11 @@ def _save_live_deck_html(
         email=author_email,
         username=username,
     )
-    commit = sc.upsert_file(
+    commit = sc.compare_and_swap_file(
         repo_id=repo_id,
         path=paths["workbook_path"],
         content=html,
+        expected_revision=expected_revision,
         message=message,
         branch=paths["branch"],
         author_name=author_name,
@@ -2061,14 +2075,30 @@ async def apply_template(
             copied=len(catalog_assets),
             embedded=int(meta["embedded_images"]),
         )
-        commit = sc.upsert_files(
+        commit = sc.compare_and_swap_file(
             repo_id=repo_id,
-            files=_seed_file_writes(paths=paths, seed=seed, assets=catalog_assets, meta=meta),
+            path=paths["workbook_path"],
+            content=seed,
+            expected_revision=body.expected_revision,
             message=f"feat(sheets): apply template {body.template_id}",
             branch=paths["branch"],
             author_name=author_name,
             author_email=author_email,
         )
+        extra_files = [
+            item
+            for item in _seed_file_writes(paths=paths, seed=seed, assets=catalog_assets, meta=meta)
+            if item.path != paths["workbook_path"]
+        ]
+        if extra_files:
+            sc.upsert_files(
+                repo_id=repo_id,
+                files=extra_files,
+                message="chore(sheets): template metadata",
+                branch=paths["branch"],
+                author_name=author_name,
+                author_email=author_email,
+            )
         sidecar_ok = _write_workbook_via_sidecar(
             sidecar_base,
             sidecar_secret,
@@ -2953,6 +2983,7 @@ async def _run_workbook_tab_mutation(
             repo_id=repo_id,
             paths=paths,
             html=new_html,
+            expected_revision=content_revision(html),
             message=message,
             workspace_id=workspace_id,
             slug=slug,
