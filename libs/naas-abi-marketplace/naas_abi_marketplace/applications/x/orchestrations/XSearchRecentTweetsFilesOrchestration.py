@@ -19,10 +19,11 @@ Skip-existing: before reprocessing, the job lists the folder, queries the graph
 for the ``x:file_path`` of every ``x:SearchResultSet`` already mapped, and feeds
 only the envelopes whose path is **not** yet in the graph to
 :class:`XSearchRecentTweetsPipeline` in ``file_path`` mode (via the shared
-``run_search_pipeline_for_file`` helper). That rebuilds the full SearchQuery /
-SearchResultSet / SearchRecentTweets / Tweet structure from each new file. Set
-``skip_existing: false`` to force a full re-run over every file (the pipeline's
-label-based dedupe still makes a re-run a no-op).
+``run_search_pipeline_for_file`` helper). Envelopes already in the graph but
+missing from ``envelopes_v1`` are **not** remapped; they are synced to Dataset
+Service on this sweep instead. Set ``skip_existing: false`` to force a full
+re-run over every file (the pipeline's label-based dedupe still makes a re-run a
+no-op).
 
 ``max_age_hours`` (optional) further limits the sweep to envelopes whose
 filename timestamp (``<iso-ts>_<slug>.json``) falls within the last N hours.
@@ -65,6 +66,7 @@ from naas_abi_marketplace.applications.x.orchestrations.utils import (
     safe_name,
 )
 from naas_abi_marketplace.applications.x.orchestrations.utils._common import (
+    search_envelope_in_dataset,
     sync_x_dataset_paths_batched,
 )
 
@@ -344,18 +346,25 @@ def _reprocess_files(
         paths, skipped_recheck = _filter_paths_by_max_age(paths, cutoff=cutoff)
         skipped_age += skipped_recheck
 
-    # Reprocess only files not already in the graph: drop every path that is the
-    # x:file_path of an x:SearchResultSet already mapped into graph_name.
-    skipped = 0
+    # skip_existing: map only paths not in the graph; dataset-sync paths that are
+    # in the graph but missing from envelopes_v1 (same gap as ObjectPut Events).
+    paths_dataset_only: list[str] = []
+    skipped_fully_projected = 0
     if skip_existing:
         mapped = _mapped_file_paths(
             module.engine.services.triple_store,
             graph_name,
             module.configuration.ontology_namespace,
         )
-        before = len(paths)
-        paths = [p for p in paths if p not in mapped]
-        skipped = before - len(paths)
+        to_map: list[str] = []
+        for path in paths:
+            if path not in mapped:
+                to_map.append(path)
+            elif search_envelope_in_dataset(module, path):
+                skipped_fully_projected += 1
+            else:
+                paths_dataset_only.append(path)
+        paths = to_map
 
     age_note = (
         f", {skipped_age} older than {max_age_hours}h skipped" if max_age_hours else ""
@@ -363,7 +372,8 @@ def _reprocess_files(
     logger.info(
         f"XSearchRecentTweetsFilesOrchestration[{config.name}]: {len(paths)} "
         f"envelope(s) under {prefix!r} to reprocess via "
-        f"XSearchRecentTweetsPipeline ({skipped} already in graph skipped"
+        f"XSearchRecentTweetsPipeline ({skipped_fully_projected} fully projected "
+        f"skipped, {len(paths_dataset_only)} dataset-only catch-up"
         f"{age_note})"
     )
 
@@ -387,22 +397,25 @@ def _reprocess_files(
                 f"reprocess {file_path!r} ({exc}); continuing"
             )
 
+    dataset_paths = processed_paths + paths_dataset_only
     summary = {
         "prefix": prefix,
         "processed": processed,
-        "skipped": skipped,
+        "skipped": skipped_fully_projected,
+        "dataset_only": len(paths_dataset_only),
         "skipped_age": skipped_age,
         "max_age_hours": max_age_hours,
         "failed": failed,
     }
     # Fallback when ObjectPut ingestion missed envelopes: graph + dataset for
-    # every path we successfully mapped this sweep.
-    if processed_paths:
+    # every path mapped this sweep, plus dataset-only catch-up for graph-mapped
+    # paths missing from envelopes_v1.
+    if dataset_paths:
         summary["dataset"] = sync_x_dataset_paths_batched(
-            module, processed_paths, batch_size=64
+            module, dataset_paths, batch_size=64
         )
     else:
-        summary["dataset"] = {"skipped": True, "reason": "no_paths_mapped"}
+        summary["dataset"] = {"skipped": True, "reason": "no_paths_to_sync"}
     # Republish static app snapshots only when this sweep actually mapped
     # something (same gate as primary event path, but optional via app_publish).
     summary["app"] = republish_x_app_after_pipeline(
@@ -433,6 +446,23 @@ def _trigger_description(config: XSearchRecentTweetsFilesConfiguration) -> str:
         f"file already mapped as the x:file_path of an x:SearchResultSet, and "
         f"feed the rest to XSearchRecentTweetsPipeline."
     )
+
+
+def _default_files_run_config(
+    entry_config: XSearchRecentTweetsFilesConfiguration,
+) -> dict:
+    """Launchpad defaults for one files-reprocess job (single op, step 1)."""
+    safe = safe_name(entry_config.name)
+    op_name = f"x_reprocess_recent_tweets_files_op_{safe}"
+    body: dict[str, object] = {
+        "prefix": entry_config.prefix,
+        "persist": entry_config.persist,
+        "skip_existing": entry_config.skip_existing,
+        "app_publish": entry_config.app_publish,
+    }
+    if entry_config.max_age_hours is not None:
+        body["max_age_hours"] = entry_config.max_age_hours
+    return {"ops": {op_name: {"config": body}}}
 
 
 def _build_reprocess_files_definitions(
@@ -472,7 +502,11 @@ def _build_reprocess_files_definitions(
             fn=lambda: _reprocess_files(config, context.op_config or {}),
         )
 
-    @dg.job(name=job_name, executor_def=dg.in_process_executor)
+    @dg.job(
+        name=job_name,
+        executor_def=dg.in_process_executor,
+        config=_default_files_run_config(config),
+    )
     def reprocess_files_job():
         reprocess_files_op()
 

@@ -85,7 +85,34 @@ _PIPELINE_CONFIG_SCHEMA = {
             "unless set) — turn on here to force a rebuild for one run."
         ),
     ),
+    "skip_graph_map": dg.Field(
+        bool,
+        is_required=False,
+        description=(
+            "Skip XSearchRecentTweetsPipeline when triples already exist; run "
+            "dataset sync (and optional app publish) only."
+        ),
+    ),
 }
+
+
+def _default_event_run_config(
+    event_cfg: XSearchRecentTweetsEventConfiguration,
+    pipeline_op_name: str,
+) -> dict:
+    """Launchpad defaults for manual envelope replay (step 1 — graph map op)."""
+    return {
+        "ops": {
+            pipeline_op_name: {
+                "config": {
+                    "prefix": event_cfg.prefix.strip("/"),
+                    "key": "REPLACE_WITH_ENVELOPE_FILENAME.json",
+                    "persist": event_cfg.persist,
+                    "app_publish": event_cfg.app_publish,
+                }
+            }
+        }
+    }
 
 
 def _is_search_recent_tweets_put(
@@ -138,6 +165,13 @@ def _graph_ingest_search_envelope(
     prefix = op_cfg["prefix"]
     key = op_cfg["key"]
     file_path = posixpath.join(prefix, key)
+
+    if launchpad_override(op_cfg, "skip_graph_map", False):
+        logger.info(
+            f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: "
+            f"graph already has {file_path}; skipping map (dataset sync only)"
+        )
+        return {"file_path": file_path, "op_cfg": op_cfg}
 
     logger.info(
         f"XSearchRecentTweetsEventOrchestration[{event_cfg.name}]: mapping "
@@ -254,7 +288,11 @@ def _build_search_recent_tweets_event_sensor(
         module = ABIModule.get_instance()
         return _app_publish_search_envelope(module, event_cfg, ingested)
 
-    @dg.job(name=job_name, executor_def=dg.in_process_executor)
+    @dg.job(
+        name=job_name,
+        executor_def=dg.in_process_executor,
+        config=_default_event_run_config(event_cfg, pipeline_op_name),
+    )
     def search_ingestion_job():
         mapped = search_pipeline_op()
         synced = dataset_sync_op(mapped)
@@ -363,11 +401,11 @@ def _build_search_recent_tweets_event_sensor(
                     f"metadata probe failed for {prefix}/{key} ({exc}); "
                     f"enqueuing anyway rather than risk dropping the event"
                 )
-            # Skip files already mapped into the graph (e.g. a freshen step
-            # mapped this envelope inline). The pipeline's deterministic URIs
-            # make a re-map a harmless no-op, but skipping it here saves the
-            # file read + graph build. Fails open (proceeds to ingest) on any
-            # probe error, so this never drops ingestion.
+            # New envelopes: map + dataset sync in the job. Skip re-runs when
+            # the graph already has this path (idempotent re-map would no-op).
+            # Graph without ``envelopes_v1`` is caught by
+            # XSearchRecentTweetsFilesOrchestration (scheduled reprocess), not
+            # here — ObjectPut is consumed once per write.
             file_path = posixpath.join(prefix, key)
             if search_envelope_ingested(module, file_path):
                 logger.info(
