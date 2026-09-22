@@ -47,7 +47,9 @@ def _run_backfill(module, *, batch_size: int) -> dict:
     from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.envelope_paths import (
         ENVELOPE_PREFIX,
     )
-    from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.storage_walk import walk
+    from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.storage_walk import (
+        walk,
+    )
     from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.sync import (
         sync_envelope_paths,
     )
