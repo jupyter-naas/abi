@@ -5,7 +5,6 @@ from threading import Event as ThreadingEvent
 from threading import Thread
 from unittest.mock import AsyncMock
 
-import naas_abi_core.services.cache.adapters.secondary.CacheSecondaryAdapterNATSClient as _client_module
 import nats
 import pytest
 from naas_abi_core import logger
@@ -43,17 +42,13 @@ def test_init_is_lazy(monkeypatch):
 
 
 def test_close_without_connecting_is_a_noop():
-    client = CacheSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api"
-    )
+    client = CacheSecondaryAdapterNATSClient("nats://127.0.0.1:4222", JWT_SECRET, "api")
     client.close()  # must not raise, must not connect
 
 
 def test_context_manager_calls_close():
     closed = []
-    client = CacheSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api"
-    )
+    client = CacheSecondaryAdapterNATSClient("nats://127.0.0.1:4222", JWT_SECRET, "api")
     client.close = lambda: closed.append(True)  # type: ignore[method-assign]
 
     with client:
@@ -102,11 +97,9 @@ def test_token_is_issued_once_and_reused(monkeypatch):
         calls.append(identity)
         return f"token-{len(calls)}"
 
-    monkeypatch.setattr(_client_module, "issue_service_token", fake_issue)
+    monkeypatch.setattr("naas_abi_core.engine.nats_rpc.issue_service_token", fake_issue)
 
-    client = CacheSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api"
-    )
+    client = CacheSecondaryAdapterNATSClient("nats://127.0.0.1:4222", JWT_SECRET, "api")
 
     assert client._current_token() == "token-1"
     assert client._current_token() == "token-1"
@@ -120,11 +113,9 @@ def test_token_is_reissued_when_close_to_expiry(monkeypatch):
         calls.append(identity)
         return f"token-{len(calls)}"
 
-    monkeypatch.setattr(_client_module, "issue_service_token", fake_issue)
+    monkeypatch.setattr("naas_abi_core.engine.nats_rpc.issue_service_token", fake_issue)
 
-    client = CacheSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api"
-    )
+    client = CacheSecondaryAdapterNATSClient("nats://127.0.0.1:4222", JWT_SECRET, "api")
     assert client._current_token() == "token-1"
 
     # Simulate the token being almost expired.
@@ -221,9 +212,7 @@ def nats_url():
         # pattern in NATSJetStreamAdapter_test.py / ObjectStorageSecondaryAdapterNATSClient_test.py.
         from testcontainers.core.container import DockerContainer
 
-        with (
-            DockerContainer("nats:2-alpine").with_exposed_ports(4222)
-        ) as container:
+        with DockerContainer("nats:2-alpine").with_exposed_ports(4222) as container:
             host = container.get_container_host_ip()
             port = container.get_exposed_port(4222)
             url = f"nats://{host}:{port}"

@@ -54,13 +54,17 @@ def test_init_is_lazy(monkeypatch):
 
 
 def test_close_without_connecting_is_a_noop():
-    client = SecretSecondaryAdapterNATSClient("nats://127.0.0.1:4222", JWT_SECRET, "api")
+    client = SecretSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", JWT_SECRET, "api"
+    )
     client.close()  # must not raise, must not connect
 
 
 def test_context_manager_calls_close():
     closed = []
-    client = SecretSecondaryAdapterNATSClient("nats://127.0.0.1:4222", JWT_SECRET, "api")
+    client = SecretSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", JWT_SECRET, "api"
+    )
     client.close = lambda: closed.append(True)  # type: ignore[method-assign]
 
     with client:
@@ -100,16 +104,17 @@ def test_raise_for_error_maps_unauthenticated_to_runtime_error():
 
 def test_token_is_issued_once_and_reused(monkeypatch):
     issued = []
-    from naas_abi_core.services.secret.adaptors.secondary import (
-        SecretSecondaryAdapterNATSClient as _module,
-    )
 
     def _fake_issue(identity, secret):
         issued.append(identity)
         return f"token-{len(issued)}"
 
-    monkeypatch.setattr(_module, "issue_service_token", _fake_issue)
-    client = SecretSecondaryAdapterNATSClient("nats://127.0.0.1:4222", JWT_SECRET, "api")
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_rpc.issue_service_token", _fake_issue
+    )
+    client = SecretSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", JWT_SECRET, "api"
+    )
 
     first = client._current_token()
     second = client._current_token()
@@ -120,16 +125,17 @@ def test_token_is_issued_once_and_reused(monkeypatch):
 
 def test_token_is_reissued_when_close_to_expiry(monkeypatch):
     issued = []
-    from naas_abi_core.services.secret.adaptors.secondary import (
-        SecretSecondaryAdapterNATSClient as _module,
-    )
 
     def _fake_issue(identity, secret):
         issued.append(identity)
         return f"token-{len(issued)}"
 
-    monkeypatch.setattr(_module, "issue_service_token", _fake_issue)
-    client = SecretSecondaryAdapterNATSClient("nats://127.0.0.1:4222", JWT_SECRET, "api")
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_rpc.issue_service_token", _fake_issue
+    )
+    client = SecretSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", JWT_SECRET, "api"
+    )
     client._current_token()
     client._token_expires_at = datetime.now(UTC) + timedelta(seconds=1)
 
@@ -185,7 +191,9 @@ class _PrimaryAdapterServer:
 
     async def _start_async(self) -> None:
         self._nc = await nats.connect(self._nats_url)
-        self._primary = SecretPrimaryAdapterNATS(self._wrapped_adapter, self._jwt_secret)
+        self._primary = SecretPrimaryAdapterNATS(
+            self._wrapped_adapter, self._jwt_secret
+        )
         await self._primary.start(self._nc)
 
     def stop(self) -> None:
@@ -213,7 +221,7 @@ def nats_url():
     try:
         from testcontainers.core.container import DockerContainer
 
-        with (DockerContainer("nats:2-alpine").with_exposed_ports(4222)) as container:
+        with DockerContainer("nats:2-alpine").with_exposed_ports(4222) as container:
             host = container.get_container_host_ip()
             port = container.get_exposed_port(4222)
             url = f"nats://{host}:{port}"
@@ -246,7 +254,10 @@ def test_get_set_remove_list_round_trip_through_real_nats(nats_url):
     server = _PrimaryAdapterServer(nats_url, JWT_SECRET, wrapped)
     server.start()
     client = SecretSecondaryAdapterNATSClient(
-        nats_url=nats_url, jwt_secret=JWT_SECRET, service_identity="api", timeout_seconds=10.0
+        nats_url=nats_url,
+        jwt_secret=JWT_SECRET,
+        service_identity="api",
+        timeout_seconds=10.0,
     )
     try:
         assert client.get("NOPE") is None

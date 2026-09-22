@@ -73,7 +73,9 @@ def test_context_manager_calls_close():
 
 def test_raise_for_error_maps_subject_not_found():
     with pytest.raises(Exceptions.SubjectNotFoundError):
-        _raise_for_error(common_pb2.CallError(code="SUBJECT_NOT_FOUND", message="x"), None)
+        _raise_for_error(
+            common_pb2.CallError(code="SUBJECT_NOT_FOUND", message="x"), None
+        )
 
 
 def test_raise_for_error_maps_subscription_not_found():
@@ -90,7 +92,9 @@ def test_raise_for_error_maps_view_not_found():
 
 def test_raise_for_error_maps_graph_not_found():
     with pytest.raises(Exceptions.GraphNotFoundError):
-        _raise_for_error(common_pb2.CallError(code="GRAPH_NOT_FOUND", message="x"), None)
+        _raise_for_error(
+            common_pb2.CallError(code="GRAPH_NOT_FOUND", message="x"), None
+        )
 
 
 def test_raise_for_error_maps_graph_already_exists():
@@ -122,7 +126,9 @@ def test_raise_for_error_maps_request_error_with_detail():
 
 def test_raise_for_error_maps_request_error_without_detail():
     with pytest.raises(Exceptions.RequestError) as excinfo:
-        _raise_for_error(common_pb2.CallError(code="REQUEST_ERROR", message="boom"), None)
+        _raise_for_error(
+            common_pb2.CallError(code="REQUEST_ERROR", message="boom"), None
+        )
     assert excinfo.value.operation == "unknown"
 
 
@@ -205,7 +211,7 @@ def test_token_is_issued_once_and_reused(monkeypatch):
         calls.append(identity)
         return f"token-{len(calls)}"
 
-    monkeypatch.setattr(_client_module, "issue_service_token", fake_issue)
+    monkeypatch.setattr("naas_abi_core.engine.nats_rpc.issue_service_token", fake_issue)
 
     client = TripleStoreSecondaryAdapterNATSClient(
         "nats://127.0.0.1:4222", JWT_SECRET, "api"
@@ -223,7 +229,7 @@ def test_token_is_reissued_when_close_to_expiry(monkeypatch):
         calls.append(identity)
         return f"token-{len(calls)}"
 
-    monkeypatch.setattr(_client_module, "issue_service_token", fake_issue)
+    monkeypatch.setattr("naas_abi_core.engine.nats_rpc.issue_service_token", fake_issue)
 
     client = TripleStoreSecondaryAdapterNATSClient(
         "nats://127.0.0.1:4222", JWT_SECRET, "api"
@@ -296,7 +302,9 @@ class _InMemoryTripleStorePort(ITripleStorePort):
     def create_graph(self, graph_name: URIRef) -> None:
         key = str(graph_name)
         if key in self._known_graphs:
-            raise Exceptions.GraphAlreadyExistsError(f"Graph {graph_name} already exists")
+            raise Exceptions.GraphAlreadyExistsError(
+                f"Graph {graph_name} already exists"
+            )
         self._known_graphs.add(key)
         self._ds.graph(URIRef(key))
 
@@ -398,9 +406,7 @@ def nats_url():
         # pattern in NATSJetStreamAdapter_test.py / ObjectStorageSecondaryAdapterNATSClient_test.py.
         from testcontainers.core.container import DockerContainer
 
-        with (
-            DockerContainer("nats:2-alpine").with_exposed_ports(4222)
-        ) as container:
+        with DockerContainer("nats:2-alpine").with_exposed_ports(4222) as container:
             host = container.get_container_host_ip()
             port = container.get_exposed_port(4222)
             url = f"nats://{host}:{port}"

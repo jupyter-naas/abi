@@ -27,12 +27,13 @@ from typing import TypeVar
 
 import nats
 import nats.micro
-from google.protobuf.message import Message
+from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
 from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
+from naas_abi_core.engine.nats_rpc import respond_protobuf
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.source_control.v1 import source_control_pb2
 from naas_abi_core.services.source_control.adapters.source_control_nats_contract import (
@@ -131,7 +132,9 @@ def _file_content_to_pb(file_content: FileContent) -> source_control_pb2.FileCon
 
 def _file_write_from_pb(pb: source_control_pb2.FileWrite) -> FileWrite:
     content: str | bytes = (
-        pb.binary_content if pb.WhichOneof("content") == "binary_content" else pb.text_content
+        pb.binary_content
+        if pb.WhichOneof("content") == "binary_content"
+        else pb.text_content
     )
     return FileWrite(path=pb.path, content=content)
 
@@ -460,7 +463,17 @@ class SourceControlPrimaryAdapterNATS:
             return
 
         parsed_request = request_cls()
-        parsed_request.ParseFromString(request.data)
+        try:
+            parsed_request.ParseFromString(request.data)
+        except DecodeError:
+            await self._respond_error(
+                request,
+                response_cls,
+                "INVALID_ARGUMENT",
+                "invalid protobuf request",
+                retryable=False,
+            )
+            return
 
         try:
             # The adapter port is synchronous and may block for seconds (network
@@ -558,7 +571,7 @@ class SourceControlPrimaryAdapterNATS:
             )
             return
 
-        await request.respond(response.SerializeToString())
+        await respond_protobuf(request, response, response_cls)
 
     def _is_authenticated(self, request: Request) -> bool:
         headers = request.headers or {}
@@ -585,7 +598,7 @@ class SourceControlPrimaryAdapterNATS:
         if status is not None:
             error.status = status
         response = response_cls(error=error)
-        await request.respond(response.SerializeToString())
+        await respond_protobuf(request, response, response_cls)
 
     # ------------------------------------------------------------------
     # Endpoint handlers -- one per ISourceControlAdapter method.
@@ -693,7 +706,9 @@ class SourceControlPrimaryAdapterNATS:
             path=req.path,
             ref=req.ref if req.HasField("ref") else None,
         )
-        return source_control_pb2.GetFileResponse(file=_file_content_to_pb(file_content))
+        return source_control_pb2.GetFileResponse(
+            file=_file_content_to_pb(file_content)
+        )
 
     async def _handle_upsert_file(self, request: Request) -> None:
         await self._handle(
@@ -761,7 +776,9 @@ class SourceControlPrimaryAdapterNATS:
             limit=req.limit,
         )
         return source_control_pb2.ListCommitsResponse(
-            commits=source_control_pb2.Commits(commits=[_commit_to_pb(c) for c in commits])
+            commits=source_control_pb2.Commits(
+                commits=[_commit_to_pb(c) for c in commits]
+            )
         )
 
     async def _handle_list_branches(self, request: Request) -> None:
@@ -845,7 +862,9 @@ class SourceControlPrimaryAdapterNATS:
             target_branch=req.target_branch,
             reviewers=list(req.reviewers) or None,
         )
-        return source_control_pb2.CreateProposalResponse(proposal=_proposal_to_pb(proposal))
+        return source_control_pb2.CreateProposalResponse(
+            proposal=_proposal_to_pb(proposal)
+        )
 
     async def _handle_list_proposals(self, request: Request) -> None:
         await self._handle(
@@ -877,7 +896,9 @@ class SourceControlPrimaryAdapterNATS:
         self, req: source_control_pb2.GetProposalRequest
     ) -> source_control_pb2.GetProposalResponse:
         proposal = self._adapter.get_proposal(repo_id=req.repo_id, number=req.number)
-        return source_control_pb2.GetProposalResponse(proposal=_proposal_to_pb(proposal))
+        return source_control_pb2.GetProposalResponse(
+            proposal=_proposal_to_pb(proposal)
+        )
 
     async def _handle_get_proposal_diff(self, request: Request) -> None:
         await self._handle(
@@ -908,7 +929,9 @@ class SourceControlPrimaryAdapterNATS:
             repo_id=req.repo_id, number=req.number
         )
         return source_control_pb2.ListProposalCommitsResponse(
-            commits=source_control_pb2.Commits(commits=[_commit_to_pb(c) for c in commits])
+            commits=source_control_pb2.Commits(
+                commits=[_commit_to_pb(c) for c in commits]
+            )
         )
 
     async def _handle_list_comments(self, request: Request) -> None:
@@ -942,7 +965,9 @@ class SourceControlPrimaryAdapterNATS:
     ) -> source_control_pb2.ListReviewsResponse:
         reviews = self._adapter.list_reviews(repo_id=req.repo_id, number=req.number)
         return source_control_pb2.ListReviewsResponse(
-            reviews=source_control_pb2.Reviews(reviews=[_review_to_pb(r) for r in reviews])
+            reviews=source_control_pb2.Reviews(
+                reviews=[_review_to_pb(r) for r in reviews]
+            )
         )
 
     async def _handle_add_comment(self, request: Request) -> None:
@@ -1030,7 +1055,9 @@ class SourceControlPrimaryAdapterNATS:
         result = self._adapter.merge(
             repo_id=req.repo_id, number=req.number, method=req.method
         )
-        return source_control_pb2.MergeResponse(merge_result=_merge_result_to_pb(result))
+        return source_control_pb2.MergeResponse(
+            merge_result=_merge_result_to_pb(result)
+        )
 
     async def _handle_list_workflow_runs(self, request: Request) -> None:
         await self._handle(

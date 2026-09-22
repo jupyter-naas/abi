@@ -71,11 +71,7 @@ class NATSJetStreamAdapter(IBusAdapter):
         self.__nc = None
         self.__js = None
         self.__declared_streams = set()
-        # Guards connect/reconnect bookkeeping on the persistent publish
-        # loop. asyncio.run_coroutine_threadsafe already serializes work
-        # onto that single loop, but holding this for the whole
-        # submit-and-wait keeps a stale-connection retry from racing a
-        # concurrent caller's retry (mirrors RabbitMQAdapter.__publish_lock).
+        # Serialize connection bookkeeping and synchronous submissions.
         self.__publish_lock = RLock()
 
     def __enter__(self) -> Self:
@@ -105,7 +101,7 @@ class NATSJetStreamAdapter(IBusAdapter):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             holder["loop"] = loop
-            ready.set()
+            loop.call_soon(ready.set)
             loop.run_forever()
             loop.close()
 
@@ -121,7 +117,11 @@ class NATSJetStreamAdapter(IBusAdapter):
     def _run_coro(self, coro, timeout: float = _DEFAULT_TIMEOUT_SECONDS):
         loop = self._ensure_loop()
         future = asyncio.run_coroutine_threadsafe(coro, loop)
-        return future.result(timeout=timeout)
+        try:
+            return future.result(timeout=timeout)
+        except TimeoutError:
+            future.cancel()
+            raise
 
     def _stop_loop(self) -> None:
         loop = self.__loop
@@ -134,11 +134,11 @@ class NATSJetStreamAdapter(IBusAdapter):
             thread.join(timeout=5.0)
 
     async def _ensure_connection_async(self) -> tuple[NATSClient, JetStreamContext]:
-        if self.__nc is not None and self.__nc.is_connected:
+        if self.__nc is not None and not self.__nc.is_closed:
             assert self.__js is not None
             return self.__nc, self.__js
 
-        nc = await nats.connect(self.__nats_url)
+        nc = await nats.connect(self.__nats_url, pending_size=0)
         js = nc.jetstream()
         self.__nc = nc
         self.__js = js
@@ -249,22 +249,10 @@ class NATSJetStreamAdapter(IBusAdapter):
     # ------------------------------------------------------------------
 
     def publish(self, topic: str, routing_key: str, payload: bytes) -> None:
-        """Publish on core NATS, retrying once on a stale connection.
-
-        Automatically reconnects once if the persistent connection was
-        closed by the server (e.g. an idle timeout) since the last call.
-        """
+        """Publish once; a failed flush does not prove the message was not sent."""
         subject = self._subject(topic, routing_key)
         with self.__publish_lock:
-            try:
-                self._run_coro(self._do_publish_async(subject, payload))
-            except Exception:  # noqa: BLE001
-                self._close_publish_connection()
-                try:
-                    self._run_coro(self._do_publish_async(subject, payload))
-                except Exception as exc:
-                    self._close_publish_connection()
-                    raise ConnectionError("NATS publish failed") from exc
+            self._run_coro(self._do_publish_async(subject, payload))
 
     async def _do_publish_async(self, subject: str, payload: bytes) -> None:
         nc, _js = await self._ensure_connection_async()
@@ -334,22 +322,12 @@ class NATSJetStreamAdapter(IBusAdapter):
     # ------------------------------------------------------------------
 
     def enqueue(self, topic: str, routing_key: str, payload: bytes) -> None:
-        """Durably append *payload* via JetStream, retrying once on a stale connection."""
+        """Append once; a lost acknowledgement can hide a successful durable write."""
         subject = self._subject(topic, routing_key)
         with self.__publish_lock:
-            try:
-                self._run_coro(self._do_enqueue_async(topic, subject, payload))
-            except Exception:  # noqa: BLE001
-                self._close_publish_connection()
-                try:
-                    self._run_coro(self._do_enqueue_async(topic, subject, payload))
-                except Exception as exc:
-                    self._close_publish_connection()
-                    raise ConnectionError("NATS enqueue failed") from exc
+            self._run_coro(self._do_enqueue_async(topic, subject, payload))
 
-    async def _do_enqueue_async(
-        self, topic: str, subject: str, payload: bytes
-    ) -> None:
+    async def _do_enqueue_async(self, topic: str, subject: str, payload: bytes) -> None:
         _nc, js = await self._ensure_connection_async()
         stream_name = await self._ensure_stream_async(js, topic)
         await js.publish(subject, payload, stream=stream_name)

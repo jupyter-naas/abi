@@ -11,6 +11,8 @@ from naas_abi_core.services.bus.adapters.secondary.NATSJetStreamAdapter import (
 from naas_abi_core.services.bus.tests.bus__secondary_adapter__generic_test import (
     GenericBusSecondaryAdapterTest,
 )
+from nats.errors import ConnectionClosedError, MaxPayloadError
+from nats.errors import TimeoutError as NatsTimeoutError
 
 
 class TestNATSJetStreamAdapter(GenericBusSecondaryAdapterTest):
@@ -45,6 +47,19 @@ def test_context_manager_calls_close(monkeypatch):
         pass
 
     assert closed == [True]
+
+
+@pytest.mark.parametrize("method", ["publish", "enqueue"])
+@pytest.mark.parametrize(
+    "error", [NatsTimeoutError(), ConnectionClosedError(), MaxPayloadError()]
+)
+def test_failed_send_is_not_replayed(method, error, monkeypatch):
+    with NATSJetStreamAdapter() as adapter:
+        operation = AsyncMock(side_effect=error)
+        monkeypatch.setattr(adapter, f"_do_{method}_async", operation)
+        with pytest.raises(type(error)):
+            getattr(adapter, method)("topic", "key", b"payload")
+        assert operation.await_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -82,12 +97,12 @@ def test_stream_name_has_no_invalid_nats_characters():
 
 
 def test_stream_name_is_deterministic_per_topic():
-    assert NATSJetStreamAdapter._stream_name("topic") == NATSJetStreamAdapter._stream_name(
+    assert NATSJetStreamAdapter._stream_name(
         "topic"
-    )
-    assert NATSJetStreamAdapter._stream_name("topic.a") != NATSJetStreamAdapter._stream_name(
-        "topic.b"
-    )
+    ) == NATSJetStreamAdapter._stream_name("topic")
+    assert NATSJetStreamAdapter._stream_name(
+        "topic.a"
+    ) != NATSJetStreamAdapter._stream_name("topic.b")
 
 
 def test_durable_consumer_name_is_deterministic_per_topic_and_routing_key():

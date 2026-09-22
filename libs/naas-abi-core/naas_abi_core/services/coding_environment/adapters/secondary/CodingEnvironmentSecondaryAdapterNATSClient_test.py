@@ -5,7 +5,6 @@ from threading import Event as ThreadingEvent
 from threading import Thread
 from unittest.mock import AsyncMock
 
-import naas_abi_core.services.coding_environment.adapters.secondary.CodingEnvironmentSecondaryAdapterNATSClient as _client_module
 import nats
 import pytest
 from naas_abi_core import logger
@@ -116,9 +115,7 @@ _ERROR_MAPPING = [
 @pytest.mark.parametrize(("code", "exc_cls"), _ERROR_MAPPING)
 def test_raise_for_error_maps_code_to_exception_with_status(code, exc_cls):
     with pytest.raises(exc_cls) as excinfo:
-        _raise_for_error(
-            common_pb2.CallError(code=code, message="x", status=404)
-        )
+        _raise_for_error(common_pb2.CallError(code=code, message="x", status=404))
     assert excinfo.value.status == 404
 
 
@@ -153,7 +150,7 @@ def test_token_is_issued_once_and_reused(monkeypatch):
         calls.append(identity)
         return f"token-{len(calls)}"
 
-    monkeypatch.setattr(_client_module, "issue_service_token", fake_issue)
+    monkeypatch.setattr("naas_abi_core.engine.nats_rpc.issue_service_token", fake_issue)
 
     client = CodingEnvironmentSecondaryAdapterNATSClient(
         "nats://127.0.0.1:4222", JWT_SECRET, "api"
@@ -171,7 +168,7 @@ def test_token_is_reissued_when_close_to_expiry(monkeypatch):
         calls.append(identity)
         return f"token-{len(calls)}"
 
-    monkeypatch.setattr(_client_module, "issue_service_token", fake_issue)
+    monkeypatch.setattr("naas_abi_core.engine.nats_rpc.issue_service_token", fake_issue)
 
     client = CodingEnvironmentSecondaryAdapterNATSClient(
         "nats://127.0.0.1:4222", JWT_SECRET, "api"
@@ -274,9 +271,7 @@ def nats_url():
         # ObjectStorageSecondaryAdapterNATSClient_test.py.
         from testcontainers.core.container import DockerContainer
 
-        with (
-            DockerContainer("nats:2-alpine").with_exposed_ports(4222)
-        ) as container:
+        with DockerContainer("nats:2-alpine").with_exposed_ports(4222) as container:
             host = container.get_container_host_ip()
             port = container.get_exposed_port(4222)
             url = f"nats://{host}:{port}"

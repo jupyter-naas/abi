@@ -29,12 +29,13 @@ from typing import TypeVar
 
 import nats
 import nats.micro
-from google.protobuf.message import Message
+from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
 from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
+from naas_abi_core.engine.nats_rpc import respond_protobuf
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.keyvalue.v1 import keyvalue_pb2
 from naas_abi_core.services.keyvalue.adapters.keyvalue_nats_contract import (
@@ -171,7 +172,17 @@ class KeyValuePrimaryAdapterNATS:
             return
 
         parsed_request = request_cls()
-        parsed_request.ParseFromString(request.data)
+        try:
+            parsed_request.ParseFromString(request.data)
+        except DecodeError:
+            await self._respond_error(
+                request,
+                response_cls,
+                "INVALID_ARGUMENT",
+                "invalid protobuf request",
+                retryable=False,
+            )
+            return
 
         try:
             # The adapter port is synchronous and may block for seconds (network
@@ -206,7 +217,7 @@ class KeyValuePrimaryAdapterNATS:
             )
             return
 
-        await request.respond(response.SerializeToString())
+        await respond_protobuf(request, response, response_cls)
 
     def _is_authenticated(self, request: Request) -> bool:
         headers = request.headers or {}
@@ -230,12 +241,14 @@ class KeyValuePrimaryAdapterNATS:
         lock_timeout_detail: keyvalue_pb2.KVLockTimeoutDetail | None = None,
     ) -> None:
         kwargs: dict[str, object] = {
-            "error": common_pb2.CallError(code=code, message=message, retryable=retryable)
+            "error": common_pb2.CallError(
+                code=code, message=message, retryable=retryable
+            )
         }
         if lock_timeout_detail is not None:
             kwargs["lock_timeout_detail"] = lock_timeout_detail
         response = response_cls(**kwargs)
-        await request.respond(response.SerializeToString())
+        await respond_protobuf(request, response, response_cls)
 
     # ------------------------------------------------------------------
     # Endpoint handlers -- one per IKeyValueAdapter method.
@@ -289,7 +302,9 @@ class KeyValuePrimaryAdapterNATS:
             self._call_delete,
         )
 
-    def _call_delete(self, req: keyvalue_pb2.DeleteRequest) -> keyvalue_pb2.DeleteResponse:
+    def _call_delete(
+        self, req: keyvalue_pb2.DeleteRequest
+    ) -> keyvalue_pb2.DeleteResponse:
         self._adapter.delete(req.key)
         return keyvalue_pb2.DeleteResponse()
 
@@ -315,6 +330,8 @@ class KeyValuePrimaryAdapterNATS:
             self._call_exists,
         )
 
-    def _call_exists(self, req: keyvalue_pb2.ExistsRequest) -> keyvalue_pb2.ExistsResponse:
+    def _call_exists(
+        self, req: keyvalue_pb2.ExistsRequest
+    ) -> keyvalue_pb2.ExistsResponse:
         exists = self._adapter.exists(req.key)
         return keyvalue_pb2.ExistsResponse(ok_value=exists)

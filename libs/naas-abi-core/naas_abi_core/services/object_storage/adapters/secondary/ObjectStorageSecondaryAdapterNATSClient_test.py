@@ -6,7 +6,6 @@ from threading import Event as ThreadingEvent
 from threading import Thread
 from unittest.mock import AsyncMock
 
-import naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterNATSClient as _client_module
 import nats
 import pytest
 from naas_abi_core import logger
@@ -124,7 +123,7 @@ def test_token_is_issued_once_and_reused(monkeypatch):
         calls.append(identity)
         return f"token-{len(calls)}"
 
-    monkeypatch.setattr(_client_module, "issue_service_token", fake_issue)
+    monkeypatch.setattr("naas_abi_core.engine.nats_rpc.issue_service_token", fake_issue)
 
     client = ObjectStorageSecondaryAdapterNATSClient(
         "nats://127.0.0.1:4222", JWT_SECRET, "api"
@@ -142,7 +141,7 @@ def test_token_is_reissued_when_close_to_expiry(monkeypatch):
         calls.append(identity)
         return f"token-{len(calls)}"
 
-    monkeypatch.setattr(_client_module, "issue_service_token", fake_issue)
+    monkeypatch.setattr("naas_abi_core.engine.nats_rpc.issue_service_token", fake_issue)
 
     client = ObjectStorageSecondaryAdapterNATSClient(
         "nats://127.0.0.1:4222", JWT_SECRET, "api"
@@ -243,9 +242,7 @@ def nats_url():
         # pattern in NATSJetStreamAdapter_test.py / ApacheJenaTDB2_integration_test.py.
         from testcontainers.core.container import DockerContainer
 
-        with (
-            DockerContainer("nats:2-alpine").with_exposed_ports(4222)
-        ) as container:
+        with DockerContainer("nats:2-alpine").with_exposed_ports(4222) as container:
             host = container.get_container_host_ip()
             port = container.get_exposed_port(4222)
             url = f"nats://{host}:{port}"
@@ -273,7 +270,9 @@ def nats_url():
 
 
 @pytest.mark.integration
-class TestObjectStorageSecondaryAdapterNATSClient(ObjectStorageSecondaryAdapterContract):
+class TestObjectStorageSecondaryAdapterNATSClient(
+    ObjectStorageSecondaryAdapterContract
+):
     """Round-trips the shared adapter contract through a real primary adapter
     (wrapping a real filesystem adapter) and the real client, over a live
     NATS server."""
