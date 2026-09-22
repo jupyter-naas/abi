@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.52.0 (2026-09-22)
+
+### Features
+
+- **x_reprocess**: Add observability and progress logging to envelope reprocessing
+  ([`b4f4998`](https://github.com/jupyter-naas/abi/commit/b4f49985cedeb3276d69c9b916a65b3692e1dde8))
+
+
 ## v3.51.0 (2026-09-22)
 
 ### Bug Fixes
