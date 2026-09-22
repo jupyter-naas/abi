@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { authFetch, useAuthStore } from './auth';
 import { getApiUrl } from '@/lib/config';
 import { readGraph } from '@/hooks/use-graph-request';
-import type { ExplorerCatalog, ExplorerGraph } from '@/lib/graph-explorer';
+import { pendingPollDelay, type ExplorerCatalog, type ExplorerGraph } from '@/lib/graph-explorer';
 
 interface State {
   key: string;
@@ -15,12 +15,16 @@ interface State {
   revision: number;
   fetchedAt: number;
   loadStartedAt: number;
-  load: (workspaceId: string, graphs: string[], force?: boolean) => Promise<void>;
+  /** `silent` refetches without clearing the current data (used to poll pending graphs). */
+  load: (workspaceId: string, graphs: string[], force?: boolean, silent?: boolean) => Promise<void>;
 }
 const CATALOG_CACHE_MS = 30_000;
 /** In-flight catalog can take minutes on large graphs; allow retry after this. */
 const CATALOG_STALE_LOAD_MS = 90_000;
 let pending: AbortController | undefined;
+let pollTimer: ReturnType<typeof setTimeout> | undefined;
+/** Consecutive polls for the current key, for backoff while counts are pending. */
+let pollAttempt = 0;
 export const useGraphExplorerStore = create<State>((set, get) => ({
   key: '',
   data: null,
@@ -29,7 +33,7 @@ export const useGraphExplorerStore = create<State>((set, get) => ({
   revision: 0,
   fetchedAt: 0,
   loadStartedAt: 0,
-  load: async (workspaceId, graphs, force = false) => {
+  load: async (workspaceId, graphs, force = false, silent = false) => {
     const key = JSON.stringify([workspaceId, graphs]);
     const current = get();
     if (!workspaceId) return;
@@ -45,10 +49,11 @@ export const useGraphExplorerStore = create<State>((set, get) => ({
       return;
     }
     pending?.abort();
+    clearTimeout(pollTimer);
     const controller = new AbortController();
     pending = controller;
     const startedAt = Date.now();
-    set({
+    if (!silent) set({
       key,
       data: force ? null : current.key === key ? current.data : null,
       loading: true,
@@ -60,10 +65,16 @@ export const useGraphExplorerStore = create<State>((set, get) => ({
     try {
       const data = await readGraph<ExplorerCatalog>('explorer/catalog',
         JSON.stringify({ workspace_id: workspaceId, graph_uris: graphs }), controller.signal, force);
-      if (!controller.signal.aborted && get().key === key)
+      if (!controller.signal.aborted && get().key === key) {
         set({ data, loading: false, fetchedAt: Date.now(), loadStartedAt: 0 });
+        if (!silent) pollAttempt = 0;
+        if (data.pending?.length)
+          pollTimer = setTimeout(() => {
+            if (get().key === key) void get().load(workspaceId, graphs, true, true);
+          }, pendingPollDelay(pollAttempt++));
+      }
     } catch (error) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || silent) return;
       if (get().key === key)
         set({
           data: null,
@@ -77,6 +88,7 @@ export const useGraphExplorerStore = create<State>((set, get) => ({
 
 export function invalidateGraphExplorer() {
   pending?.abort();
+  clearTimeout(pollTimer);
   useGraphExplorerStore.setState({
     key: '',
     data: null,

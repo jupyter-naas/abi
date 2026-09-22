@@ -1883,26 +1883,47 @@ class GraphService:
 
     @workspace_graph_operation()
     async def explorer_catalog(self, workspace_id: str, graph_uris: list[str]) -> dict[str, Any]:
-        from naas_abi.apps.nexus.apps.api.app.services.graph.explorer import catalog, resolve_graphs
+        from naas_abi.apps.nexus.apps.api.app.services.graph.explorer import (
+            catalog,
+            resolve_graphs,
+            snapshot_class_counts,
+        )
 
         packs = await self.list_graphs(workspace_id)
-        pack_uris = sorted({g.uri for pack in packs for g in pack.graphs})
-        # Empty client selection = all readable graphs for class counts (queried per graph).
-        graphs_for_catalog = (
-            resolve_graphs(packs, graph_uris) if graph_uris else pack_uris
+        # Empty client selection = all readable graphs.
+        graphs_for_catalog = resolve_graphs(packs, graph_uris)
+        # Class counts come from the same per-graph snapshots as the dashboard
+        # KPIs (one queued scan per graph, cached 5 min) rather than a combined
+        # scan of every graph that competes with them for Fuseki. Graphs still
+        # computing are listed in ``pending``; the sidebar polls until empty.
+        store = self._get_catalog_store()
+        snapshots = await asyncio.to_thread(
+            _explorer_snapshots,
+            store,
+            self._explorer_snapshot_keys(graphs_for_catalog),
+            _EXPLORER_SNAPSHOT_WAIT_SECONDS,
         )
-        # Catalog counts use the raw store + explicit GRAPH IRIs (already pack-scoped).
-        # WorkspaceGraphStore injects all readable graphs when VALUES ?g is absent and
-        # multi-graph VALUES still trip Fuseki 500 on this dataset.
+        ready = [snap for snap in snapshots.values() if snap is not None]
         result = await asyncio.to_thread(
             lambda: catalog(
-                self._get_catalog_store(), packs, graphs_for_catalog, str(SCHEMA_GRAPH_URI)
+                store,
+                packs,
+                graphs_for_catalog,
+                str(SCHEMA_GRAPH_URI),
+                class_counts=snapshot_class_counts(ready),
             )
         )
+        result["pending"] = sorted(uri for uri, snap in snapshots.items() if snap is None)
         if not graph_uris:
             result["selected_graphs"] = []
         result["permissions"] = {"can_create_graph": bool(self.access_scope and self.access_scope.allow_create)}
         return result
+
+    def _explorer_snapshot_keys(self, graph_uris: list[str]) -> dict[str, str]:
+        scoped = self._get_triple_store()
+        return {
+            uri: _scope_cache_key(scoped, f"explorer_snapshot_v3_{uri}") for uri in graph_uris
+        }
 
     @workspace_graph_operation()
     async def explorer_overview(self, workspace_id: str, graph_uris: list[str]) -> dict[str, Any]:
@@ -1916,13 +1937,12 @@ class GraphService:
         # per-graph snapshots. Graphs are pack-scoped here, so snapshots query
         # the raw store with an explicit GRAPH IRI (as the catalog does).
         selected = resolve_graphs(packs, graph_uris)
-        scoped = self._get_triple_store()
         store = self._get_catalog_store()
-        keys = {
-            uri: _scope_cache_key(scoped, f"explorer_snapshot_v2_{uri}") for uri in selected
-        }
         snapshots = await asyncio.to_thread(
-            _explorer_snapshots, store, keys, _EXPLORER_SNAPSHOT_WAIT_SECONDS
+            _explorer_snapshots,
+            store,
+            self._explorer_snapshot_keys(selected),
+            _EXPLORER_SNAPSHOT_WAIT_SECONDS,
         )
         result = overview(
             store,

@@ -10,7 +10,7 @@ import { preloadExplorerNetwork, ExplorerNetwork, type ExplorerNetworkData } fro
 import { ExplorerClassDetails } from './explorer-class-details';
 import { useGraphRequest } from '@/hooks/use-graph-request';
 import { useGraphExplorer } from '@/stores/graph-explorer';
-import { explorerQuery, explorerScope, type ExplorerKpis, type ExplorerView, type ExplorerOverview } from '@/lib/graph-explorer';
+import { explorerQuery, explorerScope, pendingPollDelay, type ExplorerKpis, type ExplorerView, type ExplorerOverview } from '@/lib/graph-explorer';
 import '@/components/ontology/ontology-dashboard.css';
 import '../instance-browser.css';
 import './graph-explorer.css';
@@ -32,9 +32,21 @@ function Dashboard({
   const excluded = data.excluded ?? {};
   const graphLabel = (uri: string) => data.graphs.find((g) => g.uri === uri)?.label ?? uri;
   // A consolidated KPI may leave out graphs where that metric could not be read.
+  const pendingSet = new Set(data.pending ?? []);
+  const unreadable = data.unreadable_predicates ?? {};
+  const unreadableCount = Object.values(unreadable).reduce((n, list) => n + list.length, 0);
   const excludedNote = (key: keyof ExplorerKpis) => {
     const graphs = excluded[key] ?? [];
-    return graphs.length ? `excl. ${graphs.map(graphLabel).join(', ')}` : '';
+    const counting = graphs.filter((uri) => pendingSet.has(uri)).map(graphLabel);
+    const failed = graphs.filter((uri) => !pendingSet.has(uri)).map(graphLabel);
+    const parts = [
+      counting.length ? `counting ${counting.join(', ')}…` : '',
+      failed.length ? `excl. ${failed.join(', ')}` : '',
+      (key === 'relations' || key === 'literal_values') && unreadableCount
+        ? `excl. ${unreadableCount} unreadable predicate${unreadableCount > 1 ? 's' : ''}`
+        : '',
+    ];
+    return parts.filter(Boolean).join(' · ');
   };
   const sameScope =
     (excluded.instances ?? []).join() === (excluded.labeled_instances ?? []).join();
@@ -42,7 +54,9 @@ function Dashboard({
     k.instances && k.labeled_instances != null && sameScope
       ? Math.round((k.labeled_instances / k.instances) * 100)
       : null;
-  const partialGraphs = [...new Set(Object.values(excluded).flat())];
+  const partialGraphs = [...new Set(Object.values(excluded).flat())].filter(
+    (uri) => !pendingSet.has(uri),
+  );
   const pending = data.pending ?? [];
   const snapshotTimes = data.graph_metrics
     .map((g) => g.computed_at)
@@ -121,8 +135,8 @@ function Dashboard({
         </div>
         {pending.length > 0 && (
           <p className="ontology-dashboard-empty" role="status">
-            Computing statistics for {pending.length} of {data.selected_graphs.length} graphs… Totals
-            appear once every graph is ready; large graphs can take a few minutes.
+            Counting {pending.length} of {data.selected_graphs.length} graphs… Totals below cover the
+            graphs already counted and update automatically.
           </p>
         )}
         {partialGraphs.length > 0 && (
@@ -460,12 +474,16 @@ export default function GraphExplorerPage() {
   const scope = explorerScope(query);
   const request = useGraphExplorer(workspaceId, scope.graphs);
   const overview = useGraphRequest<ExplorerOverview>('explorer/overview', { workspace_id: workspaceId, graph_uris: scope.graphs }, scope.dashboard);
-  // Poll quietly while the server is still computing graph snapshots.
+  // Poll quietly while the server is still computing graph snapshots, backing off.
+  const pollAttempt = useRef(0);
   const pendingSnapshots = overview.data?.pending?.length ?? 0;
   const refreshOverview = overview.refresh;
   useEffect(() => {
-    if (!pendingSnapshots) return;
-    const timer = window.setTimeout(refreshOverview, 5000);
+    if (!pendingSnapshots) {
+      pollAttempt.current = 0;
+      return;
+    }
+    const timer = window.setTimeout(refreshOverview, pendingPollDelay(pollAttempt.current++));
     return () => window.clearTimeout(timer);
   }, [overview.data, pendingSnapshots, refreshOverview]);
   const navigate = (changes: Record<string, string | string[] | null>) =>

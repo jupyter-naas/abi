@@ -332,13 +332,16 @@ class ExplorerProjectionTest(unittest.TestCase):
         self.assertEqual([g["uri"] for g in data["graph_metrics"]], [G1, G2, EMPTY])
         self.assertEqual(data["kpis"], self.summary()["kpis"])
 
-    def test_pending_snapshot_blanks_totals_and_keeps_tile_order(self) -> None:
+    def test_pending_graph_is_excluded_from_partial_totals(self) -> None:
         def snapshot(store: Any, uri: str) -> dict[str, Any] | None:
             return None if uri == G2 else graph_snapshot(store, uri)
 
         data = overview(self.store, self.packs, [G1, G2, EMPTY], SCHEMA, snapshot=snapshot)
         self.assertEqual(data["pending"], [G2])
-        self.assertTrue(all(v is None for v in data["kpis"].values()))
+        # Totals cover the ready graphs; the pending one is listed as excluded.
+        self.assertEqual(data["kpis"]["instances"], 2)
+        self.assertEqual(data["excluded"]["instances"], [G2])
+        self.assertEqual(data["excluded"]["triples"], [G2])
         self.assertEqual([g["uri"] for g in data["graph_metrics"]], [G1, G2, EMPTY])
         self.assertTrue(data["graph_metrics"][1]["pending"])
         self.assertEqual(data["graph_metrics"][0]["instances"], 2)
@@ -397,12 +400,63 @@ class ExplorerProjectionTest(unittest.TestCase):
 
         class Flaky:
             def query(self, query: str) -> Any:
-                if "COUNT(DISTINCT ?s) AS ?instances" in query:
+                if "?s a ?instanceType" in query:
                     raise ConnectionResetError(104, "Connection reset by peer")
                 return dataset.query(query)
 
         snap = graph_snapshot(Flaky(), G1)
         self.assertEqual(snap["transient"], ["instances", "named_individuals"])
+
+    def test_timeout_is_remembered_not_transient(self) -> None:
+        dataset = self.store
+
+        class ReadTimeout(OSError):
+            pass
+
+        class Slow:
+            def query(self, query: str) -> Any:
+                if "?s a ?instanceType" in query:
+                    raise ReadTimeout("Read timed out")
+                return dataset.query(query)
+
+        snap = graph_snapshot(Slow(), G1)
+        self.assertIn("instances", snap["unavailable"])
+        self.assertEqual(snap["transient"], [])
+
+    def test_catalog_uses_supplied_class_counts_without_scanning(self) -> None:
+        queries: list[str] = []
+        dataset = self.store
+
+        class RecordingStore:
+            def query(self, query: str) -> Any:
+                queries.append(query)
+                return dataset.query(query)
+
+        data = catalog(
+            RecordingStore(), self.packs, [G1, G2], SCHEMA,
+            class_counts={str(PERSON): 3, str(EMPLOYEE): 1},
+        )
+        self.assertFalse(any("COUNT(DISTINCT ?s)" in q for q in queries))
+        classes = {c["uri"]: c for c in data["classes"]}
+        self.assertEqual(classes[str(PERSON)]["count"], 3)
+        self.assertEqual(classes[str(PERSON)]["label"], "Person")
+        self.assertEqual(classes[str(EMPLOYEE)]["parents"], [str(PERSON)])
+
+    def test_unreadable_predicate_only_drops_that_predicate(self) -> None:
+        dataset = self.store
+
+        class OnePredicateDamaged:
+            def query(self, query: str) -> Any:
+                if "<urn:knows>" in query and "isLiteral(?o)" in query:
+                    raise RuntimeError("NodeTableTRDF/Read")
+                return dataset.query(query)
+
+        snap = graph_snapshot(OnePredicateDamaged(), G1)
+        full = graph_snapshot(self.store, G1)
+        self.assertEqual(snap["unreadable_predicates"], ["urn:knows"])
+        self.assertEqual(snap["relations"], full["relations"] - 1)
+        self.assertEqual(snap["literal_values"], full["literal_values"])
+        self.assertEqual(snap["unavailable"], [])
 
     def test_query_failure_is_not_zero(self) -> None:
         class FailStore:

@@ -41,10 +41,12 @@ export interface ExplorerOverview {
   unavailable?: string[];
   /** KPI key -> graph URIs left out of that consolidated total (metric unreadable there). */
   excluded?: Partial<Record<keyof ExplorerKpis, string[]>>;
-  /** Graph URIs whose snapshot is still computing; consolidated KPIs are null until empty. */
+  /** Graph URI -> predicates whose objects could not be read (left out of relations/literals). */
+  unreadable_predicates?: Record<string, string[]>;
+  /** Graph URIs whose snapshot is still computing; they are excluded from the totals meanwhile. */
   pending?: string[];
 }
-export type ExplorerCatalog = Pick<ExplorerOverview, 'permissions' | 'graphs' | 'selected_graphs' | 'classes'>;
+export type ExplorerCatalog = Pick<ExplorerOverview, 'permissions' | 'graphs' | 'selected_graphs' | 'classes' | 'pending'>;
 
 export function graphMode(path: string): 'explorer' | 'composer' {
   return /\/graph\/(composer|explore-next|explore)(?:\/|$)/.test(path) ? 'composer' : 'explorer';
@@ -187,4 +189,9 @@ export function groupComposerViews<
       path,
       views: items.sort((a, b) => (a.name || a.label).localeCompare(b.name || b.label)),
     }));
+}
+
+/** Poll delay while server-side snapshots compute: 5 s, doubling, capped at 30 s. */
+export function pendingPollDelay(attempt: number): number {
+  return Math.min(5_000 * 2 ** attempt, 30_000);
 }

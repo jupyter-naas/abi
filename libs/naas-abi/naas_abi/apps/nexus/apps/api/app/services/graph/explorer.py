@@ -198,9 +198,18 @@ def _enrich_catalog_classes(
 
 
 def catalog(
-    store: QueryStore, packs: list[GraphPackData], graphs: list[str], schema_uri: str
+    store: QueryStore,
+    packs: list[GraphPackData],
+    graphs: list[str],
+    schema_uri: str,
+    *,
+    class_counts: dict[str, int] | None = None,
 ) -> dict[str, Any]:
-    """Sidebar metadata only; opening an instance view must not require dashboard totals."""
+    """Sidebar metadata only; opening an instance view must not require dashboard totals.
+
+    ``class_counts`` (class URI -> instances) lets the caller supply counts from
+    per-graph snapshots instead of scanning every selected graph again here.
+    """
     graph_catalog = {
         g.uri: {
             "uri": g.uri,
@@ -218,7 +227,13 @@ def catalog(
             "selected_graphs": [],
             "classes": [],
         }
-    classes = _catalog_class_counts(store, graphs)
+    if class_counts is None:
+        classes = _catalog_class_counts(store, graphs)
+    else:
+        classes = {
+            uri: {"uri": uri, "label": local_name(uri), "count": count, "parents": []}
+            for uri, count in class_counts.items()
+        }
     if classes:
         _enrich_catalog_classes(store, classes, graphs, schema_uri)
     return {
@@ -253,7 +268,13 @@ KPI_KEYS = (
 
 
 def _is_transient(exc: Exception) -> bool:
-    """Store outages (connection reset, timeout, 502-504) as opposed to data errors."""
+    """Store outages (connection reset, 502-504) as opposed to data errors.
+
+    A timeout is not transient: the query is too heavy for the store and would
+    time out again on the next refresh, so it is remembered like a data error.
+    """
+    if any("Timeout" in cls.__name__ for cls in type(exc).__mro__):
+        return False
     if isinstance(exc, OSError):  # requests' transport errors subclass OSError
         return True
     return getattr(exc, "status_code", None) in (502, 503, 504)
@@ -278,13 +299,40 @@ def _snapshot_metric(
             snapshot["transient"].append(metric)
 
 
+# Types that make a subject a schema construct rather than an instance.
+SCHEMA_TYPES = """VALUES ?schemaType { owl:Class rdfs:Class owl:Ontology
+ owl:ObjectProperty owl:DatatypeProperty owl:AnnotationProperty rdf:Property
+ rdfs:Datatype owl:Restriction owl:Axiom }"""
+_SCHEMA_TYPE_URIS = {
+    "http://www.w3.org/2002/07/owl#" + name
+    for name in (
+        "Class", "Ontology", "ObjectProperty", "DatatypeProperty",
+        "AnnotationProperty", "Restriction", "Axiom",
+    )
+} | {
+    "http://www.w3.org/2000/01/rdf-schema#Class",
+    "http://www.w3.org/2000/01/rdf-schema#Datatype",
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#Property",
+}
+RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+
+
 def graph_snapshot(
     store: QueryStore, graph_uri: str, skip: Iterable[str] = ()
 ) -> dict[str, Any]:
     """Dashboard statistics for one named graph, as JSON-serialisable data.
 
+    Queries are shaped for TDB2 on multi-million-triple graphs: each is an index
+    scan with no per-row EXISTS probe. "Instance" keeps the Explorer definition
+    (typed IRI with no schema type), computed as ``typed - schema-typed`` since
+    the schema-typed side is a cheap index lookup and usually empty.
+
+    Object statistics run per predicate: an unreadable value (e.g. a damaged
+    TDB2 node table) then only drops that predicate, listed in
+    ``unreadable_predicates``, instead of the whole metric.
+
     Metrics in ``skip`` are reported unavailable without querying: the caller
-    uses it to avoid re-running full-graph scans that recently failed.
+    uses it to avoid re-running scans that recently failed or timed out.
 
     The triple count is the reachability probe: if it fails the store is down and
     the error propagates, so a failed query never masquerades as an empty graph.
@@ -299,67 +347,113 @@ def graph_snapshot(
             ]["n"]
         ),
         **dict.fromkeys(SNAPSHOT_METRICS),
+        "unreadable_predicates": [],
         "unavailable": [],
         # Failed because the store was unreachable, not because of the data.
         "transient": [],
     }
+    predicate_counts: dict[str, int] = {}
 
-    def predicates() -> None:
-        snapshot["predicates"] = sorted(
-            str(row["p"])
-            for row in rows(
-                store, f"SELECT DISTINCT ?p WHERE {{ {scope} {{ ?s ?p ?o }} }}"
-            )
-        )
-
-    def objects() -> None:
-        row = rows(
-            store,
-            f"""
-          SELECT (SUM(IF(isIRI(?o) && ?p != rdf:type, 1, 0)) AS ?relations)
-            (SUM(IF(isLiteral(?o), 1, 0)) AS ?literal_values)
-          WHERE {{ {scope} {{ ?s ?p ?o }} }}
-        """,
-        )[0]
-        # SUM over zero rows is 0; an unbound SUM means an expression raised
-        # (Jena reports unreadable nodes this way), so it is not a count.
-        if row.get("relations") is None or row.get("literal_values") is None:
-            raise ValueError("object aggregate unbound: store failed to read values")
-        snapshot["relations"] = int(row["relations"])
-        snapshot["literal_values"] = int(row["literal_values"])
-
-    def instance_counts() -> None:
-        row = rows(
-            store,
-            f"""
-          SELECT ?instances ?named_individuals WHERE {{
-            {{ SELECT (COUNT(DISTINCT ?s) AS ?instances) WHERE {{
-              {scope} {{ {INSTANCE} }} }} }}
-            {{ SELECT (COUNT(DISTINCT ?s) AS ?named_individuals) WHERE {{
-              {scope} {{ {INSTANCE} FILTER EXISTS {{ ?s a owl:NamedIndividual }} }} }} }}
-          }}
-        """,
-        )[0]
-        snapshot["instances"] = int(row["instances"])
-        snapshot["named_individuals"] = int(row["named_individuals"])
-
-    def labeled() -> None:
-        snapshot["labeled_instances"] = int(
+    def count(pattern: str) -> int:
+        return int(
             rows(
                 store,
-                f"""
-          SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE {{ {scope} {{ {INSTANCE}
-            FILTER EXISTS {{ ?s rdfs:label ?label .
-              FILTER(isLiteral(?label) && STRLEN(STR(?label)) > 0) }} }} }}
-        """,
+                f"SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE {{ {scope} {{ {pattern} }} }}",
             )[0]["n"]
         )
 
+    def predicates() -> None:
+        for row in rows(
+            store,
+            f"SELECT ?p (COUNT(*) AS ?n) WHERE {{ {scope} {{ ?s ?p ?o }} }} GROUP BY ?p",
+        ):
+            predicate_counts[str(row["p"])] = int(row["n"])
+        snapshot["predicates"] = sorted(predicate_counts)
+
+    def objects() -> None:
+        if snapshot["predicates"] is None:
+            raise ValueError("predicate list unavailable")
+        relations = literal_values = 0
+        readable = 0
+        for predicate in snapshot["predicates"]:
+            if predicate == RDF_TYPE:
+                continue  # never a relation; typed objects are IRIs
+            try:
+                row = rows(
+                    store,
+                    f"""
+          SELECT (SUM(IF(isIRI(?o), 1, 0)) AS ?iris)
+            (SUM(IF(isLiteral(?o), 1, 0)) AS ?literals)
+          WHERE {{ {scope} {{ ?s {sparql_iri(predicate)} ?o }} }}
+        """,
+                )[0]
+                # An unbound SUM means an expression raised: Jena reports
+                # unreadable nodes this way, so it is not a count of zero.
+                if row.get("iris") is None or row.get("literals") is None:
+                    raise ValueError("object aggregate unbound")
+            except Exception as exc:
+                if _is_transient(exc):
+                    raise
+                logger.warning(
+                    "Explorer: unreadable objects for %s in %s: %s",
+                    predicate, graph_uri, exc,
+                )
+                snapshot["unreadable_predicates"].append(predicate)
+                continue
+            readable += 1
+            relations += int(row["iris"])
+            literal_values += int(row["literals"])
+        if not readable and snapshot["unreadable_predicates"]:
+            raise ValueError("no predicate has readable objects")
+        snapshot["relations"] = relations
+        snapshot["literal_values"] = literal_values
+
+    def instance_counts() -> None:
+        schema_typed = f"{SCHEMA_TYPES} ?s a ?schemaType"
+        snapshot["instances"] = count(
+            "?s a ?instanceType . FILTER(isIRI(?s))"
+        ) - count(f"{schema_typed} FILTER(isIRI(?s))")
+        snapshot["named_individuals"] = count(
+            "?s a owl:NamedIndividual . FILTER(isIRI(?s))"
+        ) - count(f"{schema_typed} . ?s a owl:NamedIndividual")
+
+    def labeled() -> None:
+        label = "?s rdfs:label ?label . FILTER(isIRI(?s) && isLiteral(?label) && STRLEN(STR(?label)) > 0)"
+        snapshot["labeled_instances"] = count(
+            f"{label} FILTER EXISTS {{ ?s a ?anyType }}"
+        ) - count(f"{SCHEMA_TYPES} ?s a ?schemaType . {label}")
+
     def classes() -> None:
-        snapshot["classes"] = {
-            uri: int(row["count"])
-            for uri, row in _catalog_class_counts_one_graph(store, graph_uri).items()
+        overlap = {
+            str(row["cls"]): int(row["n"])
+            for row in rows(
+                store,
+                f"""
+          SELECT ?cls (COUNT(DISTINCT ?s) AS ?n) WHERE {{ {scope} {{
+            {SCHEMA_TYPES} ?s a ?schemaType . ?s a ?cls }} }} GROUP BY ?cls
+        """,
+            )
         }
+        counts: dict[str, int] = {}
+        for row in rows(
+            store,
+            f"""
+          SELECT ?cls (COUNT(DISTINCT ?s) AS ?n) WHERE {{ {scope} {{
+            ?s a ?cls . FILTER(isIRI(?s)) }} }} GROUP BY ?cls
+        """,
+        ):
+            uri = str(row["cls"])
+            if (
+                row["cls"] is None
+                or not uri.startswith(("http://", "https://", "urn:"))
+                or uri in _SCHEMA_TYPE_URIS
+                or uri == NAMED
+            ):
+                continue
+            n = int(row["n"]) - overlap.get(uri, 0)
+            if n > 0:
+                counts[uri] = n
+        snapshot["classes"] = counts
 
     skipped = set(skip)
     for metric, compute, companion in (
@@ -428,6 +522,15 @@ def consolidate(
     return kpis, excluded
 
 
+def snapshot_class_counts(snapshots: list[dict[str, Any]]) -> dict[str, int]:
+    """Per-graph class instance counts, summed across snapshots."""
+    counts: dict[str, int] = {}
+    for item in snapshots:
+        for uri, count in (item["classes"] or {}).items():
+            counts[uri] = counts.get(uri, 0) + count
+    return counts
+
+
 # Returns ``None`` while a graph's snapshot is still being computed elsewhere.
 SnapshotFn = Callable[[QueryStore, str], dict[str, Any] | None]
 
@@ -469,6 +572,7 @@ def overview(
             "graph_metrics": [{**meta, **zero} for meta in graph_catalog.values()],
             "unavailable": [],
             "excluded": {},
+            "unreadable_predicates": {},
             "pending": [],
         }
     if max_workers > 1 and len(graphs) > 1:
@@ -481,17 +585,25 @@ def overview(
         results = [snapshot(store, uri) for uri in graphs]
     pending = [uri for uri, item in zip(graphs, results, strict=True) if item is None]
     snapshots = [item for item in results if item is not None]
-    class_counts: dict[str, int] = {}
-    for item in snapshots:
-        for uri, count in (item["classes"] or {}).items():
-            class_counts[uri] = class_counts.get(uri, 0) + count
+    class_counts = snapshot_class_counts(snapshots)
     kpis, excluded = consolidate(snapshots)
+    # Totals cover the graphs that are ready; pending ones are listed as excluded
+    # until their snapshot lands, so values show up as soon as any graph is done.
+    if pending:
+        excluded = {key: excluded.get(key, []) + pending for key in KPI_KEYS}
     return {
         "graphs": list(graph_catalog.values()),
         "selected_graphs": graphs,
-        "kpis": kpis if not pending else dict.fromkeys(KPI_KEYS),
+        "kpis": kpis if snapshots else dict.fromkeys(KPI_KEYS),
         # Metric -> graph URIs left out of that consolidated KPI.
-        "excluded": excluded if not pending else {},
+        "excluded": excluded,
+        # Graph URI -> predicates whose objects could not be read; relations and
+        # literal values of that graph are counted without them.
+        "unreadable_predicates": {
+            item["graph_uri"]: item["unreadable_predicates"]
+            for item in snapshots
+            if item.get("unreadable_predicates")
+        },
         "classes": sorted(
             (
                 {"uri": uri, "label": local_name(uri), "count": count, "parents": []}

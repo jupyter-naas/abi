@@ -127,12 +127,32 @@ def run_search_pipeline_for_file(
         f"XOrchestration: mapping envelope {file_path!r} into the graph via "
         f"XSearchRecentTweetsPipeline"
     )
+    effective_persist = True if persist is None else persist
     pipeline.run(
         XSearchRecentTweetsPipelineParameters(
             file_path=file_path,
-            persist=True if persist is None else persist,
+            persist=effective_persist,
         )
     )
+    if effective_persist:
+        try:
+            from intelligence.utils.OsintPipelinePendingWork import (
+                enqueue_pending_location_extractions_from_envelope,
+            )
+
+            enqueue_pending_location_extractions_from_envelope(
+                module.engine.services.triple_store,
+                module.engine.services.object_storage,
+                file_path,
+                ontology_namespace=getattr(
+                    module.configuration, "ontology_namespace", "http://ontology.naas.ai/x/"
+                ),
+                graph_name=str(graph_name or module.configuration.graph_name),
+            )
+        except Exception as exc:  # noqa: BLE001 — ingestion must not fail on queue write
+            logger.warning(
+                f"XOrchestration: pending location enqueue failed for {file_path!r} ({exc})"
+            )
 
 
 def search_envelope_ingested(

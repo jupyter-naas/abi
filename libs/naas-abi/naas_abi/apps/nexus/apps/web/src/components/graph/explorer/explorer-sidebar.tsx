@@ -468,7 +468,11 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
       <p className="graph-explorer-list-count">
         {request.loading
           ? 'Loading classes…'
-          : `${classes.filter((c) => c.count > 0).length.toLocaleString()} classes`}
+          : `${classes.filter((c) => c.count > 0).length.toLocaleString()} classes${
+              request.data?.pending?.length
+                ? ` · counting ${request.data.pending.length} more graph${request.data.pending.length > 1 ? 's' : ''}…`
+                : ''
+            }`}
       </p>
       {request.error ? (
         <p className="graph-explorer-message" role="alert">
