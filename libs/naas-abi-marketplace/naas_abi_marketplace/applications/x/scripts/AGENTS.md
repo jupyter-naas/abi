@@ -10,7 +10,7 @@
 | Catch up `envelopes_v1` / posts from storage | `backfill_x_datasets.py` | **Yes** |
 | Validate Parquet cache vs dataset totals | `compare_x_dataset_cache.py` | **No** |
 
-Steady-state ingest uses Dagster (`x_sensor_recent_tweets_put_search_recent_tweets`, files reprocess job) and `sync_envelope_paths` inside orchestrations—not these CLIs.
+Steady-state ingest uses Dagster (`x_sensor_recent_tweets_put_search_recent_tweets` for new puts, `x_reprocess_recent_tweets_files_schedule_*` for catch-up including dataset-only when graph ⊃ dataset) and `sync_envelope_paths` inside orchestrations—not these CLIs.
 
 ## `audit_envelope_bookkeeping.py`
 

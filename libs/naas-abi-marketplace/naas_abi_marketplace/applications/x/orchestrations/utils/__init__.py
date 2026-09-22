@@ -19,6 +19,8 @@ from naas_abi_marketplace.applications.x.orchestrations.utils._common import (
     run_search_pipeline_for_file,
     run_search_workflow_for_filter,
     safe_name,
+    search_envelope_fully_projected,
+    search_envelope_in_dataset,
     search_envelope_ingested,
     x_app_publish_enabled,
 )
@@ -37,6 +39,8 @@ __all__ = [
     "run_search_pipeline_for_file",
     "run_search_workflow_for_filter",
     "safe_name",
+    "search_envelope_fully_projected",
+    "search_envelope_in_dataset",
     "search_envelope_ingested",
     "x_app_publish_enabled",
 ]

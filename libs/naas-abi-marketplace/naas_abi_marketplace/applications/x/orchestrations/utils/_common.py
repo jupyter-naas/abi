@@ -201,6 +201,46 @@ def search_envelope_ingested(
     return bool(rows)
 
 
+def search_envelope_in_dataset(module, file_path: str) -> bool:
+    """True when *file_path* is recorded in ``x.envelopes_v1``.
+
+    Fails open (``False``) when Dataset Service is unavailable or the probe
+    errors, so ingestion still runs rather than dropping projection.
+    """
+    try:
+        if not module.engine.services.dataset_available():
+            return False
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
+            envelope_already_ingested,
+        )
+
+        return envelope_already_ingested(
+            module.engine.services.dataset, normalize_envelope_path(file_path)
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            f"search_envelope_in_dataset: probe failed for {file_path!r} ({exc}); "
+            f"treating as not ingested"
+        )
+        return False
+
+
+def normalize_envelope_path(path: str) -> str:
+    return str(path or "").strip().lstrip("/")
+
+
+def search_envelope_fully_projected(
+    module,
+    file_path: str,
+    *,
+    graph_name: str | None = None,
+) -> bool:
+    """True when the envelope is mapped in the graph and listed in ``envelopes_v1``."""
+    return search_envelope_ingested(
+        module, file_path, graph_name=graph_name
+    ) and search_envelope_in_dataset(module, file_path)
+
+
 # ----- Search fetch + inline-map helpers -------------------------------------
 
 
