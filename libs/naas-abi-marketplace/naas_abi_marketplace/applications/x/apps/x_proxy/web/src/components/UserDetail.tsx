@@ -9,7 +9,8 @@ import { UserPostCard } from "@/components/UserPostCard";
 import { UserProfileCard } from "@/components/UserProfileCard";
 import {
   feedOf,
-  loadUserBundle,
+  loadUserFeedPage,
+  postsInTab,
   USER_FEED_BATCH,
   tweetIdOf,
 } from "@/lib/userSearch";
@@ -24,9 +25,8 @@ const TABS = FEED.tabs as { key: FeedTab; label: string }[];
 
 type Props = {
   username: string;
-  /** The index row for this author, when the search index knows them. */
+  /** Optional row from the search results when the profile was opened from the list. */
   known: UserRow | null;
-  indexLoading: boolean;
   timezone: string;
   needle: string;
   /** Tweet id the reader came back from, marked in the feed. */
@@ -78,6 +78,7 @@ function profileFromKnown(known: UserRow | null): UserProfile | null {
     username: known.username,
     posts: known.posts,
     last_post_at: known.last_post_at,
+    first_post_at: known.first_post_at,
     location: known.location,
     verified_type: known.verified_type,
     description: known.description,
@@ -106,7 +107,6 @@ function ingestedPostCount(
 export function UserDetail({
   username,
   known,
-  indexLoading,
   timezone,
   needle,
   selectedPost,
@@ -120,13 +120,17 @@ export function UserDetail({
   const [tab, setTab] = useState<FeedTab>("all");
   const [shown, setShown] = useState(USER_FEED_BATCH);
   const [bundleLoading, setBundleLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [fetchPage, setFetchPage] = useState(0);
 
   useEffect(() => {
     let live = true;
     setBundleLoading(true);
     setShown(USER_FEED_BATCH);
     setTab("all");
-    loadUserBundle(username)
+    setFetchPage(0);
+    setBundle(null);
+    loadUserFeedPage(username, 0, USER_FEED_BATCH)
       .then((res) => {
         if (live) setBundle(res);
       })
@@ -149,16 +153,49 @@ export function UserDetail({
   const ingestedTotal = ingestedPostCount(known, feed.profile, feed.counts);
   const lastPostAt =
     profile?.last_post_at || feed.profile?.last_post_at || rows[0]?.created_at || "";
-  const firstPostAt = feed.profile?.first_post_at || "";
+  const firstPostAt =
+    feed.profile?.first_post_at || profile?.first_post_at || known?.first_post_at || "";
   const pinned = pinnedIds.users.includes(pin.id);
   const unknown =
-    !indexLoading &&
-    !bundleLoading &&
-    !profile &&
-    !rows.length &&
-    ingestedTotal === 0;
+    !bundleLoading && !profile && !rows.length && ingestedTotal === 0;
   const referencedCount = feed.counts.referenced;
   const matchedCount = feed.counts.matched;
+
+  const loadMore = async () => {
+    const loaded = bundle?.posts || [];
+    const inTab = postsInTab(loaded, tab);
+    if (shown < inTab.length) {
+      setShown((count) => count + USER_FEED_BATCH);
+      return;
+    }
+    if (!bundle || loaded.length >= bundle.postTotal) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = fetchPage + 1;
+      const page = await loadUserFeedPage(username, nextPage, USER_FEED_BATCH);
+      if (!page) return;
+      setFetchPage(nextPage);
+      setBundle((prev) => {
+        if (!prev) return page;
+        const seen = new Set(prev.posts.map((post) => tweetIdOf(post) || post.url));
+        const merged = [...prev.posts];
+        for (const post of page.posts) {
+          const key = tweetIdOf(post) || post.url;
+          if (key && seen.has(key)) continue;
+          if (key) seen.add(key);
+          merged.push(post);
+        }
+        return {
+          profile: page.profile,
+          posts: merged,
+          postTotal: page.postTotal,
+        };
+      });
+      setShown((count) => count + USER_FEED_BATCH);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const kpis: KpiItem[] = [
     {
@@ -300,9 +337,10 @@ export function UserDetail({
               <button
                 type="button"
                 className="feed-more-btn"
-                onClick={() => setShown((count) => count + USER_FEED_BATCH)}
+                disabled={loadingMore}
+                onClick={() => void loadMore()}
               >
-                Load more
+                {loadingMore ? "Loading…" : "Load more"}
               </button>
               <span className="feed-more-label">
                 {rows.length} of {feed.total} posts in this feed

@@ -4,6 +4,26 @@ import { useEffect, useMemo, useState } from "react";
 import { artifactUrl } from "@/lib/userSearch";
 
 /** True when *href* points at a playable video (MP4 / X video CDN). */
+/** Spinner frame while media is fetched or decoded. */
+export function MediaProcessingPlaceholder({
+  label = "Processing media…",
+}: {
+  label?: string;
+}) {
+  return (
+    <div className="media-carousel">
+      <div
+        className="media-frame media-frame-loading"
+        role="status"
+        aria-live="polite"
+      >
+        <span className="loading-spinner media-loader-spinner" aria-hidden />
+        <span className="media-loader-label">{label}</span>
+      </div>
+    </div>
+  );
+}
+
 export function isVideoUrl(href: string): boolean {
   const lower = href.toLowerCase();
   return (
@@ -31,11 +51,14 @@ export function MediaCarousel({ value }: { value: string }) {
   );
   const [index, setIndex] = useState(0);
   const [broken, setBroken] = useState<Record<string, boolean>>({});
+  const [ready, setReady] = useState<Record<string, boolean>>({});
 
   // A different post reuses this component when the feed re-renders; the slide
   // it was left on does not carry over.
   useEffect(() => {
     setIndex(0);
+    setBroken({});
+    setReady({});
   }, [value]);
 
   if (!urls.length) return null;
@@ -49,6 +72,11 @@ export function MediaCarousel({ value }: { value: string }) {
 
   const markBroken = () =>
     setBroken((prev) => ({ ...prev, [source]: true }));
+
+  const markReady = () =>
+    setReady((prev) => ({ ...prev, [source]: true }));
+
+  const awaitingAsset = !broken[source] && !ready[source];
 
   return (
     <div
@@ -68,6 +96,12 @@ export function MediaCarousel({ value }: { value: string }) {
       }}
     >
       <div className="media-frame">
+        {awaitingAsset ? (
+          <div className="media-loader-overlay" aria-hidden>
+            <span className="loading-spinner media-loader-spinner" />
+            <span className="media-loader-label">Loading media…</span>
+          </div>
+        ) : null}
         {broken[source] ? (
           <a
             className="media-fallback"
@@ -86,6 +120,7 @@ export function MediaCarousel({ value }: { value: string }) {
             controls
             playsInline
             preload="metadata"
+            onLoadedData={markReady}
             onError={markBroken}
           />
         ) : (
@@ -103,6 +138,7 @@ export function MediaCarousel({ value }: { value: string }) {
               src={href}
               alt=""
               loading="lazy"
+              onLoad={markReady}
               onError={markBroken}
             />
           </a>

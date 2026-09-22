@@ -102,7 +102,6 @@ export function DatasetsNamespaceGroups({ dense }: { dense?: boolean }) {
                       }
                       className={cn(
                         'datasets-section-row',
-                        shellTokens.sidebar.listRow,
                         active && 'datasets-section-row--active',
                         dense && 'datasets-section-row--dense',
                       )}

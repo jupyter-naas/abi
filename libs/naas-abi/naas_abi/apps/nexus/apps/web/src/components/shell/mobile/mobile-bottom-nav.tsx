@@ -1,6 +1,6 @@
 'use client';
 
-import { Code, Folder, LayoutGrid, MessageSquare, MoreHorizontal } from 'lucide-react';
+import { Code, Files, LayoutGrid, MessageSquare, MoreHorizontal } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useFeature } from '@/hooks/use-feature';
@@ -20,7 +20,7 @@ type TabDef = {
 const TABS: TabDef[] = [
   { id: 'apps', label: 'Apps', icon: <LayoutGrid size={20} />, href: '/apps', feature: 'apps' },
   { id: 'code', label: 'Code', icon: <Code size={20} />, href: '/code', feature: 'code' },
-  { id: 'files', label: 'Files', icon: <Folder size={20} />, href: '/files', feature: 'files' },
+  { id: 'files', label: 'Files', icon: <Files size={20} />, href: '/files', feature: 'files' },
   { id: 'chat', label: 'Chat', icon: <MessageSquare size={20} />, href: '/chat', feature: 'chat' },
   { id: 'more', label: 'More', icon: <MoreHorizontal size={20} /> },
 ];

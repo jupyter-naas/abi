@@ -125,9 +125,9 @@ def catalog(
         for row in rows(
             store,
             f"""
-          SELECT ?cls (MIN(STR(?label)) AS ?label) WHERE {{
+          SELECT ?cls (MIN(STR(?rawLabel)) AS ?label) WHERE {{
             VALUES ?cls {{ {label_values} }} {metadata_scope}
-            GRAPH ?g {{ ?cls rdfs:label ?label . FILTER(isLiteral(?label)) }}
+            GRAPH ?g {{ ?cls rdfs:label ?rawLabel . FILTER(isLiteral(?rawLabel)) }}
           }} GROUP BY ?cls
         """,
         ):
@@ -338,9 +338,9 @@ def instances(
     for row in rows(
         store,
         f"""
-      SELECT ?cls (MIN(STR(?label)) AS ?label) WHERE {{
+      SELECT ?cls (MIN(STR(?rawLabel)) AS ?label) WHERE {{
         VALUES ?cls {{ {class_values} }} {values(sorted(set(graphs + [schema_uri])))}
-        GRAPH ?g {{ ?cls rdfs:label ?label }}
+        GRAPH ?g {{ ?cls rdfs:label ?rawLabel }}
       }} GROUP BY ?cls
     """,
     ):
@@ -473,10 +473,10 @@ def network(
         for row in rows(
             store,
             f"""
-            SELECT ?p (MIN(STR(?label)) AS ?label) WHERE {{
+            SELECT ?p (MIN(STR(?rawLabel)) AS ?label) WHERE {{
                 VALUES ?p {{ {" ".join(map(sparql_iri, sorted(predicates)))} }}
                 {values(sorted(set(graphs + [schema_uri])))}
-                GRAPH ?g {{ ?p rdfs:label ?label }}
+                GRAPH ?g {{ ?p rdfs:label ?rawLabel }}
             }} GROUP BY ?p
         """,
         ):

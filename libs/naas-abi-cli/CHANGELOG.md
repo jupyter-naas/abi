@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.24.1 (2026-09-21)
+
+### Bug Fixes
+
+- **x-proxy-dataset**: Apply various minor fixes and updates
+  ([`6becfb5`](https://github.com/jupyter-naas/abi/commit/6becfb51527d799a4222f2c5243a690935d19386))
+
+
 ## v2.24.0 (2026-09-17)
 
 ### Features

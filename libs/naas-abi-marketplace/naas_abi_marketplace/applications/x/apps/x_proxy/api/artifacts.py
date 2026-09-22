@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import mimetypes
 import re
@@ -90,18 +91,23 @@ def _download_media(
             content_type = str(response.headers.get("Content-Type") or "")
             if not content_type.startswith(("image/", "video/")):
                 raise ValueError(f"unsupported content type {content_type!r}")
-            body = bytearray()
+            hasher = hashlib.sha256()
+            buffer = io.BytesIO()
+            total = 0
             while chunk := response.read(64 * 1024):
-                body.extend(chunk)
-                if len(body) > MAX_MEDIA_BYTES:
+                total += len(chunk)
+                if total > MAX_MEDIA_BYTES:
                     raise ValueError("media exceeds size limit")
+                hasher.update(chunk)
+                buffer.write(chunk)
     except Exception as exc:  # noqa: BLE001 - one attachment must not fail publish
         logger.warning(f"X artifact media: download failed for {source_url!r} ({exc})")
         return None
 
-    digest = hashlib.sha256(body).hexdigest()
+    digest = hasher.hexdigest()
     filename = f"{digest}{_extension(content_type, source_url)}"
-    storage.put_object(prefix, filename, bytes(body))
+    buffer.seek(0)
+    storage.put_object_stream(prefix, filename, buffer)
     return filename
 
 

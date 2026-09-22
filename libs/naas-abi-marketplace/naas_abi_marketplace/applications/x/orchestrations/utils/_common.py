@@ -341,6 +341,61 @@ def run_search_workflow_for_filter(
     return file_paths
 
 
+def report_jobs_in_progress(context) -> bool:
+    """True when a daily report pipeline run is still in flight (defer dataset sync)."""
+    try:
+        instance = context.instance
+    except AttributeError:
+        return False
+    runs = instance.get_runs(
+        filters=dg.RunsFilter(
+            statuses=IN_PROGRESS_RUN_STATUSES,
+        ),
+        limit=50,
+    )
+    for run in runs:
+        name = str(getattr(run, "job_name", "") or "")
+        if name.startswith("report_"):
+            return True
+    return False
+
+
+def sync_x_dataset_paths_batched(
+    module,
+    envelope_paths: list[str],
+    *,
+    batch_size: int = 64,
+    context=None,
+) -> dict:
+    """Sync many envelope paths in bounded batches (Files fallback sweeps)."""
+    if not envelope_paths:
+        return {"skipped": True, "reason": "no_paths", "batches": 0}
+    summaries: list[dict] = []
+    for offset in range(0, len(envelope_paths), batch_size):
+        batch = envelope_paths[offset : offset + batch_size]
+        summaries.append(sync_x_dataset_paths(module, batch, context=context))
+    return {"batches": len(summaries), "summaries": summaries}
+
+
+def sync_x_dataset_paths(
+    module,
+    envelope_paths: list[str],
+    *,
+    context=None,
+) -> dict:
+    """Incremental dataset projection for exact envelope paths."""
+    if context is not None and report_jobs_in_progress(context):
+        logger.info(
+            "sync_x_dataset_paths: deferred while report pipeline in progress"
+        )
+        return {"skipped": True, "reason": "report_window"}
+    from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.sync import (
+        sync_envelope_paths,
+    )
+
+    return sync_envelope_paths(module, envelope_paths)
+
+
 def run_search_and_map_for_query(
     module,
     filter_config: XTweetSearchWorkflowConfiguration,
@@ -526,11 +581,25 @@ def publish_x_app(
         logger.info(f"publish_x_app: skipped ({reason})")
         return {"skipped": True, "reason": reason}
 
+    from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
+        x_dataset_read_enabled,
+    )
     from naas_abi_marketplace.applications.x.apps.x_proxy.hub import XAppHubBuilder
 
-    # Bring the columnar projection level with the envelope archive first, so the
-    # snapshots below read a view that includes this tick's ingest.
-    projection = refresh_x_cache(module)
+    dataset_read = x_dataset_read_enabled(module)
+    projection = None
+    if not dataset_read:
+        # Bring the columnar projection level with the envelope archive first, so the
+        # snapshots below read a view that includes this tick's ingest.
+        projection = refresh_x_cache(module)
+
+    app_cfg = getattr(module.configuration, "app", None)
+    dataset_cfg = getattr(app_cfg, "dataset", None) if app_cfg else None
+    skip_user_shards = bool(
+        dataset_cfg
+        and getattr(dataset_cfg, "skip_user_shard_publish", False)
+        and dataset_read
+    )
 
     hub = XAppHubBuilder(
         module.engine.services.object_storage,
@@ -539,8 +608,10 @@ def publish_x_app(
     )
     published = hub.publish(
         followed_count_entries(module),
-        full_users=full_users,
+        full_users=full_users and not skip_user_shards,
         direct_user_limit=direct_user_limit,
+        skip_user_shards=skip_user_shards,
+        use_cache=not dataset_read,
     )
     if projection is not None:
         published = {**published, "projection": projection}

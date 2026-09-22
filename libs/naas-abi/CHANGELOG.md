@@ -2,6 +2,44 @@
 
 <!-- version list -->
 
+## v2.72.4 (2026-09-21)
+
+### Bug Fixes
+
+- **nexus**: Align sidebar rows to 12px and drop app menu hover rings.
+  ([`2304325`](https://github.com/jupyter-naas/abi/commit/23043258e933ad57416bf9181aae057dbbd7b85f))
+
+- **nexus**: Open Files on comfortable spacing by default.
+  ([`5ad72ab`](https://github.com/jupyter-naas/abi/commit/5ad72ab8a52fa4a4d3ffa43e475bd56023709e9e))
+
+- **nexus**: Restore orthogonal ontology connectors and turn Files into a real explorer.
+  ([`1a68145`](https://github.com/jupyter-naas/abi/commit/1a68145f9d252ebdb900b2a50755f60c50d6fbea))
+
+
+## v2.72.3 (2026-09-21)
+
+### Bug Fixes
+
+- **nexus-web**: Pack dock icons instead of compressing them
+  ([`d7c5782`](https://github.com/jupyter-naas/abi/commit/d7c5782737cfd04e9d5bdea35f030bfe0c8fbd73))
+
+
+## v2.72.2 (2026-09-21)
+
+### Bug Fixes
+
+- **graph**: Avoid label aggregate alias collisions in Fuseki
+  ([`12e2765`](https://github.com/jupyter-naas/abi/commit/12e27652b1b01040f310bf6e204cb6931c895f31))
+
+
+## v2.72.1 (2026-09-21)
+
+### Bug Fixes
+
+- **auth**: Halve login wordmark height
+  ([`7034343`](https://github.com/jupyter-naas/abi/commit/70343431062eb186ab529b87e4ff4227be6bc48d))
+
+
 ## v2.72.0 (2026-09-21)
 
 ### Bug Fixes

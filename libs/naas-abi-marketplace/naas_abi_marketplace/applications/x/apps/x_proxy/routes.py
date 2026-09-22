@@ -50,6 +50,8 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
 if TYPE_CHECKING:
+    from naas_abi_core.services.dataset.DatasetPort import IDatasetPort
+    from naas_abi_marketplace.applications.x import ABIModule
     from naas_abi_marketplace.applications.x.apps.x_proxy.cache.reader import (
         CacheReader,
     )
@@ -73,6 +75,9 @@ _DIRECT_ARTIFACT_RE = re.compile(
     r"^(?:posts/by-id/\d+/(?:post\.json|media/[a-f0-9]{64}\.[a-z0-9]{1,5})"
     r"|users/by-handle/[a-z0-9_]{1,64}/"
     r"(?:user\.json|media/(?:avatar|banner)-[a-f0-9]{64}\.[a-z0-9]{1,5}))$"
+)
+_DATASET_MEDIA_RE = re.compile(
+    r"^dataset/media/[A-Za-z0-9_:-]{1,128}/[a-f0-9]{64}\.[a-z0-9]{1,5}$"
 )
 # Legacy data/*.json paths (older hub publishes) - keep serving if present.
 _LEGACY_DATA_RE = re.compile(r"^data/[A-Za-z0-9_.-]+\.json$")
@@ -222,12 +227,178 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
     before the router, so this is the only ordering that holds.
     """
 
-    def __init__(self, app, object_storage_service: ObjectStorageService) -> None:
+    def __init__(
+        self,
+        app,
+        object_storage_service: ObjectStorageService,
+        *,
+        dataset: IDatasetPort | None = None,
+        module: ABIModule | None = None,
+    ) -> None:
         super().__init__(app)
         self._object_storage = object_storage_service
+        self._dataset = dataset
+        self._module = module
         self._search_reader: CacheReader | None = None
         self._search_state: dict = {}
         self._search_lock = threading.Lock()
+
+    def _dataset_read_enabled(self) -> bool:
+        if self._module is None or self._dataset is None:
+            return False
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
+            x_dataset_read_enabled,
+        )
+
+        return x_dataset_read_enabled(self._module)
+
+    def _dataset_graph_totals(self) -> bytes:
+        from datetime import UTC, datetime
+
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import (
+            api as ds_api,
+        )
+
+        totals = ds_api.graph_totals(self._dataset)
+        doc = {
+            "updated_at": datetime.now(UTC).isoformat(),
+            **totals,
+        }
+        return json.dumps(doc, separators=(",", ":")).encode()
+
+    def _dataset_search_tweets(self, query: str, page: int, per_page: int) -> bytes:
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import (
+            api as ds_api,
+        )
+
+        total, posts = ds_api.search_tweets(
+            self._dataset,
+            query,
+            offset=page * per_page,
+            limit=per_page,
+        )
+        return json.dumps(
+            {
+                "count": total,
+                "page": page,
+                "per_page": per_page,
+                "posts": ds_api.serialize_search_posts(posts),
+            },
+            separators=(",", ":"),
+            default=str,
+        ).encode()
+
+    def _dataset_users_search(self, query: str, page: int, per_page: int) -> bytes:
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import (
+            api as ds_api,
+        )
+
+        total, rows = ds_api.search_users(
+            self._dataset,
+            query,
+            offset=page * per_page,
+            limit=per_page,
+        )
+        return json.dumps(
+            {"count": total, "page": page, "per_page": per_page, "users": rows},
+            separators=(",", ":"),
+            default=str,
+        ).encode()
+
+    def _cached_dataset_search_response(
+        self,
+        if_none_match: str | None,
+        scope: str,
+        query: str,
+        page: int,
+        per_page: int,
+    ) -> tuple[int, bytes, dict[str, str]]:
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.read_cache import (
+            SearchScope,
+            cached_search_response,
+            optional_module_kv,
+            read_cache_generation,
+        )
+
+        kv = optional_module_kv(self._module)
+        generation = read_cache_generation(self._dataset, kv=kv)
+        typed_scope: SearchScope = "posts" if scope == "posts" else "users"
+
+        def compute_body() -> bytes:
+            if typed_scope == "posts":
+                return self._dataset_search_tweets(query, page, per_page)
+            return self._dataset_users_search(query, page, per_page)
+
+        return cached_search_response(
+            if_none_match=if_none_match,
+            generation=generation,
+            scope=typed_scope,
+            query=query,
+            page=page,
+            per_page=per_page,
+            compute_body=compute_body,
+        )
+
+    def _dataset_user_posts(
+        self, username: str, page: int, per_page: int, kind: str | None
+    ) -> bytes:
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import (
+            api as ds_api,
+        )
+
+        profile, total, posts = ds_api.user_posts(
+            self._dataset,
+            username,
+            offset=page * per_page,
+            limit=per_page,
+            kind=kind,
+        )
+        if profile is None:
+            raise HTTPException(status_code=404, detail="user not found")
+        return json.dumps(
+            {
+                "profile": profile,
+                "count": total,
+                "page": page,
+                "per_page": per_page,
+                "posts": posts,
+            },
+            separators=(",", ":"),
+            default=str,
+        ).encode()
+
+    def _dataset_post(self, tweet_id: str) -> bytes:
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import (
+            api as ds_api,
+        )
+
+        post = ds_api.post_by_id(self._dataset, tweet_id)
+        if post is None:
+            raise HTTPException(status_code=404, detail="post not found")
+        return json.dumps({"post": post}, separators=(",", ":"), default=str).encode()
+
+    def _dataset_ensure_post_media(self, tweet_id: str) -> bytes:
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.media_resolve import (
+            ensure_tweet_media,
+        )
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.media_worker import (
+            DEFAULT_MAX_BYTES,
+        )
+
+        app_cfg = getattr(self._module.configuration, "app", None) if self._module else None
+        dataset_cfg = getattr(app_cfg, "dataset", None) if app_cfg else None
+        max_bytes = int(
+            getattr(dataset_cfg, "media_max_bytes", DEFAULT_MAX_BYTES)
+            if dataset_cfg
+            else DEFAULT_MAX_BYTES
+        )
+        doc = ensure_tweet_media(
+            self._dataset,
+            self._object_storage,
+            tweet_id,
+            max_bytes=max_bytes,
+        )
+        return json.dumps(doc, separators=(",", ":")).encode()
 
     def _search_tweets(self, query: str, page: int, per_page: int) -> bytes:
         from naas_abi_marketplace.applications.x.apps.x_proxy.cache.reader import (
@@ -299,7 +470,7 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         app_prefix, rel = matched
 
-        if rel == "search_tweets/query.json":
+        if rel == "dataset/posts/search.json":
             query = str(request.query_params.get("q") or "")[:200]
             try:
                 page = max(0, int(request.query_params.get("page") or 0))
@@ -310,16 +481,147 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                 raise HTTPException(
                     status_code=400, detail="page and per_page must be integers"
                 ) from exc
-            content = await run_in_threadpool(
-                self._search_tweets, query, page, per_page
+            if not self._dataset_read_enabled():
+                raise HTTPException(
+                    status_code=503,
+                    detail="X Proxy dataset read path is disabled",
+                )
+            status, content, cache_headers = await run_in_threadpool(
+                self._cached_dataset_search_response,
+                request.headers.get("if-none-match"),
+                "posts",
+                query,
+                page,
+                per_page,
             )
+            return Response(
+                content=content,
+                status_code=status,
+                media_type="application/json; charset=utf-8",
+                headers={
+                    **_frame_ancestor_headers(request),
+                    **cache_headers,
+                },
+            )
+
+        if self._dataset_read_enabled() and rel == "globals/graph.json":
+            content = await run_in_threadpool(self._dataset_graph_totals)
             return Response(
                 content=content,
                 media_type="application/json; charset=utf-8",
                 headers={
                     **_frame_ancestor_headers(request),
-                    "Cache-Control": "private, max-age=30",
+                    "Cache-Control": "private, max-age=60",
                 },
+            )
+
+        if rel == "dataset/users/search.json":
+            query = str(request.query_params.get("q") or "")[:200]
+            try:
+                page = max(0, int(request.query_params.get("page") or 0))
+                per_page = max(
+                    1, min(100, int(request.query_params.get("per_page") or 100))
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400, detail="page and per_page must be integers"
+                ) from exc
+            if not self._dataset_read_enabled():
+                raise HTTPException(
+                    status_code=503,
+                    detail="X Proxy dataset read path is disabled",
+                )
+            status, content, cache_headers = await run_in_threadpool(
+                self._cached_dataset_search_response,
+                request.headers.get("if-none-match"),
+                "users",
+                query,
+                page,
+                per_page,
+            )
+            return Response(
+                content=content,
+                status_code=status,
+                media_type="application/json; charset=utf-8",
+                headers={
+                    **_frame_ancestor_headers(request),
+                    **cache_headers,
+                },
+            )
+
+        if self._dataset_read_enabled() and rel.startswith("dataset/users/"):
+            suffix = rel[len("dataset/users/") :]
+            if suffix.endswith("/posts.json"):
+                username = suffix[: -len("/posts.json")]
+                kind = str(request.query_params.get("kind") or "") or None
+                if kind not in (None, "matched", "referenced"):
+                    raise HTTPException(status_code=400, detail="invalid kind")
+                try:
+                    page = max(0, int(request.query_params.get("page") or 0))
+                    per_page = max(
+                        1, min(200, int(request.query_params.get("per_page") or 100))
+                    )
+                except ValueError as exc:
+                    raise HTTPException(
+                        status_code=400, detail="page and per_page must be integers"
+                    ) from exc
+                content = await run_in_threadpool(
+                    self._dataset_user_posts, username, page, per_page, kind
+                )
+                return Response(
+                    content=content,
+                    media_type="application/json; charset=utf-8",
+                    headers={
+                        **_frame_ancestor_headers(request),
+                        "Cache-Control": "private, max-age=15",
+                    },
+                )
+
+        if self._dataset_read_enabled() and rel.startswith("dataset/posts/"):
+            suffix = rel[len("dataset/posts/") :]
+            if suffix.endswith("/media.json"):
+                tweet_id = suffix[: -len("/media.json")]
+                if not tweet_id.isdigit():
+                    raise HTTPException(status_code=400, detail="invalid tweet id")
+                content = await run_in_threadpool(
+                    self._dataset_ensure_post_media, tweet_id
+                )
+                return Response(
+                    content=content,
+                    media_type="application/json; charset=utf-8",
+                    headers={
+                        **_frame_ancestor_headers(request),
+                        "Cache-Control": "private, max-age=31536000, immutable",
+                    },
+                )
+            tweet_id = suffix.removesuffix(".json")
+            if not tweet_id.isdigit():
+                raise HTTPException(status_code=400, detail="invalid tweet id")
+            content = await run_in_threadpool(self._dataset_post, tweet_id)
+            return Response(
+                content=content,
+                media_type="application/json; charset=utf-8",
+                headers={
+                    **_frame_ancestor_headers(request),
+                    "Cache-Control": "private, max-age=60",
+                },
+            )
+
+        if self._dataset_read_enabled() and _DATASET_MEDIA_RE.fullmatch(rel):
+            from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.media_resolve import (
+                object_storage_prefix_for_public_rel,
+            )
+
+            mapped = object_storage_prefix_for_public_rel(rel)
+            if mapped is None:
+                raise HTTPException(status_code=404, detail="media not found")
+            prefix, name = mapped
+            return _serve_object(
+                self._object_storage,
+                prefix,
+                name,
+                _media_type(name),
+                request,
             )
 
         if not rel or rel == "index.html":
@@ -363,6 +665,17 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                     return await call_next(request)
                 raise
 
+        if self._dataset_read_enabled() and rel.startswith(
+            ("search_users/", "search_tweets/")
+        ):
+            raise HTTPException(
+                status_code=410,
+                detail=(
+                    "Legacy search JSON is disabled; use "
+                    "dataset/posts/search.json or dataset/users/search.json"
+                ),
+            )
+
         if _SNAPSHOT_RE.fullmatch(rel) or _LEGACY_DATA_RE.fullmatch(rel):
             return _serve_relative(
                 self._object_storage,
@@ -401,13 +714,27 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
 def register_x_count_app_routes(
     app: FastAPI,
     object_storage_service: ObjectStorageService,
+    *,
+    dataset=None,
+    module=None,
 ) -> None:
     """Mount the dashboard middleware.
 
     Object storage is the only dependency: the app is served entirely from the
     published dataset, so no triple store is needed in the API process.
+
+    ``signals.x`` loads the same routes but has no ``app.dataset`` flags; only
+    register once from ``naas_abi_marketplace.applications.x`` so dataset read
+    is not shadowed by a second middleware layer.
     """
+    if module is not None and type(module).__module__ != "naas_abi_marketplace.applications.x":
+        return
+    if getattr(app.state, "x_count_app_middleware_registered", False):
+        return
     app.add_middleware(
         XCountAppMiddleware,
         object_storage_service=object_storage_service,
+        dataset=dataset,
+        module=module,
     )
+    app.state.x_count_app_middleware_registered = True

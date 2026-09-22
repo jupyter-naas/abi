@@ -10,8 +10,10 @@ Launch the job manually from the Dagster launchpad to override ``prefix`` /
 
 Unlike :class:`XSearchRecentTweetsEventOrchestration` (which maps one envelope
 per ObjectPut event as files land), this orchestration sweeps **all** files
-under a prefix in one run. Use it to backfill / re-ingest the graph after a
-mapping change without re-querying the X API.
+under a prefix in one run — a **fallback** when event ingestion missed puts.
+It maps the graph, syncs namespace ``x`` datasets for successfully processed
+paths, and republishes the app only when ``app_publish`` is on and at least one
+file was mapped this sweep.
 
 Skip-existing: before reprocessing, the job lists the folder, queries the graph
 for the ``x:file_path`` of every ``x:SearchResultSet`` already mapped, and feeds
@@ -61,6 +63,9 @@ from naas_abi_marketplace.applications.x.orchestrations.utils import (
     republish_x_app_after_pipeline,
     run_search_pipeline_for_file,
     safe_name,
+)
+from naas_abi_marketplace.applications.x.orchestrations.utils._common import (
+    sync_x_dataset_paths_batched,
 )
 
 _ENVELOPE_EXTENSIONS = (".json", ".ndjson", ".json.gz", ".ndjson.gz")
@@ -364,12 +369,14 @@ def _reprocess_files(
 
     processed = 0
     failed = 0
+    processed_paths: list[str] = []
     for file_path in paths:
         try:
             run_search_pipeline_for_file(
                 file_path, persist=persist, graph_name=graph_name
             )
             processed += 1
+            processed_paths.append(file_path)
         except OrchestrationTimeoutError:
             raise
         except Exception as exc:  # noqa: BLE001
@@ -388,8 +395,16 @@ def _reprocess_files(
         "max_age_hours": max_age_hours,
         "failed": failed,
     }
-    # Once per sweep rather than once per file: the sweep can map hundreds of
-    # envelopes, and the dataset is rebuilt from the final graph state anyway.
+    # Fallback when ObjectPut ingestion missed envelopes: graph + dataset for
+    # every path we successfully mapped this sweep.
+    if processed_paths:
+        summary["dataset"] = sync_x_dataset_paths_batched(
+            module, processed_paths, batch_size=64
+        )
+    else:
+        summary["dataset"] = {"skipped": True, "reason": "no_paths_mapped"}
+    # Republish static app snapshots only when this sweep actually mapped
+    # something (same gate as primary event path, but optional via app_publish).
     summary["app"] = republish_x_app_after_pipeline(
         module,
         source=f"XSearchRecentTweetsFilesOrchestration[{config.name}]",

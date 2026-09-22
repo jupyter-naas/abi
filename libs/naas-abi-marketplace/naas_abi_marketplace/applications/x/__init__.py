@@ -4,6 +4,7 @@ from naas_abi_core.module.Module import (
     ModuleConfiguration,
     ModuleDependencies,
 )
+from naas_abi_core.services.dataset.DatasetService import DatasetService
 from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -222,6 +223,50 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
         return self
 
 
+class XDatasetConfiguration(BaseModel):
+    """Dataset Service read model for X Proxy (incremental sync + dynamic APIs)."""
+
+    sync_enabled: bool = Field(
+        default=False,
+        description=(
+            "Project new search envelopes into namespace ``x`` datasets on "
+            "ObjectPut event ingestion and on Files reprocess sweeps (not on "
+            "search fetch-only jobs). Requires Dataset Service on the engine."
+        ),
+    )
+    read_enabled: bool = Field(
+        default=False,
+        description=(
+            "Serve paginated user/tweet APIs from datasets (canary). Static JSON "
+            "shards remain available when false or on query failure."
+        ),
+    )
+    skip_user_shard_publish: bool = Field(
+        default=False,
+        description=(
+            "When ``read_enabled``, skip rebuilding ``search_users/posts/*.json`` "
+            "shards on publish (aggregate snapshots only)."
+        ),
+    )
+    skip_report_warmup: bool = Field(
+        default=False,
+        description=(
+            "Skip ``ReportXProxyWarmup`` shard rebuild when dataset read path is active."
+        ),
+    )
+    media_max_bytes: int = Field(
+        default=250 * 1024 * 1024,
+        ge=1024 * 1024,
+        description="Maximum bytes per streamed media download.",
+    )
+    media_batch_size: int = Field(
+        default=4,
+        ge=1,
+        le=32,
+        description="Pending media rows processed per media-worker tick.",
+    )
+
+
 class XAppConfiguration(BaseModel):
     """Publishing controls for the Nexus Recent Tweets app (``x/apps/x_proxy/``).
 
@@ -239,6 +284,7 @@ class XAppConfiguration(BaseModel):
             "mapping without refreshing the catalog app."
         ),
     )
+    dataset: XDatasetConfiguration = Field(default_factory=XDatasetConfiguration)
 
 
 class XSearchRecentTweetsEventConfiguration(BaseModel):
@@ -474,7 +520,13 @@ class ABIModule(BaseModule):
         modules=[
             "naas_abi_core.modules.templatablesparqlquery",
         ],
-        services=[ObjectStorageService, Secret, TripleStoreService, EventService],
+        services=[
+            ObjectStorageService,
+            Secret,
+            TripleStoreService,
+            EventService,
+            DatasetService,
+        ],
     )
 
     class Configuration(ModuleConfiguration):
@@ -628,6 +680,11 @@ class ABIModule(BaseModule):
     # You can see it as the constructor of the module.
     def on_load(self):
         super().on_load()
+        # Dagster jobs/schedules are registered once from the marketplace module
+        # when both ``signals.x`` and ``naas_abi_marketplace.applications.x`` are
+        # enabled (same pattern as ``register_x_count_app_routes``).
+        if self.__class__.__module__ == "signals.x":
+            self._BaseModule__orchestrations = []
 
     # Optional FastAPI integration hook.
     # This mirrors how `naas_abi` wires API settings and services into app.state.
@@ -643,7 +700,13 @@ class ABIModule(BaseModule):
 
             # Object storage only: the app reads a published dataset, so no
             # SPARQL runs at request time and the API needs no triple store.
-            register_x_count_app_routes(app, self.engine.services.object_storage)
+            dataset = getattr(self.engine.services, "dataset", None)
+            register_x_count_app_routes(
+                app,
+                self.engine.services.object_storage,
+                dataset=dataset,
+                module=self,
+            )
         except Exception as exc:  # noqa: BLE001
             from naas_abi_core import logger
 

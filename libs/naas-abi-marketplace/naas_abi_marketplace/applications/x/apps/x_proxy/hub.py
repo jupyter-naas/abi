@@ -94,6 +94,8 @@ class XAppHubBuilder:
         *,
         full_users: bool = False,
         direct_user_limit: int = 100,
+        skip_user_shards: bool = False,
+        use_cache: bool = True,
     ) -> dict[str, Any]:
         """Publish snapshots (+ web assets when this host has an export).
 
@@ -113,4 +115,6 @@ class XAppHubBuilder:
             require_web=False,
             full_users=full_users,
             direct_user_limit=direct_user_limit,
+            skip_user_shards=skip_user_shards,
+            use_cache=use_cache,
         )

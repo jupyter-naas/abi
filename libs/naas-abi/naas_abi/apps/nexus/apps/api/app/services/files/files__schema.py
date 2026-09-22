@@ -55,6 +55,20 @@ class ArchiveTooLargeError(FilesDomainError):
         )
 
 
+class ExtractTooLargeError(FilesDomainError):
+    def __init__(self, *, reason: str):
+        self.reason = reason
+        super().__init__(reason)
+
+
+class InvalidArchiveError(FilesDomainError):
+    pass
+
+
+class UnsupportedArchiveError(FilesDomainError):
+    pass
+
+
 @dataclass(frozen=True)
 class FileInfoData:
     name: str
