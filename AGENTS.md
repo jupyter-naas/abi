@@ -56,8 +56,6 @@ The marketplace (`libs/naas-abi-marketplace/`) is a registry of pluggable module
 
 ## Extra Rules Discovery
 
-- Checked `.cursorrules`: not present.
-- Checked `.cursor/rules/`: not present.
 - Checked `.github/copilot-instructions.md`: not present.
 - Additional instructions are defined in `~/.claude/CLAUDE.md`:
   - Use `gh` CLI for GitHub operations.
@@ -380,7 +378,7 @@ docker compose logs -f <service>                # View logs
 
 When creating or modifying secondary adapters, **ALL abstract methods from the port interface MUST be implemented**. Python will refuse to instantiate the class otherwise. For features not supported by an adapter, implement the method to raise `NotImplementedError` with a descriptive message.
 
-## Cursor Cloud specific instructions
+## Hosted development environment instructions
 
 The Cloud VM has no Docker, so use the **no-Docker `abi dev` runtime** (backed by `config.yaml`: Oxigraph/SQLite/filesystem adapters). `abi stack start` and `config.local.yaml` require Docker (Postgres/Fuseki/Qdrant/RabbitMQ/Redis/MinIO) and will not work here. The update script installs deps (`uv sync --all-extras` + `pnpm install` for the web app) and Ollama if missing; it does **not** pull the ~2 GB models on every boot. Do not re-run those to "start" anything.
 
@@ -391,7 +389,7 @@ Run all four services with `uv run abi dev up -d`, then `abi dev status` / `abi 
 Non-obvious gotchas discovered during setup:
 
 - **`.env` is required and gitignored.** It is auto-created on first `abi dev up`, seeding only the admin login. The engine renders `config.yaml` through Jinja and **hard-fails non-interactively (no TTY) on missing `{{ secret.X }}` in active (non-comment) YAML**. Full-line YAML comments are left unrendered, so commented-out modules can keep example `{{ secret.X }}` placeholders. Root config is keyless-clean for AI/integrations; remaining deploy placeholders are in `.env.example` (`NAAS_API_KEY`, `ABI_API_KEY`, `NEXUS_API_URL`). Copy those if missing.
-- **For capable cloud models:** set `global_config.ai_mode: "cloud"`, uncomment a cloud provider module in `config.yaml`, replace `SECRET_REF` with a real Jinja secret, and add its key via Cursor Secrets / `.env`.
+- **For capable cloud models:** set `global_config.ai_mode: "cloud"`, uncomment a cloud provider module in `config.yaml`, replace `SECRET_REF` with a real Jinja secret, and add its key via environment secrets or `.env`.
 - **First API boot is slow (~2-3 min):** the worker loads every module/ontology and runs Nexus SQLite migrations before serving. Watch `abi dev logs api`; it is ready when `/docs` returns 200 (`GET http://localhost:<api-port>/docs`).
 - **Ports are offset per worktree** (see `abi dev ports`), so they are not the config defaults. `abi dev` injects `OXIGRAPH_URL` into each service; the `config.yaml` default `:7878` is not the live port. To run a test that builds its own engine against the live triple store, pass `OXIGRAPH_URL=http://127.0.0.1:<oxigraph-port>`.
 - **Login:** `admin@example.com` / `admin` (the `abi dev` default; the Docker stack uses `Admin1234!`). Web UI is the `nexus-web` port.

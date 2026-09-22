@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from threading import RLock
 
 from naas_abi_core.services.source_control.SourceControlPorts import (
     PROPOSAL_MERGED,
@@ -26,8 +27,10 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Repo,
     RepoNotFoundError,
     Review,
+    RevisionConflictError,
     SourceControlError,
     WorkflowRun,
+    content_revision,
 )
 
 # Forge review "event" verbs -> normalized review state.
@@ -38,6 +41,9 @@ _REVIEW_EVENTS = {
     "REQUEST_CHANGE": REVIEW_CHANGES_REQUESTED,
     "COMMENT": REVIEW_COMMENT,
 }
+
+
+_CAS_LOCK = RLock()
 
 
 class InMemoryAdapter(ISourceControlAdapter):
@@ -138,6 +144,35 @@ class InMemoryAdapter(ISourceControlAdapter):
         return FileContent(
             path=path, name=path.rsplit("/", 1)[-1], size=len(stored), text=stored
         )
+
+    def compare_and_swap_file(
+        self,
+        *,
+        repo_id: str,
+        path: str,
+        content: str,
+        expected_revision: str,
+        message: str,
+        branch: str,
+        author_name: str | None = None,
+        author_email: str | None = None,
+    ) -> Commit:
+        with _CAS_LOCK:
+            current = self.get_file(repo_id=repo_id, path=path, ref=branch)
+            if (
+                current.text is None
+                or content_revision(current.text) != expected_revision
+            ):
+                raise RevisionConflictError("Workbook changed. Reload before saving.")
+            return self.upsert_file(
+                repo_id=repo_id,
+                path=path,
+                content=content,
+                message=message,
+                branch=branch,
+                author_name=author_name,
+                author_email=author_email,
+            )
 
     def upsert_file(
         self,
@@ -300,9 +335,7 @@ class InMemoryAdapter(ISourceControlAdapter):
         return self._to_proposal(repo_id, record)
 
     def _to_proposal(self, repo_id: str, record: dict) -> Proposal:
-        approvals = sum(
-            1 for r in record["reviews"] if r["state"] == REVIEW_APPROVED
-        )
+        approvals = sum(1 for r in record["reviews"] if r["state"] == REVIEW_APPROVED)
         return Proposal(
             id=record["id"],
             number=record["number"],

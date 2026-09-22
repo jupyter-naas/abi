@@ -1,0 +1,222 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
+import { Header } from '@/components/shell/header';
+import { SheetsIndexGallery, SheetsTemplateStrip } from '@/components/sheets/sheets-index-gallery';
+import { invalidateSheetsCover } from '@/components/sheets/sheets-cover-thumb';
+import { SheetsMenuBar } from '@/components/sheets/sheets-menu-bar';
+import { SheetsStatusBar } from '@/components/sheets/sheets-status-bar';
+import {
+  openSheetsAgentPane,
+  sheetsApiErrorMessage,
+  startNewWorkbook,
+} from '@/lib/create-sheets-project';
+import { partitionSheetsProjects, patchSheetsProject } from '@/lib/sheets-project-actions';
+import type { SheetsSeedTemplate } from '@/lib/sheets-templates';
+import { authFetch } from '@/stores/auth';
+import {
+  SHEETS_DECK_UPDATED_EVENT,
+  useSheetsStore,
+  type SheetsProject,
+} from '@/stores/sheets';
+import '@/app/workspace/[workspaceId]/chat/components/chat-components.css';
+
+export default function SheetsIndexPage() {
+  const params = useParams();
+  const router = useRouter();
+  const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
+  const base = `/workspace/${workspaceId}/sheets`;
+  const [projects, setProjects] = useState<SheetsProject[]>([]);
+  const [templates, setTemplates] = useState<SheetsSeedTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const setSelectedSlug = useSheetsStore((s) => s.setSelectedSlug);
+  const setSelectedTitle = useSheetsStore((s) => s.setSelectedTitle);
+  const { active, archived } = partitionSheetsProjects(projects);
+  const visibleProjects = showArchived ? archived : active;
+
+  const onCreateFromTemplate = useCallback(
+    async (templateId?: string) => {
+      if (!workspaceId || creating) return;
+      setCreating(true);
+      setError(null);
+      try {
+        await startNewWorkbook(workspaceId, (href) => router.push(href), templateId);
+      } catch (e) {
+        setError(sheetsApiErrorMessage((e as Error).message, 'Could not create the workbook.'));
+        setCreating(false);
+      }
+    },
+    [workspaceId, creating, router],
+  );
+
+  const load = useCallback(
+    async (opts?: { quiet?: boolean }) => {
+      if (!workspaceId) return;
+      const quiet = Boolean(opts?.quiet);
+      if (!quiet) {
+        setLoading(true);
+        setError(null);
+      }
+      try {
+        const [projRes, tmplRes] = await Promise.all([
+          authFetch(`/api/sheets/projects?workspace_id=${encodeURIComponent(workspaceId)}`),
+          authFetch(`/api/sheets/templates?workspace_id=${encodeURIComponent(workspaceId)}`),
+        ]);
+        if (!projRes.ok) {
+          const body = (await projRes.json().catch(() => ({}))) as { detail?: unknown };
+          throw new Error(sheetsApiErrorMessage(body.detail, `Failed (${projRes.status})`));
+        }
+        setProjects((await projRes.json()) as SheetsProject[]);
+        if (tmplRes.ok) {
+          const body = (await tmplRes.json()) as SheetsSeedTemplate[];
+          setTemplates(
+            body.map((row) => ({
+              ...row,
+              sheets: row.sheets ?? [],
+              assets: row.assets ?? [],
+            })),
+          );
+        }
+      } catch (e) {
+        if (!quiet) setError((e as Error).message);
+      } finally {
+        if (!quiet) setLoading(false);
+      }
+    },
+    [workspaceId],
+  );
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (archived.length === 0 && showArchived) setShowArchived(false);
+  }, [archived.length, showArchived]);
+
+  useEffect(() => {
+    const onUpdated = (event: Event) => {
+      const slug = (event as CustomEvent<{ slug?: string }>).detail?.slug;
+      invalidateSheetsCover(workspaceId, slug);
+      void load({ quiet: true });
+    };
+    window.addEventListener(SHEETS_DECK_UPDATED_EVENT, onUpdated);
+    return () => window.removeEventListener(SHEETS_DECK_UPDATED_EVENT, onUpdated);
+  }, [load, workspaceId]);
+
+  const renameProject = useCallback(
+    async (project: SheetsProject, title: string) => {
+      setProjects((current) =>
+        current.map((row) => (row.slug === project.slug ? { ...row, title } : row)),
+      );
+      try {
+        await patchSheetsProject(workspaceId, project.slug, { title });
+      } catch (e) {
+        setError((e as Error).message);
+        void load({ quiet: true });
+      }
+    },
+    [workspaceId, load],
+  );
+
+  const archiveProject = useCallback(
+    async (project: SheetsProject) => {
+      const nextArchived = !project.archived;
+      setProjects((current) =>
+        current.map((row) =>
+          row.slug === project.slug ? { ...row, archived: nextArchived } : row,
+        ),
+      );
+      try {
+        await patchSheetsProject(workspaceId, project.slug, { archived: nextArchived });
+      } catch (e) {
+        setError((e as Error).message);
+        void load({ quiet: true });
+      }
+    },
+    [workspaceId, load],
+  );
+
+  return (
+    <div className="flex h-full flex-col">
+      <Header
+        title="Sheets"
+        nav={<SheetsMenuBar onNewWorkbook={() => void onCreateFromTemplate()} />}
+      />
+
+      {error && (
+        <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-600">
+          {error}
+        </div>
+      )}
+
+      <div className="flex-1 overflow-auto">
+        {loading ? (
+          <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
+            <Loader2 size={16} className="mr-2 animate-spin" />
+            Loading sheets…
+          </div>
+        ) : (
+          <>
+            <SheetsTemplateStrip
+              templates={templates}
+              creating={creating}
+              onSelect={(templateId) => void onCreateFromTemplate(templateId)}
+            />
+            <div className="p-6">
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <h2 className="text-sm font-medium text-foreground">
+                  {showArchived ? 'Archived' : 'Your sheets'}
+                </h2>
+                {archived.length > 0 ? (
+                  <div className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      className={`chat-section-label${!showArchived ? '' : ' is-link'}`}
+                      onClick={() => setShowArchived(false)}
+                    >
+                      Sheets
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="sheets-archived-filter"
+                      className={`chat-section-label${showArchived ? '' : ' is-link'}`}
+                      onClick={() => setShowArchived(true)}
+                    >
+                      Archived
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              {visibleProjects.length === 0 ? (
+                <p className="py-12 text-center text-sm text-muted-foreground">
+                  {showArchived ? 'No archived sheets.' : 'No sheets yet.'}
+                </p>
+              ) : (
+                <SheetsIndexGallery
+                  projects={visibleProjects}
+                  workspaceId={workspaceId}
+                  templates={templates}
+                  onOpen={(project) => {
+                    setSelectedSlug(project.slug);
+                    setSelectedTitle(project.title);
+                    openSheetsAgentPane({ slug: project.slug, title: project.title });
+                    router.push(`${base}/${project.slug}`);
+                  }}
+                  onRename={(project, title) => void renameProject(project, title)}
+                  onArchive={(project) => void archiveProject(project)}
+                />
+              )}
+            </div>
+          </>
+        )}
+      </div>
+      <SheetsStatusBar />
+    </div>
+  );
+}

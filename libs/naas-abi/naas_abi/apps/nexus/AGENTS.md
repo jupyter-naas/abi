@@ -630,3 +630,32 @@ cd apps/web && pnpm typecheck
 ## Conventional commits
 
 NEXUS uses Conventional Commits enforced via `CONTRIBUTING.md` (`feat:`, `fix:`, `docs:`, `refactor:`, and so on). Consistent prefixes make cherry-picks and release notes tractable when syncing with upstream ABI. Match the style of recent commits when authoring messages.
+
+
+## Sheets UI and agent
+
+The Sheets editor uses `apps/web/src/components/sheets/workbook-grid.tsx`, a
+virtualized native grid. `workbook-model.ts` reads/writes the JSON block in
+`workbook.html`. Do not restore the fixed 1280×720 slide preview as the editor.
+Sparse `column_widths` and `row_heights` persist pixel dimensions per tab and
+are preserved by duplication and XLSX export. Formula entry supports arrow-key
+and mouse cell references without moving the destination cell.
+Row/column headers are editor chrome; row 1 remains workbook data. Bottom tabs
+select sheets; direct edits, clipboard changes and tab changes autosave through
+the existing workbook endpoint. Keep raw formulas intact in stored HTML/XLSX.
+
+`POST /api/sheets/evaluate` validates workspace access and calculates a local
+draft without saving. Both the grid and SheetsAgent use `sheets/formulas.py`.
+`agents/SheetsAgent.py` loads `agents/sheets/skills/nexus-sheets/SKILL.md`.
+`update_sheets_cells` performs bounded A1 edits without replacing other cells.
+Include `naas_abi SheetsAgent` in explicitly restricted workspace agent rosters.
+
+Focused checks from web: `pnpm test -- workbook-grid.test.ts workbook-model.test.ts sheets-`
+and `pnpm typecheck`. Backend: run pytest on `apps/nexus/sheets/`,
+`agents/SheetsAgent_test.py`, and the sheets primary adapter tests. The skill's
+validation script checks HTML workbooks without mutating formulas.
+
+Sheets mutations require writer membership. Whole-workbook saves and template
+replacements require the revision returned by GET; HTTP 409 preserves the local
+draft and pauses autosave. Git is authoritative; sidecars are mirrors. Dev output
+is `.next-dev`, separate from the production `.next` build directory.
