@@ -471,6 +471,7 @@ services:
   # Opt-in alongside RabbitMQ, not a replacement yet — see
   # docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
   nats:
+    profiles: ["nats"]
     image: nats:2-alpine
     pull_policy: always
     restart: unless-stopped

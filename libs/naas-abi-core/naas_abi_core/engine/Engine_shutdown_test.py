@@ -20,6 +20,7 @@ from naas_abi_core.engine.Engine import Engine
 def _bare_engine(primaries: list) -> Engine:
     engine = Engine.__new__(Engine)
     engine._Engine__nats_primary_adapters = primaries  # type: ignore[attr-defined]
+    engine._Engine__nats_runtime_started = bool(primaries)  # type: ignore[attr-defined]
     return engine
 
 
@@ -29,6 +30,17 @@ def test_shutdown_is_a_noop_when_nats_was_never_configured(monkeypatch):
     engine = _bare_engine([])
 
     engine.shutdown()  # must not raise
+
+    close.assert_not_called()
+
+
+def test_shutdown_closes_configured_runtime_even_without_primaries(monkeypatch):
+    close = MagicMock()
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.close", close)
+    engine = _bare_engine([])
+    engine._Engine__nats_runtime_started = True
+
+    engine.shutdown()
 
     close.assert_called_once()
 
@@ -110,4 +122,4 @@ def test_shutdown_can_be_called_more_than_once(monkeypatch):
     engine.shutdown()  # must not re-stop anything or raise
 
     assert run_coro.call_count == 1
-    assert close.call_count == 2
+    close.assert_called_once()

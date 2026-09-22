@@ -483,6 +483,7 @@ services:
   # JetStream; `-m 8222` exposes the monitoring/health endpoint used below and by
   # the NATS Services framework's $SRV.* discovery subjects.
   nats:
+    profiles: ["nats"]
     image: nats:2-alpine
     pull_policy: always
     restart: unless-stopped
