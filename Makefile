@@ -1039,3 +1039,11 @@ clean:
 # Declare all targets as phony to avoid conflicts with files of the same name
 
 .PHONY: ollama-models test test-local-embedded-core test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology docs docs-clean
+
+.PHONY: test-sdk demo-sdk
+test-sdk:
+	$(MAKE) -C libs/naas-abi-proto test
+	$(MAKE) -C libs/naas-abi-sdk test
+
+demo-sdk:
+	$(MAKE) -C examples/standalone_module demo

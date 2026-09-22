@@ -1,0 +1,255 @@
+// NATS-RPC contract for the vector_store kernel domain.
+// Mirrors naas_abi_core/services/vector_store/IVectorStorePort.py::IVectorStorePort 1:1 --
+// IVectorStorePort has no streaming/callback members, so this is a full mapping, no
+// exclusions. See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
+//
+// `create_collection`'s `**kwargs` is deliberately NOT part of this wire contract. It is an
+// opaque passthrough straight into the concrete client library (QdrantAdapter and
+// QdrantInMemoryAdapter forward it unchanged into `QdrantClient.create_collection(...)`,
+// e.g. for `on_disk_payload`/`hnsw_config`/etc.); SqliteVecAdapter accepts and ignores it.
+// Grepping every real call site in this repo -- both adapters, VectorStoreService.ensure_collection,
+// and every test (IVectorStorePort_test.py, QdrantAdapter_test.py, QdrantInMemoryAdapter_test.py,
+// VectorStoreService_test.py, VectorStoreService_events_test.py) -- turns up nothing that ever
+// passes a kwarg beyond the three named parameters (collection_name, dimension,
+// distance_metric). Adding a generic passthrough field (e.g. another Struct) would let a
+// remote caller ask an adapter to do something no in-process caller has ever needed, and
+// would silently mean something different (or nothing) depending which concrete adapter is
+// listening on the other end -- the opposite of a well-defined contract. If a real use for
+// `**kwargs` ever appears, add it as an explicit named field then.
+//
+// Vectors are carried as `repeated float` (32-bit), matching this domain's actual convention:
+// SqliteVecAdapter packs every vector through `np.float32` explicitly (see `_pack_vector`),
+// and every shared fixture/test across the domain (IVectorStorePort_test.py's
+// `sample_vectors`, QdrantInMemoryAdapter_test.py) constructs vectors with `dtype=np.float32`.
+// QdrantAdapter/QdrantInMemoryAdapter round-trip through `.tolist()` / `np.array(...)`
+// without pinning a dtype, but nothing in this domain stores or expects float64 precision --
+// `repeated float` (not `double`) is the right call either way.
+//
+// `VectorDocument.vector` / `SearchResult.vector` can legitimately be `None` (e.g.
+// `include_vector=False`, or a document stored without embedding its own vector back), and
+// proto3 cannot mark a bare `repeated` field `optional` -- so both wrap it in `VectorData`,
+// an `optional`-message field, to distinguish "no vector" from "an empty vector".
+//
+// Subjects (see "Protobuf contract shapes" in the RFC):
+//   abi.svc.vector_store.v1.initialize
+//   abi.svc.vector_store.v1.create_collection
+//   abi.svc.vector_store.v1.delete_collection
+//   abi.svc.vector_store.v1.list_collections
+//   abi.svc.vector_store.v1.store_vectors
+//   abi.svc.vector_store.v1.search
+//   abi.svc.vector_store.v1.get_vector
+//   abi.svc.vector_store.v1.update_vector
+//   abi.svc.vector_store.v1.delete_vectors
+//   abi.svc.vector_store.v1.count_vectors
+//   abi.svc.vector_store.v1.close
+syntax = "proto3";
+
+package abi.vector_store.v1;
+
+import "naas_abi_proto/common/v1/common.proto";
+import "google/protobuf/struct.proto";
+
+// Wraps a `repeated float` so it can be used as an `optional` message field --
+// proto3 cannot mark a bare `repeated` scalar field `optional`, and both
+// VectorDocument.vector and SearchResult.vector need to distinguish "no
+// vector" (e.g. include_vector=False) from "vector present but empty".
+message VectorData {
+  repeated float values = 1;
+}
+
+message VectorDocument {
+  string id = 1;
+  optional VectorData vector = 2;
+  google.protobuf.Struct metadata = 3;
+  optional google.protobuf.Struct payload = 4;
+}
+
+message SearchResult {
+  string id = 1;
+  float score = 2;
+  optional VectorData vector = 3;
+  optional google.protobuf.Struct metadata = 4;
+  optional google.protobuf.Struct payload = 5;
+}
+
+// -----------------------------------------------------------------------
+// initialize
+// -----------------------------------------------------------------------
+
+message InitializeRequest {
+  abi.common.v1.CallContext context = 1;
+}
+message InitializeResponse {
+  // Empty on success -- the error, if any, is the whole signal.
+  optional abi.common.v1.CallError error = 1;
+}
+
+// -----------------------------------------------------------------------
+// create_collection
+// -----------------------------------------------------------------------
+
+message CreateCollectionRequest {
+  abi.common.v1.CallContext context = 1;
+  string collection_name = 2;
+  int32 dimension = 3;
+  string distance_metric = 4;
+}
+message CreateCollectionResponse {
+  optional abi.common.v1.CallError error = 1;
+}
+
+// -----------------------------------------------------------------------
+// delete_collection
+// -----------------------------------------------------------------------
+
+message DeleteCollectionRequest {
+  abi.common.v1.CallContext context = 1;
+  string collection_name = 2;
+}
+message DeleteCollectionResponse {
+  optional abi.common.v1.CallError error = 1;
+}
+
+// -----------------------------------------------------------------------
+// list_collections
+// -----------------------------------------------------------------------
+
+message ListCollectionsRequest {
+  abi.common.v1.CallContext context = 1;
+}
+message CollectionNames {
+  repeated string names = 1;
+}
+message ListCollectionsResponse {
+  oneof result {
+    CollectionNames collections = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// -----------------------------------------------------------------------
+// store_vectors
+// -----------------------------------------------------------------------
+
+message StoreVectorsRequest {
+  abi.common.v1.CallContext context = 1;
+  string collection_name = 2;
+  repeated VectorDocument documents = 3;
+}
+message StoreVectorsResponse {
+  optional abi.common.v1.CallError error = 1;
+}
+
+// -----------------------------------------------------------------------
+// search
+// -----------------------------------------------------------------------
+
+message SearchRequest {
+  abi.common.v1.CallContext context = 1;
+  string collection_name = 2;
+  // Required on the port (IVectorStorePort.search's query_vector has no
+  // default) -- unlike VectorDocument.vector/SearchResult.vector, this is
+  // never absent, so it stays a bare `repeated float` rather than a
+  // VectorData-wrapped optional.
+  repeated float query_vector = 3;
+  int32 k = 4;
+  optional google.protobuf.Struct filter = 5;
+  bool include_vectors = 6;
+  bool include_metadata = 7;
+}
+message SearchResultList {
+  repeated SearchResult results = 1;
+}
+message SearchResponse {
+  oneof result {
+    SearchResultList results = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// -----------------------------------------------------------------------
+// get_vector
+// -----------------------------------------------------------------------
+
+message GetVectorRequest {
+  abi.common.v1.CallContext context = 1;
+  string collection_name = 2;
+  string vector_id = 3;
+  bool include_vector = 4;
+}
+// Wraps VectorDocument in an `optional` field so the response can represent
+// IVectorStorePort.get_vector's `VectorDocument | None` return: HasField
+// distinguishes "found, document present" from "not found, document unset".
+message VectorDocumentOrNone {
+  optional VectorDocument document = 1;
+}
+message GetVectorResponse {
+  oneof result {
+    VectorDocumentOrNone found = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// -----------------------------------------------------------------------
+// update_vector
+// -----------------------------------------------------------------------
+
+message UpdateVectorRequest {
+  abi.common.v1.CallContext context = 1;
+  string collection_name = 2;
+  string vector_id = 3;
+  // Unset means "leave the vector unchanged" (IVectorStorePort.update_vector's
+  // vector=None default) -- distinct from a present-but-empty vector.
+  optional VectorData vector = 4;
+  optional google.protobuf.Struct metadata = 5;
+  optional google.protobuf.Struct payload = 6;
+}
+message UpdateVectorResponse {
+  optional abi.common.v1.CallError error = 1;
+}
+
+// -----------------------------------------------------------------------
+// delete_vectors
+// -----------------------------------------------------------------------
+
+message DeleteVectorsRequest {
+  abi.common.v1.CallContext context = 1;
+  string collection_name = 2;
+  repeated string vector_ids = 3;
+}
+message DeleteVectorsResponse {
+  optional abi.common.v1.CallError error = 1;
+}
+
+// -----------------------------------------------------------------------
+// count_vectors
+// -----------------------------------------------------------------------
+
+message CountVectorsRequest {
+  abi.common.v1.CallContext context = 1;
+  string collection_name = 2;
+}
+message CountVectorsResponse {
+  oneof result {
+    int64 count = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+// -----------------------------------------------------------------------
+// close
+// -----------------------------------------------------------------------
+// Included for 1:1 completeness with IVectorStorePort. VectorStoreSecondaryAdapterNATSClient
+// (the reference client for this contract) deliberately never sends this RPC itself -- see
+// that class's `close()` docstring: the adapter behind VectorStorePrimaryAdapterNATS is
+// shared across every concurrent caller on the subject, so one caller closing its own NATS
+// connection must not also tear down that shared adapter's connection to the underlying
+// store out from under every other caller. This endpoint remains available for whatever
+// process genuinely owns that shared adapter's lifecycle to call directly.
+
+message CloseRequest {
+  abi.common.v1.CallContext context = 1;
+}
+message CloseResponse {
+  optional abi.common.v1.CallError error = 1;
+}

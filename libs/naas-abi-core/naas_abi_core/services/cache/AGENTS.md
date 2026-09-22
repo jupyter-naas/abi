@@ -108,3 +108,7 @@ a timeout can hide a completed operation. Reconcile its outcome before retrying.
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
 The latter uses a local `nats-server` executable without Docker.
+
+The engine exposes its cold-tier adapter under the cache v1 subject when NATS is
+configured. A cold tier already backed by a NATS client is not re-exposed. Hot-tier
+selection and cache decorators remain process-local.

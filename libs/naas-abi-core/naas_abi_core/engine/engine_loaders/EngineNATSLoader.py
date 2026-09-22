@@ -47,6 +47,12 @@ from naas_abi_core.services.activity_log.adapters.primary.activity_log__primary_
 from naas_abi_core.services.activity_log.adapters.secondary.ActivityLogSecondaryAdapterNATSClient import (
     ActivityLogSecondaryAdapterNATSClient,
 )
+from naas_abi_core.services.cache.adapters.primary.cache__primary_adapter__NATS import (
+    CachePrimaryAdapterNATS,
+)
+from naas_abi_core.services.cache.adapters.secondary.CacheSecondaryAdapterNATSClient import (
+    CacheSecondaryAdapterNATSClient,
+)
 from naas_abi_core.services.coding_environment.adapters.primary.coding_environment__primary_adapter__NATS import (
     CodingEnvironmentPrimaryAdapterNATS,
 )
@@ -145,7 +151,7 @@ class EngineNATSLoader:
         elif services.object_storage_available():
             logger.debug(
                 "EngineNATSLoader: object_storage is itself a NATS client "
-                "(adapter: \"nats_rpc\") -- not re-exposing a remote proxy"
+                '(adapter: "nats_rpc") -- not re-exposing a remote proxy'
             )
 
         if services.secret_available() and not all(
@@ -186,9 +192,7 @@ class EngineNATSLoader:
         if services.kv_available() and not isinstance(
             services.kv.adapter, KeyValueSecondaryAdapterNATSClient
         ):
-            primary_kv = KeyValuePrimaryAdapterNATS(
-                services.kv, nats_config.jwt_secret
-            )
+            primary_kv = KeyValuePrimaryAdapterNATS(services.kv, nats_config.jwt_secret)
             nats_runtime.run_coro(primary_kv.start(nc))
             started.append(primary_kv)
             logger.debug("EngineNATSLoader: exposed kv over NATS")
@@ -224,7 +228,7 @@ class EngineNATSLoader:
             logger.debug("EngineNATSLoader: exposed activity_log over NATS")
         elif services.activity_log_available():
             logger.debug(
-                'EngineNATSLoader: activity_log is itself a NATS client '
+                "EngineNATSLoader: activity_log is itself a NATS client "
                 '(adapter: "nats_rpc") -- not re-exposing a remote proxy'
             )
 
@@ -240,7 +244,7 @@ class EngineNATSLoader:
             logger.debug("EngineNATSLoader: exposed coding_environment over NATS")
         elif services.coding_environment_available():
             logger.debug(
-                'EngineNATSLoader: coding_environment is itself a NATS client '
+                "EngineNATSLoader: coding_environment is itself a NATS client "
                 '(adapter: "nats_rpc") -- not re-exposing a remote proxy'
             )
 
@@ -274,7 +278,7 @@ class EngineNATSLoader:
             logger.debug("EngineNATSLoader: exposed source_control over NATS")
         elif services.source_control_available():
             logger.debug(
-                'EngineNATSLoader: source_control is itself a NATS client '
+                "EngineNATSLoader: source_control is itself a NATS client "
                 '(adapter: "nats_rpc") -- not re-exposing a remote proxy'
             )
 
@@ -292,7 +296,7 @@ class EngineNATSLoader:
             logger.debug("EngineNATSLoader: exposed vector_store over NATS")
         elif services.vector_store_available():
             logger.debug(
-                'EngineNATSLoader: vector_store is itself a NATS client '
+                "EngineNATSLoader: vector_store is itself a NATS client "
                 '(adapter: "nats_rpc") -- not re-exposing a remote proxy'
             )
 
@@ -312,8 +316,18 @@ class EngineNATSLoader:
             logger.debug("EngineNATSLoader: exposed triple_store over NATS")
         elif services.triple_store_available():
             logger.debug(
-                'EngineNATSLoader: triple_store is itself a NATS client '
+                "EngineNATSLoader: triple_store is itself a NATS client "
                 '(adapter: "nats_rpc") -- not re-exposing a remote proxy'
             )
+
+        if services.cache_available() and not isinstance(
+            services.cache.cold.adapter, CacheSecondaryAdapterNATSClient
+        ):
+            # v1 exposes one adapter. Use the canonical cold tier for remote callers.
+            primary_cache = CachePrimaryAdapterNATS(
+                services.cache.cold.adapter, nats_config.jwt_secret
+            )
+            nats_runtime.run_coro(primary_cache.start(nc))
+            started.append(primary_cache)
 
         return started
