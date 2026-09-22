@@ -7,6 +7,7 @@ out for this adapter.
 """
 
 import asyncio
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from queue import Queue
@@ -268,3 +269,54 @@ def test_stub_adapter_streaming_methods_are_not_wired_to_any_endpoint(method_nam
     # module docstring), so there is no handler exercising them at all.
     adapter = ObjectStoragePrimaryAdapterNATS(_StubAdapter(), SECRET)
     assert not hasattr(adapter, f"_handle_{method_name}")
+
+
+def test_domain_call_runs_off_the_event_loop_so_the_loop_stays_responsive():
+    """The adapter port is synchronous and may block for seconds (S3 round
+    trip, a slow Fuseki query on the triple_store twin of this class, ...).
+    All primaries share ONE event loop (``nats_runtime``) and ONE connection,
+    so running the call inline would freeze every other endpoint of every
+    service in the process, plus nats-py's own PING/PONG handling.
+
+    Scenario: a handler whose domain call parks on a threading.Event. If the
+    call ran on the loop thread, the coroutine below that releases it could
+    never be scheduled and the call would time out; with the call on a
+    worker thread the loop keeps turning, releases it, and the reply is the
+    real content.
+    """
+    entered = threading.Event()
+    release = threading.Event()
+    call_threads: list[threading.Thread] = []
+
+    class _SlowAdapter(_StubAdapter):
+        def get_object(self, prefix: str, key: str) -> bytes:
+            call_threads.append(threading.current_thread())
+            entered.set()
+            if not release.wait(timeout=2.0):
+                raise TimeoutError("event loop never got to release the call")
+            return b"slow-but-served"
+
+    adapter = ObjectStoragePrimaryAdapterNATS(_SlowAdapter(), SECRET)
+    request = _FakeRequest(
+        data=_get_object_request("p", "k"), headers={AUTH_HEADER: _valid_token()}
+    )
+
+    async def scenario() -> threading.Thread:
+        loop_thread = threading.current_thread()
+        handler = asyncio.create_task(adapter._handle_get_object(request))
+        # Only runs if the loop is free while the domain call is in flight.
+        for _ in range(500):
+            if entered.is_set():
+                break
+            await asyncio.sleep(0.01)
+        release.set()
+        await asyncio.wait_for(handler, timeout=5.0)
+        return loop_thread
+
+    loop_thread = asyncio.run(scenario())
+
+    response = object_storage_pb2.GetObjectResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error"), response.error
+    assert response.content == b"slow-but-served"
+    assert call_threads and call_threads[0] is not loop_thread

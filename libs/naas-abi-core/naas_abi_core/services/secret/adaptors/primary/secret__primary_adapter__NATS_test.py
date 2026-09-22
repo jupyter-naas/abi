@@ -6,6 +6,7 @@ against a minimal fake ``Request`` that records whatever gets passed to
 """
 
 import asyncio
+import threading
 
 from naas_abi_core.engine.nats_auth import issue_service_token
 from naas_abi_core.proto.secret.v1 import secret_pb2
@@ -228,3 +229,45 @@ def test_unexpected_exception_maps_to_internal_and_does_not_leak_message():
 def test_stop_without_start_is_a_noop():
     adapter = SecretPrimaryAdapterNATS(_StubAdapter(), SECRET)
     asyncio.run(adapter.stop())
+
+
+def test_domain_call_runs_off_the_event_loop_so_the_loop_stays_responsive():
+    """Same guarantee as the object_storage primary: the synchronous adapter
+    call must run on a worker thread, never inline on the shared
+    ``nats_runtime`` loop (see object_storage__primary_adapter__NATS_test)."""
+    entered = threading.Event()
+    release = threading.Event()
+    call_threads: list[threading.Thread] = []
+
+    class _SlowAdapter(_StubAdapter):
+        def get(self, key: str, default=None):
+            call_threads.append(threading.current_thread())
+            entered.set()
+            if not release.wait(timeout=2.0):
+                raise TimeoutError("event loop never got to release the call")
+            return "slow-but-served"
+
+    adapter = SecretPrimaryAdapterNATS(_SlowAdapter(), SECRET)
+    request = _FakeRequest(
+        secret_pb2.GetRequest(key="API_KEY").SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+    )
+
+    async def scenario() -> threading.Thread:
+        loop_thread = threading.current_thread()
+        handler = asyncio.create_task(adapter._handle_get(request))
+        for _ in range(500):
+            if entered.is_set():
+                break
+            await asyncio.sleep(0.01)
+        release.set()
+        await asyncio.wait_for(handler, timeout=5.0)
+        return loop_thread
+
+    loop_thread = asyncio.run(scenario())
+
+    response = secret_pb2.GetResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error"), response.error
+    assert response.found.value == "slow-but-served"
+    assert call_threads and call_threads[0] is not loop_thread

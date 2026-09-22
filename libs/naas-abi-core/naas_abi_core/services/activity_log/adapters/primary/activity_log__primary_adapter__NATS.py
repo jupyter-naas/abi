@@ -25,6 +25,7 @@ every other endpoint's "always call straight through" behaviour.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from datetime import UTC
 from typing import TypeVar
@@ -201,7 +202,12 @@ class ActivityLogPrimaryAdapterNATS:
         parsed_request.ParseFromString(request.data)
 
         try:
-            response = call(parsed_request)
+            # The adapter port is synchronous and may block for seconds (network
+            # round trips, slow backends). Every primary shares ONE event loop and
+            # ONE connection (nats_runtime), so run the call on a worker thread:
+            # inline it would stall every other endpoint of every service in the
+            # process, plus nats-py's own PING/PONG handling.
+            response = await asyncio.to_thread(call, parsed_request)
         except Exception:  # noqa: BLE001 - a handler must never crash the service
             logger.opt(exception=True).error(
                 f"ActivityLogPrimaryAdapterNATS: unexpected error handling {request.subject!r}"
