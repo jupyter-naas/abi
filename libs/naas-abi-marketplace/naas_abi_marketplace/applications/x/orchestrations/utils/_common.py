@@ -136,7 +136,7 @@ def run_search_pipeline_for_file(
     )
     if effective_persist:
         try:
-            from intelligence.utils.OsintPipelinePendingWork import (
+            from intelligence.utils.OsintPipelinePendingWork import (  # type: ignore[import-not-found]
                 enqueue_pending_location_extractions_from_envelope,
             )
 
