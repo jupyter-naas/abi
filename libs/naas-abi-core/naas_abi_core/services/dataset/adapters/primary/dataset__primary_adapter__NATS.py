@@ -18,6 +18,7 @@ mapping -- one endpoint per port method, no exclusions.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from typing import Any, TypeVar
 
@@ -307,7 +308,12 @@ class DatasetPrimaryAdapterNATS:
         parsed_request.ParseFromString(request.data)
 
         try:
-            response = call(parsed_request)
+            # The adapter port is synchronous and may block for seconds (network
+            # round trips, slow backends). Every primary shares ONE event loop and
+            # ONE connection (nats_runtime), so run the call on a worker thread:
+            # inline it would stall every other endpoint of every service in the
+            # process, plus nats-py's own PING/PONG handling.
+            response = await asyncio.to_thread(call, parsed_request)
         except DatasetNotFoundError as exc:
             await self._respond_error(
                 request,
