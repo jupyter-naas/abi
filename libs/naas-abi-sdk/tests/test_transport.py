@@ -51,7 +51,7 @@ def test_deadline_cancels_local_wait():
             cancelled.append(True)
 
     nc.request.side_effect = wait
-    with pytest.raises(TimeoutError):
+    with pytest.raises(asyncio.TimeoutError):
         asyncio.run(rpc.call("set", kv.SetRequest(), kv.SetResponse))
     assert cancelled == [True]
     assert nc.request.await_count == 1
