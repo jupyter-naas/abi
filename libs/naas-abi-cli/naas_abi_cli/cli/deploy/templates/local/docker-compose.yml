@@ -474,12 +474,13 @@ services:
     image: nats:2-alpine
     pull_policy: always
     restart: unless-stopped
-    command: ["-js", "-sd", "/data", "-m", "8222"]
+    command: ["-c", "/etc/nats/nats.conf", "-js", "-sd", "/data", "-m", "8222"]
     ports:
       - 4222:4222 # client connections
       - 8222:8222 # HTTP monitoring
     volumes:
       - nats_data:/data
+      - ./.deploy/docker/nats/nats.conf:/etc/nats/nats.conf:ro # max_payload (no CLI flag)
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
       interval: 10s

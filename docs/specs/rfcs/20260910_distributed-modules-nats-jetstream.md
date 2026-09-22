@@ -321,6 +321,13 @@ document assumes them.
   `principal_id`/`workspace_id`/`tenant_id` above is exactly the wire-level carrier this needs for the NATS case;
   building the actual ARN scope model, the policy-matching logic, and the `contextvars` plumbing is deliberately
   not part of Stage 1 — noted here so the direction is decided, not so it gets built now.
+- **One RPC message is capped at 8 MB (`max_payload: 8MB`), and that cap is final.** nats-server refuses any
+  single message above `max_payload`; the 1 MB default would reject a 2 MB `get_object` reply or a whole-store
+  `triple_store.get`. 8 MB is the largest value NATS recommends, and there is no CLI flag for it, so every launcher
+  ships a `nats.conf` (`abi dev` writes `storage/nats/nats.conf`; docker-compose mounts `.deploy/docker/nats/
+  nats.conf`). Anything that needs more than 8 MB is the wrong shape for a request/reply message: it must stream in
+  chunks (the port's `get_object_stream`/`put_object_stream` are the natural home) or hand back a storage reference
+  (JetStream Object Store, or a presigned URL when the backend is S3/MinIO). Raising the cap again is not an option.
 - **Stage 1's JWT is deliberately minimal, not the full Stage 2 design.** Stage 1 has no extracted or untrusted
   module — every NATS client is first-party infrastructure already under your control (the API process, Dagster).
   Ship HS256 JWTs signed with one shared secret (delivered like any other secret today, via `SecretService`/

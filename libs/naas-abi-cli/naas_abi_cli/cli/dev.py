@@ -117,6 +117,13 @@ ALL_SERVICES = ("oxigraph", "api", "dagster", "nexus-web")
 # `abi dev up --service api --service nats`.
 OPTIONAL_SERVICES = ("nats",)
 
+# nats-server refuses any single message above `max_payload` (1 MB by default),
+# which is the hard ceiling for one RPC request or reply. 8 MB is the largest
+# value NATS recommends. Anything bigger must stream or return a storage
+# reference -- do not raise this further. Config-file key only (no CLI flag),
+# so every launcher (this one, docker-compose) carries a nats.conf.
+NATS_MAX_PAYLOAD = "8MB"
+
 # The full universe of names `--service`/`abi dev status`/`abi dev logs`
 # accept. `_validate_services` still defaults to just `ALL_SERVICES` when
 # nothing is explicitly selected.
@@ -357,6 +364,13 @@ def _nats_url(ports: dict[str, int]) -> str:
     return f"nats://{PROBE_HOST}:{ports['nats']}"
 
 
+def _nats_server_config() -> str:
+    """Body of the nats.conf handed to nats-server with -c. Ports, bind
+    address and JetStream stay on the command line (flags override the file),
+    so this only carries what has no flag."""
+    return f"max_payload: {NATS_MAX_PAYLOAD}\n"
+
+
 def _launch_nats(spec: ServiceSpec) -> int:
     """Launch a native `nats-server` process with JetStream enabled.
 
@@ -376,9 +390,14 @@ def _launch_nats(spec: ServiceSpec) -> int:
         )
     store_path = _project_root() / "storage" / "nats"
     store_path.mkdir(parents=True, exist_ok=True)
+    # Rewritten on every launch so a stale copy can never pin an old limit.
+    config_path = store_path / "nats.conf"
+    config_path.write_text(_nats_server_config(), encoding="utf-8")
     env = os.environ.copy()
     cmd = [
         binary,
+        "-c",
+        str(config_path),
         "-js",
         "-sd",
         str(store_path),

@@ -261,3 +261,22 @@ def test_setup_local_deploy_hardens_fuseki_for_reliability(tmp_path: Path) -> No
     backup_script = tmp_path / ".deploy" / "docker" / "fuseki" / "backup.sh"
     assert backup_script.exists()
     assert "--compact" in backup_script.read_text(encoding="utf-8")
+
+
+def test_setup_local_deploy_ships_a_nats_config_raising_max_payload_to_8mb(
+    tmp_path: Path,
+) -> None:
+    """nats-server's 1 MB default is the ceiling for one RPC reply; there is
+    no CLI flag for it, so the compose service must mount a nats.conf and
+    pass it with -c. Anything above 8 MB should stream or return a storage
+    reference rather than grow this limit."""
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
+
+    compose_content = (tmp_path / "docker-compose.yml").read_text(encoding="utf-8")
+    nats_conf = tmp_path / ".deploy/docker/nats/nats.conf"
+
+    assert nats_conf.exists()
+    assert "max_payload: 8MB" in nats_conf.read_text(encoding="utf-8")
+    nats_block = compose_content.split("\n  nats:", 1)[1].split("\n  redis:", 1)[0]
+    assert '"-c", "/etc/nats/nats.conf"' in nats_block
+    assert "./.deploy/docker/nats/nats.conf:/etc/nats/nats.conf:ro" in nats_block
