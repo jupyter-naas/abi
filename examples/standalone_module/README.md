@@ -44,3 +44,20 @@ throwaway. Do not run this full exercise against a shared production engine.
 The server-only `engine_host` module requests services through the normal engine
 loader. It is not installed in the worker. This demo does not depend on or implement
 the proposed workload service.
+
+## Module lifecycle and internal domain traffic
+
+`worker.py` now exports `ABIModule(BaseModule)` with nested `Configuration`, declared
+`ModuleDependencies`, and load/initialize/unload hooks. `run_module` owns its
+transport and lifecycle, and business code uses `self.engine.services`.
+`report.json` includes the module name and the completed lifecycle sequence.
+
+The engine configures hot cache through `keyvalue` and cold cache through
+`object_storage`. A broker observer verifies the nested KV, object-storage, and
+event-log subjects and records them under `cross_domain_subjects`. This includes
+same-process engine calls through the network. The shared asyncio worker pool is
+limited to one thread during the exercise to catch shared-pool starvation;
+primaries dispatch to independent worker pools. The SDK also exercises tier 0.
+
+See the SDK README for the migration pattern and its limits. This preserves ABI
+module structure, not automatic portability of framework-specific components.

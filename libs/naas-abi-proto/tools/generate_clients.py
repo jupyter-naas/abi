@@ -37,6 +37,23 @@ class {cls}:
     async def {method}(self, request: pb.{name}Request) -> pb.{name}Response:
         return await self._transport.call("abi.svc.{domain}.v1.{method}", request, pb.{name}Response)
 """
+    if domain == "cache":
+        text = text.replace(
+            "def __init__(self, transport: Transport) -> None:",
+            'def __init__(self, transport: Transport, *, subject_prefix: str = "abi.svc.cache.v1") -> None:',
+        )
+        text = text.replace(
+            "        self._transport = transport",
+            "        self._transport = transport\n        self._subject_prefix = subject_prefix",
+        )
+        text = text.replace('"abi.svc.cache.v1.', 'f"{self._subject_prefix}.')
+        text += '''
+    def tier(self, index: int) -> "CacheClient":
+        """Select an explicitly configured tier by its order in cache.adapters."""
+        if index < 0:
+            raise ValueError("tier index must be nonnegative")
+        return CacheClient(self._transport, subject_prefix=f"abi.svc.cache.v1.tier.{index}")
+'''
     (SDK / f"{domain}.py").write_text(text)
     imports.append(f"from naas_abi_sdk.{domain} import {cls}")
     initializers.append(f"        self.{domain} = {cls}(self._transport)")

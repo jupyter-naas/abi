@@ -112,3 +112,11 @@ The latter uses a local `nats-server` executable without Docker.
 The engine exposes its cold-tier adapter under the cache v1 subject when NATS is
 configured. A cold tier already backed by a NATS client is not re-exposed. Hot-tier
 selection and cache decorators remain process-local.
+
+`adapter: keyvalue` is a lazy adapter to the engine KV domain, with `cache_prefix`
+configuration matching object-storage cache configuration. It uses KV atomic
+set-if-not-exists and maps missing keys to CacheNotFoundError. This is distinct
+from the cache's direct Redis adapter. The loader includes required KV/storage
+services transitively. In NATS mode those dependencies are network facades.
+Every configured local tier also serves `abi.svc.cache.v1.tier.<index>.*`; cold's
+original endpoint remains compatible. No schema changes are required.

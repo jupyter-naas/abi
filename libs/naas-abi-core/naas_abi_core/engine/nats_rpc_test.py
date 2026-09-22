@@ -121,8 +121,11 @@ def test_client_preserves_reconnecting_connection(client, monkeypatch):
 def primary(request):
     cls = adapter_class(*request.param, primary=True)
     instance = cls.__new__(cls)
+    from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
     instance._jwt_secret = SECRET
-    return instance
+    instance._dispatch = DomainRPCDispatcher(request.param[0])
+    yield instance
+    instance._dispatch.close()
 
 
 def response_class(primary):

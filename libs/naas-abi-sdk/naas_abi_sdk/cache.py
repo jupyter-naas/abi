@@ -5,32 +5,43 @@ from naas_abi_sdk.transport import Transport
 
 
 class CacheClient:
-    def __init__(self, transport: Transport) -> None:
+    def __init__(
+        self, transport: Transport, *, subject_prefix: str = "abi.svc.cache.v1"
+    ) -> None:
         self._transport = transport
+        self._subject_prefix = subject_prefix
 
     async def get(self, request: pb.GetRequest) -> pb.GetResponse:
         return await self._transport.call(
-            "abi.svc.cache.v1.get", request, pb.GetResponse
+            f"{self._subject_prefix}.get", request, pb.GetResponse
         )
 
     async def set(self, request: pb.SetRequest) -> pb.SetResponse:
         return await self._transport.call(
-            "abi.svc.cache.v1.set", request, pb.SetResponse
+            f"{self._subject_prefix}.set", request, pb.SetResponse
         )
 
     async def set_if_absent(
         self, request: pb.SetIfAbsentRequest
     ) -> pb.SetIfAbsentResponse:
         return await self._transport.call(
-            "abi.svc.cache.v1.set_if_absent", request, pb.SetIfAbsentResponse
+            f"{self._subject_prefix}.set_if_absent", request, pb.SetIfAbsentResponse
         )
 
     async def delete(self, request: pb.DeleteRequest) -> pb.DeleteResponse:
         return await self._transport.call(
-            "abi.svc.cache.v1.delete", request, pb.DeleteResponse
+            f"{self._subject_prefix}.delete", request, pb.DeleteResponse
         )
 
     async def exists(self, request: pb.ExistsRequest) -> pb.ExistsResponse:
         return await self._transport.call(
-            "abi.svc.cache.v1.exists", request, pb.ExistsResponse
+            f"{self._subject_prefix}.exists", request, pb.ExistsResponse
+        )
+
+    def tier(self, index: int) -> "CacheClient":
+        """Select an explicitly configured tier by its order in cache.adapters."""
+        if index < 0:
+            raise ValueError("tier index must be nonnegative")
+        return CacheClient(
+            self._transport, subject_prefix=f"abi.svc.cache.v1.tier.{index}"
         )

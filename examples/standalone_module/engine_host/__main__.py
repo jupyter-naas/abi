@@ -46,10 +46,15 @@ engine = Engine(
                 "cache": {
                     "adapters": [
                         {
-                            "adapter": "fs",
+                            "adapter": "keyvalue",
+                            "tier": "hot",
+                            "config": {"cache_prefix": "hot-cache"},
+                        },
+                        {
+                            "adapter": "object_storage",
                             "tier": "cold",
-                            "config": {"base_path": str(root / "cache")},
-                        }
+                            "config": {"cache_prefix": "cache"},
+                        },
                     ]
                 },
             },
@@ -61,6 +66,52 @@ signal.signal(signal.SIGTERM, lambda *_: stop.set())
 signal.signal(signal.SIGINT, lambda *_: stop.set())
 try:
     engine.load()
+
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    from naas_abi_core.engine import nats_runtime
+
+    async def constrain_shared_pool():
+        asyncio.get_running_loop().set_default_executor(
+            ThreadPoolExecutor(max_workers=1)
+        )
+
+    nats_runtime.run_coro(constrain_shared_pool())
+    seen = set()
+    from collections import Counter
+
+    from naas_abi_proto.event.v1.event_pb2 import AppendRequest
+
+    event_counts = Counter()
+
+    async def observe(msg):
+        seen.add(msg.subject)
+        if msg.subject == "abi.svc.event.v1.append":
+            event_counts[AppendRequest.FromString(msg.data).event_type] += 1
+
+    nc = nats_runtime.get_connection(url)
+    subscription = nats_runtime.run_coro(nc.subscribe("abi.svc.>", cb=observe))
+    nats_runtime.run_coro(nc.flush())
+    # Invoke the owning cache service. Its dependencies must cross the broker,
+    # even though their owners happen to be in this same engine process.
+    engine.services.cache.cold.set_text("boundary", "cold")
+    assert engine.services.cache.cold.get("boundary") == "cold"
+    engine.services.cache.hot.set_text("boundary", "hot")
+    assert engine.services.cache.hot.get("boundary") == "hot"
+    engine.services.cache.delete("boundary")
+    nats_runtime.run_coro(nc.flush())
+    required = {
+        "abi.svc.object_storage.v1.put_object",
+        "abi.svc.object_storage.v1.get_object",
+        "abi.svc.keyvalue.v1.set",
+        "abi.svc.keyvalue.v1.get",
+        "abi.svc.event.v1.append",
+    }
+    assert required <= seen, f"Missing cross-domain NATS traffic: {required - seen}"
+    assert event_counts["http://ontology.naas.ai/abi/object_storage/ObjectPut"] == 1
+    assert event_counts["http://ontology.naas.ai/abi/keyvalue/KeyValueSet"] == 1
+    nats_runtime.run_coro(subscription.unsubscribe())
 
     def echo(payload):
         engine.services.bus.publish("demo.reply", "echo", payload)
@@ -76,7 +127,15 @@ try:
     token.write_text(
         issue_service_token("standalone-demo", os.environ["DEMO_SIGNING_KEY"])
     )
-    (root / "ready.json").write_text(json.dumps({"engine_pid": os.getpid()}))
+    (root / "ready.json").write_text(
+        json.dumps(
+            {
+                "engine_pid": os.getpid(),
+                "cross_domain_subjects": sorted(seen),
+                "cross_domain_event_counts": dict(event_counts),
+            }
+        )
+    )
     stop.wait()
 finally:
     engine.shutdown()

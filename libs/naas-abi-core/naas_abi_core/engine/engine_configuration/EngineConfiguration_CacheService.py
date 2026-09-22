@@ -173,10 +173,19 @@ class ObjectStorageBackedAdapter(ICacheAdapter):
 # ---------------------------------------------------------------------------
 
 
+class KeyValueBackedAdapter(ObjectStorageBackedAdapter):
+    """Reuse lazy cache-port forwarding, backed by the injected KV service."""
+    def wire_services(self, services: IEngine.Services) -> None:
+        from naas_abi_core.services.cache.adapters.secondary.CacheKeyValueAdapter import (
+            CacheKeyValueAdapter,
+        )
+        self._inner = CacheKeyValueAdapter(services.kv, prefix=self._cache_prefix)
+
+
 class CacheAdapterEntry(GenericLoader):
     """One adapter entry in the cache stack."""
 
-    adapter: Literal["fs", "redis", "object_storage", "nats_rpc", "custom"]
+    adapter: Literal["fs", "redis", "object_storage", "keyvalue", "nats_rpc", "custom"]
     tier: str = TIER_COLD  # "hot" | "cold" | any custom name
     config: dict | None = None
 
@@ -191,6 +200,7 @@ class CacheAdapterEntry(GenericLoader):
             "fs": (CacheAdapterFSConfiguration, "fs"),
             "redis": (CacheAdapterRedisConfiguration, "redis"),
             "object_storage": (CacheAdapterObjectStorageConfiguration, "object_storage"),
+            "keyvalue": (CacheAdapterObjectStorageConfiguration, "keyvalue"),
             "nats_rpc": (CacheAdapterNATSConfiguration, "nats_rpc"),
         }
         if self.adapter in validators:
@@ -230,6 +240,10 @@ class CacheAdapterEntry(GenericLoader):
         if self.adapter == "object_storage":
             os_cfg = CacheAdapterObjectStorageConfiguration(**self.config)
             return ObjectStorageBackedAdapter(cache_prefix=os_cfg.cache_prefix)
+
+        if self.adapter == "keyvalue":
+            kv_cfg = CacheAdapterObjectStorageConfiguration(**self.config)
+            return KeyValueBackedAdapter(cache_prefix=kv_cfg.cache_prefix)
 
         if self.adapter == "nats_rpc":
             nats_cfg = CacheAdapterNATSConfiguration(**self.config)

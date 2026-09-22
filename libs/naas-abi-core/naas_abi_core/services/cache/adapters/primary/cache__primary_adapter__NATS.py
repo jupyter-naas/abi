@@ -31,7 +31,6 @@ depend on each other; see that module's docstring for why).
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable
 from typing import TypeVar
 
@@ -43,6 +42,7 @@ from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     verify_service_token,
 )
+from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import respond_protobuf
 from naas_abi_core.proto.cache.v1 import cache_pb2
 from naas_abi_core.proto.common.v1 import common_pb2
@@ -114,9 +114,17 @@ class CachePrimaryAdapterNATS:
     never as a crashed handler or a raw NATS-level error.
     """
 
-    def __init__(self, adapter: ICacheAdapter, jwt_secret: str) -> None:
+    def __init__(
+        self,
+        adapter: ICacheAdapter,
+        jwt_secret: str,
+        *,
+        subject_prefix: str = SUBJECT_PREFIX,
+    ) -> None:
+        self._subject_prefix = subject_prefix
         self._adapter = adapter
         self._jwt_secret = jwt_secret
+        self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: Service | None = None
 
     async def start(self, nc: nats.NATS) -> None:
@@ -137,27 +145,27 @@ class CachePrimaryAdapterNATS:
         )
         await service.add_endpoint(
             name="get",
-            subject=f"{SUBJECT_PREFIX}.get",
+            subject=f"{self._subject_prefix}.get",
             handler=self._handle_get,
         )
         await service.add_endpoint(
             name="set",
-            subject=f"{SUBJECT_PREFIX}.set",
+            subject=f"{self._subject_prefix}.set",
             handler=self._handle_set,
         )
         await service.add_endpoint(
             name="set_if_absent",
-            subject=f"{SUBJECT_PREFIX}.set_if_absent",
+            subject=f"{self._subject_prefix}.set_if_absent",
             handler=self._handle_set_if_absent,
         )
         await service.add_endpoint(
             name="delete",
-            subject=f"{SUBJECT_PREFIX}.delete",
+            subject=f"{self._subject_prefix}.delete",
             handler=self._handle_delete,
         )
         await service.add_endpoint(
             name="exists",
-            subject=f"{SUBJECT_PREFIX}.exists",
+            subject=f"{self._subject_prefix}.exists",
             handler=self._handle_exists,
         )
         self._service = service
@@ -166,8 +174,11 @@ class CachePrimaryAdapterNATS:
         """Deregister the service, draining its subscriptions."""
         service = self._service
         self._service = None
-        if service is not None:
-            await service.stop()
+        try:
+            if service is not None:
+                await service.stop()
+        finally:
+            self._dispatch.close()
 
     # ------------------------------------------------------------------
     # Shared request handling: auth, decode, dispatch, encode.
@@ -209,7 +220,7 @@ class CachePrimaryAdapterNATS:
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            response = await asyncio.to_thread(call, parsed_request)
+            response = await self._dispatch.call(call, parsed_request)
         except CacheNotFoundError as exc:
             await self._respond_error(
                 request, response_cls, "CACHE_NOT_FOUND", str(exc), retryable=False

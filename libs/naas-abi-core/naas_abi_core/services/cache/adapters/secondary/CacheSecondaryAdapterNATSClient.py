@@ -97,7 +97,10 @@ class CacheSecondaryAdapterNATSClient(NatsRPCClient, ICacheAdapter):
         jwt_secret: str,
         service_identity: str,
         timeout_seconds: float = 10.0,
+        *,
+        subject_prefix: str = SUBJECT_PREFIX,
     ) -> None:
+        self._subject_prefix = subject_prefix
         super().__init__(
             nats_url,
             jwt_secret,
@@ -112,7 +115,9 @@ class CacheSecondaryAdapterNATSClient(NatsRPCClient, ICacheAdapter):
 
     def get(self, key: str) -> CachedData:
         request = cache_pb2.GetRequest(context=self._context(), key=key)
-        response = self._call(f"{SUBJECT_PREFIX}.get", request, cache_pb2.GetResponse)
+        response = self._call(
+            f"{self._subject_prefix}.get", request, cache_pb2.GetResponse
+        )
         if response.HasField("error"):
             _raise_for_error(response.error)
         return _pb_to_cached_data(response.value)
@@ -121,7 +126,9 @@ class CacheSecondaryAdapterNATSClient(NatsRPCClient, ICacheAdapter):
         request = cache_pb2.SetRequest(
             context=self._context(), key=key, value=_cached_data_to_pb(value)
         )
-        response = self._call(f"{SUBJECT_PREFIX}.set", request, cache_pb2.SetResponse)
+        response = self._call(
+            f"{self._subject_prefix}.set", request, cache_pb2.SetResponse
+        )
         if response.HasField("error"):
             _raise_for_error(response.error)
 
@@ -130,7 +137,7 @@ class CacheSecondaryAdapterNATSClient(NatsRPCClient, ICacheAdapter):
             context=self._context(), key=key, value=_cached_data_to_pb(value)
         )
         response = self._call(
-            f"{SUBJECT_PREFIX}.set_if_absent",
+            f"{self._subject_prefix}.set_if_absent",
             request,
             cache_pb2.SetIfAbsentResponse,
         )
@@ -141,7 +148,7 @@ class CacheSecondaryAdapterNATSClient(NatsRPCClient, ICacheAdapter):
     def delete(self, key: str) -> None:
         request = cache_pb2.DeleteRequest(context=self._context(), key=key)
         response = self._call(
-            f"{SUBJECT_PREFIX}.delete", request, cache_pb2.DeleteResponse
+            f"{self._subject_prefix}.delete", request, cache_pb2.DeleteResponse
         )
         if response.HasField("error"):
             _raise_for_error(response.error)
@@ -149,7 +156,7 @@ class CacheSecondaryAdapterNATSClient(NatsRPCClient, ICacheAdapter):
     def exists(self, key: str) -> bool:
         request = cache_pb2.ExistsRequest(context=self._context(), key=key)
         response = self._call(
-            f"{SUBJECT_PREFIX}.exists", request, cache_pb2.ExistsResponse
+            f"{self._subject_prefix}.exists", request, cache_pb2.ExistsResponse
         )
         if response.HasField("error"):
             _raise_for_error(response.error)

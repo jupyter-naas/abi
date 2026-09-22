@@ -32,6 +32,11 @@ class BusService(ServiceBase):
         self.__adapter = adapter
         self._emit_message_events = emit_message_events
 
+    @property
+    def adapter(self) -> IBusAdapter:
+        """Transport owned by this service, for composition and shutdown."""
+        return self.__adapter
+
     def __publish_event(self, event: object) -> None:
         if not self.services_wired:
             return
