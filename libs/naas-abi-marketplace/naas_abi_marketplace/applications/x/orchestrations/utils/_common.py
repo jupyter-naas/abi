@@ -623,8 +623,6 @@ def publish_x_app(
     module,
     *,
     enabled: bool | None = None,
-    full_users: bool = False,
-    direct_user_limit: int = 100,
 ) -> dict:
     """(Re)publish the X app dashboard + snapshots for all followed queries.
 
@@ -632,8 +630,6 @@ def publish_x_app(
     When *enabled* is ``None`` (count / search workflow), module
     ``app.publish`` applies (default true).
 
-    *full_users* forces a complete rebuild of the Users dataset instead of only
-    the shards whose authors changed since the last publish.
     """
     allow = bool(enabled) if enabled is not None else x_app_publish_enabled(module)
     if not allow:
@@ -646,62 +642,27 @@ def publish_x_app(
     )
     from naas_abi_marketplace.applications.x.apps.x_proxy.hub import XAppHubBuilder
 
-    dataset_read = x_dataset_read_enabled(module)
-    projection = None
-    if not dataset_read:
-        # Bring the columnar projection level with the envelope archive first, so the
-        # snapshots below read a view that includes this tick's ingest.
-        projection = refresh_x_cache(module)
+    if not x_dataset_read_enabled(module):
+        logger.info(
+            "publish_x_app: skipped (app.dataset.read_enabled is false — "
+            "Fuseki/Parquet snapshot publish was removed)"
+        )
+        return {"skipped": True, "reason": "dataset_read_disabled"}
 
-    app_cfg = getattr(module.configuration, "app", None)
-    dataset_cfg = getattr(app_cfg, "dataset", None) if app_cfg else None
-    skip_user_shards = bool(
-        dataset_cfg
-        and getattr(dataset_cfg, "skip_user_shard_publish", False)
-        and dataset_read
-    )
+    dataset = getattr(module.engine.services, "dataset", None)
+    if dataset is None:
+        logger.warning(
+            "publish_x_app: app.dataset.read_enabled but Dataset Service "
+            "is not wired — skipping publish"
+        )
+        return {"skipped": True, "reason": "dataset_service_missing"}
 
     hub = XAppHubBuilder(
         module.engine.services.object_storage,
         module.engine.services.triple_store,
         namespace=module.configuration.ontology_namespace,
     )
-    published = hub.publish(
-        followed_count_entries(module),
-        full_users=full_users and not skip_user_shards,
-        direct_user_limit=direct_user_limit,
-        skip_user_shards=skip_user_shards,
-        use_cache=not dataset_read,
-    )
-    if projection is not None:
-        published = {**published, "projection": projection}
-    return published
-
-
-def refresh_x_cache(module, *, full: bool = False) -> dict | None:
-    """Update the Parquet projection from any envelopes written since last time.
-
-    Returns the refresh summary, or ``None`` when the projection is unavailable
-    (polars not installed, object storage unreachable). A failure here must never
-    fail the publish: the snapshots fall back to SPARQL, which is what ran before
-    the projection existed.
-    """
-    try:
-        from naas_abi_marketplace.applications.x.apps.x_proxy.cache import refresh
-    except ImportError as exc:
-        logger.info(f"refresh_x_cache: projection unavailable ({exc})")
-        return None
-    try:
-        kv = getattr(module.engine.services, "kv", None)
-    except Exception:  # noqa: BLE001 — kv is optional; the watermark degrades to a rescan
-        kv = None
-    try:
-        return refresh(module.engine.services.object_storage, kv, full=full)
-    except Exception as exc:  # noqa: BLE001 — degrade to the SPARQL path
-        logger.warning(
-            f"refresh_x_cache: refresh failed ({exc}) — snapshots use SPARQL"
-        )
-        return None
+    return hub.publish(followed_count_entries(module), dataset=dataset)
 
 
 def republish_x_app_after_pipeline(

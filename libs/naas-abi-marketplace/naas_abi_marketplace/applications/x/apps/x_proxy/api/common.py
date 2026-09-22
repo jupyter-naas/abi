@@ -452,9 +452,11 @@ class SnapshotContext:
         tweet_limit: int = DEFAULT_TWEET_LIMIT,
         built_at: datetime | None = None,
         cache: Any | None = None,
+        dataset: Any | None = None,
     ) -> None:
         self.object_storage = object_storage
         self.triple_store = triple_store
+        self.dataset = dataset
         self.storage = StorageUtils(object_storage)
         self.queries = list(queries)
         self.scenarios = scenarios or build_scenarios()
@@ -615,6 +617,14 @@ class SnapshotContext:
         )
 
     def _timeseries(self, query_string: str) -> list[dict[str, Any]]:
+        cache = self.cache
+        slug = self._cache_slug(query_string)
+        if (
+            cache is not None
+            and slug is not None
+            and hasattr(cache, "count_endpoint_timeseries")
+        ):
+            return cache.count_endpoint_timeseries(slug)
         escaped = _escape_sparql_string(query_string)
         sparql = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>

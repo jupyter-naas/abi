@@ -8,9 +8,11 @@ from naas_abi_core.services.dataset.DatasetPort import IDatasetPort
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
-from signals.x.apps.x_proxy.cache.schema import ENVELOPE_PREFIX
-from signals.x.apps.x_proxy.cache.storage import walk
-from signals.x.apps.x_proxy.dataset.store import (
+from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.envelope_paths import (
+    ENVELOPE_PREFIX,
+)
+from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.storage_walk import walk
+from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
     ENVELOPES_V1,
     X_DATASET_NAMESPACE,
     ensure_x_datasets,

@@ -8,7 +8,6 @@
 |------|--------|---------|
 | Check envelope lag before/after backfill | `audit_envelope_bookkeeping.py` | **No** |
 | Catch up `envelopes_v1` / posts from storage | `backfill_x_datasets.py` | **Yes** |
-| Validate Parquet cache vs dataset totals | `compare_x_dataset_cache.py` | **No** |
 
 Steady-state ingest uses Dagster (`x_sensor_recent_tweets_put_search_recent_tweets` for new puts, `x_reprocess_recent_tweets_files_schedule_*` for catch-up including dataset-only when graph ⊃ dataset) and `sync_envelope_paths` inside orchestrations—not these CLIs.
 
@@ -21,7 +20,7 @@ Steady-state ingest uses Dagster (`x_sensor_recent_tweets_put_search_recent_twee
 - Fix lag with `backfill_x_datasets.py` (not the audit script).
 - Logic: `signals.x.apps.x_proxy.dataset.envelope_bookkeeping`.
 
-**Parquet cache:** `x/cache/processed_envelopes.json` is separate (columnar projection). Use `apps/x_proxy/dataset/count_audit.py` for a three-way envelope/cache/dataset sanity check.
+Use `apps/x_proxy/dataset/count_audit.py` or `dataset/api.graph_totals` for row-count sanity checks.
 
 ## Running locally
 

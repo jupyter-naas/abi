@@ -44,10 +44,10 @@ def _table_counts(module) -> dict[str, int]:
 
 
 def _run_backfill(module, *, batch_size: int) -> dict:
-    from naas_abi_marketplace.applications.x.apps.x_proxy.cache.schema import (
+    from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.envelope_paths import (
         ENVELOPE_PREFIX,
     )
-    from naas_abi_marketplace.applications.x.apps.x_proxy.cache.storage import walk
+    from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.storage_walk import walk
     from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.sync import (
         sync_envelope_paths,
     )
@@ -114,18 +114,16 @@ def main(argv: list[str] | None = None) -> int:
 
     cache_compare: dict | None = None
     try:
-        from naas_abi_marketplace.applications.x.apps.x_proxy.cache.reader import (
-            CacheReader,
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.api import (
+            graph_totals,
         )
 
-        cache = CacheReader(module.engine.services.object_storage)
-        cache_total, _ = cache.search_tweets("", offset=0, limit=1)
+        totals = graph_totals(module.engine.services.dataset)
         cache_compare = {
-            "cache_search_total": cache_total,
-            "dataset_posts_total": after_second.get("posts_v1", 0),
-            "delta": after_second.get("posts_v1", 0) - cache_total,
+            "dataset_graph_totals": totals,
+            "dataset_posts_rows": after_second.get("posts_v1", 0),
         }
-        logger.info("Cache equivalence: %s", cache_compare)
+        logger.info("Dataset totals: %s", cache_compare)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Cache compare skipped (%s)", exc)
 

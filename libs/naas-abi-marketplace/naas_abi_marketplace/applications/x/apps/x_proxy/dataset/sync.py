@@ -11,14 +11,16 @@ from naas_abi_core import logger
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
-from naas_abi_marketplace.applications.x.apps.x_proxy.cache.envelopes import (
+from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.envelope_paths import (
+    ENVELOPE_PREFIX,
+)
+from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.envelopes import (
     parse_envelope,
     slugify,
 )
-from naas_abi_marketplace.applications.x.apps.x_proxy.cache.schema import (
-    ENVELOPE_PREFIX,
+from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.storage_walk import (
+    split_key,
 )
-from naas_abi_marketplace.applications.x.apps.x_proxy.cache.storage import split_key
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.author_stats import (
     recompute_author_stats,
 )

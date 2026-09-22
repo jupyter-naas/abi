@@ -16,7 +16,9 @@ except ImportError:
 if LangChainPendingDeprecationWarning is not None:
     warnings.filterwarnings("ignore", category=LangChainPendingDeprecationWarning)
 
-from signals.x.apps.x_proxy.cache.schema import ENVELOPE_PREFIX
+from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.envelope_paths import (
+    ENVELOPE_PREFIX,
+)
 from signals.x.apps.x_proxy.dataset.envelope_bookkeeping import (
     envelope_bookkeeping_diff,
 )

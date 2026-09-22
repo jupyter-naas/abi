@@ -34,7 +34,6 @@ import hashlib
 import json
 import mimetypes
 import re
-import threading
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, HTTPException, Request
@@ -52,9 +51,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 if TYPE_CHECKING:
     from naas_abi_core.services.dataset.DatasetPort import IDatasetPort
     from naas_abi_marketplace.applications.x import ABIModule
-    from naas_abi_marketplace.applications.x.apps.x_proxy.cache.reader import (
-        CacheReader,
-    )
 
 APP_HTML_INDEX_PATH = "/app-html/x/apps/x_proxy/index.html"
 APP_HTML_INDEX_DIR = "/app-html/x/apps/x_proxy/"
@@ -239,10 +235,6 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
         self._object_storage = object_storage_service
         self._dataset = dataset
         self._module = module
-        self._search_reader: CacheReader | None = None
-        self._search_state: dict = {}
-        self._search_lock = threading.Lock()
-
     def _dataset_read_enabled(self) -> bool:
         if self._module is None or self._dataset is None:
             return False
@@ -399,35 +391,6 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
             max_bytes=max_bytes,
         )
         return json.dumps(doc, separators=(",", ":")).encode()
-
-    def _search_tweets(self, query: str, page: int, per_page: int) -> bytes:
-        from naas_abi_marketplace.applications.x.apps.x_proxy.cache.reader import (
-            CacheReader,
-        )
-
-        with self._search_lock:
-            current = CacheReader(self._object_storage)
-            state = current.projection_state()
-            if self._search_reader is None or state != self._search_state:
-                reader = current
-                self._search_reader = reader
-                self._search_state = state
-            else:
-                reader = self._search_reader
-            total, posts = reader.search_tweets(
-                query,
-                offset=page * per_page,
-                limit=per_page,
-            )
-        return json.dumps(
-            {
-                "count": total,
-                "page": page,
-                "per_page": per_page,
-                "posts": posts,
-            },
-            separators=(",", ":"),
-        ).encode()
 
     def _index(self, request: Request, *, app_prefix: str = DEFAULT_APP_PREFIX):
         return _serve_object(

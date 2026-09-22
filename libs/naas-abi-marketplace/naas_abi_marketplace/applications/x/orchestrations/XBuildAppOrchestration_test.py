@@ -54,20 +54,12 @@ def test_run_build_cycle_resolves_abi_module():
             "naas_abi_marketplace.applications.x.orchestrations.utils.publish_x_app",
             return_value={"ok": True},
         ) as publish,
-        patch(
-            "naas_abi_marketplace.applications.x.orchestrations.utils.refresh_x_cache",
-            return_value={"rebuilt": True},
-        ) as refresh,
     ):
-        summary = _run_build_cycle(full_users=True, rebuild_projection=True)
+        summary = _run_build_cycle()
 
     get_instance.assert_called_once_with()
-    refresh.assert_called_once_with(module, full=True)
-    publish.assert_called_once_with(module, full_users=True, direct_user_limit=100)
-    assert summary == {
-        "projection_rebuild": {"rebuilt": True},
-        "app": {"ok": True},
-    }
+    publish.assert_called_once_with(module)
+    assert summary == {"app": {"ok": True}}
 
 
 def test_run_media_batch_resolves_abi_module():
