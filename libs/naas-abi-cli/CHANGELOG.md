@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.25.0 (2026-09-22)
+
+### Bug Fixes
+
+- **core**: Address document service review feedback
+  ([`adc548c`](https://github.com/jupyter-naas/abi/commit/adc548cf122052e64ea79c3427a1e0d450e3093f))
+
+### Features
+
+- **core**: Add portable document store service
+  ([`db7df35`](https://github.com/jupyter-naas/abi/commit/db7df354346a5bf1ebeba60ba4f33651cad09c9d))
+
+
 ## v2.24.1 (2026-09-21)
 
 ### Bug Fixes

@@ -47,7 +47,9 @@ Launchpad example (for an entry named ``reprocess_envelopes``)::
 import posixpath
 import re
 import signal
+import time
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TypeVar
 
@@ -75,7 +77,77 @@ _ENVELOPE_EXTENSIONS = (".json", ".ndjson", ".json.gz", ".ndjson.gz")
 # ``2026-06-29T17_58_45.974146+00_00_<slug>.json``.
 _ENVELOPE_TS_RE = re.compile(r"^(?P<ts>\d{4}-\d{2}-\d{2}T[\d_:.+-]+?)_")
 _REPROCESS_MAX_RUNTIME_SECONDS = 5 * 60
+_LIST_ENVELOPE_PROGRESS_INTERVAL_S = 30.0
+_DATASET_PROBE_PROGRESS_EVERY = 25
 T = TypeVar("T")
+
+
+def _reprocess_log(
+    log: Callable[[str], None] | None,
+    *,
+    config_name: str,
+    run_id: str,
+    phase: str,
+    message: str,
+) -> None:
+    """Emit to Dagster step logs (stderr) and the shared application logger."""
+    line = (
+        f"XSearchRecentTweetsFilesOrchestration[{config_name}] "
+        f"run_id={run_id} phase={phase}: {message}"
+    )
+    if log is not None:
+        log(line)
+    logger.info(line)
+
+
+@dataclass
+class _ListEnvelopeProgress:
+    """Counters for long recursive object-storage listing sweeps."""
+
+    log: Callable[[str], None] | None
+    config_name: str
+    run_id: str
+    started_at: float = field(default_factory=time.monotonic)
+    last_logged_at: float = field(default_factory=time.monotonic)
+    list_calls: int = 0
+    keys_seen: int = 0
+    envelopes_kept: int = 0
+    skipped_age: int = 0
+    prefixes_visited: int = 0
+
+    def note_list_call(self) -> None:
+        self.list_calls += 1
+
+    def note_prefix_visited(self) -> None:
+        self.prefixes_visited += 1
+
+    def note_key(self) -> None:
+        self.keys_seen += 1
+
+    def note_envelope_kept(self) -> None:
+        self.envelopes_kept += 1
+
+    def note_skipped_age(self) -> None:
+        self.skipped_age += 1
+
+    def maybe_log_progress(self, *, force: bool = False) -> None:
+        now = time.monotonic()
+        if not force and (now - self.last_logged_at) < _LIST_ENVELOPE_PROGRESS_INTERVAL_S:
+            if self.keys_seen == 0 or self.keys_seen % 500 != 0:
+                return
+        self.last_logged_at = now
+        elapsed = now - self.started_at
+        _reprocess_log(
+            self.log,
+            config_name=self.config_name,
+            run_id=self.run_id,
+            phase="list_envelopes",
+            message=(
+                f"progress elapsed={elapsed:.1f}s list_calls={self.list_calls} "
+                f"prefixes_visited={self.prefixes_visited} keys_seen={self.keys_seen} "
+                f"envelopes_kept={self.envelopes_kept} skipped_age={self.skipped_age}"
+            ),
+        )
 
 
 class OrchestrationTimeoutError(TimeoutError):
@@ -87,6 +159,8 @@ def _with_signal_timeout(
     timeout_seconds: float,
     run_id: str,
     fn: Callable[[], T],
+    log: Callable[[str], None] | None = None,
+    config_name: str = "reprocess_envelopes",
 ) -> T:
     """Run ``fn`` under a SIGALRM wall-clock timeout (Linux/Unix only)."""
     if timeout_seconds <= 0:
@@ -94,15 +168,39 @@ def _with_signal_timeout(
             f"X file reprocessing exceeded {timeout_seconds}s (run_id={run_id})."
         )
     if not hasattr(signal, "SIGALRM"):
+        _reprocess_log(
+            log,
+            config_name=config_name,
+            run_id=run_id,
+            phase="timeout",
+            message=(
+                f"SIGALRM unavailable on this platform; "
+                f"configured limit {timeout_seconds}s not enforced"
+            ),
+        )
         return fn()
 
     previous_handler = signal.getsignal(signal.SIGALRM)
 
     def _handler(_signum, _frame) -> None:  # pragma: no cover - raised by signal
+        _reprocess_log(
+            log,
+            config_name=config_name,
+            run_id=run_id,
+            phase="timeout",
+            message=f"SIGALRM fired after {timeout_seconds}s wall-clock limit",
+        )
         raise OrchestrationTimeoutError(
             f"X file reprocessing exceeded {timeout_seconds}s (run_id={run_id})."
         )
 
+    _reprocess_log(
+        log,
+        config_name=config_name,
+        run_id=run_id,
+        phase="timeout",
+        message=f"arming SIGALRM wall-clock limit {timeout_seconds}s",
+    )
     signal.signal(signal.SIGALRM, _handler)
     signal.setitimer(signal.ITIMER_REAL, timeout_seconds)
     try:
@@ -205,6 +303,7 @@ def _list_envelope_paths(
     *,
     cutoff: datetime | None = None,
     _seen: set[str] | None = None,
+    progress: _ListEnvelopeProgress | None = None,
 ) -> tuple[list[str], int]:
     """Full object-storage paths of every envelope file under *prefix*.
 
@@ -224,8 +323,12 @@ def _list_envelope_paths(
     if not prefix or prefix in seen:
         return [], 0
     seen.add(prefix)
+    if progress is not None:
+        progress.note_prefix_visited()
 
     try:
+        if progress is not None:
+            progress.note_list_call()
         all_keys = object_storage.list_objects(prefix) or []
     except Exception as exc:  # noqa: BLE001
         logger.warning(
@@ -239,6 +342,9 @@ def _list_envelope_paths(
     for k in all_keys:
         if not k:
             continue
+        if progress is not None:
+            progress.note_key()
+            progress.maybe_log_progress()
         full_path = k if k.startswith(prefix) else posixpath.join(prefix, k)
         base = posixpath.basename(full_path.rstrip("/"))
         # Nexus folder markers are zero-byte placeholders, not real prefixes.
@@ -250,6 +356,7 @@ def _list_envelope_paths(
                 full_path.rstrip("/"),
                 cutoff=cutoff,
                 _seen=seen,
+                progress=progress,
             )
             paths.extend(child_paths)
             skipped_age += child_skipped
@@ -257,13 +364,21 @@ def _list_envelope_paths(
         if full_path.lower().endswith(_ENVELOPE_EXTENSIONS):
             if cutoff is not None and not _within_max_age(full_path, cutoff):
                 skipped_age += 1
+                if progress is not None:
+                    progress.note_skipped_age()
                 continue
             paths.append(full_path)
+            if progress is not None:
+                progress.note_envelope_kept()
             continue
         # Non-envelope child with no trailing slash — likely a slug dir (FS
         # adapter) or an unrelated file. Recurse; empty/missing dirs no-op.
         child_paths, child_skipped = _list_envelope_paths(
-            object_storage, full_path, cutoff=cutoff, _seen=seen
+            object_storage,
+            full_path,
+            cutoff=cutoff,
+            _seen=seen,
+            progress=progress,
         )
         paths.extend(child_paths)
         skipped_age += child_skipped
@@ -322,8 +437,12 @@ def _mapped_file_paths(triple_store, graph_name: str, namespace: str) -> set[str
 def _reprocess_files(
     config: XSearchRecentTweetsFilesConfiguration,
     op_cfg: dict | None = None,
+    *,
+    run_id: str = "unknown-run",
+    log: Callable[[str], None] | None = None,
 ) -> dict:
     op_cfg = op_cfg or {}
+    run_started = time.monotonic()
     module = ABIModule.get_instance()
     object_storage = module.engine.services.object_storage
     # Launchpad values win; otherwise fall back to this entry's config defaults.
@@ -340,62 +459,198 @@ def _reprocess_files(
     if max_age_hours is not None:
         cutoff = datetime.now(UTC) - timedelta(hours=int(max_age_hours))
 
-    paths, skipped_age = _list_envelope_paths(object_storage, prefix, cutoff=cutoff)
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="run",
+        message=(
+            f"started prefix={prefix!r} skip_existing={skip_existing} "
+            f"max_age_hours={max_age_hours} persist={persist} graph_name={graph_name!r}"
+        ),
+    )
+
+    list_started = time.monotonic()
+    list_progress = _ListEnvelopeProgress(log, config.name, run_id)
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="list_envelopes",
+        message=f"started prefix={prefix!r} max_age_hours={max_age_hours}",
+    )
+    paths, skipped_age = _list_envelope_paths(
+        object_storage, prefix, cutoff=cutoff, progress=list_progress
+    )
+    list_progress.maybe_log_progress(force=True)
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="list_envelopes",
+        message=(
+            f"done elapsed={time.monotonic() - list_started:.2f}s "
+            f"recent_envelopes={len(paths)} skipped_age={skipped_age}"
+        ),
+    )
+
     # Second filename-timestamp check (same rule) after listing.
     if cutoff is not None:
+        recheck_started = time.monotonic()
+        before = len(paths)
         paths, skipped_recheck = _filter_paths_by_max_age(paths, cutoff=cutoff)
         skipped_age += skipped_recheck
+        _reprocess_log(
+            log,
+            config_name=config.name,
+            run_id=run_id,
+            phase="age_recheck",
+            message=(
+                f"done elapsed={time.monotonic() - recheck_started:.2f}s "
+                f"before={before} after={len(paths)} skipped={skipped_recheck}"
+            ),
+        )
 
     # skip_existing: map only paths not in the graph; dataset-sync paths that are
     # in the graph but missing from envelopes_v1 (same gap as ObjectPut Events).
     paths_dataset_only: list[str] = []
     skipped_fully_projected = 0
     if skip_existing:
+        mapped_started = time.monotonic()
+        _reprocess_log(
+            log,
+            config_name=config.name,
+            run_id=run_id,
+            phase="mapped_paths_query",
+            message=f"started graph_name={graph_name!r}",
+        )
         mapped = _mapped_file_paths(
             module.engine.services.triple_store,
             graph_name,
             module.configuration.ontology_namespace,
         )
+        _reprocess_log(
+            log,
+            config_name=config.name,
+            run_id=run_id,
+            phase="mapped_paths_query",
+            message=(
+                f"done elapsed={time.monotonic() - mapped_started:.2f}s "
+                f"mapped_paths={len(mapped)}"
+            ),
+        )
+
+        probe_started = time.monotonic()
+        _reprocess_log(
+            log,
+            config_name=config.name,
+            run_id=run_id,
+            phase="dataset_projection_probe",
+            message=f"started candidates={len(paths)}",
+        )
         to_map: list[str] = []
-        for path in paths:
+        for index, path in enumerate(paths, start=1):
             if path not in mapped:
                 to_map.append(path)
             elif search_envelope_in_dataset(module, path):
                 skipped_fully_projected += 1
             else:
                 paths_dataset_only.append(path)
+            if index == len(paths) or index % _DATASET_PROBE_PROGRESS_EVERY == 0:
+                _reprocess_log(
+                    log,
+                    config_name=config.name,
+                    run_id=run_id,
+                    phase="dataset_projection_probe",
+                    message=(
+                        f"progress {index}/{len(paths)} elapsed="
+                        f"{time.monotonic() - probe_started:.1f}s "
+                        f"to_map={len(to_map)} fully_projected={skipped_fully_projected} "
+                        f"dataset_only={len(paths_dataset_only)}"
+                    ),
+                )
         paths = to_map
+        _reprocess_log(
+            log,
+            config_name=config.name,
+            run_id=run_id,
+            phase="dataset_projection_probe",
+            message=(
+                f"done elapsed={time.monotonic() - probe_started:.2f}s "
+                f"to_map={len(paths)} fully_projected={skipped_fully_projected} "
+                f"dataset_only={len(paths_dataset_only)}"
+            ),
+        )
 
     age_note = (
         f", {skipped_age} older than {max_age_hours}h skipped" if max_age_hours else ""
     )
-    logger.info(
-        f"XSearchRecentTweetsFilesOrchestration[{config.name}]: {len(paths)} "
-        f"envelope(s) under {prefix!r} to reprocess via "
-        f"XSearchRecentTweetsPipeline ({skipped_fully_projected} fully projected "
-        f"skipped, {len(paths_dataset_only)} dataset-only catch-up"
-        f"{age_note})"
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="plan",
+        message=(
+            f"{len(paths)} envelope(s) under {prefix!r} to map via "
+            f"XSearchRecentTweetsPipeline ({skipped_fully_projected} fully projected "
+            f"skipped, {len(paths_dataset_only)} dataset-only catch-up{age_note})"
+        ),
     )
 
     processed = 0
     failed = 0
     processed_paths: list[str] = []
-    for file_path in paths:
+    map_started = time.monotonic()
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="map_envelopes",
+        message=f"started count={len(paths)}",
+    )
+    for index, file_path in enumerate(paths, start=1):
+        file_started = time.monotonic()
         try:
             run_search_pipeline_for_file(
                 file_path, persist=persist, graph_name=graph_name
             )
             processed += 1
             processed_paths.append(file_path)
+            _reprocess_log(
+                log,
+                config_name=config.name,
+                run_id=run_id,
+                phase="map_envelopes",
+                message=(
+                    f"mapped {index}/{len(paths)} elapsed="
+                    f"{time.monotonic() - file_started:.2f}s path={file_path!r}"
+                ),
+            )
         except OrchestrationTimeoutError:
             raise
         except Exception as exc:  # noqa: BLE001
             # Don't let one bad envelope abort the whole reprocess run.
             failed += 1
-            logger.warning(
-                f"XSearchRecentTweetsFilesOrchestration[{config.name}]: failed to "
-                f"reprocess {file_path!r} ({exc}); continuing"
+            _reprocess_log(
+                log,
+                config_name=config.name,
+                run_id=run_id,
+                phase="map_envelopes",
+                message=(
+                    f"failed {index}/{len(paths)} path={file_path!r} ({exc}); "
+                    f"continuing"
+                ),
             )
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="map_envelopes",
+        message=(
+            f"done elapsed={time.monotonic() - map_started:.2f}s "
+            f"processed={processed} failed={failed}"
+        ),
+    )
 
     dataset_paths = processed_paths + paths_dataset_only
     summary = {
@@ -411,21 +666,66 @@ def _reprocess_files(
     # every path mapped this sweep, plus dataset-only catch-up for graph-mapped
     # paths missing from envelopes_v1.
     if dataset_paths:
+        sync_started = time.monotonic()
+        _reprocess_log(
+            log,
+            config_name=config.name,
+            run_id=run_id,
+            phase="dataset_sync",
+            message=f"started paths={len(dataset_paths)} batch_size=64",
+        )
         summary["dataset"] = sync_x_dataset_paths_batched(
             module, dataset_paths, batch_size=64
         )
+        _reprocess_log(
+            log,
+            config_name=config.name,
+            run_id=run_id,
+            phase="dataset_sync",
+            message=(
+                f"done elapsed={time.monotonic() - sync_started:.2f}s "
+                f"summary={summary['dataset']}"
+            ),
+        )
     else:
         summary["dataset"] = {"skipped": True, "reason": "no_paths_to_sync"}
+        _reprocess_log(
+            log,
+            config_name=config.name,
+            run_id=run_id,
+            phase="dataset_sync",
+            message="skipped (no paths to sync)",
+        )
     # Republish static app snapshots only when this sweep actually mapped
     # something (same gate as primary event path, but optional via app_publish).
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="app_publish",
+        message="started",
+    )
     summary["app"] = republish_x_app_after_pipeline(
         module,
         source=f"XSearchRecentTweetsFilesOrchestration[{config.name}]",
         app_publish=launchpad_override(op_cfg, "app_publish", config.app_publish),
         ran=processed > 0,
     )
-    logger.info(
-        f"XSearchRecentTweetsFilesOrchestration[{config.name}]: done — {summary}"
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="app_publish",
+        message=f"done result={summary['app']}",
+    )
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="run",
+        message=(
+            f"done elapsed={time.monotonic() - run_started:.2f}s summary={summary}"
+        ),
     )
     return summary
 
@@ -496,10 +796,23 @@ def _build_reprocess_files_definitions(
 
     @dg.op(name=op_name, config_schema=_FILES_CONFIG_SCHEMA)
     def reprocess_files_op(context) -> dict:
+        run_id = str(getattr(context, "run_id", "unknown-run"))
+        op_log = context.log.info
+
+        def _run() -> dict:
+            return _reprocess_files(
+                config,
+                context.op_config or {},
+                run_id=run_id,
+                log=op_log,
+            )
+
         return _with_signal_timeout(
             timeout_seconds=_REPROCESS_MAX_RUNTIME_SECONDS,
-            run_id=str(getattr(context, "run_id", "unknown-run")),
-            fn=lambda: _reprocess_files(config, context.op_config or {}),
+            run_id=run_id,
+            fn=_run,
+            log=op_log,
+            config_name=config.name,
         )
 
     @dg.job(

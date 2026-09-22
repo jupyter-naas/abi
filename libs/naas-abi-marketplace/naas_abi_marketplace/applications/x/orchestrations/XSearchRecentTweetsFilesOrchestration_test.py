@@ -13,6 +13,7 @@ from naas_abi_marketplace.applications.x.orchestrations.XSearchRecentTweetsFiles
     XSearchRecentTweetsFilesOrchestration,
     _build_reprocess_files_definitions,
     _reprocess_files,
+    _reprocess_log,
     _with_signal_timeout,
 )
 
@@ -90,6 +91,93 @@ def test_definitions_skip_duplicate_files_names():
         orch = XSearchRecentTweetsFilesOrchestration.New()
 
     assert len(list(orch.definitions.schedules or [])) == 1
+
+
+def test_reprocess_log_includes_run_id_and_phase():
+    lines: list[str] = []
+
+    _reprocess_log(
+        lines.append,
+        config_name="reprocess_envelopes",
+        run_id="run-test",
+        phase="list_envelopes",
+        message="started prefix='x/search_recent_tweets'",
+    )
+
+    assert len(lines) == 1
+    assert "run_id=run-test" in lines[0]
+    assert "phase=list_envelopes" in lines[0]
+    assert "reprocess_envelopes" in lines[0]
+
+
+def test_reprocess_emits_phase_logs_for_each_stage():
+    cfg = _files_config(skip_existing=True, max_age_hours=24)
+    path_graph_only = (
+        "x/search_recent_tweets/slug/2026-09-22T10:00:00+00:00_slug.json"
+    )
+    path_needs_map = "x/search_recent_tweets/slug/2026-09-22T11:00:00+00:00_slug.json"
+    dagster_lines: list[str] = []
+
+    module = MagicMock()
+    module.configuration.graph_name = "http://ontology.naas.ai/graph/x"
+    module.configuration.ontology_namespace = "http://ontology.naas.ai/x/"
+
+    with (
+        patch(
+            "naas_abi_marketplace.applications.x.orchestrations."
+            "XSearchRecentTweetsFilesOrchestration.ABIModule.get_instance",
+            return_value=module,
+        ),
+        patch(
+            "naas_abi_marketplace.applications.x.orchestrations."
+            "XSearchRecentTweetsFilesOrchestration._list_envelope_paths",
+            return_value=([path_graph_only, path_needs_map], 3),
+        ),
+        patch(
+            "naas_abi_marketplace.applications.x.orchestrations."
+            "XSearchRecentTweetsFilesOrchestration._mapped_file_paths",
+            return_value={path_graph_only},
+        ),
+        patch(
+            "naas_abi_marketplace.applications.x.orchestrations."
+            "XSearchRecentTweetsFilesOrchestration.search_envelope_in_dataset",
+            side_effect=lambda _mod, p: p != path_graph_only,
+        ),
+        patch(
+            "naas_abi_marketplace.applications.x.orchestrations."
+            "XSearchRecentTweetsFilesOrchestration.run_search_pipeline_for_file",
+        ),
+        patch(
+            "naas_abi_marketplace.applications.x.orchestrations."
+            "XSearchRecentTweetsFilesOrchestration.sync_x_dataset_paths_batched",
+            return_value={"batches": 1},
+        ),
+        patch(
+            "naas_abi_marketplace.applications.x.orchestrations."
+            "XSearchRecentTweetsFilesOrchestration.republish_x_app_after_pipeline",
+            return_value={"skipped": True},
+        ),
+    ):
+        _reprocess_files(
+            cfg,
+            run_id="run-phase-test",
+            log=dagster_lines.append,
+        )
+
+    joined = "\n".join(dagster_lines)
+    for phase in (
+        "run",
+        "list_envelopes",
+        "mapped_paths_query",
+        "dataset_projection_probe",
+        "plan",
+        "map_envelopes",
+        "dataset_sync",
+        "app_publish",
+    ):
+        assert f"phase={phase}" in joined
+    assert "run_id=run-phase-test" in joined
+    assert "elapsed=" in joined
 
 
 def test_reprocess_syncs_dataset_only_when_graph_mapped_but_not_envelopes_v1():
