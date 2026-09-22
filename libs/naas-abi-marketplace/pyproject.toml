@@ -19,6 +19,7 @@ Homepage = "https://github.com/jupyter-naas/abi"
 Repository = "https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-marketplace"
 
 [tool.uv.sources]
+naas-abi-proto = {path = "../naas-abi-proto", editable = true}
 naas-abi-core = { path = "../naas-abi-core", editable = true }
 
 [tool.mypy]

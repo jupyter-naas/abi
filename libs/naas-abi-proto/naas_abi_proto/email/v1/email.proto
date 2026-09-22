@@ -1,0 +1,45 @@
+// NATS-RPC contract for the email kernel domain.
+// Mirrors naas_abi_core/services/email/EmailPorts.py 1:1 for its one method.
+// See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
+//
+// Subjects (see "Protobuf contract shapes" in the RFC):
+//   abi.svc.email.v1.send
+syntax = "proto3";
+
+package abi.email.v1;
+
+import "naas_abi_proto/common/v1/common.proto";
+
+message EmailAttachment {
+  string filename = 1;
+  bytes content = 2;
+  string mime_type = 3;
+  optional string content_id = 4;
+  bool is_inline = 5;
+}
+
+message SendRequest {
+  abi.common.v1.CallContext context = 1;
+  optional string to_email = 2;
+  string subject = 3;
+  string text_body = 4;
+  optional string html_body = 5;
+  string from_email = 6;
+  optional string from_name = 7;
+  optional string reply_to = 8;
+  repeated EmailAttachment attachments = 9;
+  // `to_emails`/`cc_emails` accept a single address or a list on the port
+  // (`list[str] | str | None`); the client always normalizes to a list
+  // before sending, so the wire only ever carries `repeated string`. An
+  // empty repeated field here is treated as "no addresses given" on the
+  // server, not distinguished from "field not set" -- see
+  // EmailPorts.resolve_recipients()/EmailMessageBuilder.build_email_message(),
+  // which both already treat an empty/missing list identically to `None`,
+  // so no extra presence tracking is needed for these two fields.
+  repeated string to_emails = 10;
+  repeated string cc_emails = 11;
+}
+message SendResponse {
+  // Empty on success — the error, if any, is the whole signal.
+  optional abi.common.v1.CallError error = 1;
+}

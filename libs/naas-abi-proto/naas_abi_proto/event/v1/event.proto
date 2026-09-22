@@ -1,0 +1,136 @@
+// NATS-RPC contract for the event kernel domain.
+// Mirrors naas_abi_core/services/event/EventPort.py::IEventAdapter 1:1 -- the
+// SECONDARY port only (the durable event log), NOT the domain-level
+// IEventService. See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
+//
+// Scope of this v1 contract, deliberately: only the six IEventAdapter
+// methods below are covered -- `append`, `query`, `max_seq`, `get_cursor`,
+// `set_cursor`, `query_for_consumer`. Everything that lives on IEventService
+// instead is explicitly OUT of scope and has no RPC here at all:
+//   - `publish`/`subscribe` -- bus-backed, live pub/sub; `subscribe` returns
+//     a Thread and has no meaningful request/reply shape. EventService
+//     composes a BusService on top of whichever IEventAdapter is plugged in
+//     here, entirely independent of this contract.
+//   - `iter_query`/`iter_query_for_consumer` -- generator-based batch
+//     draining, already composable client-side from plain `query`/
+//     `query_for_consumer` below; remoting them as a stream is unneeded.
+//   - the domain-level `query` -- takes `event_class: type`, not this port's
+//     `event_type: str`; EventService resolves the class <-> IRI mapping
+//     locally before ever reaching the adapter.
+//   - `seek_consumer_to_end` -- a thin composition of `get_cursor`/
+//     `max_seq`/`set_cursor`, all three of which are already covered below.
+// A primary adapter serving this contract wraps a raw IEventAdapter, not the
+// domain EventService, so it never has bus access to begin with.
+//
+// IEventAdapter declares no exceptions of its own (EventNotFoundError /
+// InvalidEventError in EventPort.py are raised by the domain EventService,
+// not this port) -- callers should expect INTERNAL for any adapter failure.
+// EVENT_NOT_FOUND/INVALID_EVENT error codes are still reserved below,
+// defensively, in case a future IEventAdapter implementation raises them.
+//
+// Subjects (see "Protobuf contract shapes" in the RFC):
+//   abi.svc.event.v1.append
+//   abi.svc.event.v1.query
+//   abi.svc.event.v1.max_seq
+//   abi.svc.event.v1.get_cursor
+//   abi.svc.event.v1.set_cursor
+//   abi.svc.event.v1.query_for_consumer
+syntax = "proto3";
+
+package abi.event.v1;
+
+import "naas_abi_proto/common/v1/common.proto";
+import "google/protobuf/struct.proto";
+
+message StoredEvent {
+  string id = 1;
+  string event_type = 2;
+  int64 seq = 3;
+  string timestamp = 4;
+  bytes payload = 5;
+}
+
+message StoredEvents {
+  repeated StoredEvent events = 1;
+}
+
+message AppendRequest {
+  abi.common.v1.CallContext context = 1;
+  string event_id = 2;
+  string event_type = 3;
+  string timestamp = 4;
+  bytes payload = 5;
+}
+message AppendResponse {
+  oneof result {
+    StoredEvent event = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+message QueryRequest {
+  abi.common.v1.CallContext context = 1;
+  optional string event_type = 2;
+  optional int64 since_seq = 3;
+  optional int64 until_seq = 4;
+  optional string since_timestamp = 5;
+  optional string until_timestamp = 6;
+  optional google.protobuf.Struct json_filter = 7;
+  optional int64 limit = 8;
+  bool newest_first = 9;
+  optional string search = 10;
+}
+message QueryResponse {
+  oneof result {
+    StoredEvents events = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+message MaxSeqRequest {
+  abi.common.v1.CallContext context = 1;
+  optional string event_type = 2;
+}
+message MaxSeqResponse {
+  oneof result {
+    int64 seq = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+message GetCursorRequest {
+  abi.common.v1.CallContext context = 1;
+  string consumer_id = 2;
+  string event_type = 3;
+}
+message GetCursorResponse {
+  oneof result {
+    int64 last_seq = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
+
+message SetCursorRequest {
+  abi.common.v1.CallContext context = 1;
+  string consumer_id = 2;
+  string event_type = 3;
+  int64 last_seq = 4;
+}
+message SetCursorResponse {
+  // Empty on success -- the error, if any, is the whole signal.
+  optional abi.common.v1.CallError error = 1;
+}
+
+message QueryForConsumerRequest {
+  abi.common.v1.CallContext context = 1;
+  string consumer_id = 2;
+  string event_type = 3;
+  optional int64 limit = 4;
+  optional google.protobuf.Struct json_filter = 5;
+}
+message QueryForConsumerResponse {
+  oneof result {
+    StoredEvents events = 1;
+    abi.common.v1.CallError error = 2;
+  }
+}
