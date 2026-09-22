@@ -283,3 +283,23 @@ uniqueness. Subclass `DocumentSecondaryAdapterContract` and provide its `adapter
 fixture. Run the full contract against a real backend. Add factory/configuration
 wiring, adapter-specific lifecycle tests, and update this guide. Do not introduce
 backend-specific methods into the module-facing port.
+
+## NATS transport
+
+`adapters/primary/document__primary_adapter__NATS.py` wraps the owning service;
+`adapters/secondary/DocumentSecondaryAdapterNATSClient.py` implements the complete
+storage port, with close disposing only its own transport. Top-level NATS wiring
+injects a remote root into engine module proxies. `adapter: nats_rpc` also accepts
+nats_url, jwt_secret, service_identity and timeout_seconds (default 10), preserving
+an explicit upstream route without re-exposing it.
+
+The canonical contract is `naas-abi-proto/naas_abi_proto/document/v1/document.proto`.
+Namespaces are explicit on the wire and convention-bound in module proxies, not
+per-module authorization under Stage 1 shared JWT trust. Server domain validation
+is authoritative. Never silently replay storage failures. Engine-owned backend
+resources must not be closed by a remote client.
+
+The adapter's tests reuse the full portable contract through a native nats-server.
+`examples/standalone_module/checkpoint_integration_test.py` verifies the optional
+SDK LangGraph saver can resume in another interpreter through these endpoints.
+No synchronous core Agent default or PostgreSQL checkpoint data is changed.

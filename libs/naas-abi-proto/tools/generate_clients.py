@@ -54,6 +54,28 @@ class {cls}:
             raise ValueError("tier index must be nonnegative")
         return CacheClient(self._transport, subject_prefix=f"abi.svc.cache.v1.tier.{index}")
 '''
+    if domain == "document":
+        text = text.replace("def __init__(self, transport: Transport) -> None:", "def __init__(self, transport: Transport, namespace: str | None = None) -> None:")
+        text = text.replace("        self._transport = transport", "        self._transport = transport\n        self._namespace = namespace")
+        text = text.replace(", request, pb.", ", self._scoped(request), pb.")
+        text += '''
+    def for_namespace(self, namespace: str) -> "DocumentClient":
+        if self._namespace is not None and namespace != self._namespace:
+            raise ValueError("A bound document client cannot change namespace")
+        if not namespace or "\\x00" in namespace:
+            raise ValueError("A module namespace is required")
+        return DocumentClient(self._transport, namespace)
+
+    def _scoped(self, request):
+        if self._namespace is None:
+            return request
+        if request.namespace and request.namespace != self._namespace:
+            raise ValueError("Request does not match the module namespace")
+        cloned = type(request)()
+        cloned.CopyFrom(request)
+        cloned.namespace = self._namespace
+        return cloned
+'''
     (SDK / f"{domain}.py").write_text(text)
     imports.append(f"from naas_abi_sdk.{domain} import {cls}")
     initializers.append(f"        self.{domain} = {cls}(self._transport)")

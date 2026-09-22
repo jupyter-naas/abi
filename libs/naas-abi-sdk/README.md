@@ -30,8 +30,8 @@ asyncio.run(main())
 ```
 
 Every method accepts a generated protobuf request and returns its generated response.
-Explicit typed methods cover all 101 v1 RPC endpoints in `naas_abi_sdk/catalog.py`.
-Services: activity_log, cache, coding_environment, dataset, email, event, keyvalue,
+Explicit typed methods cover all 109 v1 RPC endpoints in `naas_abi_sdk/catalog.py`.
+Services: activity_log, cache, coding_environment, dataset, document, email, event, keyvalue,
 object_storage, secret, source_control, triple_store, vector_store. `abi.bus`
 provides publish/subscribe and enqueue/dequeue using the engine's native subject,
 stream, and durable-consumer conventions. Pull consumers require explicit
@@ -116,3 +116,47 @@ separately from those framework-specific components.
 engine's `services.cache.adapters` list. The default `client.cache` remains the
 v1 cold endpoint. Tier contracts use the same protobuf messages, with subjects
 `abi.svc.cache.v1.tier.<index>.<method>`.
+
+## Document state and LangGraph checkpoints
+
+Modules can declare `"document"`. `self.engine.services.document` binds requests
+to the module's Python module name; it rejects rebinding and conflicting request
+namespaces. Direct ABIClient users explicitly call
+`client.document.for_namespace("my_package.agents")`. This is API scoping under
+Stage 1 shared trust, not server-enforced per-module authorization.
+
+Document RPCs cover collection declarations/list/drop, put/get/delete,
+find/pagination, and count. `if_version=0` is create-only, positive versions are
+compare-and-swap, and omission is unconditional. Portable values use
+`naas_abi_proto.document.values.encode_data/decode_data`; bytes, datetimes and
+large integers retain their types. No database credentials are needed by clients.
+
+Install `naas-abi-sdk[langgraph]` only in modules that run LangGraph:
+
+```python
+from naas_abi_sdk.langgraph import DocumentCheckpointSaver
+
+# In your async ABIModule.on_initialized():
+self.checkpointer = DocumentCheckpointSaver(
+    self.engine.services.document, agent_id="reviewer-v1"
+)
+await self.checkpointer.setup()
+self.graph = builder.compile(checkpointer=self.checkpointer)
+
+# In an async module operation:
+result = await self.graph.ainvoke(
+    {"messages": [...]}, {"configurable": {"thread_id": conversation_id}}
+)
+```
+
+Use `ainvoke`/`astream`; synchronous graph invocation is not supported by this
+saver. It supports history, pending writes, interrupts/resume, and thread deletion.
+A stable agent ID and module namespace let another process resume the same graph;
+different agents remain isolated even when conversation IDs match. Run only one
+execution per agent/thread at a time; shared persistence is not an execution lock.
+Stop a thread's runs before deleting it. Metadata filtering is performed while
+paging history; full snapshots remain subject to RPC payload limits.
+
+Existing core agents keep their current PostgreSQL/memory selection. This optional
+saver does not migrate old checkpoints, launch remote agents, or provide discovery.
+See the document-checkpoint ADR and remote-agent invocation RFC for those boundaries.

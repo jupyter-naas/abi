@@ -37,6 +37,12 @@ from naas_abi_core.services.dataset.adapters.primary.dataset__primary_adapter__N
 from naas_abi_core.services.dataset.adapters.secondary.DatasetSecondaryAdapterNATSClient import (
     DatasetSecondaryAdapterNATSClient,
 )
+from naas_abi_core.services.document.adapters.primary.document__primary_adapter__NATS import (
+    DocumentPrimaryAdapterNATS,
+)
+from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterNATSClient import (
+    DocumentSecondaryAdapterNATSClient,
+)
 from naas_abi_core.services.email.adapters.primary.email__primary_adapter__NATS import (
     EmailPrimaryAdapterNATS,
 )
@@ -93,6 +99,7 @@ from naas_abi_core.services.vector_store.adapters.secondary.VectorStoreSecondary
 # constructed from services.<x> itself, the domain service (everyone else
 # -- preserves event publishing / derived behaviour for remote callers).
 _WIRED_SERVICES = [
+    ("document", DocumentPrimaryAdapterNATS, DocumentSecondaryAdapterNATSClient, False),
     (
         "object_storage",
         ObjectStoragePrimaryAdapterNATS,

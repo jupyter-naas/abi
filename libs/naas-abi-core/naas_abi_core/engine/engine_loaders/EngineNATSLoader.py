@@ -65,6 +65,12 @@ from naas_abi_core.services.dataset.adapters.primary.dataset__primary_adapter__N
 from naas_abi_core.services.dataset.adapters.secondary.DatasetSecondaryAdapterNATSClient import (
     DatasetSecondaryAdapterNATSClient,
 )
+from naas_abi_core.services.document.adapters.primary.document__primary_adapter__NATS import (
+    DocumentPrimaryAdapterNATS,
+)
+from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterNATSClient import (
+    DocumentSecondaryAdapterNATSClient,
+)
 from naas_abi_core.services.email.adapters.primary.email__primary_adapter__NATS import (
     EmailPrimaryAdapterNATS,
 )
@@ -339,5 +345,14 @@ class EngineNATSLoader:
                 )
                 nats_runtime.run_coro(primary_tier.start(nc))
                 started.append(primary_tier)
+
+        if services.document_available() and not isinstance(
+            services.document.adapter, DocumentSecondaryAdapterNATSClient
+        ):
+            primary_document = DocumentPrimaryAdapterNATS(
+                services.document, nats_config.jwt_secret
+            )
+            nats_runtime.run_coro(primary_document.start(nc))
+            started.append(primary_document)
 
         return started

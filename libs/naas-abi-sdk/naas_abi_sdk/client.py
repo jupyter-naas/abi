@@ -10,6 +10,7 @@ from naas_abi_sdk.bus import BusClient
 from naas_abi_sdk.cache import CacheClient
 from naas_abi_sdk.coding_environment import CodingEnvironmentClient
 from naas_abi_sdk.dataset import DatasetClient
+from naas_abi_sdk.document import DocumentClient
 from naas_abi_sdk.email import EmailClient
 from naas_abi_sdk.event import EventClient
 from naas_abi_sdk.keyvalue import KeyvalueClient
@@ -36,6 +37,7 @@ class ABIClient:
         self.cache = CacheClient(self._transport)
         self.coding_environment = CodingEnvironmentClient(self._transport)
         self.dataset = DatasetClient(self._transport)
+        self.document = DocumentClient(self._transport)
         self.email = EmailClient(self._transport)
         self.event = EventClient(self._transport)
         self.keyvalue = KeyvalueClient(self._transport)

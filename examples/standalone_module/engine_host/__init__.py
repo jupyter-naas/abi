@@ -11,6 +11,7 @@ from naas_abi_core.module.Module import (
 from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.dataset.DatasetService import DatasetService
+from naas_abi_core.services.document.DocumentService import DocumentService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.secret.Secret import Secret
@@ -28,6 +29,7 @@ class ABIModule(BaseModule):
             ActivityLogService,
             CacheService,
             DatasetService,
+            DocumentService,
             EmailService,
             KeyValueService,
             Secret,

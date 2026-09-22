@@ -21,6 +21,8 @@ jobs:
         run: |
           uv run --project libs/naas-abi-proto --python '${{ matrix.python }}' pytest libs/naas-abi-proto/tests -q
           uv run --project libs/naas-abi-sdk --python '${{ matrix.python }}' pytest libs/naas-abi-sdk/tests -q
+      - name: Test optional LangGraph integration imports
+        run: uv run --project libs/naas-abi-sdk --extra langgraph --python '${{ matrix.python }}' pytest libs/naas-abi-sdk/tests -q
       - name: Build distributable wheels
         run: |
           uv build --project libs/naas-abi-proto --wheel

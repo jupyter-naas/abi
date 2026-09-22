@@ -33,6 +33,10 @@ from naas_abi_core.services.dataset.adapters.secondary.DatasetSecondaryAdapterNA
     DatasetSecondaryAdapterNATSClient,
 )
 from naas_abi_core.services.dataset.DatasetService import DatasetService
+from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterNATSClient import (
+    DocumentSecondaryAdapterNATSClient,
+)
+from naas_abi_core.services.document.DocumentService import DocumentService
 from naas_abi_core.services.email.adapters.secondary.EmailSecondaryAdapterNATSClient import (
     EmailSecondaryAdapterNATSClient,
 )
@@ -116,6 +120,10 @@ class EngineNATSDependencies:
                 self._adapter(
                     owners.object_storage, ObjectStorageSecondaryAdapterNATSClient
                 )
+            )
+        if owners.document_available():
+            values["document"] = DocumentService._for_engine(
+                self._adapter(owners.document, DocumentSecondaryAdapterNATSClient)
             )
         if owners.dataset_available():
             values["dataset"] = DatasetService(
