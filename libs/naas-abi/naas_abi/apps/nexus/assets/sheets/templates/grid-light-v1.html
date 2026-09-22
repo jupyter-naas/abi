@@ -4,20 +4,14 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="nexus-sheets-template" content="grid-light-v1" />
-<title>Sample budget</title>
+<title>Untitled workbook</title>
 <script type="application/vnd.nexus.sheet+json">
 {
-  "title": "Sample budget",
+  "title": "Untitled workbook",
   "sheets": [
     {
       "name": "Sheet1",
-      "rows": [
-        ["Category", "Q1", "Q2", "Q3", "Q4"],
-        ["Revenue", 120000, 132000, 128000, 145000],
-        ["COGS", 42000, 44000, 43000, 46000],
-        ["Opex", 55000, 56000, 57000, 58000],
-        ["Net", "=B2-B3-B4", "=C2-C3-C4", "=D2-D3-D4", "=E2-E3-E4"]
-      ]
+      "rows": []
     }
   ]
 }
@@ -33,7 +27,7 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; font-family: "Roboto", Arial, sans-serif; background: var(--grid-bg); color: var(--ink); }
-  .workbook { max-width: 960px; margin: 0 auto; padding: 16px; }
+  .workbook { max-width: 1100px; margin: 0 auto; padding: 16px; }
   .workbook-menubar {
     display: flex; align-items: center; gap: 12px; padding: 8px 12px;
     background: var(--cell-bg); border: 1px solid var(--border); border-radius: 8px 8px 0 0;
@@ -58,7 +52,7 @@
 <body>
 <div class="workbook">
   <div class="workbook-menubar">
-    <h1 id="workbook-title">Sample budget</h1>
+    <h1 id="workbook-title">Untitled workbook</h1>
     <button type="button" id="sync-grid">Sync grid</button>
     <button type="button" class="primary" id="export-xlsx-hint" title="Use Nexus Export or: python -m naas_abi.apps.nexus.sheets.cli">Export XLSX</button>
   </div>
@@ -92,7 +86,7 @@
       tr.querySelectorAll('th, td').forEach(function (cell) { row.push(cell.textContent.trim()); });
       out.push(row);
     });
-    model.sheets[0].rows = out;
+    if (model.sheets && model.sheets[0]) model.sheets[0].rows = out;
     script.textContent = JSON.stringify(model, null, 2);
   });
 })();

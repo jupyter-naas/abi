@@ -88,25 +88,47 @@ describe('SheetsTemplateStrip', () => {
       createElement(SheetsTemplateStrip, {
         templates: [
           {
-            id: 'acme/house-style-v1',
-            name: 'House style',
+            id: 'abi/grid-light-v1',
+            name: 'Blank',
             description: '',
-            preview_bg: '#f4f4f4',
+            preview_bg: '#f3f3f3',
             preview_panel: '#ffffff',
-            preview_accent: '#0072ce',
-            preview_ink: '#464b4b',
-            sheets: [{ index: 0, eyebrow: 'Cover', title: 'House style' }],
+            preview_accent: '#1a73e8',
+            preview_ink: '#202124',
+            sheets: [{ index: 0, eyebrow: '', title: 'Sheet1' }],
             assets: [],
           },
           {
-            id: 'acme/industry-v2',
-            name: 'Industry',
+            id: 'abi/monthly-pnl-v1',
+            name: 'Monthly P&L',
             description: '',
-            preview_bg: '#111111',
+            preview_bg: '#eef3f8',
             preview_panel: '#ffffff',
-            preview_accent: '#0072ce',
-            preview_ink: '#464b4b',
-            sheets: [],
+            preview_accent: '#0b57d0',
+            preview_ink: '#1f1f1f',
+            sheets: [{ index: 0, eyebrow: '', title: 'P&L' }],
+            assets: [],
+          },
+          {
+            id: 'abi/budget-vs-actuals-v1',
+            name: 'Budget vs Actuals',
+            description: '',
+            preview_bg: '#f1f5f0',
+            preview_panel: '#ffffff',
+            preview_accent: '#137333',
+            preview_ink: '#1f1f1f',
+            sheets: [{ index: 0, eyebrow: '', title: 'Summary' }],
+            assets: [],
+          },
+          {
+            id: 'abi/cash-runway-v1',
+            name: 'Cash Runway',
+            description: '',
+            preview_bg: '#f7f2ea',
+            preview_panel: '#ffffff',
+            preview_accent: '#b06000',
+            preview_ink: '#1f1f1f',
+            sheets: [{ index: 0, eyebrow: '', title: 'Runway' }],
             assets: [],
           },
         ],
@@ -116,12 +138,14 @@ describe('SheetsTemplateStrip', () => {
     expect(html).toContain('data-testid="sheets-template-strip"');
     expect(html).toContain('Start a new workbook');
     expect(html).toContain('Blank');
-    expect(html).toContain('House style');
-    expect(html).toContain('Industry');
+    expect(html).toContain('Monthly P&amp;L');
+    expect(html).toContain('Budget vs Actuals');
+    expect(html).toContain('Cash Runway');
     expect(html).toContain('data-template-id="abi/grid-light-v1"');
+    expect(html).toContain('data-template-id="abi/monthly-pnl-v1"');
     expect(html).toContain('data-testid="sheets-template-blank-thumb"');
     expect(html).not.toContain('>abi/');
     expect(html).not.toContain('/api/sheets/projects');
-    expect(html.indexOf('Blank')).toBeLessThan(html.indexOf('House style'));
+    expect(html.indexOf('Blank')).toBeLessThan(html.indexOf('Monthly P&amp;L'));
   });
 });

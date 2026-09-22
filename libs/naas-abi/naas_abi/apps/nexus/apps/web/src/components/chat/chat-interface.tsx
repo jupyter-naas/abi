@@ -745,6 +745,10 @@ export function ChatInterface({
           isPane && officeSurface.onSlides
             ? useSlidesStore.getState().selectedSlug ?? undefined
             : undefined,
+        sheetsSlug:
+          isPane && officeSurface.onSheets
+            ? useSheetsStore.getState().selectedSlug ?? undefined
+            : undefined,
         documentsSlug:
           isPane && officeSurface.onDocuments
             ? useDocumentsStore.getState().selectedSlug ?? undefined

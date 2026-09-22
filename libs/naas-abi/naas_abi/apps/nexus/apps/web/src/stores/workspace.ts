@@ -12,6 +12,7 @@ import {
   dropSlidesPaneConversationKeys,
   slidesPaneConversationKey,
 } from '@/lib/slides-pane-conversation';
+import { sheetsPaneConversationKey, dropSheetsPaneConversationKeys } from '@/lib/sheets-pane-conversation';
 import { conversationTitleFromPrompt } from '@/lib/office-auto-title';
 import { useAuthStore } from './auth';
 import { useDocumentsStore } from './documents';
@@ -123,6 +124,7 @@ export interface Conversation {
   /** Slides deck this pane thread is bound to. Client-only; API has no field. */
   slidesSlug?: string;
   documentsSlug?: string;
+  sheetsSlug?: string;
 }
 
 export interface Project {
@@ -313,6 +315,7 @@ interface WorkspaceState {
     slug: string,
     conversationId: string,
   ) => void;
+  sheetsPaneConversationByKey: Record<string, string>;
   documentsPaneConversationByKey: Record<string, string>;
   rememberDocumentsPaneConversation: (
     workspaceId: string,
@@ -327,7 +330,7 @@ interface WorkspaceState {
   closePaneTab: (id: string) => void;
   createConversation: (
     projectId?: string,
-    options?: { surface?: 'main' | 'pane'; slidesSlug?: string; documentsSlug?: string },
+    options?: { surface?: 'main' | 'pane'; slidesSlug?: string; documentsSlug?: string; sheetsSlug?: string },
   ) => string;
   setActiveConversation: (id: string | null) => void;
   /** Record the latest agent used in a conversation (mirrors the backend,
@@ -647,6 +650,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       ),
     }));
   },
+  sheetsPaneConversationByKey: {},
   documentsPaneConversationByKey: {},
   rememberDocumentsPaneConversation: (workspaceId, slug, conversationId) => {
     const ws = workspaceId.trim();
@@ -706,7 +710,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       };
     }),
 
-  createConversation: (projectId?: string, options?: { surface?: 'main' | 'pane'; slidesSlug?: string; documentsSlug?: string }) => {
+  createConversation: (projectId?: string, options?: { surface?: 'main' | 'pane'; slidesSlug?: string; documentsSlug?: string; sheetsSlug?: string }) => {
     const id = generateConversationId();
     const workspaceId = get().currentWorkspaceId;
     const surface = options?.surface ?? 'main';
@@ -716,6 +720,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     }
     const agent = surface === 'pane' ? get().paneAgent : get().selectedAgent;
     const slidesSlug = options?.slidesSlug?.trim() || undefined;
+    const sheetsSlug = options?.sheetsSlug?.trim() || undefined;
     const documentsSlug = options?.documentsSlug?.trim() || undefined;
     const newConversation: Conversation = {
       id,
@@ -730,6 +735,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       isDraft: true,
       slidesSlug,
       documentsSlug,
+      sheetsSlug,
     };
     const slidesKey =
       slidesSlug && surface === 'pane'
@@ -757,6 +763,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             },
           }
         : {}),
+      ...(sheetsSlug && surface === 'pane' ? {
+        sheetsPaneConversationByKey: {
+          ...state.sheetsPaneConversationByKey,
+          [sheetsPaneConversationKey(workspaceId, sheetsSlug)]: id,
+        },
+      } : {}),
       ...(documentsKey
         ? {
             documentsPaneConversationByKey: {
@@ -1030,6 +1042,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           state.slidesPaneConversationByKey,
           id,
         ),
+        sheetsPaneConversationByKey: dropSheetsPaneConversationKeys(state.sheetsPaneConversationByKey, id),
         documentsPaneConversationByKey: dropDocumentsPaneConversationKeys(
           state.documentsPaneConversationByKey,
           id,
@@ -1130,6 +1143,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             // Preserve loaded message history if we already have it in memory.
             messages: existing.messages.length > 0 ? existing.messages : apiConv.messages,
             slidesSlug: existing.slidesSlug ?? apiConv.slidesSlug,
+            sheetsSlug: existing.sheetsSlug ?? apiConv.sheetsSlug,
             isDraft: false,
           };
         });
@@ -1208,6 +1222,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
                 ? [...mapped.messages, ...localOnly]
                 : mapped.messages,
           slidesSlug: existing?.slidesSlug ?? mapped.slidesSlug,
+          sheetsSlug: existing?.sheetsSlug ?? mapped.sheetsSlug,
           isDraft: false,
         };
         const conversations = existing
@@ -1843,6 +1858,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         paneOpenTabIds: state.paneOpenTabIds,
         slidesPaneConversationByKey: state.slidesPaneConversationByKey,
         documentsPaneConversationByKey: state.documentsPaneConversationByKey,
+        sheetsPaneConversationByKey: state.sheetsPaneConversationByKey,
         activePanelSection: state.activePanelSection,
         dockWidth: state.dockWidth,
         sectionPanelWidth: state.sectionPanelWidth,
@@ -1896,6 +1912,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             typeof state.slidesPaneConversationByKey === 'object'
               ? state.slidesPaneConversationByKey
               : {};
+          state.sheetsPaneConversationByKey = state.sheetsPaneConversationByKey || {};
           state.documentsPaneConversationByKey =
             state.documentsPaneConversationByKey &&
             typeof state.documentsPaneConversationByKey === 'object'

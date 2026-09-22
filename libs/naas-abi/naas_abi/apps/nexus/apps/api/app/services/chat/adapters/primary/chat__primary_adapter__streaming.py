@@ -235,8 +235,8 @@ async def stream_chat_response(
         from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
             pick_workspace_chat_agent_id,
             pick_workspace_documents_agent_id,
-            pick_workspace_slides_agent_id,
             pick_workspace_sheets_agent_id,
+            pick_workspace_slides_agent_id,
         )
 
         async with AsyncSessionLocal() as db:
@@ -339,12 +339,12 @@ async def stream_chat_response(
                     documents_active_mode,
                     documents_active_slug,
                     documents_active_title,
-                    slides_active_mode,
-                    slides_active_slug,
-                    slides_active_title,
                     sheets_active_mode,
                     sheets_active_slug,
                     sheets_active_title,
+                    slides_active_mode,
+                    slides_active_slug,
+                    slides_active_title,
                 )
                 agent_user_id.set(str(current_user.id))
                 name = getattr(current_user, "name", None)

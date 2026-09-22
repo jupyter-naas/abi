@@ -24,10 +24,10 @@ def parse_workbook_html(html: str) -> SheetWorkbook:
 
 
 def serialize_workbook_html(workbook: SheetWorkbook, *, template_html: str) -> str:
-    payload = json.dumps(workbook.model_dump(), indent=2)
+    payload = json.dumps(workbook.model_dump(), indent=2).replace("<", "\\u003c")
     block = f'<script type="{_SHEET_JSON_TYPE}">\n{payload}\n</script>'
     if _JSON_SCRIPT_RE.search(template_html):
-        return _JSON_SCRIPT_RE.sub(block, template_html, count=1)
+        return _JSON_SCRIPT_RE.sub(lambda _match: block, template_html, count=1)
     if "</head>" in template_html:
         return template_html.replace("</head>", f"{block}\n</head>", 1)
     return template_html + "\n" + block

@@ -46,8 +46,8 @@ from naas_abi.apps.nexus.apps.api.app.services.platform.handlers import (
     router as platform_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.providers.handlers import router as providers_router
-from naas_abi.apps.nexus.apps.api.app.services.skills.handlers import router as skills_router
 from naas_abi.apps.nexus.apps.api.app.services.sheets.handlers import router as sheets_router
+from naas_abi.apps.nexus.apps.api.app.services.skills.handlers import router as skills_router
 from naas_abi.apps.nexus.apps.api.app.services.slides.handlers import router as slides_router
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.handlers import (
     router as workspaces_router,

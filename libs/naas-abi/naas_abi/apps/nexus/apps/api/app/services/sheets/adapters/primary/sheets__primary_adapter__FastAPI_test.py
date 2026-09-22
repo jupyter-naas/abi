@@ -23,7 +23,6 @@ from naas_abi.apps.nexus.apps.api.app.services.sheets.adapters.primary.sheets__p
     _assets_gitkeep_path,
     _branch_for,
     _coder_workspace_name,
-    _workbook_path,
     _discover_seed_ids,
     _ensure_coding_repo,
     _friendly_coding_detail,
@@ -45,6 +44,7 @@ from naas_abi.apps.nexus.apps.api.app.services.sheets.adapters.primary.sheets__p
     _slugify,
     _source_control_http_error,
     _wait_for_sidecar,
+    _workbook_path,
     _write_deck_via_sidecar,
 )
 from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
@@ -92,22 +92,36 @@ def test_parse_slide_outline_reads_workbook_tabs() -> None:
     assert [a["name"] for a in assets] == ["hero", "logo"]
 
 
+_ABI_SHEETS_TEMPLATE_IDS = [
+    "abi/grid-light-v1",
+    "abi/monthly-pnl-v1",
+    "abi/budget-vs-actuals-v1",
+    "abi/cash-runway-v1",
+]
+
+
 def test_seed_template_includes_sheet_json() -> None:
     html = _load_seed_html("grid-light-v1")
     assert "application/vnd.nexus.sheet+json" in html
     assert "table.sheet-grid" in html
-    assert "Sample budget" in html
+    assert "Untitled workbook" in html
 
 
 def test_seed_catalog_lists_all_templates() -> None:
     ids = _discover_seed_ids()
-    assert ids == ["abi/grid-light-v1"]
+    assert ids == _ABI_SHEETS_TEMPLATE_IDS
     records = _list_seed_template_records()
     by_id = {r["id"]: r for r in records}
-    assert by_id["abi/grid-light-v1"]["name"] == "Grid Light"
+    assert by_id["abi/grid-light-v1"]["name"] == "Blank"
+    assert by_id["abi/monthly-pnl-v1"]["name"] == "Monthly P&L"
+    assert by_id["abi/budget-vs-actuals-v1"]["name"] == "Budget vs Actuals"
+    assert by_id["abi/cash-runway-v1"]["name"] == "Cash Runway"
     html = _load_seed_html("grid-light-v1")
     assert "application/vnd.nexus.sheet+json" in html
     assert _load_seed_html("abi/grid-light-v1") == html
+    pnl = _load_seed_html("abi/monthly-pnl-v1")
+    assert "Gross margin %" in pnl
+    assert '"name": "Assumptions"' in pnl
 
 
 def _write_template_dir(directory: Path, stem: str, name: str) -> Path:
@@ -146,7 +160,7 @@ def test_templates_need_no_configured_source(monkeypatch) -> None:
 
     ids = _discover_seed_ids()
 
-    assert ids == ["abi/grid-light-v1"]
+    assert ids == _ABI_SHEETS_TEMPLATE_IDS
     assert {row["source"] for row in _list_seed_template_records()} == {"abi"}
     assert "application/vnd.nexus.sheet+json" in _load_seed_html("abi/grid-light-v1")
 
@@ -312,10 +326,17 @@ def test_list_and_create_projects_seed_in_memory_repo(monkeypatch) -> None:
     templates = client.get("/sheets/templates", params={"workspace_id": "ws-test"})
     assert templates.status_code == 200, templates.text
     catalog = templates.json()
-    assert {t["id"] for t in catalog} == {"abi/grid-light-v1"}
+    assert {t["id"] for t in catalog} == set(_ABI_SHEETS_TEMPLATE_IDS)
+    assert [t["id"] for t in catalog] == _ABI_SHEETS_TEMPLATE_IDS
     assert all(t["source"] == "abi" for t in catalog)
     light = next(t for t in catalog if t["id"] == "abi/grid-light-v1")
-    assert light["name"] == "Grid Light"
+    assert light["name"] == "Blank"
+    assert {t["name"] for t in catalog} == {
+        "Blank",
+        "Monthly P&L",
+        "Budget vs Actuals",
+        "Cash Runway",
+    }
     deck = client.get(
         "/sheets/projects/untitled-local/workbook",
         params={"workspace_id": "ws-test"},
@@ -1291,3 +1312,21 @@ def test_versions_from_commits_tracks_running_total_per_commit() -> None:
         "5": "0.2.0",
         "6": "0.2.1",
     }
+
+
+def test_evaluate_local_draft_preserves_formula_and_requires_workspace(monkeypatch):
+    client = _slides_client(monkeypatch, SourceControlService(InMemoryAdapter()))
+    html = '<script type="application/vnd.nexus.sheet+json">' + json.dumps({
+        "title": "Draft", "sheets": [{"name": "Inputs", "rows": [[3, "=A1*2", "=1/0"]]}]
+    }) + '</script>'
+    response = client.post('/sheets/evaluate', json={"workspace_id": "ws-1", "html": html})
+    assert response.status_code == 200
+    assert response.json()["workbook"]["sheets"][0]["rows"] == [[3, 6, "#ERR"]]
+    assert response.json()["errors"][0]["cell"] == "C1"
+    assert '=A1*2' in html
+
+    async def deny(*args):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    monkeypatch.setattr(slides_api, 'require_workspace_access', deny)
+    assert client.post('/sheets/evaluate', json={"workspace_id": "other", "html": html}).status_code == 403

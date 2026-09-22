@@ -65,7 +65,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
 from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1817,8 +1817,10 @@ async def export_workbook_xlsx(
     request: Request,
     current_user: User = Depends(get_current_user_required),
 ) -> Response:
-    """Download the live workbook as XLSX (JSON block or ``sheet-grid`` table)."""
-    from naas_abi.apps.nexus.sheets.formulas import evaluate_workbook_formulas
+    """Download the live workbook as XLSX (JSON block or ``sheet-grid`` table).
+
+    Formula strings stay as Excel formulas. Do not bake computed values first.
+    """
     from naas_abi.apps.nexus.sheets.html_io import grid_from_table_html, parse_workbook_html
     from naas_abi.apps.nexus.sheets.xlsx_export import workbook_to_xlsx_bytes
 
@@ -1844,8 +1846,7 @@ async def export_workbook_xlsx(
             if workbook is None:
                 raise ValueError(
                     "Workbook HTML has no nexus sheet JSON or sheet-grid table"
-                )
-        workbook = evaluate_workbook_formulas(workbook)
+                ) from None
         return workbook_to_xlsx_bytes(workbook)
 
     try:
@@ -1862,6 +1863,37 @@ async def export_workbook_xlsx(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.post("/evaluate")
+async def evaluate_workbook_preview(
+    body: WorkbookUpdateRequest,
+    current_user: User = Depends(get_current_user_required),
+) -> dict:
+    """Calculate a local draft without persisting or replacing its formulas."""
+    from naas_abi.apps.nexus.sheets.formulas import (
+        evaluate_workbook_formulas,
+        formula_errors,
+    )
+    from naas_abi.apps.nexus.sheets.html_io import parse_workbook_html
+
+    await require_workspace_access(current_user.id, body.workspace_id)
+    if len(body.html) > 2_000_000:
+        raise HTTPException(status_code=422, detail="Workbook draft is too large")
+    try:
+        workbook = parse_workbook_html(body.html)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if sum(len(row) for tab in workbook.sheets for row in tab.rows) > 100_000:
+        raise HTTPException(status_code=422, detail="Calculate up to 100,000 cells")
+
+    def calculate() -> dict:
+        return {
+            "workbook": evaluate_workbook_formulas(workbook).model_dump(),
+            "errors": formula_errors(workbook),
+        }
+
+    return await run_in_threadpool(calculate)
 
 
 @router.put("/projects/{slug}/workbook", response_model=WorkbookResponse)
@@ -2937,8 +2969,21 @@ class SeedTemplateResponse(BaseModel):
     preview_panel: str = "#ffffff"
     preview_accent: str = "#0072ce"
     preview_ink: str = "#2d2d2d"
+    # ``slides`` kept for Slides-era clients; ``sheets`` is the Sheets name.
     slides: list[SlideOutlineItem] = Field(default_factory=list)
+    sheets: list[SlideOutlineItem] = Field(default_factory=list)
     assets: list[TemplateAssetItem] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _sync_sheet_outline(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        slides = data.get("slides") or []
+        sheets = data.get("sheets") or []
+        outline = sheets or slides
+        data = {**data, "slides": outline, "sheets": outline}
+        return data
 
 
 @router.get("/templates", response_model=list[SeedTemplateResponse])

@@ -244,7 +244,7 @@ export interface SheetsMenuBarProps {
   /** File → Save to My Drive (MinIO copy). Omit when not on an open workbook. */
   onSaveToMyDrive?: () => void;
   saveToMyDriveDisabled?: boolean;
-  /** File → Export to XLSX (server-side, formulas evaluated). */
+  /** File → Export to XLSX (server-side; formula strings preserved). */
   onExportXlsx?: () => void;
   /** File → Export HTML. Omit when not on an open workbook. */
   onExportHtml?: () => void;
@@ -377,7 +377,7 @@ export function SheetsMenuBar({
     manualEdit,
     canManualEdit: canToggleManualEdit && !manualEditDisabled,
     onManualEditChange,
-  });
+  }).filter(item => Boolean(onManualEditChange) || !['manual-edit', 'sep-manual-edit'].includes(item.id));
 
   const insertItems = buildSheetsInsertMenu({
     canInsert: Boolean(onInsertTab) && !insertTabDisabled,
@@ -390,7 +390,7 @@ export function SheetsMenuBar({
   const viewItems: SheetsMenuEntry[] = [
     {
       id: 'preview',
-      label: 'Preview',
+      label: 'Spreadsheet',
       disabled: !canChangeMode,
       checked: mode === 'preview',
       onSelect: () => onModeChange?.('preview'),

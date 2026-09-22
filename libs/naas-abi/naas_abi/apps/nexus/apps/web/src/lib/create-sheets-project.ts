@@ -1,3 +1,4 @@
+import { findSheetsPaneConversationId, sheetsPaneConversationKey } from '@/lib/sheets-pane-conversation';
 import { authFetch } from '@/stores/auth';
 import { useAgentsStore } from '@/stores/agents';
 import { dispatchSheetsWorkbookUpdated, useSheetsStore } from '@/stores/sheets';
@@ -81,6 +82,12 @@ export function openSheetsAgentPane(opts?: {
   if (opts?.freshChat) {
     ws.setPaneConversationId(null);
     ws.clearPaneAgentExplicitSelection();
+  }
+  if (slug && !opts?.freshChat && ws.currentWorkspaceId) {
+    ws.setPaneConversationId(findSheetsPaneConversationId({
+      workspaceId: ws.currentWorkspaceId, slug, conversations: ws.conversations, workbookTitle: title,
+      boundId: ws.sheetsPaneConversationByKey[sheetsPaneConversationKey(ws.currentWorkspaceId, slug)],
+    }));
   }
   const defaultId = pickSheetsPaneAgentId();
   if (!defaultId) return;

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from langchain_core.embeddings import Embeddings
 from naas_abi.agents.sheets import (
     bind_sheets_reasoning,
@@ -26,14 +28,33 @@ class _NoopEmbeddings(Embeddings):
         return [0.0]
 
 
-SHEETS_GUIDELINES = """- When the user asks for a spreadsheet or workbook and none is open, call create_sheets_project first with a short title from their brief, then write rows via write_sheets_workbook.
+SHEETS_SKILL = (Path(__file__).parent / "sheets/skills/nexus-sheets/SKILL.md").read_text(encoding="utf-8")
+
+
+SHEETS_GUIDELINES = """- When the user asks for a spreadsheet or workbook and none is open, call create_sheets_project first with a short title from their brief (and template_id when known), then edit via write_sheets_workbook only as needed.
 - Never call create_sheets_project when a workbook is already open; edit it instead.
+- Finance intents must seed the matching template, not a blank toy grid:
+  - P&L / income statement / monthly P&L → template_id monthly-pnl-v1
+  - Budget vs actuals / variance → template_id budget-vs-actuals-v1
+  - Cash runway / burn / cash rollforward → template_id cash-runway-v1
+  - Otherwise blank grid-light-v1
+- After a finance seed loads, edit Assumptions inputs and labels. Keep every total, margin, variance, and check cell as a formula. Never paste a computed total over a formula. Never replace the workbook with a 4-row sample grid.
 - The source of truth is the JSON block inside workbook.html (application/vnd.nexus.sheet+json). Use read_sheets_workbook before large edits and write_sheets_workbook to persist tabs/rows.
-- Use evaluate_sheets_formulas after adding ``=`` formulas (e.g. ``=B2+C2`` or ``=SUM(A1:A10)`` with simple arithmetic).
+- Use evaluate_sheets_formulas after formula edits (read-only check; it does not bake values). Checks / Tie-out Status must be OK.
 - Use import_dataset_to_sheet to pull live rows from a Nexus dataset (namespace/name) into a tab.
-- For time-sensitive numeric briefs, call web_search first (2–4 queries), then write the grid from sources.
+- For time-sensitive numeric briefs, call web_search first (2–4 queries), then write from sources.
 - Omit slug on tool calls when open-workbook context is present.
 - Do not dump full workbook HTML in chat; report slug, tab names, and row counts."""
+
+
+SHEETS_OUTPUT_QUALITY = """Workbook quality (audit-workpaper bar):
+- Formulas over literals: totals, subtotals, margins, variance %, rollforwards, and check diffs must be ``=`` formulas that reference cells. Do not hardcode a result you calculated in your head.
+- Assumptions / Drivers on their own tab. Calculations reference those cells (including cross-sheet refs like Assumptions!C2 or 'P&L'!B4). No magic numbers inside formulas.
+- Multiple tabs when the brief is financial: Assumptions, the statement or schedule, and a Checks (or Tie-out) tab with OK/BREAK formulas (IF + ABS on diffs).
+- Label units in headers (e.g. EUR '000). Periods are real months. Inputs live on Assumptions; formula cells stay formulas.
+- Supported formula surface: arithmetic, A1 refs, cross-sheet refs, SUM, IF, ABS, ROUND. Prefer SUM(range) for totals.
+- After edits, call evaluate_sheets_formulas and fix any BREAK / #ERR before claiming the workbook is done.
+- XLSX export preserves formula strings; do not ask the user to treat export as values-only."""
 
 
 _HANDOFF_PHRASES = (
@@ -43,12 +64,10 @@ _HANDOFF_PHRASES = (
     "build sheets",
     "write a workbook",
     "fais des sheets",
-    "crée une présentation",
     "crée une spreadsheet",
     "prépare un tableur",
     "prepare un tableur",
     "monte un tableur",
-    "rédige une présentation",
 )
 
 
@@ -75,24 +94,32 @@ You are Sheets, the office agent for Nexus Sheets. You research, then write the 
 </role>
 
 <objective>
-Turn the user's brief into a researched spreadsheet in workbook.html. The JSON grid model is the live source of truth. XLSX export is derived from that model.
+Turn the user's brief into a researched, formula-correct spreadsheet in workbook.html. The JSON grid model is the live source of truth. XLSX export is derived from that model and must keep formulas.
 </objective>
 
 <context>
-You will receive an open-workbook block (slug, path, branch, today) when the user is in Sheets. Edit that file. Do not invent a second workbook. Do not dump or rewrite the full file for a small text change. From the main chat, with no workbook open, create the workbook first, then write it.
+You will receive an open-workbook block (slug, path, branch, today) when the user is in Sheets. Edit that file. Do not invent a second workbook. Do not dump or rewrite the full file for a small text change. From the main chat, with no workbook open, create the workbook first (correct finance template when applicable), then edit Assumptions / formulas.
 Your step budget is finite ({SHEETS_RECURSION_LIMIT} graph steps). Plan, then write. Do not spend the budget listing and reading the whole workbook.
 </context>
 
 <tasks>
-1. If no workbook is open and the user asked for a workbook, spreadsheet, or sheets, call create_sheets_project first, then research, then write.
-2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (2 to 4 queries), then read_sheets_workbook once, then write the whole workbook in one write_sheets_workbook.
-3. After adding ``=`` formulas, call evaluate_sheets_formulas. For live data, use import_dataset_to_sheet.
-4. After writes, report what changed in the open workbook. Do not claim Preview updated unless the tool result confirms it. Do not re-read the workbook to check.
+1. If no workbook is open and the user asked for a workbook, spreadsheet, or sheets, call create_sheets_project first (with the matching finance template_id when the brief is P&L, budget vs actuals, or runway), then research if needed, then customize.
+2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (2 to 4 queries), then read_sheets_workbook once, then write with formulas.
+3. After adding or changing ``=`` formulas, call evaluate_sheets_formulas and fix BREAKs. For live data, use import_dataset_to_sheet.
+4. After writes, report what changed in the open workbook (tabs, key formulas, check status). Do not claim Preview updated unless the tool result confirms it. Do not re-read the workbook to check.
 </tasks>
 
 <sheets_guidelines>
 {SHEETS_GUIDELINES}
 </sheets_guidelines>
+
+<sheets_output_quality>
+{SHEETS_OUTPUT_QUALITY}
+</sheets_output_quality>
+
+<spreadsheet_skill>
+{SHEETS_SKILL}
+</spreadsheet_skill>
 
 <tools>
 [TOOLS]
@@ -101,7 +128,7 @@ Your step budget is finite ({SHEETS_RECURSION_LIMIT} graph steps). Plan, then wr
 <operating_guidelines>
 - Keep a clear, concise, professional tone.
 - Format replies as clean Markdown.
-- Include relevant tool output when it matters (cover_h1_updated, write errors, search budget).
+- Include relevant tool output when it matters (template_id, check Status, write errors, search budget).
 </operating_guidelines>
 
 <constraints>
@@ -113,17 +140,22 @@ Your step budget is finite ({SHEETS_RECURSION_LIMIT} graph steps). Plan, then wr
 """
     suggestions: list[dict] = [
         {
-            "label": "Situation brief",
+            "label": "Monthly P&L",
             "value": (
-                "Create a briefing on what's going on now. "
-                "Research first, then write the open workbook."
+                "Build a monthly P&L in EUR thousands with Assumptions, "
+                "statement, and Checks that all read OK."
             ),
-            "description": "2 to 4 web searches, then fill tabs with sourced rows",
+            "description": "Seed monthly-pnl-v1, then tune inputs",
         },
         {
-            "label": "Company brief",
-            "value": "Build a company briefing workbook from current sources.",
-            "description": "Research the company, then write tabs and formulas",
+            "label": "Budget vs actuals",
+            "value": "Create a budget vs actuals workbook with variance % and tie-out checks.",
+            "description": "Seed budget-vs-actuals-v1",
+        },
+        {
+            "label": "Cash runway",
+            "value": "Build a 12-month cash runway rollforward with hiring costs and Checks OK.",
+            "description": "Seed cash-runway-v1",
         },
         {
             "label": "What can you do?",

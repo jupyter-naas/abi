@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from naas_abi.apps.nexus.sheets.html_io import parse_workbook_html, serialize_workbook_html
+from naas_abi.apps.nexus.sheets.html_io import (
+    parse_workbook_html,
+    serialize_workbook_html,
+)
 from naas_abi.apps.nexus.sheets.model import SheetTab, SheetWorkbook
 
 OutlineItem = dict[str, Any]
@@ -23,7 +26,9 @@ def _outline(workbook: SheetWorkbook) -> list[OutlineItem]:
     ]
 
 
-def _ok(workbook: SheetWorkbook, html_template: str, active_index: int) -> dict[str, Any]:
+def _ok(
+    workbook: SheetWorkbook, html_template: str, active_index: int
+) -> dict[str, Any]:
     items = _outline(workbook)
     return {
         "html": serialize_workbook_html(workbook, template_html=html_template),
@@ -53,7 +58,11 @@ def insert_workbook_tab(
         return {"error": str(exc)}
     name = (title or "").strip() or f"Sheet{len(workbook.sheets) + 1}"
     tab = SheetTab(name=name, rows=[["Column A", "Column B"], ["", ""]])
-    insert_at = len(workbook.sheets) if after_index < 0 else min(after_index + 1, len(workbook.sheets))
+    insert_at = (
+        len(workbook.sheets)
+        if after_index < 0
+        else min(after_index + 1, len(workbook.sheets))
+    )
     workbook.sheets.insert(insert_at, tab)
     return _ok(workbook, html, insert_at)
 
@@ -81,7 +90,7 @@ def duplicate_workbook_tab(html: str, index: int) -> dict[str, Any]:
         return {"error": f"tab index out of range: {index}"}
     source = workbook.sheets[index]
     copy_name = f"{source.name} copy"
-    copy_tab = SheetTab(name=copy_name, rows=[list(row) for row in source.rows])
+    copy_tab = source.model_copy(deep=True, update={"name": copy_name})
     insert_at = index + 1
     workbook.sheets.insert(insert_at, copy_tab)
     return _ok(workbook, html, insert_at)

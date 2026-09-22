@@ -6,19 +6,12 @@ import { Loader2 } from 'lucide-react';
 import { MonacoEditor } from '@/components/monaco/monaco-editor';
 import { Header } from '@/components/shell/header';
 import {
-  isSheetsTypingTarget,
   SheetsMenuBar,
   type SheetsEditorMode,
 } from '@/components/sheets/sheets-menu-bar';
-import { SheetsPreviewFrame } from '@/components/sheets/sheets-preview-frame';
+import { WorkbookGrid } from '@/components/sheets/workbook-grid';
 import { downloadSheetsHtml, resolveSheetsPreviewAssets } from '@/components/sheets/sheets-assets';
-import {
-  applySheetsTextEdits,
-  collectSheetsTextEdits,
-  sanitizeSheetsEditHtml,
-  SHEETS_MANUAL_EDIT_IDLE_MS,
-  type SheetsTextEdit,
-} from '@/components/sheets/sheets-preview-fit';
+import { SHEETS_MANUAL_EDIT_IDLE_MS } from '@/components/sheets/sheets-preview-fit';
 import {
   clampTabIndex,
   deleteWorkbookTab,
@@ -199,17 +192,15 @@ export default function SheetsEditorPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [mode, setMode] = useState<SheetsEditorMode>('preview');
-  const [manualEdit, setManualEdit] = useState(false);
-  const [holdPreview, setHoldPreview] = useState(false);
   const [mutating, setMutating] = useState(false);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [previewHtml, setPreviewHtml] = useState('');
   const dirtyRef = useRef(false);
   const htmlRef = useRef('');
-  const manualEditRef = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadGenRef = useRef(0);
   const skipTokenEffectRef = useRef(true);
+  const saveInFlight = useRef(false);
   const saveRef = useRef<() => Promise<void>>(async () => {});
   const refreshRef = useRef<() => Promise<void>>(async () => {});
 
@@ -230,10 +221,6 @@ export default function SheetsEditorPage() {
   useEffect(() => {
     htmlRef.current = html;
   }, [html]);
-
-  useEffect(() => {
-    manualEditRef.current = manualEdit;
-  }, [manualEdit]);
 
   useEffect(() => {
     return () => {
@@ -305,7 +292,6 @@ export default function SheetsEditorPage() {
         const workbook = (await workbookRes.json()) as { html: string; source?: string };
         if (gen !== loadGenRef.current) return;
         setTitle(proj.title);
-        setHoldPreview(false);
         setHtml(workbook.html);
         setPreviewHtml(workbook.html);
         setSelectedIndex(
@@ -331,7 +317,7 @@ export default function SheetsEditorPage() {
               : workbook.source === 'forgejo'
                 ? 'Forgejo snapshot'
                 : null;
-          setStatus(src ? `Preview refreshed (${src})` : 'Preview refreshed');
+          setStatus(src ? `Workbook refreshed (${src})` : 'Workbook refreshed');
         }
         setLoading(false);
         setRefreshing(false);
@@ -417,17 +403,18 @@ export default function SheetsEditorPage() {
   }, [mode, setEditorMode]);
 
   useEffect(() => {
-    if (holdPreview) return;
     if (previewTimer.current) clearTimeout(previewTimer.current);
     previewTimer.current = setTimeout(() => setPreviewHtml(html), 350);
     return () => {
       if (previewTimer.current) clearTimeout(previewTimer.current);
     };
-  }, [html, holdPreview]);
+  }, [html]);
 
   const save = useCallback(async () => {
     const workbook = htmlRef.current;
     if (!workspaceId || !slug || !workbook) return;
+    if (saveInFlight.current) return;
+    saveInFlight.current = true;
     setSaving(true);
     setError(null);
     setStatus(null);
@@ -446,12 +433,21 @@ export default function SheetsEditorPage() {
         throw new Error(sheetsApiErrorMessage(body.detail, `Save failed (${res.status})`));
       }
       const body = (await res.json()) as { commit_sha?: string };
-      setDirty(false);
+      // A save response must not clear edits made while that save was in flight.
+      if (htmlRef.current === workbook) {
+        dirtyRef.current = false;
+        setDirty(false);
+      }
       setStatus(body.commit_sha ? `Saved ${body.commit_sha.slice(0, 7)}` : 'Saved');
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      saveInFlight.current = false;
       setSaving(false);
+      if (htmlRef.current !== workbook) {
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(() => void saveRef.current(), SHEETS_MANUAL_EDIT_IDLE_MS);
+      }
     }
   }, [workspaceId, slug]);
 
@@ -482,25 +478,14 @@ export default function SheetsEditorPage() {
     refreshRef.current = refresh;
   }, [refresh]);
 
-  const deleteSelectedTabRef = useRef<() => void>(() => {});
-
-  // ⌘/Ctrl+S Save, ⌘/Ctrl+R Refresh (intercept browser reload). Delete tab when not typing.
+  // ⌘/Ctrl+S Save, ⌘/Ctrl+R Refresh (intercept browser reload).
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const mod = event.metaKey || event.ctrlKey;
-      if (!mod) {
-        if (
-          event.key === 'Delete' &&
-          !manualEditRef.current &&
-          !isSheetsTypingTarget(event.target)
-        ) {
-          event.preventDefault();
-          deleteSelectedTabRef.current();
-        }
-        return;
-      }
+      if (!mod) return;
       const key = event.key.toLowerCase();
       if (key === 's') {
+        if (event.target instanceof HTMLInputElement) event.target.blur();
         event.preventDefault();
         event.stopPropagation();
         void saveRef.current();
@@ -522,8 +507,12 @@ export default function SheetsEditorPage() {
     setError(null);
     setStatus(null);
     try {
+      if (dirtyRef.current) {
+        await save();
+        if (dirtyRef.current) throw new Error('Save your changes before exporting.');
+      }
       await downloadSheetsWorkbookXlsx(workspaceId, slug, `${slug}.xlsx`);
-      setStatus('Downloaded Excel workbook (formulas evaluated)');
+      setStatus('Downloaded Excel workbook with formulas preserved');
     } catch (e) {
       setError(`XLSX export failed: ${(e as Error).message}`);
     } finally {
@@ -542,10 +531,8 @@ export default function SheetsEditorPage() {
     async (run: () => Promise<TabMutationResult>, label: string) => {
       if (!workspaceId || !slug) return;
       if (dirtyRef.current) {
-        const ok = window.confirm(
-          'Unsaved code edits will be replaced by this sheet tab change. Continue?',
-        );
-        if (!ok) return;
+        await saveRef.current();
+        if (dirtyRef.current) { setError('Save your changes before changing sheets.'); return; }
       }
       setMutating(true);
       setError(null);
@@ -553,8 +540,7 @@ export default function SheetsEditorPage() {
       try {
         const result = await run();
         if (result.html) {
-          setHoldPreview(false);
-          setHtml(result.html);
+            setHtml(result.html);
           setPreviewHtml(result.html);
         }
         setSelectedIndex(result.section_index);
@@ -577,10 +563,10 @@ export default function SheetsEditorPage() {
     setFilmstrip({
       workspaceId,
       slug,
-      html: holdPreview ? html : previewHtml || html,
+      html: html,
       disabled: mutating || loading || !html,
     });
-  }, [workspaceId, slug, previewHtml, html, holdPreview, mutating, loading, setFilmstrip]);
+  }, [workspaceId, slug, previewHtml, html, mutating, loading, setFilmstrip]);
 
   useEffect(() => {
     setReorderOpenWorkbook((fromIndex, toIndex) => {
@@ -601,7 +587,7 @@ export default function SheetsEditorPage() {
   }, [setFilmstrip, setReorderOpenWorkbook, setTabCount]);
 
   const exportHtml = async () => {
-    const live = previewHtml || html;
+    const live = htmlRef.current || html;
     if (!live) {
       setError('Workbook is empty; nothing to export.');
       return;
@@ -634,28 +620,6 @@ export default function SheetsEditorPage() {
     };
   }, []);
 
-  const onManualEditCommit = useCallback(
-    (edits: SheetsTextEdit[]) => {
-      if (!Array.isArray(edits) || !edits.length) return;
-      const baseline = new Map(
-        collectSheetsTextEdits(htmlRef.current).map((edit) => [edit.path, edit.html]),
-      );
-      const changed = edits.filter((edit) => {
-        const before = baseline.get(edit.path);
-        if (before === undefined) return false;
-        return sanitizeSheetsEditHtml(edit.html) !== sanitizeSheetsEditHtml(before);
-      });
-      if (!changed.length) return;
-      const next = applySheetsTextEdits(htmlRef.current, changed);
-      if (next === htmlRef.current) return;
-      setHoldPreview(true);
-      setHtml(next);
-      setDirty(true);
-      scheduleManualSave();
-    },
-    [scheduleManualSave],
-  );
-
   const tabActionsDisabled = mutating || loading || !html;
 
   const insertSelectedTab = () => {
@@ -681,7 +645,6 @@ export default function SheetsEditorPage() {
       'Deleted sheet tab',
     );
   };
-  deleteSelectedTabRef.current = deleteSelectedTab;
 
   const menuBar = (
     <SheetsMenuBar
@@ -707,11 +670,7 @@ export default function SheetsEditorPage() {
       mode={mode}
       onModeChange={(next) => {
         setMode(next);
-        if (next !== 'preview') setManualEdit(false);
       }}
-      manualEdit={manualEdit}
-      onManualEditChange={setManualEdit}
-      manualEditDisabled={tabActionsDisabled}
       onRefresh={() => void refresh()}
       refreshDisabled={loading || refreshing}
       trailing={
@@ -753,7 +712,7 @@ export default function SheetsEditorPage() {
     <div className="flex h-full flex-col">
       <Header
         title={title}
-        subtitle={`JSON grid in workbook.html · Export to Excel for sharing`}
+        subtitle={`${tabs.length} sheet${tabs.length === 1 ? '' : 's'} · Changes save automatically`}
         nav={menuBar}
       />
 
@@ -765,7 +724,7 @@ export default function SheetsEditorPage() {
 
       {agentWriting && (
         <div className="border-b border-workspace-accent/20 bg-workspace-accent-10 px-4 py-2 text-xs text-foreground">
-          Abi is updating the workbook…
+          SheetsAgent is updating the workbook…
         </div>
       )}
 
@@ -794,7 +753,7 @@ export default function SheetsEditorPage() {
 
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="relative min-h-0 flex-1">
-        {/* Keep iframe mounted so preview stays warm when switching Code ↔ Preview. */}
+        {/* Keep selection and undo history when switching between grid and code. */}
         <div
           className={cn(
             'absolute inset-0',
@@ -802,14 +761,20 @@ export default function SheetsEditorPage() {
           )}
           aria-hidden={mode !== 'preview'}
         >
-          <SheetsPreviewFrame
-            html={previewHtml}
+          <WorkbookGrid
+            key={slug}
+            html={html}
             workspaceId={workspaceId}
-            slug={slug}
             selectedIndex={currentIndex}
-            onSelectedIndexChange={setSelectedIndex}
-            manualEdit={manualEdit}
-            onManualEditCommit={onManualEditCommit}
+            onSelect={setSelectedIndex}
+            disabled={mutating || agentWriting}
+            onChange={(next) => {
+              htmlRef.current = next;
+              dirtyRef.current = true;
+              setHtml(next);
+              setDirty(true);
+              scheduleManualSave();
+            }}
           />
         </div>
 
@@ -821,8 +786,7 @@ export default function SheetsEditorPage() {
               theme="vs-dark"
               value={html}
               onChange={(value) => {
-                setHoldPreview(false);
-                setHtml(value ?? '');
+                        setHtml(value ?? '');
                 setDirty(true);
               }}
               onMount={(editor, monaco) => {

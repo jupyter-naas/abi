@@ -16,7 +16,10 @@ from naas_abi.agents.sheets import (
     derive_workbook_title,
     is_placeholder_workbook_title,
 )
-from naas_abi.apps.nexus.sheets.html_io import parse_workbook_html, serialize_workbook_html
+from naas_abi.apps.nexus.sheets.html_io import (
+    parse_workbook_html,
+    serialize_workbook_html,
+)
 from naas_abi_core.services.agent.context import (
     agent_chat_id,
     agent_user_email,
@@ -125,12 +128,15 @@ def conventional_message(message: str, *, default_type: str = "chore") -> str:
     return f"{default_type}(sheets): {text}"
 
 
-def load_seed_workbook_html() -> str | None:
+def load_seed_workbook_html(template_id: str | None = None) -> str | None:
     try:
         from importlib import resources
 
+        from naas_abi.agents.sheets.template_resolve import normalize_sheets_template_id
+
+        stem = normalize_sheets_template_id(template_id)
         root = resources.files("naas_abi.apps.nexus.assets.sheets.templates")
-        text = (root / "grid-light-v1.html").read_text(encoding="utf-8")
+        text = (root / f"{stem}.html").read_text(encoding="utf-8")
         return text if text.strip() else None
     except Exception:  # noqa: BLE001
         return None
@@ -211,7 +217,12 @@ def _display_title(slug: str, stored_title: str | None) -> str:
 
 
 def _ensure_project_json(
-    sc: Any, rid: str, paths: dict[str, str], slug: str
+    sc: Any,
+    rid: str,
+    paths: dict[str, str],
+    slug: str,
+    *,
+    template_id: str | None = None,
 ) -> str:
     meta: dict[str, Any] = {}
     try:
@@ -224,7 +235,16 @@ def _ensure_project_json(
         meta = {}
     stored = str(meta.get("title") or "").strip() if isinstance(meta, dict) else ""
     title = _display_title(slug, stored)
-    if isinstance(meta, dict) and meta and stored == title:
+    existing_tid = (
+        str(meta.get("template_id") or "").strip() if isinstance(meta, dict) else ""
+    )
+    resolved_tid = (template_id or "").strip() or existing_tid or "grid-light-v1"
+    if (
+        isinstance(meta, dict)
+        and meta
+        and stored == title
+        and existing_tid == resolved_tid
+    ):
         return title
     ws = _workspace_id()
     payload = {
@@ -234,10 +254,7 @@ def _ensure_project_json(
         or ws
         or "",
         "title": title,
-        "template_id": (
-            (meta.get("template_id") if isinstance(meta, dict) else "")
-            or "grid-light-v1"
-        ),
+        "template_id": resolved_tid,
     }
     try:
         sc.upsert_file(
@@ -302,7 +319,9 @@ def resolve_paths(slug: str) -> dict[str, str]:
     }
 
 
-def ensure_sheets_write_paths(slug: str) -> dict[str, str]:
+def ensure_sheets_write_paths(
+    slug: str, *, template_id: str | None = None
+) -> dict[str, str]:
     paths = resolve_paths(slug)
     if paths.get("error"):
         return paths
@@ -323,7 +342,9 @@ def ensure_sheets_write_paths(slug: str) -> dict[str, str]:
             pass
         except SourceControlError as exc:
             return {"error": friendly_sc_error(exc)}
-    paths["title"] = _ensure_project_json(sc, rid, paths, slug)
+    paths["title"] = _ensure_project_json(
+        sc, rid, paths, slug, template_id=template_id
+    )
     return paths
 
 

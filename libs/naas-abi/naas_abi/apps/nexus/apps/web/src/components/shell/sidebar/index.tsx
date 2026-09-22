@@ -241,7 +241,7 @@ export function Sidebar() {
     ? []
     : orderedSections.slice(dockLayout.visibleCount);
 
-  const getDefaultPath = useCallback((sectionId: SidebarSection): string => {
+  const getDefaultPath = useCallback((sectionId: SidebarSection): string | undefined => {
     switch (sectionId) {
       case 'home':     return getWorkspacePath(currentWorkspaceId, '/home');
       case 'maps':     return getWorkspacePath(currentWorkspaceId, '/maps/presence');
@@ -257,6 +257,7 @@ export function Sidebar() {
       case 'code':     return getWorkspacePath(currentWorkspaceId, '/code');
       case 'slides':   return getWorkspacePath(currentWorkspaceId, '/slides');
       case 'documents': return getWorkspacePath(currentWorkspaceId, '/documents');
+      case 'sheets':    return getWorkspacePath(currentWorkspaceId, '/sheets');
       case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
       case 'infrastructure': return getWorkspacePath(currentWorkspaceId, '/settings/infrastructure');
@@ -270,7 +271,8 @@ export function Sidebar() {
     if (!currentWorkspaceId) return;
     for (const section of orderedSections) {
       if (section.id === 'search') continue;
-      router.prefetch(getDefaultPath(section.id));
+      const path = getDefaultPath(section.id);
+      if (path) router.prefetch(path);
     }
   }, [currentWorkspaceId, getDefaultPath, orderedSections, router]);
 
@@ -281,22 +283,23 @@ export function Sidebar() {
       requestQuickOpen();
       return;
     }
+    const path = getDefaultPath(section.id);
     if (section.id === 'home') {
       setActivePanelSection(null);
-      router.push(getDefaultPath(section.id));
+      if (path) router.push(path);
       return;
     }
     if (activePanelSection === section.id) {
       if (section.id === 'slides') {
         const gallery = getDefaultPath('slides');
-        if (isSlidesNestedPath(pathname, gallery)) {
+        if (gallery && isSlidesNestedPath(pathname, gallery)) {
           router.push(gallery);
           return;
         }
       }
       if (section.id === 'documents') {
         const gallery = getDefaultPath('documents');
-        if (isDocumentsNestedPath(pathname, gallery)) {
+        if (gallery && isDocumentsNestedPath(pathname, gallery)) {
           router.push(gallery);
           return;
         }
@@ -306,7 +309,7 @@ export function Sidebar() {
     }
     setActivePanelSection(section.id);
     if (section.id === 'files') setActiveSource('my-drive');
-    router.push(getDefaultPath(section.id));
+    if (path) router.push(path);
   };
 
   const measureDropIndex = useCallback((clientY: number) => {
@@ -594,7 +597,10 @@ export function Sidebar() {
               onPointerUp={(e) => onItemPointerUp(section, e)}
               onPointerCancel={onItemPointerCancel}
               onPointerEnter={(e) => {
-                if (section.id !== 'search') router.prefetch(getDefaultPath(section.id));
+                if (section.id !== 'search') {
+                  const path = getDefaultPath(section.id);
+                  if (path) router.prefetch(path);
+                }
                 showHoverTip(section, e.currentTarget);
               }}
               onPointerLeave={hideHoverTip}
