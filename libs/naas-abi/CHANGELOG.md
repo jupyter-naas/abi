@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.73.1 (2026-09-22)
+
+### Bug Fixes
+
+- **nexus/files**: Render markdown and CSV cleanly in preview.
+  ([#1295](https://github.com/jupyter-naas/abi/pull/1295),
+  [`93a2d87`](https://github.com/jupyter-naas/abi/commit/93a2d87e4df01514f43e57ac160217d0834f3754))
+
+
 ## v2.73.0 (2026-09-22)
 
 ### Features
