@@ -25,11 +25,20 @@ Steady-state ingest uses Dagster (`x_sensor_recent_tweets_put_search_recent_twee
 
 ## Running locally
 
+Compose sets `LOG_LEVEL=DEBUG` on the shared `abi` anchor; one-off CLIs are quieter with **`LOG_LEVEL=INFO`** (still shows backfill batch lines and `sync_envelope_paths` summaries).
+
 ```bash
-docker compose exec -T abi uv run python src/signals/x/scripts/audit_envelope_bookkeeping.py --config config.local.yaml
+docker compose exec -T abi env LOG_LEVEL=INFO uv run python \
+  src/signals/x/scripts/audit_envelope_bookkeeping.py --config config.local.yaml
+
+docker compose exec -T abi env LOG_LEVEL=INFO uv run python \
+  src/signals/x/scripts/backfill_x_datasets.py --config config.local.yaml \
+  --paths-file /tmp/x_pending.txt --batch-size 8
 ```
 
 Host `uv run` fails if config uses Docker service names (`fuseki`, `minio`, `postgres`).
+
+**Pending ingest on prod:** build `/tmp/x_pending.txt` once (audit JSON), then backfill with `--paths-file` only — avoid re-running the full audit before every backfill.
 
 ## Do not
 

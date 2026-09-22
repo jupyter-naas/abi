@@ -4,7 +4,7 @@ Manual ops for envelope → Dataset Service projection and diagnostics. Run from
 
 `uv run python src/signals/x/scripts/<name>.py --config config.local.yaml`
 
-On Docker Compose hosts, prefer **`docker compose exec -T abi uv run python …`** so MinIO, DuckLake, and Fuseki hostnames resolve (see `config.local.yaml`).
+On Docker Compose hosts, prefer **`docker compose exec -T abi env LOG_LEVEL=INFO uv run python …`** so MinIO, DuckLake, and Fuseki hostnames resolve (`config.local.yaml`) without DEBUG engine noise.
 
 | Script | Added | Purpose |
 |--------|-------|---------|

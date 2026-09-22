@@ -5,7 +5,16 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import warnings
 from pathlib import Path
+
+try:
+    from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
+except ImportError:
+    LangChainPendingDeprecationWarning = None  # type: ignore[misc, assignment]
+
+if LangChainPendingDeprecationWarning is not None:
+    warnings.filterwarnings("ignore", category=LangChainPendingDeprecationWarning)
 
 from signals.x.apps.x_proxy.cache.schema import ENVELOPE_PREFIX
 from signals.x.apps.x_proxy.dataset.envelope_bookkeeping import (
