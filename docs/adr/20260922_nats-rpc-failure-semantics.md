@@ -59,6 +59,35 @@ Work-queue consumer redelivery remains at least once. This decision removes
 automatic producer replay; it does not promise exactly-once business effects.
 The remaining Stage 1 exposure/ownership and runtime review findings are separate.
 
+## Compatibility for existing installations
+
+An existing configuration needs no NATS migration. Omitting the top-level `nats`
+field (or setting it to null) keeps exposure disabled. Engine construction, load,
+and shutdown do not import the optional NATS runtime in that case. Existing local,
+RabbitMQ, Redis, and other adapter selections remain unchanged; no new JWT secret
+or running NATS broker is required. Installing the `all` extra includes the NATS
+client dependencies, but does not enable NATS.
+
+The new settings are independent opt-ins:
+
+- Top-level `nats: {nats_url: ..., jwt_secret: ...}` exposes loaded services.
+- A service's `adapter: nats_rpc` selects its remote RPC client, using `nats_url`,
+  `jwt_secret`, and `service_identity` (default `api`).
+- The bus's `adapter: nats_jetstream` selects the NATS/JetStream bus backend.
+
+The repository and generated local Compose files put the broker behind the `nats`
+profile. Plain `docker compose up` / `abi stack start` leave it disabled. Start it
+explicitly with `docker compose up -d nats`, or include it in the stack with
+`docker compose --profile nats up -d` (equivalently, set `COMPOSE_PROFILES=nats`).
+This follows [Docker Compose profile semantics](https://docs.docker.com/compose/how-tos/profiles/).
+`abi dev` also keeps NATS outside its default service set; use `--service nats`
+when explicitly selecting the services to start. Starting the broker alone does
+not change the application's adapter configuration.
+
+Regression tests run an old-style configuration in a fresh Python process where
+imports of the NATS package are blocked. They exercise engine load/shutdown and
+filesystem storage, Python key-value, and Python queue operations.
+
 ## Validation
 
 Parameterized unit tests cover all twelve RPC adapter pairs, both error envelope

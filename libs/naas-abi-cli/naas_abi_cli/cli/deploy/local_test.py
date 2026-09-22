@@ -1,7 +1,20 @@
 import re
 from pathlib import Path
 
+import yaml
+
 from naas_abi_cli.cli.deploy.local import _build_nexus_api_url, setup_local_deploy
+
+
+def test_nats_is_opt_in_in_repository_and_generated_compose(tmp_path):
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
+    repo_root = Path(__file__).resolve().parents[5]
+    for path in (repo_root / "docker-compose.yml", tmp_path / "docker-compose.yml"):
+        services = yaml.safe_load(path.read_text())["services"]
+        assert services["nats"]["profiles"] == ["nats"]
+        for name, service in services.items():
+            if name != "nats" and not service.get("profiles"):
+                assert "nats" not in service.get("depends_on", {})
 
 
 def test_build_nexus_api_url_uses_abi_port_for_localhost() -> None:

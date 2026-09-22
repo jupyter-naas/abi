@@ -1,6 +1,5 @@
 
 from naas_abi_core import logger
-from naas_abi_core.engine import nats_runtime
 from naas_abi_core.engine.context import (
     set_default_event_service,
     set_default_model_registry,
@@ -9,7 +8,6 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
 )
 from naas_abi_core.engine.engine_loaders.EngineModuleLoader import EngineModuleLoader
-from naas_abi_core.engine.engine_loaders.EngineNATSLoader import EngineNATSLoader
 from naas_abi_core.engine.engine_loaders.EngineOntologyLoader import (
     EngineOntologyLoader,
 )
@@ -22,7 +20,6 @@ class Engine(IEngine):
     __configuration: EngineConfiguration
     __engine_module_loader: EngineModuleLoader
     __engine_service_loader: EngineServiceLoader
-    __engine_nats_loader: EngineNATSLoader
 
     __modules: dict[
         str, BaseModule
@@ -33,6 +30,7 @@ class Engine(IEngine):
     # Started NATS primary adapters, if config.yaml has a top-level `nats:`
     # block -- otherwise always []. Consumed by shutdown() below.
     __nats_primary_adapters: list[object]
+    __nats_runtime_started: bool
 
     @property
     def configuration(self) -> EngineConfiguration:
@@ -56,10 +54,10 @@ class Engine(IEngine):
         self.__configuration = EngineConfiguration.load_configuration(configuration)
         self.__engine_module_loader = EngineModuleLoader(self.__configuration)
         self.__engine_service_loader = EngineServiceLoader(self.__configuration)
-        self.__engine_nats_loader = EngineNATSLoader(self.__configuration)
         # Set here, not only inside load(), so shutdown() is safe to call
         # even if load() was never (or not yet) invoked.
         self.__nats_primary_adapters = []
+        self.__nats_runtime_started = False
 
     def load(self, module_names: list[str] | None = None):
         # Per-module CLI invocations (e.g. ``abi chat <module> <agent>``)
@@ -100,9 +98,16 @@ class Engine(IEngine):
 
         # Config-gated: a no-op unless config.yaml has a top-level `nats:`
         # block. See EngineNATSLoader / EngineConfiguration.NATSConfiguration.
-        self.__nats_primary_adapters = self.__engine_nats_loader.expose_services(
-            self.__services
-        )
+        if self.__configuration.nats is not None:
+            # The NATS extra must not be imported by existing non-NATS installs.
+            from naas_abi_core.engine.engine_loaders.EngineNATSLoader import (
+                EngineNATSLoader,
+            )
+
+            self.__nats_runtime_started = True
+            self.__nats_primary_adapters = EngineNATSLoader(
+                self.__configuration
+            ).expose_services(self.__services)
 
         logger.debug("Loading engine modules")
         self.__modules = self.__engine_module_loader.load_modules(self, module_names)
@@ -152,12 +157,9 @@ class Engine(IEngine):
     def shutdown(self) -> None:
         """Gracefully tear down everything ``load()`` started over NATS.
 
-        A no-op if ``config.yaml`` never had a top-level ``nats:`` block
-        (``__nats_primary_adapters`` stays ``[]``, and closing the shared
-        runtime connection is safe -- see ``nats_runtime.close()``'s own
-        idempotence guard -- even if nothing ever connected it). Safe to
-        call more than once, and safe to call even if ``load()`` was never
-        invoked. Stops every started primary adapter first (draining its
+        A no-op without importing NATS if this engine never started its
+        NATS runtime. Safe to call more than once, including before load().
+        Stops every started primary adapter first (draining its
         subscriptions with the connection still up) before closing the
         shared connection those adapters were registered on, not the other
         order.
@@ -169,6 +171,11 @@ class Engine(IEngine):
         reaps naturally -- this only makes the *clean* shutdown path
         actually clean, it's not required for correctness.
         """
+        if not self.__nats_runtime_started:
+            return
+        self.__nats_runtime_started = False
+        from naas_abi_core.engine import nats_runtime
+
         primaries, self.__nats_primary_adapters = self.__nats_primary_adapters, []
         for primary in primaries:
             try:
