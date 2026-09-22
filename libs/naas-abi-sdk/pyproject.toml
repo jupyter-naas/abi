@@ -24,3 +24,6 @@ extend-exclude = ["**/*_pb2.py", "**/*_pb2.pyi"]
 
 [project.scripts]
 naas-abi-module = "naas_abi_sdk.module_runner:main"
+
+[project.optional-dependencies]
+langgraph = ["langgraph-checkpoint>=3.0.1,<4"]

@@ -16,7 +16,7 @@ them into a fresh worker virtualenv, and starts three separate processes:
 3. `worker.py`, importing only the standalone packages and standard library.
 
 The worker runs with Python isolation enabled and asserts ABI core is not installed.
-It exercises 101 RPC endpoints across 12 services, plus publish, publish_many, subscribe,
+It exercises 109 RPC endpoints across 13 services, plus publish, publish_many, subscribe,
 enqueue, and dequeue against the engine. Object storage includes create, read,
 list, overwrite/update, metadata, recursive listing, delete, and listing after
 removal. Other mutable services have equivalent state checks; append-only logs
@@ -61,3 +61,18 @@ primaries dispatch to independent worker pools. The SDK also exercises tier 0.
 
 See the SDK README for the migration pattern and its limits. This preserves ABI
 module structure, not automatic portability of framework-specific components.
+
+Document service CRUD, version checks, collection operations, queries and count
+are included in the SDK-only worker (109 RPC operations total). The worker still
+installs only four packages; LangGraph is an optional SDK extra.
+
+For the separate LangGraph persistence regression, with the development runtime,
+SDK source installed and native `nats-server` available:
+
+```sh
+uv run --no-sync pytest examples/standalone_module/checkpoint_integration_test.py -q
+```
+
+It pauses a real graph at an interrupt, starts another Python interpreter to
+resume from the document service, and checks history and module/agent isolation.
+This proves shared persistence across processes, not remote agent invocation.

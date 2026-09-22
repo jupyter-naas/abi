@@ -27,6 +27,16 @@ OPERATIONS = {
         "list_snapshots",
         "drop",
     ],
+    "document": [
+        "ensure_collection",
+        "drop_collection",
+        "collections",
+        "put",
+        "get",
+        "delete",
+        "find",
+        "count",
+    ],
     "email": ["send"],
     "event": [
         "append",

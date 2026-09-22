@@ -47,6 +47,10 @@ class DocumentService(ServiceBase):
         return root
 
     @property
+    def adapter(self) -> IDocumentAdapter:
+        return self.__adapter
+
+    @property
     def namespace(self) -> str:
         if self.__can_bind_namespaces:
             raise PermissionError("The engine document root only binds namespaces")

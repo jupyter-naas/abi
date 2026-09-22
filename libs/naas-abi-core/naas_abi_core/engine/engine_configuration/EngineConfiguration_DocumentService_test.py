@@ -170,3 +170,22 @@ def test_remote_configuration_explicitly_uses_deployment_postgresql(scaffold):
         "POSTGRES_DB",
     ):
         assert "{{ secret." + secret + " }}" in dsn
+
+
+def test_nats_adapter_configuration_and_client_lifetime():
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration_DocumentService import (
+        DocumentAdapterConfiguration,
+    )
+    from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterNATSClient import (
+        DocumentSecondaryAdapterNATSClient,
+    )
+    from naas_abi_core.services.document.DocumentPort import DocumentStorageError
+
+    adapter = DocumentAdapterConfiguration(
+        adapter="nats_rpc",
+        config={"nats_url": "nats://unused:4222", "jwt_secret": "x" * 32},
+    ).load()
+    assert isinstance(adapter, DocumentSecondaryAdapterNATSClient)
+    adapter.close()
+    with pytest.raises(DocumentStorageError, match="closed"):
+        adapter.collections("module")

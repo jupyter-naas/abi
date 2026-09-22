@@ -550,6 +550,43 @@ class ABIModule(BaseModule):
         )
         print(json.dumps(self.results[-1]), flush=True)
 
+    async def document(self):
+        from naas_abi_proto.document.v1 import document_pb2 as pb
+        from naas_abi_proto.document.values import decode_data, encode_data
+
+        await self.call(
+            "document", "ensure_collection", spec=pb.CollectionSpec(name="exercise")
+        )
+        assert "exercise" in (await self.call("document", "collections")).collections
+        first = await self.call(
+            "document",
+            "put",
+            collection="exercise",
+            id="one",
+            data=encode_data({"value": b"created", "large": 2**60}),
+            if_version=0,
+        )
+        assert first.document.version == 1
+        await self.call(
+            "document",
+            "put",
+            collection="exercise",
+            id="one",
+            data=encode_data({"value": b"updated"}),
+            if_version=1,
+        )
+        result = await self.call("document", "get", collection="exercise", id="one")
+        assert decode_data(result.document.data) == {"value": b"updated"}
+        assert (
+            len((await self.call("document", "find", collection="exercise")).items) == 1
+        )
+        assert (await self.call("document", "count", collection="exercise")).count == 1
+        await self.call(
+            "document", "delete", collection="exercise", id="one", if_version=2
+        )
+        assert (await self.call("document", "count", collection="exercise")).count == 0
+        await self.call("document", "drop_collection", collection="exercise")
+
     async def run(self):
         for domain in OPERATIONS:
             try:

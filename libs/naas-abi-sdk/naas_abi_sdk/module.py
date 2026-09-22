@@ -24,8 +24,11 @@ class ModuleConfiguration:
 class ServicesProxy:
     """Dependency declarations are an API boundary, not broker authorization."""
 
-    def __init__(self, client: ABIClient, dependencies: ModuleDependencies):
+    def __init__(
+        self, client: ABIClient, dependencies: ModuleDependencies, module_name: str = ""
+    ):
         self._client = client
+        self._module_name = module_name
         self._aliases = {"kv": "keyvalue", "events": "event"}
         self._allowed = {
             self._aliases.get(name, name) for name in dependencies.services
@@ -41,16 +44,20 @@ class ServicesProxy:
         canonical = self._aliases.get(name, name)
         if canonical not in self._allowed:
             raise ValueError(f"Module did not declare service dependency: {name}")
+        if canonical == "document":
+            return self._client.document.for_namespace(self._module_name)
         return getattr(self._client, canonical)
 
 
 class EngineProxy:
-    def __init__(self, client: ABIClient, dependencies: ModuleDependencies):
+    def __init__(
+        self, client: ABIClient, dependencies: ModuleDependencies, module_name: str = ""
+    ):
         if dependencies.modules:
             raise ValueError(
                 "Cross-module discovery is not implemented; declare service dependencies only"
             )
-        self.services = ServicesProxy(client, dependencies)
+        self.services = ServicesProxy(client, dependencies, module_name)
 
 
 Config = TypeVar("Config", bound=ModuleConfiguration)
@@ -116,7 +123,7 @@ async def run_module(
     """Own transport, dependency injection, ordered startup and guaranteed cleanup."""
     async with ABIClient(url, token, timeout=timeout, **connection_options) as client:
         module = module_type(
-            EngineProxy(client, module_type.get_dependencies()),
+            EngineProxy(client, module_type.get_dependencies(), module_type.__module__),
             configuration if configuration is not None else module_type.Configuration(),
         )
         try:
