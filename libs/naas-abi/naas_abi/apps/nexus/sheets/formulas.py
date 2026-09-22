@@ -321,7 +321,7 @@ def _arithmetic(expression: str) -> float:
             value = visit(node.operand)
             return -value if isinstance(node.op, ast.USub) else value
         if isinstance(node, ast.BinOp) and type(node.op) in operations:
-            return operations[type(node.op)](visit(node.left), visit(node.right))
+            return float(operations[type(node.op)](visit(node.left), visit(node.right)))
         raise ValueError("Unsupported arithmetic expression")
 
     result = visit(tree.body)

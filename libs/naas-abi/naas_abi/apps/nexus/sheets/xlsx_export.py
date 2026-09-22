@@ -45,8 +45,8 @@ def workbook_to_xlsx_bytes(workbook: SheetWorkbook) -> bytes:
             ws.column_dimensions[openpyxl.utils.get_column_letter(column + 1)].width = (
                 pixels - 5
             ) / 7
-        for row, pixels in tab.row_heights.items():
-            ws.row_dimensions[row + 1].height = pixels * 0.75
+        for row_index, pixels in tab.row_heights.items():
+            ws.row_dimensions[row_index + 1].height = pixels * 0.75
         headers = tab.rows[0] if tab.rows else []
         col_formats: dict[int, str] = {}
         for c_idx, header in enumerate(headers):
