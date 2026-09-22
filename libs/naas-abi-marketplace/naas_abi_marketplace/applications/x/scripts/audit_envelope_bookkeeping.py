@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Read-only audit: ``x/search_recent_tweets`` envelopes vs ``x.envelopes_v1``."""
 
 from __future__ import annotations
