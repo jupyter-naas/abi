@@ -18,7 +18,7 @@ Steady-state ingest uses Dagster (`x_sensor_recent_tweets_put_search_recent_twee
 - Fields: `pending_ingest`, `ingested_not_in_storage`, `in_sync`.
 - `--strict`: exit 1 when out of sync.
 - Fix lag with `backfill_x_datasets.py` (not the audit script).
-- Logic: `signals.x.apps.x_proxy.dataset.envelope_bookkeeping`.
+- Logic: `naas_abi_marketplace.applications.x.apps.x_proxy.dataset.envelope_bookkeeping`.
 
 Use `apps/x_proxy/dataset/count_audit.py` or `dataset/api.graph_totals` for row-count sanity checks.
 

@@ -84,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(
                 "Dataset Service is not available (--pending-from-audit)."
             )
-        from signals.x.apps.x_proxy.dataset.envelope_bookkeeping import (
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.envelope_bookkeeping import (
             envelope_bookkeeping_diff,
         )
 

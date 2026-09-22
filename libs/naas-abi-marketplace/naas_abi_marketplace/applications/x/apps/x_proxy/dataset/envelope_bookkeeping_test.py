@@ -9,13 +9,17 @@ from naas_abi_core.services.dataset.DatasetFactory import DatasetFactory
 from naas_abi_core.services.object_storage.ObjectStorageFactory import (
     ObjectStorageFactory,
 )
+from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.envelope_bookkeeping import (
+    envelope_bookkeeping_diff,
+)
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.envelope_paths import (
     ENVELOPE_PREFIX,
 )
-from signals.x.apps.x_proxy.dataset.envelope_bookkeeping import (
-    envelope_bookkeeping_diff,
+from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
+    ENVELOPES_V1,
+    X_DATASET_NAMESPACE,
+    ensure_x_datasets,
 )
-from signals.x.apps.x_proxy.dataset.store import ENVELOPES_V1, X_DATASET_NAMESPACE
 
 
 def _dataset(tmp_path: Path):
@@ -42,8 +46,6 @@ def test_envelope_bookkeeping_diff_pending_and_in_sync(tmp_path: Path) -> None:
     assert before["storage_envelope_count"] == 1
     assert before["pending_ingest"] == [rel]
     assert before["in_sync"] is False
-
-    from signals.x.apps.x_proxy.dataset.store import ensure_x_datasets
 
     ensure_x_datasets(dataset)
     dataset.write(
