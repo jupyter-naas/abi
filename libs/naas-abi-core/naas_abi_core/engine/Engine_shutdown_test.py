@@ -19,6 +19,7 @@ from naas_abi_core.engine.Engine import Engine
 
 def _bare_engine(primaries: list) -> Engine:
     engine = Engine.__new__(Engine)
+    engine._Engine__nats_dependencies = None  # type: ignore[attr-defined]
     engine._Engine__nats_primary_adapters = primaries  # type: ignore[attr-defined]
     engine._Engine__nats_runtime_started = bool(primaries)  # type: ignore[attr-defined]
     return engine

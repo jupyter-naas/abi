@@ -314,13 +314,10 @@ def test_expose_services_does_not_re_expose_secret_when_every_adapter_is_remote(
     run_coro.assert_not_called()
 
 
-def test_expose_services_still_exposes_secret_when_only_some_adapters_are_remote(
+def test_expose_services_does_not_expose_secret_when_only_some_adapters_are_remote(
     monkeypatch,
 ):
-    """The realistic mixed case: a local dotenv/naas adapter alongside a
-    nats_rpc one that reaches a different, upstream secret store -- there's
-    still something local worth serving, so this must NOT be skipped
-    (confirms the guard is `all(...)`, not `any(...)`)."""
+    """Never expose a fanout containing a proxy on the same global subject."""
     config = SimpleNamespace(
         nats=NATSConfiguration(nats_url="nats://example:4222", jwt_secret="x" * 32)
     )
@@ -334,9 +331,8 @@ def test_expose_services_still_exposes_secret_when_only_some_adapters_are_remote
 
     started = loader.expose_services(services)
 
-    assert len(started) == 1
-    assert isinstance(started[0], SecretPrimaryAdapterNATS)
-    run_coro.assert_called_once()
+    assert started == []
+    run_coro.assert_not_called()
 
 
 @pytest.mark.parametrize("remote", [False, True])

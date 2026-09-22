@@ -18,8 +18,7 @@ def test_legacy_config_loads_and_shuts_down_without_nats(tmp_path, nats_config):
         "services:\n"
         "  secret: {secret_adapters: []}\n"
         "  bus: {bus_adapter: {adapter: python_queue, config: {}}}\n"
-        "  kv: {kv_adapter: {adapter: python, config: {}}}\n"
-        + nats_config
+        "  kv: {kv_adapter: {adapter: python, config: {}}}\n" + nats_config
     )
     result = subprocess.run(
         [
@@ -73,13 +72,15 @@ def test_explicit_nats_config_still_exposes_services(monkeypatch):
     from naas_abi_core.engine.Engine import Engine
     from naas_abi_core.engine.engine_loaders.EngineNATSLoader import EngineNATSLoader
 
+    # This test stubs the endpoints, so do not initialize built-in modules that query them.
+    monkeypatch.setattr(Engine, "on_initialized", lambda self: None)
     expose = MagicMock(return_value=[])
     close = MagicMock()
     monkeypatch.setattr(EngineNATSLoader, "expose_services", expose)
     monkeypatch.setattr("naas_abi_core.engine.nats_runtime.close", close)
     engine = Engine(
         "api: {}\n"
-        "global_config: {ai_mode: cloud}\n"
+        "global_config: {ai_mode: cloud, skip_ontology_loading: true}\n"
         "modules: []\n"
         "services: {secret: {secret_adapters: []}}\n"
         "nats: {jwt_secret: test-secret}\n"
@@ -88,6 +89,13 @@ def test_explicit_nats_config_still_exposes_services(monkeypatch):
     close.assert_not_called()
 
     engine.load()
-    expose.assert_called_once_with(engine.services)
+    expose.assert_called_once()
+    owners = expose.call_args.args[0]
+    assert owners is not engine.services
+    assert owners.coding_environment.services is not owners
+    assert (
+        owners.coding_environment.services.coding_environment
+        is engine.services.coding_environment
+    )
     engine.shutdown()
     close.assert_called_once()

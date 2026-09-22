@@ -13,16 +13,41 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from naas_abi_sdk import ABIClient, RPCError
+from naas_abi_sdk import RPCError
 from naas_abi_sdk.catalog import OPERATIONS
+from naas_abi_sdk.module import (
+    BaseModule,
+    ModuleConfiguration,
+    ModuleDependencies,
+    run_module,
+)
 
 
-class ServiceExercise:
-    def __init__(self, client: ABIClient):
-        self.client = client
+class ABIModule(BaseModule):
+    class Configuration(ModuleConfiguration):
+        pass
+
+    dependencies = ModuleDependencies(services=(*OPERATIONS, "bus"))
+
+    @property
+    def client(self):
+        return self.engine.services
+
+    def __init__(self, engine, configuration):
+        super().__init__(engine, configuration)
+        self.lifecycle: list[str] = []
         self.seen: set[tuple[str, str]] = set()
         self.results: list[dict] = []
         self.unsupported: list[str] = []
+
+    def on_load(self):
+        self.lifecycle.append("on_load")
+
+    async def on_initialized(self):
+        self.lifecycle.append("on_initialized")
+
+    def on_unloaded(self):
+        self.lifecycle.append("on_unloaded")
 
     async def call(self, domain: str, operation: str, **fields):
         pb = importlib.import_module(f"naas_abi_proto.{domain}.v1.{domain}_pb2")
@@ -88,6 +113,14 @@ class ServiceExercise:
         assert (await call("exists")).value
         await call("delete")
         assert not (await call("exists")).value
+        from naas_abi_proto.cache.v1 import cache_pb2
+
+        hot = self.engine.services.cache.tier(0)
+        await hot.set(cache_pb2.SetRequest(key="tier-demo", value=value))
+        assert (
+            await hot.get(cache_pb2.GetRequest(key="tier-demo"))
+        ).value.data == "updated"
+        await hot.delete(cache_pb2.DeleteRequest(key="tier-demo"))
 
     async def secret(self):
         await self.call("secret", "set", key="DEMO_VALUE", value="fixture-value")
@@ -554,6 +587,8 @@ class ServiceExercise:
             if (d, op) not in self.seen
         )
         return {
+            "module": "ABIModule",
+            "lifecycle": self.lifecycle,
             "results": self.results,
             "missing_operations": missing,
             "rpc_operations": len(self.seen),
@@ -566,8 +601,9 @@ async def main():
         "Worker must not have core installed"
     )
     token = os.environ["ABI_SERVICE_TOKEN"]
-    async with ABIClient(os.environ["ABI_NATS_URL"], token, timeout=30) as client:
-        report = await ServiceExercise(client).run()
+    report = await run_module(
+        ABIModule, url=os.environ["ABI_NATS_URL"], token=token, timeout=30
+    )
     report.update(
         worker_pid=os.getpid(),
         packages=sorted(d.metadata["Name"] for d in importlib.metadata.distributions()),

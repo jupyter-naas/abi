@@ -137,6 +137,9 @@ class IEngine:
         def secret_available(self) -> bool:
             return self.__secret is not None
 
+        def bus_available(self) -> bool:
+            return self.__bus is not None
+
         @property
         def bus(self) -> BusService:
             assert self.__bus is not None, "Bus service is not initialized"
@@ -229,7 +232,7 @@ class IEngine:
                 self.__source_control,
             ]
 
-        def wire_services(self) -> None:
+        def wire_services(self, dependencies: IEngine.Services | None = None) -> None:
             """
             Wire the loaded services with references to the full set of engine services.
 
@@ -242,7 +245,7 @@ class IEngine:
                 if service is None:
                     continue
                 if isinstance(service, ServicesAware):
-                    service.set_services(self)
+                    service.set_services(dependencies if dependencies is not None else self)
 
     __services: Services
     __modules: dict[str, BaseModule]

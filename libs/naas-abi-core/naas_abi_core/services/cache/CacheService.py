@@ -372,6 +372,11 @@ class CacheService(ServiceBase, ICacheService):
             for tier, adapter in adapters
         }
 
+    @property
+    def adapters(self) -> tuple[tuple[str, ICacheAdapter], ...]:
+        """Ordered tier adapters for composition; callers cannot mutate the registry."""
+        return tuple(self._adapters)
+
     def __publish_event(self, event: Any) -> None:
         if not self.services_wired:
             return
@@ -466,7 +471,9 @@ class CacheService(ServiceBase, ICacheService):
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "Cache tier %r unavailable during get(%r), falling through: %s",
-                    tier_name, key, exc,
+                    tier_name,
+                    key,
+                    exc,
                 )
                 continue
         raise CacheNotFoundError(f"Cache not found in any tier: {key!r}")
@@ -484,7 +491,9 @@ class CacheService(ServiceBase, ICacheService):
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "Cache tier %r unavailable during exists(%r), treating as miss: %s",
-                    tier_name, key, exc,
+                    tier_name,
+                    key,
+                    exc,
                 )
         return False
 

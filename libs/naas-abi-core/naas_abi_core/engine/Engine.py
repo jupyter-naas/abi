@@ -1,3 +1,11 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from naas_abi_core.engine.engine_loaders.EngineNATSDependencies import (
+        EngineNATSDependencies,
+    )
 
 from naas_abi_core import logger
 from naas_abi_core.engine.context import (
@@ -17,6 +25,7 @@ from naas_abi_core.module.Module import BaseModule
 
 
 class Engine(IEngine):
+    __nats_dependencies: EngineNATSDependencies | None
     __configuration: EngineConfiguration
     __engine_module_loader: EngineModuleLoader
     __engine_service_loader: EngineServiceLoader
@@ -47,6 +56,8 @@ class Engine(IEngine):
 
     @property
     def services(self) -> IEngine.Services:
+        if self.__nats_dependencies is not None:
+            return self.__nats_dependencies.module_services
         return self.__services
 
     def __init__(self, configuration: str | None = None):
@@ -56,6 +67,7 @@ class Engine(IEngine):
         self.__engine_service_loader = EngineServiceLoader(self.__configuration)
         # Set here, not only inside load(), so shutdown() is safe to call
         # even if load() was never (or not yet) invoked.
+        self.__nats_dependencies = None
         self.__nats_primary_adapters = []
         self.__nats_runtime_started = False
 
@@ -74,9 +86,7 @@ class Engine(IEngine):
         if module_names is None:
             module_names = []
         if module_names:
-            model_providers = (
-                self.__engine_module_loader.get_model_providing_modules()
-            )
+            model_providers = self.__engine_module_loader.get_model_providing_modules()
             extra = [m for m in model_providers if m not in module_names]
             if extra:
                 logger.debug(
@@ -100,10 +110,16 @@ class Engine(IEngine):
         # block. See EngineNATSLoader / EngineConfiguration.NATSConfiguration.
         if self.__configuration.nats is not None:
             # The NATS extra must not be imported by existing non-NATS installs.
+            from naas_abi_core.engine.engine_loaders.EngineNATSDependencies import (
+                EngineNATSDependencies,
+            )
             from naas_abi_core.engine.engine_loaders.EngineNATSLoader import (
                 EngineNATSLoader,
             )
 
+            self.__nats_dependencies = EngineNATSDependencies(self.__configuration.nats)
+            dependencies = self.__nats_dependencies.build(self.__services)
+            self.__services.wire_services(dependencies)
             self.__nats_runtime_started = True
             self.__nats_primary_adapters = EngineNATSLoader(
                 self.__configuration
@@ -137,7 +153,7 @@ class Engine(IEngine):
         # EngineProxy and the module dependency-declaration system; see
         # ``engine/context.py`` for the rationale.
         if self.__services.events_available():
-            set_default_event_service(self.__services.events)
+            set_default_event_service(self.services.events)
         else:
             set_default_event_service(None)
 
@@ -174,6 +190,7 @@ class Engine(IEngine):
         if not self.__nats_runtime_started:
             return
         self.__nats_runtime_started = False
+        set_default_event_service(None)
         from naas_abi_core.engine import nats_runtime
 
         primaries, self.__nats_primary_adapters = self.__nats_primary_adapters, []
@@ -192,6 +209,9 @@ class Engine(IEngine):
                     f"Engine.shutdown: error stopping a NATS primary adapter "
                     f"({type(primary).__name__}): {exc}"
                 )
+        if self.__nats_dependencies is not None:
+            self.__nats_dependencies.close()
+            self.__nats_dependencies = None
         nats_runtime.close()
 
 

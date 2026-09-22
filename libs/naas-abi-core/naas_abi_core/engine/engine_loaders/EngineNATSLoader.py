@@ -5,9 +5,9 @@ See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md and
 implements: ``config.yaml``'s top-level ``nats:`` block is what turns this
 on at all -- no per-service opt-in flag. When present, every loaded service
 that has a NATS primary adapter available gets one started automatically,
-wrapping the *same* service instance every in-process caller already uses
-(so remote callers get identical behaviour -- event publishing, prefix
-normalization, whatever the domain service does beyond the raw adapter).
+wrapping the owning service instance. Local modules and other domains receive
+NATS-backed facades, so their calls use the same endpoints as remote modules.
+Service-level endpoints retain event publishing and prefix normalization.
 
 Extending to another service means adding one more branch to
 ``expose_services`` below, following the same shape -- not a generic/
@@ -21,9 +21,9 @@ holding a valid service token can read every secret this process's
 ("if it's adding security problems we will have to fix that anyway"), not
 an oversight -- revisit once Stage 2 per-caller authorization exists. It
 also has its own re-exposure guard shape (see ``expose_services`` below):
-``Secret`` fans out over a *list* of adapters, not one, so it's only
-skipped when literally every configured adapter is itself a NATS client
-(nothing local left to serve) rather than when any single one is.
+``Secret`` fans out over a *list* of adapters, not one, so it is skipped when
+any configured adapter is itself a NATS client, preventing
+recursive self-routing on the globally shared secret subjects.
 
 Deliberately NOT exposed here, on purpose (see the RFC / dev log for the
 full reasoning, not an oversight):
@@ -154,14 +154,12 @@ class EngineNATSLoader:
                 '(adapter: "nats_rpc") -- not re-exposing a remote proxy'
             )
 
-        if services.secret_available() and not all(
+        if services.secret_available() and not any(
             isinstance(adapter, SecretSecondaryAdapterNATSClient)
             for adapter in services.secret.adapters
         ):
-            # Skip only when EVERY configured adapter is itself a NATS
-            # client -- Secret fans out over a list, so having a nats_rpc
-            # adapter alongside a real one (dotenv, naas, ...) still means
-            # there's something local worth serving.
+            # A fanout containing a proxy must not serve its own global subject.
+            # Dependency wiring rejects mixed local/remote ownership explicitly.
             primary_secret = SecretPrimaryAdapterNATS(
                 services.secret, nats_config.jwt_secret
             )
@@ -170,7 +168,7 @@ class EngineNATSLoader:
             logger.debug("EngineNATSLoader: exposed secret over NATS")
         elif services.secret_available():
             logger.debug(
-                "EngineNATSLoader: secret is entirely backed by NATS clients "
+                "EngineNATSLoader: secret contains NATS clients "
                 "-- not re-exposing a remote proxy"
             )
 
@@ -329,5 +327,17 @@ class EngineNATSLoader:
             )
             nats_runtime.run_coro(primary_cache.start(nc))
             started.append(primary_cache)
+
+        if services.cache_available():
+            for index, (_, adapter) in enumerate(services.cache.adapters):
+                if isinstance(adapter, CacheSecondaryAdapterNATSClient):
+                    continue
+                primary_tier = CachePrimaryAdapterNATS(
+                    adapter,
+                    nats_config.jwt_secret,
+                    subject_prefix=f"abi.svc.cache.v1.tier.{index}",
+                )
+                nats_runtime.run_coro(primary_tier.start(nc))
+                started.append(primary_tier)
 
         return started

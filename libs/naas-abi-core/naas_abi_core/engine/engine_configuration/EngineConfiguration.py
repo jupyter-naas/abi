@@ -229,12 +229,12 @@ class NATSConfiguration(BaseModel):
     at the top level next to ``api``/``deploy``/``global_config``, not nested
     under ``services:``.
 
-    Its mere presence (non-null) is what triggers exposure: at engine load
-    time, every loaded service that has a NATS primary adapter available gets
-    one started automatically, wrapping the same instance every in-process
-    caller already uses -- see ``EngineNATSLoader``. No per-service opt-in
-    flag; add a service to the exposed set by giving it a primary adapter,
-    not by touching this config.
+    A non-null block enables network domain boundaries. Loaded local owners
+    expose endpoints; engine modules and every owner's injected dependencies
+    use NATS-backed facades, even when owners share a process. The bus uses
+    this broker in NATS mode. Without this block, wiring remains in-process.
+    Process-local model registration is available only to modules, never as
+    an injected cross-domain dependency. See the network-boundaries ADR.
 
     See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
     ("Decisions locked in" -- Stage 1's JWT is deliberately minimal).
