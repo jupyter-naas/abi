@@ -44,6 +44,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Optional newline-delimited envelope paths (relative object keys).",
     )
     parser.add_argument(
+        "--pending-from-audit",
+        action="store_true",
+        help=(
+            "Sync only envelope paths reported as pending_ingest by "
+            "audit_envelope_bookkeeping (no paths-file needed)."
+        ),
+    )
+    parser.add_argument(
         "--staging-prefix",
         default="x/dataset_import/batches",
         help="Object-storage prefix for checksum manifest batches (prod import).",
@@ -71,7 +79,23 @@ def main(argv: list[str] | None = None) -> int:
     module = ABIModule.get_instance()
     object_storage = module.engine.services.object_storage
 
-    if args.paths_file:
+    if args.pending_from_audit:
+        if not module.engine.services.dataset_available():
+            raise SystemExit(
+                "Dataset Service is not available (--pending-from-audit)."
+            )
+        from signals.x.apps.x_proxy.dataset.envelope_bookkeeping import (
+            envelope_bookkeeping_diff,
+        )
+
+        report = envelope_bookkeeping_diff(
+            object_storage, module.engine.services.dataset
+        )
+        paths = list(report.get("pending_ingest") or [])
+        logger.info(f"backfill_x_datasets: {len(paths)} pending path(s) from audit")
+    elif args.paths_file:
+        if not args.paths_file.is_file():
+            raise SystemExit(f"paths-file not found: {args.paths_file.resolve()}")
         paths = [
             line.strip()
             for line in args.paths_file.read_text(encoding="utf-8").splitlines()

@@ -33,7 +33,7 @@ docker compose exec -T abi env LOG_LEVEL=INFO uv run python \
 
 docker compose exec -T abi env LOG_LEVEL=INFO uv run python \
   src/signals/x/scripts/backfill_x_datasets.py --config config.local.yaml \
-  --paths-file /tmp/x_pending.txt --batch-size 8
+  --pending-from-audit --batch-size 8
 ```
 
 Host `uv run` fails if config uses Docker service names (`fuseki`, `minio`, `postgres`).

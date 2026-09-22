@@ -51,7 +51,7 @@ class _FakeDataset:
     def __init__(self, rows: list[dict]):
         self._rows = rows
 
-    def query(self, sql: str, *, namespace: str):  # noqa: ARG002
+    def query(self, sql: str, *, namespace: str):
         class _Result:
             def __init__(self, rows):
                 self.rows = rows
