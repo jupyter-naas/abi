@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v2.72.5 (2026-09-22)
+
+### Bug Fixes
+
+- **graph**: Handle additional exceptions in graph primary adapter and improve instance pairs query
+  ([`345d35d`](https://github.com/jupyter-naas/abi/commit/345d35db63f528b12a1d0e2f23b9c7ca4c08774e))
+
+- **graph**: Limit dataset to graphs pinned by VALUES clause
+  ([`8c1b85c`](https://github.com/jupyter-naas/abi/commit/8c1b85c358e8587a358d86f656e90dd17b1241d1))
+
+- **graph**: Update explorer and graph service with improved snapshot metrics and error handling
+  ([`583c3d8`](https://github.com/jupyter-naas/abi/commit/583c3d8f70a89816028fb3e78ea9c26b7a1c4d3d))
+
+- **graph-explorer**: Remove parallel executor and fix loading message
+  ([`1569f40`](https://github.com/jupyter-naas/abi/commit/1569f40b87076468644d521c98b10ff03337e02a))
+
+- **graph-explorer**: Update graph explorer and related services with enhancements and fixes
+  ([`ba578e3`](https://github.com/jupyter-naas/abi/commit/ba578e32a07db36be1810ff62349e4b0fd86a4c2))
+
+- **nexus**: Improve graph class counts and loading state handling
+  ([`7e39104`](https://github.com/jupyter-naas/abi/commit/7e39104d5106b8732792820790c254e92b1863c4))
+
+
 ## v2.72.4 (2026-09-21)
 
 ### Bug Fixes
