@@ -141,6 +141,21 @@ class EngineNATSLoader:
 
         nc = nats_runtime.get_connection(nats_config.nats_url)
         started: list[object] = []
+        if nats_config.discovery is not None:
+            from naas_abi_core.services.discovery.discovery_factory import (
+                start_discovery,
+            )
+
+            started.append(
+                nats_runtime.run_coro(
+                    start_discovery(
+                        nc,
+                        nats_config.jwt_secret,
+                        nats_config.discovery.project,
+                        nats_config.discovery.lease_seconds,
+                    )
+                )
+            )
 
         if services.object_storage_available() and not isinstance(
             services.object_storage.adapter, ObjectStorageSecondaryAdapterNATSClient

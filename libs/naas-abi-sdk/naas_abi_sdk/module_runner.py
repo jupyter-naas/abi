@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 
+from naas_abi_sdk.discovery import DiscoveryConfiguration
 from naas_abi_sdk.module import BaseModule, run_module
 
 
@@ -20,6 +21,9 @@ def main() -> None:
         "--url", default=os.environ.get("ABI_NATS_URL", "nats://127.0.0.1:4222")
     )
     parser.add_argument("--timeout", type=float, default=10.0)
+    parser.add_argument(
+        "--discovery-project", help="Enable module discovery in this project"
+    )
     args = parser.parse_args()
     token = os.environ.get("ABI_SERVICE_TOKEN")
     if not token:
@@ -36,6 +40,9 @@ def main() -> None:
             token=token,
             configuration=configuration,
             timeout=args.timeout,
+            discovery=DiscoveryConfiguration(project=args.discovery_project)
+            if args.discovery_project
+            else None,
         )
     )
 

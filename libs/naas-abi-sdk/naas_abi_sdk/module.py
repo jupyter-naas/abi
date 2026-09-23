@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
+import logging
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from naas_abi_sdk.catalog import OPERATIONS
 from naas_abi_sdk.client import ABIClient
+from naas_abi_sdk.discovery import (
+    AgentDescriptor,
+    DiscoveryClient,
+    DiscoveryConfiguration,
+    DiscoverySession,
+    ModulesProxy,
+    module_descriptor,
+)
 from naas_abi_sdk.services import service_proxy
 
 if TYPE_CHECKING:
@@ -114,12 +124,17 @@ class RPCServicesProxy(_ServicesAccess):
 
 class EngineProxy:
     def __init__(
-        self, client: ABIClient, dependencies: ModuleDependencies, module_name: str = ""
+        self,
+        client: ABIClient,
+        dependencies: ModuleDependencies,
+        module_name: str = "",
+        discovery: DiscoveryClient | None = None,
     ):
-        if dependencies.modules:
-            raise ValueError(
-                "Cross-module discovery is not implemented; declare service dependencies only"
-            )
+        if dependencies.modules and discovery is None:
+            raise ValueError("Module dependencies require discovery configuration")
+        self.modules = (
+            ModulesProxy(discovery, dependencies.modules) if discovery else None
+        )
         self.services = ServicesProxy(client, dependencies, module_name)
         self.rpc = RPCServicesProxy(client, dependencies, module_name)
 
@@ -136,6 +151,10 @@ class BaseModule(Generic[Config]):
 
     Configuration = ModuleConfiguration
     dependencies = ModuleDependencies()
+    module_id: str | None = None
+    package_version: str = "0.0.0"
+    contract_major: int = 1
+    agents: tuple[AgentDescriptor, ...] = ()
 
     def __init__(self, engine: EngineProxy, configuration: Config):
         if not isinstance(configuration, self.Configuration):
@@ -144,6 +163,7 @@ class BaseModule(Generic[Config]):
             )
         self._engine = engine
         self._configuration = configuration
+        self._discovery_session: DiscoverySession | None = None
 
     @property
     def engine(self) -> EngineProxy:
@@ -152,6 +172,14 @@ class BaseModule(Generic[Config]):
     @property
     def configuration(self) -> Config:
         return self._configuration
+
+    @property
+    def discovery_status(self) -> str:
+        """Last confirmed membership state; lookups still validate targets live."""
+        session = self._discovery_session
+        if session is None:
+            return "DISABLED"
+        return session.current_status
 
     @classmethod
     def get_dependencies(cls) -> ModuleDependencies:
@@ -206,23 +234,68 @@ async def run_module(
     token,
     configuration: ModuleConfiguration | None = None,
     timeout: float = 10.0,
+    discovery: DiscoveryConfiguration | None = None,
     **connection_options,
 ) -> Any:
     """Own transport, dependency injection, ordered startup and guaranteed cleanup."""
     async with ABIClient(url, token, timeout=timeout, **connection_options) as client:
+        identity = module_type.module_id or module_type.__module__
+        dependencies = module_type.get_dependencies()
+        discovery_client = (
+            DiscoveryClient(client._transport, discovery.project) if discovery else None
+        )
         module = module_type(
-            EngineProxy(client, module_type.get_dependencies(), module_type.__module__),
+            EngineProxy(client, dependencies, identity, discovery_client),
             configuration if configuration is not None else module_type.Configuration(),
         )
         scope = _ModuleScope(module)
         token_context = _scope.set(scope)
+        registration = (
+            DiscoverySession(
+                discovery_client,
+                module_descriptor(module_type, identity, dependencies.modules),
+            )
+            if discovery_client
+            else None
+        )
+        module._discovery_session = registration
+        work = None
         try:
             await _invoke(module.on_load)
+            if registration:
+                await registration.start()
+                await module.engine.modules.wait_ready(discovery)
             await _invoke(module.on_initialized)
+            if registration:
+                registration.initialized = True
+                await registration.renew()
+                work = asyncio.create_task(_invoke(module.run))
+                done, _ = await asyncio.wait(
+                    (work, registration.task), return_when=asyncio.FIRST_COMPLETED
+                )
+                if registration.task in done:
+                    await registration.task
+                return await work
             return await _invoke(module.run)
         finally:
             try:
+                if work:
+                    if not work.done():
+                        work.cancel()
+                    await asyncio.gather(work, return_exceptions=True)
+                if registration:
+                    registration.draining = True
+                    try:
+                        await registration.renew()
+                    except Exception:
+                        logging.getLogger(__name__).warning(
+                            "Could not mark module draining", exc_info=True
+                        )
                 await _invoke(module.on_unloaded)
             finally:
-                scope.active = False
-                _scope.reset(token_context)
+                try:
+                    if registration:
+                        await registration.close()
+                finally:
+                    scope.active = False
+                    _scope.reset(token_context)

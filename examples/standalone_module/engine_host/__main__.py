@@ -21,7 +21,11 @@ engine = Engine(
             "api": {},
             "global_config": {"ai_mode": "cloud", "skip_ontology_loading": True},
             "modules": [{"module": "engine_host", "enabled": True}],
-            "nats": {"nats_url": url, "jwt_secret": os.environ["DEMO_SIGNING_KEY"]},
+            "nats": {
+                "nats_url": url,
+                "jwt_secret": os.environ["DEMO_SIGNING_KEY"],
+                "discovery": {"lease_seconds": 2},
+            },
             "services": {
                 "secret": {
                     "secret_adapters": [
