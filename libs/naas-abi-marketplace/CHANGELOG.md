@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.53.0 (2026-09-23)
+
+### Features
+
+- **x_proxy**: Add envelope_paths_in_dataset bulk lookup and recent tweets file filtering
+  ([`b466ef4`](https://github.com/jupyter-naas/abi/commit/b466ef4fa3210cf66ff82d8118d54ba5050a6a0e))
+
+
 ## v3.52.0 (2026-09-22)
 
 ### Features
