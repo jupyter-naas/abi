@@ -10,6 +10,9 @@ from naas_abi_core.services.vector_store.adapters.QdrantAdapter import QdrantAda
 from naas_abi_core.services.vector_store.adapters.QdrantInMemoryAdapter import (
     QdrantInMemoryAdapter,
 )
+from naas_abi_core.services.vector_store.adapters.SqliteVecAdapter import (
+    SqliteVecAdapter,
+)
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 from qdrant_client import QdrantClient
 
@@ -22,14 +25,16 @@ def _production_qdrant() -> QdrantAdapter:
     return adapter
 
 
-@pytest.fixture(params=["qdrant_in_memory", "qdrant"])
-def vector_store(request):
-    adapter = (
-        QdrantInMemoryAdapter(storage_path=":memory:")
-        if request.param == "qdrant_in_memory"
-        else _production_qdrant()
-    )
-    service = VectorStoreService(adapter=adapter)
+@pytest.fixture(params=["qdrant_in_memory", "qdrant", "sqlite_vec"])
+def vector_store(request, tmp_path):
+    adapters = {
+        "qdrant_in_memory": lambda: QdrantInMemoryAdapter(storage_path=":memory:"),
+        "qdrant": _production_qdrant,
+        "sqlite_vec": lambda: SqliteVecAdapter(
+            persistence_path=str(tmp_path / "vectors.sqlite3")
+        ),
+    }
+    service = VectorStoreService(adapter=adapters[request.param]())
     yield service
     service.close()
 
@@ -95,3 +100,45 @@ def test_tool_ids_are_stored_as_valid_point_ids_on_the_server_adapter():
     assert hit.id == "acme.github/create_issue@1"
     index.delete(["acme.github/create_issue@1"])
     assert index.size() == 0
+
+
+def test_min_score_keeps_an_exact_match_on_every_backend(vector_store):
+    """Registry-level: min_score is a similarity threshold whatever the store."""
+    from naas_abi_core.services.tool_registry.tests.concept_embeddings import (
+        CountingConceptEmbedder,
+    )
+    from naas_abi_core.services.tool_registry.ToolRegistryPort import (
+        PublishedTool,
+        ToolDefinition,
+    )
+    from naas_abi_core.services.tool_registry.ToolRegistryService import (
+        ToolRegistryService,
+    )
+
+    class _Binding:
+        default_config: dict = {}
+
+        def create(self, context, config):
+            return object()
+
+    registry = ToolRegistryService(
+        embedder=CountingConceptEmbedder(),
+        index=VectorStoreToolIndexAdapter(vector_store, collection_prefix="tools"),
+    )
+    registry.publish(
+        "acme.weather",
+        [
+            PublishedTool(
+                definition=ToolDefinition(
+                    namespace="acme.weather",
+                    name="get_forecast",
+                    description="Get the weather forecast.",
+                    module="acme.weather",
+                ),
+                binding=_Binding(),
+            )
+        ],
+    )
+    results = registry.search_tools("weather forecast", min_score=0.5)
+    assert [r.name for r in results] == ["get_forecast"]
+    assert results[0].score > 0.9
