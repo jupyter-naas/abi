@@ -71,6 +71,9 @@ definitions by cosine similarity.
   `IToolEmbedderPort`. **Index** is an `IToolIndexPort`: in process memory by
   default, or the engine's `VectorStoreService` when one is loaded
   (`index: auto | memory | vector_store`). The registry owns the index.
+  Tool ids are not valid point ids on every backend (a Qdrant server accepts
+  only UUIDs and integers), so the vector-store index stores each entry under
+  a UUID derived from the tool id and keeps the id in the entry's metadata.
 - **Embedded text** is the name split into words, the description, the
   parameter names and descriptions, the tags and the last segment of the
   module path (`github`, not the `naas_abi_marketplace.applications.` prefix
@@ -136,8 +139,17 @@ with `search_capabilities`, `enable_capability`, `disable_capability` and
   the tool set the step started with, so a call issued alongside its own
   `disable_capability` completes. The next model call no longer sees the
   tool, and a later call to it gets an explicit "not available" message.
+- **Batches**: the calls of one step all receive the state the step started
+  with, so each enable or disable is validated against that state plus the
+  changes issued before it in the same step. Simultaneous enables cannot
+  exceed `max_enabled` or claim one model-facing name.
 - **Authorization**: checked on enable (`ENABLE`) and again whenever the tool
   is bound or dispatched (`EXECUTE`), for the caller of the current request.
+  The agent's current allow-list is applied at the same points, so narrowing
+  it revokes selections persisted in existing conversations.
+- **Binding cache**: bound models are cached by what the model is shown (name,
+  description, argument schema), so switching versions or republishing a tool
+  with a new schema rebinds it.
 
 ### 5. Contracts
 

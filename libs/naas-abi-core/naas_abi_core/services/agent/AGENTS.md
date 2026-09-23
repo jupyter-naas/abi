@@ -97,7 +97,9 @@ checkpointed state key `ABIAgentState.enabled_capabilities` (per agent name,
 merged by `merge_enabled_capabilities`), so it is scoped to one conversation
 and survives agent reconstruction. Changes apply from the next graph step:
 calls already issued in a step run against the tools the step started with.
-Access is checked on enable and again on every bind and dispatch.
+Enables and disables of one step are validated together (limit, name
+collisions). Access and the current allow list are checked on enable and again
+on every bind and dispatch.
 
 Tools that declare `state: Annotated[dict, InjectedState]` receive the graph
 state from `call_tools` (inside the call's arguments).
