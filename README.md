@@ -32,26 +32,18 @@ It also covers the full stack from ingestion to UI, so you are not stitching tog
 
 ## Quick Start
 
-### Prerequisites
-
-- Python 3.12+, Git, [uv](https://astral.sh/uv) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- Node.js 18+ and [pnpm](https://pnpm.io/installation) 8.15+ (`npm install -g pnpm`) — for the Nexus web app; required by `abi dev up`, not by the Docker stack
-- [Docker Desktop](https://www.docker.com/products/docker-desktop) (8GB+ RAM for full stack)
-- LLM API keys: any OpenAI-compatible provider (OpenAI, OpenRouter, or equivalent)
-
-### Get started
+Like React/Next.js: you don't clone the framework to start an app, you scaffold one. Cloning or forking this repo is for contributing to ABI itself; it won't give you a running product. To build with ABI, create a new project with the CLI:
 
 ```bash
-uv tool install naas-abi-cli --force --upgrade --with-executables-from naas-abi-core
-
-abi new project my_ai   # replace "my_ai" with your project name
-cd my_ai
-abi dev up
+# once: curl -LsSf https://astral.sh/uv/install.sh | sh
+uvx --from naas-abi-cli abi new project my_ai --start
 ```
+
+Scaffolds `my_ai/`, installs deps, starts the local runtime, and prints the Web UI URL + login (ports are per-project). Needs [uv](https://astral.sh/uv), Node.js 18+ / [pnpm](https://pnpm.io/installation) 8.15+ for the UI, and an OpenAI-compatible API key.
 
 ### Web UI
 
-The main interface. Chat with Abi, switch agents, manage your workspace, and access your knowledge graph. Open [http://localhost:3042](http://localhost:3042) and log in with `admin@example.com` / `Admin1234!`.
+Chat with Abi, switch agents, manage your workspace, access the knowledge graph. Open the printed **nexus-web** URL; login defaults to `admin@example.com` / `admin`.
 
 <div align="center">
   <img src="docs/site/static/abi/Screenshot_Local_WebUI.png" alt="ABI web UI" width="800">
@@ -59,7 +51,7 @@ The main interface. Chat with Abi, switch agents, manage your workspace, and acc
 
 ### API
 
-Every agent is exposed as a REST endpoint. Useful for integrating ABI into your own tools, triggering agents from scripts, or building on top of the platform. Explore the full reference at [http://localhost:9879/docs](http://localhost:9879/docs).
+Every agent is a REST endpoint. Docs at the printed **api** URL (`/docs`).
 
 <div align="center">
   <img src="docs/site/static/abi/Screenshot_Local_API.png" alt="ABI API docs" width="800">
@@ -67,24 +59,11 @@ Every agent is exposed as a REST endpoint. Useful for integrating ABI into your 
 
 ### CLI
 
-Run `abi chat` to talk to Abi directly from your terminal. No browser needed.
+`abi chat` talks to Abi in the terminal, with no browser. Full `abi dev` / scaffold commands live under [Working on ABI](#working-on-abi-development).
 
 <div align="center">
   <img src="docs/site/static/abi/Screenshot_Local_CLI.png" alt="ABI CLI" width="800">
 </div>
-
-```bash
-abi start            # Start the full stack and open the browser
-abi stop             # Stop all running services
-abi chat             # Chat with Abi in the terminal
-abi logs             # Tail logs from a service (e.g. abi logs abi)
-abi stack status     # Check health of all running containers
-abi config validate  # Check your config.yaml for errors
-abi new module       # Scaffold a new module
-abi new agent        # Scaffold a new agent
-abi new workflow     # Scaffold a new workflow
-```
-
 ## How It Works
 
 Everything in ABI is organized around **modules**. A module models a domain, connects to its data sources, and exposes intelligent capabilities on top. You enable one with a single line in `config.yaml`.
@@ -148,7 +127,9 @@ abi/
 
 ## Working on ABI (development)
 
-`abi dev` is a no-docker dev runtime for hacking on the project itself. It spawns API, Dagster, Nexus web, and a bundled Oxigraph SPARQL server as native processes, sharing one terminal. Parallel branches (git worktrees) get their own deterministic ports automatically — no collisions, no `docker compose` shuffling.
+For contributors hacking the framework. Users building on ABI: stay on [Quick Start](#quick-start). You don't need this clone.
+
+`abi dev` is a no-docker dev runtime for hacking on the project itself. It spawns API, Dagster, Nexus web, and a bundled Oxigraph SPARQL server as native processes, sharing one terminal. Parallel branches (git worktrees) get their own deterministic ports automatically. No collisions, no `docker compose` shuffling.
 
 ### One-time setup
 

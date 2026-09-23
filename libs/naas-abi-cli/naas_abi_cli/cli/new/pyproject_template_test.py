@@ -1,11 +1,12 @@
 """Render checks for the generated project's ``pyproject.toml``.
 
-A scaffolded project resolves the framework from the ``.abi`` submodule rather
-than PyPI, so it tracks the checked-out source instead of the last published
-release. That only works when ``.abi/libs`` is actually there: ``git`` may be
-missing, the clone may fail, or the user may pass ``--without-abi-submodule``.
-Emitting the path sources in those cases points uv at directories that do not
-exist and breaks project creation outright, so the block is conditional.
+When ``--with-abi-submodule`` succeeds, the scaffold resolves the framework
+from ``.abi/libs`` so it tracks checked-out source instead of the last
+published release. That only works when ``.abi/libs`` is actually there:
+``git`` may be missing, the clone may fail, or hello-world may skip the
+submodule entirely (the default — resolve from PyPI). Emitting path sources
+in those cases points uv at directories that do not exist and breaks project
+creation outright, so the block is conditional.
 """
 
 from __future__ import annotations
