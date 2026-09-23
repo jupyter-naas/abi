@@ -14,6 +14,7 @@ from naas_abi_sdk.document import DocumentClient
 from naas_abi_sdk.email import EmailClient
 from naas_abi_sdk.event import EventClient
 from naas_abi_sdk.keyvalue import KeyvalueClient
+from naas_abi_sdk.model_registry import ModelRegistryClient
 from naas_abi_sdk.object_storage import ObjectStorageClient
 from naas_abi_sdk.secret import SecretClient
 from naas_abi_sdk.source_control import SourceControlClient
@@ -41,6 +42,7 @@ class ABIClient:
         self.email = EmailClient(self._transport)
         self.event = EventClient(self._transport)
         self.keyvalue = KeyvalueClient(self._transport)
+        self.model_registry = ModelRegistryClient(self._transport)
         self.object_storage = ObjectStorageClient(self._transport)
         self.secret = SecretClient(self._transport)
         self.source_control = SourceControlClient(self._transport)

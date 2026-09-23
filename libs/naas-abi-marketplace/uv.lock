@@ -3425,6 +3425,7 @@ requires-dist = [
     { name = "naas-abi-core", extras = ["sqlite-vec"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["ssh"], marker = "extra == 'all'" },
     { name = "naas-abi-proto", marker = "extra == 'nats'", editable = "../naas-abi-proto" },
+    { name = "naas-abi-sdk", extras = ["models"], marker = "extra == 'nats'", editable = "../naas-abi-sdk" },
     { name = "nats-py", marker = "extra == 'nats'", specifier = ">=2.16.0" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "pandas-stubs", specifier = ">=2.3.2.250926" },

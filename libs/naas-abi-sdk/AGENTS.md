@@ -18,3 +18,9 @@ conversation claims. Never infer execution ownership from discovery leases or
 replay an orphaned run. Core Agent/IntentAgent compatibility belongs in core's
 RemoteAgentAdapter; only agent_tools imports optional LangChain dependencies.
 Agent streaming preserves string event/data pairs and sequence-based replay.
+
+Model proxies/codec import optional LangChain through [models]. Never import them
+from package __init__ or the base service catalog. Registry facades lazy-load
+proxies on model lookup. ModelConnection keeps NATS I/O on the resolving loop;
+sync callers must use another thread. Stream IDs are caller-bound, ephemeral,
+sequence-checked handles; never retry inference or cursor reads automatically.

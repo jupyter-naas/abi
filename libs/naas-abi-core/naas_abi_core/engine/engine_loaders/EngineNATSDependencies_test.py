@@ -42,8 +42,9 @@ def test_domains_receive_only_network_dependencies_and_no_local_model_objects(tm
         assert dependencies.kv is not local_kv
         assert isinstance(dependencies.object_storage.adapter, NatsRPCClient)
         assert isinstance(dependencies.kv.adapter, NatsRPCClient)
-        assert not dependencies.model_registry_available()
-        assert wiring.module_services.model_registry is owners.model_registry
+        assert dependencies.model_registry_available()
+        assert wiring.module_services.model_registry is not owners.model_registry
+        assert wiring.module_services.model_registry.owner is owners.model_registry
         assert [tier for tier, _ in dependencies.cache.adapters] == ["hot", "cold"]
         assert all(
             isinstance(adapter, NatsRPCClient)

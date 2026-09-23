@@ -461,6 +461,9 @@ agents = [
 langgraph = [
     { name = "langgraph-checkpoint" },
 ]
+models = [
+    { name = "langchain-core" },
+]
 rdf = [
     { name = "rdflib" },
 ]
@@ -474,12 +477,13 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "langchain-core", marker = "extra == 'agents'", specifier = ">=1,<2" },
+    { name = "langchain-core", marker = "extra == 'models'", specifier = ">=0.3.78,<2" },
     { name = "langgraph-checkpoint", marker = "extra == 'langgraph'", specifier = ">=3.0.1,<4" },
     { name = "naas-abi-proto", editable = "../naas-abi-proto" },
     { name = "nats-py", specifier = ">=2.16.0,<3" },
     { name = "rdflib", marker = "extra == 'rdf'", specifier = ">=7,<8" },
 ]
-provides-extras = ["agents", "rdf", "langgraph"]
+provides-extras = ["models", "agents", "rdf", "langgraph"]
 
 [package.metadata.requires-dev]
 dev = [

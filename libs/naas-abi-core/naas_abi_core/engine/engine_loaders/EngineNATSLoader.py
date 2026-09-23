@@ -25,12 +25,8 @@ also has its own re-exposure guard shape (see ``expose_services`` below):
 any configured adapter is itself a NATS client, preventing
 recursive self-routing on the globally shared secret subjects.
 
-Deliberately NOT exposed here, on purpose (see the RFC / dev log for the
-full reasoning, not an oversight):
-- ``model_registry`` -- has no secondary-adapter-port/``Literal[...,"custom"]``
-  slot to hang a NATS client on at all, and its ``get*`` methods return live
-  LangChain client objects bound to local credentials/HTTP sessions --
-  fundamentally process-local, not serializable.
+Model registry endpoints resolve metadata and execute inference at the owner;
+clients receive LangChain proxies instead of serialized live model objects.
 """
 
 from __future__ import annotations
@@ -371,5 +367,16 @@ class EngineNATSLoader:
             )
             nats_runtime.run_coro(primary_document.start(nc))
             started.append(primary_document)
+
+        if services.model_registry_available():
+            from naas_abi_core.services.model_registry.adapters.primary.model_registry_nats import (
+                ModelRegistryNATS,
+            )
+
+            primary_models = ModelRegistryNATS(
+                services.model_registry, nats_config.jwt_secret
+            )
+            nats_runtime.run_coro(primary_models.start(nc))
+            started.append(primary_models)
 
         return started

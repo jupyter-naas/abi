@@ -17,7 +17,7 @@ them into a fresh worker virtualenv, and starts a broker and engine, then isolat
 4. `worker.py`, exercising every low-level protobuf endpoint.
 
 The worker runs with Python isolation enabled and asserts ABI core is not installed.
-It exercises 110 RPC endpoints across 13 services, plus publish, publish_many, subscribe,
+It exercises 117 RPC endpoints across 14 services, plus publish, publish_many, subscribe,
 enqueue, and dequeue against the engine. Object storage includes create, read,
 list, overwrite/update, metadata, recursive listing, delete, and listing after
 removal. Other mutable services have equivalent state checks; append-only logs
@@ -66,7 +66,7 @@ See the SDK README for the migration pattern and its limits. This preserves ABI
 module structure, not automatic portability of framework-specific components.
 
 Document service CRUD, version checks, collection operations, queries and count
-are included in the SDK-only worker (110 RPC operations total). The worker still
+are included in the SDK-only worker (117 RPC operations total). The worker still
 installs only four packages; LangGraph is an optional SDK extra.
 
 For the separate LangGraph persistence regression, with the development runtime,
@@ -98,3 +98,18 @@ status through the replacement provider. The base worker still has four packages
 instances with deterministic local model/embedding doubles. It verifies the
 compatibility adapter, SSE format, invalid-token rejection and an async LangGraph
 parent invoking the remote agent as a tool. No external LLM credentials are used.
+
+### Remote model example
+
+`model_module.py` extends SDK BaseModule and declares only `model_registry`. It
+resolves a chat model and embeddings from the engine, invokes/streams through
+LangChain proxies, and records its distinct process ID. `make demo-sdk` runs it
+in a second core-free environment with the optional `[models]` dependencies.
+The engine hosts deterministic models, so no LLM API keys or external model
+servers are required. The raw worker also exercises all seven model RPCs,
+bringing service coverage to 117 endpoints across 14 services, plus the bus.
+
+`model_integration_test.py` additionally verifies actual core Agent/IntentAgent
+use, tool execution, streaming tool arguments, structured output, the core
+registry bridge, invalid tokens, caller-bound stream handles, expiry, cleanup,
+deadlines and sanitized provider errors over a real local NATS broker.

@@ -173,6 +173,7 @@ def _services(available: dict[str, object] | None = None) -> MagicMock:
         adapter = MagicMock() if value is True else value
         if adapter is not None:
             getattr(services, flag).adapter = adapter
+    services.model_registry_available.return_value = "model_registry" in available
     services.cache_available.return_value = False
     return services
 
@@ -369,3 +370,21 @@ def test_cache_exposes_cold_tier_and_skips_remote_proxy(monkeypatch, remote):
         assert len(started) == 1
         assert isinstance(started[0], CachePrimaryAdapterNATS)
         assert started[0]._adapter is adapter
+
+
+def test_expose_model_registry_owner(monkeypatch):
+    from naas_abi_core.services.model_registry.adapters.primary.model_registry_nats import (
+        ModelRegistryNATS,
+    )
+
+    config = SimpleNamespace(nats=NATSConfiguration(jwt_secret="x" * 32))
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_runtime.run_coro",
+        MagicMock(side_effect=lambda coro: coro.close()),
+    )
+    services = _services({"model_registry": True})
+    started = EngineNATSLoader(config).expose_services(services)
+    assert len(started) == 1
+    assert isinstance(started[0], ModelRegistryNATS)
+    assert started[0].registry is services.model_registry

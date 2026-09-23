@@ -70,6 +70,26 @@ signal.signal(signal.SIGTERM, lambda *_: stop.set())
 signal.signal(signal.SIGINT, lambda *_: stop.set())
 try:
     engine.load()
+    from langchain_core.embeddings import DeterministicFakeEmbedding
+    from langchain_core.language_models.fake_chat_models import FakeListChatModel
+    from naas_abi_core.models.Model import ChatModel, EmbeddingModel
+
+    engine.services.model_registry.register(
+        "demo-chat",
+        ChatModel(
+            model_id="fake",
+            provider="demo",
+            model=FakeListChatModel(responses=["remote model answer"]),
+        ),
+    )
+    engine.services.model_registry.register(
+        "demo-embedding",
+        EmbeddingModel(
+            model_id="fake-embedding",
+            provider="demo",
+            model=DeterministicFakeEmbedding(size=8),
+        ),
+    )
 
     import asyncio
     from concurrent.futures import ThreadPoolExecutor

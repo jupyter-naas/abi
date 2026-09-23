@@ -32,7 +32,7 @@ internal. Argument names and defaults follow the corresponding core methods wher
 the v1 contract supports them. No core classes are imported.
 
 Explicit protobuf access remains available through `engine.rpc` or the low-level
-`ABIClient`. Those clients cover all 110 v1 RPC endpoints in `catalog.py`.
+`ABIClient`. Those clients cover all 117 v1 RPC endpoints in `catalog.py`.
 Services: activity_log, cache, coding_environment, dataset, document, email, event,
 keyvalue, object_storage, secret, source_control, triple_store, vector_store.
 The bus retains its native publish/subscribe and enqueue/dequeue API, including
@@ -403,3 +403,58 @@ This forwards the caller's bearer token to the trusted provider for verification
 use broker TLS/ACLs. Stage 1 still lacks per-end-user/module grants, and document
 namespaces are not security boundaries. Caller identity guards invocation status
 and cancellation; declaration checks alone are not authorization.
+
+## Remote models
+
+Install `naas-abi-sdk[models]` to use models already registered by the engine's
+provider modules. The engine exposes its model registry automatically when
+its top-level NATS configuration is enabled. No additional model configuration
+or provider credentials are needed in the consumer.
+
+```python
+from naas_abi_sdk import BaseModule, ModuleDependencies
+
+class ABIModule(BaseModule):
+    dependencies = ModuleDependencies(services=("model_registry",))
+
+    async def run(self):
+        registry = self.engine.services.model_registry
+        registered = await registry.get_default_chat_model()
+        chat = registered.model  # LangChain BaseChatModel proxy
+        response = await chat.ainvoke("Explain this result")
+        print(response.content)
+        async for chunk in chat.astream("Explain it step by step"):
+            print(chunk.content, end="")
+
+        embedding = (await registry.get_default_embedding_model()).model
+        vector = await embedding.aembed_query("A document to index")
+        return vector
+```
+
+Configure `run_module(..., timeout=120)` for inference. Explicit model lookups use
+`await registry.get_chat_model(canonical_id, provider=None)` or
+`get_embedding_model(...)`; `get`, `list_models`, and `list_canonical_ids` are
+also available. Like core, lookups return a wrapper whose `.model` is the usable
+LangChain model. Pass `.model` to your agent. Core's NATS registry client returns
+core wrappers automatically for existing local agents.
+
+`chat.bind_tools([tool])` sends tool definitions; tool execution stays with your
+agent. Tool calls/results, streamed tool arguments, usage metadata and portable
+multimodal message content survive the boundary. Generic LangChain
+`with_structured_output(schema)` uses tool calling and parses locally. Provider
+support still determines which tools, formats and JSON generation options work.
+Python callbacks, credentials, live model objects, and non-JSON provider options
+cannot be sent. The proxy is not a provider-specific model subclass.
+
+Sync `invoke`, `stream`, `embed_query` and `embed_documents` are supported from
+worker threads while the module's event loop remains running. On that loop, use
+async methods; otherwise a sync call would deadlock. No inference call is replayed
+automatically. Streams are ephemeral, have bounded buffers and expire after
+30 seconds idle or 120 seconds generation time; each payload is at most 512 KiB.
+Closing a stream requests cancellation, which cannot guarantee that provider
+billing or synchronous work stops. Registry/model ownership stays with the
+configured engine; publishing models from SDK provider modules is future work.
+
+Runnable example: `examples/standalone_module/model_module.py`. `make demo-sdk`
+launches it in a separate environment containing LangChain, SDK and proto, with
+no ABI core installed. The base worker still verifies its four-package install.
