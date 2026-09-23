@@ -108,8 +108,8 @@ API_LANDING_HTML = """
                 justify-content: center;
                 height: 100vh;
                 margin: 0;
-                background-color: #000000;
-                color: white;
+                background-color: [BACKGROUND_COLOR];
+                color: [TEXT_COLOR];
             }
             .logo {
                 width: 200px;
@@ -131,11 +131,11 @@ API_LANDING_HTML = """
                 cursor: pointer;
                 text-decoration: none;
                 color: white;
-                background-color: #007bff;
-                transition: background-color 0.2s;
+                background-color: [PRIMARY_COLOR];
+                transition: opacity 0.2s;
             }
             a:hover {
-                background-color: #0056b3;
+                opacity: 0.85;
             }
         </style>
     </head>

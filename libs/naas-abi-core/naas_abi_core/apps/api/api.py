@@ -10,6 +10,7 @@ print(
 
 import html
 import os
+import re
 import subprocess
 from importlib.resources import files
 from typing import Annotated
@@ -295,19 +296,50 @@ def overridden_redoc():
     )
 
 
-def render_landing_html(title: str, description: str, logo: str, favicon: str) -> str:
-    """Fill the landing template. Config values are escaped; URLs are attribute-escaped."""
+_CSS_COLOR = re.compile(r"^(#[0-9a-fA-F]{3,8}|[a-zA-Z]{1,32})$")
+
+
+def css_color(value: str, default: str) -> str:
+    """Accept a hex code or a bare CSS colour name; anything else falls back.
+
+    Colours land inside a <style> block, so this is the whole allow-list.
+    """
+    return value if _CSS_COLOR.match(value or "") else default
+
+
+def render_landing_html(
+    title: str,
+    description: str,
+    logo: str,
+    favicon: str,
+    *,
+    background_color: str = "#000000",
+    text_color: str = "#FFFFFF",
+    primary_color: str = "#007BFF",
+) -> str:
+    """Fill the landing template. Text is HTML-escaped, URLs attribute-escaped, colours allow-listed."""
     return (
         API_LANDING_HTML.replace("[TITLE]", html.escape(title))
         .replace("[DESCRIPTION]", html.escape(description))
         .replace("[LOGO_URL]", html.escape(logo, quote=True))
         .replace("[FAVICON_URL]", html.escape(favicon, quote=True))
+        .replace("[BACKGROUND_COLOR]", css_color(background_color, "#000000"))
+        .replace("[TEXT_COLOR]", css_color(text_color, "#FFFFFF"))
+        .replace("[PRIMARY_COLOR]", css_color(primary_color, "#007BFF"))
     )
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def root():
-    return render_landing_html(TITLE, DESCRIPTION, logo_url, favicon_url)
+    return render_landing_html(
+        TITLE,
+        DESCRIPTION,
+        logo_url,
+        favicon_url,
+        background_color=api_runtime_configuration.background_color,
+        text_color=api_runtime_configuration.text_color,
+        primary_color=api_runtime_configuration.primary_color,
+    )
 
 
 def _load_runtime_routes():
