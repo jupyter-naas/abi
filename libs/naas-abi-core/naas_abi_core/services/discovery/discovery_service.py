@@ -310,3 +310,31 @@ class DiscoveryService:
             if len(records) > req.limit
             else "",
         )
+
+    async def authorize_agent(
+        self, req: pb.AuthorizeAgentRequest, owner: str
+    ) -> pb.AuthorizeAgentResponse:
+        state, _ = await self._read()
+        self._ready(state)
+        record = next(
+            (r for r in state.records if r.instance.instance_id == req.instance_id),
+            None,
+        )
+        if record is None:
+            raise DiscoveryError("LEASE_EXPIRED", "Provider registration expired")
+        self._authorize(record, req.lease_token, owner)
+        _require(
+            any(
+                a.name == req.agent_name and "agent.invoke.v1" in a.capabilities
+                for a in record.instance.descriptor.agents
+            ),
+            "AGENT_NOT_FOUND",
+            req.agent_name,
+        )
+        if req.new_invocation:
+            _require(
+                record.instance.status == "READY",
+                "MODULE_UNAVAILABLE",
+                "Provider is not ready",
+            )
+        return pb.AuthorizeAgentResponse()

@@ -455,6 +455,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+agents = [
+    { name = "langchain-core" },
+]
 langgraph = [
     { name = "langgraph-checkpoint" },
 ]
@@ -470,12 +473,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "langchain-core", marker = "extra == 'agents'", specifier = ">=1,<2" },
     { name = "langgraph-checkpoint", marker = "extra == 'langgraph'", specifier = ">=3.0.1,<4" },
     { name = "naas-abi-proto", editable = "../naas-abi-proto" },
     { name = "nats-py", specifier = ">=2.16.0,<3" },
     { name = "rdflib", marker = "extra == 'rdf'", specifier = ">=7,<8" },
 ]
-provides-extras = ["rdf", "langgraph"]
+provides-extras = ["agents", "rdf", "langgraph"]
 
 [package.metadata.requires-dev]
 dev = [

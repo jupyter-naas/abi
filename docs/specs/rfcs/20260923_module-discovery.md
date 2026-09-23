@@ -186,3 +186,14 @@ ownership, cancellation and execution fencing remain in the AgentProxy follow-up
   is exposed in this version. Engine-hosted module registration is still future work.
 - Validation currently executes in the application service; Protovalidate support
   remains absent from the existing proto tooling and is not claimed by these tests.
+
+
+## AgentProxy follow-up
+
+The invocation slice now resolves `get_agent(name)` to an async AgentProxy.
+Invocable descriptors declare `agent.invoke.v1`; the runner requires an installed
+handler before READY. Subjects are derived from the validated project, instance
+and agent identity rather than accepted as arbitrary descriptor redirects.
+Providers validate callers through authorize_agent using their own lease and issued
+token, so the signing secret stays in the engine. See the remote-agent proxy ADR
+for durable status, streaming, cancellation and conservative ownership boundaries.
