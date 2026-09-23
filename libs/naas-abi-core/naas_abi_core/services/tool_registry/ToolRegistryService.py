@@ -309,10 +309,11 @@ class ToolRegistryService(IToolRegistry):
         results: list[ToolSearchResult] = []
         seen: set[str] = set()
         stale: list[str] = []
-        total = max(index.size(), 1)
         # Over-fetch so hits the caller may not see don't starve the limit;
-        # widen until the limit is filled or the index is exhausted.
-        fetch = min(total, max(limit * 4, limit + 10))
+        # widen until the limit is filled or a short page shows the index is
+        # exhausted. ``index.size()`` is not trusted here: some backends
+        # under-report it.
+        fetch = max(limit * 4, limit + 10)
         while True:
             hits = index.search(vector, limit=fetch)
             for hit in hits:
@@ -342,9 +343,9 @@ class ToolRegistryService(IToolRegistry):
                         definition=tool.definition,
                     )
                 )
-            if len(results) >= limit or fetch >= total or len(hits) < fetch:
+            if len(results) >= limit or len(hits) < fetch:
                 break
-            fetch = min(total, fetch * 2)
+            fetch *= 2
 
         if stale:
             # Leftovers of a previous process sharing a persistent index.

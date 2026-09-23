@@ -29,7 +29,7 @@ tool_registry/
 │   ├── primary/LangChainToolPublisher.py      # ToolPublisher, StaticToolBinding, FactoryToolBinding
 │   └── secondary/
 │       ├── InMemoryToolIndexAdapter.py        # numpy cosine index (default)
-│       ├── VectorStoreToolIndexAdapter.py     # index in the engine's VectorStoreService
+│       ├── VectorStoreToolIndexAdapter.py     # index in the engine's VectorStoreService (UUID point ids)
 │       └── ModelRegistryEmbedderAdapter.py    # embeddings from the model registry
 └── tests/
     ├── tool_index__secondary_adapter__generic_test.py  # IToolIndexPort contract
@@ -70,7 +70,9 @@ Exceptions (all `ToolRegistryError`): `InvalidToolReferenceError`,
 - **Resolution** merges the binding's `default_config` (module-level values,
   never exposed) with the caller's config, checks the access policy, then
   required config, then builds. Binding failures become `ToolResolutionError`.
-- **Search** embeds the query, over-fetches from the index, drops hits the
+- **Search** embeds the query, over-fetches from the index (widening until
+  the limit is met or a short page shows the index is exhausted; it does not
+  trust `size()`), drops hits the
   caller may not discover and stale ids, and returns `limit` results sorted by
   cosine similarity. It never builds or grants a tool. No default score
   threshold: real-model margins are too narrow for one.
