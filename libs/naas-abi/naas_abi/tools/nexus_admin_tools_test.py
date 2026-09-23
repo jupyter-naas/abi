@@ -5,8 +5,9 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from naas_abi.tools import nexus_admin_tools as mod
 from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
+
+from naas_abi.tools import nexus_admin_tools as mod
 
 
 def _tools_by_name() -> dict[str, Any]:

@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from langchain_core.tools import BaseTool, tool
+
 from naas_abi.agents.feature.runtime import (
     guarded,
     jsonable,
@@ -37,13 +38,13 @@ def settings_tools() -> list[BaseTool]:
         user_id, workspace_id = ctx
 
         async def _run(db: Any) -> Any:
-            from naas_abi.tools.nexus_admin_tools import (
-                _organization_service,
-                _workspace_service,
-            )
             from naas_abi.apps.nexus.apps.api.app.core.config import settings
             from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
                 build_feature_flags,
+            )
+            from naas_abi.tools.nexus_admin_tools import (
+                _organization_service,
+                _workspace_service,
             )
 
             role = await require_member(db, user_id, workspace_id)

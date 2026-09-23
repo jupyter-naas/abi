@@ -6,12 +6,19 @@ import json
 from typing import Any
 
 from langchain_core.tools import BaseTool, tool
+from naas_abi_core.services.agent.context import (
+    agent_user_id,
+    note_sheets_write,
+    sheets_active_slug,
+    sheets_active_title,
+    sheets_brief,
+)
+
 from naas_abi.agents.sheets import resolve_workbook_title
 from naas_abi.agents.sheets.template_resolve import (
     qualify_sheets_template_id,
     resolve_sheets_template_id,
 )
-from naas_abi.tools import sheets_workbook_storage as store
 from naas_abi.apps.nexus.sheets.formulas import (
     calculate_workbook,
 )
@@ -20,13 +27,7 @@ from naas_abi.apps.nexus.sheets.html_io import (
     serialize_workbook_html,
 )
 from naas_abi.apps.nexus.sheets.model import SheetTab, SheetWorkbook
-from naas_abi_core.services.agent.context import (
-    agent_user_id,
-    note_sheets_write,
-    sheets_active_slug,
-    sheets_active_title,
-    sheets_brief,
-)
+from naas_abi.tools import sheets_workbook_storage as store
 
 
 def _load_model(slug: str) -> tuple[SheetWorkbook, str, str] | dict[str, Any]:

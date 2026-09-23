@@ -12,9 +12,10 @@ def test_workbook_paths_are_namespaced_under_sheets() -> None:
 
 
 def test_viewer_agent_cannot_persist(monkeypatch):
+    from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
+
     from naas_abi.agents.feature import runtime
     from naas_abi.tools import sheets_workbook_storage as store
-    from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
 
     user = agent_user_id.set("viewer")
     workspace = agent_workspace_id.set("ws-test")

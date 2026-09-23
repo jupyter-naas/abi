@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 from langchain_core.tools import BaseTool, tool
+
 from naas_abi.agents.feature.runtime import clip, guarded, jsonable, run, tool_context
 
 _FEATURE = "Search"

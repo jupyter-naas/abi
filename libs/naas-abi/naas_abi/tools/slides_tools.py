@@ -26,16 +26,6 @@ from collections import OrderedDict
 from typing import Any
 
 from langchain_core.tools import BaseTool, tool
-from naas_abi.agents.slides import (
-    derive_deck_title,
-    is_placeholder_deck_title,
-    note_slides_list,
-    note_slides_section_read,
-    reject_repeat_list_slides_sections,
-    reject_slides_section_read,
-    reject_unresearched_slides_write,
-    resolve_deck_title,
-)
 from naas_abi_core.services.agent.context import (
     agent_chat_id,
     agent_user_email,
@@ -53,6 +43,17 @@ from naas_abi_core.services.agent.tools.workspace_tools import _call as _sidecar
 from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNameConflictError,
     SourceControlError,
+)
+
+from naas_abi.agents.slides import (
+    derive_deck_title,
+    is_placeholder_deck_title,
+    note_slides_list,
+    note_slides_section_read,
+    reject_repeat_list_slides_sections,
+    reject_slides_section_read,
+    reject_unresearched_slides_write,
+    resolve_deck_title,
 )
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")

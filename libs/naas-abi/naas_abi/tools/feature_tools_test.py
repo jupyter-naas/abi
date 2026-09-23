@@ -3,9 +3,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
+
 from naas_abi.agents.feature.context import nexus_feature_context
 from naas_abi.tools import datasets_tools, files_tools, graph_tools, maps_tools
-from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
 
 
 @pytest.fixture(autouse=True)
@@ -174,10 +175,10 @@ def test_secret_listing_returns_names_only(monkeypatch) -> None:
 def test_member_list_marks_the_caller(monkeypatch) -> None:
     from datetime import UTC, datetime
 
-    from naas_abi.tools import nexus_admin_tools
     from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
         WorkspaceMemberRecord,
     )
+    from naas_abi.tools import nexus_admin_tools
 
     rows = [
         WorkspaceMemberRecord(

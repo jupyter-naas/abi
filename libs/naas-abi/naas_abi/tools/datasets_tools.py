@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any
 
 from langchain_core.tools import BaseTool, tool
+
 from naas_abi.agents.feature.context import active_feature_resource_id
 from naas_abi.agents.feature.runtime import (
     check_member,
@@ -53,15 +54,16 @@ def _split(dataset: str) -> tuple[str, str] | dict[str, str]:
 
 
 def _known_error(exc: Exception) -> dict[str, str] | None:
+    from naas_abi_core.services.dataset.DatasetPort import (
+        DatasetNotFoundError,
+        DatasetSnapshotNotFoundError,
+    )
+
     from naas_abi.apps.nexus.apps.api.app.services.datasets.datasets__schema import (
         DatasetQueryError,
         DatasetQueryTimeoutError,
         DatasetServiceUnavailableError,
         InvalidDatasetIdentifierError,
-    )
-    from naas_abi_core.services.dataset.DatasetPort import (
-        DatasetNotFoundError,
-        DatasetSnapshotNotFoundError,
     )
 
     known = (

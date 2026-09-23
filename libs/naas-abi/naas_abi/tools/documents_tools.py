@@ -26,6 +26,26 @@ from collections import OrderedDict
 from typing import Any
 
 from langchain_core.tools import BaseTool, tool
+from naas_abi_core.services.agent.context import (
+    agent_chat_id,
+    agent_user_email,
+    agent_user_id,
+    agent_user_name,
+    agent_workspace_id,
+    coder_workspace_base,
+    documents_active_mode,
+    documents_active_slug,
+    documents_active_title,
+    documents_brief,
+    documents_research_required,
+    note_documents_write,
+)
+from naas_abi_core.services.agent.tools.workspace_tools import _call as _sidecar_call
+from naas_abi_core.services.source_control.SourceControlPorts import (
+    BranchNameConflictError,
+    SourceControlError,
+)
+
 from naas_abi.agents.documents import (
     auto_document_title,
     derive_document_title,
@@ -46,25 +66,6 @@ from naas_abi.agents.documents import (
     resolve_document_title,
 )
 from naas_abi.tools.documents_html import DocumentHTML, template_fields
-from naas_abi_core.services.agent.context import (
-    agent_chat_id,
-    agent_user_email,
-    agent_user_id,
-    agent_user_name,
-    agent_workspace_id,
-    coder_workspace_base,
-    documents_active_mode,
-    documents_active_slug,
-    documents_active_title,
-    documents_brief,
-    documents_research_required,
-    note_documents_write,
-)
-from naas_abi_core.services.agent.tools.workspace_tools import _call as _sidecar_call
-from naas_abi_core.services.source_control.SourceControlPorts import (
-    BranchNameConflictError,
-    SourceControlError,
-)
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _BRANCH_PREFIX = "documents/"

@@ -6,10 +6,11 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from naas_abi.agents.feature.context import nexus_feature_context
-from naas_abi.tools import skills_tools as tools_module
-from naas_abi.apps.nexus.apps.api.app.services.skills.port import SkillRecord
 from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
+
+from naas_abi.agents.feature.context import nexus_feature_context
+from naas_abi.apps.nexus.apps.api.app.services.skills.port import SkillRecord
+from naas_abi.tools import skills_tools as tools_module
 
 NOW = datetime(2026, 9, 17, tzinfo=UTC)
 

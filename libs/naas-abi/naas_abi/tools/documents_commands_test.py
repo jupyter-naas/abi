@@ -300,11 +300,12 @@ def test_leftover_write_note_marks_incomplete() -> None:
 
 
 def test_leftover_write_note_after_one_fill_says_stop() -> None:
-    from naas_abi.agents.documents.policy import note_documents_slot_fill
     from naas_abi_core.services.agent.context import (
         documents_writes_completed,
         note_documents_write,
     )
+
+    from naas_abi.agents.documents.policy import note_documents_slot_fill
 
     token = documents_writes_completed.set([])
     try:

@@ -6,6 +6,24 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from naas_abi_core.services.agent.context import (
+    agent_user_id,
+    agent_workspace_id,
+    documents_active_slug,
+    documents_active_title,
+    documents_brief,
+    documents_research_queries,
+    documents_research_required,
+    documents_writes_completed,
+)
+from naas_abi_core.services.source_control.adapters.secondary.InMemoryAdapter import (
+    InMemoryAdapter,
+)
+from naas_abi_core.services.source_control.SourceControlPorts import RepoNotFoundError
+from naas_abi_core.services.source_control.SourceControlService import (
+    SourceControlService,
+)
+
 from naas_abi.tools.documents_tools import (
     _DATA_URL_RE,
     _REDACTED_PLACEHOLDER,
@@ -44,23 +62,6 @@ from naas_abi.tools.web_tools import (
     make_web_fetch_tool,
     make_web_search_tool,
     reset_web_tool_turn,
-)
-from naas_abi_core.services.agent.context import (
-    agent_user_id,
-    agent_workspace_id,
-    documents_active_slug,
-    documents_active_title,
-    documents_brief,
-    documents_research_queries,
-    documents_research_required,
-    documents_writes_completed,
-)
-from naas_abi_core.services.source_control.adapters.secondary.InMemoryAdapter import (
-    InMemoryAdapter,
-)
-from naas_abi_core.services.source_control.SourceControlPorts import RepoNotFoundError
-from naas_abi_core.services.source_control.SourceControlService import (
-    SourceControlService,
 )
 
 _SAMPLE = """<!DOCTYPE html>

@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Any
 
 from langchain_core.tools import BaseTool, tool
+
 from naas_abi.agents.feature.context import active_feature_resource_id
 from naas_abi.agents.feature.runtime import (
     check_member,
@@ -45,6 +46,7 @@ def _scoped(
 ) -> str | dict[str, str]:
     """Storage key for ``path`` inside the caller's drive, or an error."""
     from fastapi import HTTPException
+
     from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__FastAPI import (
         _resolve_my_drive_scoped_path,
         _resolve_workspace_scoped_path,

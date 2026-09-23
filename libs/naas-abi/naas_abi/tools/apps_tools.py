@@ -18,6 +18,8 @@ from typing import Any
 from urllib.parse import quote
 
 from langchain_core.tools import BaseTool, tool
+from naas_abi_core.services.agent.context import agent_workspace_id
+
 from naas_abi.agents.feature.context import active_feature_resource_id
 from naas_abi.tools.nexus_admin_tools import (
     _record_to_dict,
@@ -26,7 +28,6 @@ from naas_abi.tools.nexus_admin_tools import (
     _with_db,
     _workspace_service,
 )
-from naas_abi_core.services.agent.context import agent_workspace_id
 
 APP_RESOURCE_KIND = "app"
 _MAX_DESCRIPTION = 300

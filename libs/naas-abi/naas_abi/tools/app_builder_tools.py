@@ -17,6 +17,8 @@ import re
 from typing import Any
 
 from langchain_core.tools import BaseTool, tool
+from naas_abi_core.services.agent.context import agent_workspace_id
+
 from naas_abi.agents.feature.context import (
     active_feature_errors,
     active_feature_resource_id,
@@ -27,7 +29,6 @@ from naas_abi.tools.nexus_admin_tools import (
     _with_db,
     _workspace_service,
 )
-from naas_abi_core.services.agent.context import agent_workspace_id
 
 APP_PROJECT_RESOURCE_KIND = "app_project"
 # Tools that change a project. The web mirrors this list
@@ -69,6 +70,8 @@ def _caller() -> tuple[str, str, Any] | dict[str, str]:
         }
 
     async def _check(db: Any) -> Any:
+        from sqlalchemy import select
+
         from naas_abi.apps.nexus.apps.api.app.models import UserModel
         from naas_abi.apps.nexus.apps.api.app.services.apps.projects.port import (
             AppAuthor,
@@ -76,7 +79,6 @@ def _caller() -> tuple[str, str, Any] | dict[str, str]:
         from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
             WorkspacePermissionError,
         )
-        from sqlalchemy import select
 
         try:
             await _workspace_service(db).require_workspace_access(

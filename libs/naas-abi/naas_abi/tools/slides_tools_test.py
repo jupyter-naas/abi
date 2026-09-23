@@ -5,6 +5,23 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from naas_abi_core.services.agent.context import (
+    agent_user_id,
+    agent_workspace_id,
+    slides_active_slug,
+    slides_active_title,
+    slides_brief,
+    slides_research_queries,
+    slides_research_required,
+)
+from naas_abi_core.services.source_control.adapters.secondary.InMemoryAdapter import (
+    InMemoryAdapter,
+)
+from naas_abi_core.services.source_control.SourceControlPorts import RepoNotFoundError
+from naas_abi_core.services.source_control.SourceControlService import (
+    SourceControlService,
+)
+
 from naas_abi.tools.slides_tools import (
     _DATA_URL_RE,
     _REDACTED_PLACEHOLDER,
@@ -33,22 +50,6 @@ from naas_abi.tools.slides_tools import (
     _split_sections,
     _view_for_llm,
     slides_tools,
-)
-from naas_abi_core.services.agent.context import (
-    agent_user_id,
-    agent_workspace_id,
-    slides_active_slug,
-    slides_active_title,
-    slides_brief,
-    slides_research_queries,
-    slides_research_required,
-)
-from naas_abi_core.services.source_control.adapters.secondary.InMemoryAdapter import (
-    InMemoryAdapter,
-)
-from naas_abi_core.services.source_control.SourceControlPorts import RepoNotFoundError
-from naas_abi_core.services.source_control.SourceControlService import (
-    SourceControlService,
 )
 
 _SAMPLE = """<!DOCTYPE html>

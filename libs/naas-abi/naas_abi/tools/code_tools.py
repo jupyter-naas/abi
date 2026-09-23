@@ -13,12 +13,13 @@ from __future__ import annotations
 from typing import Any
 
 from langchain_core.tools import BaseTool, tool
-from naas_abi.agents.feature.context import active_feature_resource_id
-from naas_abi.agents.feature.runtime import check_member, clip, guarded, tool_context
 from naas_abi_core.services.agent.context import (
     coding_active_branch,
     coding_active_repo,
 )
+
+from naas_abi.agents.feature.context import active_feature_resource_id
+from naas_abi.agents.feature.runtime import check_member, clip, guarded, tool_context
 
 REPO_RESOURCE_KIND = "repo"
 _FEATURE = "Code"

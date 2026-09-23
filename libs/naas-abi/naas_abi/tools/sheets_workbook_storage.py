@@ -12,14 +12,6 @@ import unicodedata
 from collections import OrderedDict
 from typing import Any
 
-from naas_abi.agents.sheets import (
-    derive_workbook_title,
-    is_placeholder_workbook_title,
-)
-from naas_abi.apps.nexus.sheets.html_io import (
-    parse_workbook_html,
-    serialize_workbook_html,
-)
 from naas_abi_core.services.agent.context import (
     agent_chat_id,
     agent_user_email,
@@ -35,6 +27,15 @@ from naas_abi_core.services.agent.tools.workspace_tools import _call as _sidecar
 from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNameConflictError,
     SourceControlError,
+)
+
+from naas_abi.agents.sheets import (
+    derive_workbook_title,
+    is_placeholder_workbook_title,
+)
+from naas_abi.apps.nexus.sheets.html_io import (
+    parse_workbook_html,
+    serialize_workbook_html,
 )
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")

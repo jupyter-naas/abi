@@ -5,18 +5,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from naas_abi.agents.feature.context import bind_feature_context
-from naas_abi.tools import app_builder_tools as tools_module
-from naas_abi.apps.nexus.apps.api.app.services.apps.projects.adapters.secondary.object_storage import (
-    AppDraftStoreObjectStorage,
-)
-from naas_abi.apps.nexus.apps.api.app.services.apps.projects.adapters.secondary.source_control import (
-    AppProjectRepositoryGit,
-)
-from naas_abi.apps.nexus.apps.api.app.services.apps.projects.port import AppAuthor
-from naas_abi.apps.nexus.apps.api.app.services.apps.projects.service import (
-    AppProjectsService,
-)
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
     ObjectStorageSecondaryAdapterFS,
 )
@@ -29,6 +17,19 @@ from naas_abi_core.services.source_control.adapters.secondary.InMemoryAdapter im
 from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
 )
+
+from naas_abi.agents.feature.context import bind_feature_context
+from naas_abi.apps.nexus.apps.api.app.services.apps.projects.adapters.secondary.object_storage import (
+    AppDraftStoreObjectStorage,
+)
+from naas_abi.apps.nexus.apps.api.app.services.apps.projects.adapters.secondary.source_control import (
+    AppProjectRepositoryGit,
+)
+from naas_abi.apps.nexus.apps.api.app.services.apps.projects.port import AppAuthor
+from naas_abi.apps.nexus.apps.api.app.services.apps.projects.service import (
+    AppProjectsService,
+)
+from naas_abi.tools import app_builder_tools as tools_module
 
 WS = "ws-1"
 
