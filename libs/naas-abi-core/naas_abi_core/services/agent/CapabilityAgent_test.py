@@ -624,3 +624,88 @@ def test_republishing_a_tool_with_a_new_schema_rebinds_it(registry):
     republished.publish_to(registry)
     agent.invoke("look it up again")
     assert recorder.bound_args[-1]["lookup_version"] == ["record_id"]
+
+
+dotted_calls: list[str] = []
+
+
+@tool("lookup.record")
+def dotted_lookup(record_id: str) -> str:
+    """Look a record up by id.
+
+    Args:
+        record_id: The record id.
+    """
+    dotted_calls.append(record_id)
+    return f"record {record_id}"
+
+
+def test_a_dynamic_tool_is_bound_under_its_normalised_name(registry):
+    dotted_calls.clear()
+    naming = ToolPublisher("acme.naming")
+    naming.add_tool(dotted_lookup)
+    naming.publish_to(registry)
+    agent, recorder = _agent(
+        registry,
+        [
+            _call(
+                "enable_capability", {"tool_id": "acme.naming/lookup_record@1"}, "e1"
+            ),
+            _call("lookup_record", {"record_id": "42"}, "r1"),
+            AIMessage(content="ok"),
+        ],
+    )
+    agent.invoke("look up record 42")
+
+    assert "lookup_record" in recorder.bound[1]
+    assert "lookup.record" not in recorder.bound[1]
+    assert dotted_calls == ["42"]
+    # The registry's shared instance keeps its own name.
+    assert dotted_lookup.name == "lookup.record"
+
+
+def test_a_restored_capability_yields_to_a_static_tool_of_the_same_name(registry):
+    memory = MemorySaver()
+    first, _ = _agent(
+        registry,
+        [
+            _call("enable_capability", {"tool_id": CREATE_ISSUE}, "e1"),
+            AIMessage(content="ok"),
+        ],
+        memory=memory,
+    )
+    first.invoke("enable issues")
+
+    @tool("create_issue")
+    def static_create_issue(repo_name: str, title: str) -> str:
+        """The agent's own issue tool, added after the selection was made.
+
+        Args:
+            repo_name: Full repository name.
+            title: Title of the issue.
+        """
+        return "static issue"
+
+    # Same conversation, rebuilt with a static tool claiming the same name.
+    recorder = ScriptRecorder(
+        [
+            _call("create_issue", {"repo_name": "o/r", "title": "t"}, "c1"),
+            AIMessage(content="done"),
+        ]
+    )
+    second = CapabilityAgent(
+        name="capability_agent",
+        description="Finds and enables the tools it needs",
+        chat_model=ScriptedChatModel(recorder=recorder),
+        tool_registry=registry,
+        tools=[lookup, static_create_issue],
+        memory=memory,
+        state=AgentSharedState(thread_id="conversation-1"),
+        configuration=AgentConfiguration(system_prompt="You are under test."),
+        enable_default_tools=False,
+    )
+    second.invoke("file it")
+
+    assert recorder.bound[0].count("create_issue") == 1
+    assert _tool_messages(recorder)[-1].content == "static issue"
+    assert issue_calls == []

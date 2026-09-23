@@ -221,6 +221,8 @@ class CapabilityAgent(Agent):
 
         The allow list is applied here too, not only when enabling, so
         narrowing it revokes selections persisted in existing conversations.
+        A restored tool whose name a static tool now owns is left out, and
+        tools are bound under the normalised name dispatch uses.
         """
         context = self._context()
         resolved: dict[str, BaseTool] = {}
@@ -248,12 +250,25 @@ class CapabilityAgent(Agent):
                 )
                 continue
             name = Agent.validate_name(built.name)
+            if name in self._tools_by_name:
+                # Checked on enable, but a restored selection can meet a
+                # static tool added since. Dispatch prefers the static tool,
+                # so binding matches it.
+                logger.warning(
+                    f"Agent '{self.name}': enabled tool '{tool_id}' is shadowed by "
+                    f"the agent's own tool `{name}` and is not bound."
+                )
+                continue
             if name in resolved:
                 logger.error(
                     f"Agent '{self.name}': enabled tool '{tool_id}' shares the name "
                     f"`{name}` with another enabled tool; only the first is bound."
                 )
                 continue
+            if built.name != name:
+                # Bind under the normalised name dispatch looks up, on a copy:
+                # the registry's instance is shared with other agents.
+                built = built.model_copy(update={"name": name})
             resolved[name] = built
         return resolved
 

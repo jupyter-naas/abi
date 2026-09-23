@@ -74,6 +74,9 @@ definitions by cosine similarity.
   Tool ids are not valid point ids on every backend (a Qdrant server accepts
   only UUIDs and integers), so the vector-store index stores each entry under
   a UUID derived from the tool id and keeps the id in the entry's metadata.
+  Scores are cosine similarities on every backend; `SqliteVecAdapter` now
+  converts sqlite-vec's cosine distance so `min_score` means the same thing
+  on SQLite and Qdrant.
 - **Embedded text** is the name split into words, the description, the
   parameter names and descriptions, the tags and the last segment of the
   module path (`github`, not the `naas_abi_marketplace.applications.` prefix
@@ -146,7 +149,9 @@ with `search_capabilities`, `enable_capability`, `disable_capability` and
 - **Authorization**: checked on enable (`ENABLE`) and again whenever the tool
   is bound or dispatched (`EXECUTE`), for the caller of the current request.
   The agent's current allow-list is applied at the same points, so narrowing
-  it revokes selections persisted in existing conversations.
+  it revokes selections persisted in existing conversations. A restored
+  selection whose name a static tool now owns is not bound (dispatch prefers
+  the static tool), and dynamic tools are bound under their normalised name.
 - **Binding cache**: bound models are cached by what the model is shown (name,
   description, argument schema), so switching versions or republishing a tool
   with a new schema rebinds it.
