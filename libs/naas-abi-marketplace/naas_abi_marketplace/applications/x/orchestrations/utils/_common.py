@@ -201,6 +201,32 @@ def search_envelope_ingested(
     return bool(rows)
 
 
+def envelope_paths_in_dataset(module, file_paths: list[str]) -> set[str]:
+    """Subset of *file_paths* already recorded in ``x.envelopes_v1``.
+
+    Fails open (empty set) when Dataset Service is unavailable or the probe
+    errors, matching :func:`search_envelope_in_dataset` per-path behaviour.
+    """
+    try:
+        if not module.engine.services.dataset_available():
+            return set()
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
+            envelope_paths_in_dataset as lookup_envelope_paths,
+        )
+
+        return lookup_envelope_paths(
+            module.engine.services.dataset,
+            file_paths,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "envelope_paths_in_dataset: bulk probe failed (%s); "
+            "treating all paths as not ingested",
+            exc,
+        )
+        return set()
+
+
 def search_envelope_in_dataset(module, file_path: str) -> bool:
     """True when *file_path* is recorded in ``x.envelopes_v1``.
 

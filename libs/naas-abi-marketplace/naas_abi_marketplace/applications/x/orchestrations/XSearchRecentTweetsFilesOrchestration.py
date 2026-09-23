@@ -68,7 +68,8 @@ from naas_abi_marketplace.applications.x.orchestrations.utils import (
     safe_name,
 )
 from naas_abi_marketplace.applications.x.orchestrations.utils._common import (
-    search_envelope_in_dataset,
+    envelope_paths_in_dataset,
+    normalize_envelope_path,
     sync_x_dataset_paths_batched,
 )
 
@@ -297,6 +298,156 @@ def _within_max_age(file_path: str, cutoff: datetime) -> bool:
     return ts is not None and ts >= cutoff
 
 
+def _path_is_envelope(file_path: str) -> bool:
+    return file_path.lower().endswith(_ENVELOPE_EXTENSIONS)
+
+
+def _full_object_path(prefix: str, key: str) -> str:
+    prefix = prefix.rstrip("/")
+    if key.startswith(prefix):
+        return key
+    return posixpath.join(prefix, key)
+
+
+def _filter_dir_envelopes_by_cutoff(
+    envelope_paths: list[str],
+    cutoff: datetime,
+    *,
+    progress: _ListEnvelopeProgress | None = None,
+) -> tuple[list[str], int]:
+    """Keep in-window envelopes; stop after the newest contiguous in-window run."""
+    if not envelope_paths:
+        return [], 0
+    sortable: list[tuple[datetime | None, str]] = [
+        (_envelope_path_timestamp(path), path) for path in envelope_paths
+    ]
+
+    def _sort_key(item: tuple[datetime | None, str]) -> tuple[int, datetime]:
+        ts, _ = item
+        if ts is None:
+            return (0, datetime.min.replace(tzinfo=UTC))
+        return (1, ts)
+
+    sortable.sort(key=_sort_key, reverse=True)
+    kept: list[str] = []
+    for ts, path in sortable:
+        if ts is None or ts < cutoff:
+            break
+        kept.append(path)
+        if progress is not None:
+            progress.note_envelope_kept()
+    skipped = len(envelope_paths) - len(kept)
+    if progress is not None and skipped:
+        for _ in range(skipped):
+            progress.note_skipped_age()
+    return kept, skipped
+
+
+def _list_envelopes_in_prefix_dir(
+    object_storage,
+    prefix: str,
+    *,
+    cutoff: datetime,
+    progress: _ListEnvelopeProgress | None = None,
+) -> tuple[list[str], int]:
+    """List envelope files under one prefix directory, bounded by *cutoff*."""
+    prefix = prefix.rstrip("/")
+    try:
+        if progress is not None:
+            progress.note_list_call()
+        keys = object_storage.list_objects(prefix) or []
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            f"XSearchRecentTweetsFilesOrchestration: list_objects({prefix!r}) "
+            f"failed ({exc})"
+        )
+        return [], 0
+    if progress is not None:
+        progress.note_prefix_visited()
+        for _ in keys:
+            progress.note_key()
+
+    local_envelopes: list[str] = []
+    paths: list[str] = []
+    skipped_age = 0
+    for key in keys:
+        if not key:
+            continue
+        full_path = _full_object_path(prefix, key)
+        base = posixpath.basename(full_path.rstrip("/"))
+        if base == ".nexus_folder":
+            continue
+        if full_path.endswith("/") or not _path_is_envelope(full_path):
+            child_paths, child_skipped = _list_envelopes_in_prefix_dir(
+                object_storage,
+                full_path.rstrip("/"),
+                cutoff=cutoff,
+                progress=progress,
+            )
+            paths.extend(child_paths)
+            skipped_age += child_skipped
+            continue
+        local_envelopes.append(full_path)
+
+    kept, skipped = _filter_dir_envelopes_by_cutoff(
+        local_envelopes, cutoff, progress=progress
+    )
+    paths.extend(kept)
+    return paths, skipped_age + skipped
+
+
+def _list_envelope_paths_within_cutoff(
+    object_storage,
+    prefix: str,
+    *,
+    cutoff: datetime,
+    progress: _ListEnvelopeProgress | None = None,
+) -> tuple[list[str], int]:
+    """Two-level slug/file listing with per-directory age cutoffs."""
+    prefix = prefix.rstrip("/")
+    try:
+        if progress is not None:
+            progress.note_list_call()
+        top_keys = object_storage.list_objects(prefix) or []
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            f"XSearchRecentTweetsFilesOrchestration: list_objects({prefix!r}) "
+            f"failed ({exc})"
+        )
+        return [], 0
+    if progress is not None:
+        progress.note_prefix_visited()
+        for _ in top_keys:
+            progress.note_key()
+
+    paths: list[str] = []
+    skipped_age = 0
+    for key in top_keys:
+        if not key:
+            continue
+        full_path = _full_object_path(prefix, key)
+        base = posixpath.basename(full_path.rstrip("/"))
+        if base == ".nexus_folder":
+            continue
+        if full_path.endswith("/") or not _path_is_envelope(full_path):
+            child_prefix = full_path.rstrip("/")
+            child_paths, child_skipped = _list_envelopes_in_prefix_dir(
+                object_storage,
+                child_prefix,
+                cutoff=cutoff,
+                progress=progress,
+            )
+            paths.extend(child_paths)
+            skipped_age += child_skipped
+            continue
+        kept, skipped = _filter_dir_envelopes_by_cutoff(
+            [full_path], cutoff, progress=progress
+        )
+        paths.extend(kept)
+        skipped_age += skipped
+    return paths, skipped_age
+
+
 def _list_envelope_paths(
     object_storage,
     prefix: str,
@@ -319,6 +470,10 @@ def _list_envelope_paths(
     run :func:`_filter_paths_by_max_age` as a second filename pass.
     """
     prefix = prefix.rstrip("/")
+    if cutoff is not None:
+        return _list_envelope_paths_within_cutoff(
+            object_storage, prefix, cutoff=cutoff, progress=progress
+        )
     seen = _seen if _seen is not None else set()
     if not prefix or prefix in seen:
         return [], 0
@@ -546,13 +701,15 @@ def _reprocess_files(
             config_name=config.name,
             run_id=run_id,
             phase="dataset_projection_probe",
-            message=f"started candidates={len(paths)}",
+            message=f"started candidates={len(paths)} bulk_lookup=true",
         )
+        ingested_in_dataset = envelope_paths_in_dataset(module, paths)
         to_map: list[str] = []
         for index, path in enumerate(paths, start=1):
+            normalized = normalize_envelope_path(path)
             if path not in mapped:
                 to_map.append(path)
-            elif search_envelope_in_dataset(module, path):
+            elif normalized in ingested_in_dataset:
                 skipped_fully_projected += 1
             else:
                 paths_dataset_only.append(path)
@@ -566,7 +723,8 @@ def _reprocess_files(
                         f"progress {index}/{len(paths)} elapsed="
                         f"{time.monotonic() - probe_started:.1f}s "
                         f"to_map={len(to_map)} fully_projected={skipped_fully_projected} "
-                        f"dataset_only={len(paths_dataset_only)}"
+                        f"dataset_only={len(paths_dataset_only)} "
+                        f"ingested_in_dataset={len(ingested_in_dataset)}"
                     ),
                 )
         paths = to_map

@@ -306,3 +306,40 @@ def envelope_already_ingested(dataset: IDatasetPort, envelope_path: str) -> bool
         namespace=X_DATASET_NAMESPACE,
     )
     return bool(result.rows)
+
+
+_ENVELOPE_PATH_LOOKUP_CHUNK = 200
+
+
+def envelope_paths_in_dataset(
+    dataset: IDatasetPort,
+    envelope_paths: list[str],
+    *,
+    chunk_size: int = _ENVELOPE_PATH_LOOKUP_CHUNK,
+) -> set[str]:
+    """Return normalized envelope paths present in ``envelopes_v1``."""
+    from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.envelope_bookkeeping import (
+        normalize_envelope_path,
+    )
+
+    ensure_x_datasets(dataset)
+    normalized = [
+        normalize_envelope_path(path)
+        for path in envelope_paths
+        if str(path or "").strip()
+    ]
+    if not normalized:
+        return set()
+    found: set[str] = set()
+    for offset in range(0, len(normalized), chunk_size):
+        chunk = normalized[offset : offset + chunk_size]
+        in_list = ", ".join("'" + path.replace("'", "''") + "'" for path in chunk)
+        result = dataset.query(
+            f"SELECT envelope_path FROM {ENVELOPES_V1} WHERE envelope_path IN ({in_list})",  # nosec B608
+            namespace=X_DATASET_NAMESPACE,
+        )
+        for row in result.rows:
+            cell = row.get("envelope_path")
+            if cell:
+                found.add(normalize_envelope_path(str(cell)))
+    return found
