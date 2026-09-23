@@ -91,15 +91,35 @@ def _cd_argument(project_path: str) -> str:
     return shlex.quote(relative)
 
 
-def _print_next_steps(project_path: str) -> None:
-    """Report where the project landed and how to start it."""
+def _print_created(project_path: str) -> None:
     click.echo()
     click.secho(f"✓ Project created at {project_path}", fg="green", bold=True)
+
+
+def _print_next_steps(project_path: str) -> None:
+    """Report where the project landed and how to start it."""
+    _print_created(project_path)
     click.echo()
     click.secho("Next steps:", bold=True)
     click.echo(f"  cd {_cd_argument(project_path)}")
     click.echo("  abi dev up")
     click.echo()
+
+
+def _start_dev_runtime(project_path: str) -> None:
+    """Run `abi dev up -d` inside the new project.
+
+    Uses the project's own `uv` env (deps were just installed) so the URL and
+    login printed by `abi dev up` are the live runtime values — not hardcoded
+    Docker ports/credentials.
+    """
+    click.echo()
+    click.secho("Starting ABI dev runtime (`abi dev up -d`)...", bold=True)
+    subprocess.run(
+        ["uv", "run", "abi", "dev", "up", "-d"],
+        cwd=project_path,
+        check=True,
+    )
 
 
 @new.command("project")
@@ -125,22 +145,41 @@ def _print_next_steps(project_path: str) -> None:
 )
 @click.option(
     "--with-abi-submodule/--without-abi-submodule",
-    default=True,
+    default=False,
     help=(
         "Add jupyter-naas/abi as a git submodule at .abi/ so agents can "
-        "locate framework source and docs locally (default: enabled)."
+        "locate framework source and docs locally (default: disabled; "
+        "hello-world resolves the framework from PyPI)."
     ),
 )
 @click.option(
     "--domain",
     "base_domain",
-    prompt="Base domain",
     default="localhost",
     show_default=True,
     help=(
         "Base domain for the project (sets BASE_DOMAIN, with PUBLIC_WEB_HOST "
         "and PUBLIC_API_HOST derived as nexus.<domain> and api.<domain>). "
-        "Threaded into local deploy when --with-local-deploy is enabled."
+        "Threaded into local deploy when --with-local-deploy is enabled. "
+        "No interactive prompt — pass this flag to override the default."
+    ),
+)
+@click.option(
+    "-y",
+    "--yes",
+    is_flag=True,
+    default=False,
+    help="Non-interactive; accept defaults (no prompts).",
+)
+@click.option(
+    "--start",
+    "--up",
+    "start",
+    is_flag=True,
+    default=False,
+    help=(
+        "After creating the project, run `abi dev up -d` inside it and print "
+        "the live URL + login from the runtime."
     ),
 )
 def new_project(
@@ -151,6 +190,8 @@ def new_project(
     with_coding: bool,
     with_abi_submodule: bool,
     base_domain: str,
+    yes: bool,
+    start: bool,
 ):
     # Defaults must be evaluated at runtime so they reflect the caller's CWD.
     if project_name is None:
@@ -231,5 +272,14 @@ def new_project(
         cwd=project_path,
         check=True,
     )
+
+    # `-y/--yes` is part of the non-interactive surface (uvx / CI). Domain no
+    # longer prompts; keep the flag so callers can pass it safely.
+    _ = yes
+
+    if start:
+        _print_created(project_path)
+        _start_dev_runtime(project_path)
+        return
 
     _print_next_steps(project_path)

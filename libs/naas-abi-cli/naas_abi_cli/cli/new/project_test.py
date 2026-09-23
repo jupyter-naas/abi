@@ -145,7 +145,9 @@ def _invoke_new_project(tmp_path, monkeypatch, *extra_args):
 
 
 def test_new_project_emits_live_sources(tmp_path, monkeypatch) -> None:
-    doc, _ = _run_new_project(tmp_path, monkeypatch, submodule_ok=True)
+    doc, _ = _run_new_project(
+        tmp_path, monkeypatch, "--with-abi-submodule", submodule_ok=True
+    )
 
     sources = doc["tool"]["uv"]["sources"]
     assert set(sources) == _FRAMEWORK_PACKAGES
@@ -158,10 +160,21 @@ def test_new_project_emits_live_sources(tmp_path, monkeypatch) -> None:
 def test_new_project_falls_back_to_pypi_when_the_clone_fails(
     tmp_path, monkeypatch
 ) -> None:
-    doc, rendered = _run_new_project(tmp_path, monkeypatch, submodule_ok=False)
+    doc, rendered = _run_new_project(
+        tmp_path, monkeypatch, "--with-abi-submodule", submodule_ok=False
+    )
 
     assert "sources" not in doc["tool"]["uv"]
     assert "# [tool.uv.sources]" in rendered
+
+
+def test_new_project_defaults_to_pypi_without_submodule(
+    tmp_path, monkeypatch
+) -> None:
+    """Hello-world / Quick Start must not clone the monorepo unless asked."""
+    doc, _ = _run_new_project(tmp_path, monkeypatch, submodule_ok=True)
+
+    assert "sources" not in doc["tool"]["uv"]
 
 
 def test_new_project_without_the_submodule_flag_uses_pypi(
@@ -191,6 +204,78 @@ def test_next_steps_report_the_project_path_and_how_to_start(
     assert str(tmp_path / "demo") in result.output
     assert "cd " in result.output
     assert "  abi dev up" in result.output
+
+
+def test_start_flag_runs_abi_dev_up_detached(tmp_path, monkeypatch) -> None:
+    """`--start` / `--up` should bring the runtime up in the new project."""
+    from click.testing import CliRunner
+
+    calls: list[tuple[list[str], str | None]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((list(cmd), kwargs.get("cwd")))
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(project.subprocess, "run", fake_run)
+    monkeypatch.setattr(project.shutil, "which", lambda _cmd: "/usr/bin/git")
+
+    result = CliRunner().invoke(
+        project.new_project,
+        [
+            "demo",
+            str(tmp_path),
+            "--domain",
+            "localhost",
+            "--without-local-deploy",
+            "--without-abi-submodule",
+            "--start",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    project_dir = str(tmp_path / "demo")
+    assert project_dir in result.output
+    assert "Starting ABI dev runtime" in result.output
+    assert "Next steps:" not in result.output
+
+    started = [
+        (cmd, cwd)
+        for cmd, cwd in calls
+        if cmd[:4] == ["uv", "run", "abi", "dev"] and "up" in cmd and "-d" in cmd
+    ]
+    assert len(started) == 1
+    assert started[0][1] == project_dir
+
+
+def test_up_flag_is_an_alias_for_start(tmp_path, monkeypatch) -> None:
+    from click.testing import CliRunner
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(list(cmd))
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(project.subprocess, "run", fake_run)
+    monkeypatch.setattr(project.shutil, "which", lambda _cmd: "/usr/bin/git")
+
+    result = CliRunner().invoke(
+        project.new_project,
+        [
+            "demo",
+            str(tmp_path),
+            "--domain",
+            "localhost",
+            "--without-local-deploy",
+            "--without-abi-submodule",
+            "--up",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert any(
+        cmd[:4] == ["uv", "run", "abi", "dev"] and "up" in cmd and "-d" in cmd
+        for cmd in calls
+    )
 
 
 def test_cd_target_is_relative_when_the_project_is_below_the_cwd(
