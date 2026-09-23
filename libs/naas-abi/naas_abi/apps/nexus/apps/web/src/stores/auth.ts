@@ -5,6 +5,7 @@
 
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { discardDeferredStorage } from '@/lib/deferred-storage';
 import { clearAuthFlagCookie, mergeAuthPersistedState, setAuthFlagCookie, shouldRefreshAccessToken } from '@/lib/auth-session';
 import { getSafeStorage } from '@/lib/safe-storage';
 
@@ -279,6 +280,8 @@ export const useAuthStore = create<AuthState>()(
           'nexus-knowledge-graph',
           'nexus-servers',
         ];
+        // Queued deferred writes would otherwise re-create these keys.
+        discardDeferredStorage(storeKeys);
         for (const key of storeKeys) {
           try { localStorage.removeItem(key); } catch { /* SSR safe */ }
         }

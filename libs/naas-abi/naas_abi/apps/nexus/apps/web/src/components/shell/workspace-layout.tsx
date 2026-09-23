@@ -172,10 +172,13 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   // Agents/skills belong to chat, agent settings, and the open AI pane.
   // Fetching them on every workspace switch (including Apps) POSTed
   // /agents/sync and starved GET /api/apps.
+  // Keyed on the boolean, not the pathname: re-fetching (and re-persisting)
+  // the agent catalog on every section switch while the pane is open was a
+  // fixed cost on each dock click.
+  const needsAgents = Boolean(
+    currentWorkspaceId && (contextPanelOpen || pathNeedsAgentCatalog(pathname)),
+  );
   useEffect(() => {
-    const needsAgents = Boolean(
-      currentWorkspaceId && (contextPanelOpen || pathNeedsAgentCatalog(pathname)),
-    );
     if (!needsAgents || !currentWorkspaceId) return;
     const loadAgents = async () => {
       const { ensureAgentsSynced, useAgentsStore } = await import('@/stores/agents');
@@ -189,7 +192,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     };
     loadAgents();
     loadSkills();
-  }, [currentWorkspaceId, contextPanelOpen, pathname]);
+  }, [currentWorkspaceId, contextPanelOpen, needsAgents]);
 
   // Keyboard shortcut: Cmd+K to toggle the side chat pane (desktop only).
   // Capture phase so Monaco / editors do not swallow ⌘K as a chord starter.

@@ -80,6 +80,9 @@ export function Sidebar() {
   } | null>(null);
   const [navMeasure, setNavMeasure] = useState<{ available: number; item: number; padding: number } | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  // Section the user just clicked, highlighted before the route commits so the
+  // dock answers the click immediately instead of after the page renders.
+  const [pendingSection, setPendingSection] = useState<{ id: SidebarSection; from: string } | null>(null);
   const [morePos, setMorePos] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
   const navRef = useRef<HTMLElement>(null);
   const moreBtnRef = useRef<HTMLButtonElement>(null);
@@ -108,18 +111,20 @@ export function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const {
-    currentWorkspaceId,
-    activePanelSection,
-    setActivePanelSection,
-    sidebarNavOrder,
-    setSidebarNavOrder,
-    dockWidth,
-    setDockWidth,
-  } = useWorkspaceStore();
+  // Field selectors, not the whole store: the dock used to re-render on every
+  // workspace/files/ontology store update (streamed chat tokens, file lists,
+  // ontology loads), which made section switches pay for a full dock render.
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const activePanelSection = useWorkspaceStore((s) => s.activePanelSection);
+  const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
+  const sidebarNavOrder = useWorkspaceStore((s) => s.sidebarNavOrder);
+  const setSidebarNavOrder = useWorkspaceStore((s) => s.setSidebarNavOrder);
+  const dockWidth = useWorkspaceStore((s) => s.dockWidth);
+  const setDockWidth = useWorkspaceStore((s) => s.setDockWidth);
 
-  const { fetchFiles, setActiveSource } = useFilesStore();
-  const { fetchItems: fetchOntology } = useOntologyStore();
+  const fetchFiles = useFilesStore((s) => s.fetchFiles);
+  const setActiveSource = useFilesStore((s) => s.setActiveSource);
+  const fetchOntology = useOntologyStore((s) => s.fetchItems);
 
   const canMaps = useFeature('maps');
   const canChat = useFeature('chat');
@@ -163,6 +168,10 @@ export function Sidebar() {
     if (urlSection?.id === 'files' && canFiles) { fetchFiles(); }
     if (urlSection?.id === 'ontology' && canOntology) { fetchOntology(); }
   }, [urlSection?.id, currentWorkspaceId, canFiles, canOntology, fetchFiles, fetchOntology]);
+
+  useEffect(() => {
+    setPendingSection(null);
+  }, [pathname]);
 
   const lastReconciledPathRef = useRef<string | null>(null);
   useEffect(() => {
@@ -209,7 +218,11 @@ export function Sidebar() {
     return true;
   };
 
+  // Pending until the pathname moves off the one the click started from.
+  const pendingId = pendingSection && pendingSection.from === pathname ? pendingSection.id : null;
+
   const isSectionActive = (section: SectionDef) => {
+    if (pendingId) return pendingId === section.id;
     const base = getWorkspacePath(currentWorkspaceId, section.href);
     if (pathname.startsWith(base)) return true;
     if (section.extraHref) {
@@ -284,9 +297,27 @@ export function Sidebar() {
       return;
     }
     const path = getDefaultPath(section.id);
+    // Navigating: only flip the dock highlight now. The pathname reconciler
+    // above opens the matching column when the route commits, so the column
+    // and the page swap together. Setting the store here rendered the whole
+    // new column synchronously inside pointerup (zustand updates are always
+    // sync), blocking the click for 100s of ms on heavy sections (Ontology).
+    const navigates = !!path && path.split('?')[0] !== pathname;
+    const navigate = () => {
+      if (!path) return;
+      setPendingSection({ id: section.id, from: pathname });
+      router.push(path);
+    };
+    // Query-only change (e.g. Ontology's restored route): the pathname stays
+    // put, so the reconciler will not run; switch the column here.
+    const pushQueryOnly = () => {
+      if (path && path !== pathname + window.location.search) router.push(path);
+    };
     if (section.id === 'home') {
+      // Closing is cheap, and the reconciler keeps a Workspaces panel open on
+      // Home, so an explicit Home click still closes whatever column is open.
       setActivePanelSection(null);
-      if (path) router.push(path);
+      if (navigates) navigate();
       return;
     }
     if (activePanelSection === section.id) {
@@ -307,9 +338,14 @@ export function Sidebar() {
       setActivePanelSection(null);
       return;
     }
-    setActivePanelSection(section.id);
     if (section.id === 'files') setActiveSource('my-drive');
-    if (path) router.push(path);
+    if (navigates) {
+      navigate();
+      return;
+    }
+    // Same route (column was closed): no pathname change, so open it now.
+    setActivePanelSection(section.id);
+    pushQueryOnly();
   };
 
   const measureDropIndex = useCallback((clientY: number) => {

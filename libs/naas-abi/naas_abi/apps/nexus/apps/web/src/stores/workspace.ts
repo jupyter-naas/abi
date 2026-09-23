@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
+import { createDeferredStorage } from '@/lib/deferred-storage';
 import type { WorkspaceFeatureFlags } from '@/lib/feature-access';
 import { DEFAULT_NAV_ORDER, mergeNavOrder } from '@/lib/sidebar-nav';
 import { clampDockWidth, clampFeatureColumnWidth, DOCK_WIDTH_DEFAULT } from '@/lib/shell-columns';
@@ -18,36 +19,6 @@ import { useAuthStore } from './auth';
 import { useDocumentsStore } from './documents';
 import { useSlidesStore } from './slides';
 import { getApiUrl } from '@/lib/config';
-
-// Throttled localStorage wrapper: prevents browser freeze during streaming.
-// During chat streaming, updateLastMessage fires on every token, which causes
-// Zustand persist to JSON.stringify + localStorage.setItem the entire state
-// hundreds of times per second. This batches writes to at most once per second.
-const throttledLocalStorage = () => {
-  let pendingValue: string | null = null;
-  let writeTimer: ReturnType<typeof setTimeout> | null = null;
-
-  return {
-    getItem: (name: string) => localStorage.getItem(name),
-    setItem: (name: string, value: string) => {
-      pendingValue = value;
-      if (!writeTimer) {
-        writeTimer = setTimeout(() => {
-          if (pendingValue !== null) {
-            try {
-              localStorage.setItem(name, pendingValue);
-            } catch {
-              // Silently handle quota exceeded
-            }
-            pendingValue = null;
-          }
-          writeTimer = null;
-        }, 1000);
-      }
-    },
-    removeItem: (name: string) => localStorage.removeItem(name),
-  };
-};
 
 export type NavigationItem =
   | 'maps'
@@ -1837,7 +1808,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 }),
     {
       name: 'nexus-workspace-storage',
-      storage: createJSONStorage(throttledLocalStorage),
+      // Deferred: chat streaming and dock clicks must not stringify the store.
+      storage: createDeferredStorage(),
       partialize: (state) => ({
         // Persist these parts of state
         workspaces: state.workspaces,
