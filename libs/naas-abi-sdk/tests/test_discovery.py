@@ -83,3 +83,29 @@ def test_lease_status_expires_locally_and_cleanup_survives_heartbeat_failure():
 def test_discovery_config_rejects_unsafe_subjects_and_unbounded_timeouts(kwargs):
     with pytest.raises(ValueError):
         DiscoveryConfiguration(**kwargs)
+
+
+def test_endpoint_rebinding_must_succeed_before_ready_renewal():
+    async def scenario():
+        client = DiscoveryClient(AsyncMock())
+        client.transport.call.side_effect = [
+            pb.RegisterResponse(
+                instance=pb.Instance(status="STARTING"), lease_seconds=20
+            ),
+            pb.RenewResponse(instance=pb.Instance(status="READY"), lease_seconds=20),
+        ]
+        session = DiscoverySession(
+            client, pb.ModuleDescriptor(module_id="a", contract_major=1)
+        )
+        session.initialized = True
+        session.on_registered = AsyncMock(
+            side_effect=[ConnectionError("bind failed"), None]
+        )
+        with pytest.raises(ConnectionError):
+            await session.register()
+        assert session.current_status == "STARTING"
+        await session.renew()
+        assert session.on_registered.await_count == 2
+        assert session.current_status == "READY"
+
+    asyncio.run(scenario())

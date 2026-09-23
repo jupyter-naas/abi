@@ -19,6 +19,7 @@ from nats.aio.msg import Msg
 from nats.aio.subscription import Subscription
 
 OPERATIONS: dict[str, tuple[Any, Any, bool]] = {
+    "authorize_agent": (pb.AuthorizeAgentRequest, pb.AuthorizeAgentResponse, True),
     "register": (pb.RegisterRequest, pb.RegisterResponse, True),
     "renew": (pb.RenewRequest, pb.RenewResponse, True),
     "unregister": (pb.UnregisterRequest, pb.UnregisterResponse, True),
@@ -65,10 +66,17 @@ class DiscoveryNATS:
                     "PAYLOAD_TOO_LARGE", "Discovery request exceeds limit"
                 )
             request = request_type.FromString(msg.data)
+            caller = (
+                verify_service_token(request.caller_token, self.secret)
+                if operation == "authorize_agent"
+                else None
+            )
             handler = getattr(self.service, operation)
             response = (
                 await handler(request, owner) if mutation else await handler(request)
             )
+            if caller is not None:
+                response.caller_identity = caller
         except InvalidServiceTokenError:
             response.error.code, response.error.message = (
                 "UNAUTHENTICATED",

@@ -9,7 +9,7 @@ make demo
 Prerequisites: the repository's UV development environment (`make deps` at the repo
 root), plus `nats-server` on PATH with JetStream support. No Docker or external
 API credentials are required. The runner builds the proto and SDK wheels, installs
-them into a fresh worker virtualenv, and starts a broker and engine, then two separate worker processes:
+them into a fresh worker virtualenv, and starts a broker and engine, then isolated SDK worker processes:
 
 1. A loopback-only NATS/JetStream broker on a temporary port.
 2. A real ABI Engine with all remotely supported services loaded.
@@ -35,8 +35,9 @@ not the signing key. Only test data is used. Coding environments and source cont
 use the engine's in-memory adapters; email uses its filesystem adapter. The runner
 independently checks that email persisted. No external email is sent.
 
-Limitations are explicit: object streaming, model objects, agent/ontology execution,
-and registration/heartbeats have no v1 remote contract. The triple-store
+Limitations are explicit: object streaming, model objects and ontology execution
+have no remote contract. Discovery and agent invocation are exercised separately
+from the service-endpoint coverage worker. The triple-store
 `handle_view_event` endpoint is exercised and its expected `NOT_SUPPORTED` reply
 is recorded separately; it is an internal adapter callback, not an engine operation.
 Remote `shutdown`/`close` endpoints are exercised only because this engine is
@@ -89,4 +90,11 @@ The host enables discovery with a two-second lease for the demo. The wheel-only
 startup gating and agent descriptors, kills the provider, waits for lease expiry,
 then starts a replacement. The consumer observes recovery with a different
 instance identity. `report.json` records the distinct process IDs under discovery.
-These are agent descriptors only; remote agent invocation is not implemented.
+The consumer also invokes the remote agent, re-submits the same invocation ID
+without another execution, consumes SSE events, cancels a run, and reads completed
+status through the replacement provider. The base worker still has four packages.
+
+`agent_integration_test.py` additionally hosts real core Agent and IntentAgent
+instances with deterministic local model/embedding doubles. It verifies the
+compatibility adapter, SSE format, invalid-token rejection and an async LangGraph
+parent invoking the remote agent as a tool. No external LLM credentials are used.

@@ -53,3 +53,14 @@ message RegistryRecord {
   bool draining = 5;
 }
 message RegistryState { repeated RegistryRecord records = 1; }
+
+// Provider authenticates the incoming caller without receiving a signing key.
+message AuthorizeAgentRequest {
+  abi.common.v1.CallContext context = 1;
+  string instance_id = 2;
+  string lease_token = 3;
+  string agent_name = 4;
+  string caller_token = 5;
+  bool new_invocation = 6;
+}
+message AuthorizeAgentResponse { abi.common.v1.CallError error = 1; string caller_identity = 2; }

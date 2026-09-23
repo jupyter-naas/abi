@@ -1,6 +1,7 @@
 # Remote agents and module dependencies
 
-Status: Proposed (not implemented by the document-checkpoint change)
+Status: First discovery and invocation slice implemented; fenced takeover and
+graph resume remain proposed. See 20260923_remote-agent-proxy.md in docs/adr.
 
 ## Problem
 
@@ -57,3 +58,13 @@ be rejected or modelled as optional capabilities.
    and ownership. Prove a parent in one module invokes a child in another process.
 4. Failure tests: worker death, lost replies, expired leases, cancellation,
    resubmission, disconnected event consumers, and concurrent conversation runs.
+
+## Delivered first invocation slice
+
+AgentProxy supports async invoke, SSE streaming, duplicate, optional parent tools,
+submission handles, durable status/event replay and cooperative cancellation.
+RemoteAgentAdapter bridges existing Agent/IntentAgent on the provider side.
+Invocations and conversation claims use document CAS, but no execution ownership
+is ever transferred automatically. Orphan claims block until operator reconciliation.
+This deliberately defers the fencing/takeover design above. Graph interrupt/resume,
+per-module authorization and automatic retention are not yet implemented.

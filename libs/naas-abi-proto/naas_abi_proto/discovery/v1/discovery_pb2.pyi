@@ -172,3 +172,27 @@ class RegistryState(_message.Message):
     RECORDS_FIELD_NUMBER: _ClassVar[int]
     records: _containers.RepeatedCompositeFieldContainer[RegistryRecord]
     def __init__(self, records: _Optional[_Iterable[_Union[RegistryRecord, _Mapping]]] = ...) -> None: ...
+
+class AuthorizeAgentRequest(_message.Message):
+    __slots__ = ("context", "instance_id", "lease_token", "agent_name", "caller_token", "new_invocation")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
+    LEASE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    AGENT_NAME_FIELD_NUMBER: _ClassVar[int]
+    CALLER_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    NEW_INVOCATION_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    instance_id: str
+    lease_token: str
+    agent_name: str
+    caller_token: str
+    new_invocation: bool
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., instance_id: _Optional[str] = ..., lease_token: _Optional[str] = ..., agent_name: _Optional[str] = ..., caller_token: _Optional[str] = ..., new_invocation: bool = ...) -> None: ...
+
+class AuthorizeAgentResponse(_message.Message):
+    __slots__ = ("error", "caller_identity")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    CALLER_IDENTITY_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    caller_identity: str
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., caller_identity: _Optional[str] = ...) -> None: ...

@@ -177,3 +177,35 @@ def test_register_retry_does_not_extend_lease_or_overstate_remaining_lifetime():
         assert repeated.lease_seconds == 5
 
     asyncio.run(scenario())
+
+
+def test_agent_authorization_requires_provider_lease_and_readiness():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        req = registration("provider", "instance")
+        req.descriptor.agents.add(
+            name="Researcher", contract_major=1, capabilities=["agent.invoke.v1"]
+        )
+        await service.register(req, "provider-identity")
+        auth = pb.AuthorizeAgentRequest(
+            instance_id="instance",
+            lease_token=req.lease_token,
+            agent_name="Researcher",
+            new_invocation=True,
+        )
+        with pytest.raises(DiscoveryError, match="MODULE_UNAVAILABLE"):
+            await service.authorize_agent(auth, "provider-identity")
+        await service.renew(
+            pb.RenewRequest(
+                instance_id="instance", lease_token=req.lease_token, initialized=True
+            ),
+            "provider-identity",
+        )
+        await service.authorize_agent(auth, "provider-identity")
+        with pytest.raises(DiscoveryError, match="PERMISSION_DENIED"):
+            await service.authorize_agent(auth, "other-identity")
+        auth.lease_token = "wrong"
+        with pytest.raises(DiscoveryError, match="PERMISSION_DENIED"):
+            await service.authorize_agent(auth, "provider-identity")
+
+    asyncio.run(scenario())

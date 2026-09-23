@@ -124,6 +124,21 @@ class ModuleProxy:
             )
         return ready
 
+    async def get_agent(self, name: str):
+        from naas_abi_sdk.agent import AgentProxy
+
+        descriptor = next((a for a in await self.list_agents() if a.name == name), None)
+        if descriptor is None:
+            raise RPCError("AGENT_NOT_FOUND", name)
+        if (
+            descriptor.contract_major != 1
+            or "agent.invoke.v1" not in descriptor.capabilities
+        ):
+            raise RPCError(
+                "AGENT_NOT_INVOKABLE", "Agent has no supported invocation handler"
+            )
+        return AgentProxy(self, descriptor)
+
     async def list_agents(self) -> tuple[AgentDescriptor, ...]:
         return (await self.ready_instances())[0].agents
 
@@ -178,6 +193,8 @@ class DiscoverySession:
         self._lock = asyncio.Lock()
         self.task: asyncio.Task | None = None
         self.status = "STARTING"
+        self.on_registered = None
+        self._bound = True
 
     @property
     def current_status(self) -> str:
@@ -197,6 +214,10 @@ class DiscoverySession:
         self.lease_seconds = result.lease_seconds
         self.confirmed_until = started + result.lease_seconds
         self.status = result.instance.status
+        self._bound = self.on_registered is None
+        if self.on_registered is not None:
+            await self.on_registered()
+            self._bound = True
 
     async def start(self) -> None:
         await self.register()
@@ -204,6 +225,9 @@ class DiscoverySession:
 
     async def renew(self) -> None:
         async with self._lock:
+            if self.on_registered is not None and not self._bound:
+                await self.on_registered()
+                self._bound = True
             started = time.monotonic()
             result = await self.client._call(
                 "renew",

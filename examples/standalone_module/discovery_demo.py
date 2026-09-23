@@ -14,9 +14,35 @@ from naas_abi_sdk.transport import RPCError
 ROOT = Path(os.environ["DISCOVERY_REPORT_DIR"])
 
 
+class ResearchAgent:
+    def __init__(self):
+        self.calls = 0
+
+    async def invoke(self, prompt, context):
+        self.calls += 1
+        if prompt == "slow":
+            await asyncio.sleep(30)
+        return f"remote:{prompt}:{self.calls}"
+
+    async def stream_invoke(self, prompt, context):
+        self.calls += 1
+        yield {"event": "message", "data": "hello from the provider"}
+        yield {"event": "done", "data": "[DONE]"}
+
+
 class Provider(BaseModule):
     module_id = "demo.research"
-    agents = (AgentDescriptor("Researcher", "Research capability descriptor"),)
+    agents = (
+        AgentDescriptor(
+            "Researcher",
+            "Research capability descriptor",
+            capabilities=("agent.invoke.v1",),
+        ),
+    )
+    dependencies = ModuleDependencies(services=("document",))
+
+    async def on_initialized(self):
+        self.expose_agent("Researcher", ResearchAgent())
 
     async def run(self):
         (ROOT / "provider-ready").write_text(str(os.getpid()))
@@ -31,6 +57,33 @@ class Consumer(BaseModule):
         provider = self.engine.modules["demo.research"]
         initial = (await provider.ready_instances())[0].instance_id
         assert (await provider.list_agents())[0].name == "Researcher"
+        agent = await provider.get_agent("Researcher")
+        answer = await agent.invoke("hello", invocation_id="demo-invoke", timeout=10)
+        assert answer == "remote:hello:1"
+        assert (
+            await agent.invoke("hello", invocation_id="demo-invoke", timeout=10)
+            == answer
+        )
+        events = [event async for event in agent.stream_invoke("stream", timeout=10)]
+        assert events == [
+            {"event": "message", "data": "hello from the provider"},
+            {"event": "done", "data": "[DONE]"},
+        ]
+        handle = await agent.submit("slow")
+        await handle.cancel()
+        while (await handle.status()).status == "CANCELLING":
+            await asyncio.sleep(0.05)
+        assert (await handle.status()).status == "CANCELLED"
+        (ROOT / "agent-proxy.json").write_text(
+            json.dumps(
+                {
+                    "answer": answer,
+                    "stream_events": events,
+                    "deduplicated": True,
+                    "cancelled": True,
+                }
+            )
+        )
         (ROOT / "consumer-ready").write_text(str(os.getpid()))
         lost = False
         while True:
@@ -54,6 +107,10 @@ class Consumer(BaseModule):
                             }
                         )
                     )
+                    # Completed invocations can be read through a replacement process.
+                    assert (
+                        await agent.invocation("demo-invoke").status()
+                    ).result == answer
                     return
             await asyncio.sleep(0.05)
 
@@ -87,6 +144,7 @@ async def orchestrate():
         await wait_file("recovered.json")
         assert await consumer.wait() == 0
         report = json.loads((ROOT / "recovered.json").read_text())
+        report["agent_proxy"] = json.loads((ROOT / "agent-proxy.json").read_text())
         report.update(
             status="passed",
             consumer_pid=consumer.pid,

@@ -17,7 +17,7 @@ initializers = []
 catalog = {}
 for file in sorted(PROTO.glob("*/v1/*.proto")):
     domain = file.stem
-    if domain in ("common", "discovery"):
+    if domain in ("common", "discovery", "agent"):
         continue
     cls = "".join(p.title() for p in domain.split("_")) + "Client"
     methods = re.findall(r"message (\w+)Request \{", file.read_text())

@@ -129,3 +129,13 @@ Integration tests (require infra):
 2. Register intents in `intents/default_intents.py` (or a domain-local module) if you want the router to dispatch to it.
 3. Emit events via the dataclasses in `ontologies/modules/AgentEventOntology.py` — never invent ad-hoc event types.
 4. Mirror the test pattern: `MyAgent_test.py` next to the implementation.
+
+
+## Remote hosting
+
+RemoteAgentAdapter wraps an existing Agent/IntentAgent as an async SDK host
+handler without importing the SDK. It duplicates per invocation with an isolated
+thread ID and preserves SSE events. Cancellation must wait for the synchronous
+worker to stop before the host releases its conversation claim. Cover both
+invocation and cancellation in RemoteAgentAdapter_test.py; the full network
+regression is examples/standalone_module/agent_integration_test.py.

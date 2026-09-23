@@ -11,3 +11,10 @@ LangGraph support lives in langgraph.py and is opt-in via [langgraph]; never imp
 it from package __init__ or make it a base dependency. Only async graph execution
 is supported. Keep checkpoint schema versions and pending-write semantics explicit.
 Document module namespaces are a programming boundary, not authorization.
+
+
+AgentProxy and AgentHost use document CAS for durable invocations and non-expiring
+conversation claims. Never infer execution ownership from discovery leases or
+replay an orphaned run. Core Agent/IntentAgent compatibility belongs in core's
+RemoteAgentAdapter; only agent_tools imports optional LangChain dependencies.
+Agent streaming preserves string event/data pairs and sequence-based replay.

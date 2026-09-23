@@ -60,7 +60,8 @@ transport exceptions and malformed protobuf errors propagate. The payload ceilin
 is 8 MiB, or the broker's lower limit, including request headers.
 
 The existing v1 contract has deliberate limits: no object streaming, process-local
-model objects, agent/ontology execution, or remote callbacks. Cache v1 addresses
+model objects, ontology execution, or arbitrary remote callbacks. Agent invocation
+uses the separate contract described below. Cache v1 addresses
 the engine's cold adapter by default; `cache.tier(index)` selects an explicit tier. Decorators remain local. Event v1 is the durable
 log port; live messages use the bus. The engine's triple-store service rejects
 `handle_view_event`, an adapter-internal callback, with `NOT_SUPPORTED`.
@@ -193,7 +194,7 @@ See the document-checkpoint ADR and remote-agent invocation RFC for those bounda
   helpers have no equivalent here. Unsupported operations are not silently run
   locally. Use `engine.rpc` for administrative or lower-level contract operations.
 - `current_module()` finds the current instance only. `engine.modules` resolves
-  declared dependencies through discovery; AgentProxy invocation remains separate.
+  declared dependencies through discovery; `get_agent` returns an AgentProxy.
 
 See `examples/standalone_module/user_module.py` at the repository root for a
 protobuf-free module exercising the facades against a separate engine process.
@@ -269,10 +270,136 @@ fresh state; missing, incompatible and not-ready modules have distinct RPC error
 codes. Recovery after lease loss uses a new instance identity. Unload marks
 DRAINING and unregisters; a hard crash is handled by expiry.
 
-`list_agents()` returns SDK descriptors, not callable agents. No invocation,
-streaming, execution locking, or automatic publication of legacy engine modules
-is included yet. The Stage 1 trust model still allows trusted service identities
+`list_agents()` returns descriptors; `get_agent(name)` returns an invocable
+proxy when its capability is registered. Legacy engine modules are not automatically
+published. The Stage 1 trust model still allows trusted service identities
 to register logical module names; declaration checks are not authorization.
 
 Run the standalone demo to see a consumer wait, discover a provider's agent,
 observe provider death, and recover after a replacement process registers.
+
+## Remote agents
+
+With discovery enabled, `await module.get_agent(name)` returns an `AgentProxy`.
+The proxy preserves the Agent/IntentAgent prompt API with async network calls:
+
+```python
+research = self.engine.modules["acme.research"]
+agent = await research.get_agent("Researcher")
+answer = await agent.invoke("Explain the result")
+async for event in agent.stream_invoke("Explain it step by step"):
+    print(event["event"], event["data"])
+```
+
+Each proxy has `name`, `description` and `state.thread_id`. `duplicate()` creates
+an independent conversation; `state.set_thread_id(...)` selects a stable one.
+Intent matching stays in the owner process. Raw graphs, model clients, Python
+callbacks and parent-graph handoffs are not serialized.
+
+Providers declare the invocation capability and bind a handler before readiness:
+
+```python
+import asyncio
+from naas_abi_sdk import BaseModule, ModuleDependencies, AgentDescriptor
+from naas_abi_sdk.agent_host import InvocationContext
+
+
+class Researcher:
+    async def invoke(self, prompt: str, context: InvocationContext) -> str:
+        return f"Received: {prompt}"
+
+
+class ABIModule(BaseModule):
+    module_id = "acme.research"
+    dependencies = ModuleDependencies(services=("document",))
+    agents = (
+        AgentDescriptor(
+            "Researcher", "Research a question", capabilities=("agent.invoke.v1",)
+        ),
+    )
+
+    async def on_initialized(self):
+        self.expose_agent("Researcher", Researcher())
+
+    async def run(self):
+        await asyncio.Event().wait()
+```
+
+A handler may also implement async `stream_invoke(prompt, context)`, yielding
+`{"event": ..., "data": ...}` string pairs. Core SSE types (`message`, `done`,
+`ai_message`, tool events and routing events) pass through unchanged. Without that
+method, the host emits the completed invoke result as a message followed by done.
+Streaming status reconstructs result text from message events joined by newlines;
+`invoke()` preserves the handler's exact string result.
+
+A module hosting an existing core Agent or IntentAgent can use:
+
+```python
+from naas_abi_core.services.agent.RemoteAgentAdapter import RemoteAgentAdapter
+
+self.expose_agent("Researcher", RemoteAgentAdapter(existing_agent))
+```
+
+Only that provider needs ABI core. The adapter duplicates the agent with a scoped
+thread ID and retains its configured checkpointer. It does not convert a synchronous
+core graph to the async document checkpointer. Native async handlers can use
+DocumentCheckpointSaver with `context.thread_id`, which is scoped to project,
+module, agent and authenticated caller. The default SDK stays at four packages.
+
+Install `[agents]` for `agent.as_tools()`. Use the resulting tool's `ainvoke` in
+async LangGraph parents. Tools created inside the module event loop also support
+synchronous core agent worker threads; they dispatch back to that loop. Calling
+synchronous `tool.invoke` on the loop itself fails explicitly. Parent RunnableConfig
+thread IDs propagate into separate remote conversations. Pass these as tools;
+an AgentProxy is not an instance of the core Agent class for `agents=[...]` checks.
+
+### Invocation status, replay and cancellation
+
+```python
+handle = await agent.submit("Research this", invocation_id="job-123")
+status = await handle.status()
+answer = await handle.result(timeout=120)
+
+# Reattach after a lost reply or reconnect:
+handle = agent.invocation("job-123")
+async for event in handle.events(after_sequence=42):
+    print(event)
+
+# Explicit, cooperative cancellation:
+await handle.cancel()
+```
+
+Submission uses a stable ID and document create-only/CAS operations. Repeating an
+ID with identical caller, prompt, thread, mode and deadline returns the stored run;
+changed input raises INVOCATION_CONFLICT. Ambiguous submission failures raise
+SubmissionUncertain with a handle. There is no automatic invocation retry or
+execution takeover. Status can be read through a replacement provider with the
+same module/agent identity. A lost owner remains an unknown execution outcome,
+not proof of failure. Live discovery does not guarantee a worker is making progress.
+
+Conversation claims never expire automatically. Worker death or an ambiguous
+storage write can leave one behind; reconcile the run and prove the old worker is
+stopped before an operator removes a claim. Do not use the discovery lease to
+unlock execution. This is intentionally conservative and is not exactly-once tool
+side effects or a fenced failover scheduler.
+
+The default execution deadline is 120 seconds (allowed 1..3600). Wait timeouts and
+abandoning a stream do not cancel remote execution. Cancellation marks CANCELLING;
+CANCELLED/TIMED_OUT is persisted only after execution stops. Synchronous core
+inference cannot be forcibly interrupted: the adapter waits for its worker thread
+before releasing the claim. Completed side effects cannot be undone. Graph
+interrupt/resume is not yet part of this protocol.
+
+The host admits at most 32 active runs per module. Prompts/results/events are
+bounded to 64 KiB per value, 1024 events, and a 384 KiB run record. Events are polled
+in pages of 64 with sequence cursors; overflow stops execution rather than silently
+losing events. Records are retained until explicitly cleaned by an operator; no
+automatic retention policy is installed, because deleting deduplication records
+changes retry safety. Reserve the `agent_runs_*` and `agent_claims_*` collections.
+
+Providers authenticate incoming issued tokens through discovery's authorize_agent
+RPC using their own issued token and lease. Signing keys stay in the engine.
+This forwards the caller's bearer token to the trusted provider for verification;
+use broker TLS/ACLs. Stage 1 still lacks per-end-user/module grants, and document
+namespaces are not security boundaries. Caller identity guards invocation status
+and cancellation; declaration checks alone are not authorization.

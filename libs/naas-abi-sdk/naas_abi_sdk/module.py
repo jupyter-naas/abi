@@ -164,6 +164,7 @@ class BaseModule(Generic[Config]):
         self._engine = engine
         self._configuration = configuration
         self._discovery_session: DiscoverySession | None = None
+        self._agent_handlers = {}
 
     @property
     def engine(self) -> EngineProxy:
@@ -172,6 +173,21 @@ class BaseModule(Generic[Config]):
     @property
     def configuration(self) -> Config:
         return self._configuration
+
+    def expose_agent(self, name: str, handler) -> None:
+        """Bind an async agent handler during on_initialized, before readiness."""
+        descriptor = next((a for a in self.agents if a.name == name), None)
+        if descriptor is None or "agent.invoke.v1" not in descriptor.capabilities:
+            raise ValueError(
+                "Declare an AgentDescriptor with agent.invoke.v1 capability first"
+            )
+        if name in self._agent_handlers:
+            raise ValueError(f"Agent handler already registered: {name}")
+        if not inspect.iscoroutinefunction(handler.invoke):
+            raise TypeError(
+                "Agent handler.invoke must be async; use the core adapter for synchronous agents"
+            )
+        self._agent_handlers[name] = handler
 
     @property
     def discovery_status(self) -> str:
@@ -260,12 +276,33 @@ async def run_module(
         )
         module._discovery_session = registration
         work = None
+        agent_host = None
         try:
             await _invoke(module.on_load)
             if registration:
                 await registration.start()
                 await module.engine.modules.wait_ready(discovery)
             await _invoke(module.on_initialized)
+            declared = {
+                a.name for a in module.agents if "agent.invoke.v1" in a.capabilities
+            }
+            if declared != set(module._agent_handlers):
+                raise ValueError(
+                    "Every invocable agent must have a handler before module readiness"
+                )
+            if module._agent_handlers:
+                if registration is None or "document" not in dependencies.services:
+                    raise ValueError(
+                        "Agent hosting requires discovery and a document service dependency"
+                    )
+                from naas_abi_sdk.agent_host import AgentHost
+
+                agent_host = AgentHost(
+                    registration,
+                    module.engine.services.document,
+                    module._agent_handlers,
+                )
+                await agent_host.start()
             if registration:
                 registration.initialized = True
                 await registration.renew()
@@ -291,6 +328,8 @@ async def run_module(
                         logging.getLogger(__name__).warning(
                             "Could not mark module draining", exc_info=True
                         )
+                if agent_host:
+                    await agent_host.close()
                 await _invoke(module.on_unloaded)
             finally:
                 try:
