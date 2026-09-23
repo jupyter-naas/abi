@@ -16,6 +16,7 @@ Orchestration layer binding a chat model to tools and sub-agents. Handles:
 | Class | File | Role |
 |---|---|---|
 | `Agent` | `Agent.py` | Base orchestrator binding LLM ↔ tools/sub-agents; manages state, memory, graph |
+| `CapabilityAgent` | `CapabilityAgent.py` | Discovers, enables and disables tool-registry tools during a conversation |
 | `CoordinatorAgent` | `CoordinatorAgent.py` | Strict supervisor: refuses direct answers, routes to intent-matched agent; extends `IntentAgent` |
 | `IntentAgent` | `IntentAgent.py` | Intent-aware router; multi-stage filtering (intent / entity / relevance) |
 | `OpencodeAgent` | `OpencodeAgent.py` | External AI-IDE session orchestrator (subprocess + SSE streaming) |
@@ -78,6 +79,31 @@ work off to a queue or thread yourself.
 Distinct from the `on_tool_usage` / `on_tool_response` / `on_ai_message`
 *callback registration* methods, which take a callable and are set per-instance.
 
+## Tool-set hooks and runtime capabilities
+
+`Agent` binds its tools once, at construction. Three hooks let a subclass vary
+them per step, and `call_model` / `call_tools` go through them:
+
+```python
+_chat_model_for_turn(state) -> Runnable        # model bound to this step's tools
+_tool_for_call(tool_name, state) -> tool|None  # what call_tools dispatches
+_tool_names_for_turn(state) -> list[str]       # names reported for unknown calls
+```
+
+`CapabilityAgent` overrides them. Its tools `search_capabilities`,
+`enable_capability`, `disable_capability` and `list_enabled_capabilities` work
+on the tool registry (`services/tool_registry`). The enabled set lives in the
+checkpointed state key `ABIAgentState.enabled_capabilities` (per agent name,
+merged by `merge_enabled_capabilities`), so it is scoped to one conversation
+and survives agent reconstruction. Changes apply from the next graph step:
+calls already issued in a step run against the tools the step started with.
+Access is checked on enable and again on every bind and dispatch.
+
+Tools that declare `state: Annotated[dict, InjectedState]` receive the graph
+state from `call_tools` (inside the call's arguments).
+
+Agents can also be built from records: see `services/agent_composer`.
+
 ## Subdirectories
 
 | Path | Contents |
@@ -85,6 +111,7 @@ Distinct from the `on_tool_usage` / `on_tool_response` / `on_ai_message`
 | `beta/` | `IntentMapper.py` (embedding-based intent matching), `LocalModel.py`, `VectorStore.py` |
 | `intents/` | `default_intents.py` — predefined `Intent` objects (name/desc match, supervisor help, …) |
 | `ontologies/` | `modules/AgentEventOntology.py` — event dataclasses (`AgentUserMessageReceived`, `AgentAIMessageEmitted`, `AgentToolCalled`, `AgentToolResponded`, `AgentModelCalled`, `AgentRouted`, `AgentInvocationCompleted`); `classes/` auto-generated from RDF |
+| `tests/` | `scripted_chat_model.py` — `ScriptedChatModel`, the LLM stand-in for turn-level tests (records bound tools and seen messages) |
 | `tools/` | `default_tools.py` (`get_time_date`, `get_current_active_agent`, `get_supervisor_agent`); `utils.py` (`can_bind_tools`) |
 
 ## Memory / Checkpointing
@@ -111,6 +138,8 @@ Propagate across async tasks / raw threads with `contextvars.copy_context()`.
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_events_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_hooks_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_injected_state_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/CapabilityAgent_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/IntentAgent_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/OpencodeAgent_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/OpencodeSessionService_test.py
