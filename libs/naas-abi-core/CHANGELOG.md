@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.40.0 (2026-09-23)
+
+### Bug Fixes
+
+- **api**: Render configured description and branding assets on landing page
+  ([`c064c34`](https://github.com/jupyter-naas/abi/commit/c064c3402eb30d0951cf4763b3449aab30650f70))
+
+### Features
+
+- **api**: Configurable landing page theme colours
+  ([`94b58f7`](https://github.com/jupyter-naas/abi/commit/94b58f799bf900c4ff35077d0fbaa20b47b0438f))
+
+
 ## v2.39.0 (2026-09-22)
 
 ### Features
