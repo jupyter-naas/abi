@@ -38,6 +38,11 @@ class CacheClient:
             f"{self._subject_prefix}.exists", request, pb.ExistsResponse
         )
 
+    async def describe(self, request: pb.DescribeRequest) -> pb.DescribeResponse:
+        return await self._transport.call(
+            f"{self._subject_prefix}.describe", request, pb.DescribeResponse
+        )
+
     def tier(self, index: int) -> "CacheClient":
         """Select an explicitly configured tier by its order in cache.adapters."""
         if index < 0:

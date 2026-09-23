@@ -26,6 +26,7 @@ from naas_abi_proto.document.v1 import document_pb2 as pb
 from naas_abi_proto.document.values import decode_data, encode_data, encode_value
 
 from naas_abi_sdk.document import DocumentClient
+from naas_abi_sdk.services.document import DocumentService
 from naas_abi_sdk.transport import RPCError
 
 
@@ -43,7 +44,7 @@ class DocumentCheckpointSaver(BaseCheckpointSaver):
 
     def __init__(
         self,
-        documents: DocumentClient,
+        documents: DocumentClient | DocumentService,
         *,
         agent_id: str,
         serde: SerializerProtocol | None = None,
@@ -51,7 +52,9 @@ class DocumentCheckpointSaver(BaseCheckpointSaver):
         super().__init__(serde=serde)
         if not agent_id:
             raise ValueError("agent_id must be a stable, nonempty identifier")
-        self.documents = documents
+        self.documents = (
+            documents.rpc if isinstance(documents, DocumentService) else documents
+        )
         self.agent_id = agent_id
 
     async def setup(self) -> None:

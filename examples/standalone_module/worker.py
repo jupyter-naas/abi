@@ -31,7 +31,7 @@ class ABIModule(BaseModule):
 
     @property
     def client(self):
-        return self.engine.services
+        return self.engine.rpc
 
     def __init__(self, engine, configuration):
         super().__init__(engine, configuration)
@@ -95,6 +95,8 @@ class ABIModule(BaseModule):
         assert not (await call("exists")).ok_value
 
     async def cache(self):
+        await self.call("cache", "describe")
+
         async def call(op, **fields):
             return await self.call("cache", op, key="demo", **fields)
 

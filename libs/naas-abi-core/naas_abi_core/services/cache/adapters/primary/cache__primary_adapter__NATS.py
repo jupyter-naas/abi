@@ -120,8 +120,10 @@ class CachePrimaryAdapterNATS:
         jwt_secret: str,
         *,
         subject_prefix: str = SUBJECT_PREFIX,
+        tiers: tuple[str, ...] = (),
     ) -> None:
         self._subject_prefix = subject_prefix
+        self._tiers = tiers
         self._adapter = adapter
         self._jwt_secret = jwt_secret
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
@@ -167,6 +169,11 @@ class CachePrimaryAdapterNATS:
             name="exists",
             subject=f"{self._subject_prefix}.exists",
             handler=self._handle_exists,
+        )
+        await service.add_endpoint(
+            name="describe",
+            subject=f"{self._subject_prefix}.describe",
+            handler=self._handle_describe,
         )
         self._service = service
 
@@ -332,3 +339,11 @@ class CachePrimaryAdapterNATS:
     def _call_exists(self, req: cache_pb2.ExistsRequest) -> cache_pb2.ExistsResponse:
         exists = self._adapter.exists(req.key)
         return cache_pb2.ExistsResponse(value=exists)
+
+    async def _handle_describe(self, request: Request) -> None:
+        await self._handle(
+            request,
+            cache_pb2.DescribeRequest,
+            cache_pb2.DescribeResponse,
+            lambda _: cache_pb2.DescribeResponse(tiers=self._tiers),
+        )

@@ -329,7 +329,9 @@ class EngineNATSLoader:
         ):
             # v1 exposes one adapter. Use the canonical cold tier for remote callers.
             primary_cache = CachePrimaryAdapterNATS(
-                services.cache.cold.adapter, nats_config.jwt_secret
+                services.cache.cold.adapter,
+                nats_config.jwt_secret,
+                tiers=tuple(tier for tier, _ in services.cache.adapters),
             )
             nats_runtime.run_coro(primary_cache.start(nc))
             started.append(primary_cache)

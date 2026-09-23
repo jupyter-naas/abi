@@ -100,3 +100,10 @@ message ExistsResponse {
     abi.common.v1.CallError error = 2;
   }
 }
+
+// Ordered tier metadata for SDK service facades. No cached values are exposed.
+message DescribeRequest { abi.common.v1.CallContext context = 1; }
+message DescribeResponse {
+  optional abi.common.v1.CallError error = 1;
+  repeated string tiers = 2;
+}
