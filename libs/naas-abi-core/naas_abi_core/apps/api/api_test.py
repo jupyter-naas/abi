@@ -50,6 +50,72 @@ def test_api_basic_endpoints():
         pytest.fail(f"Failed to test API basic endpoints: {e}")
 
 
+def test_landing_page_uses_configured_title_and_description():
+    """The landing page must render api.title and api.description, not engine copy."""
+    from naas_abi_core.apps.api.api import DESCRIPTION, TITLE, app
+
+    body = TestClient(app).get("/").text
+
+    assert f"<title>{TITLE}</title>" in body
+    assert f"<h1>Welcome to {TITLE}!</h1>" in body
+    assert DESCRIPTION in body
+    assert "ABI's capabilities" not in body or "ABI's capabilities" in DESCRIPTION
+
+
+def test_render_landing_html_escapes_config_values():
+    from naas_abi_core.apps.api.api import render_landing_html
+
+    body = render_landing_html(
+        title="<b>X</b> API",
+        description='Say "hi" & <script>',
+        logo="/static/logo.png",
+        favicon='https://example.com/f.ico?a=1&b="2"',
+    )
+
+    assert "<b>X</b>" not in body
+    assert "&lt;b&gt;X&lt;/b&gt; API" in body
+    assert "&lt;script&gt;" in body
+    assert 'href="https://example.com/f.ico?a=1&amp;b=&quot;2&quot;"' in body
+
+
+def test_resolve_branding_asset(tmp_path):
+    from naas_abi_core.apps.api.api import resolve_branding_asset
+
+    # Remote URL: passed through, nothing to serve locally.
+    url = "https://example.com/brand/favicon.ico"
+    assert resolve_branding_asset(url) == (url, None)
+
+    # Existing file: served from /branding/<basename>.
+    logo = tmp_path / "acme-logo.png"
+    logo.write_bytes(b"png")
+    assert resolve_branding_asset(str(logo)) == (
+        "/branding/acme-logo.png",
+        str(logo.resolve()),
+    )
+
+    # Missing file: falls back to the bundled asset with the same basename.
+    assert resolve_branding_asset("assets/logo.png") == ("/static/logo.png", None)
+
+
+def test_branding_route_serves_only_configured_files(tmp_path):
+    from naas_abi_core.apps.api import api as api_module
+
+    client = TestClient(api_module.app)
+    assert client.get("/branding/nothing.png").status_code == 404
+
+    logo = tmp_path / "logo.png"
+    logo.write_bytes(b"\x89PNG")
+    original = dict(api_module._branding_files)
+    api_module._branding_files["logo.png"] = str(logo)
+    try:
+        response = client.get("/branding/logo.png")
+        assert response.status_code == 200
+        assert response.content == b"\x89PNG"
+    finally:
+        api_module._branding_files.clear()
+        api_module._branding_files.update(original)
+
+
 def test_api_authentication():
     """Test authentication endpoints of the API."""
     try:
@@ -261,9 +327,7 @@ def test_api_cors_configuration():
 
         # Check for CORS headers
         headers = response.headers
-        cors_headers = [
-            h for h in headers if h.lower().startswith("access-control")
-        ]
+        cors_headers = [h for h in headers if h.lower().startswith("access-control")]
 
         if cors_headers:
             print(f"✅ CORS headers found: {cors_headers}")
