@@ -6,15 +6,30 @@ from naas_abi_core.services.tool_registry.tests.tool_index__secondary_adapter__g
     ToolIndexSecondaryAdapterContract,
 )
 from naas_abi_core.services.tool_registry.ToolRegistryPort import ToolIndexEntry
+from naas_abi_core.services.vector_store.adapters.QdrantAdapter import QdrantAdapter
 from naas_abi_core.services.vector_store.adapters.QdrantInMemoryAdapter import (
     QdrantInMemoryAdapter,
 )
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
+from qdrant_client import QdrantClient
 
 
-@pytest.fixture
-def vector_store():
-    service = VectorStoreService(adapter=QdrantInMemoryAdapter(storage_path=":memory:"))
+def _production_qdrant() -> QdrantAdapter:
+    """The server adapter, pointed at a local client: it keeps point ids as
+    given, so tool ids must reach it already encoded."""
+    adapter = QdrantAdapter()
+    adapter.client = QdrantClient(":memory:")
+    return adapter
+
+
+@pytest.fixture(params=["qdrant_in_memory", "qdrant"])
+def vector_store(request):
+    adapter = (
+        QdrantInMemoryAdapter(storage_path=":memory:")
+        if request.param == "qdrant_in_memory"
+        else _production_qdrant()
+    )
+    service = VectorStoreService(adapter=adapter)
     yield service
     service.close()
 
@@ -60,3 +75,23 @@ class TestVectorStoreToolIndexAdapter(ToolIndexSecondaryAdapterContract):
 
         assert "unrelated" in vector_store.list_collections()
         assert other.size() == 1
+
+
+def test_tool_ids_are_stored_as_valid_point_ids_on_the_server_adapter():
+    store = VectorStoreService(adapter=_production_qdrant())
+    index = VectorStoreToolIndexAdapter(store, collection_prefix="tools")
+    index.prepare("model-a")
+    index.upsert(
+        [
+            ToolIndexEntry(
+                id="acme.github/create_issue@1", fingerprint="v1", vector=(1.0, 0.0)
+            )
+        ]
+    )
+    assert index.fingerprints(["acme.github/create_issue@1"]) == {
+        "acme.github/create_issue@1": "v1"
+    }
+    (hit,) = index.search((1.0, 0.0), limit=1)
+    assert hit.id == "acme.github/create_issue@1"
+    index.delete(["acme.github/create_issue@1"])
+    assert index.size() == 0

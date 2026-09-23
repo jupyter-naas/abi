@@ -6,6 +6,11 @@ lets a restarted process recover it without a metadata record, and encoding
 the model hash means switching embedding models never mixes vectors: the
 previous model's collection is dropped when the index is prepared for a new
 one. Stored fingerprints make re-syncs incremental across restarts.
+
+Tool ids (``ns/name@1``) are not valid point ids for every backend (Qdrant
+servers accept only UUIDs and integers), so each entry is stored under a
+deterministic UUID derived from the tool id, with the tool id kept in the
+entry's metadata and read back from there.
 """
 
 from __future__ import annotations
@@ -13,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import re
 import threading
+import uuid
 from collections.abc import Sequence
 
 import numpy as np
@@ -24,6 +30,12 @@ from naas_abi_core.services.tool_registry.ToolRegistryPort import (
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 
 _FINGERPRINT_KEY = "tool_fingerprint"
+_TOOL_ID_KEY = "tool_id"
+_POINT_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "https://naas.ai/abi/tool-registry")
+
+
+def _point_id(tool_id: str) -> str:
+    return str(uuid.uuid5(_POINT_NAMESPACE, tool_id))
 
 
 class VectorStoreToolIndexAdapter(IToolIndexPort):
@@ -80,7 +92,7 @@ class VectorStoreToolIndexAdapter(IToolIndexPort):
             found: dict[str, str] = {}
             for id in ids:
                 document = self._store.get_document(
-                    self._collection, id, include_vector=False
+                    self._collection, _point_id(id), include_vector=False
                 )
                 if document is not None and document.metadata:
                     fingerprint = document.metadata.get(_FINGERPRINT_KEY)
@@ -109,12 +121,16 @@ class VectorStoreToolIndexAdapter(IToolIndexPort):
                 self._dimension = dimension
             self._store.add_documents(
                 self._collection,
-                ids=[entry.id for entry in entries],
+                ids=[_point_id(entry.id) for entry in entries],
                 vectors=[
                     np.asarray(entry.vector, dtype=np.float64) for entry in entries
                 ],
                 metadata=[
-                    {**entry.metadata, _FINGERPRINT_KEY: entry.fingerprint}
+                    {
+                        **entry.metadata,
+                        _FINGERPRINT_KEY: entry.fingerprint,
+                        _TOOL_ID_KEY: entry.id,
+                    }
                     for entry in entries
                 ],
             )
@@ -124,7 +140,9 @@ class VectorStoreToolIndexAdapter(IToolIndexPort):
             self._require_prepared()
             if self._collection is None or not ids:
                 return
-            self._store.delete_documents(self._collection, list(ids))
+            self._store.delete_documents(
+                self._collection, [_point_id(id) for id in ids]
+            )
 
     def search(self, vector: Sequence[float], limit: int) -> list[ToolIndexHit]:
         if limit <= 0:
@@ -137,11 +155,14 @@ class VectorStoreToolIndexAdapter(IToolIndexPort):
                 self._collection,
                 np.asarray(vector, dtype=np.float64),
                 k=limit,
-                # Qdrant keeps our id in the payload; without it a hit only
-                # carries the backend's internal point UUID.
+                # The tool id lives in the metadata; the hit id is a point UUID.
                 include_metadata=True,
             )
-            return [ToolIndexHit(id=r.id, score=float(r.score)) for r in results]
+            return [
+                ToolIndexHit(id=str(r.metadata[_TOOL_ID_KEY]), score=float(r.score))
+                for r in results
+                if r.metadata and _TOOL_ID_KEY in r.metadata
+            ]
 
     def size(self) -> int:
         with self._lock:

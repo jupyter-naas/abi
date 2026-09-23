@@ -394,6 +394,19 @@ class TestSearch:
         assert len(registry.search_tools("github repository", limit=1)) == 1
         assert len(registry.search_tools("github repository", limit=50)) == 5
 
+    def test_search_does_not_trust_the_index_size(self, embedder):
+        """Some backends under-report their size (a Qdrant server counts only
+        HNSW-indexed vectors); search must still fill the limit."""
+
+        class _UnderCountingIndex(InMemoryToolIndexAdapter):
+            def size(self) -> int:
+                return 0
+
+        service = ToolRegistryService(embedder=embedder, index=_UnderCountingIndex())
+        for module, tools in _catalog().items():
+            service.publish(module, tools)
+        assert len(service.search_tools("github repository", limit=4)) == 4
+
     def test_limit_must_be_positive(self, registry):
         with pytest.raises(ValueError):
             registry.search_tools("anything", limit=0)
