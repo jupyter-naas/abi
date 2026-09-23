@@ -8,6 +8,7 @@ print(
     flush=True,
 )
 
+import html
 import os
 import subprocess
 from importlib.resources import files
@@ -19,7 +20,7 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.models import OAuthFlowPassword
 from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 # Authentication
 from fastapi.security import OAuth2PasswordRequestForm
@@ -82,13 +83,33 @@ TITLE = api_runtime_configuration.title
 DESCRIPTION = api_runtime_configuration.description
 app = FastAPI(title=TITLE, docs_url=None, redoc_url=None)
 
-# Set logo path
-logo_path = api_runtime_configuration.logo_path
-logo_name = os.path.basename(logo_path)
 
-# Set favicon path
-favicon_path = api_runtime_configuration.favicon_path
-favicon_name = os.path.basename(favicon_path)
+def resolve_branding_asset(configured: str) -> tuple[str, str | None]:
+    """Turn a configured logo/favicon value into a browser-loadable URL.
+
+    Returns ``(url, local_file)``:
+
+    - ``http(s)://…`` is used as is; ``local_file`` is ``None``.
+    - A path to an existing file is served from ``/branding/<basename>``;
+      ``local_file`` is its absolute path.
+    - Anything else falls back to the bundled asset with the same basename
+      under ``/static/``; ``local_file`` is ``None``.
+    """
+    if configured.startswith(("http://", "https://")):
+        return configured, None
+    name = os.path.basename(configured)
+    if os.path.isfile(configured):
+        return f"/branding/{name}", os.path.abspath(configured)
+    return f"/static/{name}", None
+
+
+logo_url, _logo_file = resolve_branding_asset(api_runtime_configuration.logo_path)
+favicon_url, _favicon_file = resolve_branding_asset(
+    api_runtime_configuration.favicon_path
+)
+_branding_files: dict[str, str] = {
+    os.path.basename(path): path for path in (_logo_file, _favicon_file) if path
+}
 
 # Allow callers (e.g. `abi dev`) to inject additional origins at runtime so
 # the config file does not need to know about dynamically-allocated dev ports.
@@ -115,6 +136,15 @@ app.add_middleware(
 
 static_dir = os.path.join(os.path.dirname(str(files("naas_abi_core"))), "assets")
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+
+@app.get("/branding/{name}", include_in_schema=False)
+def branding_asset(name: str):
+    """Serve the logo/favicon configured under ``api.logo_path`` / ``api.favicon_path``."""
+    path = _branding_files.get(name)
+    if path is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return FileResponse(path)
 
 
 # Custom OAuth2 class that accepts query parameter
@@ -237,7 +267,7 @@ def custom_openapi():
         # tags=TAGS_METADATA,
     )
     openapi_schema["info"]["x-logo"] = {
-        "url": f"/static/{logo_name}",
+        "url": logo_url,
         "altText": "Logo",
     }
     app.openapi_schema = openapi_schema
@@ -252,7 +282,7 @@ def overridden_swagger():
     return get_swagger_ui_html(
         openapi_url="/openapi.json",
         title=TITLE,
-        swagger_favicon_url=f"/static/{favicon_name}",
+        swagger_favicon_url=favicon_url,
     )
 
 
@@ -261,13 +291,23 @@ def overridden_redoc():
     return get_redoc_html(
         openapi_url="/openapi.json",
         title=TITLE,
-        redoc_favicon_url=f"/static/{favicon_name}",
+        redoc_favicon_url=favicon_url,
+    )
+
+
+def render_landing_html(title: str, description: str, logo: str, favicon: str) -> str:
+    """Fill the landing template. Config values are escaped; URLs are attribute-escaped."""
+    return (
+        API_LANDING_HTML.replace("[TITLE]", html.escape(title))
+        .replace("[DESCRIPTION]", html.escape(description))
+        .replace("[LOGO_URL]", html.escape(logo, quote=True))
+        .replace("[FAVICON_URL]", html.escape(favicon, quote=True))
     )
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def root():
-    return API_LANDING_HTML.replace("[TITLE]", TITLE).replace("[LOGO_NAME]", logo_name)
+    return render_landing_html(TITLE, DESCRIPTION, logo_url, favicon_url)
 
 
 def _load_runtime_routes():
