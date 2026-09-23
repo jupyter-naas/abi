@@ -27,6 +27,7 @@ Core services live under `libs/naas-abi-core/naas_abi_core/services/`. Each has 
 |---|---|---|
 | `activity_log` | Per-actor activity event log (fail-open recording) | [services/activity_log/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/activity_log/AGENTS.md) |
 | `agent` | LLM ↔ tools/sub-agents orchestration, memory, SSE streaming | [services/agent/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/agent/AGENTS.md) |
+| `agent_composer` | Build agents from records (`AgentSpec`) or programmatically | [services/agent_composer/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/agent_composer/AGENTS.md) |
 | `bus` | Pub/sub + durable work-queue message broker | [services/bus/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/bus/AGENTS.md) |
 | `cache` | Multi-tier (hot/cold) cache with decorator API | [services/cache/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/cache/AGENTS.md) |
 | `document` | Portable mutable documents, scoped to modules (SQLite / PostgreSQL) | [services/document/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/document/AGENTS.md) |
@@ -37,6 +38,7 @@ Core services live under `libs/naas-abi-core/naas_abi_core/services/`. Each has 
 | `object_storage` | S3-style blob storage (FS / S3 / Naas) | [services/object_storage/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/object_storage/AGENTS.md) |
 | `ontology` | LLM-powered NER against an RDF/OWL ontology | [services/ontology/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/ontology/AGENTS.md) |
 | `secret` | Layered secret store (dotenv / Naas / base64) | [services/secret/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/secret/AGENTS.md) |
+| `tool_registry` | Catalog of module tools: versioned ids, bindings, semantic search | [services/tool_registry/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/tool_registry/AGENTS.md) |
 | `triple_store` | RDF/SPARQL named-graph store + view subscriptions | [services/triple_store/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/triple_store/AGENTS.md) |
 | `vector_store` | Vector DB facade (Qdrant / SQLite-vec) | [services/vector_store/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/vector_store/AGENTS.md) |
 

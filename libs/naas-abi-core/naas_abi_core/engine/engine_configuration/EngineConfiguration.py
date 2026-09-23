@@ -75,6 +75,9 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_SourceControl
     SourceControlAdapterConfiguration,
     SourceControlServiceConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_ToolRegistryService import (
+    ToolRegistryServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_TripleStoreService import (
     TripleStoreAdapterConfiguration,
     TripleStoreAdapterOxigraphEmbeddedConfiguration,
@@ -198,6 +201,9 @@ class ServicesConfiguration(BaseModel):
     )
     model_registry: ModelRegistryServiceConfiguration = (
         ModelRegistryServiceConfiguration()
+    )
+    tool_registry: ToolRegistryServiceConfiguration = (
+        ToolRegistryServiceConfiguration()
     )
     cache: CacheServiceConfiguration = CacheServiceConfiguration(
         adapters=[

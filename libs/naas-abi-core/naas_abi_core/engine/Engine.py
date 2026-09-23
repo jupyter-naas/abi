@@ -31,6 +31,7 @@ from naas_abi_core.engine.engine_loaders.EngineOntologyLoader import (
     EngineOntologyLoader,
 )
 from naas_abi_core.engine.engine_loaders.EngineServiceLoader import EngineServiceLoader
+from naas_abi_core.engine.engine_loaders.EngineToolLoader import EngineToolLoader
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.engine.ownership.ownership_service import Claim
 from naas_abi_core.module.Module import BaseModule, ModuleDependencies
@@ -222,6 +223,14 @@ class Engine(IEngine):
         logger.debug("Initializing engine")
         self.on_initialized()
         logger.debug("Engine initialized")
+
+        # Tool instances exist once every module ran ``on_initialized``.
+        # Publication completes before ``load`` returns, so anything composing
+        # agents afterwards (kernel routes, requests) sees every tool.
+        if self.__services.tool_registry_available():
+            EngineToolLoader.publish_tools(
+                self.__services.tool_registry, self.__modules
+            )
 
         # Module jobs start last: their handlers may use anything initialized above.
         # A standby or client engine hosts none: the serving engine does.
@@ -456,6 +465,7 @@ class Engine(IEngine):
             if offer is not None:
                 owners.update(offer(adapter, self.services))
         return owners
+
 
     def on_initialized(self):
         for module in self.__modules.values():
