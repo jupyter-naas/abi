@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from naas_abi.agents.tools.documents_commands import (
+from naas_abi.tools.documents_commands import (
     PAGE_BREAK_HTML,
     apply_document_commands,
     heading_outline,
@@ -130,7 +130,7 @@ def test_expert_user_script_against_html() -> None:
 
 
 def test_expert_script_verbs_are_known_commands() -> None:
-    from naas_abi.agents.tools.documents_commands import KNOWN_COMMANDS
+    from naas_abi.tools.documents_commands import KNOWN_COMMANDS
 
     for name in (
         "apply_mark",

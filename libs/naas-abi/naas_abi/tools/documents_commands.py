@@ -14,7 +14,7 @@ import re
 from typing import Any
 from urllib.parse import urlsplit
 
-from naas_abi.agents.tools.documents_html import replace_visible, template_fields
+from naas_abi.tools.documents_html import replace_visible, template_fields
 
 PAGE_BREAK_HTML = '<div class="page-break" data-nexus-page-break></div>'
 
@@ -1232,7 +1232,7 @@ def apply_document_commands(
             )
             heading_index = 0
         elif typ == "fill_slots":
-            from naas_abi.agents.tools.documents_slots import fill_document_slots
+            from naas_abi.tools.documents_slots import fill_document_slots
 
             filled = fill_document_slots(
                 next_html, {k: v for k, v in raw.items() if k != "type"}

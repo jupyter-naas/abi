@@ -11,7 +11,7 @@ from naas_abi.agents.sheets.template_resolve import (
     qualify_sheets_template_id,
     resolve_sheets_template_id,
 )
-from naas_abi.agents.tools import sheets_workbook_storage as store
+from naas_abi.tools import sheets_workbook_storage as store
 from naas_abi.apps.nexus.sheets.formulas import (
     calculate_workbook,
 )

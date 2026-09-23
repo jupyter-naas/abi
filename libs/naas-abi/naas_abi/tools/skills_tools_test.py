@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 from naas_abi.agents.feature.context import nexus_feature_context
-from naas_abi.agents.tools import skills_tools as tools_module
+from naas_abi.tools import skills_tools as tools_module
 from naas_abi.apps.nexus.apps.api.app.services.skills.port import SkillRecord
 from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
 
@@ -213,7 +213,7 @@ def test_write_tools_are_the_ones_the_web_refreshes_on() -> None:
     """stores/skills.ts mirrors this list to refetch the catalog."""
     from pathlib import Path
 
-    from naas_abi.agents.tools.nexus_source_tools import PACKAGE_ROOT
+    from naas_abi.tools.nexus_source_tools import PACKAGE_ROOT
 
     names = {t.name for t in tools_module.skills_tools()}
     assert set(tools_module.SKILL_WRITE_TOOLS) <= names

@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 from naas_abi.agents.feature.context import nexus_feature_context
-from naas_abi.agents.tools import apps_tools as tools_module
+from naas_abi.tools import apps_tools as tools_module
 from naas_abi.apps.nexus.apps.api.app.services.apps.port import (
     AppConfigRecord,
     AppInfo,

@@ -21,7 +21,7 @@ from naas_abi.agents.feature.context import (
     active_feature_errors,
     active_feature_resource_id,
 )
-from naas_abi.agents.tools.nexus_admin_tools import (
+from naas_abi.tools.nexus_admin_tools import (
     _require_user_id,
     _run_async,
     _with_db,

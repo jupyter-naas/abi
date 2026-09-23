@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 
 from naas_abi.agents.DocumentsAgent import DOCUMENTS_GUIDELINES, DocumentsAgent
-from naas_abi.agents.tools.documents_commands import (
+from naas_abi.tools.documents_commands import (
     apply_document_commands,
     delete_block,
     insert_list,
@@ -16,7 +16,7 @@ from naas_abi.agents.tools.documents_commands import (
     replace_class,
     update_paragraph_style,
 )
-from naas_abi.agents.tools.documents_slots import fill_document_slots
+from naas_abi.tools.documents_slots import fill_document_slots
 
 _FLOWING_MEMO = """<!doctype html><html><head><title>Note au board</title></head><body>
 <main class="document">

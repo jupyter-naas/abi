@@ -37,7 +37,7 @@ def settings_tools() -> list[BaseTool]:
         user_id, workspace_id = ctx
 
         async def _run(db: Any) -> Any:
-            from naas_abi.agents.tools.nexus_admin_tools import (
+            from naas_abi.tools.nexus_admin_tools import (
                 _organization_service,
                 _workspace_service,
             )

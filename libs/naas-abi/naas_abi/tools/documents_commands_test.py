@@ -1,4 +1,4 @@
-from naas_abi.agents.tools.documents_commands import (
+from naas_abi.tools.documents_commands import (
     FILL_SLOT_KEYS,
     PAGE_BREAK_HTML,
     apply_document_commands,
@@ -454,7 +454,7 @@ def test_apply_failure_does_not_ask_for_another_apply() -> None:
 
 
 def test_inline_mark_targets_visible_text_and_preserves_head():
-    from naas_abi.agents.tools.documents_commands import apply_mark
+    from naas_abi.tools.documents_commands import apply_mark
 
     seed = '<html><head><title>Proposal</title><style>.Proposal{}</style></head><body><h1 title="Proposal">Proposal</h1></body></html>'
     result = apply_mark(seed, "Proposal")
@@ -463,7 +463,7 @@ def test_inline_mark_targets_visible_text_and_preserves_head():
 
 
 def test_inline_mark_refuses_ambiguous_text_and_unsafe_link():
-    from naas_abi.agents.tools.documents_commands import apply_mark, insert_link
+    from naas_abi.tools.documents_commands import apply_mark, insert_link
 
     assert "error" in apply_mark("<p>Same</p><p>Same</p>", "Same")
     assert "error" in insert_link("<p>Open</p>", "Open", "javascript:alert(1)")

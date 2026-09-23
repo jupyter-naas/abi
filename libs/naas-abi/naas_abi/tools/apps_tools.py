@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 from langchain_core.tools import BaseTool, tool
 from naas_abi.agents.feature.context import active_feature_resource_id
-from naas_abi.agents.tools.nexus_admin_tools import (
+from naas_abi.tools.nexus_admin_tools import (
     _record_to_dict,
     _require_user_id,
     _run_async,

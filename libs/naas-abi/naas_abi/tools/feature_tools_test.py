@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 from naas_abi.agents.feature.context import nexus_feature_context
-from naas_abi.agents.tools import datasets_tools, files_tools, graph_tools, maps_tools
+from naas_abi.tools import datasets_tools, files_tools, graph_tools, maps_tools
 from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
 
 
@@ -133,7 +133,7 @@ def test_maps_real_catalog_has_the_builtin_layers() -> None:
 
 
 def test_secret_listing_returns_names_only(monkeypatch) -> None:
-    from naas_abi.agents.tools import settings_tools
+    from naas_abi.tools import settings_tools
 
     secret = SimpleNamespace(
         key="OPENAI_API_KEY",
@@ -174,7 +174,7 @@ def test_secret_listing_returns_names_only(monkeypatch) -> None:
 def test_member_list_marks_the_caller(monkeypatch) -> None:
     from datetime import UTC, datetime
 
-    from naas_abi.agents.tools import nexus_admin_tools
+    from naas_abi.tools import nexus_admin_tools
     from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
         WorkspaceMemberRecord,
     )

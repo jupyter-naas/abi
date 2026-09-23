@@ -16,7 +16,7 @@ from typing import Any
 
 from langchain_core.tools import BaseTool, tool
 from naas_abi.agents.feature.context import active_feature_resource_id
-from naas_abi.agents.tools.nexus_source_tools import PACKAGE_ROOT
+from naas_abi.tools.nexus_source_tools import PACKAGE_ROOT
 
 MAP_DATASET_RESOURCE_KIND = "map_dataset"
 _WEB = PACKAGE_ROOT / "apps/nexus/apps/web/src"

@@ -45,7 +45,7 @@ from naas_abi.agents.documents import (
     reject_unresearched_documents_write,
     resolve_document_title,
 )
-from naas_abi.agents.tools.documents_html import DocumentHTML, template_fields
+from naas_abi.tools.documents_html import DocumentHTML, template_fields
 from naas_abi_core.services.agent.context import (
     agent_chat_id,
     agent_user_email,
@@ -634,7 +634,7 @@ def _persist_document(
     section") still buckets into the right semver bump instead of always
     falling back to the non-bumping "chore" type.
     """
-    from naas_abi.agents.tools.documents_commands import (
+    from naas_abi.tools.documents_commands import (
         leftover_write_note,
         normalize_document_flow,
     )
@@ -1750,7 +1750,7 @@ def _rename_or_update_document(
     message: str,
 ) -> dict[str, Any]:
     """Shared path for rename_document (project + HTML) and update_title (HTML)."""
-    from naas_abi.agents.tools.documents_commands import update_document_title
+    from naas_abi.tools.documents_commands import update_document_title
 
     if not agent_user_id.get():
         return {"error": "No authenticated user on this agent session."}
@@ -1839,7 +1839,7 @@ def _write_project_template_id(slug: str, template_id: str) -> None:
 
 def _view_for_llm(html: str) -> dict[str, Any]:
     """Outline-only document view. Full HTML belongs in one targeted section read."""
-    from naas_abi.agents.tools.documents_commands import (
+    from naas_abi.tools.documents_commands import (
         leftover_placeholders,
         leftover_slots,
     )
@@ -2499,10 +2499,10 @@ def documents_tools() -> list[BaseTool]:
         repeat = reject_repeat_apply_document_commands()
         if repeat:
             return repeat
-        from naas_abi.agents.tools.documents_commands import (
+        from naas_abi.tools.documents_commands import (
             apply_document_commands as apply_commands,
         )
-        from naas_abi.agents.tools.documents_commands import (
+        from naas_abi.tools.documents_commands import (
             last_rename_document_title,
         )
 
@@ -2598,7 +2598,7 @@ def documents_tools() -> list[BaseTool]:
             return {"error": f"slots_json is not valid JSON: {exc}"}
         if not isinstance(payload, dict):
             return {"error": "slots_json must be a JSON object"}
-        from naas_abi.agents.tools.documents_slots import (
+        from naas_abi.tools.documents_slots import (
             fill_document_slots as fill_slots,
         )
 

@@ -28,7 +28,7 @@ API:
 Ontology files: naas_abi/ontologies/ (BFO-aligned TTL; imports under naas_abi/ontologies/imports/).
 Engine: naas_abi_core/services/triple_store/ (TripleStoreService and adapters).
 Related: naas_abi/agents/OntologyEngineerAgent.py (BFO 7 Buckets modeling rules, exposed here as get_bfo_modeling_guidelines).
-Agent: naas_abi/agents/OntologyAgent.py and naas_abi/agents/tools/ontology_tools.py."""
+Agent: naas_abi/agents/OntologyAgent.py and naas_abi/tools/ontology_tools.py."""
 
 ONTOLOGY_CAPABILITIES = """- Browse the workspace's ontology catalog (TTL files from loaded modules, limited to the workspace seed's ontologies: list when it declares one).
 - Explore one ontology: network view, overview counts (classes, object and data properties, individuals, imports), class and relation lists, subclass hierarchy.
@@ -99,8 +99,8 @@ class OntologyAgent(IntentAgent):
 
     @staticmethod
     def get_tools() -> list:
-        from naas_abi.agents.tools.nexus_source_tools import nexus_source_tools
-        from naas_abi.agents.tools.ontology_tools import ontology_tools
+        from naas_abi.tools.nexus_source_tools import nexus_source_tools
+        from naas_abi.tools.ontology_tools import ontology_tools
 
         return ontology_tools() + nexus_source_tools()
 

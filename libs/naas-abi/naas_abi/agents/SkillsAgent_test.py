@@ -9,7 +9,7 @@ from naas_abi.agents.feature import (
     FEATURE_GROUNDING_GUIDELINES,
 )
 from naas_abi.agents.SkillsAgent import SKILLS_CODE_MAP, SkillsAgent
-from naas_abi.agents.tools.nexus_source_tools import PACKAGE_ROOT
+from naas_abi.tools.nexus_source_tools import PACKAGE_ROOT
 
 
 def test_skills_agent_is_a_named_office_agent() -> None:

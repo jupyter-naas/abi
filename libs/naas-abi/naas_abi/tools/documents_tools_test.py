@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from naas_abi.agents.tools.documents_tools import (
+from naas_abi.tools.documents_tools import (
     _DATA_URL_RE,
     _REDACTED_PLACEHOLDER,
     _WIPED_DECK_ERROR,
@@ -40,7 +40,7 @@ from naas_abi.agents.tools.documents_tools import (
     maybe_auto_title_open_document,
     resolve_documents_template_id,
 )
-from naas_abi.agents.tools.web_tools import (
+from naas_abi.tools.web_tools import (
     make_web_fetch_tool,
     make_web_search_tool,
     reset_web_tool_turn,
@@ -81,7 +81,7 @@ _SAMPLE = """<!DOCTYPE html>
 """
 
 _TEMPLATE = (
-    Path(__file__).resolve().parents[2]
+    Path(__file__).resolve().parents[1]
     / "apps"
     / "nexus"
     / "assets"
@@ -338,10 +338,10 @@ def test_apply_replacements_real_template_cover_title():
 def _bind_in_memory_git(monkeypatch):
     sc = SourceControlService(InMemoryAdapter())
     monkeypatch.setattr(
-        "naas_abi.agents.tools.documents_tools._get_source_control", lambda: sc
+        "naas_abi.tools.documents_tools._get_source_control", lambda: sc
     )
     monkeypatch.setattr(
-        "naas_abi.agents.tools.documents_tools._repo_id", lambda: "abi/monorepo"
+        "naas_abi.tools.documents_tools._repo_id", lambda: "abi/monorepo"
     )
     return sc
 
@@ -565,11 +565,11 @@ def test_missing_repo_error_is_wipe_message(monkeypatch):
             raise RepoNotFoundError("abi/monorepo")
 
     monkeypatch.setattr(
-        "naas_abi.agents.tools.documents_tools._get_source_control",
+        "naas_abi.tools.documents_tools._get_source_control",
         lambda: _MissingRepo(),
     )
     monkeypatch.setattr(
-        "naas_abi.agents.tools.documents_tools._repo_id", lambda: "abi/monorepo"
+        "naas_abi.tools.documents_tools._repo_id", lambda: "abi/monorepo"
     )
     tokens = _sections_context()
     try:
@@ -1275,7 +1275,7 @@ def test_conv_uc4e9gn3zn_rejects_second_fetch_insert_and_read(monkeypatch):
                 "body": "truncated",
             },
         ]
-        with patch("naas_abi.agents.tools.web_tools._ddgs_search", return_value=fake):
+        with patch("naas_abi.tools.web_tools._ddgs_search", return_value=fake):
             found = search.invoke(
                 {"query": "Forvis Mazars Israel office Tel Aviv services 2026"}
             )
@@ -1290,7 +1290,7 @@ def test_conv_uc4e9gn3zn_rejects_second_fetch_insert_and_read(monkeypatch):
         opener = MagicMock()
         opener.open.return_value = resp
         with patch(
-            "naas_abi.agents.tools.web_tools._http_only_opener",
+            "naas_abi.tools.web_tools._http_only_opener",
             return_value=opener,
         ):
             first = fetch.invoke({"url": "https://www.forvismazars.com/il/en/offices"})
@@ -1417,11 +1417,11 @@ def test_apply_documents_template_skips_research_gate(monkeypatch):
     seed = "<html><body><h1>Portrait A4</h1><p>Introduction</p></body></html>"
     sc = _seed_in_memory_document(_bind_in_memory_git(monkeypatch), _SAMPLE)
     monkeypatch.setattr(
-        "naas_abi.agents.tools.documents_tools._catalog_template_rows",
+        "naas_abi.tools.documents_tools._catalog_template_rows",
         lambda: _CATALOG,
     )
     monkeypatch.setattr(
-        "naas_abi.agents.tools.documents_tools._load_catalog_seed_html",
+        "naas_abi.tools.documents_tools._load_catalog_seed_html",
         lambda template_id: seed,
     )
     tokens = _sections_context()

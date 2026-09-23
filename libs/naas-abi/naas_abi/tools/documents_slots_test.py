@@ -1,5 +1,5 @@
-from naas_abi.agents.tools.documents_commands import leftover_placeholders
-from naas_abi.agents.tools.documents_slots import (
+from naas_abi.tools.documents_commands import leftover_placeholders
+from naas_abi.tools.documents_slots import (
     ensure_title_slot_is_h1,
     fill_document_slots,
 )

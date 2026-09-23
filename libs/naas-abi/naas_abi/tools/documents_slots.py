@@ -10,7 +10,7 @@ import html as html_lib
 import re
 from typing import Any
 
-from naas_abi.agents.tools.documents_commands import (
+from naas_abi.tools.documents_commands import (
     delete_block,
     heading_outline,
     leftover_placeholders,
@@ -20,7 +20,7 @@ from naas_abi.agents.tools.documents_commands import (
     replace_class,
     update_document_title,
 )
-from naas_abi.agents.tools.documents_html import (
+from naas_abi.tools.documents_html import (
     DocumentHTML,
     acknowledge_filled_fields,
     template_fields,

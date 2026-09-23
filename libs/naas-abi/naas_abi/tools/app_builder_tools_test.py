@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 from naas_abi.agents.feature.context import bind_feature_context
-from naas_abi.agents.tools import app_builder_tools as tools_module
+from naas_abi.tools import app_builder_tools as tools_module
 from naas_abi.apps.nexus.apps.api.app.services.apps.projects.adapters.secondary.object_storage import (
     AppDraftStoreObjectStorage,
 )

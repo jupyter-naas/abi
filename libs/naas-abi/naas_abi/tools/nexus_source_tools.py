@@ -29,7 +29,7 @@ from typing import Any
 
 from langchain_core.tools import BaseTool, tool
 
-PACKAGE_ROOT = Path(__file__).resolve().parents[2]
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 _DEFAULT_PREFIX = "naas_abi"
 _CORE_PREFIX = "naas_abi_core"
 _WEB_PREFIX = "apps/nexus/apps/web"

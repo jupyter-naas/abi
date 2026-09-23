@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from naas_abi.agents.tools.web_tools import (
+from naas_abi.tools.web_tools import (
     _ddgs_search,
     _html_to_text,
     _http_only_opener,
@@ -20,7 +20,7 @@ def _reset_web_tool_turn() -> None:
     reset_web_tool_turn()
 
 
-_PYPROJECT = Path(__file__).parents[3] / "pyproject.toml"
+_PYPROJECT = Path(__file__).parents[2] / "pyproject.toml"
 
 
 def test_html_to_text_strips_tags_and_scripts() -> None:
@@ -45,7 +45,7 @@ def test_web_search_tool_name_and_numbered_results() -> None:
             "body": "President...",
         },
     ]
-    with patch("naas_abi.agents.tools.web_tools._ddgs_search", return_value=fake):
+    with patch("naas_abi.tools.web_tools._ddgs_search", return_value=fake):
         result = tool.invoke({"query": "president usa 2026"})
     assert "1." in result
     assert "Trump wins" in result
@@ -54,7 +54,7 @@ def test_web_search_tool_name_and_numbered_results() -> None:
 
 def test_web_search_empty_and_caps() -> None:
     tool = make_web_search_tool()
-    with patch("naas_abi.agents.tools.web_tools._ddgs_search", return_value=[]) as mock:
+    with patch("naas_abi.tools.web_tools._ddgs_search", return_value=[]) as mock:
         empty = tool.invoke({"query": "xyzzy nothing here"})
         assert "No results" in empty
         assert "web_fetch" in empty
@@ -86,7 +86,7 @@ def test_web_fetch_rejects_non_http_and_strips_html() -> None:
 
     resp = _html_response(b"<html><body><p>Hello world</p></body></html>")
     with patch(
-        "naas_abi.agents.tools.web_tools._http_only_opener",
+        "naas_abi.tools.web_tools._http_only_opener",
         return_value=_mock_opener(resp),
     ):
         result = tool.invoke({"url": "https://example.com"})
@@ -119,7 +119,7 @@ def test_web_fetch_refuses_every_scheme_but_http_and_https(url: str) -> None:
     opener = MagicMock()
 
     with patch(
-        "naas_abi.agents.tools.web_tools._http_only_opener",
+        "naas_abi.tools.web_tools._http_only_opener",
         return_value=opener,
     ):
         result = tool.invoke({"url": url})
@@ -133,7 +133,7 @@ def test_web_fetch_accepts_an_uppercase_scheme() -> None:
     """Scheme comparison is case-insensitive per RFC 3986, unlike startswith."""
     resp = _html_response(b"<p>ok</p>")
     with patch(
-        "naas_abi.agents.tools.web_tools._http_only_opener",
+        "naas_abi.tools.web_tools._http_only_opener",
         return_value=_mock_opener(resp),
     ):
         assert "ok" in make_web_fetch_tool().invoke({"url": "HTTPS://example.com"})
@@ -173,7 +173,7 @@ def test_web_fetch_refuses_metadata_and_private_hosts(url: str) -> None:
     opener = MagicMock()
 
     with patch(
-        "naas_abi.agents.tools.web_tools._http_only_opener",
+        "naas_abi.tools.web_tools._http_only_opener",
         return_value=opener,
     ):
         result = tool.invoke({"url": url})
@@ -199,7 +199,7 @@ def test_web_fetch_still_opens_ordinary_public_urls(url: str) -> None:
     """
     resp = _html_response(b"<p>public</p>")
     with patch(
-        "naas_abi.agents.tools.web_tools._http_only_opener",
+        "naas_abi.tools.web_tools._http_only_opener",
         return_value=_mock_opener(resp),
     ):
         assert "public" in make_web_fetch_tool().invoke({"url": url})
@@ -296,7 +296,7 @@ def test_ddgs_search_falls_back_when_ddgs_fails() -> None:
 
 def test_web_search_floors_max_results_at_one() -> None:
     tool = make_web_search_tool()
-    with patch("naas_abi.agents.tools.web_tools._ddgs_search", return_value=[]) as mock:
+    with patch("naas_abi.tools.web_tools._ddgs_search", return_value=[]) as mock:
         tool.invoke({"query": "q", "max_results": 0})
     mock.assert_called_once_with("q", 1)
 
@@ -304,12 +304,12 @@ def test_web_search_floors_max_results_at_one() -> None:
 def test_web_search_truncates_snippets_and_tolerates_other_key_names() -> None:
     tool = make_web_search_tool()
     long_body = [{"title": "T", "href": "https://example.com", "body": "X" * 500}]
-    with patch("naas_abi.agents.tools.web_tools._ddgs_search", return_value=long_body):
+    with patch("naas_abi.tools.web_tools._ddgs_search", return_value=long_body):
         assert "X" * 251 not in tool.invoke({"query": "q"})
 
     reset_web_tool_turn()
     short_keys = [{"t": "Title", "u": "https://x.com", "d": "Desc"}]
-    with patch("naas_abi.agents.tools.web_tools._ddgs_search", return_value=short_keys):
+    with patch("naas_abi.tools.web_tools._ddgs_search", return_value=short_keys):
         assert "Title" in tool.invoke({"query": "q"})
 
 
@@ -318,7 +318,7 @@ def test_web_fetch_marks_truncated_pages() -> None:
     resp = _html_response(b"A" * 10_000, content_type="text/plain")
 
     with patch(
-        "naas_abi.agents.tools.web_tools._http_only_opener",
+        "naas_abi.tools.web_tools._http_only_opener",
         return_value=_mock_opener(resp),
     ):
         result = tool.invoke({"url": "https://x.com", "max_length": 100})
@@ -331,7 +331,7 @@ def test_web_fetch_rejects_the_same_url_twice() -> None:
     tool = make_web_fetch_tool()
     resp = _html_response(b"<p>ok</p>")
     with patch(
-        "naas_abi.agents.tools.web_tools._http_only_opener",
+        "naas_abi.tools.web_tools._http_only_opener",
         return_value=_mock_opener(resp),
     ):
         assert "ok" in tool.invoke(
@@ -350,7 +350,7 @@ def test_web_fetch_rejects_truncated_oss_url_then_repeat() -> None:
     )
     opener = MagicMock()
     with patch(
-        "naas_abi.agents.tools.web_tools._http_only_opener",
+        "naas_abi.tools.web_tools._http_only_opener",
         return_value=opener,
     ):
         first = tool.invoke({"url": url})
@@ -374,7 +374,7 @@ def test_web_search_drops_truncated_result_urls() -> None:
             "body": "junk",
         },
     ]
-    with patch("naas_abi.agents.tools.web_tools._ddgs_search", return_value=fake):
+    with patch("naas_abi.tools.web_tools._ddgs_search", return_value=fake):
         result = tool.invoke({"query": "Forvis Mazars Israel 2026"})
     assert "forvismazars.com" in result
     assert "routify" not in result

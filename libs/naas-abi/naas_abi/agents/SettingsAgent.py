@@ -31,7 +31,7 @@ API:
 - {_API}/services/iam/service.py, authorization.py, IAM_SPEC.md: scopes and workspace access checks.
 - {_API}/core/feature_flags.py: build_feature_flags (enabled catalog, role baseline, organization override, workspace override).
 - naas_abi/__init__.py: FeatureFlagsConfig and WorkspaceSeedConfig (config.yaml nexus_config: feature_flags, organizations, workspaces, agents, apps, ontologies).
-Agent: naas_abi/agents/SettingsAgent.py, naas_abi/agents/tools/settings_tools.py, naas_abi/agents/tools/nexus_admin_tools.py."""
+Agent: naas_abi/agents/SettingsAgent.py, naas_abi/tools/settings_tools.py, naas_abi/tools/nexus_admin_tools.py."""
 
 SETTINGS_CAPABILITIES = """- Workspace settings: name and theme, members and roles (owner, admin, member, viewer), secrets, drives (platform and system drive access), models and inference servers, services, apps enablement, export.
 - Organization settings: users, admins, workspaces, branding, domains, billing, and role-level feature overrides.
@@ -107,9 +107,9 @@ class SettingsAgent(IntentAgent):
 
     @staticmethod
     def get_tools() -> list:
-        from naas_abi.agents.tools.nexus_admin_tools import nexus_admin_tools
-        from naas_abi.agents.tools.nexus_source_tools import nexus_source_tools
-        from naas_abi.agents.tools.settings_tools import settings_tools
+        from naas_abi.tools.nexus_admin_tools import nexus_admin_tools
+        from naas_abi.tools.nexus_source_tools import nexus_source_tools
+        from naas_abi.tools.settings_tools import settings_tools
 
         return settings_tools() + nexus_admin_tools() + nexus_source_tools()
 
