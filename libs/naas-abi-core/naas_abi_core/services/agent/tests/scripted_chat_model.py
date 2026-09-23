@@ -19,6 +19,8 @@ class ScriptRecorder:
     def __init__(self, script: list[AIMessage]):
         self.script = script
         self.bound: list[list[str]] = []
+        # Per call: tool name -> argument names the model was shown.
+        self.bound_args: list[dict[str, list[str]]] = []
         self.seen: list[list[BaseMessage]] = []
 
     def tool_messages(self, call: int = -1) -> list[ToolMessage]:
@@ -28,6 +30,7 @@ class ScriptRecorder:
 class ScriptedChatModel(BaseChatModel):
     recorder: Any
     bound_names: list[str] = []
+    bound_args: dict[str, list[str]] = {}
 
     @classmethod
     def from_script(cls, script: list[AIMessage]) -> ScriptedChatModel:
@@ -39,7 +42,10 @@ class ScriptedChatModel(BaseChatModel):
 
     def bind_tools(self, tools: Any, **kwargs: Any) -> ScriptedChatModel:
         names = [t["name"] if isinstance(t, dict) else t.name for t in tools]
-        return self.model_copy(update={"bound_names": names})
+        args = {
+            t.name: sorted(_properties(t)) for t in tools if not isinstance(t, dict)
+        }
+        return self.model_copy(update={"bound_names": names, "bound_args": args})
 
     def _generate(
         self, messages: list[BaseMessage], stop=None, run_manager=None, **kwargs: Any
@@ -47,8 +53,15 @@ class ScriptedChatModel(BaseChatModel):
         recorder: ScriptRecorder = self.recorder
         index = min(len(recorder.bound), len(recorder.script) - 1)
         recorder.bound.append(sorted(self.bound_names))
+        recorder.bound_args.append(dict(self.bound_args))
         recorder.seen.append(list(messages))
         return ChatResult(generations=[ChatGeneration(message=recorder.script[index])])
+
+
+def _properties(tool: Any) -> dict[str, Any]:
+    schema = tool.tool_call_schema
+    schema = schema if isinstance(schema, dict) else schema.model_json_schema()
+    return schema.get("properties", {})
 
 
 def tool_call(name: str, args: dict[str, Any], id: str) -> AIMessage:

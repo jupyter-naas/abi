@@ -22,16 +22,23 @@ Semantics:
   issued in the current step are dispatched against the tool set the step
   started with, so a call issued alongside its own ``disable_capability``
   still completes; the next model call no longer sees the tool.
+* **Batches.** All calls of one step see the state the step started with, so
+  each enable or disable is validated against that state plus the changes
+  issued before it in the same step: simultaneous enables cannot exceed the
+  limit or claim one model-facing name.
 * **Authorization.** Access is checked when enabling (``ToolAction.ENABLE``)
   and again every time the tool is bound or dispatched
-  (``ToolAction.EXECUTE``), for the caller of the current request. An enabled
-  tool the caller may no longer run is neither bound nor dispatched.
+  (``ToolAction.EXECUTE``), for the caller of the current request, together
+  with the agent's current allow list. An enabled tool the caller may no
+  longer run, or that the allow list no longer covers, is neither bound nor
+  dispatched.
 """
 
 from __future__ import annotations
 
 import fnmatch
 import json
+import threading
 from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -137,6 +144,8 @@ class CapabilityAgent(Agent):
         self._tool_config = {k: dict(v) for k, v in (tool_config or {}).items()}
         self._search_limit = search_limit
         self._bound_cache: dict[tuple[tuple[str, ...], bool], Runnable] = {}
+        # Capability changes issued by the step ``call_tools`` is running.
+        self._step = threading.local()
 
         # Keep the caller's list untouched: ``duplicate`` passes it back in.
         user_tools = list(tools or [])
@@ -182,11 +191,46 @@ class CapabilityAgent(Agent):
         selections = state.get("enabled_capabilities") or {}
         return list(selections.get(self.name, []))
 
+    def _pending(self) -> list[tuple[str, str]]:
+        pending = getattr(self._step, "pending", None)
+        return pending if pending is not None else []
+
+    def _record(self, operation: str, tool_ids: Sequence[str]) -> None:
+        pending = getattr(self._step, "pending", None)
+        if pending is not None:
+            pending.extend((operation, tool_id) for tool_id in tool_ids)
+
+    def _selection(self, state: Mapping[str, Any]) -> list[str]:
+        """Enabled ids once the changes issued earlier in this step apply."""
+        ids = self.enabled_tool_ids(state)
+        for operation, tool_id in self._pending():
+            if operation == "enable" and tool_id not in ids:
+                ids.append(tool_id)
+            elif operation == "disable" and tool_id in ids:
+                ids.remove(tool_id)
+        return ids
+
+    def _definition_name(self, tool_id: str) -> str | None:
+        try:
+            return self._tool_registry.get_definition(tool_id).name
+        except ToolRegistryError:
+            return None
+
     def _resolve_enabled(self, state: Mapping[str, Any]) -> dict[str, BaseTool]:
-        """Enabled tools the current caller may run, by model-facing name."""
+        """Enabled tools the current caller may run, by model-facing name.
+
+        The allow list is applied here too, not only when enabling, so
+        narrowing it revokes selections persisted in existing conversations.
+        """
         context = self._context()
         resolved: dict[str, BaseTool] = {}
         for tool_id in self.enabled_tool_ids(state):
+            if not self._allowed(tool_id):
+                logger.warning(
+                    f"Agent '{self.name}': enabled tool '{tool_id}' is outside the "
+                    f"allow list ({', '.join(self._allow)}) and is not bound."
+                )
+                continue
             try:
                 built = self._tool_registry.resolve(
                     tool_id, context, config=self._tool_config.get(tool_id)
@@ -203,8 +247,33 @@ class CapabilityAgent(Agent):
                     f"{type(built).__name__}, not a LangChain BaseTool; not bound."
                 )
                 continue
-            resolved[Agent.validate_name(built.name)] = built
+            name = Agent.validate_name(built.name)
+            if name in resolved:
+                logger.error(
+                    f"Agent '{self.name}': enabled tool '{tool_id}' shares the name "
+                    f"`{name}` with another enabled tool; only the first is bound."
+                )
+                continue
+            resolved[name] = built
         return resolved
+
+    @staticmethod
+    def _binding_signature(tools: Mapping[str, BaseTool]) -> tuple[str, ...]:
+        """What the model is shown for each tool.
+
+        Keying the bound-model cache on this (not on names) rebinds when a
+        tool is swapped for another version or republished with a new schema.
+        """
+        signature = []
+        for name, bound_tool in sorted(tools.items()):
+            schema = bound_tool.tool_call_schema
+            schema = schema if isinstance(schema, dict) else schema.model_json_schema()
+            signature.append(
+                json.dumps(
+                    [name, bound_tool.description, schema], sort_keys=True, default=str
+                )
+            )
+        return tuple(signature)
 
     # ---------------------------------------------------------- agent hooks
     def _chat_model_for_turn(self, state: ABIAgentState) -> Runnable:
@@ -212,7 +281,7 @@ class CapabilityAgent(Agent):
         if not dynamic:
             return super()._chat_model_for_turn(state)
         with_workspace = bool(coder_workspace_base.get())
-        key = (tuple(sorted(dynamic)), with_workspace)
+        key = (self._binding_signature(dynamic), with_workspace)
         cached = self._bound_cache.get(key)
         if cached is not None:
             return cached
@@ -239,6 +308,16 @@ class CapabilityAgent(Agent):
         return sorted(
             {*super()._tool_names_for_turn(state), *self._resolve_enabled(state)}
         )
+
+    def call_tools(self, state: ABIAgentState) -> list[Command]:
+        # Every call of this step receives the same starting ``state``; the
+        # capability tools record their changes here so later calls of the
+        # step validate against them.
+        self._step.pending = []
+        try:
+            return super().call_tools(state)
+        finally:
+            self._step.pending = None
 
     # -------------------------------------------------------- capability tools
     def _capability_tools(self) -> list[BaseTool]:
@@ -299,7 +378,7 @@ class CapabilityAgent(Agent):
                     f"Tool '{canonical}' is not allowed for agent '{agent.name}' "
                     f"(allowed: {', '.join(agent._allow)})."
                 )
-            enabled = agent.enabled_tool_ids(state)
+            enabled = [i for i in agent._selection(state) if agent._allowed(i)]
             if canonical in enabled:
                 return _reply(
                     tool_call_id,
@@ -312,7 +391,11 @@ class CapabilityAgent(Agent):
                     f"{agent._max_enabled} enabled tools. Disable one first "
                     f"(enabled: {', '.join(enabled)})."
                 )
-            taken = set(agent._tools_by_name) | set(agent._resolve_enabled(state))
+            taken = set(agent._tools_by_name) | {
+                name
+                for name in (agent._definition_name(i) for i in enabled)
+                if name is not None
+            }
             if definition.name in taken:
                 raise CapabilityNameCollisionError(
                     f"A tool named `{definition.name}` is already available to "
@@ -325,6 +408,7 @@ class CapabilityAgent(Agent):
                 config=agent._tool_config.get(canonical),
                 action=ToolAction.ENABLE,
             )
+            agent._record("enable", [canonical])
             return Command(
                 update={
                     "enabled_capabilities": {agent.name: {"enable": [canonical]}},
@@ -351,7 +435,7 @@ class CapabilityAgent(Agent):
                 tool_id: The tool_id of an enabled tool.
             """
             ref = ToolRef.parse(tool_id)
-            enabled = agent.enabled_tool_ids(state)
+            enabled = agent._selection(state)
             matches = [
                 enabled_id
                 for enabled_id in enabled
@@ -362,6 +446,7 @@ class CapabilityAgent(Agent):
                     f"'{tool_id}' is not enabled for agent '{agent.name}' "
                     f"(enabled: {', '.join(enabled) or 'none'})."
                 )
+            agent._record("disable", matches)
             return Command(
                 update={
                     "enabled_capabilities": {agent.name: {"disable": matches}},

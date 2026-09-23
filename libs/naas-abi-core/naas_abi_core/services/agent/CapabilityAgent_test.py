@@ -445,3 +445,182 @@ def test_search_output_marks_enabled_tools_and_respects_the_limit(registry):
     assert set(result) >= {"tool_id", "name", "description", "score", "available"}
     enabled = json.loads(messages[-1].content)
     assert enabled == [{"tool_id": CREATE_ISSUE, "name": "create_issue"}]
+
+
+# --------------------------------------------------------------------------- #
+# Review regressions                                                           #
+# --------------------------------------------------------------------------- #
+
+
+def test_a_narrowed_allow_list_revokes_restored_selections(registry):
+    memory = MemorySaver()
+    first, _ = _agent(
+        registry,
+        [
+            _call("enable_capability", {"tool_id": FORECAST}, "e1"),
+            AIMessage(content="ok"),
+        ],
+        memory=memory,
+    )
+    first.invoke("enable the forecast")
+
+    # Same conversation, rebuilt after the record's allow-list was narrowed.
+    second, recorder = _agent(
+        registry,
+        [
+            _call("get_forecast", {"city": "Paris"}, "f1"),
+            AIMessage(content="done"),
+        ],
+        memory=memory,
+        allow=[f"{GITHUB}/*"],
+    )
+    second.invoke("weather in Paris?")
+
+    assert "get_forecast" not in recorder.bound[0]
+    refusal = _tool_messages(recorder)[-1]
+    assert "not available" in refusal.content
+    assert "sunny" not in refusal.content
+
+
+def test_simultaneous_enables_cannot_exceed_the_limit(registry):
+    agent, recorder = _agent(
+        registry,
+        [
+            _calls(
+                ("enable_capability", {"tool_id": CREATE_ISSUE}, "e1"),
+                ("enable_capability", {"tool_id": FORECAST}, "e2"),
+            ),
+            AIMessage(content="ok"),
+        ],
+        max_enabled=1,
+    )
+    agent.invoke("enable both at once")
+
+    replies = [m.content for m in _tool_messages(recorder)]
+    assert any("Enabled" in r for r in replies)
+    assert any("limit" in r for r in replies)
+    assert (
+        recorder.bound[-1].count("create_issue")
+        + recorder.bound[-1].count("get_forecast")
+        == 1
+    )
+
+
+def test_simultaneous_enables_cannot_claim_the_same_name(registry):
+    other = ToolPublisher("acme.other")
+    other.add_tool(create_issue)
+    other.publish_to(registry)
+    agent, recorder = _agent(
+        registry,
+        [
+            _calls(
+                ("enable_capability", {"tool_id": CREATE_ISSUE}, "e1"),
+                ("enable_capability", {"tool_id": "acme.other/create_issue@1"}, "e2"),
+            ),
+            _call("list_enabled_capabilities", {}, "l1"),
+            AIMessage(content="ok"),
+        ],
+    )
+    agent.invoke("enable both issue tools")
+
+    enabled = json.loads(_tool_messages(recorder)[-1].content)
+    assert enabled == [{"tool_id": CREATE_ISSUE, "name": "create_issue"}]
+    replies = [m.content for m in _tool_messages(recorder)]
+    assert any("already available" in r for r in replies)
+
+
+def test_a_batch_can_disable_then_enable_within_the_limit(registry):
+    agent, recorder = _agent(
+        registry,
+        [
+            _call("enable_capability", {"tool_id": CREATE_ISSUE}, "e1"),
+            _calls(
+                ("disable_capability", {"tool_id": CREATE_ISSUE}, "d1"),
+                ("enable_capability", {"tool_id": FORECAST}, "e2"),
+            ),
+            AIMessage(content="ok"),
+        ],
+        max_enabled=1,
+    )
+    agent.invoke("swap issue tracking for the forecast")
+    assert "get_forecast" in recorder.bound[-1]
+    assert "create_issue" not in recorder.bound[-1]
+
+
+@tool("lookup_version")
+def lookup_v1(query: str) -> str:
+    """Look a record up by text.
+
+    Args:
+        query: What to look for.
+    """
+    return query
+
+
+@tool("lookup_version")
+def lookup_v2(record_id: int) -> str:
+    """Look a record up by id.
+
+    Args:
+        record_id: The record id.
+    """
+    return str(record_id)
+
+
+def test_switching_versions_rebinds_the_new_schema(registry):
+    versioned = ToolPublisher("acme.versioned")
+    versioned.add_tool(lookup_v1, version="1")
+    versioned.add_tool(lookup_v2, version="2")
+    versioned.publish_to(registry)
+    agent, recorder = _agent(
+        registry,
+        [
+            _call(
+                "enable_capability",
+                {"tool_id": "acme.versioned/lookup_version@1"},
+                "e1",
+            ),
+            _calls(
+                (
+                    "disable_capability",
+                    {"tool_id": "acme.versioned/lookup_version@1"},
+                    "d1",
+                ),
+                (
+                    "enable_capability",
+                    {"tool_id": "acme.versioned/lookup_version@2"},
+                    "e2",
+                ),
+            ),
+            AIMessage(content="ok"),
+        ],
+    )
+    agent.invoke("switch lookup versions")
+
+    assert recorder.bound_args[1]["lookup_version"] == ["query"]
+    assert recorder.bound_args[2]["lookup_version"] == ["record_id"]
+
+
+def test_republishing_a_tool_with_a_new_schema_rebinds_it(registry):
+    versioned = ToolPublisher("acme.versioned")
+    versioned.add_tool(lookup_v1)
+    versioned.publish_to(registry)
+    agent, recorder = _agent(
+        registry,
+        [
+            _call(
+                "enable_capability",
+                {"tool_id": "acme.versioned/lookup_version@1"},
+                "e1",
+            ),
+            AIMessage(content="ok"),
+        ],
+    )
+    agent.invoke("enable lookup")
+    assert recorder.bound_args[-1]["lookup_version"] == ["query"]
+
+    republished = ToolPublisher("acme.versioned")
+    republished.add_tool(lookup_v2)
+    republished.publish_to(registry)
+    agent.invoke("look it up again")
+    assert recorder.bound_args[-1]["lookup_version"] == ["record_id"]
