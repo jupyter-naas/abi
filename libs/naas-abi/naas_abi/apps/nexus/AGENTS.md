@@ -343,7 +343,7 @@ Notes:
 
 - Invite **creates** the user when missing, adds membership, and emails OTP / magic-link sign-in (same challenge as `/api/auth/magic-link/request`). Optional `workspace_id` on org invite also adds workspace membership.
 - UI must hide or disable Add / Invite for non-admins; API still returns `403`.
-- **Agents:** `invite_organization_member` / `invite_workspace_member` in `naas_abi/agents/tools/nexus_admin_tools.py` use the same create-on-invite path in-process.
+- **Agents:** `invite_organization_member` / `invite_workspace_member` in `naas_abi/tools/nexus_admin_tools.py` use the same create-on-invite path in-process.
 
 Web entry points: `organizations/[orgId]/settings/users/`, workspace `organization/users/`, workspace `settings/members/`. Store: `stores/organization.ts`.
 

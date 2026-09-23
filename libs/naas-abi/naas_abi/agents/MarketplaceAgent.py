@@ -24,7 +24,7 @@ API:
 - {_API}/services/modules/schema.py: ModuleInfo, ModulesResponse, MarketplaceConfigResponse.
 - {_API}/core/config.py: MarketplaceConfig (pricing and usage tiers from nexus_config).
 Engine: naas_abi_core/module/Module.py (BaseModule) and naas_abi_core/engine/Engine.py (which modules load, from config.yaml modules:).
-Agent: naas_abi/agents/MarketplaceAgent.py and naas_abi/agents/tools/marketplace_tools.py."""
+Agent: naas_abi/agents/MarketplaceAgent.py and naas_abi/tools/marketplace_tools.py."""
 
 MARKETPLACE_CAPABILITIES = """- Discover ABI modules: the catalog lists every module found on disk (core, ai, application, domain) and flags the ones the engine loaded (installed).
 - Inspect a module: description, tier (community or enterprise), maintainer, its agent, app URL, whether a demo login exists.
@@ -95,8 +95,8 @@ class MarketplaceAgent(IntentAgent):
 
     @staticmethod
     def get_tools() -> list:
-        from naas_abi.agents.tools.marketplace_tools import marketplace_tools
-        from naas_abi.agents.tools.nexus_source_tools import nexus_source_tools
+        from naas_abi.tools.marketplace_tools import marketplace_tools
+        from naas_abi.tools.nexus_source_tools import nexus_source_tools
 
         return marketplace_tools() + nexus_source_tools()
 

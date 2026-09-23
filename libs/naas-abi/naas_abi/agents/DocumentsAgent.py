@@ -247,7 +247,7 @@ Your step budget is finite ({DOCUMENTS_RECURSION_LIMIT} graph steps). Plan, then
         """Document writes plus the search stack the research gate depends on."""
         tools: list = []
         try:
-            from naas_abi.agents.tools.documents_tools import documents_agent_tools
+            from naas_abi.tools.documents_tools import documents_agent_tools
 
             tools += documents_agent_tools()
         except Exception as exc:  # noqa: BLE001

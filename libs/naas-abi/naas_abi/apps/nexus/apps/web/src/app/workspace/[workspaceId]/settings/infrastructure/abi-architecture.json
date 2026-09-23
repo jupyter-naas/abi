@@ -709,7 +709,7 @@
       ]
     },
     {
-      "id": "abi/agents/tools",
+      "id": "abi/tools",
       "label": "Tools",
       "layer": "applications",
       "files": 6,
@@ -719,12 +719,12 @@
       "tests": 3,
       "symbols": 151,
       "sourcePaths": [
-        "naas_abi/agents/tools/__init__.py",
-        "naas_abi/agents/tools/coding_tools.py",
-        "naas_abi/agents/tools/nexus_admin_tools.py",
-        "naas_abi/agents/tools/platform_tools.py",
-        "naas_abi/agents/tools/slides_tools.py",
-        "naas_abi/agents/tools/web_tools.py"
+        "naas_abi/tools/__init__.py",
+        "naas_abi/tools/coding_tools.py",
+        "naas_abi/tools/nexus_admin_tools.py",
+        "naas_abi/tools/platform_tools.py",
+        "naas_abi/tools/slides_tools.py",
+        "naas_abi/tools/web_tools.py"
       ]
     },
     {
@@ -1471,7 +1471,7 @@
   "edges": [
     {
       "source": "abi/agents/AbiAgent",
-      "target": "abi/agents/tools",
+      "target": "abi/tools",
       "count": 4,
       "relations": {
         "imports": 2,
@@ -1548,7 +1548,7 @@
     },
     {
       "source": "abi/agents/PlatformServicesAgent",
-      "target": "abi/agents/tools",
+      "target": "abi/tools",
       "count": 3,
       "relations": {
         "imports_from": 1,
@@ -1587,7 +1587,7 @@
     },
     {
       "source": "abi/agents/SlidesAgent",
-      "target": "abi/agents/tools",
+      "target": "abi/tools",
       "count": 2,
       "relations": {
         "imports": 1,
@@ -1632,7 +1632,7 @@
       }
     },
     {
-      "source": "abi/agents/tools",
+      "source": "abi/tools",
       "target": "abi/agents/slides",
       "count": 16,
       "relations": {
@@ -1641,7 +1641,7 @@
       }
     },
     {
-      "source": "abi/agents/tools",
+      "source": "abi/tools",
       "target": "abi/apps/nexus",
       "count": 24,
       "relations": {
@@ -1651,7 +1651,7 @@
       }
     },
     {
-      "source": "abi/agents/tools",
+      "source": "abi/tools",
       "target": "abi/module/module",
       "count": 3,
       "relations": {
@@ -1659,7 +1659,7 @@
       }
     },
     {
-      "source": "abi/agents/tools",
+      "source": "abi/tools",
       "target": "adapters/coding_environment",
       "count": 3,
       "relations": {
@@ -1669,7 +1669,7 @@
       }
     },
     {
-      "source": "abi/agents/tools",
+      "source": "abi/tools",
       "target": "core/engine",
       "count": 2,
       "relations": {
@@ -1678,7 +1678,7 @@
       }
     },
     {
-      "source": "abi/agents/tools",
+      "source": "abi/tools",
       "target": "core/utils",
       "count": 2,
       "relations": {
@@ -1687,7 +1687,7 @@
       }
     },
     {
-      "source": "abi/agents/tools",
+      "source": "abi/tools",
       "target": "services/agent",
       "count": 13,
       "relations": {
@@ -1697,7 +1697,7 @@
       }
     },
     {
-      "source": "abi/agents/tools",
+      "source": "abi/tools",
       "target": "services/source_control",
       "count": 4,
       "relations": {
@@ -1717,7 +1717,7 @@
     },
     {
       "source": "abi/apps/nexus",
-      "target": "abi/agents/tools",
+      "target": "abi/tools",
       "count": 12,
       "relations": {
         "imports": 6,
