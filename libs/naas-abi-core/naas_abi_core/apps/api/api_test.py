@@ -78,47 +78,6 @@ def test_render_landing_html_escapes_config_values():
     assert 'href="https://example.com/f.ico?a=1&amp;b=&quot;2&quot;"' in body
 
 
-def test_render_landing_html_applies_theme_colors():
-    from naas_abi_core.apps.api.api import render_landing_html
-
-    body = render_landing_html(
-        "T",
-        "D",
-        "/static/logo.png",
-        "/static/favicon.ico",
-        background_color="#FFFFFF",
-        text_color="#0B1F3A",
-        primary_color="#0057B8",
-    )
-
-    assert "background-color: #FFFFFF;" in body
-    assert "color: #0B1F3A;" in body
-    assert "background-color: #0057B8;" in body
-    assert "[BACKGROUND_COLOR]" not in body
-
-
-def test_render_landing_html_defaults_keep_dark_theme():
-    from naas_abi_core.apps.api.api import render_landing_html
-
-    body = render_landing_html("T", "D", "/static/logo.png", "/static/favicon.ico")
-
-    assert "background-color: #000000;" in body
-    assert "color: #FFFFFF;" in body
-    assert "background-color: #007BFF;" in body
-
-
-def test_css_color_allow_list():
-    from naas_abi_core.apps.api.api import css_color
-
-    assert css_color("#fff", "#000") == "#fff"
-    assert css_color("#0057B8", "#000") == "#0057B8"
-    assert css_color("rebeccapurple", "#000") == "rebeccapurple"
-    # Anything that could break out of the <style> block falls back.
-    assert css_color("red; } </style><script>", "#000") == "#000"
-    assert css_color("url(x)", "#000") == "#000"
-    assert css_color("", "#000") == "#000"
-
-
 def test_resolve_branding_asset(tmp_path):
     from naas_abi_core.apps.api.api import resolve_branding_asset
 

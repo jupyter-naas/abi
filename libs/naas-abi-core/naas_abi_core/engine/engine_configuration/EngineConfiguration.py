@@ -88,9 +88,7 @@ from rich.prompt import Prompt
 
 
 class ServicesConfiguration(BaseModel):
-    document: DocumentServiceConfiguration = Field(
-        default_factory=DocumentServiceConfiguration
-    )
+    document: DocumentServiceConfiguration = Field(default_factory=DocumentServiceConfiguration)
     object_storage: ObjectStorageServiceConfiguration = (
         ObjectStorageServiceConfiguration(
             object_storage_adapter=ObjectStorageAdapterConfiguration(
@@ -224,10 +222,6 @@ class ApiConfiguration(BaseModel):
     description: str = "API for ABI, your Artifical Business Intelligence"
     logo_path: str = "assets/logo.png"
     favicon_path: str = "assets/favicon.ico"
-    # Landing page (GET /) theme. Defaults match the bundled dark logo.
-    background_color: str = "#000000"
-    text_color: str = "#FFFFFF"
-    primary_color: str = "#007BFF"
     cors_origins: list[str] = ["http://localhost:9879"]
     reload: bool = True
     host: str = "0.0.0.0"  # nosec B104 - default binds all interfaces
@@ -439,9 +433,7 @@ class EngineConfiguration(BaseModel):
         # the dotenv path here, which is bootstrap config and cannot itself depend
         # on a secret, so empty-rendered secrets are harmless.
         env = cls._build_jinja_env(base_dir)
-        raw_data = yaml.safe_load(
-            StringIO(cls._render_yaml_template(env, yaml_content))
-        )
+        raw_data = yaml.safe_load(StringIO(cls._render_yaml_template(env, yaml_content)))
         if not isinstance(raw_data, dict):
             return None
 
