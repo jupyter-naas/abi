@@ -9,14 +9,15 @@ make demo
 Prerequisites: the repository's UV development environment (`make deps` at the repo
 root), plus `nats-server` on PATH with JetStream support. No Docker or external
 API credentials are required. The runner builds the proto and SDK wheels, installs
-them into a fresh worker virtualenv, and starts three separate processes:
+them into a fresh worker virtualenv, and starts a broker and engine, then two separate worker processes:
 
 1. A loopback-only NATS/JetStream broker on a temporary port.
 2. A real ABI Engine with all remotely supported services loaded.
-3. `worker.py`, importing only the standalone packages and standard library.
+3. `user_module.py`, exercising the Python service facades without protobuf imports.
+4. `worker.py`, exercising every low-level protobuf endpoint.
 
 The worker runs with Python isolation enabled and asserts ABI core is not installed.
-It exercises 109 RPC endpoints across 13 services, plus publish, publish_many, subscribe,
+It exercises 110 RPC endpoints across 13 services, plus publish, publish_many, subscribe,
 enqueue, and dequeue against the engine. Object storage includes create, read,
 list, overwrite/update, metadata, recursive listing, delete, and listing after
 removal. Other mutable services have equivalent state checks; append-only logs
@@ -49,7 +50,8 @@ the proposed workload service.
 
 `worker.py` now exports `ABIModule(BaseModule)` with nested `Configuration`, declared
 `ModuleDependencies`, and load/initialize/unload hooks. `run_module` owns its
-transport and lifecycle, and business code uses `self.engine.services`.
+transport and lifecycle, and business code uses `self.engine.services` in `user_module.py`; the protocol
+coverage worker uses `self.engine.rpc`.
 `report.json` includes the module name and the completed lifecycle sequence.
 
 The engine configures hot cache through `keyvalue` and cold cache through
@@ -63,7 +65,7 @@ See the SDK README for the migration pattern and its limits. This preserves ABI
 module structure, not automatic portability of framework-specific components.
 
 Document service CRUD, version checks, collection operations, queries and count
-are included in the SDK-only worker (109 RPC operations total). The worker still
+are included in the SDK-only worker (110 RPC operations total). The worker still
 installs only four packages; LangGraph is an optional SDK extra.
 
 For the separate LangGraph persistence regression, with the development runtime,
@@ -76,3 +78,6 @@ uv run --no-sync pytest examples/standalone_module/checkpoint_integration_test.p
 It pauses a real graph at an interrupt, starts another Python interpreter to
 resume from the document service, and checks history and module/agent isolation.
 This proves shared persistence across processes, not remote agent invocation.
+
+`user_module.py` demonstrates explicit component injection and task-scoped
+`current_module()` access. Its result is recorded under `ergonomic_module`.

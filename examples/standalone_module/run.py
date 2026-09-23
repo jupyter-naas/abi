@@ -116,6 +116,17 @@ def main():
                     ABI_SERVICE_TOKEN=(root / "token").read_text(),
                     DEMO_REPORT=str(report_path),
                 )
+                ergonomic_path = root / "ergonomic.json"
+                ergonomic = subprocess.run(
+                    [worker_python, "-I", str(HERE / "user_module.py")],
+                    cwd=root,
+                    env=dict(worker_env, DEMO_REPORT=str(ergonomic_path)),
+                    timeout=180,
+                    check=False,
+                )
+                if ergonomic.returncode:
+                    print((root / "engine.log").read_text()[-5000:])
+                    raise SystemExit(1)
                 result = subprocess.run(
                     [worker_python, "-I", str(HERE / "worker.py")],
                     cwd=root,
@@ -124,6 +135,7 @@ def main():
                     check=False,
                 )
                 report = json.loads(report_path.read_text())
+                report["ergonomic_module"] = json.loads(ergonomic_path.read_text())
                 report.update(json.loads((root / "ready.json").read_text()))
                 assert report["engine_pid"] != report["worker_pid"]
                 email_files = list((root / "email").rglob("*.eml"))

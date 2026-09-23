@@ -61,6 +61,10 @@ class DocumentClient:
             "abi.svc.document.v1.count", self._scoped(request), pb.CountResponse
         )
 
+    @property
+    def namespace(self) -> str | None:
+        return self._namespace
+
     def for_namespace(self, namespace: str) -> "DocumentClient":
         if self._namespace is not None and namespace != self._namespace:
             raise ValueError("A bound document client cannot change namespace")

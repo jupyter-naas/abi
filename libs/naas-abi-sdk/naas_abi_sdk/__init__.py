@@ -5,6 +5,7 @@ from naas_abi_sdk.module import (
     BaseModule,
     ModuleConfiguration,
     ModuleDependencies,
+    current_module,
     run_module,
 )
 from naas_abi_sdk.transport import RPCError
@@ -15,5 +16,6 @@ __all__ = [
     "ModuleConfiguration",
     "ModuleDependencies",
     "RPCError",
+    "current_module",
     "run_module",
 ]

@@ -26,4 +26,5 @@ extend-exclude = ["**/*_pb2.py", "**/*_pb2.pyi"]
 naas-abi-module = "naas_abi_sdk.module_runner:main"
 
 [project.optional-dependencies]
+rdf = ["rdflib>=7,<8"]
 langgraph = ["langgraph-checkpoint>=3.0.1,<4"]

@@ -2,7 +2,7 @@
 
 OPERATIONS = {
     "activity_log": ["record", "query", "list_actors", "shutdown"],
-    "cache": ["get", "set", "set_if_absent", "delete", "exists"],
+    "cache": ["get", "set", "set_if_absent", "delete", "exists", "describe"],
     "coding_environment": [
         "ensure_user",
         "list_templates",

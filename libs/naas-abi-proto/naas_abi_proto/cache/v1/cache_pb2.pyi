@@ -1,8 +1,9 @@
 from naas_abi_proto.common.v1 import common_pb2 as _common_pb2
+from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from collections.abc import Mapping as _Mapping
+from collections.abc import Iterable as _Iterable, Mapping as _Mapping
 from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
@@ -111,3 +112,17 @@ class ExistsResponse(_message.Message):
     value: bool
     error: _common_pb2.CallError
     def __init__(self, value: bool = ..., error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...
+
+class DescribeRequest(_message.Message):
+    __slots__ = ("context",)
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ...) -> None: ...
+
+class DescribeResponse(_message.Message):
+    __slots__ = ("error", "tiers")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    TIERS_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    tiers: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., tiers: _Optional[_Iterable[str]] = ...) -> None: ...

@@ -25,6 +25,7 @@ def test_checkpoint_resume_from_second_process_and_isolation(document_host):  # 
     from langgraph.types import interrupt
     from naas_abi_sdk import ABIClient
     from naas_abi_sdk.langgraph import DocumentCheckpointSaver
+    from naas_abi_sdk.services.document import DocumentService
 
     class State(TypedDict):
         value: str
@@ -43,7 +44,8 @@ def test_checkpoint_resume_from_second_process_and_isolation(document_host):  # 
     async def scenario():
         async with ABIClient(document_host, token) as client:
             saver = DocumentCheckpointSaver(
-                client.document.for_namespace("module.agent"), agent_id="reviewer"
+                DocumentService(client.document.for_namespace("module.agent")),
+                agent_id="reviewer",
             )
             await saver.setup()
             graph = builder.compile(checkpointer=saver)
