@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.73.2 (2026-09-23)
+
+### Bug Fixes
+
+- **nexus**: Renew user sessions automatically
+  ([#1251](https://github.com/jupyter-naas/abi/pull/1251),
+  [`d331489`](https://github.com/jupyter-naas/abi/commit/d3314893a7b21e18c49e8f6d59aa7c533903b77b))
+
+
 ## v2.73.1 (2026-09-22)
 
 ### Bug Fixes
