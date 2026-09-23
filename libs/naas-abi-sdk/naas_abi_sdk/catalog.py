@@ -54,6 +54,15 @@ OPERATIONS = {
         "delete_if_value_matches",
         "exists",
     ],
+    "model_registry": [
+        "list_models",
+        "resolve",
+        "chat",
+        "stream_open",
+        "stream_next",
+        "stream_close",
+        "embed",
+    ],
     "object_storage": [
         "get_object",
         "put_object",

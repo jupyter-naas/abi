@@ -23,6 +23,10 @@ jobs:
           uv run --project libs/naas-abi-sdk --python '${{ matrix.python }}' pytest libs/naas-abi-sdk/tests -q
       - name: Test optional LangGraph integration imports
         run: uv run --project libs/naas-abi-sdk --extra langgraph --python '${{ matrix.python }}' pytest libs/naas-abi-sdk/tests -q
+      - name: Test optional model proxies
+        run: uv run --project libs/naas-abi-sdk --extra models --python '${{ matrix.python }}' pytest libs/naas-abi-sdk/tests/test_models.py -q
+      - name: Test LangChain 0.3 compatibility
+        run: uv run --project libs/naas-abi-sdk --extra models --with 'langchain-core==0.3.78' --python '${{ matrix.python }}' pytest libs/naas-abi-sdk/tests/test_models.py -q
       - name: Build distributable wheels
         run: |
           uv build --project libs/naas-abi-proto --wheel

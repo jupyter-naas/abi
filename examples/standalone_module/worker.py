@@ -589,6 +589,49 @@ class ABIModule(BaseModule):
         assert (await self.call("document", "count", collection="exercise")).count == 0
         await self.call("document", "drop_collection", collection="exercise")
 
+    async def model_registry(self):
+        from naas_abi_proto.model_registry.v1 import model_registry_pb2 as pb
+
+        async def call(operation, **fields):
+            return await self.call("model_registry", operation, **fields)
+
+        models = await call("list_models")
+        assert {m.ref.canonical_id for m in models.models} >= {
+            "demo-chat",
+            "demo-embedding",
+        }
+        resolved = await call(
+            "resolve", ref=pb.ModelRef(canonical_id="demo-chat", kind="chat")
+        )
+        chat = pb.ChatRequest(
+            ref=resolved.model.ref,
+            messages=[pb.ChatMessage(type="human", data_json=b'{"content":"hello"}')],
+        )
+        response = await call("chat", ref=chat.ref, messages=chat.messages)
+        assert (
+            json.loads(response.message.data_json)["content"] == "remote model answer"
+        )
+        opened = await call("stream_open", chat=chat)
+        content = []
+        try:
+            for sequence in range(100):
+                response = await call(
+                    "stream_next", stream_id=opened.stream_id, sequence=sequence
+                )
+                if response.done:
+                    break
+                content.append(json.loads(response.chunk.data_json)["content"])
+            assert "".join(content) == "remote model answer"
+        finally:
+            await call("stream_close", stream_id=opened.stream_id)
+        response = await call(
+            "embed",
+            ref=pb.ModelRef(canonical_id="demo-embedding", kind="embedding"),
+            texts=["hello"],
+            query=True,
+        )
+        assert len(response.vectors[0].values) == 8
+
     async def run(self):
         for domain in OPERATIONS:
             try:
@@ -649,7 +692,7 @@ async def main():
         core_installed=False,
         unsupported=[
             "object_storage streaming",
-            "process-local model registry",
+            "publishing models from SDK provider modules",
             "ontology/agent execution (no v1 RPC contract)",
         ],
     )

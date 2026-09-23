@@ -93,6 +93,7 @@ nats = [
     "nats-py>=2.16.0",
     "pyjwt>=2.11.0",
     "naas-abi-proto>=0.1.0,<0.2",
+    "naas-abi-sdk[models]>=0.1.0,<0.2",
 ]
 microsoft = [
     "msal>=1.37.0",
@@ -174,4 +175,5 @@ markers = [
 ]
 
 [tool.uv.sources]
+naas-abi-sdk = {path = "../naas-abi-sdk", editable = true}
 naas-abi-proto = {path = "../naas-abi-proto", editable = true}

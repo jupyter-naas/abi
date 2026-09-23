@@ -32,6 +32,7 @@ if TYPE_CHECKING:
         EmailService,
         EventService,
         KeyValueService,
+        ModelRegistryService,
         ObjectStorageService,
         SecretService,
         SourceControlService,
@@ -85,6 +86,7 @@ class ServicesProxy(_ServicesAccess):
     source_control: SourceControlService
     triple_store: TripleStoreService
     vector_store: VectorStoreService
+    model_registry: ModelRegistryService
     bus: BusClient
 
     def __getattr__(self, name: str):

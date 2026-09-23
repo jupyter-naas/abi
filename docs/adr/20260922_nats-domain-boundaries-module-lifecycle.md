@@ -70,3 +70,8 @@ requests and runs with the shared asyncio worker pool restricted to one thread.
 Local backend data, issued tokens, and all broker processes remain disposable.
 Authentication is still the Stage 1 shared-trust model; dependency declarations
 are programming boundaries, not security authorization.
+
+## 2026-09-24 follow-up
+
+The model registry now has network lookup/inference proxies; local registration
+remains a bootstrap operation. See [Remote model registry](20260924_remote-model-registry.md).

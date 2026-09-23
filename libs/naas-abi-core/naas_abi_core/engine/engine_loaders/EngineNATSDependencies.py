@@ -208,7 +208,16 @@ class EngineNATSDependencies:
                     for index, (tier, adapter) in enumerate(owners.cache.adapters)
                 ]
             )
-        # No fallback to process-local model objects across a domain boundary.
+        if owners.model_registry_available():
+            from naas_abi_core.services.model_registry.adapters.secondary.model_registry_client import (
+                ModelRegistryNATSClient,
+            )
+
+            models = ModelRegistryNATSClient(
+                owners.model_registry, self.config.nats_url, self.config.jwt_secret
+            )
+            self.clients.append(models)
+            values["model_registry"] = models
         dependencies = IEngine.Services(**values)
         if dependencies.triple_store_available():
             dependencies.triple_store.set_services(
@@ -219,14 +228,7 @@ class EngineNATSDependencies:
             if key in values:
                 values[key].set_services(IEngine.Services(events=values.get("events")))
         self.services = dependencies
-        # Model registration remains a module-local capability, never injected
-        # into domain services as a cross-domain dependency.
-        self.module_services = IEngine.Services(
-            **values,
-            model_registry=(
-                owners.model_registry if owners.model_registry_available() else None
-            ),
-        )
+        self.module_services = dependencies
         return dependencies
 
     def close(self) -> None:

@@ -9,12 +9,14 @@ from naas_abi_sdk.services.cache import CacheService
 from naas_abi_sdk.services.document import DocumentService
 from naas_abi_sdk.services.event import EventService
 from naas_abi_sdk.services.keyvalue import KeyValueService
+from naas_abi_sdk.services.model_registry import ModelRegistryService
 from naas_abi_sdk.services.object_storage import ObjectStorageService
 from naas_abi_sdk.services.secret import SecretService
 from naas_abi_sdk.services.triple_store import TripleStoreService
 from naas_abi_sdk.services.vector_store import VectorStoreService
 
 FACTORIES = {
+    "model_registry": ModelRegistryService,
     "object_storage": ObjectStorageService,
     "keyvalue": KeyValueService,
     "secret": SecretService,

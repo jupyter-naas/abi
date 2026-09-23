@@ -158,7 +158,7 @@ class Engine(IEngine):
             set_default_event_service(None)
 
         if self.__services.model_registry_available():
-            set_default_model_registry(self.__services.model_registry)
+            set_default_model_registry(self.services.model_registry)
         else:
             set_default_model_registry(None)
 

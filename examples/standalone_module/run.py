@@ -141,7 +141,29 @@ def main():
                     timeout=180,
                     check=False,
                 )
+                # Keep the base worker's four-package isolation check intact.
+                # A second environment exercises the optional LangChain facade.
+                run("uv", "venv", str(root / "model-env"), "--python", sys.executable)
+                model_python = str(root / "model-env/bin/python")
+                run(
+                    "uv",
+                    "pip",
+                    "install",
+                    "--python",
+                    model_python,
+                    *map(str, wheels.glob("*.whl")),
+                    "langchain-core>=1,<2",
+                )
+                model_report = root / "models.json"
+                subprocess.run(
+                    [model_python, "-I", str(HERE / "model_module.py")],
+                    cwd=root,
+                    env=dict(worker_env, DEMO_REPORT=str(model_report)),
+                    timeout=60,
+                    check=True,
+                )
                 report = json.loads(report_path.read_text())
+                report["remote_models"] = json.loads(model_report.read_text())
                 report["ergonomic_module"] = json.loads(ergonomic_path.read_text())
                 report["discovery"] = json.loads((root / "discovery.json").read_text())
                 report.update(json.loads((root / "ready.json").read_text()))
