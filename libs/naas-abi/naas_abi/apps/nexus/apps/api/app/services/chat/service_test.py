@@ -1182,11 +1182,11 @@ async def test_build_abi_injection_preamble_includes_open_slides_deck() -> None:
     assert "Open Slides presentation" in preamble
     assert "q3-br" in preamble
     assert "Do not ask which deck" in preamble
-    assert "Edit HTML sections only" in preamble
-    assert "buildPptx" in preamble
-    assert "Plan, then write" in preamble
-    assert "write_slides_sections" in preamble
-    assert "web_search" in preamble
+    assert "transfer_to_Slides" in preamble
+    # The procedure lives in the slides skill, not in this per-turn block.
+    assert "Plan, then write" not in preamble
+    assert "list_slides_sections" not in preamble
+    assert "write_slides_sections" not in preamble
     assert "start editing immediately" not in preamble
     assert "today:" in preamble
 
@@ -1249,7 +1249,10 @@ def test_render_slides_context_block_carries_selected_slide() -> None:
     )
     assert "- slide_count: 12" in block
     assert "- selected_slide_index: 4 (slide 5 of 12 in the editor)" in block
-    assert "Do not ask which slide" in block
+    # The instruction lives in the Slides procedure; this block carries state.
+    from naas_abi.agents.SlidesAgent import SLIDES_PROCEDURE
+
+    assert "Do not ask which deck or which slide" in SLIDES_PROCEDURE
 
 
 def test_render_slides_context_block_accepts_string_indexes() -> None:
@@ -1353,7 +1356,8 @@ def test_render_slides_context_block_asks_to_rename_when_untitled() -> None:
         {"slides": {"slug": "untitled-abc", "title": "Untitled presentation"}},
         "ws-1",
     )
-    assert "rename_deck first" in block
+    assert "placeholder" in block
+    assert "rename_deck" not in block
 
 
 def test_render_documents_context_block_carries_selected_section() -> None:

@@ -68,7 +68,15 @@ _SECTION_SPLIT_RE = re.compile(r"(?=<section\b)", re.IGNORECASE)
 _SECTION_OPEN_RE = re.compile(r"<section\b([^>]*)>", re.IGNORECASE)
 _ATTR_ID_RE = re.compile(r"""\bid\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 _ATTR_CLASS_RE = re.compile(r"""\bclass\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
+_SEMANTIC_SLIDE_ID_RE = re.compile(
+    r"""(data-semantic-slide-id\s*=\s*["'])([^"']+)(["'])""",
+    re.IGNORECASE,
+)
 _H1_RE = re.compile(r"<h1\b[^>]*>(.*?)</h1>", re.IGNORECASE | re.DOTALL)
+_MAX_OUTLINE_SLIDES = 24
+_MAX_TITLE_CHARS = 70
+_MAX_SUBTITLE_CHARS = 80
+_MAX_BODY_CHARS = 900
 _TAG_RE = re.compile(r"<[^>]+>")
 _REDACTED_PLACEHOLDER = "[REDACTED_DATA_URL]"
 _SCRIPT_PLACEHOLDER = "<!-- REDACTED_SCRIPT -->"
@@ -1166,7 +1174,12 @@ def _assign_section_id(section_html: str, new_id: str) -> str:
         new_attrs = _ATTR_ID_RE.sub(f'id="{new_id}"', attrs, count=1)
     else:
         new_attrs = f' id="{new_id}"{attrs}'
-    return f"<section{new_attrs}>{section_html[open_m.end() :]}"
+    updated = f"<section{new_attrs}>{section_html[open_m.end() :]}"
+
+    def _rename_semantic(match: re.Match[str]) -> str:
+        return f"{match.group(1)}{new_id}{match.group(3)}"
+
+    return _SEMANTIC_SLIDE_ID_RE.sub(_rename_semantic, updated, count=1)
 
 
 def _set_section_title(section_html: str, title: str, layout: str) -> str:
@@ -1378,6 +1391,274 @@ def _reorder_slides_html(
     return _mutation_payload(new_html, sections, to_index)
 
 
+def _element_inner_re(attr: str, value: str) -> re.Pattern[str]:
+    """Open/close pair whose attribute equals ``value``. Group 1 is the open tag."""
+    return re.compile(
+        rf"(<([a-zA-Z0-9]+)\b[^>]*\b{attr}\s*=\s*[\"']{re.escape(value)}[\"'][^>]*>)"
+        rf"(.*?)(</\2>)",
+        re.IGNORECASE | re.DOTALL,
+    )
+
+
+def _class_inner_re(class_name: str) -> re.Pattern[str]:
+    return re.compile(
+        rf"(<([a-zA-Z0-9]+)\b[^>]*\bclass\s*=\s*[\"'][^\"']*\b{re.escape(class_name)}\b[^\"']*[\"'][^>]*>)"
+        rf"(.*?)(</\2>)",
+        re.IGNORECASE | re.DOTALL,
+    )
+
+
+def _replace_element_inner(
+    html: str, pattern: re.Pattern[str], inner: str
+) -> tuple[str, int]:
+    count = 0
+
+    def _sub(match: re.Match[str]) -> str:
+        nonlocal count
+        count += 1
+        return f"{match.group(1)}{inner}{match.group(4)}"
+
+    return pattern.sub(_sub, html), count
+
+
+def _set_slot_text(html: str, slot: str, inner: str) -> tuple[str, int]:
+    return _replace_element_inner(html, _element_inner_re("data-slot", slot), inner)
+
+
+def _set_class_text(html: str, class_name: str, inner: str) -> tuple[str, int]:
+    return _replace_element_inner(html, _class_inner_re(class_name), inner)
+
+
+def _body_lines(body: Any) -> list[str]:
+    if body is None:
+        return []
+    if isinstance(body, list):
+        return [str(item).strip() for item in body if str(item).strip()]
+    text = str(body).strip()
+    if not text:
+        return []
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+
+def _render_body(body: Any) -> str:
+    return "<br>".join(html_lib.escape(line, quote=False) for line in _body_lines(body))
+
+
+def _plain(text: str) -> str:
+    return html_lib.escape(text, quote=False)
+
+
+def _find_build_donor(sections: list[str], layout: str) -> str | None:
+    """Skeleton to clone. Content prefers a title/subtitle/body slide over a card grid."""
+    matches = [sec for sec in sections if _section_layout(sec) == layout]
+    if layout != "content":
+        return matches[0] if matches else None
+    for sec in matches:
+        if re.search(r"""data-slot\s*=\s*["']body["']""", sec, re.IGNORECASE):
+            return sec
+        if re.search(r"""\bbody-copy\b""", sec, re.IGNORECASE):
+            return sec
+    for sec in matches:
+        if re.search(r"""\bsubtitle\b""", sec, re.IGNORECASE):
+            return sec
+    return matches[0] if matches else None
+
+
+def _parse_deck_outline(raw: Any) -> list[Any] | dict[str, str]:
+    payload = raw
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            return {"error": "outline must be a non-empty JSON array"}
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError as exc:
+            return {"error": f"outline is not valid JSON: {exc}"}
+    if not isinstance(payload, list) or not payload:
+        return {
+            "error": (
+                "outline must be a non-empty JSON array of "
+                "{layout, title, subtitle, body}"
+            )
+        }
+    return payload
+
+
+def _prepare_outline(
+    rows: list[Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return cleaned rows and rejection reasons. A rejection writes nothing."""
+    cleaned: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+    if len(rows) > _MAX_OUTLINE_SLIDES:
+        rejected.append(
+            {
+                "index": _MAX_OUTLINE_SLIDES,
+                "reason": (
+                    f"outline has {len(rows)} slides; "
+                    f"the maximum is {_MAX_OUTLINE_SLIDES}"
+                ),
+            }
+        )
+    for i, row in enumerate(rows):
+        if not isinstance(row, dict):
+            rejected.append({"index": i, "reason": "row must be an object"})
+            continue
+        raw_layout = row.get("layout")
+        if not isinstance(raw_layout, str) or not raw_layout.strip():
+            rejected.append(
+                {
+                    "index": i,
+                    "reason": "layout is required (cover, section-divider, or content)",
+                }
+            )
+            continue
+        layout = _normalize_layout(raw_layout)
+        if isinstance(layout, dict):
+            rejected.append({"index": i, "reason": layout["error"]})
+            continue
+        if i == 0 and layout != "cover":
+            rejected.append({"index": i, "reason": "first slide must be cover"})
+        title = str(row.get("title") or "").strip()
+        if not title:
+            rejected.append({"index": i, "reason": "title is empty"})
+        elif len(title) > _MAX_TITLE_CHARS:
+            rejected.append(
+                {
+                    "index": i,
+                    "reason": f"title is longer than {_MAX_TITLE_CHARS} characters",
+                }
+            )
+        subtitle = str(row.get("subtitle") or "").strip()
+        if "\n" in subtitle or "\r" in subtitle or len(subtitle) > _MAX_SUBTITLE_CHARS:
+            rejected.append(
+                {
+                    "index": i,
+                    "reason": (
+                        "subtitle must be one line, "
+                        f"{_MAX_SUBTITLE_CHARS} characters or fewer"
+                    ),
+                }
+            )
+        body = row.get("bullets")
+        if body in (None, "", []):
+            body = row.get("body")
+        if layout == "content" and sum(len(line) for line in _body_lines(body)) > _MAX_BODY_CHARS:
+            rejected.append(
+                {
+                    "index": i,
+                    "reason": (
+                        f"body is longer than {_MAX_BODY_CHARS} characters; "
+                        "split it across slides"
+                    ),
+                }
+            )
+        cleaned.append(
+            {"layout": layout, "title": title, "subtitle": subtitle, "body": body}
+        )
+    return cleaned, rejected
+
+
+def _fill_built_slide(section_html: str, row: dict[str, Any]) -> str:
+    """Write title, subtitle, and body into slots. The model does not supply HTML."""
+    title = _plain(row["title"])
+    subtitle = _plain(row["subtitle"])
+    filled, title_slots = _set_slot_text(section_html, "slide-title", title)
+    filled, _nexus = _set_class_text(filled, "nexus-slide-title", title)
+    if row["layout"] == "section-divider":
+        filled, _divider = _set_class_text(filled, "divider-title", title)
+    if title_slots == 0:
+        filled = _set_section_title(filled, row["title"], row["layout"])
+    filled, _subtitle_slots = _set_slot_text(filled, "slide-subtitle", subtitle)
+    filled, _subtitle_class = _set_class_text(filled, "subtitle", subtitle)
+    filled, _divider_sub = _set_class_text(filled, "divider-sub", subtitle)
+    if row["layout"] == "content":
+        rendered = _render_body(row["body"])
+        filled, body_slots = _set_slot_text(filled, "body", rendered)
+        filled, body_class = _set_class_text(filled, "body-copy", rendered)
+        if body_slots == 0 and body_class == 0 and rendered:
+            filled = re.sub(
+                r"(<p\b(?![^>]*\bsubtitle\b)[^>]*>)(.*?)(</p>)",
+                rf"\g<1>{rendered}\g<3>",
+                filled,
+                count=1,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+    return filled
+
+
+def _set_document_title(html: str, title: str) -> str:
+    safe = _plain(title)
+    titled = re.sub(
+        r"(<title\b[^>]*>)(.*?)(</title>)",
+        rf"\g<1>{safe}\g<3>",
+        html,
+        count=1,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return re.sub(
+        r"(<span\b[^>]*\bclass\s*=\s*[\"'][^\"']*\bdeck-menubar-label\b[^\"']*[\"'][^>]*>)(.*?)(</span>)",
+        rf"\g<1>{safe}\g<3>",
+        titled,
+        count=1,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+
+def _build_slides_deck_html(html: str, rows: list[Any]) -> dict[str, Any]:
+    """Replace seed sections with one cloned skeleton per outline row."""
+    _cleaned, rejected = _prepare_outline(rows)
+    if rejected:
+        return {
+            "error": (
+                "Outline rejected. Nothing was written. "
+                "Shorten the listed rows and call build_slides_deck again."
+            ),
+            "rejected": rejected,
+        }
+    cleaned = _cleaned
+    if not cleaned:
+        return {
+            "error": (
+                "outline must be a non-empty JSON array of "
+                "{layout, title, subtitle, body}"
+            )
+        }
+    prefix, sections, suffix = _split_sections(html)
+    if not sections:
+        return {"error": "Deck has no slide skeletons to clone."}
+    donors: dict[str, str] = {}
+    for layout in {row["layout"] for row in cleaned}:
+        donor = _find_build_donor(sections, layout)
+        if donor is None:
+            return {"error": f"Open deck has no {layout} slide to clone."}
+        donors[layout] = donor
+    built: list[str] = []
+    divider_n = 0
+    cover_title = cleaned[0]["title"]
+    for index, row in enumerate(cleaned):
+        cloned = _clone_section(
+            donors[row["layout"]],
+            new_id=_next_section_id(built),
+            title=None,
+            layout=row["layout"],
+        )
+        cloned = _fill_built_slide(cloned, row)
+        if row["layout"] == "section-divider":
+            divider_n += 1
+            cloned, _n = _set_class_text(cloned, "divider-number", f"{divider_n:02d}")
+        cloned, _n = _set_class_text(cloned, "footer-number", str(index + 1))
+        cloned, _n = _set_class_text(cloned, "footer-title", _plain(cover_title))
+        built.append(cloned)
+    new_html = _set_document_title(_join_sections(prefix, built, suffix), cover_title)
+    lost = _guard_main(html, new_html)
+    if lost:
+        return lost
+    payload = _mutation_payload(new_html, built, 0)
+    payload["rejected"] = []
+    return payload
+
+
 def _run_slide_mutation(
     slug: str,
     mutate,
@@ -1408,6 +1689,12 @@ def _run_slide_mutation(
             result["section_index"] = mutated["section_index"]
             result["section_count"] = mutated["section_count"]
             result["ids"] = mutated["ids"]
+            if "rejected" in mutated:
+                result["rejected"] = mutated["rejected"]
+                result["slides"] = mutated.get("slides")
+            for key in ("image_url", "steps", "violations"):
+                if key in mutated:
+                    result[key] = mutated[key]
         result.pop("html", None)
         result.update(_open_deck_note(resolved))
         return result
@@ -1446,8 +1733,9 @@ def _view_for_llm(html: str) -> dict[str, Any]:
         "note": (
             "Outline only. HTML is omitted on purpose: a 25-slide industry "
             "deck is ~160k characters and blows the next model call. "
-            "Read at most 3 sections, then write with write_slides_sections "
-            "or write_slides_deck. Do not edit buildPptx. Preview is HTML; "
+            "Read at most 3 sections. For a new deck, call build_slides_deck. "
+            "Use write_slides_sections only to restyle slides that already exist. "
+            "Do not edit buildPptx. Preview is HTML; "
             "PPTX is derived at export."
         ),
     }
@@ -1456,18 +1744,12 @@ def _view_for_llm(html: str) -> dict[str, Any]:
 def slides_tools() -> list[BaseTool]:
     @tool
     def create_slides_project(title: str) -> dict[str, Any]:
-        """Create a new Slides presentation and make it the deck you are editing.
+        """Create a new Slides presentation and make it the open deck.
 
-        Use this when the user asks for a deck, presentation, or slides and no
-        deck is open yet (for example from the main chat surface). It seeds the
-        Minimal Light template, then every later slides tool acts on this deck
-        without needing a slug.
-
-        Pass a short human title for the topic, in the user's language. Passing
-        the raw request is tolerated: the topic is extracted from it.
-
-        After creating it, research the topic with web_search and then write the
-        slides. Do not ask the user which presentation to edit.
+        ``title`` is a short topic title in the user's language; a raw request
+        is tolerated and the topic is extracted. Seeds the default template.
+        Later slides tools act on this deck without a slug. Returns
+        {ok, slug, title}. Never HTML.
         """
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
@@ -1672,7 +1954,7 @@ def slides_tools() -> list[BaseTool]:
                 "note": (
                     f"Redacted {n_assets} embedded data-URL asset(s). "
                     "Do not re-read this section after you write it. "
-                    "For a full-deck rewrite, use write_slides_sections instead of "
+                    "For a new deck, call build_slides_deck instead of "
                     "reading every slide."
                 ),
             }
@@ -2001,6 +2283,40 @@ def slides_tools() -> list[BaseTool]:
             return _tool_error(exc)
 
     @tool
+    def build_slides_deck(
+        outline: str,
+        slug: str = "",
+        message: str = "feat(slides): build deck from outline via Abi",
+    ) -> dict[str, Any]:
+        """Build the open deck from an outline. Use this once for a new deck or a full briefing.
+
+        ``outline`` is a JSON array. Each row is
+        ``{"layout": "cover"|"section-divider"|"content", "title": "...", "subtitle": "...", "body": ["..."]}``.
+        The first row must be cover. subtitle is one line, 80 characters or fewer.
+        body is plain text or a list of bullets, on content slides only. Do not pass HTML or CSS.
+
+        Clones cover, section-divider, and content skeletons from the open deck, fills those
+        slots, renumbers footers, and persists once. Returns {ok, section_count, slides, rejected}.
+        Never returns HTML. If rejected is non-empty, nothing was written: shorten those rows
+        and call again.
+
+        For news or factual briefs: call web_search once this turn first.
+        """
+        blocked = reject_unresearched_slides_write()
+        if blocked:
+            return blocked
+        parsed = _parse_deck_outline(outline)
+        if isinstance(parsed, dict):
+            return parsed
+        return _run_slide_mutation(
+            slug,
+            lambda html: _build_slides_deck_html(html, parsed),
+            message or "feat(slides): build deck from outline via Abi",
+            "full deck",
+            default_type="feat",
+        )
+
+    @tool
     def insert_slide(
         after_index: int = -1,
         layout: str = "content",
@@ -2133,6 +2449,7 @@ def slides_tools() -> list[BaseTool]:
         replace_in_slides_deck,
         read_slides_deck,
         write_slides_deck,
+        build_slides_deck,
         insert_slide,
         delete_slide,
         duplicate_slide,

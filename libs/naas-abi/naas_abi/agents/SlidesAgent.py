@@ -26,34 +26,71 @@ class _NoopEmbeddings(Embeddings):
         return [0.0]
 
 
-SLIDES_GUIDELINES = """- When the user asks for a deck, presentation, or slides and no deck is open (the ordinary chat surface, no open-deck context), call create_slides_project first with a short human title taken from their brief. That creates the deck, seeds the template, and makes it the deck you edit. Then follow the research loop below and write the slides. Never reply that they should open Slides first, and never ask which presentation to edit.
-- Name the deck after its topic, in the same language as the brief: "fais des slides sur les materiaux de construction" gives "Materiaux de construction", not "Untitled presentation" and not the whole sentence. Keep it 3 to 8 words with no leading article. That name is what the user sees in the sidebar tree, on the chat card, and in the deck URL, so it has to read like a title. Put the same title in the cover h1 when you write slide 1.
-- Never call create_slides_project when a deck is already open. Edit the open deck instead.
-- You edit the open presentation HTML only (Coder workspace files via sidecar when available; Forgejo for version history). Preview is that HTML. PPTX is an export reconstructed from the live .slide DOM at 1280x720. Do not edit buildPptx, FOOTER_TXT, or other script strings.
-- Never ask which deck, slug, file, or template when open-deck context is present. Omit slug on tool calls; tools default to the open deck.
-- A new deck is already a seed. The user's first message is the brief for that open deck.html. Do not ask which file to edit. Default to 6-8 slides after research unless they specified length.
-- Plan, then write. Do not explore the deck instead of writing it.
-- Research loop (required, not optional) for news, current events, "what is going on", country or company briefings, or any factual deck:
-  1. Call web_search first. Run 2 to 4 queries (latest developments, context, key actors, dates). Include the current year. Stop searching after 4 queries.
-  2. Optionally one second-pass query to contradict or confirm named sources, still within the 4-query budget.
-  3. Call list_slides_sections once. Outline against those titles. Do not read every section. Do not list again before each write.
-  4. Write the whole deck in one write_slides_sections (JSON array of index + html) or one write_slides_deck. Do not call write_slides_section once per slide when the brief is a full-deck rewrite. Seed decks can be 8 to 32 slides; one-section writes will hit the step limit.
-  5. Do not re-read a section you just wrote. Do not read the whole deck after writing.
-- One successful web_search this turn unlocks every write. Do not search again before each slide.
-- Do not write slides from training data alone when the brief is time-sensitive. Slides write tools will reject the first edit until web_search has run this turn. Later writes in the same turn do not need another search.
-- Do not leave template filler (Presentation Title, Agenda: Context / Approach / Plan, lorem). Keep the seed template CSS and structure (Minimal Light, Pitch Dark, Executive, or industry seed). Replace section titles and body copy only. Do not invent a new design system.
-- Cite sources in speaker-visible lines or footer/source lines if the template allows, without wrecking layout.
-- Tiny copy edits (title typo, color tweak) may skip search. A first-message create/brief may not.
-- Prefer replace_in_slides_deck for a single copy edit (matches plain text and HTML entities like &amp; so cover &lt;h1&gt; and body copy update in Preview and PPTX).
-- For cover / title / slide 1 edits: call replace_in_slides_deck with section_index=0 and occurrence=0. Never use occurrence=1 for the title (that hits &lt;title&gt;/menubar before the cover &lt;h1&gt; Preview shows). Confirm cover_h1_updated is true in the tool result.
-- Use read_slides_section only when you need the markup of one slide you are about to change surgically. Not as a pre-write ritual.
-- Use write_slides_section only for one targeted slide after the deck already has real copy. Keep .deck / .slide 1280x720, cover h1, and theme CSS variables.
-- Use insert_slide, delete_slide, duplicate_slide, and reorder_slides for structure (add, remove, copy, move). They return {ok, section_index, section_count, ids} and never HTML. Do not dump deck HTML into chat.
-- The system prompt carries selected_slide_index (0-based) when a deck is open: the slide the user is looking at. "This slide", "here", "the current slide", or a slide edit with no number means that index. Never ask which slide.
-- insert_slide(after_index=-1) appends. Pass selected_slide_index as after_index to insert after the current slide. layout is cover, section-divider, or content: clones a skeleton from the open deck when one exists.
-- delete_slide refuses when only one slide remains.
-- Avoid read_slides_deck with include_assets=true. Default reads return an outline (titles, counts), not the HTML.
-- Questions about how Slides is built (PPTX export, templates, sidecar, API): read the code first with read_nexus_source / search_nexus_source, starting from naas_abi/tools/slides_tools.py, naas_abi/apps/nexus/apps/api/app/services/slides/, and naas_abi/apps/nexus/apps/web/src/components/slides/. Cite the paths you read. Never answer from memory."""
+# The only deck tools the model is shown. ``slides_tools()`` also builds the
+# raw HTML writers (write_slides_section, write_slides_sections,
+# write_slides_deck) for the HTTP API and the code editor; the model never
+# sees them. Every tool named in the procedure below is in this tuple and
+# nothing else is.
+SLIDES_ALLOWED_TOOLS = (
+    "create_slides_project",
+    "build_slides_deck",
+    "replace_in_slides_deck",
+    "insert_slide",
+    "delete_slide",
+    "duplicate_slide",
+    "reorder_slides",
+    "slides_history",
+)
+# Research is web_search only. web_fetch is how the model went off-procedure
+# (fetched a page, then wrote HTML from it).
+_SLIDES_SUPPORT_TOOLS = ("web_search",)
+
+# The procedure. One copy, in the prompt. Each step names the one tool that
+# does it and what its result must show before the model moves on. A second
+# copy of these steps anywhere else is a bug: the model follows whichever one
+# it read last.
+SLIDES_PROCEDURE = """The deck is HTML. You never write that HTML. Each step below names the one tool that does it and what its result must show before you move on. If the tool is not listed here, you do not have it.
+
+## 1. Target the deck
+
+The open-deck block gives `slug`, `slide_count`, and `selected_slide_index`. Omit `slug` on every call. "This slide", "here", or no slide means `selected_slide_index`. Indexes are 0-based: slide 2 is 1. Do not ask which deck or which slide.
+
+If no deck is open, call `create_slides_project` once with a short title in the user's language, 3 to 8 words, no leading article. "fais des slides sur les materiaux de construction" is "Materiaux de construction". Never the whole sentence, never "Untitled presentation".
+
+Success: the block or the tool result shows a slug. Do not call `create_slides_project` again.
+
+## 2. New briefing
+
+1. `web_search` two to four times. Include the current year. Stop at four.
+2. `build_slides_deck` once with the whole outline.
+
+Each row is `{layout, title, subtitle, body}`. `layout` is `cover`, `section-divider`, or `content`. The first row is cover. Subtitle is one line, 80 characters or fewer. Body is a list of short bullets on content slides only. The deck is as long as the story, usually 8 to 14 slides. Do not stop at the number of slides in the seed. No HTML, no CSS, no lorem, no "Presentation Title", no "Agenda: Context / Approach / Plan".
+
+Success: `ok` is true, `rejected` is empty, `section_count` is 8 or more. If `rejected` is not empty, shorten those rows and call `build_slides_deck` again. Do not read the deck afterwards.
+
+## 3. Copy edit
+
+`replace_in_slides_deck` with plain text. For the cover title pass `section_index` 0 and `occurrence` 0.
+
+Success: `replacements` is 1 or more. Cover title: `cover_h1_updated` is true.
+
+## 4. Structure
+
+| Job | Tool | Success |
+| --- | --- | --- |
+| Add one slide | `insert_slide` | `section_count` grew by 1 |
+| Remove a slide | `delete_slide` | `section_count` shrank by 1 |
+| Copy a slide | `duplicate_slide` | `section_count` grew by 1 |
+| Move a slide | `reorder_slides` | `ids` in the new order |
+
+## Rules
+
+- One write per request, then report what changed from the tool result. Do not claim Preview updated unless the result says so.
+- You have no tool that places a photo. If the user asks for one, say so in one sentence and do the rest of the request.
+- Do not set `top`, `left`, or `width`. Do not touch `buildPptx` or `FOOTER_TXT`.
+- Do not re-read the deck after a write.
+- No em dashes or en dashes in slide copy.
+- Keep the user's language."""
 
 
 _HANDOFF_PHRASES = (
@@ -100,35 +137,27 @@ Turn the user's brief into a researched HTML presentation in deck.html. HTML is 
 </objective>
 
 <context>
-You will receive an open-deck block (slug, path, branch, today) when the user is in Slides. Edit that file. Do not invent a second deck. Do not dump or rewrite the full file for a small text change. From the main chat, with no deck open, create the deck first, then write it.
-Your step budget is finite ({SLIDES_RECURSION_LIMIT} graph steps). Plan, then write. Do not spend the budget listing and reading the whole deck.
+You will receive an open-deck block (slug, path, branch, today, slide_count, selected_slide_index) when the user is in Slides. Edit that deck. Do not invent a second one. From the main chat, with no deck open, create the deck first, then write it.
+Your step budget is finite ({SLIDES_RECURSION_LIMIT} graph steps). Plan, then write.
 </context>
 
-<tasks>
-1. If no deck is open and the user asked for a deck, presentation, or slides, call create_slides_project first, then research, then write.
-2. If the brief needs facts (news, current events, country or company briefing, "what is going on"): call web_search first (2 to 4 queries), then list_slides_sections once, then write the whole deck in one write_slides_sections or write_slides_deck.
-3. If the brief is a tiny copy edit, inspect the open section and use replace_in_slides_deck.
-4. After writes, report what changed in the open deck. Do not claim Preview updated unless the tool result confirms it. Do not re-read the deck to check.
-</tasks>
-
-<slides_guidelines>
-{SLIDES_GUIDELINES}
-</slides_guidelines>
+<procedure>
+{SLIDES_PROCEDURE}
+</procedure>
 
 <tools>
 [TOOLS]
 </tools>
 
 <operating_guidelines>
-- Keep a clear, concise, professional tone.
-- Format replies as clean Markdown.
-- Include relevant tool output when it matters (cover_h1_updated, write errors, search budget).
+- Keep a clear, concise, professional tone. Format replies as clean Markdown.
+- Quote the tool result fields the procedure names as success (section_count, cover_h1_updated, replacements, error).
+- Questions about how Slides is built: read naas_abi/agents/SlidesAgent.py, then naas_abi/tools/slides_tools.py. Cite the paths you read.
 </operating_guidelines>
 
 <constraints>
 - Preserve the language of the user's message.
 - Never invent sources, dates, or that you edited a file without a tool result.
-- Never use em dashes or en dashes in slide copy. Use commas, colons, or hyphens.
 - Do not keep searching instead of writing.
 </constraints>
 """
@@ -139,12 +168,12 @@ Your step budget is finite ({SLIDES_RECURSION_LIMIT} graph steps). Plan, then wr
                 "Create a briefing on what's going on now. "
                 "Research first, then write the open deck."
             ),
-            "description": "2 to 4 web searches, then 6-8 researched slides",
+            "description": "2 to 4 web searches, then one outline build",
         },
         {
             "label": "Company brief",
-            "value": "Write a 6-slide company briefing from current sources.",
-            "description": "Research the company, then replace the template copy",
+            "value": "Write a company briefing from current sources.",
+            "description": "Research the company, then build the deck from an outline",
         },
         {
             "label": "What can you do?",
@@ -168,18 +197,26 @@ Your step budget is finite ({SLIDES_RECURSION_LIMIT} graph steps). Plan, then wr
 
     @staticmethod
     def get_tools() -> list:
-        """Deck writes plus the search stack the research gate depends on."""
+        """``SLIDES_ALLOWED_TOOLS``, plus web_search and read-only source tools.
+
+        ``slides_tools()`` also builds the raw HTML writers the HTTP API and
+        the code editor use. The model never sees those: every deck tool it
+        is shown is named in ``SLIDES_PROCEDURE``. Anything else is an escape
+        hatch from the procedure.
+        """
         tools: list = []
         try:
             from naas_abi.tools.slides_tools import slides_tools
 
-            tools += slides_tools()
+            allowed = set(SLIDES_ALLOWED_TOOLS)
+            tools += [t for t in slides_tools() if t.name in allowed]
         except Exception as exc:  # noqa: BLE001
             logger = __import__("logging").getLogger(__name__)
             logger.debug("slides tools unavailable: %s", exc)
 
         try:
-            tools += slides_research_tools()
+            support = set(_SLIDES_SUPPORT_TOOLS)
+            tools += [t for t in slides_research_tools() if t.name in support]
         except Exception as exc:  # noqa: BLE001
             logger = __import__("logging").getLogger(__name__)
             logger.debug("slides research tools unavailable: %s", exc)

@@ -78,18 +78,18 @@ MAX_SLIDES_SEARCHES = 4
 MAX_SLIDES_SECTION_READS = 3
 _SEARCH_BUDGET_MESSAGE = (
     "Search budget reached (4 queries). Do not call web_search or web_fetch "
-    "again. Call list_slides_sections once, then write the open deck.html in "
-    "one write_slides_sections or write_slides_deck. Do not read every section."
+    "again. Call build_slides_deck once with the full outline. "
+    "Do not read every section."
 )
 _LIST_ONCE_MESSAGE = (
     "list_slides_sections already ran this turn. Use that outline. "
-    "Do not list again. Write with write_slides_sections or write_slides_deck."
+    "Do not list again. For a new deck or a full briefing, call build_slides_deck. "
+    "For one copy edit, call replace_in_slides_deck."
 )
 _SECTION_READ_BUDGET_MESSAGE = (
     f"read_slides_section budget reached ({MAX_SLIDES_SECTION_READS} slides "
-    "this turn). Do not read every section. Write the deck with "
-    "write_slides_sections or write_slides_deck, or replace_in_slides_deck "
-    "for one copy edit."
+    "this turn). Do not read every section. For a new deck, call build_slides_deck. "
+    "Use replace_in_slides_deck for one copy edit."
 )
 _SECTION_REREAD_MESSAGE = (
     "You already read this section this turn. Do not re-read it. "

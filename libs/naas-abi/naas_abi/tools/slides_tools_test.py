@@ -29,6 +29,7 @@ from naas_abi.tools.slides_tools import (
     _apply_replacements,
     _apply_replacements_in_section,
     _apply_section_writes,
+    _build_slides_deck_html,
     _cover_h1_text,
     _cover_subtitle_text,
     _deck_path,
@@ -912,6 +913,154 @@ def test_reorder_slides_from_to_and_order_list():
     _p, restored, _s = _split_sections(permuted["html"])
     assert 'id="slide-cover"' in restored[0]
     assert 'id="slide-agenda"' in restored[1]
+
+
+_BLANK = """<!DOCTYPE html>
+<html><head><title>Presentation title</title></head><body>
+<div class="deck-menubar"><span class="deck-menubar-label">BOB blank template</span></div>
+<main class="deck">
+<section id="slide-cover" class="slide cover" data-layout="title-cover" data-semantic-slide-id="slide-cover">
+  <h1 class="nexus-slide-title">Presentation title</h1>
+  <div class="industry-stage">
+    <img src="assets/cover-city.jpg" alt="" />
+    <h1 data-slot="slide-title">Presentation title</h1>
+    <h2 class="subtitle" data-slot="slide-subtitle">Subtitle or presentation objective</h2>
+    <div class="footer"><span class="footer-number">1</span><span class="footer-title">Presentation title</span><span class="footer-date">Date</span></div>
+  </div>
+</section>
+<section id="slide-divider" class="slide section-divider" data-layout="section-divider" data-semantic-slide-id="slide-divider">
+  <h1 class="nexus-slide-title">Section title</h1>
+  <div class="industry-stage">
+    <div class="divider-number">01</div>
+    <h1 data-slot="slide-title">Section title</h1>
+    <h2 data-slot="slide-subtitle">Optional section context</h2>
+  </div>
+</section>
+<section id="slide-content" class="slide content" data-layout="content-slide" data-semantic-slide-id="slide-content">
+  <h1 class="nexus-slide-title">Slide title</h1>
+  <div class="industry-stage">
+    <h1 data-slot="slide-title">Slide title</h1>
+    <h2 class="subtitle" data-slot="slide-subtitle">Slide subtitle or takeaway</h2>
+    <p class="body-copy" data-slot="body">Use this area for the main message.</p>
+    <div class="footer"><span class="footer-number">3</span><span class="footer-title">Presentation title</span><span class="footer-date">Date</span></div>
+  </div>
+</section>
+</main>
+<script>const KEEP = "HEAVYASSETDATA";</script>
+</body></html>
+"""
+
+_THIEL_OUTLINE = [
+    {"layout": "cover", "title": "Peter Thiel", "subtitle": "Contrarian investor"},
+    {"layout": "section-divider", "title": "The investor", "subtitle": "Early bets"},
+    {
+        "layout": "content",
+        "title": "PayPal",
+        "subtitle": "Co-founder",
+        "body": ["Started PayPal", "Sold in 2002"],
+    },
+    {
+        "layout": "content",
+        "title": "Palantir",
+        "subtitle": "Software",
+        "bullets": ["Founded Palantir", "Still chairman"],
+    },
+    {"layout": "divider", "title": "Later", "subtitle": "Books and funds"},
+]
+
+
+def test_build_slides_deck_clones_one_section_per_outline_row():
+    result = _build_slides_deck_html(_BLANK, _THIEL_OUTLINE)
+    assert result["ok"] is True
+    assert result["rejected"] == []
+    assert result["section_count"] == 5
+    html = result["html"]
+    _prefix, sections, _suffix = _split_sections(html)
+    assert len(sections) == 5
+    assert html.count("<section") == 5
+    assert "Use this area for the main message." not in html
+    assert "Slide subtitle or takeaway" not in html
+    assert "Presentation title" not in html
+    assert "Peter Thiel" in html
+    assert "Started PayPal<br>Sold in 2002" in html
+    assert "Founded Palantir<br>Still chairman" in html
+    assert html.count('class="footer-number">1<') == 1
+    assert html.count('class="footer-number">3<') == 1
+    assert html.count('class="footer-number">4<') == 1
+    assert 'class="divider-number">01<' in html
+    assert 'class="divider-number">02<' in html
+    assert 'class="footer-title">Peter Thiel<' in html
+    assert "<title>Peter Thiel</title>" in html
+    assert 'deck-menubar-label">Peter Thiel<' in html
+    assert "assets/cover-city.jpg" in html
+    assert "HEAVYASSETDATA" in html
+    ids = [sid for sid in result["ids"] if sid]
+    assert ids == [f"slide-{n:03d}" for n in range(1, 6)]
+    assert "slide-cover" not in html
+    assert result["slides"][2]["title"] == "PayPal"
+    assert result["slides"][2]["layout"] == "content"
+
+
+def test_build_slides_deck_rejects_a_long_subtitle_without_html():
+    outline = [
+        {"layout": "cover", "title": "Peter Thiel", "subtitle": "x" * 81},
+        {"layout": "content", "title": "PayPal", "subtitle": "Co-founder", "body": ["One"]},
+    ]
+    result = _build_slides_deck_html(_BLANK, outline)
+    assert "html" not in result
+    assert result["rejected"][0]["index"] == 0
+    assert "one line" in result["rejected"][0]["reason"]
+
+
+def test_build_slides_deck_rejects_a_deck_that_does_not_open_on_the_cover():
+    result = _build_slides_deck_html(
+        _BLANK,
+        [{"layout": "content", "title": "PayPal", "subtitle": "Co-founder"}],
+    )
+    assert "html" not in result
+    assert result["rejected"][0]["reason"] == "first slide must be cover"
+
+
+def test_build_slides_deck_persists_without_returning_html(monkeypatch):
+    sc = _seed_in_memory_deck(_bind_in_memory_git(monkeypatch), _BLANK)
+    tokens = _slides_context()
+    try:
+        tool = next(t for t in slides_tools() if t.name == "build_slides_deck")
+        result = tool.invoke({"outline": json.dumps(_THIEL_OUTLINE)})
+        assert "error" not in result, result
+        assert result["ok"] is True
+        assert result["section_count"] == 5
+        assert result["rejected"] == []
+        assert "html" not in result
+        assert "<section" not in json.dumps(result)
+        deck = sc.get_file(
+            repo_id="abi/monorepo",
+            path="slides/ws-test/untitled-local/deck.html",
+            ref="slides/ws-test/untitled-local",
+        )
+        text = deck.text or ""
+        assert "Peter Thiel" in text
+        assert "Use this area for the main message." not in text
+        assert text.count("<section") == 5
+    finally:
+        _reset_tokens(tokens)
+
+
+def test_build_slides_deck_requires_research(monkeypatch):
+    _seed_in_memory_deck(_bind_in_memory_git(monkeypatch), _BLANK)
+    monkeypatch.setattr(
+        "naas_abi.agents.slides.policy.slides_search_tool_bound",
+        lambda: True,
+    )
+    tokens = _slides_context()
+    slides_research_required.set(True)
+    slides_research_queries.set([])
+    try:
+        tool = next(t for t in slides_tools() if t.name == "build_slides_deck")
+        result = tool.invoke({"outline": json.dumps(_THIEL_OUTLINE)})
+        assert "Research required" in result["error"]
+    finally:
+        _reset_tokens(tokens)
 
 
 def test_structure_tools_persist_without_returning_html(monkeypatch):

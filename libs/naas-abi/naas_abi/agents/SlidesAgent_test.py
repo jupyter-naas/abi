@@ -4,7 +4,17 @@ from types import SimpleNamespace
 from naas_abi.agents import SlidesAgent as slides_agent_module
 from naas_abi.agents.AbiAgent import AbiAgent
 from naas_abi.agents.slides import DEFAULT_SLIDES_MODEL
-from naas_abi.agents.SlidesAgent import SLIDES_GUIDELINES, SlidesAgent
+from naas_abi.agents.SlidesAgent import (
+    SLIDES_ALLOWED_TOOLS,
+    SLIDES_PROCEDURE,
+    SlidesAgent,
+)
+
+_RAW_HTML_WRITERS = {
+    "write_slides_section",
+    "write_slides_sections",
+    "write_slides_deck",
+}
 
 
 def test_slides_agent_is_first_class() -> None:
@@ -16,17 +26,46 @@ def test_slides_agent_is_first_class() -> None:
     assert hasattr(SlidesAgent, "get_chat_model_id")
 
 
-def test_slides_agent_prompt_requires_research_then_write() -> None:
+def test_slides_agent_prompt_is_the_procedure() -> None:
+    """One procedure, in the prompt. No second copy of the steps anywhere."""
     prompt = SlidesAgent.system_prompt
+    assert SLIDES_PROCEDURE in prompt
     assert "web_search" in prompt
-    assert "Research loop" in prompt
-    assert "Plan, then write" in prompt
-    assert "write_slides_sections" in prompt
-    assert "Do not re-read" in prompt
-    assert "start writing immediately" not in prompt
-    assert "Context / Approach / Plan" in prompt
+    assert "build_slides_deck" in prompt
     assert "deck.html" in prompt
-    assert SLIDES_GUIDELINES in prompt
+    assert "Context / Approach / Plan" in prompt
+    assert "Do not re-read" in prompt
+    # The old duplicates are gone.
+    assert "<tasks>" not in prompt
+    assert "Research loop" not in prompt
+    for name in _RAW_HTML_WRITERS:
+        assert name not in prompt
+
+
+def test_slides_procedure_names_success_for_every_step() -> None:
+    """Each step says what in the tool result proves it is done."""
+    assert SLIDES_PROCEDURE.count("Success") >= 3
+    assert "section_count" in SLIDES_PROCEDURE
+    assert "cover_h1_updated" in SLIDES_PROCEDURE
+    assert "replacements" in SLIDES_PROCEDURE
+
+
+def test_slides_procedure_only_names_allowed_tools() -> None:
+    """Every deck tool the procedure mentions is one the model is given."""
+    assert set(SLIDES_ALLOWED_TOOLS) == {
+        "create_slides_project",
+        "build_slides_deck",
+        "replace_in_slides_deck",
+        "insert_slide",
+        "delete_slide",
+        "duplicate_slide",
+        "reorder_slides",
+        "slides_history",
+    }
+    assert not _RAW_HTML_WRITERS & set(SLIDES_ALLOWED_TOOLS)
+    for name in SLIDES_ALLOWED_TOOLS:
+        if name != "slides_history":
+            assert f"`{name}`" in SLIDES_PROCEDURE, name
 
 
 def test_slides_agent_prompt_covers_creating_a_deck_from_the_main_chat() -> None:
@@ -36,11 +75,10 @@ def test_slides_agent_prompt_covers_creating_a_deck_from_the_main_chat() -> None
 
 
 def test_slides_agent_prompt_names_the_deck_after_its_topic() -> None:
-    prompt = SlidesAgent.system_prompt
-    lowered = prompt.lower()
-    assert "same language as the brief" in lowered
-    assert "untitled" in lowered
-    assert "cover" in lowered
+    procedure = SLIDES_PROCEDURE.lower()
+    assert "user's language" in procedure
+    assert "untitled" in procedure
+    assert "cover" in procedure
 
 
 def test_slides_agent_default_model_is_the_policy_fallback() -> None:
@@ -48,17 +86,18 @@ def test_slides_agent_default_model_is_the_policy_fallback() -> None:
     assert SlidesAgent.get_chat_model_ids() == [DEFAULT_SLIDES_MODEL]
 
 
-def test_slides_agent_owns_the_write_and_research_tools() -> None:
+def test_slides_agent_binds_exactly_the_allowed_tools_plus_search() -> None:
+    """The model sees SLIDES_ALLOWED_TOOLS and web_search. Nothing that takes HTML."""
     names = {tool.name for tool in SlidesAgent.get_tools()}
-    assert "create_slides_project" in names
-    assert "write_slides_deck" in names
-    assert "write_slides_section" in names
-    assert "write_slides_sections" in names
-    assert "replace_in_slides_deck" in names
+    assert set(SLIDES_ALLOWED_TOOLS) <= names
     assert "web_search" in names
-    assert "web_fetch" in names
+    # Escape hatches: raw HTML in, or a page the model then rewrites as HTML.
+    assert not _RAW_HTML_WRITERS & names
+    assert "web_fetch" not in names
+    assert "read_slides_deck" not in names
+    assert "list_slides_sections" not in names
     source = inspect.getsource(SlidesAgent.get_tools)
-    assert "naas_abi.tools.web_tools" in source or "slides_research_tools" in source
+    assert "slides_research_tools" in source
     assert "nexus_admin_tools" not in source
 
 

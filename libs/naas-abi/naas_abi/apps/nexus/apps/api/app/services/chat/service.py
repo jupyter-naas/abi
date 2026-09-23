@@ -202,9 +202,12 @@ def _untitled_slides_rename_hint(title: str, slug: str) -> str:
         return ""
     if not is_placeholder_deck_title(title or slug):
         return ""
+    # There is no rename tool. The cover row of build_slides_deck is the
+    # deck's title. Telling the model to call rename_deck sent it looking
+    # for a tool it does not have.
     return (
-        "If the open deck is still Untitled, call rename_deck first with a "
-        "short topic title, then write.\n"
+        "The open deck title is still a placeholder. The cover row of your "
+        "build_slides_deck outline names it: use the topic, not Untitled.\n"
     )
 
 
@@ -243,7 +246,6 @@ def _render_slides_context_block(
     title = str(slides.get("title") or "").strip()
     mode = str(slides.get("mode") or "").strip()
     today = datetime.now().date().isoformat()
-    year = today[:4]
     lines = [
         f"- slug: {slug}",
         f"- path: {path}",
@@ -257,46 +259,22 @@ def _render_slides_context_block(
     if mode:
         lines.append(f"- editor_mode: {mode}")
     lines.extend(_selected_slide_lines(slides))
+    # State only. The procedure is the slides skill, loaded in the Slides
+    # agent's prompt. A second copy of the steps here contradicted it (this
+    # block said "call list_slides_sections once"; the skill says do not).
     return (
         "\n\n## Open Slides presentation\n"
         "The user is editing this presentation in the Slides overlay right now. "
-        "If you do not have replace_in_slides_deck, write_slides_section, "
-        "write_slides_sections, or write_slides_deck, call transfer_to_Slides "
-        "immediately and stop. Do not "
-        "web_search, read the deck, or write files yourself.\n"
-        "You are operating on its Coder workspace files (sidecar) when available; "
-        "Forgejo remains the Save/history snapshot. Preview loads from sidecar when "
-        "ready. Do not ask which deck, slug, file, or template. "
-        "Omit slug on Slides tool calls; tools default to this open deck.\n"
-        "selected_slide_index below is the slide the user has selected in the "
-        "editor, 0-based, same index space as section_index / index / "
-        "after_index on the Slides tools. When the user says this slide, here, "
-        "the current slide, or gives no slide, target that index. Do not ask "
-        "which slide.\n"
-        "Plan, then write. For news, current events, "
-        '"what is going on", country or company briefings, or any factual deck:\n'
-        f"1. Call web_search 2 to 4 times first (latest developments, context, "
-        f"key actors, dates). Include {year}. Stop after 4 searches. "
-        "One successful search this turn unlocks every write; do not search again "
-        "before each slide.\n"
-        "2. Call list_slides_sections once. Do not read every section. "
-        "Do not re-read a slide you just wrote.\n"
-        "3. Write the whole deck in one write_slides_sections or write_slides_deck. "
-        "Do not write one section per tool call when the brief is a full-deck rewrite. "
-        "Seed decks can be 8 to 32 slides.\n"
-        "4. After that write, report what changed. Do not list or read the "
-        "whole deck again. No lorem. No Context / Approach / Plan filler when "
-        "the user asked for a situation brief.\n"
+        "If you do not have build_slides_deck, call transfer_to_Slides "
+        "immediately and stop. Do not web_search, read the deck, or write "
+        "files yourself.\n"
+        "Do not ask which deck, slug, file, or template. Omit slug on Slides "
+        "tool calls; tools default to this open deck. selected_slide_index is "
+        "0-based, the same index space as section_index / index / after_index "
+        "on the Slides tools.\n"
         + _untitled_slides_rename_hint(title, slug)
-        + "Keep the seed template CSS and structure. Cite sources in footer or "
-        "source lines if the layout allows. "
-        "A tiny copy edit (title typo, color tweak) may skip search. "
-        "Edit HTML sections only. Preview is the HTML stage. PPTX export "
-        "reconstructs the live .slide DOM at 1280x720; do not edit buildPptx or "
-        "FOOTER_TXT. For a small copy edit after research (or a title-only tweak), "
-        "call replace_in_slides_deck with section_index=0 and "
-        "occurrence=0 (matches &amp; on cover h1; do not use occurrence=1 "
-        "for the title).\n" + "\n".join(lines) + "\n"
+        + "\n".join(lines)
+        + "\n"
     )
 
 
