@@ -117,7 +117,7 @@ class ABIModule(BaseModule):
         assert not (await call("exists")).value
         from naas_abi_proto.cache.v1 import cache_pb2
 
-        hot = self.engine.services.cache.tier(0)
+        hot = self.engine.rpc.cache.tier(0)
         await hot.set(cache_pb2.SetRequest(key="tier-demo", value=value))
         assert (
             await hot.get(cache_pb2.GetRequest(key="tier-demo"))

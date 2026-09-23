@@ -1,0 +1,55 @@
+syntax = "proto3";
+package abi.discovery.v1;
+import "naas_abi_proto/common/v1/common.proto";
+
+message AgentDescriptor {
+  string name = 1;
+  string description = 2;
+  uint32 contract_major = 3;
+  repeated string capabilities = 4;
+}
+message Dependency { string module_id = 1; uint32 contract_major = 2; }
+message ModuleDescriptor {
+  string module_id = 1;
+  string package_version = 2;
+  uint32 contract_major = 3;
+  repeated Dependency dependencies = 4;
+  repeated AgentDescriptor agents = 5;
+}
+message Instance {
+  ModuleDescriptor descriptor = 1;
+  string instance_id = 2;
+  string status = 3;
+  double expires_at = 4;
+}
+message RegisterRequest {
+  abi.common.v1.CallContext context = 1;
+  ModuleDescriptor descriptor = 2;
+  string instance_id = 3;
+  string lease_token = 4;
+}
+message RegisterResponse { abi.common.v1.CallError error = 1; Instance instance = 2; double lease_seconds = 3; }
+message RenewRequest {
+  abi.common.v1.CallContext context = 1;
+  string instance_id = 2;
+  string lease_token = 3;
+  bool initialized = 4;
+  bool draining = 5;
+}
+message RenewResponse { abi.common.v1.CallError error = 1; Instance instance = 2; double lease_seconds = 3; }
+message UnregisterRequest { abi.common.v1.CallContext context = 1; string instance_id = 2; string lease_token = 3; }
+message UnregisterResponse { abi.common.v1.CallError error = 1; }
+message GetModuleRequest { abi.common.v1.CallContext context = 1; string module_id = 2; uint32 contract_major = 3; }
+message GetModuleResponse { abi.common.v1.CallError error = 1; repeated Instance instances = 2; }
+message ListModulesRequest { abi.common.v1.CallContext context = 1; uint32 limit = 2; string after_instance_id = 3; }
+message ListModulesResponse { abi.common.v1.CallError error = 1; repeated Instance instances = 2; string next_after_instance_id = 3; }
+
+// Private persistence envelope; never returned by discovery lookup RPCs.
+message RegistryRecord {
+  Instance instance = 1;
+  string owner = 2;
+  string lease_hash = 3;
+  bool initialized = 4;
+  bool draining = 5;
+}
+message RegistryState { repeated RegistryRecord records = 1; }

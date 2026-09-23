@@ -81,3 +81,12 @@ This proves shared persistence across processes, not remote agent invocation.
 
 `user_module.py` demonstrates explicit component injection and task-scoped
 `current_module()` access. Its result is recorded under `ergonomic_module`.
+
+## Discovery failure and recovery
+
+The host enables discovery with a two-second lease for the demo. The wheel-only
+`discovery_demo.py` starts a consumer before its provider, verifies dependency
+startup gating and agent descriptors, kills the provider, waits for lease expiry,
+then starts a replacement. The consumer observes recovery with a different
+instance identity. `report.json` records the distinct process IDs under discovery.
+These are agent descriptors only; remote agent invocation is not implemented.

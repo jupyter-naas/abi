@@ -88,7 +88,9 @@ from rich.prompt import Prompt
 
 
 class ServicesConfiguration(BaseModel):
-    document: DocumentServiceConfiguration = Field(default_factory=DocumentServiceConfiguration)
+    document: DocumentServiceConfiguration = Field(
+        default_factory=DocumentServiceConfiguration
+    )
     object_storage: ObjectStorageServiceConfiguration = (
         ObjectStorageServiceConfiguration(
             object_storage_adapter=ObjectStorageAdapterConfiguration(
@@ -228,6 +230,11 @@ class ApiConfiguration(BaseModel):
     port: int = 9879
 
 
+class DiscoveryConfiguration(BaseModel):
+    project: str = Field(default="default", pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    lease_seconds: float = Field(default=20, ge=1, le=300, allow_inf_nan=False)
+
+
 class NATSConfiguration(BaseModel):
     """Cross-cutting NATS exposure config -- not a domain service, so it lives
     at the top level next to ``api``/``deploy``/``global_config``, not nested
@@ -250,6 +257,7 @@ class NATSConfiguration(BaseModel):
 
     nats_url: str = "nats://127.0.0.1:4222"
     jwt_secret: str
+    discovery: DiscoveryConfiguration | None = None
 
 
 class OpencodeProviderConfiguration(BaseModel):
@@ -459,7 +467,9 @@ class EngineConfiguration(BaseModel):
         # the dotenv path here, which is bootstrap config and cannot itself depend
         # on a secret, so empty-rendered secrets are harmless.
         env = cls._build_jinja_env(base_dir)
-        raw_data = yaml.safe_load(StringIO(cls._render_yaml_template(env, yaml_content)))
+        raw_data = yaml.safe_load(
+            StringIO(cls._render_yaml_template(env, yaml_content))
+        )
         if not isinstance(raw_data, dict):
             return None
 

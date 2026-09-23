@@ -78,7 +78,7 @@ and `on_load`, `on_initialized`, `on_unloaded` hooks. The runner calls them in t
 order around `run()`, and unloads/closes on failure or cancellation. Hooks may be
 sync or async. `kv`/`events` aliases and `<service>_available()` checks are supported;
 availability indicates a declared capability, not remote health or authorization.
-Undeclared access and unsupported cross-module discovery fail explicitly.
+Undeclared access fails explicitly. Module dependencies require discovery enabled.
 
 Pass the module or a narrower service dependency into ordinary components:
 
@@ -124,7 +124,7 @@ Migration preserves module structure/lifecycle; it is not binary compatibility
 with arbitrary engine modules. Change the base imports, declare service names
 instead of core classes, use dataclass configuration, and await SDK operations
 with ordinary Python arguments. Workflow/agent/FastAPI auto-discovery, live model objects,
-and direct access to another module are not silently emulated. Port business logic
+and access to another module's Python objects are not silently emulated. Port business logic
 separately from those framework-specific components.
 
 `client.cache.tier(index)` addresses a configured cache tier by its order in the
@@ -192,8 +192,87 @@ See the document-checkpoint ADR and remote-agent invocation RFC for those bounda
 - Object streaming, KV lock contexts, local model objects and framework-specific
   helpers have no equivalent here. Unsupported operations are not silently run
   locally. Use `engine.rpc` for administrative or lower-level contract operations.
-- `current_module()` finds the current instance only. It does not discover other
-  modules or provide an AgentProxy; cross-module dependencies still fail explicitly.
+- `current_module()` finds the current instance only. `engine.modules` resolves
+  declared dependencies through discovery; AgentProxy invocation remains separate.
 
 See `examples/standalone_module/user_module.py` at the repository root for a
 protobuf-free module exercising the facades against a separate engine process.
+
+## Module discovery
+
+Configure exactly one engine to host the registry for a project:
+
+```yaml
+nats:
+  nats_url: nats://127.0.0.1:4222
+  jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
+  discovery:
+    project: default
+    lease_seconds: 20
+```
+
+Without `discovery`, existing engine startup is unchanged. The registry needs
+JetStream enabled and bucket permissions on its broker connection. It stores an
+atomic bounded snapshot (256 live instances / 512 KiB) and verifies logical expiry
+on every read. This first version supports one configured owner per project.
+A separate process can host it through core's `start_discovery` factory.
+
+```python
+from naas_abi_sdk import (
+    BaseModule,
+    ModuleDependencies,
+    AgentDescriptor,
+    DiscoveryConfiguration,
+    run_module,
+)
+
+
+class Provider(BaseModule):
+    module_id = "acme.research"  # Stable even when launched as __main__.
+    package_version = "1.0.0"
+    agents = (AgentDescriptor("Researcher", "Find supporting evidence"),)
+
+    async def run(self):
+        await stop_event.wait()  # Your application's shutdown event.
+
+
+class Consumer(BaseModule):
+    module_id = "acme.consumer"
+    dependencies = ModuleDependencies(modules=("acme.research",))
+
+    async def on_initialized(self):
+        research = self.engine.modules["acme.research"]
+        self.agents = await research.list_agents()
+
+    async def run(self):
+        return self.agents
+
+
+# In separate processes, using issued tokens:
+# await run_module(Provider, url=url, token=token, discovery=DiscoveryConfiguration())
+# await run_module(Consumer, url=url, token=token, discovery=DiscoveryConfiguration())
+```
+
+For package entrypoints the CLI accepts `--discovery-project default`. Registration
+starts after on_load. Dependencies must become READY before on_initialized runs;
+the default startup bound is 60 seconds, with 2-second dependency refresh. SDK
+string dependencies currently request module contract major 1. Registration
+publishes the module's explicit contract_major; clients can use DiscoveryClient
+for explicit version lookup. Replicas of one contract declare identical dependency
+and agent metadata. Changing that metadata requires a new contract major.
+
+The heartbeat runs every 5 seconds (or a quarter lease for shorter leases), with
+jitter. `module.discovery_status` exposes last-confirmed readiness and becomes
+UNAVAILABLE after confirmation expires. Dependency loss yields DEGRADED on the
+registry without killing independent module work. Every ModuleProxy lookup queries
+fresh state; missing, incompatible and not-ready modules have distinct RPC error
+codes. Recovery after lease loss uses a new instance identity. Unload marks
+DRAINING and unregisters; a hard crash is handled by expiry.
+
+`list_agents()` returns SDK descriptors, not callable agents. No invocation,
+streaming, execution locking, or automatic publication of legacy engine modules
+is included yet. The Stage 1 trust model still allows trusted service identities
+to register logical module names; declaration checks are not authorization.
+
+Run the standalone demo to see a consumer wait, discover a provider's agent,
+observe provider death, and recover after a replacement process registers.

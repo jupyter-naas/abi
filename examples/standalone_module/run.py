@@ -116,6 +116,13 @@ def main():
                     ABI_SERVICE_TOKEN=(root / "token").read_text(),
                     DEMO_REPORT=str(report_path),
                 )
+                subprocess.run(
+                    [worker_python, "-I", str(HERE / "discovery_demo.py")],
+                    cwd=root,
+                    env=dict(worker_env, DISCOVERY_REPORT_DIR=str(root)),
+                    timeout=60,
+                    check=True,
+                )
                 ergonomic_path = root / "ergonomic.json"
                 ergonomic = subprocess.run(
                     [worker_python, "-I", str(HERE / "user_module.py")],
@@ -136,6 +143,7 @@ def main():
                 )
                 report = json.loads(report_path.read_text())
                 report["ergonomic_module"] = json.loads(ergonomic_path.read_text())
+                report["discovery"] = json.loads((root / "discovery.json").read_text())
                 report.update(json.loads((root / "ready.json").read_text()))
                 assert report["engine_pid"] != report["worker_pid"]
                 email_files = list((root / "email").rglob("*.eml"))
