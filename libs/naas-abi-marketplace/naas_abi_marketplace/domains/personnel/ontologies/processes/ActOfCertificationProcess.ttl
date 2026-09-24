@@ -22,15 +22,17 @@ personnel:ActOfCertificationProcess a owl:Ontology ;
   #   WHAT         ActOfCertification (the process itself)
   #   WHEN         TemporalRegion, bounded by the instant the certification was
   #                awarded (absent when the source gives no date)
-  #   WHERE        Site (optional - where the assessment took place)
+  #   WHERE        Facility (CCO Facility, optional - where the assessment took place)
   #   WHY          CertificationCandidateRole (SDC) - the role borne by the person
   #                for as long as they seek or hold the certification
-  #   HOW IT IS    Skill (quality) - the competence the person demonstrates
+  #   HOW IT IS    Skill (quality) - the competence the person demonstrates,
+  #                LanguageCapability (quality) - the language capability developed
   #   HOW WE KNOW  Certification (GDC, the credential the act concretizes),
   #                ProfileDocument (GDC, where the claim was published)
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
   owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
   owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/FacilityOntology> ;
   owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
   rdfs:seeAlso <http://ontology.naas.ai/personnel/PersonnelOntology> ;
   rdfs:member "bpl-processes/personnel" ;
@@ -52,11 +54,12 @@ personnel:ActOfCertification a owl:Class ;
   rdfs:subClassOf cco:ont00000228 ,
     [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
     [ a owl:Restriction ; owl:onProperty personnel:forCertifyingOrganization ; owl:someValuesFrom abi:Organization ] ,
-    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:Site ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom cco:ont00000192 ] ,
     [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
     [ a owl:Restriction ; owl:onProperty personnel:hasAwardedCertification ; owl:someValuesFrom personnel:Certification ] ,
     [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom personnel:CertificationCandidateRole ] ,
-    [ a owl:Restriction ; owl:onProperty personnel:demonstratesSkill ; owl:someValuesFrom personnel:Skill ] ;
+    [ a owl:Restriction ; owl:onProperty personnel:demonstratesSkill ; owl:someValuesFrom personnel:Skill ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:developsLanguageCapability ; owl:someValuesFrom personnel:LanguageCapability ] ;
   rdfs:label "Act of Certification"@en ;
   skos:definition "A Planned Act in which a certifying organization attests that a person has demonstrated a competence, met a professional standard or holds a licence to practise, realizing a certification candidate role and concretizing the certification it awards."@en ;
   skos:example "Alice Dupont being certified as a Certified Information Systems Auditor by ISACA in 2019."@en ;
@@ -82,6 +85,18 @@ personnel:CertificationCandidateRole a owl:Class ;
 personnel:Certification rdfs:subClassOf
     [ a owl:Restriction ; owl:onProperty abi:isConcretizedBy ; owl:someValuesFrom personnel:ActOfCertification ] ,
     [ a owl:Restriction ; owl:onProperty personnel:isSourcedFrom ; owl:someValuesFrom personnel:ProfileDocument ] .
+
+#################################################################
+#    Classes - WHO x WHERE (restrictions on shared IRIs)
+#################################################################
+
+# Person and Organization are ABI classes and Facility is a CCO class: this slice only
+# adds, by restriction, what the act of certification ties them to.
+abi:Person rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty personnel:hasCertificationFacility ; owl:someValuesFrom cco:ont00000192 ] .
+
+abi:Organization rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty personnel:hasAssessmentFacility ; owl:someValuesFrom cco:ont00000192 ] .
 
 #################################################################
 #    Object properties - process-only
@@ -167,3 +182,33 @@ personnel:isCertificationCandidateRoleOf a owl:ObjectProperty ;
   skos:definition "Relates a certification candidate role to the person in whom it inheres."@en ;
   rdfs:domain personnel:CertificationCandidateRole ;
   rdfs:range  abi:Person .
+
+# WHO ↔ WHERE (facility) - the candidate and the facility they are assessed in.
+personnel:hasCertificationFacility a owl:ObjectProperty ;
+  owl:inverseOf personnel:isCertificationFacilityOf ;
+  rdfs:label "has certification facility"@en ;
+  skos:definition "Relates a person to the facility in which they are assessed in an act of certification."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  cco:ont00000192 .
+
+personnel:isCertificationFacilityOf a owl:ObjectProperty ;
+  owl:inverseOf personnel:hasCertificationFacility ;
+  rdfs:label "is certification facility of"@en ;
+  skos:definition "Relates a facility to a person who is assessed in it in an act of certification."@en ;
+  rdfs:domain cco:ont00000192 ;
+  rdfs:range  abi:Person .
+
+# WHO ↔ WHERE (facility) - the certifying organization and the facility it assesses in.
+personnel:hasAssessmentFacility a owl:ObjectProperty ;
+  owl:inverseOf personnel:isAssessmentFacilityOf ;
+  rdfs:label "has assessment facility"@en ;
+  skos:definition "Relates an organization to a facility in which it assesses candidates for a certification."@en ;
+  rdfs:domain abi:Organization ;
+  rdfs:range  cco:ont00000192 .
+
+personnel:isAssessmentFacilityOf a owl:ObjectProperty ;
+  owl:inverseOf personnel:hasAssessmentFacility ;
+  rdfs:label "is assessment facility of"@en ;
+  skos:definition "Relates a facility to an organization that assesses candidates for a certification in it."@en ;
+  rdfs:domain cco:ont00000192 ;
+  rdfs:range  abi:Organization .

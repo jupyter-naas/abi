@@ -11,6 +11,7 @@ from rdflib.namespace import OWL, RDF, RDFS
 
 PERSONNEL_NS = "http://ontology.naas.ai/personnel/"
 ABI_NS = "http://ontology.naas.ai/abi/"
+CCO_NS = "https://www.commoncoreontologies.org/"
 
 PROCESS_SPECS: tuple[dict[str, str | Path | tuple[Path, ...]], ...] = (
     {
@@ -56,6 +57,9 @@ _ABI_CLASS_LABELS: dict[str, str] = {
     f"{ABI_NS}Person": "Person",
     f"{ABI_NS}Organization": "Organization",
     f"{ABI_NS}Site": "Site",
+    f"{CCO_NS}ont00000468": "Office Building",
+    f"{CCO_NS}ont00000270": "Educational Facility",
+    f"{CCO_NS}ont00000192": "Facility",
     f"{ABI_NS}TemporalRegion": "Temporal Region",
     f"{ABI_NS}TemporalInstant": "Temporal Instant",
 }
@@ -85,7 +89,7 @@ def _is_catalog_class(graph: Graph, class_uri: URIRef) -> bool:
 
 def _is_relevant_uri(class_uri: URIRef) -> bool:
     text = str(class_uri)
-    return text.startswith(PERSONNEL_NS) or text.startswith(ABI_NS)
+    return text.startswith(PERSONNEL_NS) or text.startswith(ABI_NS) or text in _ABI_CLASS_LABELS
 
 
 def _restriction_fillers(graph: Graph, class_uri: URIRef) -> set[URIRef]:

@@ -17,6 +17,7 @@ personnel:PersonnelOntology a owl:Ontology ;
   owl:imports <https://www.commoncoreontologies.org/QualityOntology> ;
   owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
   owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/FacilityOntology> ;
   owl:imports <http://ontology.naas.ai/personnel/ActOfWorkingProcess> ;
   owl:imports <http://ontology.naas.ai/personnel/ActOfStudyingProcess> ;
   owl:imports <http://ontology.naas.ai/personnel/ActOfPersonnelProfilingProcess> ;
@@ -406,6 +407,21 @@ personnel:isSkillDevelopedIn a owl:ObjectProperty ;
   rdfs:label "is skill developed in"@en ;
   skos:definition "Relates a skill to a planned act in which it is exercised and developed."@en ;
   rdfs:domain personnel:Skill ;
+  rdfs:range  cco:ont00000228 .
+
+# WHAT ↔ HOW IT IS - a planned act develops the language capabilities the person bears
+personnel:developsLanguageCapability a owl:ObjectProperty ;
+  owl:inverseOf personnel:isLanguageCapabilityDevelopedIn ;
+  rdfs:label "develops language capability"@en ;
+  skos:definition "Relates a planned act (an act of working, of studying or of certification) to a language capability exercised and developed in the course of it."@en ;
+  rdfs:domain cco:ont00000228 ;
+  rdfs:range  personnel:LanguageCapability .
+
+personnel:isLanguageCapabilityDevelopedIn a owl:ObjectProperty ;
+  owl:inverseOf personnel:developsLanguageCapability ;
+  rdfs:label "is language capability developed in"@en ;
+  skos:definition "Relates a language capability to a planned act in which it is exercised and developed."@en ;
+  rdfs:domain personnel:LanguageCapability ;
   rdfs:range  cco:ont00000228 .
 
 # WHO ↔ HOW IT IS - the person bears the skill
@@ -902,11 +918,12 @@ personnel:Remuneration a owl:Class ;
 personnel:LanguageCapability a owl:Class ;
     rdfs:subClassOf abi:Quality ,
       [ a owl:Restriction ; owl:onProperty personnel:isLanguageCapabilityOf ; owl:someValuesFrom abi:Person ] ,
+      [ a owl:Restriction ; owl:onProperty personnel:isLanguageCapabilityDevelopedIn ; owl:someValuesFrom cco:ont00000228 ] ,
       [ a owl:Restriction ; owl:onProperty personnel:ofLanguage ; owl:someValuesFrom cco:ont00001175 ] ;
     rdfs:label "Language Capability"@en ;
-    skos:definition "A quality that inheres in a person and holds how well they can communicate in one language."@en ;
+    skos:definition "A quality that inheres in a person and holds how well they can communicate in one language, developed and exercised in the acts the person carries out: working, studying, being certified."@en ;
     skos:example "Spanish at native or bilingual proficiency."@en ;
-    rdfs:comment "Deliberately NOT equivalent to CCO Language Skill (cco:ont00000181). That class is an Agent Capability and therefore a BFO realizable entity, which is disjoint from quality; this domain already models personnel:Skill as a quality, and asserting both would make the ontology inconsistent. The language itself is a CCO Language, reached through personnel:ofLanguage."@en .
+    rdfs:comment "Deliberately NOT equivalent to CCO Language Skill (cco:ont00000181). That class is an Agent Capability and therefore a BFO realizable entity, which is disjoint from quality; this domain already models personnel:Skill as a quality, and asserting both would make the ontology inconsistent. The language itself is a CCO Language, reached through personnel:ofLanguage. Like a skill, it is borne by the person and outlives any one act: personnel:developsLanguageCapability links a planned act, of whatever kind, to the capabilities exercised and grown in it."@en .
 
 personnel:Interest a owl:Class ;
     rdfs:subClassOf abi:Quality ,

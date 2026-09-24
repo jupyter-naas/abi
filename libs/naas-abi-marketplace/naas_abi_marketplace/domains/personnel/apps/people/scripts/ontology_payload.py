@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 
 from naas_abi_core.utils.validate_bfo_ontology import _collect_all_restrictions
 from naas_abi_marketplace.domains.personnel.apps.people.scripts.bfo_bucket_resolution import (
+    CCO_MID_LEVEL_DIR,
     infer_cockpit_bfo_bucket,
     load_bucket_inference_graph,
 )
@@ -26,9 +28,36 @@ ONTOLOGY_SOURCES: tuple[tuple[str, Path], ...] = (
     ),
 )
 
+CCO_NS = "https://www.commoncoreontologies.org/"
+
+# CCO classes the personnel ontology builds on and the viewer shows as classes of
+# their own: the facilities an act occurs in, and the educational organization
+# that runs one. Everything else of CCO stays out, as before.
+_FACILITY_ONTOLOGY = CCO_MID_LEVEL_DIR / "FacilityOntology.ttl"
+_LABEL_SOURCES = tuple(
+    CCO_MID_LEVEL_DIR / name
+    for name in ("FacilityOntology.ttl", "ArtifactOntology.ttl", "AgentOntology.ttl")
+)
+_EDUCATIONAL_ORGANIZATION = URIRef(f"{CCO_NS}ont00000564")
+
+
+@lru_cache(maxsize=1)
+def _facility_classes() -> frozenset[URIRef]:
+    facilities = Graph().parse(_FACILITY_ONTOLOGY, format="turtle")
+    return frozenset(
+        s
+        for s in facilities.subjects(RDF.type, OWL.Class)
+        if isinstance(s, URIRef) and str(s).startswith(CCO_NS)
+    ) | {_EDUCATIONAL_ORGANIZATION}
+
+
 def _in_scope(uri: URIRef) -> bool:
     text = str(uri)
-    return text.startswith(PERSONNEL_NS) or text.startswith(ABI_NS)
+    return (
+        text.startswith(PERSONNEL_NS)
+        or text.startswith(ABI_NS)
+        or uri in _facility_classes()
+    )
 
 
 def _qname(graph: Graph, uri: URIRef) -> str:
@@ -52,10 +81,44 @@ def _text_value(graph: Graph, uri: URIRef, predicate: URIRef) -> str | None:
     return str(value)
 
 
+def _add_imported_classes(graph: Graph) -> None:
+    """State, as classes, the CCO facility classes the personnel files build on.
+
+    The files name them by IRI only (``occursIn some cco:ont00000468``); their
+    labels live in the CCO imports. Each one used is stated here with its label,
+    definition and its facility parents, so the viewer can name it and show where
+    it sits, and so the merged document says what it is.
+    """
+    known = _facility_classes()
+    used: set[URIRef] = set()
+    for triple in graph:
+        used.update(term for term in triple if term in known)
+    labels = Graph()
+    for path in _LABEL_SOURCES:
+        labels.parse(path, format="turtle")
+
+    pending = sorted(used)
+    stated: set[URIRef] = set()
+    while pending:
+        cls = pending.pop()
+        if cls in stated:
+            continue
+        stated.add(cls)
+        graph.add((cls, RDF.type, OWL.Class))
+        for predicate in (RDFS.label, SKOS.definition):
+            for value in labels.objects(cls, predicate):
+                graph.add((cls, predicate, value))
+        for parent in labels.objects(cls, RDFS.subClassOf):
+            if isinstance(parent, URIRef) and parent in known:
+                graph.add((cls, RDFS.subClassOf, parent))
+                pending.append(parent)
+
+
 def load_personnel_schema_graph() -> Graph:
     graph = Graph()
     for _, path in ONTOLOGY_SOURCES:
         graph.parse(path, format="turtle")
+    _add_imported_classes(graph)
     return graph
 
 

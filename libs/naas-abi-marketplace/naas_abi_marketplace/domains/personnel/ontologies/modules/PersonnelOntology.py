@@ -764,7 +764,7 @@ class Remuneration(Quality, RDFEntity):
 
 class LanguageCapability(Quality, RDFEntity):
     """
-    Deliberately NOT equivalent to CCO Language Skill (cco:ont00000181). That class is an Agent Capability and therefore a BFO realizable entity, which is disjoint from quality; this domain already models personnel:Skill as a quality, and asserting both would make the ontology inconsistent. The language itself is a CCO Language, reached through personnel:ofLanguage.
+    Deliberately NOT equivalent to CCO Language Skill (cco:ont00000181). That class is an Agent Capability and therefore a BFO realizable entity, which is disjoint from quality; this domain already models personnel:Skill as a quality, and asserting both would make the ontology inconsistent. The language itself is a CCO Language, reached through personnel:ofLanguage. Like a skill, it is borne by the person and outlives any one act: personnel:developsLanguageCapability links a planned act, of whatever kind, to the capabilities exercised and grown in it.
     """
 
     _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/LanguageCapability"
@@ -774,6 +774,7 @@ class LanguageCapability(Quality, RDFEntity):
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "inheres_in": "http://ontology.naas.ai/abi/inheresIn",
+        "is_language_capability_developed_in": "http://ontology.naas.ai/personnel/isLanguageCapabilityDevelopedIn",
         "is_language_capability_of": "http://ontology.naas.ai/personnel/isLanguageCapabilityOf",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "language_name": "http://ontology.naas.ai/personnel/language_name",
@@ -784,6 +785,7 @@ class LanguageCapability(Quality, RDFEntity):
     _object_properties: ClassVar[set[str]] = {
         "concretizes",
         "inheres_in",
+        "is_language_capability_developed_in",
         "is_language_capability_of",
         "of_language",
         "participates_in",
@@ -799,6 +801,7 @@ class LanguageCapability(Quality, RDFEntity):
     # Object properties
     concretizes: Annotated[list[GenericallyDependentContinuant | URIRef | str], Field(description="b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies")] | None = None
     inheres_in: Annotated[list[MaterialEntity | URIRef | str], Field(description="b inheres in c =Def b is a specifically dependent continuant & c is an independent continuant that is not a spatial region & b specifically depends on c")] | None = None
+    is_language_capability_developed_in: Annotated[URIRef | str, Field(description="Relates a language capability to a planned act in which it is exercised and developed.")] | None = None
     is_language_capability_of: Annotated[list[Person | URIRef | str], Field(description="Relates a language capability to the person in whom it inheres.")] | None = None
     of_language: Annotated[URIRef | str, Field(description="Relates a language capability to the language it is held for. The language is a CCO Language: a directive information content entity prescribing a canonical format for communication, shared by every speaker of it.")] | None = None
     participates_in: Annotated[list[Process | URIRef | str], Field(description="(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way")] | None = None

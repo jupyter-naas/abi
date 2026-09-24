@@ -19,13 +19,14 @@ personnel:ActOfStudyingProcess a owl:Ontology ;
   #   WHO          Person (the student), Organization (the educational institution)
   #   WHAT         ActOfStudying (the process itself)
   #   WHEN         TemporalRegion, bounded by two TemporalInstants
-  #   WHERE        Site
+  #   WHERE        Educational Facility (CCO Facility - the school, campus or institute studied at)
   #   WHY          StudentRole (SDC) - the student role borne by the learner
-  #   HOW IT IS    Skill (quality) - skills the student bears and develops in the act
+  #   HOW IT IS    Skill, LanguageCapability (qualities) - what the student bears and develops in the act
   #   HOW WE KNOW  EnrollmentRecord, AcademicDegree, ProfileDocument (GDCs)
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
   owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
   owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/FacilityOntology> ;
   owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
   rdfs:seeAlso <http://ontology.naas.ai/personnel/PersonnelOntology> ;
   rdfs:member "bpl-processes/personnel" ;
@@ -33,7 +34,7 @@ personnel:ActOfStudyingProcess a owl:Ontology ;
   abi:ontologyResource "ontologies/processes/ActOfStudyingProcess.ttl" ;
   abi:pythonResource "ontologies/processes/ActOfStudyingProcess.py" ;
   dc:title "Act of Studying Process Ontology"@en ;
-  dc:description "Process slice for the act of studying - a CCO Planned Act (Act of Educational Training Acquisition) in which a person acquires knowledge of a curriculum from an educational organization at a site over a temporal region, realizing a student role, developing skills, and concretizing an enrollment record and academic degree."@en ;
+  dc:description "Process slice for the act of studying - a CCO Planned Act (Act of Educational Training Acquisition) in which a person acquires knowledge of a curriculum from an educational organization in an educational facility over a temporal region, realizing a student role, developing skills and language capabilities, and concretizing an enrollment record and academic degree."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;
   rdfs:comment "Process slice for Act of Studying. Reuses shared personnel classes, Skill and ProfileDocument from PersonnelOntology."@en ;
   dc11:contributor "Alice Dupont", "Emma Petit", "Grace Lambert" ;
@@ -48,14 +49,15 @@ personnel:ActOfStudying a owl:Class ;
     cco:ont00001074 ,
     [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
     [ a owl:Restriction ; owl:onProperty personnel:forEducationalOrganization ; owl:someValuesFrom abi:Organization ] ,
-    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:Site ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom cco:ont00000270 ] ,
     [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
     [ a owl:Restriction ; owl:onProperty personnel:hasEnrollment ; owl:someValuesFrom personnel:EnrollmentRecord ] ,
     [ a owl:Restriction ; owl:onProperty personnel:hasDegree ; owl:someValuesFrom personnel:AcademicDegree ] ,
     [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom personnel:StudentRole ] ,
-    [ a owl:Restriction ; owl:onProperty personnel:developsSkill ; owl:someValuesFrom personnel:Skill ] ;
+    [ a owl:Restriction ; owl:onProperty personnel:developsSkill ; owl:someValuesFrom personnel:Skill ] ,
+    [ a owl:Restriction ; owl:onProperty personnel:developsLanguageCapability ; owl:someValuesFrom personnel:LanguageCapability ] ;
   rdfs:label "Act of Studying"@en ;
-  skos:definition "A Planned Act, and an Act of Educational Training Acquisition, in which a person acquires knowledge of a curriculum from an educational organization at a site over a temporal region, realizing a student role, developing skills, under an enrollment record and academic degree."@en ;
+  skos:definition "A Planned Act, and an Act of Educational Training Acquisition, in which a person acquires knowledge of a curriculum from an educational organization in an educational facility over a temporal region, realizing a student role, developing skills and language capabilities, under an enrollment record and academic degree."@en ;
   skos:example "Alice Dupont studying for a Master's Degree in Corporate Finance at KEDGE Business School in Bordeaux from 2012 to 2016."@en .
 
 #################################################################
@@ -67,6 +69,19 @@ personnel:EnrollmentRecord rdfs:subClassOf
 
 personnel:AcademicDegree rdfs:subClassOf
     [ a owl:Restriction ; owl:onProperty personnel:isSourcedFrom ; owl:someValuesFrom personnel:ProfileDocument ] .
+
+#################################################################
+#    Classes - WHO x WHERE (restrictions on shared IRIs)
+#################################################################
+
+# Person and Educational Organization are Agent classes and Educational Facility is
+# a CCO class: this slice only adds, by restriction, what the act of studying ties
+# them to.
+abi:Person rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty personnel:hasStudyFacility ; owl:someValuesFrom cco:ont00000270 ] .
+
+cco:ont00000564 rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty personnel:hasEducationalFacility ; owl:someValuesFrom cco:ont00000270 ] .
 
 #################################################################
 #    Object properties - process-only
@@ -137,12 +152,14 @@ personnel:isDegreeOf a owl:ObjectProperty ;
   rdfs:domain personnel:AcademicDegree ;
   rdfs:range  personnel:ActOfStudying .
 
-# WHO ↔ WHERE - convenience shortcut from the student to the study site.
-# The backbone remains ActOfStudying abi:occursIn Site.
+# WHO ↔ WHERE (place) - the place a student studies in, as a Site.
+# Not the facility: the backbone is ActOfStudying abi:occursIn EducationalFacility
+# (see hasStudyFacility below). A source that only names a city says where the
+# study was, not which school, so it is kept as a Site (place) of its own.
 personnel:hasStudyLocation a owl:ObjectProperty ;
   owl:inverseOf personnel:isStudyLocationOf ;
   rdfs:label "has study location"@en ;
-  skos:definition "Convenience relation from a person to a site at which an act of studying they participate in is executed. Derived from ActOfStudying + occursIn; not a BFO primitive."@en ;
+  skos:definition "Relates a person to the place (a site: a city or a country) at which they study. Says where, not at which school: for the facility see has study facility."@en ;
   rdfs:domain abi:Person ;
   rdfs:range  abi:Site .
 
@@ -152,6 +169,36 @@ personnel:isStudyLocationOf a owl:ObjectProperty ;
   skos:definition "Relates a site to a person who studies there."@en ;
   rdfs:domain abi:Site ;
   rdfs:range  abi:Person .
+
+# WHO ↔ WHERE (facility) - the student and the facility they study in.
+personnel:hasStudyFacility a owl:ObjectProperty ;
+  owl:inverseOf personnel:isStudyFacilityOf ;
+  rdfs:label "has study facility"@en ;
+  skos:definition "Relates a person to the educational facility in which they perform an act of studying."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  cco:ont00000270 .
+
+personnel:isStudyFacilityOf a owl:ObjectProperty ;
+  owl:inverseOf personnel:hasStudyFacility ;
+  rdfs:label "is study facility of"@en ;
+  skos:definition "Relates an educational facility to a person who performs an act of studying in it."@en ;
+  rdfs:domain cco:ont00000270 ;
+  rdfs:range  abi:Person .
+
+# WHO ↔ WHERE (facility) - the educational organization and its facility.
+personnel:hasEducationalFacility a owl:ObjectProperty ;
+  owl:inverseOf personnel:isEducationalFacilityOf ;
+  rdfs:label "has educational facility"@en ;
+  skos:definition "Relates an educational organization to an educational facility in which it teaches."@en ;
+  rdfs:domain cco:ont00000564 ;
+  rdfs:range  cco:ont00000270 .
+
+personnel:isEducationalFacilityOf a owl:ObjectProperty ;
+  owl:inverseOf personnel:hasEducationalFacility ;
+  rdfs:label "is educational facility of"@en ;
+  skos:definition "Relates an educational facility to the educational organization that teaches in it."@en ;
+  rdfs:domain cco:ont00000270 ;
+  rdfs:range  cco:ont00000564 .
 
 #################################################################
 #    Data properties

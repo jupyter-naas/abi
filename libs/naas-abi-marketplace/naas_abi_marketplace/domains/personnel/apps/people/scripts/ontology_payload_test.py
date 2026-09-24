@@ -7,7 +7,7 @@ from naas_abi_marketplace.domains.personnel.apps.people.scripts.ontology_payload
     load_personnel_schema_graph,
 )
 from naas_abi_marketplace.domains.personnel.paths import ONTOLOGIES_DIR
-from rdflib import Graph
+from rdflib import OWL, Graph, URIRef
 from rdflib.compare import isomorphic
 
 
@@ -51,6 +51,93 @@ class TestOntologyPayload:
         # its restriction points at the ProfileDocument declared in the working slice
         assert any(
             r["filler"] == "personnel:ProfileDocument" for r in detail["restrictions"]
+        )
+
+    def test_the_where_of_each_act_is_a_facility_not_a_bare_site(self) -> None:
+        payload = build_ontology_payload()
+        where = {
+            "personnel:ActOfWorking": "cco:ont00000468",  # Office Building
+            "personnel:ActOfStudying": "cco:ont00000270",  # Educational Facility
+            "personnel:ActOfCertification": "cco:ont00000192",  # Facility
+        }
+        for act, facility in where.items():
+            occurs_in = [
+                edge["to"]
+                for edge in payload["graph"]["edges"]
+                if edge["from"] == act
+                and edge["kind"] == "restriction"
+                and "occursIn" in edge["label"]
+            ]
+            assert occurs_in == [facility], act
+        nodes = {node["id"]: node for node in payload["graph"]["nodes"]}
+        for facility in where.values():
+            # named, and filed under WHERE with the sites
+            assert nodes[facility]["label"] != facility.split(":")[-1]
+            assert nodes[facility]["bfo_bucket"] == "Site"
+        assert nodes["cco:ont00000468"]["label"] == "Office Building"
+
+    def test_people_and_organizations_are_tied_to_their_facilities(self) -> None:
+        payload = build_ontology_payload()
+        restrictions = {
+            (edge["from"], edge["to"], edge["label"].split(" ")[0])
+            for edge in payload["graph"]["edges"]
+            if edge["kind"] == "restriction"
+        }
+        expected = {
+            ("abi:Person", "cco:ont00000468", "personnel:hasWorkFacility"),
+            ("abi:Organization", "cco:ont00000468", "personnel:hasOfficeBuilding"),
+            ("abi:Person", "cco:ont00000270", "personnel:hasStudyFacility"),
+            ("cco:ont00000564", "cco:ont00000270", "personnel:hasEducationalFacility"),
+            ("abi:Person", "cco:ont00000192", "personnel:hasCertificationFacility"),
+            ("abi:Organization", "cco:ont00000192", "personnel:hasAssessmentFacility"),
+        }
+        assert expected <= restrictions
+
+    def test_every_facility_property_has_an_inverse_and_no_slice_asks_for_a_bare_site(
+        self,
+    ) -> None:
+        graph = load_personnel_schema_graph()
+        personnel = "http://ontology.naas.ai/personnel/"
+        for name in (
+            "WorkFacility",
+            "StudyFacility",
+            "CertificationFacility",
+            "OfficeBuilding",
+            "EducationalFacility",
+            "AssessmentFacility",
+        ):
+            has = URIRef(f"{personnel}has{name}")
+            [inverse] = list(graph.objects(has, OWL.inverseOf))
+            assert (inverse, OWL.inverseOf, has) in graph, name
+        occurs_in = URIRef("http://ontology.naas.ai/abi/occursIn")
+        site = URIRef("http://ontology.naas.ai/abi/Site")
+        for restriction in graph.subjects(OWL.onProperty, occurs_in):
+            assert (restriction, OWL.someValuesFrom, site) not in graph
+
+    def test_language_capability_is_developed_by_working_studying_and_certification(
+        self,
+    ) -> None:
+        payload = build_ontology_payload()
+        developed_by = {
+            edge["from"]
+            for edge in payload["graph"]["edges"]
+            if edge["kind"] == "restriction"
+            and edge["to"] == "personnel:LanguageCapability"
+            and "developsLanguageCapability" in edge["label"]
+        }
+        assert developed_by == {
+            "personnel:ActOfWorking",
+            "personnel:ActOfStudying",
+            "personnel:ActOfCertification",
+        }
+        # a quality, like Skill, and stated from its own side too
+        detail = payload["classes"][
+            "http://ontology.naas.ai/personnel/LanguageCapability"
+        ]
+        assert detail["bfo_bucket"] == "Quality"
+        assert any(
+            r["property"] == "personnel:isLanguageCapabilityDevelopedIn"
+            for r in detail["restrictions"]
         )
 
     def test_stats_summarize_vocabulary_shape(self) -> None:

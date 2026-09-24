@@ -30,20 +30,30 @@ _BFO_BUCKET_ROOT_IRIS: tuple[str, ...] = (
 
 _BFO_BUCKET_ROOTS = " ".join(f"<{iri}>" for iri in _BFO_BUCKET_ROOT_IRIS)
 
+# CCO Facility: a Material Artifact in BFO/CCO terms, but the seven-bucket
+# framework files a building by WHERE a process happens, so it is a WHERE root
+# here and every facility below it (Office Building, Educational Facility...)
+# lands in Site. Nothing else about the class changes.
+_CCO_NS = "https://www.commoncoreontologies.org/"
+_CCO_FACILITY = f"{_CCO_NS}ont00000192"
+
 # ABI equivalents: rdfs:subClassOf often skips the bucket-root IRI (see Nexus comments).
 _ABI_TO_BFO_BUCKET_ROOT: dict[str, str] = {
-    f"{_ABI_NS}{abi_name}": f"{_BFO_NS}{bfo_id}"
-    for abi_name, bfo_id in (
-        ("MaterialEntity", "BFO_0000040"),
-        ("Site", "BFO_0000029"),
-        ("GenericallyDependentContinuant", "BFO_0000031"),
-        ("Quality", "BFO_0000019"),
-        ("Role", "BFO_0000017"),
-        ("Disposition", "BFO_0000017"),
-        ("Process", "BFO_0000015"),
-        ("TemporalRegion", "BFO_0000008"),
-        ("TemporalInstant", "BFO_0000008"),
-    )
+    **{
+        f"{_ABI_NS}{abi_name}": f"{_BFO_NS}{bfo_id}"
+        for abi_name, bfo_id in (
+            ("MaterialEntity", "BFO_0000040"),
+            ("Site", "BFO_0000029"),
+            ("GenericallyDependentContinuant", "BFO_0000031"),
+            ("Quality", "BFO_0000019"),
+            ("Role", "BFO_0000017"),
+            ("Disposition", "BFO_0000017"),
+            ("Process", "BFO_0000015"),
+            ("TemporalRegion", "BFO_0000008"),
+            ("TemporalInstant", "BFO_0000008"),
+        )
+    },
+    _CCO_FACILITY: f"{_BFO_NS}BFO_0000029",
 }
 _ABI_BUCKET_VALUES = " ".join(f"<{iri}>" for iri in _ABI_TO_BFO_BUCKET_ROOT)
 
@@ -64,6 +74,8 @@ _BFO_ENTITY_IRIS = {
 }
 
 _ABI_IMPORTS_DIR = Path(naas_abi.__file__).resolve().parent / "ontologies" / "imports"
+# Where the CCO mid-level ontologies (Agent, Artifact, Facility...) are bundled.
+CCO_MID_LEVEL_DIR = _ABI_IMPORTS_DIR / "mid-level"
 _ABI_ONTOLOGY_PATH = (
     Path(naas_abi.__file__).resolve().parent / "ontologies" / "modules" / "ABIOntology.ttl"
 )
@@ -77,6 +89,7 @@ _BUCKET_INFERENCE_TTL_PATHS: tuple[Path, ...] = (
     _ABI_IMPORTS_DIR / "mid-level" / "InformationEntityOntology.ttl",
     _ABI_IMPORTS_DIR / "mid-level" / "EventOntology.ttl",
     _ABI_IMPORTS_DIR / "mid-level" / "ExtendedRelationOntology.ttl",
+    _ABI_IMPORTS_DIR / "mid-level" / "FacilityOntology.ttl",
 )
 
 

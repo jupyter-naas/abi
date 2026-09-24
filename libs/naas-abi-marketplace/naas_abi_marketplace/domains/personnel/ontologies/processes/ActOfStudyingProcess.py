@@ -17,7 +17,6 @@ from typing import (
 from naas_abi.ontologies.modules.ABIOntology import (
     Organization,
     Person,
-    Site,
     TemporalRegion,
 )
 from pydantic import BaseModel, Field, ValidationError
@@ -318,6 +317,7 @@ class ActOfStudying(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "developsLanguageCapability": "http://ontology.naas.ai/personnel/developsLanguageCapability",
         "developsSkill": "http://ontology.naas.ai/personnel/developsSkill",
         "for_educational_organization": "http://ontology.naas.ai/personnel/forEducationalOrganization",
         "hasParticipant": "http://ontology.naas.ai/abi/hasParticipant",
@@ -330,6 +330,7 @@ class ActOfStudying(RDFEntity):
         "realizes": "http://ontology.naas.ai/abi/realizes",
     }
     _object_properties: ClassVar[set[str]] = {
+        "developsLanguageCapability",
         "developsSkill",
         "for_educational_organization",
         "hasParticipant",
@@ -353,16 +354,15 @@ class ActOfStudying(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
+    developsLanguageCapability: Annotated[URIRef | str, Field()] | None = None
     developsSkill: Annotated[URIRef | str, Field()] | None = None
     for_educational_organization: Annotated[list[Organization | URIRef | str], Field(description="Relates an act of studying to the educational organization that participates as the training provider.")] | None = None
-    hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = (
-        None
-    )
+    hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = None
     has_degree: Annotated[URIRef | str, Field(description="Relates an act of studying to the academic degree it concretizes.")] | None = None
     has_enrollment: Annotated[URIRef | str, Field(description="Relates an act of studying to the enrollment record it concretizes.")] | None = None
     is_act_of_studying_of: Annotated[list[Person | URIRef | str], Field(description="Relates an act of studying to the person acquiring the curriculum.")] | None = None
     occupiesTemporalRegion: Annotated[list[TemporalRegion | URIRef | str], Field()] | None = None
-    occursIn: Annotated[list[Site | URIRef | str], Field()] | None = None
+    occursIn: Annotated[URIRef | str, Field()] | None = None
     realizes: Annotated[URIRef | str, Field()] | None = None
 
 

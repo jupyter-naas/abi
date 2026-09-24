@@ -21,7 +21,6 @@ from naas_abi.ontologies.modules.ABIOntology import (
     Person,
     Process,
     Role,
-    Site,
     TemporalRegion,
 )
 from pydantic import BaseModel, Field, ValidationError
@@ -323,6 +322,7 @@ class ActOfCertification(RDFEntity):
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
         "demonstrates_skill": "http://ontology.naas.ai/personnel/demonstratesSkill",
+        "developsLanguageCapability": "http://ontology.naas.ai/personnel/developsLanguageCapability",
         "for_certifying_organization": "http://ontology.naas.ai/personnel/forCertifyingOrganization",
         "hasParticipant": "http://ontology.naas.ai/abi/hasParticipant",
         "has_awarded_certification": "http://ontology.naas.ai/personnel/hasAwardedCertification",
@@ -334,6 +334,7 @@ class ActOfCertification(RDFEntity):
     }
     _object_properties: ClassVar[set[str]] = {
         "demonstrates_skill",
+        "developsLanguageCapability",
         "for_certifying_organization",
         "hasParticipant",
         "has_awarded_certification",
@@ -356,14 +357,13 @@ class ActOfCertification(RDFEntity):
 
     # Object properties
     demonstrates_skill: Annotated[URIRef | str, Field(description="Relates an act of certification to a skill the person demonstrates in the course of it.")] | None = None
+    developsLanguageCapability: Annotated[URIRef | str, Field()] | None = None
     for_certifying_organization: Annotated[list[Organization | URIRef | str], Field(description="Relates an act of certification to the organization that participates as the certifying body.")] | None = None
-    hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = (
-        None
-    )
+    hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = None
     has_awarded_certification: Annotated[URIRef | str, Field(description="Relates an act of certification to the certification it concretizes.")] | None = None
     is_act_of_certification_of: Annotated[list[Person | URIRef | str], Field(description="Relates an act of certification to the person being certified.")] | None = None
     occupiesTemporalRegion: Annotated[list[TemporalRegion | URIRef | str], Field()] | None = None
-    occursIn: Annotated[list[Site | URIRef | str], Field()] | None = None
+    occursIn: Annotated[URIRef | str, Field()] | None = None
     realizes: Annotated[list[CertificationCandidateRole | URIRef | str], Field()] | None = None
 
 
@@ -372,9 +372,7 @@ class CertificationCandidateRole(Role, RDFEntity):
     No CCO candidate-role class; minted in the personnel namespace. Kept apart from the employee and student roles: a person is a candidate whether or not they were employed or enrolled at the time.
     """
 
-    _class_uri: ClassVar[str] = (
-        "http://ontology.naas.ai/personnel/CertificationCandidateRole"
-    )
+    _class_uri: ClassVar[str] = "http://ontology.naas.ai/personnel/CertificationCandidateRole"
     _name: ClassVar[str] = "Certification Candidate Role"
     _property_uris: ClassVar[dict] = {
         "concretizes": "http://ontology.naas.ai/abi/concretizes",

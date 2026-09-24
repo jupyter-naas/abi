@@ -87,6 +87,36 @@ and an HR record does not:
 `country_code`, so a place can be grouped and flagged without matching country
 names across languages.
 
+### Skills and language capabilities are developed by the acts
+
+`personnel:developsSkill` and `personnel:developsLanguageCapability` (inverses
+`isSkillDevelopedIn`, `isLanguageCapabilityDevelopedIn`) relate a CCO Planned Act to
+a quality the person bears. `ActOfWorking` and `ActOfStudying` restrict on both;
+`ActOfCertification` restricts on `demonstratesSkill` and on
+`developsLanguageCapability`. A source that lists a language does not say which act
+developed it, so the graph does not link them.
+
+### WHERE is a facility, WHO is tied to it
+
+Each act occurs in a CCO facility from `FacilityOntology`, not in a bare
+`abi:Site`:
+
+| Act | `abi:occursIn some` | Person, by restriction | Organization, by restriction |
+|---|---|---|---|
+| `ActOfWorking` | `cco:OfficeBuilding` | `hasWorkFacility` | `hasOfficeBuilding` (any organization) |
+| `ActOfStudying` | `cco:EducationalFacility` | `hasStudyFacility` | `hasEducationalFacility` (on `cco:EducationalOrganization`) |
+| `ActOfCertification` | `cco:Facility` | `hasCertificationFacility` | `hasAssessmentFacility` |
+
+Every property has an inverse (`isWorkFacilityOf`, `isOfficeBuildingOf`, ...), and
+the restrictions are stated in the slice, on `abi:Person`, `abi:Organization` or the
+CCO class, so the slices stay the only place a process is defined. `hasWorkLocation`
+and `hasStudyLocation` are unchanged: they say which **place** (`abi:Site`, with its
+`city_name` and `country_code`) a person is based in, which is all a source that only
+names a city says. In BFO/CCO a facility is a Material Artifact, not a Site, so the
+People app files the CCO Facility classes under WHERE (`bfo_bucket_resolution.py`)
+to keep the seven-bucket reading. The instance graph still points `occursIn` at
+place individuals: no source names a building, so none is invented.
+
 ## Process ledger roadmap
 
 The `processes/` folder tracks the personnel entries of the
@@ -143,7 +173,8 @@ only the two acts remain. The conventions it established still hold for both:
 
 1. **Shared classes live in the module.** A process slice adds provenance properties
    and restrictions on IRIs declared in `PersonnelOntology.ttl`; `abi:Person`,
-   `abi:Site` and `abi:TemporalRegion` are not restated, and pipelines import them
+   `abi:Site` and `abi:TemporalRegion` are not restated (nor are the CCO facility
+   classes a slice restricts on), and pipelines import them
    from `ABIOntology`.
 2. **Everything is minted under `personnel:`.** A class that does not exist upstream
    gets this namespace, never an invented local name under `cco:`.

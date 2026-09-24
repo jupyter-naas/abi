@@ -23,7 +23,6 @@ from naas_abi.ontologies.modules.ABIOntology import (
     Process,
     Quality,
     Role,
-    Site,
     TemporalRegion,
 )
 from pydantic import BaseModel, Field, ValidationError
@@ -324,6 +323,7 @@ class ActOfWorking(RDFEntity):
     _property_uris: ClassVar[dict] = {
         "created": "http://purl.org/dc/terms/created",
         "creator": "http://purl.org/dc/terms/creator",
+        "developsLanguageCapability": "http://ontology.naas.ai/personnel/developsLanguageCapability",
         "developsSkill": "http://ontology.naas.ai/personnel/developsSkill",
         "for_organization": "http://ontology.naas.ai/personnel/forOrganization",
         "hasParticipant": "http://ontology.naas.ai/abi/hasParticipant",
@@ -335,6 +335,7 @@ class ActOfWorking(RDFEntity):
         "realizes": "http://ontology.naas.ai/abi/realizes",
     }
     _object_properties: ClassVar[set[str]] = {
+        "developsLanguageCapability",
         "developsSkill",
         "for_organization",
         "hasParticipant",
@@ -357,15 +358,14 @@ class ActOfWorking(RDFEntity):
     ] = os.environ.get("USER")
 
     # Object properties
+    developsLanguageCapability: Annotated[URIRef | str, Field()] | None = None
     developsSkill: Annotated[URIRef | str, Field()] | None = None
     for_organization: Annotated[list[Organization | URIRef | str], Field(description="Relates an act of working to the organization that participates as employer.")] | None = None
-    hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = (
-        None
-    )
+    hasParticipant: Annotated[list[Person | URIRef | str], Field()] | None = None
     has_contract: Annotated[URIRef | str, Field(description="Relates an act of working to the employment contract it concretizes.")] | None = None
     is_act_of_working_of: Annotated[list[Person | URIRef | str], Field(description="Relates an act of working to the person performing the work.")] | None = None
     occupiesTemporalRegion: Annotated[list[TemporalRegion | URIRef | str], Field()] | None = None
-    occursIn: Annotated[list[Site | URIRef | str], Field()] | None = None
+    occursIn: Annotated[URIRef | str, Field()] | None = None
     realizes: Annotated[URIRef | str, Field()] | None = None
 
 

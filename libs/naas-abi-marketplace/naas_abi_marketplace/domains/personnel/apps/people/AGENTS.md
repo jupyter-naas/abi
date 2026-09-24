@@ -139,6 +139,13 @@ Which sections are **process-shaped** (ActOfWorking / ActOfStudying / ActOfCerti
   them). The BFO 7 Buckets panel lists the connected classes and its counts and
   ticks are what is on the canvas, so its total equals the status bar's. Pinned
   in `web/lib/ontology-graph.test.js`.
+- **Facility classes are WHERE.** The process slices say an act occurs in a CCO
+  facility (Office Building, Educational Facility, Facility), which BFO/CCO file
+  under Material Artifact. `bfo_bucket_resolution.py` treats `cco:ont00000192` as
+  a WHERE root so the facilities, and their subclasses, are drawn in the Site
+  zone; the payload (`_add_imported_classes`) states the CCO classes the
+  personnel files use, with their labels, so the page can name them. A new CCO
+  class used by a slice is picked up if it belongs to the Facility ontology.
 - **The Turtle panel is resizable.** A handle on its right edge (drag, arrow keys,
   Home or double-click to reset) sets its width, kept between 240px and what
   leaves the network 320px, and remembered in `localStorage`. Stacked under 900px
