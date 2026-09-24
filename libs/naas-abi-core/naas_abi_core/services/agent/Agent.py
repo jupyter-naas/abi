@@ -506,6 +506,33 @@ class AgentSharedState:
         self._requesting_help = requesting_help
 
 
+def merge_enabled_capabilities(
+    current: dict[str, list[str]] | None, update: dict[str, Any] | None
+) -> dict[str, list[str]]:
+    """Reducer for ``ABIAgentState.enabled_capabilities``.
+
+    The value maps an agent name to the tool ids it enabled at runtime (see
+    ``CapabilityAgent``). An update entry is either an operation,
+    ``{"enable": [...], "disable": [...]}``, which lets several tool calls of
+    one step all apply, or a full list, which is how a sub-graph hands its
+    final state back to its parent.
+    """
+    merged = {agent: list(ids) for agent, ids in (current or {}).items()}
+    for agent, change in (update or {}).items():
+        if isinstance(change, list | tuple):
+            merged[agent] = list(dict.fromkeys(change))
+            continue
+        if not isinstance(change, dict):
+            continue
+        ids = merged.get(agent, [])
+        for tool_id in change.get("enable", []):
+            if tool_id not in ids:
+                ids.append(tool_id)
+        disabled = set(change.get("disable", []))
+        merged[agent] = [tool_id for tool_id in ids if tool_id not in disabled]
+    return merged
+
+
 class ABIAgentState(MessagesState):
     system_prompt: str
     # Routing state persisted through the LangGraph checkpointer so that agent
@@ -514,6 +541,10 @@ class ABIAgentState(MessagesState):
     # lost between requests).
     current_active_agent: str | None
     supervisor_agent: str | None
+    # Tools enabled at runtime, per agent name. Checkpointed with the
+    # conversation, so a selection survives across turns and stays scoped to
+    # one thread. Plain agents never write it.
+    enabled_capabilities: Annotated[dict[str, list[str]], merge_enabled_capabilities]
 
 
 @dataclass
@@ -1177,11 +1208,20 @@ class Agent(Expose):
                 and isinstance(last_human_message.content, str)
                 else ""
             )
-            active_agent = pd.find(
-                self._agents,
-                lambda a: Agent.validate_name(a.name) == active_name,
-            )
-            retain = True
+            # The active agent may sit below a direct child (nested
+            # supervisors): enter the child whose subtree holds it, and let
+            # that child's graph route the rest of the way.
+            entry, active_agent = self._route_to(active_name)
+            if entry is None:
+                # Not in this agent's tree: going to that name would target a
+                # node this graph does not have and end the turn empty.
+                logger.warning(
+                    f"Active agent '{active_name}' is not in the tree of "
+                    f"'{self._name}'; '{self._name}' takes the turn."
+                )
+                self._state.set_current_active_agent(self._name)
+                active_agent = None
+            retain = entry is not None
             retain_fn = (
                 getattr(type(active_agent), "retains_active_turn", None)
                 if active_agent is not None
@@ -1197,14 +1237,15 @@ class Agent(Expose):
                         exc_info=True,
                     )
                     retain = True
-            if retain:
+            if retain and entry is not None:
                 logger.debug(f"⏩ Continuing conversation with: '{active_name}'")
                 # self._notify_agent_routing(active_name)
-                return Command(goto=active_name)
-            logger.debug(
-                f"↩️  Releasing sticky agent '{active_name}' back to '{self._name}'"
-            )
-            self._state.set_current_active_agent(self._name)
+                return Command(goto=Agent.validate_name(entry.name))
+            if entry is not None:
+                logger.debug(
+                    f"↩️  Releasing sticky agent '{active_name}' back to '{self._name}'"
+                )
+                self._state.set_current_active_agent(self._name)
 
         # self._state.set_current_active_agent(self.name)
         logger.debug(f"💬 Starting chatting with: '{self._name}'")
@@ -1263,6 +1304,19 @@ SUBAGENT SYSTEM PROMPT:
             goto="continue_conversation",
             update={"system_prompt": updated_system_prompt},
         )
+
+    def _route_to(self, agent_name: str) -> tuple[Agent | None, Agent | None]:
+        """``(direct child to enter, agent)`` for ``agent_name`` in this tree.
+
+        Returns ``(None, None)`` when no descendant has that name.
+        """
+        for child in self._agents:
+            if Agent.validate_name(child.name) == agent_name:
+                return child, child
+            _, found = child._route_to(agent_name)
+            if found is not None:
+                return child, found
+        return None, None
 
     def continue_conversation(self, state: ABIAgentState) -> Command:
         return Command(goto="call_model")
@@ -1924,6 +1978,42 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             cleaned.append(m)
         return cleaned
 
+    # ------------------------------------------------------------------
+    # Tool-set hooks. Subclasses whose tools change during a conversation
+    # (see ``CapabilityAgent``) override these three; the base agent's tool
+    # set is fixed at construction.
+    # ------------------------------------------------------------------
+
+    def _chat_model_for_turn(self, state: ABIAgentState) -> Runnable:
+        """The model, bound to the tools this step may use.
+
+        Workspace-gated tools are only exposed when a coding workspace is
+        bound to the request; otherwise the model never sees tools it cannot
+        use.
+        """
+        return (
+            self._chat_model_with_tools
+            if coder_workspace_base.get()
+            else self._chat_model_without_workspace_tools
+        )
+
+    def _tool_for_call(
+        self, tool_name: str, state: ABIAgentState
+    ) -> Tool | BaseTool | None:
+        """The tool dispatched for ``tool_name``, or ``None`` when unavailable."""
+        return self._tools_by_name.get(tool_name)
+
+    def _tool_names_for_turn(self, state: ABIAgentState) -> list[str]:
+        """Tool names reported to the model when it calls an unknown tool."""
+        return sorted(self._tools_by_name.keys())
+
+    @staticmethod
+    def _injects_state(tool_: Tool | BaseTool) -> bool:
+        """True when ``state`` is hidden from the model, i.e. ``InjectedState``."""
+        schema = tool_.tool_call_schema
+        visible = schema if isinstance(schema, dict) else schema.model_json_schema()
+        return "state" not in visible.get("properties", {})
+
     def call_model(
         self,
         state: ABIAgentState,
@@ -1960,14 +2050,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         messages = compact_old_tool_messages(messages)
         logger.debug(f"Messages before calling model: {messages}")
 
-        # Calling model. Only expose workspace-gated tools when a coding
-        # workspace is bound to this request; otherwise the model never sees
-        # tools it cannot use.
-        chat_model = (
-            self._chat_model_with_tools
-            if coder_workspace_base.get()
-            else self._chat_model_without_workspace_tools
-        )
+        chat_model = self._chat_model_for_turn(state)
         try:
             if documents_turn_active() or slides_turn_active():
                 response = _invoke_office_chat_model(chat_model, messages)
@@ -2142,9 +2225,9 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             # lookup here would raise KeyError and kill the whole invoke thread
             # (the user sees a generic crash). Instead, surface a ToolMessage the
             # model can read so it can self-correct on the next loop.
-            tool_ = self._tools_by_name.get(tool_name)
+            tool_ = self._tool_for_call(tool_name, state)
             if tool_ is None:
-                available = sorted(self._tools_by_name.keys())
+                available = self._tool_names_for_turn(state)
                 logger.error(
                     f"🚨 Agent '{self._name}' tried to call unknown tool "
                     f"'{tool_name}'. Available tools: {available}"
@@ -2177,9 +2260,13 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             # according to LangChain's requirements
             args: dict[str, Any] | ToolCall = tool_call
 
-            # Check if tool needs state injection
-            if "state" in tool_input_fields:
-                args = {**tool_call, "state": state}  # inject state
+            # Inject the graph state into tools that declare it with
+            # ``InjectedState``: such a ``state`` is hidden from the model (absent
+            # from ``tool_call_schema``). An ordinary ``state`` argument, like an
+            # issue filter, keeps the model's value. LangChain reads injected
+            # values from the call's arguments, not from the call itself.
+            if "state" in tool_input_fields and self._injects_state(tool_):
+                args = {**tool_call, "args": {**tool_call["args"], "state": state}}
 
             # Check if tool is a handoff tool
             is_handoff = tool_call["name"].startswith("transfer_to_")

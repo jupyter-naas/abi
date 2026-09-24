@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import glob
 import os
-from typing import Generic, Self, cast
+from typing import TYPE_CHECKING, Generic, Self, cast
 
 from fastapi import FastAPI
 from naas_abi_core import logger
@@ -22,6 +22,11 @@ from naas_abi_core.utils.Expose import Expose
 from naas_abi_core.workflow.workflow import Workflow
 from pydantic import BaseModel, ConfigDict
 from typing_extensions import TypeVar
+
+if TYPE_CHECKING:
+    from naas_abi_core.services.tool_registry.adapters.primary.LangChainToolPublisher import (
+        ToolPublisher,
+    )
 
 
 class ModuleDependencies:
@@ -220,6 +225,36 @@ class BaseModule(Generic[TConfig]):
 
     def on_unloaded(self):
         pass
+
+    def publish_tools(self, publisher: ToolPublisher) -> None:
+        """Publish this module's tools to the engine's tool registry.
+
+        Called by the engine after ``on_initialized``, under the module's
+        configured name, so agents can be composed from the registry without
+        this module constructing one. The default publishes every discovered
+        tool instance (``self.tools``: ``BaseTool`` and ``Expose`` objects).
+
+        Override it to publish more, typically an integration's
+        ``as_tools(configuration)`` with ``publisher.add_factory(...)`` so
+        credentials stay references resolved per caller. Call ``super()`` to
+        keep the discovered tools.
+        """
+        from langchain_core.tools import BaseTool
+
+        for item in self.tools:
+            try:
+                if isinstance(item, BaseTool):
+                    publisher.add_tool(item)
+                elif isinstance(item, Expose):
+                    publisher.add_exposed(item)
+            except NotImplementedError:
+                # An Expose without agent tools (``as_tools`` left abstract).
+                continue
+            except Exception as exc:  # noqa: BLE001 - skip one tool, keep the rest
+                logger.warning(
+                    f"Module '{publisher.module}': tool {type(item).__name__} "
+                    f"not published: {exc}"
+                )
 
     def api(self, app: FastAPI) -> None:
         """
