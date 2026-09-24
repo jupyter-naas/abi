@@ -376,6 +376,12 @@ async def delete_workspace(
     return {"status": "deleted"}
 
 
+# Drives reach beyond the workspace: the system drive is the whole object store
+# and the platform drive is shared by every workspace. Anyone can create and own
+# a workspace, so only a platform superadmin may flip these.
+_DRIVE_FLAGS = frozenset({"platform_drive_enabled", "system_drive_enabled"})
+
+
 @router.patch("/{workspace_id}")
 async def update_workspace(
     workspace_id: str,
@@ -384,13 +390,24 @@ async def update_workspace(
     service: WorkspaceService = Depends(get_workspace_service),
     org_service: OrganizationService = Depends(get_organization_service),
 ) -> Workspace:
-    role = await require_workspace_access(current_user.id, workspace_id)
-    if role not in ("owner", "admin"):
-        raise HTTPException(status_code=403, detail="Only admins can update workspace settings")
+    changes = updates.model_dump(exclude_unset=True)
+    if changes.keys() & _DRIVE_FLAGS and not current_user.is_superadmin:
+        raise HTTPException(
+            status_code=403,
+            detail="Only a platform superadmin can enable or disable workspace drives",
+        )
+
+    if changes.keys() - _DRIVE_FLAGS or not current_user.is_superadmin:
+        role = await require_workspace_access(current_user.id, workspace_id)
+        if role not in ("owner", "admin"):
+            raise HTTPException(status_code=403, detail="Only admins can update workspace settings")
+    else:
+        # A superadmin toggling drives needs no membership in the workspace.
+        role = await get_workspace_role(current_user.id, workspace_id)
 
     record = await service.update_workspace(
         workspace_id=workspace_id,
-        updates=WorkspaceUpdateInput(**updates.model_dump(exclude_unset=True)),
+        updates=WorkspaceUpdateInput(**changes),
     )
     if record is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
