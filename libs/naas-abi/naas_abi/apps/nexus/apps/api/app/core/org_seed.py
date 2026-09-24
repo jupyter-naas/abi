@@ -35,6 +35,10 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     WorkspaceMemberModel,
     WorkspaceModel,
 )
+from naas_abi.apps.nexus.apps.api.app.services.auth.default_passwords import (
+    SHIPPED_DEFAULT_PASSWORDS,
+    is_known_default_password,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -90,6 +94,20 @@ def _hash_password(password: str) -> str:
 def _generate_password() -> str:
     # URL-safe random password (~32 chars) suitable for bootstrap credentials.
     return secrets.token_urlsafe(24)
+
+
+def _has_shipped_default_password(hashed_password: str | None) -> bool:
+    """True when the stored hash opens with a password ABI once shipped."""
+    if not hashed_password:
+        return False
+    encoded = hashed_password.encode("utf-8")
+    for candidate in SHIPPED_DEFAULT_PASSWORDS:
+        try:
+            if bcrypt.checkpw(candidate.encode("utf-8"), encoded):
+                return True
+        except ValueError:
+            return False
+    return False
 
 
 def _secret_prefix_for_email(email: str) -> str:
@@ -203,7 +221,13 @@ async def _upsert_users(
             # Prefer credentials from secret service when configured
             if secret_service is not None and user_cfg.store_credentials_in_secrets:
                 stored = _get_user_credentials_from_secret_service(secret_service, normalized_email)
-                if stored is not None:
+                if stored is not None and is_known_default_password(stored[1]):
+                    logger.warning(
+                        "Ignoring the published default password stored for email=%s; "
+                        "generating a new one",
+                        normalized_email,
+                    )
+                elif stored is not None:
                     _email, password_to_use = stored
                     password_from_secrets = True
                     logger.info(
@@ -264,6 +288,28 @@ async def _upsert_users(
                     user_cfg.is_superadmin,
                     normalized_email,
                 )
+            if _has_shipped_default_password(user.hashed_password):
+                rotated = _generate_password()
+                user.hashed_password = _hash_password(rotated)
+                user.updated_at = now
+                if secret_service is not None and user_cfg.store_credentials_in_secrets:
+                    _store_user_credentials_in_secret_service(
+                        secret_service=secret_service,
+                        email=normalized_email,
+                        password=rotated,
+                    )
+                    logger.warning(
+                        "Replaced the published default password of email=%s; the new "
+                        "one is stored in the secret store as NEXUS_USER_%s_PASSWORD",
+                        normalized_email,
+                        _secret_prefix_for_email(normalized_email),
+                    )
+                else:
+                    logger.warning(
+                        "Replaced the published default password of email=%s; sign in "
+                        "with a magic link or reset the password",
+                        normalized_email,
+                    )
 
         users_by_email[normalized_email] = user
 

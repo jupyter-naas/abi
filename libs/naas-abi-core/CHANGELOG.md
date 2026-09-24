@@ -2,6 +2,75 @@
 
 <!-- version list -->
 
+## v2.40.2 (2026-09-24)
+
+### Bug Fixes
+
+- **auth**: Lock registration, guard Ollama routes, enforce sign-in rate limits
+  ([`df2a296`](https://github.com/jupyter-naas/abi/commit/df2a296a88ca4d3da6a1846cc175b76d46525edb))
+
+
+## v2.40.1 (2026-09-24)
+
+### Bug Fixes
+
+- **api**: Remove the /token endpoint that issued ABI_API_KEY
+  ([`101085f`](https://github.com/jupyter-naas/abi/commit/101085f5dbcd209a7d8614b858f7a75fe9ff23cb))
+
+
+## v2.40.0 (2026-09-23)
+
+### Bug Fixes
+
+- **api**: Render configured description and branding assets on landing page
+  ([`c064c34`](https://github.com/jupyter-naas/abi/commit/c064c3402eb30d0951cf4763b3449aab30650f70))
+
+### Features
+
+- **api**: Configurable landing page theme colours
+  ([`94b58f7`](https://github.com/jupyter-naas/abi/commit/94b58f799bf900c4ff35077d0fbaa20b47b0438f))
+
+
+## v2.39.0 (2026-09-22)
+
+### Features
+
+- **nexus**: Native Sheets editor, formulas, resizing, and SheetsAgent
+  ([#1297](https://github.com/jupyter-naas/abi/pull/1297),
+  [`135967f`](https://github.com/jupyter-naas/abi/commit/135967f33be441c7afa9f4d82e7f1f40a4c7c465))
+
+
+## v2.38.0 (2026-09-22)
+
+### Bug Fixes
+
+- **core**: Address document service review feedback
+  ([`adc548c`](https://github.com/jupyter-naas/abi/commit/adc548cf122052e64ea79c3427a1e0d450e3093f))
+
+- **core**: Address document store code review findings
+  ([`840f142`](https://github.com/jupyter-naas/abi/commit/840f142b6eea3f1eebac5d1a4666e241b4347603))
+
+- **core**: Align document numeric comparisons and bound optional indexes
+  ([`92121af`](https://github.com/jupyter-naas/abi/commit/92121af7f013ad15a8b9870dbe20ce3ef1099978))
+
+- **core**: Close 4 remaining document store review findings
+  ([`6c5fc28`](https://github.com/jupyter-naas/abi/commit/6c5fc28e32d192403981b84362ac05b7b0a950d4))
+
+- **core**: Harden document query and storage boundaries
+  ([`c35bca5`](https://github.com/jupyter-naas/abi/commit/c35bca523909428ef28dfb045b8fbddabdb46e92))
+
+- **core**: Keep expanded JSONB floats portable
+  ([`9e3a409`](https://github.com/jupyter-naas/abi/commit/9e3a409e1df327afae62c45a67cbe25b55ad14a5))
+
+- **core**: Surface malformed document SQL as DocumentAdapterError and split adapter factories
+  ([`afb901a`](https://github.com/jupyter-naas/abi/commit/afb901a0fe9ef2d6999dcff0c738c0de30229532))
+
+### Features
+
+- **core**: Add portable document store service
+  ([`db7df35`](https://github.com/jupyter-naas/abi/commit/db7df354346a5bf1ebeba60ba4f33651cad09c9d))
+
+
 ## v2.37.0 (2026-09-17)
 
 ### Features

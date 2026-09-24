@@ -445,6 +445,20 @@ async def download_folder_archive(
     )
 
 
+@router.post("/extract/{path:path}", response_model=FileInfo)
+async def extract_archive(
+    path: str,
+    workspace_id: str | None = Query(default=None, max_length=100),
+    scope: str = Query(default="workspace", pattern=SCOPE_PATTERN),
+    current_user: User = Depends(get_current_user_required),
+    files_service: FilesService = Depends(get_files_service),
+):
+    scoped_path = await _authorize_path(
+        current_user, path, workspace_id, scope, files_service=files_service
+    )
+    return _to_file_info_schema(files_service.extract_archive(path=scoped_path))
+
+
 @router.get("/raw/{path:path}")
 async def read_file_raw(
     path: str,

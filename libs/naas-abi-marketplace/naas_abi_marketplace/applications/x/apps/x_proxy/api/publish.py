@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from naas_abi_core import logger
+from naas_abi_core.services.dataset.DatasetPort import IDatasetPort
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
@@ -27,52 +28,41 @@ from naas_abi_marketplace.applications.x.apps.x_proxy.api.globals import (
 from naas_abi_marketplace.applications.x.apps.x_proxy.api.search_recents_tweets import (
     publish_page as publish_search_page,
 )
-from naas_abi_marketplace.applications.x.apps.x_proxy.api.search_tweets import (
-    publish_page as publish_tweets_page,
+from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.snapshot_reader import (
+    DatasetSnapshotReader,
 )
-from naas_abi_marketplace.applications.x.apps.x_proxy.api.search_users import (
-    publish_page as publish_users_page,
+from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
+    POSTS_V1,
+    X_DATASET_NAMESPACE,
+    ensure_x_datasets,
 )
 from naas_abi_marketplace.applications.x.apps.x_proxy.web.publish_assets import (
     upload_web_export,
 )
 
 
-def _attach_cache(object_storage: ObjectStorageService):
-    """A :class:`CacheReader` when a usable projection exists, else ``None``.
-
-    Fails soft on purpose: polars may not be installed in every environment that
-    imports this module, and the projection may not have been built yet. Either
-    way the publish must still run off the graph.
-
-    A projection written by an older ``SCHEMA_VERSION`` is refused rather than
-    read. Its part files are missing columns this reader selects by name, so
-    attaching one trades a clean fallback for a ``KeyError`` mid-publish. The
-    next ``refresh`` rebuilds it at the current version - until then, SPARQL.
-    """
+def _dataset_data_start(dataset: IDatasetPort) -> datetime | None:
+    """Earliest post timestamp in ``posts_v1``, for All-time scenario bounds."""
     try:
-        from naas_abi_marketplace.applications.x.apps.x_proxy.cache.reader import (
-            CacheReader,
+        ensure_x_datasets(dataset)
+        result = dataset.query(
+            f"SELECT MIN(created_at) AS mn FROM {POSTS_V1}",  # nosec B608
+            namespace=X_DATASET_NAMESPACE,
         )
-        from naas_abi_marketplace.applications.x.apps.x_proxy.cache.schema import (
-            SCHEMA_VERSION,
-        )
-    except ImportError as exc:
-        logger.info(f"X app publish: projection unavailable ({exc}) - using SPARQL")
+        if not result.rows:
+            return None
+        raw = result.rows[0].get("mn")
+        if raw is None:
+            return None
+        if isinstance(raw, datetime):
+            return raw if raw.tzinfo else raw.replace(tzinfo=UTC)
+        text = str(raw)
+        if text.endswith("Z"):
+            text = f"{text[:-1]}+00:00"
+        return datetime.fromisoformat(text)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"X app publish: could not read dataset data_start ({exc})")
         return None
-    reader = CacheReader(object_storage)
-    state = reader.projection_state()
-    if not state or not state.get("watermark"):
-        logger.info("X app publish: no projection published yet - using SPARQL")
-        return None
-    if state.get("schema_version") != SCHEMA_VERSION:
-        logger.info(
-            f"X app publish: projection is schema {state.get('schema_version')}, "
-            f"this build reads {SCHEMA_VERSION} - using SPARQL until it is rebuilt"
-        )
-        return None
-    logger.info(f"X app publish: using the Parquet projection ({state})")
-    return reader
 
 
 def publish_app(
@@ -80,36 +70,22 @@ def publish_app(
     triple_store: TripleStoreService,
     queries: list[dict[str, Any]],
     *,
+    dataset: IDatasetPort,
     namespace: str = DEFAULT_NAMESPACE,
     app_prefix: str = DEFAULT_APP_PREFIX,
     require_web: bool = True,
-    full_users: bool = False,
-    use_cache: bool = True,
-    direct_user_limit: int = 100,
 ) -> dict[str, Any]:
-    """Run every page/element script and publish the web static export.
+    """Run every page script and publish the web static export from Dataset Service.
+
+    Tweet/user search is served live from dataset HTTP routes; this publish writes
+    globals plus count/search dashboard snapshots (KPIs, charts, tables, facets).
 
     *require_web* false lets the run proceed when ``web/out/`` is absent - the
-    orchestration path, where the image has no Node to build it. The CLI keeps
-    it true so a forgotten ``pnpm build`` fails loudly instead of silently
-    publishing snapshots against stale assets.
-
-    *full_users* forces every Users shard to be rebuilt instead of only the
-    ones whose authors changed; see ``api.search_users.users``.
-
-    *use_cache* attaches the Parquet projection when one has been published, so
-    the Users dataset is built from columnar data instead of two full-graph
-    aggregates. It is advisory: an absent or unreadable projection simply leaves
-    the SPARQL path in place.
+    orchestration path, where the image has no Node to build it.
     """
     built_at = datetime.now(UTC)
-    cache = _attach_cache(object_storage) if use_cache else None
-    data_start = None
-    if cache is not None:
-        try:
-            data_start = cache.earliest_matched_created_at()
-        except Exception as exc:  # noqa: BLE001 - All time then equals 30d
-            logger.warning(f"X app publish: could not resolve All time start ({exc})")
+    reader = DatasetSnapshotReader(dataset)
+    data_start = reader.earliest_matched_created_at() or _dataset_data_start(dataset)
     scenarios = build_scenarios(built_at, data_start=data_start)
     ctx = SnapshotContext(
         object_storage,
@@ -121,29 +97,22 @@ def publish_app(
         namespace=namespace,
         app_prefix=app_prefix,
         built_at=built_at,
-        cache=cache,
+        cache=reader,
+        dataset=dataset,
     )
 
     count_doc = publish_count_page(ctx)
     search_doc = publish_search_page(ctx)
-    if cache is not None:
-        released = cache.release_window_cache()
-        if released:
-            logger.info(
-                f"X app publish: released {released} window cache(s) "
-                "before full-history pages"
-            )
     globals_doc = publish_globals(ctx)
-    tweets_doc = publish_tweets_page(ctx)
-    users_doc = publish_users_page(
-        ctx, full=full_users, direct_user_limit=direct_user_limit
-    )
+    tweets_doc = {"skipped": True, "reason": "dataset_live_search"}
+    users_doc = {"skipped": True, "reason": "dataset_live_search"}
 
     web = upload_web_export(object_storage, ctx.app_prefix, required=require_web)
 
     summary = {
         "app_prefix": ctx.app_prefix,
         "built_at": built_at.isoformat(),
+        "mode": "dataset",
         "scenarios": [s["id"] for s in scenarios],
         "queries": [
             q.get("slug") for q in (globals_doc.get("queries") or {}).get("queries", [])
@@ -153,10 +122,6 @@ def publish_app(
             "count_recent_tweets": list(count_doc.keys()),
             "search_recents_tweets": list(search_doc.keys()),
             "search_tweets": tweets_doc,
-            # Counts rather than file names: the users dataset is 256 shards,
-            # and how many of them actually changed is the useful signal when
-            # this runs after every ingest tick. Carries ``skipped: true`` when
-            # the tweet graph had not moved since the last publish.
             "search_users": users_doc,
         },
         "web": web,

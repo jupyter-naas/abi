@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { ChevronRight, File, FileCode2, Folder, Image as ImageIcon, Presentation } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SlidesProjectOverflowMenu } from '@/components/slides/slides-project-menu';
-import { shellTokens } from '../tokens';
 import {
   SLIDES_ALL_ROW_LABEL,
   SLIDES_DECK_FILE_NAME,
@@ -27,8 +26,11 @@ import {
  * while a plain click stays inside the workspace shell.
  */
 
+/** Match Ontology/KG/Files density (12/18); keep global shell listRow at 14/19. */
+const SLIDES_ROW_TYPO = 'slides-sidebar-list-row';
+
 const ROW_CLASS =
-  'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 no-underline transition-colors hover:bg-workspace-accent-10';
+  'flex min-w-0 flex-1 items-center gap-1 rounded-md px-2 py-1 no-underline transition-colors hover:bg-workspace-accent-10';
 
 function Twisty({
   expanded,
@@ -145,7 +147,7 @@ function DeckRow({
             data-slug={deck.slug}
             className={cn(
               ROW_CLASS,
-              shellTokens.sidebar.listRow,
+              SLIDES_ROW_TYPO,
               deck.active
                 ? 'bg-workspace-accent-15 font-medium text-workspace-accent'
                 : 'text-foreground',
@@ -213,7 +215,7 @@ function FileRows({
                   data-testid="slides-tree-file"
                   className={cn(
                     ROW_CLASS,
-                    shellTokens.sidebar.listRow,
+                    SLIDES_ROW_TYPO,
                     node.open ? 'text-workspace-accent' : 'text-foreground',
                   )}
                 >
@@ -225,8 +227,8 @@ function FileRows({
                   title={node.path}
                   data-testid="slides-tree-file"
                   className={cn(
-                    'flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-muted-foreground',
-                    shellTokens.sidebar.listRow,
+                    'flex min-w-0 flex-1 items-center gap-1 px-2 py-1 text-muted-foreground',
+                    SLIDES_ROW_TYPO,
                   )}
                 >
                   <FileIcon node={node} />
@@ -282,7 +284,7 @@ function DeckList({
   if (decks.length === 0) {
     return (
       <li>
-        <p className={cn('px-2 py-1 text-muted-foreground', shellTokens.sidebar.listRow)}>
+        <p className={cn('px-2 py-1 text-muted-foreground', SLIDES_ROW_TYPO)}>
           {emptyLabel}
         </p>
       </li>
@@ -319,7 +321,7 @@ function DeckList({
                 <p
                   className={cn(
                     'ml-3 px-2 py-1 pl-6 text-muted-foreground',
-                    shellTokens.sidebar.listRow,
+                    SLIDES_ROW_TYPO,
                   )}
                 >
                   Loading
@@ -414,7 +416,7 @@ export function SlidesTreeView({
           aria-current={onGallery ? 'page' : undefined}
           className={cn(
             ROW_CLASS,
-            shellTokens.sidebar.listRow,
+            SLIDES_ROW_TYPO,
             onGallery
               ? 'bg-muted font-medium text-foreground'
               : 'text-muted-foreground',
@@ -434,7 +436,7 @@ export function SlidesTreeView({
           <Link
             href={rootHref}
             data-testid="slides-tree-root"
-            className={cn(ROW_CLASS, shellTokens.sidebar.listRow, 'text-foreground')}
+            className={cn(ROW_CLASS, SLIDES_ROW_TYPO, 'text-foreground')}
           >
             <Folder size={12} className="flex-shrink-0 text-muted-foreground" />
             <span className="truncate">{SLIDES_TREE_ROOT_LABEL}</span>

@@ -127,12 +127,32 @@ def run_search_pipeline_for_file(
         f"XOrchestration: mapping envelope {file_path!r} into the graph via "
         f"XSearchRecentTweetsPipeline"
     )
+    effective_persist = True if persist is None else persist
     pipeline.run(
         XSearchRecentTweetsPipelineParameters(
             file_path=file_path,
-            persist=True if persist is None else persist,
+            persist=effective_persist,
         )
     )
+    if effective_persist:
+        try:
+            from intelligence.utils.OsintPipelinePendingWork import (  # type: ignore[import-not-found]
+                enqueue_pending_location_extractions_from_envelope,
+            )
+
+            enqueue_pending_location_extractions_from_envelope(
+                module.engine.services.triple_store,
+                module.engine.services.object_storage,
+                file_path,
+                ontology_namespace=getattr(
+                    module.configuration, "ontology_namespace", "http://ontology.naas.ai/x/"
+                ),
+                graph_name=str(graph_name or module.configuration.graph_name),
+            )
+        except Exception as exc:  # noqa: BLE001 — ingestion must not fail on queue write
+            logger.warning(
+                f"XOrchestration: pending location enqueue failed for {file_path!r} ({exc})"
+            )
 
 
 def search_envelope_ingested(
@@ -179,6 +199,72 @@ def search_envelope_ingested(
         )
         return False
     return bool(rows)
+
+
+def envelope_paths_in_dataset(module, file_paths: list[str]) -> set[str]:
+    """Subset of *file_paths* already recorded in ``x.envelopes_v1``.
+
+    Fails open (empty set) when Dataset Service is unavailable or the probe
+    errors, matching :func:`search_envelope_in_dataset` per-path behaviour.
+    """
+    try:
+        if not module.engine.services.dataset_available():
+            return set()
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
+            envelope_paths_in_dataset as lookup_envelope_paths,
+        )
+
+        return lookup_envelope_paths(
+            module.engine.services.dataset,
+            file_paths,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "envelope_paths_in_dataset: bulk probe failed (%s); "
+            "treating all paths as not ingested",
+            exc,
+        )
+        return set()
+
+
+def search_envelope_in_dataset(module, file_path: str) -> bool:
+    """True when *file_path* is recorded in ``x.envelopes_v1``.
+
+    Fails open (``False``) when Dataset Service is unavailable or the probe
+    errors, so ingestion still runs rather than dropping projection.
+    """
+    try:
+        if not module.engine.services.dataset_available():
+            return False
+        from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
+            envelope_already_ingested,
+        )
+
+        return envelope_already_ingested(
+            module.engine.services.dataset, normalize_envelope_path(file_path)
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            f"search_envelope_in_dataset: probe failed for {file_path!r} ({exc}); "
+            f"treating as not ingested"
+        )
+        return False
+
+
+def normalize_envelope_path(path: str) -> str:
+    return str(path or "").strip().lstrip("/")
+
+
+def search_envelope_fully_projected(
+    module,
+    file_path: str,
+    *,
+    graph_name: str | None = None,
+) -> bool:
+    """True when the envelope is mapped in the graph and listed in ``envelopes_v1``."""
+    return search_envelope_ingested(
+        module, file_path, graph_name=graph_name
+    ) and search_envelope_in_dataset(module, file_path)
 
 
 # ----- Search fetch + inline-map helpers -------------------------------------
@@ -339,6 +425,61 @@ def run_search_workflow_for_filter(
         )
 
     return file_paths
+
+
+def report_jobs_in_progress(context) -> bool:
+    """True when a daily report pipeline run is still in flight (defer dataset sync)."""
+    try:
+        instance = context.instance
+    except AttributeError:
+        return False
+    runs = instance.get_runs(
+        filters=dg.RunsFilter(
+            statuses=IN_PROGRESS_RUN_STATUSES,
+        ),
+        limit=50,
+    )
+    for run in runs:
+        name = str(getattr(run, "job_name", "") or "")
+        if name.startswith("report_"):
+            return True
+    return False
+
+
+def sync_x_dataset_paths_batched(
+    module,
+    envelope_paths: list[str],
+    *,
+    batch_size: int = 64,
+    context=None,
+) -> dict:
+    """Sync many envelope paths in bounded batches (Files fallback sweeps)."""
+    if not envelope_paths:
+        return {"skipped": True, "reason": "no_paths", "batches": 0}
+    summaries: list[dict] = []
+    for offset in range(0, len(envelope_paths), batch_size):
+        batch = envelope_paths[offset : offset + batch_size]
+        summaries.append(sync_x_dataset_paths(module, batch, context=context))
+    return {"batches": len(summaries), "summaries": summaries}
+
+
+def sync_x_dataset_paths(
+    module,
+    envelope_paths: list[str],
+    *,
+    context=None,
+) -> dict:
+    """Incremental dataset projection for exact envelope paths."""
+    if context is not None and report_jobs_in_progress(context):
+        logger.info(
+            "sync_x_dataset_paths: deferred while report pipeline in progress"
+        )
+        return {"skipped": True, "reason": "report_window"}
+    from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.sync import (
+        sync_envelope_paths,
+    )
+
+    return sync_envelope_paths(module, envelope_paths)
 
 
 def run_search_and_map_for_query(
@@ -508,8 +649,6 @@ def publish_x_app(
     module,
     *,
     enabled: bool | None = None,
-    full_users: bool = False,
-    direct_user_limit: int = 100,
 ) -> dict:
     """(Re)publish the X app dashboard + snapshots for all followed queries.
 
@@ -517,8 +656,6 @@ def publish_x_app(
     When *enabled* is ``None`` (count / search workflow), module
     ``app.publish`` applies (default true).
 
-    *full_users* forces a complete rebuild of the Users dataset instead of only
-    the shards whose authors changed since the last publish.
     """
     allow = bool(enabled) if enabled is not None else x_app_publish_enabled(module)
     if not allow:
@@ -526,51 +663,32 @@ def publish_x_app(
         logger.info(f"publish_x_app: skipped ({reason})")
         return {"skipped": True, "reason": reason}
 
+    from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
+        x_dataset_read_enabled,
+    )
     from naas_abi_marketplace.applications.x.apps.x_proxy.hub import XAppHubBuilder
 
-    # Bring the columnar projection level with the envelope archive first, so the
-    # snapshots below read a view that includes this tick's ingest.
-    projection = refresh_x_cache(module)
+    if not x_dataset_read_enabled(module):
+        logger.info(
+            "publish_x_app: skipped (app.dataset.read_enabled is false — "
+            "Fuseki/Parquet snapshot publish was removed)"
+        )
+        return {"skipped": True, "reason": "dataset_read_disabled"}
+
+    dataset = getattr(module.engine.services, "dataset", None)
+    if dataset is None:
+        logger.warning(
+            "publish_x_app: app.dataset.read_enabled but Dataset Service "
+            "is not wired — skipping publish"
+        )
+        return {"skipped": True, "reason": "dataset_service_missing"}
 
     hub = XAppHubBuilder(
         module.engine.services.object_storage,
         module.engine.services.triple_store,
         namespace=module.configuration.ontology_namespace,
     )
-    published = hub.publish(
-        followed_count_entries(module),
-        full_users=full_users,
-        direct_user_limit=direct_user_limit,
-    )
-    if projection is not None:
-        published = {**published, "projection": projection}
-    return published
-
-
-def refresh_x_cache(module, *, full: bool = False) -> dict | None:
-    """Update the Parquet projection from any envelopes written since last time.
-
-    Returns the refresh summary, or ``None`` when the projection is unavailable
-    (polars not installed, object storage unreachable). A failure here must never
-    fail the publish: the snapshots fall back to SPARQL, which is what ran before
-    the projection existed.
-    """
-    try:
-        from naas_abi_marketplace.applications.x.apps.x_proxy.cache import refresh
-    except ImportError as exc:
-        logger.info(f"refresh_x_cache: projection unavailable ({exc})")
-        return None
-    try:
-        kv = getattr(module.engine.services, "kv", None)
-    except Exception:  # noqa: BLE001 — kv is optional; the watermark degrades to a rescan
-        kv = None
-    try:
-        return refresh(module.engine.services.object_storage, kv, full=full)
-    except Exception as exc:  # noqa: BLE001 — degrade to the SPARQL path
-        logger.warning(
-            f"refresh_x_cache: refresh failed ({exc}) — snapshots use SPARQL"
-        )
-        return None
+    return hub.publish(followed_count_entries(module), dataset=dataset)
 
 
 def republish_x_app_after_pipeline(

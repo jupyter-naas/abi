@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -204,6 +204,31 @@ async def _prefetch_agent_class_registry() -> None:
         _log.exception("Background agent registry pre-fetch failed (non-fatal)")
 
 
+async def _reencrypt_secrets_under_default_keys() -> None:
+    """Move workspace secrets encrypted under a published default key to the real key."""
+    from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.core.secret_key import (
+        INSECURE_SECRET_KEYS,
+        is_insecure_secret_key,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.secrets.adapters.secondary.postgres import (
+        SecretsSecondaryAdapterPostgres,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.secrets.service import SecretsService
+
+    if is_insecure_secret_key(current_secret_key()):
+        return
+    async with AsyncSessionLocal() as db:
+        service = SecretsService(adapter=SecretsSecondaryAdapterPostgres(db=db))
+        rewritten = await service.reencrypt_from_keys(sorted(INSECURE_SECRET_KEYS))
+    if rewritten:
+        logging.getLogger(__name__).warning(
+            "Re-encrypted %d workspace secret(s) that were stored under a default key.",
+            rewritten,
+        )
+
+
 async def _startup(app: FastAPI) -> None:
     """Application startup handler."""
     configure_logging()
@@ -225,6 +250,8 @@ async def _startup(app: FastAPI) -> None:
         print(f"✗ Database initialization failed: {e}")
         print("  API will not start without database connection.")
         raise
+
+    await _reencrypt_secrets_under_default_keys()
 
     # Apply config-driven user/org/workspace seeds from config.yaml.
     from naas_abi.apps.nexus.apps.api.app.core.org_seed import apply_configuration_seeds
@@ -537,10 +564,40 @@ def _register_routes(app: FastAPI) -> None:
     app.include_router(api_router, prefix="/api")
 
     app.add_api_route("/health", health_check, methods=["GET"])
-    app.add_api_route("/api/ollama/status", ollama_status, methods=["GET"])
-    app.add_api_route("/api/ollama/pull", ollama_pull_model, methods=["POST"])
-    app.add_api_route("/api/ollama/ensure-ready", ollama_ensure_ready, methods=["POST"])
-    app.add_api_route("/app-html/{path:path}", serve_app_html, methods=["GET"])
+    from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
+        get_current_user_required,
+        require_superadmin,
+    )
+    from naas_abi_core.apps.api.abi_api_key_auth import require_abi_api_token
+
+    # Status reveals the internal Ollama URL and models: signed-in users only.
+    # Pulling models and starting the server act on the host: superadmins only.
+    app.add_api_route(
+        "/api/ollama/status",
+        ollama_status,
+        methods=["GET"],
+        dependencies=[Depends(get_current_user_required)],
+    )
+    app.add_api_route(
+        "/api/ollama/pull",
+        ollama_pull_model,
+        methods=["POST"],
+        dependencies=[Depends(require_superadmin)],
+    )
+    app.add_api_route(
+        "/api/ollama/ensure-ready",
+        ollama_ensure_ready,
+        methods=["POST"],
+        dependencies=[Depends(require_superadmin)],
+    )
+    # The core API's middleware already guards /app-html/; checking here too keeps
+    # the route closed when Nexus is served without that middleware.
+    app.add_api_route(
+        "/app-html/{path:path}",
+        serve_app_html,
+        methods=["GET"],
+        dependencies=[Depends(require_abi_api_token)],
+    )
     from naas_abi.apps.nexus.apps.api.app.services.apps.projects.adapters.primary.app_projects__primary_adapter__FastAPI import (
         redirect_app_preview_root,
         serve_app_preview,

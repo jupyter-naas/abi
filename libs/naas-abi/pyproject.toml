@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi"
-version = "2.72.0"
+version = "2.73.5"
 description = "Multi-agent orchestrator and knowledge graph management system for AI orchestration, providing comprehensive coordination of specialized AI agents and semantic data management capabilities"
 readme = "README.md"
 authors = [{ name = "Grace Lambert", email = "maxime@naas.ai" },{ name = "Alice Dupont", email = "florent@naas.ai" }, { name = "Emma Petit", email = "jeremy@naas.ai" }]
@@ -42,10 +42,11 @@ dependencies = [
     "thefuzz>=0.22.1",
     "pymupdf>=1.27.2.2",
     "pymupdf4llm>=1.27.2.2",
-    # Backs the web_search tool (naas_abi.agents.tools.web_tools). AbiAgent
+    # Backs the web_search tool (naas_abi.tools.web_tools). AbiAgent
     # binds that tool on every request with no feature flag, so this cannot be
     # an extra: a default install would advertise a tool it cannot run.
-    "ddgs>=9.0.0"
+    "ddgs>=9.0.0",
+    "openpyxl>=3.1.5,<4",
 ]
 
 license = { text = "MIT License" }

@@ -651,6 +651,14 @@ a {
   font-size: 0.88rem;
 }
 
+.search-needle-hit {
+  background: #ffe566;
+  color: inherit;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
 .result-snippet {
   margin: 4px 0 0;
   color: var(--label);
@@ -1171,6 +1179,35 @@ a {
   height: 100%;
   object-fit: contain;
   background: #000;
+}
+
+.media-frame-loading,
+.media-loader-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.media-loader-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: var(--panel-2);
+}
+
+.media-loader-spinner {
+  width: 32px;
+  height: 32px;
+  border-width: 3px;
+}
+
+.media-loader-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: center;
+  padding: 0 12px;
 }
 
 .media-fallback {

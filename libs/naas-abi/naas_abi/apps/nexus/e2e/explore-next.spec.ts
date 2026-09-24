@@ -10,7 +10,7 @@ test.setTimeout(120_000)
 
 const WEB = process.env.WEB_URL || 'http://localhost:3000'
 const ADMIN_EMAIL = process.env.NEXUS_ADMIN_EMAIL || 'admin@example.com'
-const ADMIN_PASSWORD = process.env.NEXUS_ADMIN_PASSWORD || 'admin'
+const ADMIN_PASSWORD = process.env.NEXUS_ADMIN_PASSWORD ?? ''
 const WORKSPACE = process.env.NEXUS_WORKSPACE || 'ws-3e360b19bb96'
 const GRAPH_LABEL = process.env.NEXUS_GRAPH_LABEL || 'Test Compiler'
 const CLASS_URI = process.env.NEXUS_CLASS_URI || 'http://ontology.naas.ai/documents#ExtractedItem'

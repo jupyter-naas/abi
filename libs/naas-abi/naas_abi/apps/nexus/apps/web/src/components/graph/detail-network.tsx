@@ -126,6 +126,7 @@ export function InstanceDetailNetwork({
   );
 }
 
+/** Details pin / Open Network preview. Fullscreen ontology Network uses OntologyTermNetwork (View → Connectors). */
 export function TermDetailNetwork({
   term,
   terms,

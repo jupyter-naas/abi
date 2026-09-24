@@ -8,8 +8,11 @@ from uuid import uuid4
 
 import bcrypt
 from jose import JWTError, jwt
-from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key, settings
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.services.auth.default_passwords import (
+    is_known_default_password,
+)
 from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
     AuthPersistencePort,
     AuthUserRecord,
@@ -120,6 +123,23 @@ class ExpiredOtpError(ValueError):
         return "expired_otp"
 
 
+@dataclass
+class SignupDisabledError(PermissionError):
+    def __str__(self) -> str:
+        return "signup_disabled"
+
+
+@dataclass
+class DefaultPasswordNotAllowedError(ValueError):
+    def __str__(self) -> str:
+        return "default_password_not_allowed"
+
+
+def _reject_default_password(password: str) -> None:
+    if is_known_default_password(password):
+        raise DefaultPasswordNotAllowedError()
+
+
 def generate_otp_code(length: int | None = None) -> str:
     digits = length if length is not None else settings.otp_code_length
     if digits < 4 or digits > 10:
@@ -142,13 +162,13 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> t
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
     to_encode.update({"exp": expire, "jti": jti})
-    token = jwt.encode(to_encode, settings.secret_key, algorithm="HS256")
+    token = jwt.encode(to_encode, current_secret_key(), algorithm="HS256")
     return token, jti
 
 
 def decode_token(token: str) -> dict | None:
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+        payload = jwt.decode(token, current_secret_key(), algorithms=["HS256"])
         return payload
     except JWTError:
         return None
@@ -173,6 +193,9 @@ class AuthService:
         if not settings.auth_password_enabled:
             raise PasswordAuthenticationDisabledError()
 
+        if not settings.auth_signup_enabled:
+            raise SignupDisabledError()
+        _reject_default_password(password)
         normalized_email = email.lower()
         if await self.adapter.user_exists_with_email(normalized_email):
             raise EmailAlreadyRegisteredError()
@@ -220,6 +243,10 @@ class AuthService:
 
         if not verify_password(password, user.hashed_password):
             raise InvalidCredentialsError(reason="invalid_password", user_id=user.id)
+        if is_known_default_password(password):
+            # A published default must never open a session, even if an old
+            # install still has it on the account.
+            raise InvalidCredentialsError(reason="default_password", user_id=user.id)
 
         access_token, jti = create_access_token(data={"sub": user.id})
         refresh_token = await create_refresh_token(
@@ -244,6 +271,8 @@ class AuthService:
         user = await self.adapter.get_user_by_email(email.lower())
         if user is None or not verify_password(password, user.hashed_password):
             raise InvalidCredentialsError(reason="invalid_credentials")
+        if is_known_default_password(password):
+            raise InvalidCredentialsError(reason="default_password")
         access_token, _ = create_access_token(data={"sub": user.id})
         return access_token
 
@@ -337,6 +366,7 @@ class AuthService:
         if not settings.auth_password_enabled:
             raise PasswordAuthenticationDisabledError()
 
+        _reject_default_password(new_password)
         user = await self.adapter.get_user_by_id(user_id)
         if user is None:
             raise UserNotFoundError(user_id=user_id)
@@ -390,6 +420,7 @@ class AuthService:
         if not settings.auth_password_enabled:
             raise PasswordAuthenticationDisabledError()
 
+        _reject_default_password(new_password)
         reset_token = await self.adapter.get_password_reset_token(token)
         if reset_token is None:
             raise InvalidResetTokenError()
@@ -600,10 +631,12 @@ class AuthService:
                 break
 
         if matched is None:
-            latest = active[0]
-            attempts = await self.adapter.increment_magic_link_otp_attempts(latest.id)
-            if attempts >= settings.otp_max_attempts:
-                await self.adapter.mark_magic_link_token_used(latest.id)
+            # Charge every active code: otherwise requesting a fresh code would
+            # hand an attacker a new guess budget against the older ones.
+            for magic_token in active:
+                attempts = await self.adapter.increment_magic_link_otp_attempts(magic_token.id)
+                if attempts >= settings.otp_max_attempts:
+                    await self.adapter.mark_magic_link_token_used(magic_token.id)
             await self.adapter.commit()
             raise InvalidOtpError()
 

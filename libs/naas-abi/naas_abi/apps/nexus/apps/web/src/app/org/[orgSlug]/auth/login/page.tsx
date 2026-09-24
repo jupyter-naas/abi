@@ -227,7 +227,7 @@ export default function OrgLoginPage() {
                 <img
                   src={branding.logoRectangleUrl}
                   alt={branding.name}
-                  className="h-24 max-w-full object-contain"
+                  className="h-12 max-w-full object-contain"
                 />
               ) : (
                 <div className="flex items-center gap-3">

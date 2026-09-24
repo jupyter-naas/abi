@@ -135,14 +135,24 @@ describe('pickPaneOfficeAgent', () => {
 });
 
 describe('officeSurfaceFromPath', () => {
+  it('binds Sheets only from its route segment', () => {
+    expect(officeSurfaceFromPath('/workspace/ws-1/sheets/board-documents')).toEqual({
+      onSlides: false, onDocuments: false, onSheets: true,
+    });
+    expect(officeSurfaceFromPath('/workspace/ws-1/documents/sheets')).toEqual({
+      onSlides: false, onDocuments: true, onSheets: false,
+    });
+  });
   it('binds Slides from the slides route, not a leftover document slug', () => {
     expect(officeSurfaceFromPath('/workspace/ws-1/slides')).toEqual({
       onSlides: true,
       onDocuments: false,
+      onSheets: false,
     });
     expect(officeSurfaceFromPath('/workspace/ws-1/slides/untitled-1')).toEqual({
       onSlides: true,
       onDocuments: false,
+      onSheets: false,
     });
   });
 
@@ -150,6 +160,7 @@ describe('officeSurfaceFromPath', () => {
     expect(officeSurfaceFromPath('/workspace/ws-1/documents')).toEqual({
       onSlides: false,
       onDocuments: true,
+      onSheets: false,
     });
   });
 
@@ -157,14 +168,17 @@ describe('officeSurfaceFromPath', () => {
     expect(officeSurfaceFromPath('/workspace/ws-1/slides/board-documents')).toEqual({
       onSlides: true,
       onDocuments: false,
+      onSheets: false,
     });
     expect(officeSurfaceFromPath('/workspace/ws-1/documents/q3-slides')).toEqual({
       onSlides: false,
       onDocuments: true,
+      onSheets: false,
     });
     expect(officeSurfaceFromPath('/workspace/ws-1/chat')).toEqual({
       onSlides: false,
       onDocuments: false,
+      onSheets: false,
     });
   });
 });

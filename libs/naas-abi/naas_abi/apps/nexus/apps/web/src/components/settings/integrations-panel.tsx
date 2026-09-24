@@ -19,6 +19,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { discardDeferredStorage } from '@/lib/deferred-storage';
 import {
   useIntegrationsStore,
   type ProviderConfig,
@@ -72,6 +73,7 @@ export function IntegrationsPanel() {
 
   const resetConfig = () => {
     if (confirm('Reset all model and agent configurations to defaults?')) {
+      discardDeferredStorage(['nexus-integrations', 'nexus-agents']);
       localStorage.removeItem('nexus-integrations');
       localStorage.removeItem('nexus-agents');
       window.location.reload();

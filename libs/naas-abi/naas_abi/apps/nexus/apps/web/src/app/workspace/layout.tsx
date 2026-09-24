@@ -7,6 +7,7 @@ import { ShellTitleProvider } from '@/components/shell/shell-title';
 import { TopNavProvider } from '@/components/shell/topnav-content';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { clearAuthFlagCookie } from '@/lib/auth-session';
+import { discardDeferredStorage } from '@/lib/deferred-storage';
 import { useAuthStore } from '@/stores/auth';
 
 // Catches unhandled promise rejections (not caught by React error boundaries)
@@ -109,6 +110,7 @@ class WorkspaceErrorBoundary extends Component<
                 </button>
                 <button
                   onClick={() => {
+                    discardDeferredStorage(['nexus-workspace-storage']);
                     localStorage.removeItem('nexus-workspace-storage');
                     localStorage.removeItem('nexus-auth-storage');
                     window.location.href = '/auth/login';

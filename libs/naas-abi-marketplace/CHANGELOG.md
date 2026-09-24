@@ -2,6 +2,99 @@
 
 <!-- version list -->
 
+## v3.53.1 (2026-09-23)
+
+### Bug Fixes
+
+- **x/orchestrations**: Improve dataset sync and app publish logic in
+  XSearchRecentTweetsEventOrchestration
+  ([`9692ab0`](https://github.com/jupyter-naas/abi/commit/9692ab0c3c639927bb4afb6e38c33e0e585b95d6))
+
+
+## v3.53.0 (2026-09-23)
+
+### Features
+
+- **x_proxy**: Add envelope_paths_in_dataset bulk lookup and recent tweets file filtering
+  ([`b466ef4`](https://github.com/jupyter-naas/abi/commit/b466ef4fa3210cf66ff82d8118d54ba5050a6a0e))
+
+
+## v3.52.0 (2026-09-22)
+
+### Features
+
+- **x_reprocess**: Add observability and progress logging to envelope reprocessing
+  ([`b4f4998`](https://github.com/jupyter-naas/abi/commit/b4f49985cedeb3276d69c9b916a65b3692e1dde8))
+
+
+## v3.51.0 (2026-09-22)
+
+### Bug Fixes
+
+- Ruff error
+  ([`ec392bb`](https://github.com/jupyter-naas/abi/commit/ec392bb417000518a4cb75d3a827a73d39f81874))
+
+- Ruff errors
+  ([`5789a1e`](https://github.com/jupyter-naas/abi/commit/5789a1eb2b27053c2aed20dda1169976e00c0a9b))
+
+- Ruff EXE001 flag
+  ([`abe806f`](https://github.com/jupyter-naas/abi/commit/abe806f484482b03a0f1e66d1b9c6c43bddb5949))
+
+- **canonical**: Dedupe authors in canonical dataset query
+  ([`db60b19`](https://github.com/jupyter-naas/abi/commit/db60b1958827c97e0507848acc29aff1d66cd198))
+
+- **dataset**: Add check and refresh for dataset-spec COMMENT in DuckLake tables
+  ([`f7f6042`](https://github.com/jupyter-naas/abi/commit/f7f604290e553ede370ead8df194bb11aadc9eb3))
+
+- **graph-explorer**: Update graph explorer and related services with enhancements and fixes
+  ([`ba578e3`](https://github.com/jupyter-naas/abi/commit/ba578e32a07db36be1810ff62349e4b0fd86a4c2))
+
+- **sync**: Reorder imports for clarity in dataset sync and test scripts
+  ([`deab3a4`](https://github.com/jupyter-naas/abi/commit/deab3a4d4ef4536fb56aaa574780602b5063427c))
+
+- **x**: Fix errors and add pending-from-audit option to backfill_x_datasets
+  ([`442f6d7`](https://github.com/jupyter-naas/abi/commit/442f6d700c58353998b92c791b4b4d7288807627))
+
+- **x/scripts**: Update docs and suppress LangChain deprecation warnings
+  ([`de35b58`](https://github.com/jupyter-naas/abi/commit/de35b58614a99531749d5ffe79eeb0afc131c7a4))
+
+- **x_proxy**: Apply staged changes including deletions and refactors
+  ([`2dd0122`](https://github.com/jupyter-naas/abi/commit/2dd01222956e1ea267630a094fc3e2bf1a87eb9a))
+
+- **x_proxy**: Deduplicate authors in dataset queries and add tests
+  ([`b29f57b`](https://github.com/jupyter-naas/abi/commit/b29f57b648106966ef2bf512cbf238438669f474))
+
+- **x_proxy**: Update imports and fix references in envelope bookkeeping and related scripts
+  ([`f65f62f`](https://github.com/jupyter-naas/abi/commit/f65f62f2de834a2b85f5be8ea2cc77355a2bba38))
+
+### Features
+
+- **orchestrations**: Add default run configs for launchpad jobs
+  ([`58d8a21`](https://github.com/jupyter-naas/abi/commit/58d8a216b7383bda7a0fb324067607ecdcb7714a))
+
+- **x/orchestrations**: Add skip_graph_map option and improve file reprocessing logic
+  ([`b0dabef`](https://github.com/jupyter-naas/abi/commit/b0dabef8171442c7e68e94e74de85aa05d9867d7))
+
+- **x_proxy**: Add envelope bookkeeping audit and tests
+  ([`c339afc`](https://github.com/jupyter-naas/abi/commit/c339afc026ba7612ff71066687f1925bea30f8ef))
+
+
+## v3.50.0 (2026-09-21)
+
+### Bug Fixes
+
+- **x-proxy-dataset**: Apply various minor fixes and updates
+  ([`6becfb5`](https://github.com/jupyter-naas/abi/commit/6becfb51527d799a4222f2c5243a690935d19386))
+
+- **x-proxy-dataset-service**: Minor code cleanups and fixes
+  ([`a7528e5`](https://github.com/jupyter-naas/abi/commit/a7528e5b1ec3ecd1356e59ad78cc0730de96c94f))
+
+### Chores
+
+- **scripts**: Remove shebang lines from x dataset scripts
+  ([`82e237c`](https://github.com/jupyter-naas/abi/commit/82e237c5acb848de2d4d7b7a74cf780b2b1cc66e))
+
+
 ## v3.49.1 (2026-09-18)
 
 ### Bug Fixes

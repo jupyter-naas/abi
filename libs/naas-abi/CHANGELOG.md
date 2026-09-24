@@ -2,6 +2,136 @@
 
 <!-- version list -->
 
+## v2.73.5 (2026-09-24)
+
+### Bug Fixes
+
+- **auth**: Lock registration, guard Ollama routes, enforce sign-in rate limits
+  ([`df2a296`](https://github.com/jupyter-naas/abi/commit/df2a296a88ca4d3da6a1846cc175b76d46525edb))
+
+
+## v2.73.4 (2026-09-24)
+
+### Bug Fixes
+
+- **auth**: Remove default admin passwords and API key
+  ([`731802c`](https://github.com/jupyter-naas/abi/commit/731802cce3fe0aaf3367331ee8216df78a2cbbf9))
+
+### Testing
+
+- **auth**: Generate the custom seed password instead of a literal
+  ([`dae7107`](https://github.com/jupyter-naas/abi/commit/dae71072ab2bd36b611ec59d783708d2846b411c))
+
+
+## v2.73.3 (2026-09-24)
+
+### Bug Fixes
+
+- **api**: Remove the /token endpoint that issued ABI_API_KEY
+  ([`101085f`](https://github.com/jupyter-naas/abi/commit/101085f5dbcd209a7d8614b858f7a75fe9ff23cb))
+
+### Code Style
+
+- **naas_abi**: Sort imports after the tools move
+  ([`d0b1e77`](https://github.com/jupyter-naas/abi/commit/d0b1e77cb9de0f1ea414816a2e5b0535d0f77935))
+
+### Refactoring
+
+- Nexus shell
+  ([`9386e60`](https://github.com/jupyter-naas/abi/commit/9386e60a2af4d2a350120bab7d0b1273142728a5))
+
+- **naas_abi**: Move agents/tools to the module root
+  ([`36f6284`](https://github.com/jupyter-naas/abi/commit/36f628425ac59121c8c85bab53a5e0fa40002785))
+
+
+## v2.73.2 (2026-09-23)
+
+### Bug Fixes
+
+- **nexus**: Renew user sessions automatically
+  ([#1251](https://github.com/jupyter-naas/abi/pull/1251),
+  [`d331489`](https://github.com/jupyter-naas/abi/commit/d3314893a7b21e18c49e8f6d59aa7c533903b77b))
+
+
+## v2.73.1 (2026-09-22)
+
+### Bug Fixes
+
+- **nexus/files**: Render markdown and CSV cleanly in preview.
+  ([#1295](https://github.com/jupyter-naas/abi/pull/1295),
+  [`93a2d87`](https://github.com/jupyter-naas/abi/commit/93a2d87e4df01514f43e57ac160217d0834f3754))
+
+
+## v2.73.0 (2026-09-22)
+
+### Features
+
+- **nexus**: Native Sheets editor, formulas, resizing, and SheetsAgent
+  ([#1297](https://github.com/jupyter-naas/abi/pull/1297),
+  [`135967f`](https://github.com/jupyter-naas/abi/commit/135967f33be441c7afa9f4d82e7f1f40a4c7c465))
+
+
+## v2.72.5 (2026-09-22)
+
+### Bug Fixes
+
+- **graph**: Handle additional exceptions in graph primary adapter and improve instance pairs query
+  ([`345d35d`](https://github.com/jupyter-naas/abi/commit/345d35db63f528b12a1d0e2f23b9c7ca4c08774e))
+
+- **graph**: Limit dataset to graphs pinned by VALUES clause
+  ([`8c1b85c`](https://github.com/jupyter-naas/abi/commit/8c1b85c358e8587a358d86f656e90dd17b1241d1))
+
+- **graph**: Update explorer and graph service with improved snapshot metrics and error handling
+  ([`583c3d8`](https://github.com/jupyter-naas/abi/commit/583c3d8f70a89816028fb3e78ea9c26b7a1c4d3d))
+
+- **graph-explorer**: Remove parallel executor and fix loading message
+  ([`1569f40`](https://github.com/jupyter-naas/abi/commit/1569f40b87076468644d521c98b10ff03337e02a))
+
+- **graph-explorer**: Update graph explorer and related services with enhancements and fixes
+  ([`ba578e3`](https://github.com/jupyter-naas/abi/commit/ba578e32a07db36be1810ff62349e4b0fd86a4c2))
+
+- **nexus**: Improve graph class counts and loading state handling
+  ([`7e39104`](https://github.com/jupyter-naas/abi/commit/7e39104d5106b8732792820790c254e92b1863c4))
+
+
+## v2.72.4 (2026-09-21)
+
+### Bug Fixes
+
+- **nexus**: Align sidebar rows to 12px and drop app menu hover rings.
+  ([`2304325`](https://github.com/jupyter-naas/abi/commit/23043258e933ad57416bf9181aae057dbbd7b85f))
+
+- **nexus**: Open Files on comfortable spacing by default.
+  ([`5ad72ab`](https://github.com/jupyter-naas/abi/commit/5ad72ab8a52fa4a4d3ffa43e475bd56023709e9e))
+
+- **nexus**: Restore orthogonal ontology connectors and turn Files into a real explorer.
+  ([`1a68145`](https://github.com/jupyter-naas/abi/commit/1a68145f9d252ebdb900b2a50755f60c50d6fbea))
+
+
+## v2.72.3 (2026-09-21)
+
+### Bug Fixes
+
+- **nexus-web**: Pack dock icons instead of compressing them
+  ([`d7c5782`](https://github.com/jupyter-naas/abi/commit/d7c5782737cfd04e9d5bdea35f030bfe0c8fbd73))
+
+
+## v2.72.2 (2026-09-21)
+
+### Bug Fixes
+
+- **graph**: Avoid label aggregate alias collisions in Fuseki
+  ([`12e2765`](https://github.com/jupyter-naas/abi/commit/12e27652b1b01040f310bf6e204cb6931c895f31))
+
+
+## v2.72.1 (2026-09-21)
+
+### Bug Fixes
+
+- **auth**: Halve login wordmark height
+  ([`7034343`](https://github.com/jupyter-naas/abi/commit/70343431062eb186ab529b87e4ff4227be6bc48d))
+
+
 ## v2.72.0 (2026-09-21)
 
 ### Bug Fixes

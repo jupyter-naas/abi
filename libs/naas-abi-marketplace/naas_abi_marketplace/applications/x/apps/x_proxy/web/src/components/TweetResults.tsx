@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAppState } from "@/components/AppProvider";
 import { hrefFor } from "@/lib/routes";
+import { highlightSearchNeedle } from "@/lib/highlightSearchNeedle";
 import {
   rankTweets,
   TWEET_RESULTS_PAGE_SIZE,
@@ -86,7 +87,8 @@ export function TweetResults({
     [hits, serverPaged, submitted],
   );
   const graphTotal = graph?.posts ?? null;
-  const resultTotal = total ?? graphTotal;
+  /** Dataset browse/search: trust API count, not stale publish graph. */
+  const resultTotal = serverPaged ? total ?? null : total ?? graphTotal;
 
   const goToPage = (next: number) => {
     onPageChange(next);
@@ -152,16 +154,26 @@ export function TweetResults({
           this publish carries. A submitted needle pages its own matches. */}
       <p className="results-count">
         {submitted
-          ? `${(total ?? matches.length).toLocaleString()} result${
-              (total ?? matches.length) === 1 ? "" : "s"
+          ? `${(resultTotal ?? matches.length).toLocaleString()} result${
+              (resultTotal ?? matches.length) === 1 ? "" : "s"
             } for “${submitted}”`
-          : graphTotal != null
-            ? `${graphTotal.toLocaleString()} result${
-                graphTotal === 1 ? "" : "s"
-              } in the X graph`
-            : `${matches.length.toLocaleString()} published post${
-                matches.length === 1 ? "" : "s"
-              }`}
+          : serverPaged
+            ? loading && resultTotal == null
+              ? "Loading post count…"
+              : resultTotal != null
+                ? `${resultTotal.toLocaleString()} result${
+                    resultTotal === 1 ? "" : "s"
+                  } in the X graph`
+                : `${matches.length.toLocaleString()} published post${
+                    matches.length === 1 ? "" : "s"
+                  }`
+            : graphTotal != null
+              ? `${graphTotal.toLocaleString()} result${
+                  graphTotal === 1 ? "" : "s"
+                } in the X graph`
+              : `${matches.length.toLocaleString()} published post${
+                  matches.length === 1 ? "" : "s"
+                }`}
         {pages > 1 ? ` · page ${current + 1}/${pages.toLocaleString()}` : ""}
       </p>
 
@@ -184,12 +196,14 @@ export function TweetResults({
           const title = [hit.id, hit.username ? `@${hit.username}` : ""]
             .filter(Boolean)
             .join(" - ");
-          const facts = [
+          const factNodes: ReactNode[] = [
             formatInstant(hit.createdAt, timezone),
             hit.referenced ? "Referenced" : "",
-            hit.location,
+            hit.location
+              ? highlightSearchNeedle(hit.location, submitted)
+              : "",
             hit.mediaCount ? `${hit.mediaCount} media` : "",
-          ].filter(Boolean);
+          ].filter((part) => part !== "" && part != null);
           return (
             <li className="result" key={hit.id || hit.url || start + index}>
               <div className="result-main">
@@ -202,7 +216,7 @@ export function TweetResults({
                       className="result-author"
                       href={hrefFor("users", { user: hit.username })}
                     >
-                      {hit.username}
+                      {highlightSearchNeedle(hit.username, submitted)}
                     </Link>
                   ) : (
                     "-"
@@ -228,9 +242,20 @@ export function TweetResults({
                 ) : (
                   <span className="result-title as-text">{title || "-"}</span>
                 )}
-                <p className="result-snippet">{hit.text || "-"}</p>
-                {facts.length ? (
-                  <p className="result-facts">{facts.join(" · ")}</p>
+                <p className="result-snippet">
+                  {submitted && hit.text
+                    ? highlightSearchNeedle(hit.text, submitted)
+                    : hit.text || "-"}
+                </p>
+                {factNodes.length ? (
+                  <p className="result-facts">
+                    {factNodes.map((part, i) => (
+                      <span key={i}>
+                        {i > 0 ? " · " : null}
+                        {part}
+                      </span>
+                    ))}
+                  </p>
                 ) : null}
                 {hit.queries.length ? (
                   <p className="result-meta">

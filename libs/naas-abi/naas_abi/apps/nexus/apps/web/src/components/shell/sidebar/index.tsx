@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Folder, Database, Code, Presentation, FileText, LayoutGrid, Store, Settings, Activity, Home, Blocks,
+  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Files, Database, Code, Presentation, FileText, Table2, LayoutGrid, Store, Settings, Activity, Home, Blocks, MoreHorizontal,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -17,6 +17,7 @@ import {
   DEFAULT_NAV_ORDER,
   dragThresholdPx,
   insertIndexFromPoint,
+  layoutDockNav,
   LIFT_HOLD_MS,
   mergeNavOrder,
   moveNavItem,
@@ -38,14 +39,14 @@ type SectionDef = {
   label: string;
   description: string;
   href: string;
-  feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'documents' | 'settings.workspace';
+  feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'documents' | 'sheets' | 'settings.workspace';
   extraHref?: string;
 };
 
 const SECTIONS: SectionDef[] = [
   { id: 'home',        icon: <Home size={18} />,          label: 'Home',        description: 'Workspace overview and shortcuts',     href: '/home' },
   { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        description: 'Installed and available apps',          href: '/apps',        feature: 'apps' },
-  { id: 'files',       icon: <Folder size={18} />,        label: 'Files',       description: 'Browse and manage workspace files',     href: '/files',       feature: 'files' },
+  { id: 'files',       icon: <Files size={18} />,         label: 'Files',       description: 'Browse and manage workspace files',     href: '/files',       feature: 'files' },
   { id: 'chat',        icon: <MessageSquare size={18} />, label: 'Chat',        description: 'Conversations with Abi and your team',  href: '/chat',        feature: 'chat' },
   { id: 'search',      icon: <Search size={18} />,        label: 'Search',      description: 'Jump to anything in the workspace',     href: '/search',      feature: 'search' },
   { id: 'maps',        icon: <MapIcon size={18} />,       label: 'Maps',        description: 'Geographic and network presence maps',  href: '/maps',        feature: 'maps' },
@@ -54,6 +55,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'datasets',    icon: <Database size={18} />,      label: 'Datasets',    description: 'Manage structured datasets',            href: '/datasets',    feature: 'datasets' },
   { id: 'slides',      icon: <Presentation size={18} />,  label: 'Slides',      description: 'Create and edit presentation decks',    href: '/slides',      feature: 'slides' },
   { id: 'documents',   icon: <FileText size={18} />,      label: 'Documents',   description: 'Create and edit rich documents',        href: '/documents',   feature: 'documents' },
+  { id: 'sheets',      icon: <Table2 size={18} />,        label: 'Sheets',      description: 'Spreadsheets with HTML source and XLSX export', href: '/sheets', feature: 'sheets' },
   { id: 'code',        icon: <Code size={18} />,          label: 'Code',        description: 'Code editor and repositories',          href: '/code',        feature: 'code' },
   { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', description: 'Discover and install new apps',          href: '/marketplace', feature: 'marketplace' },
 ];
@@ -76,7 +78,15 @@ export function Sidebar() {
     top: number;
     left: number;
   } | null>(null);
+  const [navMeasure, setNavMeasure] = useState<{ available: number; item: number; padding: number } | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  // Section the user just clicked, highlighted before the route commits so the
+  // dock answers the click immediately instead of after the page renders.
+  const [pendingSection, setPendingSection] = useState<{ id: SidebarSection; from: string } | null>(null);
+  const [morePos, setMorePos] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
   const navRef = useRef<HTMLElement>(null);
+  const moreBtnRef = useRef<HTMLButtonElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dropIndexRef = useRef<number | null>(null);
@@ -101,18 +111,20 @@ export function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const {
-    currentWorkspaceId,
-    activePanelSection,
-    setActivePanelSection,
-    sidebarNavOrder,
-    setSidebarNavOrder,
-    dockWidth,
-    setDockWidth,
-  } = useWorkspaceStore();
+  // Field selectors, not the whole store: the dock used to re-render on every
+  // workspace/files/ontology store update (streamed chat tokens, file lists,
+  // ontology loads), which made section switches pay for a full dock render.
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const activePanelSection = useWorkspaceStore((s) => s.activePanelSection);
+  const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
+  const sidebarNavOrder = useWorkspaceStore((s) => s.sidebarNavOrder);
+  const setSidebarNavOrder = useWorkspaceStore((s) => s.setSidebarNavOrder);
+  const dockWidth = useWorkspaceStore((s) => s.dockWidth);
+  const setDockWidth = useWorkspaceStore((s) => s.setDockWidth);
 
-  const { fetchFiles, setActiveSource } = useFilesStore();
-  const { fetchItems: fetchOntology } = useOntologyStore();
+  const fetchFiles = useFilesStore((s) => s.fetchFiles);
+  const setActiveSource = useFilesStore((s) => s.setActiveSource);
+  const fetchOntology = useOntologyStore((s) => s.fetchItems);
 
   const canMaps = useFeature('maps');
   const canChat = useFeature('chat');
@@ -126,6 +138,7 @@ export function Sidebar() {
   const canCode = useFeature('code');
   const canSlides = useFeature('slides');
   const canDocuments = useFeature('documents');
+  const canSheets = useFeature('sheets');
   const canSettingsWorkspace = useFeature('settings.workspace');
   const isSuperadmin = useAuthStore((s) => !!s.user?.is_superadmin);
 
@@ -155,6 +168,10 @@ export function Sidebar() {
     if (urlSection?.id === 'files' && canFiles) { fetchFiles(); }
     if (urlSection?.id === 'ontology' && canOntology) { fetchOntology(); }
   }, [urlSection?.id, currentWorkspaceId, canFiles, canOntology, fetchFiles, fetchOntology]);
+
+  useEffect(() => {
+    setPendingSection(null);
+  }, [pathname]);
 
   const lastReconciledPathRef = useRef<string | null>(null);
   useEffect(() => {
@@ -196,11 +213,16 @@ export function Sidebar() {
     if (feature === 'code') return !!canCode;
     if (feature === 'slides') return !!canSlides;
     if (feature === 'documents') return !!canDocuments;
+    if (feature === 'sheets') return !!canSheets;
     if (feature === 'settings.workspace') return !!canSettingsWorkspace;
     return true;
   };
 
+  // Pending until the pathname moves off the one the click started from.
+  const pendingId = pendingSection && pendingSection.from === pathname ? pendingSection.id : null;
+
   const isSectionActive = (section: SectionDef) => {
+    if (pendingId) return pendingId === section.id;
     const base = getWorkspacePath(currentWorkspaceId, section.href);
     if (pathname.startsWith(base)) return true;
     if (section.extraHref) {
@@ -217,9 +239,22 @@ export function Sidebar() {
       .filter((s) => isFeatureEnabled(s.feature))
       .sort((a, b) => (index.get(a.id) ?? 999) - (index.get(b.id) ?? 999));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sidebarNavOrder, canMaps, canChat, canFiles, canDatasets, canApps, canMarketplace, canSearch, canOntology, canGraph, canCode, canSlides, canDocuments]);
+  }, [sidebarNavOrder, canMaps, canChat, canFiles, canDatasets, canApps, canMarketplace, canSearch, canOntology, canGraph, canCode, canSlides, canDocuments, canSheets]);
 
-  const getDefaultPath = useCallback((sectionId: SidebarSection): string => {
+  const dockLayout = layoutDockNav(
+    navMeasure?.available ?? Number.POSITIVE_INFINITY,
+    orderedSections.length,
+    navMeasure?.item ?? 40,
+    navMeasure?.padding ?? 24,
+  );
+  const visibleSections = dockLayout.scroll
+    ? orderedSections
+    : orderedSections.slice(0, dockLayout.visibleCount);
+  const overflowSections = dockLayout.scroll
+    ? []
+    : orderedSections.slice(dockLayout.visibleCount);
+
+  const getDefaultPath = useCallback((sectionId: SidebarSection): string | undefined => {
     switch (sectionId) {
       case 'home':     return getWorkspacePath(currentWorkspaceId, '/home');
       case 'maps':     return getWorkspacePath(currentWorkspaceId, '/maps/presence');
@@ -235,6 +270,7 @@ export function Sidebar() {
       case 'code':     return getWorkspacePath(currentWorkspaceId, '/code');
       case 'slides':   return getWorkspacePath(currentWorkspaceId, '/slides');
       case 'documents': return getWorkspacePath(currentWorkspaceId, '/documents');
+      case 'sheets':    return getWorkspacePath(currentWorkspaceId, '/sheets');
       case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
       case 'infrastructure': return getWorkspacePath(currentWorkspaceId, '/settings/infrastructure');
@@ -248,7 +284,8 @@ export function Sidebar() {
     if (!currentWorkspaceId) return;
     for (const section of orderedSections) {
       if (section.id === 'search') continue;
-      router.prefetch(getDefaultPath(section.id));
+      const path = getDefaultPath(section.id);
+      if (path) router.prefetch(path);
     }
   }, [currentWorkspaceId, getDefaultPath, orderedSections, router]);
 
@@ -259,22 +296,41 @@ export function Sidebar() {
       requestQuickOpen();
       return;
     }
+    const path = getDefaultPath(section.id);
+    // Navigating: only flip the dock highlight now. The pathname reconciler
+    // above opens the matching column when the route commits, so the column
+    // and the page swap together. Setting the store here rendered the whole
+    // new column synchronously inside pointerup (zustand updates are always
+    // sync), blocking the click for 100s of ms on heavy sections (Ontology).
+    const navigates = !!path && path.split('?')[0] !== pathname;
+    const navigate = () => {
+      if (!path) return;
+      setPendingSection({ id: section.id, from: pathname });
+      router.push(path);
+    };
+    // Query-only change (e.g. Ontology's restored route): the pathname stays
+    // put, so the reconciler will not run; switch the column here.
+    const pushQueryOnly = () => {
+      if (path && path !== pathname + window.location.search) router.push(path);
+    };
     if (section.id === 'home') {
+      // Closing is cheap, and the reconciler keeps a Workspaces panel open on
+      // Home, so an explicit Home click still closes whatever column is open.
       setActivePanelSection(null);
-      router.push(getDefaultPath(section.id));
+      if (navigates) navigate();
       return;
     }
     if (activePanelSection === section.id) {
       if (section.id === 'slides') {
         const gallery = getDefaultPath('slides');
-        if (isSlidesNestedPath(pathname, gallery)) {
+        if (gallery && isSlidesNestedPath(pathname, gallery)) {
           router.push(gallery);
           return;
         }
       }
       if (section.id === 'documents') {
         const gallery = getDefaultPath('documents');
-        if (isDocumentsNestedPath(pathname, gallery)) {
+        if (gallery && isDocumentsNestedPath(pathname, gallery)) {
           router.push(gallery);
           return;
         }
@@ -282,9 +338,14 @@ export function Sidebar() {
       setActivePanelSection(null);
       return;
     }
-    setActivePanelSection(section.id);
     if (section.id === 'files') setActiveSource('my-drive');
-    router.push(getDefaultPath(section.id));
+    if (navigates) {
+      navigate();
+      return;
+    }
+    // Same route (column was closed): no pathname change, so open it now.
+    setActivePanelSection(section.id);
+    pushQueryOnly();
   };
 
   const measureDropIndex = useCallback((clientY: number) => {
@@ -345,10 +406,11 @@ export function Sidebar() {
   };
 
   const commitItemDrag = useCallback((id: SidebarSection, insertIndex: number) => {
-    const visibleIds = orderedSections.map((s) => s.id);
+    const visibleIds = visibleSections.map((s) => s.id);
     const nextVisible = moveNavItem(visibleIds, id, insertIndex);
-    setSidebarNavOrder(mergeNavOrder(nextVisible, mergeNavOrder(sidebarNavOrder, DEFAULT_NAV_ORDER)));
-  }, [orderedSections, setSidebarNavOrder, sidebarNavOrder]);
+    const full = [...nextVisible, ...overflowSections.map((s) => s.id)];
+    setSidebarNavOrder(mergeNavOrder(full, mergeNavOrder(sidebarNavOrder, DEFAULT_NAV_ORDER)));
+  }, [overflowSections, setSidebarNavOrder, sidebarNavOrder, visibleSections]);
 
   const onItemPointerDown = (section: SectionDef, e: React.PointerEvent<HTMLButtonElement>) => {
     if (e.button !== 0) return;
@@ -359,7 +421,7 @@ export function Sidebar() {
     const nodes = root ? Array.from(root.querySelectorAll<HTMLElement>('[data-nav-id]')) : [];
     const origins = nodes.map((el) => el.getBoundingClientRect().top);
     const sizes = nodes.map((el) => el.getBoundingClientRect().height);
-    const fromIndex = orderedSections.findIndex((s) => s.id === section.id);
+    const fromIndex = visibleSections.findIndex((s) => s.id === section.id);
     const slot = origins.length > 1 ? origins[1] - origins[0] : rect.height + 4;
     itemDragRef.current = {
       id: section.id,
@@ -437,8 +499,70 @@ export function Sidebar() {
     endDragChrome();
   };
 
+  const placeMoreMenu = () => {
+    const btn = moreBtnRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const margin = 8;
+    const spaceBelow = window.innerHeight - rect.top - margin;
+    const spaceAbove = rect.bottom - margin;
+    const openUp = spaceBelow < 240 && spaceAbove > spaceBelow;
+    const maxHeight = Math.max(160, Math.min(384, openUp ? spaceAbove : spaceBelow));
+    setMorePos({
+      top: openUp ? Math.max(margin, rect.bottom - maxHeight) : Math.max(margin, rect.top),
+      left: Math.min(rect.right + margin, window.innerWidth - 232),
+      maxHeight,
+    });
+  };
+
+  useEffect(() => {
+    if (!dockLayout.overflow) setMoreOpen(false);
+  }, [dockLayout.overflow]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMoreOpen(false);
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (moreBtnRef.current?.contains(target) || moreMenuRef.current?.contains(target)) return;
+      setMoreOpen(false);
+    };
+    const onReposition = () => placeMoreMenu();
+    window.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('resize', onReposition);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('resize', onReposition);
+    };
+  }, [moreOpen, overflowSections.length]);
+
   const labeled = dockShowsLabels(dockWidth);
   const { isDragging: isResizing, handleDragStart } = useColumnResize(dockWidth, setDockWidth);
+
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const measure = () => {
+      if (itemDragRef.current?.lifted) return;
+      const cs = getComputedStyle(nav);
+      const padding = Math.round((parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0));
+      const sample = nav.querySelector<HTMLElement>('[data-nav-id], [data-dock-more]');
+      const item = Math.ceil(sample?.getBoundingClientRect().height || 40);
+      const available = Math.floor(nav.clientHeight);
+      setNavMeasure((prev) => {
+        if (prev && prev.available === available && prev.item === item && prev.padding === padding) return prev;
+        return { available, item, padding };
+      });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(nav);
+    return () => observer.disconnect();
+  }, [labeled, orderedSections.length]);
 
   // Collapsed dock has no room for labels, so a hover flyout carries the
   // section title + description instead of relying on the native title tooltip.
@@ -476,16 +600,21 @@ export function Sidebar() {
       <nav
         ref={navRef}
         className={cn(
-          'flex flex-1 flex-col gap-1 py-3',
+          'flex min-h-0 flex-1 flex-col py-3',
           // overflow-x-hidden matters: `overflow-y: auto` forces overflow-x to
           // compute to `auto` too, and at DOCK_WIDTH_MIN the vertical
-          // scrollbar leaves the 40px buttons + px-2 8px short — enough to
+          // scrollbar leaves the 40px buttons + px-2 8px short, enough to
           // raise a horizontal scrollbar across the foot of the dock.
-          draggingId ? 'overflow-visible' : 'overflow-y-auto overflow-x-hidden',
+          draggingId
+            ? 'overflow-visible'
+            : dockLayout.scroll
+              ? 'overflow-y-auto overflow-x-hidden scrollbar-none'
+              : 'overflow-y-hidden overflow-x-hidden',
           labeled ? 'px-2' : 'items-center px-2'
         )}
+        style={{ gap: dockLayout.gap }}
       >
-        {orderedSections.map((section, index) => {
+        {visibleSections.map((section, index) => {
           const active = isSectionActive(section);
           const isDragging = draggingId === section.id;
           const isPressed = pressedId === section.id && !isDragging;
@@ -504,7 +633,10 @@ export function Sidebar() {
               onPointerUp={(e) => onItemPointerUp(section, e)}
               onPointerCancel={onItemPointerCancel}
               onPointerEnter={(e) => {
-                if (section.id !== 'search') router.prefetch(getDefaultPath(section.id));
+                if (section.id !== 'search') {
+                  const path = getDefaultPath(section.id);
+                  if (path) router.prefetch(path);
+                }
                 showHoverTip(section, e.currentTarget);
               }}
               onPointerLeave={hideHoverTip}
@@ -519,7 +651,7 @@ export function Sidebar() {
               }}
               aria-label={section.label}
               className={cn(
-                'flex items-center rounded-lg touch-none outline-none focus-visible:ring-0',
+                'flex flex-shrink-0 items-center rounded-lg touch-none outline-none focus-visible:ring-0',
                 'hover:bg-workspace-accent-10 hover:text-workspace-accent',
                 active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-muted-foreground',
                 labeled ? 'w-full gap-3 py-2 pl-3 pr-4' : 'h-10 w-10 justify-center',
@@ -543,12 +675,47 @@ export function Sidebar() {
             </button>
           );
         })}
+        {overflowSections.length > 0 && (
+          <button
+            ref={moreBtnRef}
+            type="button"
+            data-dock-more=""
+            data-testid="dock-more"
+            aria-label="More"
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+            onClick={() => {
+              setHoverTip(null);
+              if (moreOpen) {
+                setMoreOpen(false);
+                return;
+              }
+              placeMoreMenu();
+              setMoreOpen(true);
+            }}
+            onPointerEnter={(e) => showHoverTip(
+              { id: 'dock-more', label: 'More', description: 'Sections that do not fit on the dock' },
+              e.currentTarget,
+            )}
+            onPointerLeave={hideHoverTip}
+            className={cn(
+              'flex flex-shrink-0 items-center rounded-lg outline-none focus-visible:ring-0',
+              'hover:bg-workspace-accent-10 hover:text-workspace-accent',
+              moreOpen || overflowSections.some((section) => isSectionActive(section))
+                ? 'bg-workspace-accent-15 text-workspace-accent'
+                : 'text-muted-foreground',
+              labeled ? 'w-full gap-3 py-2 pl-3 pr-4' : 'h-10 w-10 justify-center',
+            )}
+          >
+            <MoreHorizontal size={18} className="flex-shrink-0" />
+            {labeled && <span className="truncate text-sm font-medium">More</span>}
+          </button>
+        )}
       </nav>
 
       {/*
-        Pinned below the scrolling list only because it must stay in view — it
-        is the same column of destinations, so it carries no divider and no top
-        padding of its own.
+        Pinned below the main list so Settings stays in view.
+        Same column of destinations: no divider, no top padding of its own.
       */}
       <nav
         className={cn(
@@ -573,7 +740,7 @@ export function Sidebar() {
               aria-label={item.label}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'flex items-center rounded-lg transition-all outline-none focus-visible:ring-0',
+                'flex flex-shrink-0 items-center rounded-lg transition-all outline-none focus-visible:ring-0',
                 'hover:bg-workspace-accent-10 hover:text-workspace-accent',
                 active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-muted-foreground',
                 labeled ? 'w-full gap-3 py-2 pl-3 pr-4' : 'h-10 w-10 justify-center'
@@ -596,7 +763,7 @@ export function Sidebar() {
               onBlur={hideHoverTip}
               aria-label={section.label}
               className={cn(
-                'flex items-center rounded-lg transition-all outline-none focus-visible:ring-0',
+                'flex flex-shrink-0 items-center rounded-lg transition-all outline-none focus-visible:ring-0',
                 'hover:bg-workspace-accent-10 hover:text-workspace-accent',
                 active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-muted-foreground',
                 labeled ? 'w-full gap-3 py-2 pl-3 pr-4' : 'h-10 w-10 justify-center'
@@ -638,6 +805,44 @@ export function Sidebar() {
         >
           <span className="flex-shrink-0">{draggingSection.icon}</span>
           {labeled && <span className="truncate text-sm font-medium">{draggingSection.label}</span>}
+        </div>,
+        document.body,
+      )}
+
+      {moreOpen && mounted && morePos && overflowSections.length > 0 && createPortal(
+        <div
+          ref={moreMenuRef}
+          role="menu"
+          aria-label="More sections"
+          data-testid="dock-more-menu"
+          className="fixed z-[500] w-56 overflow-y-auto border border-border bg-background py-1 shadow-lg"
+          style={{ top: morePos.top, left: morePos.left, maxHeight: morePos.maxHeight }}
+        >
+          {overflowSections.map((section) => {
+            const active = isSectionActive(section);
+            return (
+              <button
+                key={section.id}
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMoreOpen(false);
+                  handleSectionClick(section);
+                }}
+                className={cn(
+                  'flex w-full items-center gap-3 px-3 py-2 text-left outline-none',
+                  'hover:bg-workspace-accent-10 hover:text-workspace-accent',
+                  active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-foreground',
+                )}
+              >
+                <span className="flex-shrink-0">{section.icon}</span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">{section.label}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{section.description}</span>
+                </span>
+              </button>
+            );
+          })}
         </div>,
         document.body,
       )}

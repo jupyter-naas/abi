@@ -290,6 +290,27 @@ aside.glass :focus-visible {
   @apply ring-0;
 }
 
+/* TopNav app menus (File / View / …): no focus ring around triggers. */
+[data-testid="app-menu-bar"] :focus-visible {
+  @apply outline-none ring-0;
+}
+
+/*
+ * Radix DropdownMenu content is portaled under body, so the app-menu-bar
+ * rule above never reaches it. Global :focus-visible { ring-2 ring-ring/30 }
+ * paints a green box-shadow (hsl(--ring)/30) around the open panel.
+ * Kill that paint unconditionally — not only on :focus — so it still wins
+ * when the panel is focused via keyboard.
+ */
+[data-radix-menu-content],
+[data-radix-popper-content-wrapper] [role='menu'] {
+  outline: none !important;
+  --tw-ring-width: 0px !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  box-shadow: none !important;
+}
+
 /* Subtle focus for glass cards */
 .glass-card:focus-within {
   border-color: var(--border-hex);
@@ -581,6 +602,41 @@ aside.glass :focus-visible {
 .shell-sidebar-list-row {
   font-size: 14px;
   line-height: 19px;
+}
+
+/* Files explorer only: match Ontology/KG sidebar density (12/18), keep shell listRow at 14/19. */
+.files-explorer-list-row {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* Slides sidebar tree only: same 12/18 density; Chat uses .chat-list-row in chat-components.css. */
+.slides-sidebar-list-row {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* Documents sidebar tree: same 12/18; keep global shell listRow at 14/19. */
+.documents-sidebar-list-row {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* Sheets sidebar tree: same 12/18; keep global shell listRow at 14/19. */
+.sheets-sidebar-list-row {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* Feature section list rows that previously used text-sm / shell listRow.
+   Workspaces stays on .shell-sidebar-list-row (14/19); it is a panel, not a dock section. */
+.apps-sidebar-list-row,
+.search-sidebar-list-row,
+.marketplace-sidebar-list-row,
+.settings-sidebar-list-row,
+.code-sidebar-list-row {
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .shell-sidebar-section-label {

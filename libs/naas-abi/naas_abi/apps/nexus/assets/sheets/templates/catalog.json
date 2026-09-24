@@ -1,0 +1,48 @@
+{
+  "templates": [
+    {
+      "id": "grid-light-v1",
+      "name": "Blank",
+      "description": "Empty workbook with a single sheet tab.",
+      "preview": {
+        "bg": "#f3f3f3",
+        "panel": "#ffffff",
+        "accent": "#1a73e8",
+        "ink": "#202124"
+      }
+    },
+    {
+      "id": "monthly-pnl-v1",
+      "name": "Monthly P&L",
+      "description": "Six-month P&L with revenue, COGS, gross margin, opex, EBITDA, and MoM growth.",
+      "preview": {
+        "bg": "#eef3f8",
+        "panel": "#ffffff",
+        "accent": "#0b57d0",
+        "ink": "#1f1f1f"
+      }
+    },
+    {
+      "id": "budget-vs-actuals-v1",
+      "name": "Budget vs Actuals",
+      "description": "Budget, actuals, variance, and variance % with a headcount payroll tab.",
+      "preview": {
+        "bg": "#f1f5f0",
+        "panel": "#ffffff",
+        "accent": "#137333",
+        "ink": "#1f1f1f"
+      }
+    },
+    {
+      "id": "cash-runway-v1",
+      "name": "Cash Runway",
+      "description": "Twelve-month cash rollforward with runway months and a hiring-cost plan.",
+      "preview": {
+        "bg": "#f7f2ea",
+        "panel": "#ffffff",
+        "accent": "#b06000",
+        "ink": "#1f1f1f"
+      }
+    }
+  ]
+}

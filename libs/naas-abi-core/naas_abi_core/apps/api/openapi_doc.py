@@ -98,7 +98,7 @@ API_LANDING_HTML = """
 <html>
     <head>
         <title>[TITLE]</title>
-        <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+        <link rel="icon" type="image/x-icon" href="[FAVICON_URL]">
         <style>
             body {
                 font-family: Arial, sans-serif;
@@ -140,9 +140,9 @@ API_LANDING_HTML = """
         </style>
     </head>
     <body>
-        <img src="/static/[LOGO_NAME]" alt="Logo" class="logo">
+        <img src="[LOGO_URL]" alt="Logo" class="logo">
         <h1>Welcome to [TITLE]!</h1>
-        <p>[TITLE] is a tool that allows you to interact with ABI's capabilities for business process automation and intelligence.</p>
+        <p>[DESCRIPTION]</p>
         <div class="buttons">
             <a href="/redoc">Go to Documentation</a>
         </div>

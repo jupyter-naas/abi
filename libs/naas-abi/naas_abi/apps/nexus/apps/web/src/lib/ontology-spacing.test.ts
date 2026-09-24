@@ -13,6 +13,9 @@ test('spacing menu preserves accumulated filters and inspection when changing di
   }
   assert.equal(ontologySpacing('spacing=invalid').value, 'compact');
   assert.equal(ontologySpacing('').value, 'compact');
+  assert.equal(ontologySpacing('', 'comfortable').value, 'comfortable');
+  assert.equal(ontologySpacing('spacing=compact', 'comfortable').value, 'compact');
+  assert.equal(ontologySpacing('spacing=invalid', 'comfortable').value, 'comfortable');
 });
 
 test('system and process overviews spread positions without scaling boxes or losing identity', () => {

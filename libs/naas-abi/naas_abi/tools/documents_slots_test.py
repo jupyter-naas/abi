@@ -1,0 +1,240 @@
+from naas_abi.tools.documents_commands import leftover_placeholders
+from naas_abi.tools.documents_slots import (
+    ensure_title_slot_is_h1,
+    fill_document_slots,
+)
+
+_SEED = """<!doctype html><html><head><title>Document title</title></head><body>
+<main class="document">
+<section class="page cover" data-layout="cover">
+  <div class="doc-body">
+    <h1 data-slot="title">Document title</h1>
+    <p class="subtitle" data-slot="subtitle">Industry or service line</p>
+    <p class="intro" data-slot="intro">Introduction. State the situation in a few sentences so the reader can scan the page before the body.</p>
+    <p class="note" data-slot="note">Header text alternates between True Blue and Dark Space. Body copy stays Outer Space.</p>
+    <div class="palette" aria-label="Forvis Mazars colour palette"><div class="swatch">#464B4B</div></div>
+  </div>
+  <footer class="doc-footer"><span class="doc-footer-title">Document title, industry or service line</span></footer>
+</section>
+<section class="page content" data-layout="content">
+  <div class="doc-body">
+    <h2 data-slot="section-0">Discussion</h2>
+    <p data-slot="section-0-body">Develop the argument here. Keep paragraphs short. This heading uses the official Heading 1 style.</p>
+    <ul data-slot="section-0-list">
+      <li>First point, written as a complete sentence.</li>
+    </ul>
+    <h3 data-slot="section-1">Supporting detail</h3>
+    <p data-slot="section-1-body">Heading 2 stays Outer Space. Use it when the section is still the same topic.</p>
+    <blockquote data-slot="quote">Use the Quote style for a short extract that must stand apart from the body.</blockquote>
+    <h4 data-slot="section-2">A narrower point</h4>
+    <p data-slot="section-2-body">Heading 3 uses the mid blue. Hyperlinks in copy look like x.</p>
+  </div>
+  <footer class="doc-footer"><span class="doc-footer-title">Document title, industry or service line</span></footer>
+</section>
+<section class="page tables" data-layout="tables">
+  <div class="doc-body">
+    <h2 data-slot="tables-heading">Findings</h2>
+    <p data-slot="tables-intro">Two official table styles. Replace the labels. Do not put confidential figures in a seed.</p>
+    <h3 data-slot="table-0-heading">Non shaded</h3>
+    <table class="fmz-table" data-slot="table-0">
+      <thead><tr><th>Topic</th><th>Owner</th><th>Status</th></tr></thead>
+      <tbody><tr><td>Scope</td><td>Lead</td><td>Open</td></tr></tbody>
+    </table>
+    <h3 data-slot="table-1-heading">Shaded</h3>
+    <table class="fmz-shaded" data-slot="table-1">
+      <thead><tr><th>Item</th><th>Note</th></tr></thead>
+      <tbody><tr><td>Assumption</td><td>Replace with the working premise.</td></tr></tbody>
+    </table>
+  </div>
+  <footer class="doc-footer"><span class="doc-footer-title">Document title, industry or service line</span></footer>
+</section>
+</main></body></html>"""
+
+_COMPLETE = {
+    "title": "Memo executif audit et conseil",
+    "subtitle": "Synthese board, semaine du 1 au 12 septembre 2026",
+    "intro": "Les cabinets font face a une fronde anti-ESG aux Etats-Unis et a un fini de cadre deontologique en France.",
+    "note": "Confidentiel. Sources: AEF, CNCC, H2A. Periode: 1-12 septembre 2026.",
+    "quote": "La fronde vise desormais ceux qui certifient et conseillent.",
+    "sections": [
+        {
+            "heading": "Faits marquants",
+            "body": "Seize procureurs generaux ont vise le Big Four le 4 septembre pour activisme climatique.",
+            "bullets": [
+                "Le decret 2026-176 integre les OTI au code de deontologie.",
+                "Les Big Four poursuivent leurs restructurations europeennes.",
+                "La correction Quemener a ete confirmee par le Conseil d Etat.",
+            ],
+        },
+        {
+            "heading": "Ce que cela change",
+            "body": "Les mandats transatlantiques doivent documenter les engagements climatiques avec plus de prudence.",
+        },
+        {
+            "heading": "Point de vigilance",
+            "body": "Le board doit arbitrer l exposition ESG americaine avant la rentre des campagnes 2027.",
+        },
+    ],
+    "tables_heading": "Signaux de la semaine",
+    "tables_intro": "Quatre themes a suivre: reglementaire US, cadre FR, concurrentiel, fiscalite.",
+    "tables": [
+        {
+            "heading": "Reglementaire",
+            "headers": ["Sujet", "Acteur", "Impact"],
+            "rows": [
+                ["Fronde ESG", "16 AG US", "Hausse"],
+                ["Decret 2026-176", "H2A", "Stable"],
+            ],
+        },
+        {
+            "heading": "A arbitrer",
+            "headers": ["Dossier", "Implication"],
+            "rows": [
+                ["Mandats US", "Revue de documentation ESG"],
+                ["Sous-traitance", "Suivi des restructurations"],
+            ],
+        },
+    ],
+}
+
+
+def test_fill_document_slots_clears_seed_copy() -> None:
+    result = fill_document_slots(_SEED, _COMPLETE)
+    assert result["ok"] is True
+    html = result["html"]
+    assert leftover_placeholders(html) == []
+    assert result["leftover_slots"] == []
+    assert result["missing_slots"] == []
+    assert result["incomplete"] is False
+    assert "section_index" in result
+    assert result["section_count"] >= 1
+    assert "Memo executif audit et conseil" in html
+    assert "Faits marquants" in html
+    assert "Signaux de la semaine" in html
+    assert "Sujet" in html
+    assert "Industry or service line" not in html
+    assert "Discussion" not in html
+    assert "Findings" not in html
+    assert "Topic" not in html
+    assert "palette" not in html
+    footer = html.lower().index("</footer>")
+    section = html.lower().index("</section>", footer)
+    assert not html[footer + len("</footer>") : section].strip()
+
+
+def test_fill_document_slots_rejects_empty_values() -> None:
+    result = fill_document_slots(_SEED, {**_COMPLETE, "intro": "   "})
+    assert result.get("error")
+    assert "intro" in result["error"]
+
+
+def test_fill_document_slots_lists_omitted_slots() -> None:
+    payload = {k: v for k, v in _COMPLETE.items() if k != "quote"}
+    result = fill_document_slots(_SEED, payload)
+    assert result["ok"] is True
+    assert "quote" in result["missing_slots"]
+    assert result["incomplete"] is True
+    assert "Use the Quote style" in result["html"]
+
+
+def test_fill_document_slots_rejects_unknown_keys() -> None:
+    result = fill_document_slots(_SEED, {**_COMPLETE, "soundtrack": "nope"})
+    assert "Unknown template field: soundtrack" in result["error"]
+
+
+def test_fill_title_writes_cover_h1_not_situation_heading() -> None:
+    html = """<!doctype html><html><head><title>Old</title></head><body>
+<main class="document">
+<section class="page cover" data-layout="cover">
+  <div class="doc-body">
+    <h1 class="fmz-title" data-slot="title">Old title</h1>
+    <p class="fmz-subtitle subtitle" data-slot="subtitle">Old subtitle</p>
+    <h2 class="fmz-heading-1" data-slot="situation-heading">Situation</h2>
+    <p class="fmz-normal" data-slot="situation">Old situation.</p>
+  </div>
+</section>
+<section class="page content" data-layout="content">
+  <div class="doc-body">
+    <h2 data-slot="section-0">Discussion</h2>
+    <p data-slot="section-0-body">Develop the argument here. Keep paragraphs short. This heading uses the official Heading 1 style.</p>
+    <h3 data-slot="section-1">Supporting detail</h3>
+    <p data-slot="section-1-body">Heading 2 stays Outer Space. Use it when the section is still the same topic.</p>
+    <blockquote data-slot="quote">Use the Quote style for a short extract that must stand apart from the body.</blockquote>
+    <h4 data-slot="section-2">A narrower point</h4>
+    <p data-slot="section-2-body">Heading 3 uses the mid blue. Hyperlinks in copy look like x.</p>
+  </div>
+</section>
+<section class="page tables" data-layout="tables">
+  <div class="doc-body">
+    <h2 data-slot="tables-heading">Findings</h2>
+    <p data-slot="tables-intro">Two official table styles. Replace the labels. Do not put confidential figures in a seed.</p>
+    <h3 data-slot="table-0-heading">Non shaded</h3>
+    <table class="fmz-table" data-slot="table-0">
+      <thead><tr><th>Topic</th><th>Owner</th><th>Status</th></tr></thead>
+      <tbody><tr><td>Scope</td><td>Lead</td><td>Open</td></tr></tbody>
+    </table>
+    <h3 data-slot="table-1-heading">Shaded</h3>
+    <table class="fmz-shaded" data-slot="table-1">
+      <thead><tr><th>Item</th><th>Note</th></tr></thead>
+      <tbody><tr><td>Assumption</td><td>Replace with the working premise.</td></tr></tbody>
+    </table>
+  </div>
+</section>
+</main></body></html>"""
+    result = fill_document_slots(html, {**_COMPLETE, "title": "Ce que c'est Palantir"})
+    assert result["ok"] is True
+    filled = result["html"]
+    assert 'data-slot="title">Ce que c\'est Palantir</h1>' in filled
+    assert 'data-slot="situation-heading">Situation</h2>' in filled
+    assert "Old title" not in filled
+
+
+def test_fill_title_promotes_h2_title_slot_to_h1() -> None:
+    raw = (
+        '<section class="page cover" data-layout="cover">'
+        '<h2 data-slot="title">Document title</h2>'
+        '<p class="subtitle" data-slot="subtitle">Industry or service line</p>'
+        "</section>"
+    )
+    promoted = ensure_title_slot_is_h1(raw)
+    assert '<h1 class="fmz-title" data-slot="title">Document title</h1>' in promoted
+    assert 'data-slot="title"' in promoted
+    assert "<h2" not in promoted
+
+
+def test_fill_document_slots_works_without_data_slot() -> None:
+    bare = _SEED.replace(' data-slot="title"', "")
+    bare = bare.replace(' data-slot="subtitle"', "")
+    bare = bare.replace(' data-slot="intro"', "")
+    bare = bare.replace(' data-slot="note"', "")
+    result = fill_document_slots(bare, _COMPLETE)
+    assert result["ok"] is True
+    assert "Synthese board" in result["html"]
+    assert leftover_placeholders(result["html"]) == []
+
+
+def test_fill_blank_creates_content_and_table_regions():
+    seed = '<main class="document"><section class="page"><div class="doc-body"><h1 data-slot="title">Title</h1><p data-slot="subtitle"></p><p data-slot="intro"></p></div><footer>Keep footer</footer></section></main>'
+    result = fill_document_slots(seed, _COMPLETE)
+    assert result["ok"], result
+    assert _COMPLETE["sections"][0]["body"] in result["html"]
+    assert "<table" in result["html"]
+    assert result["html"].index(_COMPLETE["sections"][0]["body"]) < result[
+        "html"
+    ].index("</div><footer>")
+
+
+def test_template_fields_are_filled_and_unknown_fields_rejected():
+    seed = _SEED.replace("</main>", '<p data-slot="client">[Client]</p></main>')
+    result = fill_document_slots(seed, {**_COMPLETE, "fields": {"client": "Acme & Co"}})
+    assert "Acme &amp; Co" in result.get("html", ""), result
+    assert "[Client]" not in result["html"]
+    bad = fill_document_slots(seed, {**_COMPLETE, "fields": {"clinet": "Acme"}})
+    assert "error" in bad
+
+
+def test_unfilled_business_fields_prevent_complete_result():
+    seed = _SEED.replace("</main>", '<p data-slot="client">[Client]</p></main>')
+    result = fill_document_slots(seed, _COMPLETE)
+    assert result["incomplete"]
+    assert "client" in result["missing_slots"]

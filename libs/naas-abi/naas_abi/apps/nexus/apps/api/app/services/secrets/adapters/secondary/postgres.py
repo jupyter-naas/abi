@@ -42,6 +42,10 @@ class SecretsSecondaryAdapterPostgres(SecretsPersistencePort):
             updated_at=model.updated_at,
         )
 
+    async def list_all(self) -> list[SecretRecord]:
+        result = await self.db.execute(select(SecretModel).order_by(SecretModel.id))
+        return [self._to_record(row) for row in result.scalars().all()]
+
     async def list_by_workspace(self, workspace_id: str) -> list[SecretRecord]:
         result = await self.db.execute(
             select(SecretModel)
