@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.26.2 (2026-09-24)
+
+### Bug Fixes
+
+- **auth**: Remove default admin passwords and API key
+  ([`731802c`](https://github.com/jupyter-naas/abi/commit/731802cce3fe0aaf3367331ee8216df78a2cbbf9))
+
+
 ## v2.26.1 (2026-09-24)
 
 ### Bug Fixes
