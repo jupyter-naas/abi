@@ -83,6 +83,16 @@ try:
         ),
     )
     engine.services.model_registry.register(
+        "demo-agent-chat",
+        ChatModel(
+            model_id="fake-agent",
+            provider="demo",
+            model=FakeListChatModel(
+                responses=[f"remote agent answer from PID {os.getpid()}"]
+            ),
+        ),
+    )
+    engine.services.model_registry.register(
         "demo-embedding",
         EmbeddingModel(
             model_id="fake-embedding",
