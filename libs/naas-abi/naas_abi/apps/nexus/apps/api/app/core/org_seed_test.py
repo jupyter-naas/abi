@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import bcrypt
 import pytest
@@ -10,6 +11,8 @@ from naas_abi.apps.nexus.apps.api.app.core.config import UserSeedConfig
 
 ADMIN = "admin@example.com"
 PASSWORD_KEY = "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD"
+# Generated per run: an operator-chosen value that is not a shipped default.
+CUSTOM = uuid4().hex
 
 
 class FakeSecrets:
@@ -65,11 +68,11 @@ def test_a_new_admin_never_gets_a_default_password_from_env(seed_admin, default:
 
 
 def test_a_new_admin_uses_a_custom_password_from_env(seed_admin) -> None:
-    secrets = FakeSecrets({"NEXUS_USER_ADMIN_EXAMPLE_COM_EMAIL": ADMIN, PASSWORD_KEY: "my-own-strong-pw"})
+    secrets = FakeSecrets({"NEXUS_USER_ADMIN_EXAMPLE_COM_EMAIL": ADMIN, PASSWORD_KEY: CUSTOM})
 
     session = seed_admin(None, secrets)
 
-    assert _matches("my-own-strong-pw", session.add.call_args.args[0].hashed_password)
+    assert _matches(CUSTOM, session.add.call_args.args[0].hashed_password)
 
 
 @pytest.mark.parametrize("default", ["Admin1234!", "admin"])
@@ -84,7 +87,7 @@ def test_an_existing_admin_with_a_default_password_is_rotated(seed_admin, defaul
 
 
 def test_an_existing_admin_with_a_real_password_is_left_alone(seed_admin) -> None:
-    original = _hash("my-own-strong-pw")
+    original = _hash(CUSTOM)
     user = SimpleNamespace(is_superadmin=True, hashed_password=original, updated_at=None)
     secrets = FakeSecrets()
 
