@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v2.73.3 (2026-09-24)
+
+### Bug Fixes
+
+- **api**: Remove the /token endpoint that issued ABI_API_KEY
+  ([`101085f`](https://github.com/jupyter-naas/abi/commit/101085f5dbcd209a7d8614b858f7a75fe9ff23cb))
+
+### Code Style
+
+- **naas_abi**: Sort imports after the tools move
+  ([`d0b1e77`](https://github.com/jupyter-naas/abi/commit/d0b1e77cb9de0f1ea414816a2e5b0535d0f77935))
+
+### Refactoring
+
+- Nexus shell
+  ([`9386e60`](https://github.com/jupyter-naas/abi/commit/9386e60a2af4d2a350120bab7d0b1273142728a5))
+
+- **naas_abi**: Move agents/tools to the module root
+  ([`36f6284`](https://github.com/jupyter-naas/abi/commit/36f628425ac59121c8c85bab53a5e0fa40002785))
+
+
 ## v2.73.2 (2026-09-23)
 
 ### Bug Fixes
