@@ -42,11 +42,13 @@ Create a `.env` at the repo root with the required keys:
 OPENROUTER_API_KEY=sk-or-...
 
 # Local admin login at http://localhost:3042/auth/login
+# Generate your own password; there is no default.
 NEXUS_USER_ADMIN_EMAIL=admin@example.com
-NEXUS_USER_ADMIN_PASSWORD=Admin1234!
 NEXUS_USER_ADMIN_EXAMPLE_COM_EMAIL=admin@example.com
-NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=Admin1234!
+NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=<output of: python -c "import secrets; print(secrets.token_urlsafe(24))">
 ```
+
+`abi new project`, `abi dev up` and `abi deploy local` write a generated password for you.
 
 For local mode (no internet, no API key required), set `ai_mode: "local"` in `config.yaml` and install Ollama.
 

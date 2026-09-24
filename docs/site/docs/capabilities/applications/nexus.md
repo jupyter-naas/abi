@@ -45,13 +45,7 @@ The web frontend is served at `http://localhost:9879` (or your configured port).
 
 ### Local development
 
-The local stack seeds a single admin account on first start. Default credentials:
-
-| Email | Password |
-|---|---|
-| `admin@example.com` | `Admin1234!` |
-
-The password is read from `.env` at seed time via `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`. Change it there before sharing the stack with others.
+The local stack seeds a single admin account, `admin@example.com`, on first start. There is no default password: it is generated per project and read from `.env` at seed time via `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`. Published defaults such as `admin` or `Admin1234!` are refused at login and replaced on boot.
 
 ### Password login vs. magic link
 

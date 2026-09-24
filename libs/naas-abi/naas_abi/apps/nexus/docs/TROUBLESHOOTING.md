@@ -242,9 +242,10 @@ curl http://localhost:8000/docs
 # If FastAPI docs load, API is running
 
 # 5. Check specific endpoint
+PASSWORD=$(grep '^NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=' .env | cut -d= -f2-)
 curl -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@example.com","password":"Admin1234!"}'
+  -d "{\"email\":\"admin@example.com\",\"password\":\"$PASSWORD\"}"
 ```
 
 ### CORS errors
@@ -415,14 +416,15 @@ curl -I http://localhost:8000/uploads/logos/test.png
 # 1. Check demo users exist
 docker exec nexus-postgres psql -U nexus -d nexus -c "SELECT email FROM users;"
 
-# 2. Check local admin credentials (set in .env)
-# Email: admin@example.com (NEXUS_USER_ADMIN_EMAIL)
-# Password: Admin1234!  (NEXUS_USER_ADMIN_PASSWORD)
+# 2. Check local admin credentials (generated into .env; there is no default)
+# Email: admin@example.com (NEXUS_USER_ADMIN_EXAMPLE_COM_EMAIL)
+# Password: NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD
+PASSWORD=$(grep '^NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=' .env | cut -d= -f2-)
 
 # 3. Check API login endpoint
 curl -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@example.com","password":"Admin1234!"}'
+  -d "{\"email\":\"admin@example.com\",\"password\":\"$PASSWORD\"}"
 # Should return {"access_token": "...", "refresh_token": "..."}
 
 # 4. Check browser console for errors

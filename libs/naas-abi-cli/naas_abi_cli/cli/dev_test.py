@@ -88,10 +88,11 @@ def test_api_preserves_preexisting_cors_origins(monkeypatch) -> None:
     assert "https://example.test" in captured["env"]["ABI_CORS_EXTRA_ORIGINS"].split(",")
 
 
-def test_api_env_defaults_abi_api_key(monkeypatch) -> None:
+def test_api_env_defaults_abi_api_key(monkeypatch, tmp_path) -> None:
     """Missing ABI_API_KEY must not leave the API child unauthenticated."""
     captured: dict = {}
     monkeypatch.delenv("ABI_API_KEY", raising=False)
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
     monkeypatch.setattr(
         dev,
         "_spawn",
@@ -100,7 +101,9 @@ def test_api_env_defaults_abi_api_key(monkeypatch) -> None:
 
     dev._launch_api(_spec("api", PORTS["api"]), PORTS)
 
-    assert captured["env"]["ABI_API_KEY"] == "abi"
+    key = captured["env"]["ABI_API_KEY"]
+    assert key and key != "abi"
+    assert f"ABI_API_KEY={key}" in (tmp_path / ".env").read_text()
 
 
 def test_api_env_preserves_explicit_abi_api_key(monkeypatch) -> None:
@@ -127,9 +130,21 @@ def test_ensure_default_api_key_writes_env_when_missing(
 
     key = dev._ensure_default_api_key_env()
 
-    assert key == "abi"
-    assert "ABI_API_KEY=abi" in env_file.read_text()
+    assert key != "abi" and len(key) >= 32
+    assert f"ABI_API_KEY={key}" in env_file.read_text()
     assert "OTHER=1" in env_file.read_text()
+
+
+def test_ensure_default_admin_env_generates_a_password(monkeypatch, tmp_path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=admin\n")
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+
+    email, password = dev._ensure_default_admin_env()
+
+    assert email == "admin@example.com"
+    assert password != "admin" and len(password) >= 24
+    assert f"NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD={password}" in env_file.read_text()
 
 
 def test_ensure_default_api_key_does_not_overwrite_env_file(
