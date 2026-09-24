@@ -356,9 +356,13 @@ class CapabilityAgent(Agent):
             """
             limit = max(1, min(int(limit), agent._search_limit))
             enabled = set(agent.enabled_tool_ids(state))
-            # Over-ask so tools outside the allow list don't starve the limit.
+            # The allow list filters inside the registry's widening search, so
+            # tools outside it never starve the limit.
             results = agent._tool_registry.search_tools(
-                query, context=agent._context(), limit=limit * 3
+                query,
+                context=agent._context(),
+                limit=limit,
+                where=lambda definition: agent._allowed(str(definition.id)),
             )
             candidates = [
                 {
@@ -371,8 +375,7 @@ class CapabilityAgent(Agent):
                     "enabled": r.tool_id in enabled,
                 }
                 for r in results
-                if agent._allowed(r.tool_id)
-            ][:limit]
+            ]
             return json.dumps(candidates)
 
         @tool("enable_capability")

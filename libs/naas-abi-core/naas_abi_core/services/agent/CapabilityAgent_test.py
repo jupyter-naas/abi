@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 from langchain_core.messages import AIMessage, ToolMessage
-from langchain_core.tools import tool
+from langchain_core.tools import StructuredTool, tool
 from langgraph.checkpoint.memory import MemorySaver
 from naas_abi_core.services.agent.Agent import AgentConfiguration, AgentSharedState
 from naas_abi_core.services.agent.CapabilityAgent import CapabilityAgent
@@ -709,3 +709,37 @@ def test_a_restored_capability_yields_to_a_static_tool_of_the_same_name(registry
     assert recorder.bound[0].count("create_issue") == 1
     assert _tool_messages(recorder)[-1].content == "static issue"
     assert issue_calls == []
+
+
+def test_search_widens_past_tools_outside_the_allow_list(registry):
+    blocked = ToolPublisher("acme.blocked")
+    for i in range(16):
+        blocked.add_tool(
+            StructuredTool.from_function(
+                func=lambda repo_name: repo_name,
+                name=f"create_issue_{i}",
+                description="Create a new issue in a GitHub repository.",
+            )
+        )
+    blocked.publish_to(registry)
+    allowed = ToolPublisher("acme.allowed")
+    allowed.add_tool(
+        StructuredTool.from_function(
+            func=lambda title: title,
+            name="report_problem",
+            description="Report an issue in the calendar event.",
+        )
+    )
+    allowed.publish_to(registry)
+    agent, recorder = _agent(
+        registry,
+        [
+            _call("search_capabilities", {"query": "open a ticket"}, "s1"),
+            AIMessage(content="ok"),
+        ],
+        allow=["acme.allowed/*"],
+    )
+    agent.invoke("find a ticket tool")
+
+    results = json.loads(_tool_messages(recorder)[-1].content)
+    assert [r["tool_id"] for r in results] == ["acme.allowed/report_problem@1"]

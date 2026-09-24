@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from naas_abi_core.services.tool_registry.ToolAccessPolicy import (
@@ -298,6 +298,7 @@ class ToolRegistryService(IToolRegistry):
         context: ToolContext | None = None,
         limit: int = 5,
         min_score: float | None = None,
+        where: Callable[[ToolDefinition], bool] | None = None,
     ) -> list[ToolSearchResult]:
         if limit <= 0:
             raise ValueError("limit must be a positive integer")
@@ -328,6 +329,8 @@ class ToolRegistryService(IToolRegistry):
                     stale.append(hit.id)
                     continue
                 if not self._can(tool.definition, context, ToolAction.DISCOVER):
+                    continue
+                if where is not None and not where(tool.definition):
                     continue
                 missing = self._missing_config(tool, None)
                 results.append(

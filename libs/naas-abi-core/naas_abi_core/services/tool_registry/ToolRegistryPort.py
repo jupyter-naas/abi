@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
@@ -446,8 +446,13 @@ class IToolRegistry(ABC):
         context: ToolContext | None = None,
         limit: int = 5,
         min_score: float | None = None,
+        where: Callable[[ToolDefinition], bool] | None = None,
     ) -> list[ToolSearchResult]:
-        """Semantic search. Never executes nor grants access to a tool."""
+        """Semantic search. Never executes nor grants access to a tool.
+
+        ``where`` narrows the candidates further (e.g. an agent's allow list).
+        It is applied before ``limit``, so filtered-out hits never starve it.
+        """
 
     @abstractmethod
     def sync_index(self) -> int:
