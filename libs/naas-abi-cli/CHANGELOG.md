@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.26.1 (2026-09-24)
+
+### Bug Fixes
+
+- **api**: Remove the /token endpoint that issued ABI_API_KEY
+  ([`101085f`](https://github.com/jupyter-naas/abi/commit/101085f5dbcd209a7d8614b858f7a75fe9ff23cb))
+
+
 ## v2.26.0 (2026-09-22)
 
 ### Features
