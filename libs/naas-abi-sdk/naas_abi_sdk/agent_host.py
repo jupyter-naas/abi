@@ -218,7 +218,7 @@ class AgentHost:
             or len(req.thread_id) > 256
             or len(req.prompt.encode()) > 64 * 1024
             or req.mode not in ("invoke", "stream")
-            or not 1 <= req.deadline_seconds <= 3600
+            or not 0 <= req.deadline_seconds <= 3600
         ):
             raise _error("INVALID_ARGUMENT", "Invalid thread, prompt, mode or deadline")
         fingerprint = _hash(
@@ -308,10 +308,11 @@ class AgentHost:
             self.runs[key] = run
             run.task = asyncio.create_task(self._execute(name, req, run))
             run.task.add_done_callback(self._observe_task)
-            run.deadline = asyncio.create_task(
-                self._deadline(run, req.deadline_seconds)
-            )
-            run.deadline.add_done_callback(self._observe_task)
+            if req.deadline_seconds:
+                run.deadline = asyncio.create_task(
+                    self._deadline(run, req.deadline_seconds)
+                )
+                run.deadline.add_done_callback(self._observe_task)
             return doc
 
     @staticmethod

@@ -92,7 +92,7 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/object_storage/adapters/
 
 ## Adding a new adapter
 
-1. Implement `IObjectStorageAdapter` in `adapters/secondary/<Name>.py`. All five methods.
+1. Implement `IObjectStorageAdapter` in `adapters/secondary/<Name>.py`. All abstract methods, including streaming and recursive listing.
 2. `list_objects` must implement **depth-1** semantics — list direct children of the given prefix, not the full subtree.
 3. `get_object_metadata` must populate at least `file_path`, `file_name`, `file_size_bytes`, `mime_type`. Timestamps / permissions / encoding optional.
 4. Add a `ObjectStorageFactory.<Name>(...)` builder.
@@ -116,3 +116,12 @@ a timeout can hide a completed operation. Reconcile its outcome before retrying.
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
 The latter uses a local `nats-server` executable without Docker.
+
+
+Object GET/PUT facades now use `transfer/v1` under object-storage subjects. GET
+reads the backend streaming port in bounded chunks; PUT stages chunks on temporary
+disk and calls the streaming port only after an explicit start. The old unary
+endpoints remain compatible and bounded. Transfer sessions are authenticated,
+caller-bound, sequence-checked and never replayed. Configure capacities through
+`nats.object_storage_streaming`; see the chunked-transfers ADR and standalone
+`transfer_integration_test.py` for native-broker coverage.

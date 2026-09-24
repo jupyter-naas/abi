@@ -2,6 +2,7 @@
 
 import asyncio
 import importlib.util
+import io
 import json
 import os
 from dataclasses import dataclass
@@ -88,6 +89,23 @@ class ABIModule(BaseModule):
             == b"updated"
         )
         await services.object_storage.delete_object(self.configuration.prefix, key)
+
+        # Bigger than the default broker packet ceiling, without whole-file GET.
+        payload = b"chunked-object" * (700 * 1024)
+        await services.object_storage.put_object_stream(
+            self.configuration.prefix, "large.bin", io.BytesIO(payload)
+        )
+        offset = 0
+        async with services.object_storage.get_object_stream(
+            self.configuration.prefix, "large.bin"
+        ) as stream:
+            async for chunk in stream:
+                assert chunk == payload[offset : offset + len(chunk)]
+                offset += len(chunk)
+        assert offset == len(payload)
+        await services.object_storage.delete_object(
+            self.configuration.prefix, "large.bin"
+        )
 
         doc = await services.document.put(
             "runs", "one", {"binary": b"\x00", "large": 2**60}, if_version=0

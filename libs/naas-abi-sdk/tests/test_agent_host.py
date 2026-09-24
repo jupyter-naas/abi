@@ -181,3 +181,23 @@ def test_event_pages_report_total_sequence_for_completed_invocations():
         assert second.events[-1].sequence == 70
 
     asyncio.run(scenario())
+
+
+def test_zero_deadline_leaves_execution_under_caller_control():
+    async def scenario():
+        docs, handler = Documents(), Handler()
+        owner = host(docs, handler)
+        submitted = request()
+        submitted.deadline_seconds = 0
+        owner._deadline = AsyncMock(side_effect=AssertionError("Unexpected deadline"))
+        await owner._submit("agent", "key", "caller", submitted)
+        await asyncio.sleep(0)
+        assert handler.calls == 1
+        owner._deadline.assert_not_called()
+        handler.finish.set()
+        await asyncio.gather(*(run.task for run in owner.runs.values()))
+        assert any(
+            doc.data.get("status") == "SUCCEEDED" for doc in docs.values.values()
+        )
+
+    asyncio.run(scenario())

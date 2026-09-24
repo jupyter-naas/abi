@@ -20,7 +20,7 @@ message SubmitRequest {
   string thread_id = 3;
   string prompt = 4;
   string mode = 5;
-  uint32 deadline_seconds = 6;
+  uint32 deadline_seconds = 6; // Zero means no total execution deadline.
 }
 message SubmitResponse { abi.common.v1.CallError error = 1; Invocation invocation = 2; }
 message StatusRequest { abi.common.v1.CallContext context = 1; string invocation_id = 2; uint64 after_sequence = 3; }

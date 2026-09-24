@@ -51,7 +51,23 @@ def test_message_roundtrip_preserves_tools_multimodal_and_usage():
         encode_message(ToolMessage(content="x", tool_call_id="x", artifact=object()))
 
 
-def test_proxy_tools_sync_bridge_stream_cleanup_and_no_retries():
+def test_proxy_tools_sync_bridge_stream_cleanup_and_no_retries(monkeypatch):
+    async def frames(client, operation, request):
+        if operation == "chat":
+            yield (await client.chat(request)).SerializeToString()
+        else:
+            await client.stream_open(pb.StreamOpenRequest(chat=request))
+            try:
+                while True:
+                    response = await client.stream_next(pb.StreamNextRequest())
+                    if response.done:
+                        break
+                    yield response.chunk.SerializeToString()
+            finally:
+                await client.stream_close(pb.StreamCloseRequest())
+
+    monkeypatch.setattr("naas_abi_sdk.models.model_frames", frames)
+
     async def scenario():
         client = SimpleNamespace(
             chat=AsyncMock(

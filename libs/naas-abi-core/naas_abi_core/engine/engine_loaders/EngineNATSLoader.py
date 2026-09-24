@@ -160,7 +160,9 @@ class EngineNATSLoader:
             # see ObjectStoragePrimaryAdapterNATS's docstring for why that
             # distinction matters (event publishing, prefix normalization).
             primary = ObjectStoragePrimaryAdapterNATS(
-                services.object_storage, nats_config.jwt_secret
+                services.object_storage,
+                nats_config.jwt_secret,
+                transfer_options=nats_config.object_storage_streaming.model_dump(),
             )
             nats_runtime.run_coro(primary.start(nc))
             started.append(primary)
@@ -374,7 +376,10 @@ class EngineNATSLoader:
             )
 
             primary_models = ModelRegistryNATS(
-                services.model_registry, nats_config.jwt_secret
+                services.model_registry,
+                nats_config.jwt_secret,
+                deadline=nats_config.models.generation_timeout_seconds,
+                transfer_options=nats_config.models.streaming.model_dump(),
             )
             nats_runtime.run_coro(primary_models.start(nc))
             started.append(primary_models)

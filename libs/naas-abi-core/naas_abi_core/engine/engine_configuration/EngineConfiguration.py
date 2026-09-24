@@ -235,6 +235,22 @@ class DiscoveryConfiguration(BaseModel):
     lease_seconds: float = Field(default=20, ge=1, le=300, allow_inf_nan=False)
 
 
+class NATSStreamingConfiguration(BaseModel):
+    chunk_bytes: int = Field(default=64 * 1024, ge=1024, le=4 * 1024 * 1024)
+    idle_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
+    max_sessions: int = Field(default=32, ge=1, le=1024)
+    max_upload_bytes: int | None = Field(default=None, gt=0)
+
+
+class NATSModelConfiguration(BaseModel):
+    generation_timeout_seconds: float | None = Field(
+        default=None, gt=0, allow_inf_nan=False
+    )
+    streaming: NATSStreamingConfiguration = Field(
+        default_factory=NATSStreamingConfiguration
+    )
+
+
 class NATSConfiguration(BaseModel):
     """Cross-cutting NATS exposure config -- not a domain service, so it lives
     at the top level next to ``api``/``deploy``/``global_config``, not nested
@@ -258,6 +274,10 @@ class NATSConfiguration(BaseModel):
     nats_url: str = "nats://127.0.0.1:4222"
     jwt_secret: str
     discovery: DiscoveryConfiguration | None = None
+    object_storage_streaming: NATSStreamingConfiguration = Field(
+        default_factory=NATSStreamingConfiguration
+    )
+    models: NATSModelConfiguration = Field(default_factory=NATSModelConfiguration)
 
 
 class OpencodeProviderConfiguration(BaseModel):
